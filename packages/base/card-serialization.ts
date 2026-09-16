@@ -75,6 +75,15 @@ export interface SerializeOpts {
   useAbsoluteURL?: boolean;
   omitFields?: [typeof BaseDef];
   omitQueryFields?: boolean;
+  // How much of the linked graph rides along in `included[]`. 'all' (the
+  // default) serializes every resident link target — the read/copy shape.
+  // 'local' serializes only local (unsaved, lid-bearing) targets — the write
+  // shape, where `included` is a co-creation manifest and saved targets are
+  // reference-only. 'none' serializes no link targets at all. A skipped
+  // target contributes its relationship entry only, and its own linked graph
+  // is not traversed — which is the point: a new card linking into a large
+  // saved graph serializes none of that graph on save.
+  includedScope?: 'all' | 'local' | 'none';
   maybeRelativeReference?: (possibleReference: string) => string;
   overrides?: Map<string, typeof BaseDef>;
 }

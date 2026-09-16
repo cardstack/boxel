@@ -1544,6 +1544,32 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       };
     }
 
+    // A target the includedScope excludes needs only its relationship entry —
+    // the same shapes the visited branches above emit — so the recursive
+    // serialization of the target (and the traversal of its own linked graph)
+    // is skipped entirely.
+    let includedScope = opts?.includedScope ?? 'all';
+    if (
+      (value.id && includedScope !== 'all') ||
+      (!value.id && includedScope === 'none')
+    ) {
+      return {
+        relationships: {
+          [this.name]: value.id
+            ? {
+                links: { self: makeRelativeURL(value.id, opts) },
+                data: { type: relationshipType, id: value.id },
+              }
+            : {
+                data: {
+                  type: relationshipType,
+                  lid: (value as CardDef)[localId],
+                },
+              },
+        },
+      };
+    }
+
     visited.add(value.id ?? (value as CardDef)[localId]);
 
     let serialized = callSerializeHook(
@@ -2107,6 +2133,27 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         relationships[`${this.name}.${i}`] = {
           data: { type: relationshipType, lid: (value as CardDef)[localId] },
         };
+        return;
+      }
+
+      // Same includedScope skip as linksTo: an excluded target contributes
+      // its relationship entry only, with no recursive serialization.
+      let includedScope = opts?.includedScope ?? 'all';
+      if (
+        (value.id && includedScope !== 'all') ||
+        (!value.id && includedScope === 'none')
+      ) {
+        relationships[`${this.name}.${i}`] = value.id
+          ? {
+              links: { self: makeRelativeURL(value.id, opts) },
+              data: { type: relationshipType, id: value.id },
+            }
+          : {
+              data: {
+                type: relationshipType,
+                lid: (value as CardDef)[localId],
+              },
+            };
         return;
       }
 

@@ -241,26 +241,20 @@ export default class CardService extends Service {
     if (opts?.includeComputeds) {
       await this.settleQueryBackedFields(api, card);
     }
+    // The scope pushes the realm's write-retention rule into the serializer
+    // itself: the realm keeps only the primary card plus the local (unsaved,
+    // `lid`-bearing) links it co-creates, and discards every already-saved
+    // link in `included` — so saved link targets are never serialized here at
+    // all, and a card linking into a large resident graph pays nothing for
+    // it on save.
     let serialized = api.serializeCard(card, {
       ...opts,
+      includedScope: opts?.withLocalResourcesIncluded ? 'local' : 'none',
     });
     if (!opts?.withLocalResourcesIncluded) {
+      // includedScope 'none' builds no included; the delete guards the
+      // contract against any custom serialize hook that pushes one anyway.
       delete serialized.included;
-    } else if (serialized.included) {
-      // The realm writes only the primary card and any brand-new, unsaved
-      // links it is being asked to create in the same request — identified by
-      // `lid` — and discards every already-saved link it finds in `included`.
-      // The serializer, though, inlines every linked card the store has
-      // resident, saved or not. Drop the saved ones here so the document we
-      // send equals what the realm keeps rather than inflating the payload
-      // (and its serialisation) with cards the tab merely happens to have
-      // loaded.
-      serialized.included = serialized.included.filter(
-        (resource) => typeof (resource as { lid?: unknown }).lid === 'string',
-      );
-      if (serialized.included.length === 0) {
-        delete serialized.included;
-      }
     }
     return serialized;
   }
