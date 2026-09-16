@@ -32,12 +32,17 @@
 //
 // What that costs is a gap from real time that widens as real time moves past
 // it, which matters wherever a value minted from the real clock is compared
-// against one measured from here. Nothing in the suite does that today — the
-// adapter's token expiry mints and checks on the real clock on both sides, so
-// it is internally consistent — and the intent is that any producer which ends
-// up on both sides of such a comparison moves behind the seam rather than the
-// instant chasing real time. Until then this constant is load-bearing in a way
-// no assertion covers.
+// against one measured from here. The way to keep that from mattering is for
+// the producer to move behind the seam too, rather than for this instant to
+// chase real time: `realm_file_meta.created_at` is stamped that way, so a file
+// created during a test and a rendered age of it come from the same timeline.
+//
+// A producer that stays on the real clock is fine as long as nothing measures
+// it from here. The adapter's token expiry is the example — it mints and
+// checks on the real clock on both sides, so it is internally consistent, and
+// token lifetime is auth arithmetic rather than a rendered value. What does
+// not work is one of each, and nothing enforces that; it is a property of
+// where the seam has reached so far.
 //
 // UTC noon leaves twelve hours of margin either side for a local-date reading.
 // Real offsets reach +14, so at UTC+13 or +14 the local date is the 16th.

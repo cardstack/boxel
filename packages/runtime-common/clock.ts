@@ -25,9 +25,12 @@
 // element, which trades the coverage away.
 //
 // Reading through here is what makes a renderer pinnable; one that calls the
-// clock directly is not, whatever this comment says. The rule that keeps them
-// converted lives with the lint config, because a list of callers here would
-// be wrong the moment one is added.
+// clock directly is not, whatever this comment says. A lint rule enforces that
+// across `packages/base`, where card code lives. It does not reach the host
+// app, which is also a consumer of this module — the reads there are mostly
+// timeouts and telemetry, where the wall clock is the right answer, so a
+// blanket rule would be wrong. A host-side renderer of elapsed time has to be
+// converted by whoever writes it.
 //
 // It lives in runtime-common rather than in either consumer because both sides
 // of the card loader need it: card code reaches it through
