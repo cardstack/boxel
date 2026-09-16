@@ -18,7 +18,7 @@
     "relationships": {
       "card": {
         "links": {
-          "self": null
+          "self": "../default/c9ac9b4a-762b-4e89-ab35-3938286e8bde"
         }
       }
     }

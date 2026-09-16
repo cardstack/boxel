@@ -40,7 +40,8 @@ class VariantRow extends GlimmerComponent<{
         <code class='url'>{{@durableUrl}}</code>
       </div>
       <div class='url-line'>
-        <a href={{@durableUrl}} target='_blank' rel="noopener noreferrer">Open bare</a>
+        <a href={{@durableUrl}} target='_blank' rel='noopener noreferrer'>Open
+          bare</a>
         <SignedCaptureLink @url={{@durableUrl}}>
           Open signed (mints on click)
         </SignedCaptureLink>

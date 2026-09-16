@@ -2,13 +2,21 @@
   "data": {
     "type": "card",
     "attributes": {
-      "cardInfo": { "name": "Experiments Workspace" },
+      "cardInfo": {
+        "name": "Experiments Workspace",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
       "backgroundURL": "https://boxel-images.boxel.ai/background-images/4k-light-streaks.jpg",
-      "iconURL": "https://boxel-images.boxel.ai/icons/cardstack-black.png"
+      "iconURL": "https://boxel-images.boxel.ai/icons/cardstack-black.png",
+      "allowArbitraryScreenshots": true,
+      "hostRoutingRules": [],
+      "includePrerenderedDefaultRealmIndex": false
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/realm-config",
+        "module": "@cardstack/base/realm-config",
         "name": "RealmConfig"
       }
     }

@@ -155,7 +155,9 @@ export class SignedCaptureLink extends GlimmerComponent<SignedCaptureLinkSignatu
   <template>
     <a
       href={{@url}}
-      target='_blank' rel="noopener noreferrer" data-signed-capture-link
+      target='_blank'
+      rel='noopener noreferrer'
+      data-signed-capture-link
       {{on 'click' this.openSigned}}
       ...attributes
     >{{yield}}</a>
