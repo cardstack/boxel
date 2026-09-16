@@ -231,6 +231,25 @@ module(basename(import.meta.filename), function () {
         assert.notOk(head.text, 'no body in a HEAD response');
       });
 
+      test('a byte GET reports when the realm first saw the file', async function (assert) {
+        await upload('/created-at.png', pngBytes);
+
+        let get = await request.get('/created-at.png').set('Accept', 'image/*');
+        let head = await request
+          .head('/created-at.png')
+          .set('Accept', 'image/*');
+
+        assert.ok(
+          get.headers['x-created'],
+          'a path the realm wrote carries its creation time',
+        );
+        assert.strictEqual(
+          head.headers['x-created'],
+          get.headers['x-created'],
+          'and the HEAD reports the same one',
+        );
+      });
+
       test('a path nothing is stored under is a 404', async function (assert) {
         let response = await request
           .get('/nothing-is-here.png')

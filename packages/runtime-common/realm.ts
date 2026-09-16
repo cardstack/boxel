@@ -4689,6 +4689,7 @@ export class Realm {
             defaultHeaders: {
               'content-type': source.contentType,
             },
+            createdAt: source.created,
           },
         ),
       };
@@ -5841,10 +5842,23 @@ export class Realm {
         opts,
       );
     } catch (e) {
-      if (isOperationFailure(e) && e.error.code === 'target-not-found') {
+      if (!isOperationFailure(e)) {
+        throw e;
+      }
+      if (e.error.code === 'target-not-found') {
         return undefined;
       }
-      throw e;
+      // Any other refusal carries a status the operation chose, and the router
+      // only reads one off a `CardError` — so letting it through as it is would
+      // answer 500 for a refusal that named its own answer. Nothing a stored
+      // bytes read can refuse reaches here today, the resolved path having
+      // ruled out the rest, so this is what keeps the next refusal added to
+      // that executor from arriving as a server fault.
+      throw new CardError(e.error.detail, {
+        status: e.error.status,
+        title: e.error.title,
+        id: e.error.id,
+      });
     }
     if (!isSourceResult(result)) {
       throw new Error(
@@ -5902,6 +5916,13 @@ export class Realm {
       // `buildEtag`. Callers that have the materialized body already
       // (the source endpoint cache-miss path) compute this for free.
       etagBase?: string;
+      // When the realm first saw this path, for a caller that already read the
+      // file's stored metadata and so already has it. Supplying it is what
+      // keeps such a caller from reading the same row twice per request.
+      // Present and null means the realm holds no record of the path, which is
+      // an answer — so the key being there at all, rather than its value, is
+      // what decides whether this looks the value up itself.
+      createdAt?: number | null;
     },
   ): Promise<ResponseWithNodeStream> {
     let contentType = options?.defaultHeaders?.['content-type'];
@@ -5937,7 +5958,10 @@ export class Realm {
         requestContext,
       });
     }
-    let createdFromDb = await this.getCreatedTime(ref.path);
+    let createdFromDb =
+      options && 'createdAt' in options
+        ? options.createdAt
+        : await this.getCreatedTime(ref.path);
     let headers: Record<string, string> = {
       ...(options?.defaultHeaders || {}),
       'last-modified': lastModified,
@@ -6537,6 +6561,7 @@ export class Realm {
         return await this.serveLocalFile(request, served, requestContext, {
           defaultHeaders,
           etagVariant: SOURCE_ETAG_VARIANT,
+          createdAt: source.created,
         });
       } else {
         let cachedRef = await this.materializeFileRef(served);
@@ -6583,6 +6608,7 @@ export class Realm {
           defaultHeaders,
           etagVariant: SOURCE_ETAG_VARIANT,
           etagBase: contentHash,
+          createdAt: source.created,
         });
       }
     } finally {
