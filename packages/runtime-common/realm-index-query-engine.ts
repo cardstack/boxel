@@ -2100,16 +2100,31 @@ export class RealmIndexQueryEngine {
       let cacheableCardURLs = assemblyCache
         ? [...inRealmCardURLs].filter((u) => !depthExcludedURLs.has(u))
         : [];
+      // With nothing to look up, the card lookup stays exactly where it was:
+      // one wide read issued alongside the file and cross-realm fetches. The
+      // pre-read replaces it only when there is a cache to consult, so a
+      // caller without one — an indexing pass reading the work-in-progress
+      // table, say — pays neither the extra round-trip nor a serialized one.
+      let consultingCache =
+        Boolean(assemblyCache) && cacheableCardURLs.length > 0;
       try {
-        let validatorsPromise =
-          assemblyCache && cacheableCardURLs.length > 0
-            ? this.#indexQueryEngine.getInstanceValidators(
-                cacheableCardURLs.map((u) => new URL(u)),
+        let validatorsPromise = consultingCache
+          ? this.#indexQueryEngine.getInstanceValidators(
+              cacheableCardURLs.map((u) => new URL(u)),
+              opts,
+            )
+          : undefined;
+        let instancesPromise = consultingCache
+          ? undefined
+          : inRealmCardURLs.size > 0
+            ? this.#indexQueryEngine.getInstances(
+                [...inRealmCardURLs].map((u) => new URL(u)),
                 opts,
               )
-            : undefined;
-        let [validators, files, crossRealm] = await Promise.all([
+            : Promise.resolve(new Map<string, InstanceOrError>());
+        let [validators, instances, files, crossRealm] = await Promise.all([
           validatorsPromise,
+          instancesPromise,
           inRealmFileURLs.size > 0
             ? this.#indexQueryEngine.getFiles(
                 [...inRealmFileURLs].map((u) => new URL(u)),
@@ -2130,9 +2145,10 @@ export class RealmIndexQueryEngine {
         fileMap = files;
         crossRealmMap = crossRealm;
 
-        let urlsToHydrate = inRealmCardURLs;
-        if (assemblyCache && validators) {
-          urlsToHydrate = new Set<string>(depthExcludedURLs);
+        if (!consultingCache || !validators || !assemblyCache) {
+          instanceMap = instances ?? new Map<string, InstanceOrError>();
+        } else {
+          let urlsToHydrate = new Set<string>(depthExcludedURLs);
           for (let href of cacheableCardURLs) {
             let validator = validators.get(href);
             // An errored row has no servable instance, and a row this read
@@ -2157,14 +2173,14 @@ export class RealmIndexQueryEngine {
             }
             preassembled.set(href, JSON.parse(held) as CardResource<Saved>);
           }
+          instanceMap =
+            urlsToHydrate.size > 0
+              ? await this.#indexQueryEngine.getInstances(
+                  [...urlsToHydrate].map((u) => new URL(u)),
+                  opts,
+                )
+              : new Map<string, InstanceOrError>();
         }
-        instanceMap =
-          urlsToHydrate.size > 0
-            ? await this.#indexQueryEngine.getInstances(
-                [...urlsToHydrate].map((u) => new URL(u)),
-                opts,
-              )
-            : new Map<string, InstanceOrError>();
       } catch (err: unknown) {
         let message =
           err instanceof Error ? err.message : String(err ?? 'unknown error');
