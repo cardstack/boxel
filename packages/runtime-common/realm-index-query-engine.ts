@@ -2158,6 +2158,13 @@ export class RealmIndexQueryEngine {
               urlsToHydrate.add(href);
               continue;
             }
+            // The two option members that could make one row assemble to
+            // different bytes are `skipQueryBackedExpansion`, which folds into
+            // the key, and `resolveLinksOnly`, which does not have to: it
+            // leaves this loop before a single link is classified, so it
+            // neither reads an entry nor files one. `linkFields` applies at
+            // the root layer only and every side-loaded resource expands all
+            // of its links, so it cannot split a row's bytes either.
             let key: LinkAssemblyKey = {
               canonicalURL: validator.canonicalURL,
               indexedAt: validator.indexedAt,
