@@ -148,8 +148,11 @@ async function checkQueryInputs(
 // receipts in the enclosing native admission. It has no cache-populate API.
 export class LatticeMaterializationInputs {
   static MAX_CARDS = 4096;
-  static MAX_CARD_BYTES = 1_048_576;
-  static MAX_TOTAL_BYTES = 4_194_304;
+  // Raised from 1 MiB / 4 MiB for the baseball stress realm: a season
+  // leaderboard reads every player season (673 cards, 4.3 MB after one month
+  // of games, growing with the game log). Revisit the bound with that shape.
+  static MAX_CARD_BYTES = 4_194_304;
+  static MAX_TOTAL_BYTES = 67_108_864;
   static MAX_QUERIES = 64;
   #db: DBAdapter;
   #frame: Frame;

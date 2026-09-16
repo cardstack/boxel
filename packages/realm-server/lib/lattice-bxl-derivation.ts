@@ -106,7 +106,9 @@ export class LatticeBxlWorker {
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
       throw new Error('Invalid BXL deadline');
     }
-    if (inputs.length > 512) throw new Error('BXL batch exceeds 512 cards');
+    // 512 cards / 16 MiB originally; the baseball season leaderboard reads
+    // every player season (673 cards after one month, ~4 MB).
+    if (inputs.length > 4096) throw new Error('BXL batch exceeds 4096 cards');
     // The Nucleus day owner's four programs are about 20 KB each (the port
     // repeats one prelude of record projections in every field) and its
     // projected inputs are the day's people, goals, observations and reports.
@@ -125,9 +127,9 @@ export class LatticeBxlWorker {
           Buffer.byteLength(input.thumbnailURL ?? ''),
         0,
       ) >
-      16 * 1_048_576
+      64 * 1_048_576
     ) {
-      throw new Error('BXL input batch exceeds 16 MiB');
+      throw new Error('BXL input batch exceeds 64 MiB');
     }
     this.#busy = true;
     let worker = (this.#worker ??= new Worker(
