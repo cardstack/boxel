@@ -150,6 +150,47 @@ describe('boxel screenshot: single capture', () => {
     });
   });
 
+  it('names a paged capture from its content type, not the image default', async () => {
+    // The response's contentType picks the extension; an unmapped one falls
+    // back to png, which would file a paged document as an image.
+    let pdfBytes = Buffer.from('%PDF-1.4 fake-paged-bytes');
+    let pdfBase64 = pdfBytes.toString('base64');
+    let { authenticator } = makeFake({
+      postResponses: [
+        () =>
+          readyResponse({
+            status: 'ready',
+            base64: pdfBase64,
+            contentType: 'application/pdf',
+            captures: [
+              {
+                name: null,
+                url: null,
+                width: null,
+                height: null,
+                deviceScaleFactor: null,
+                pageCount: 3,
+                base64: pdfBase64,
+              },
+            ],
+          }),
+      ],
+    });
+    let out = tempDir();
+    let result = await screenshot(`${CARD_URL}.json`, {
+      authenticator,
+      out,
+      captureSpec: { type: 'pdf' },
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.captures).toHaveLength(1);
+    let entry = result.captures[0];
+    expect(entry.status).toBe('ok');
+    expect(entry.file).toBe(join(out, 'Person-fadhlan.pdf'));
+    expect(readFileSync(entry.file!)).toEqual(pdfBytes);
+  });
+
   it('passes the capture spec through verbatim (including target)', async () => {
     let { authenticator, requests } = makeFake({
       postResponses: [
