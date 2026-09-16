@@ -1,0 +1,96 @@
+name: Upload artifact with retry
+description: >-
+  actions/upload-artifact with a bounded retry, for an artifact something
+  downstream reads. GitHub's artifact service fails an upload outright often
+  enough to matter — a 403 from FinalizeArtifact is the recurring shape — and
+  on a test shard that turns a job whose every test passed into a red one.
+
+  Diagnostic uploads answer this with continue-on-error, because nothing reads
+  them and losing one costs only that view of the job. An artifact a later job,
+  step or script consumes cannot: a report that quietly vanished would let the
+  merge publish a partial run as a complete one, which is worse than a red
+  shard. So these retry instead. A transient failure costs seconds and the
+  artifact still arrives; an upload that fails every attempt still fails the
+  job.
+
+  Forwards only the inputs this repo passes to upload-artifact. Adding another
+  one at a call site means adding it here too, or the wrapper silently drops
+  it.
+
+inputs:
+  name:
+    description: Artifact name.
+    required: true
+  path:
+    description: File, directory or wildcard pattern to upload.
+    required: true
+  retention-days:
+    description: >-
+      Days to keep the artifact. Empty uses the repository default.
+    default: ""
+  if-no-files-found:
+    description: Behaviour when the path matches nothing — warn, error or ignore.
+    default: warn
+
+runs:
+  using: composite
+  steps:
+    # Each attempt but the last tolerates its own failure, so the composite
+    # keeps going and the next one runs. The last carries no
+    # continue-on-error: its failure fails this action, and with it the step
+    # and job that called it.
+    - name: Upload artifact
+      id: attempt-1
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      continue-on-error: true
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+        retention-days: ${{ inputs.retention-days }}
+        if-no-files-found: ${{ inputs.if-no-files-found }}
+
+    - name: Wait before second upload attempt
+      if: steps.attempt-1.outcome == 'failure'
+      shell: bash
+      env:
+        ARTIFACT_NAME: ${{ inputs.name }}
+        DELAY: "10"
+      run: |
+        echo "::warning::Uploading artifact '$ARTIFACT_NAME' failed; retrying in ${DELAY}s"
+        sleep "$DELAY"
+
+    # The retries overwrite. An upload that fails at the finalize step has
+    # already registered the name, so a plain re-upload would hit a 409
+    # conflict and convert a recoverable failure into a permanent one.
+    - name: Upload artifact (attempt 2)
+      id: attempt-2
+      if: steps.attempt-1.outcome == 'failure'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      continue-on-error: true
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+        retention-days: ${{ inputs.retention-days }}
+        if-no-files-found: ${{ inputs.if-no-files-found }}
+        overwrite: true
+
+    - name: Wait before final upload attempt
+      if: steps.attempt-1.outcome == 'failure' && steps.attempt-2.outcome == 'failure'
+      shell: bash
+      env:
+        ARTIFACT_NAME: ${{ inputs.name }}
+        DELAY: "30"
+      run: |
+        echo "::warning::Uploading artifact '$ARTIFACT_NAME' failed twice; retrying in ${DELAY}s"
+        sleep "$DELAY"
+
+    - name: Upload artifact (final attempt)
+      id: attempt-3
+      if: steps.attempt-1.outcome == 'failure' && steps.attempt-2.outcome == 'failure'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+        retention-days: ${{ inputs.retention-days }}
+        if-no-files-found: ${{ inputs.if-no-files-found }}
+        overwrite: true

@@ -386,7 +386,7 @@ jobs:
           REALM_URL: https://realm-server.ci.localhost/skills/,https://realm-server.ci.localhost/openrouter/
 
       - name: Upload junit report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         if: ${{ !cancelled() }}
         with:
           name: host-live-test-report
@@ -805,7 +805,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload junit report to GitHub Actions Artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         if: ${{ !cancelled() }}
         with:
           # Scope the artifact name to the run attempt. Artifacts are retained
@@ -823,7 +823,7 @@ jobs:
         run: node scripts/extract-memory-report.mjs /tmp/test-output.log /tmp/memory-report-${{ matrix.shardIndex }}.json
         working-directory: packages/host
       - name: Upload memory report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         if: ${{ !cancelled() }}
         with:
           name: memory-report-${{ matrix.shardIndex }}
@@ -1175,7 +1175,7 @@ jobs:
         run: sed -i -E 's/classname="Chrome [^"]*"/classname="Chrome"/' host.xml
 
       - name: Upload merged report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         if: ${{ !cancelled() }}
         with:
           name: host-test-report-merged
@@ -1212,7 +1212,7 @@ jobs:
 
       - name: Upload host-tests slot
         if: ${{ !cancelled() && hashFiles('slot/slot.md') != '' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: pr-comment-slot-host-tests
           path: slot/
