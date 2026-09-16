@@ -4549,13 +4549,7 @@ function lazilyLoadLink(
         } else {
           trackRuntimeInstanceDependency(reference, dependencyTrackingContext);
         }
-        // Publication rendering may already have consumed the lazy field's
-        // tag. Preserve ordinary synchronous residency; only admitted output
-        // and indexed-input computation need to settle outside that getter.
-        fieldValue =
-          hasLatticeSnapshot(instance) || currentLatticeInputSnapshot()
-            ? await Promise.resolve(reusable)
-            : reusable;
+        fieldValue = reusable;
       } else if (isFileLink) {
         let fileMetaDoc = await store.loadFileMetaDocument(reference, {
           dependencyTrackingContext,

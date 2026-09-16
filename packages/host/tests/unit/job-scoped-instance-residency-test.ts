@@ -120,7 +120,7 @@ module('Unit | job-scoped instance residency', function (hooks) {
   const otherURL = 'http://localhost:4201/test/queenzy';
 
   for (let indexedInput of [false, true]) {
-    test(`a resident link keeps ${indexedInput ? 'publication asynchronous' : 'ordinary synchronous'} resolution`, async function (assert) {
+    test(`a resident link keeps ${indexedInput ? 'publication' : 'ordinary'} resolution outside the getter`, async function (assert) {
       if (indexedInput) {
         (globalThis as any).__latticeInputSnapshot = {
           realmURL: 'http://localhost:4201/test/',
@@ -178,10 +178,8 @@ module('Unit | job-scoped instance residency', function (hooks) {
       assert.strictEqual(parent.cardInfo.theme, undefined);
       assert.strictEqual(
         parent.cardInfo.theme,
-        indexedInput ? undefined : theme,
-        indexedInput
-          ? 'publication reads settle outside tracked rendering'
-          : 'ordinary resident reuse does not add a microtask',
+        undefined,
+        'resident reads settle outside tracked rendering in both modes',
       );
       await store.loaded();
       assert.strictEqual(

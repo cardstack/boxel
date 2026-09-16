@@ -101,12 +101,10 @@ module(basename(import.meta.filename), function () {
       expected.joined,
       'sort and join agree with the oracle',
     );
-    // BXL string literals do not accept `\u` escapes (a finding on its own),
-    // so hostile bytes arrive through the data, as they would from a card.
-    assert.throws(
-      () => prepareBxl('"caf\\u00e9"', CORE),
-      /escape/,
-      'a `\\u` escape in a formula literal is refused at preparation',
+    assert.strictEqual(
+      evaluateBxl('"caf\\u00e9"', smallInput, CORE).value,
+      'café',
+      'a Unicode escape in a formula literal decodes to its character',
     );
     const nul = evaluateBxl(
       '.entries[0].text',
@@ -117,12 +115,10 @@ module(basename(import.meta.filename), function () {
       nul.includes('\u0000'),
       'a NUL byte in the data passes through the engine untouched; it is the database that refuses it',
     );
-    // A field named after a BXL keyword cannot be read with dot syntax; the
-    // whole module fails to load if a formula tries. Bracket syntax works.
-    assert.throws(
-      () => prepareBxl('.label', CORE),
-      /keyword/,
-      '`.label` is refused because `label` is a keyword',
+    assert.strictEqual(
+      evaluateBxl('.label', { label: 'ok' }, CORE).value,
+      'ok',
+      'dot access reads a keyword-named field',
     );
     assert.strictEqual(
       evaluateBxl('.["label"]', { label: 'ok' }, CORE).value,
