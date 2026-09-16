@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "school": null,
+      "student": null,
+      "term": null,
+      "summary": null,
+      "sections": [],
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../parent-report",
+        "name": "PrintableReport"
+      }
+    }
+  }
+}
