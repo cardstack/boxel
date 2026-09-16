@@ -42,6 +42,8 @@ import {
 } from './lib/realm-registry-reconciler.ts';
 import { RealmFileChangesListener } from './lib/realm-file-changes-listener.ts';
 import { RealmIndexUpdatedListener } from './lib/realm-index-updated-listener.ts';
+import { LatticePublicationDispatcher } from './lib/lattice-publication-dispatcher.ts';
+import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation-listener.ts';
 import { ModuleCacheCoordinator } from './lib/module-cache-coordination.ts';
 import { JobsFinishedListener } from './lib/jobs-finished-listener.ts';
@@ -489,6 +491,7 @@ const reportHostShellToManager = async () => {
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
   let indexUpdatedListener: RealmIndexUpdatedListener | undefined;
+  let publicationDispatcher: LatticePublicationDispatcher | undefined;
   let jobsFinishedListener: JobsFinishedListener | undefined;
   let moduleCacheInvalidationListener:
     | ModuleCacheInvalidationListener
@@ -603,6 +606,7 @@ const reportHostShellToManager = async () => {
   // reference to it. The reconciler doesn't begin its background poll
   // loop until reconciler.start() is called below, after server.start()
   // has finished its first reconcile pass.
+  const lattice = LatticeRealmConfig.parse(process.env.LATTICE_ENABLED_REALMS);
   reconciler = new RealmRegistryReconciler({
     dbAdapter,
     prepareRealmFromRow: (row: RealmRegistryRow) => {
@@ -622,6 +626,7 @@ const reportHostShellToManager = async () => {
       const reconciledRealm = new Realm(
         {
           url: row.url,
+          lattice,
           adapter: reconciledAdapter,
           secretSeed: REALM_SECRET_SEED,
           virtualNetwork,
@@ -694,6 +699,7 @@ const reportHostShellToManager = async () => {
   });
 
   let server = new RealmServer({
+    lattice,
     realms,
     reconciler,
     mediaCacheAdapter,
@@ -782,6 +788,7 @@ const reportHostShellToManager = async () => {
           reconciler?.shutDown(),
           fileChangesListener?.shutDown(),
           indexUpdatedListener?.shutDown(),
+          publicationDispatcher?.shutDown(),
           jobsFinishedListener?.shutDown(),
           moduleCacheInvalidationListener?.shutDown(),
           moduleCacheCoordinator?.shutDown(),
@@ -884,6 +891,20 @@ const reportHostShellToManager = async () => {
   // 30s safety poll). It picks up changes from peer instances (publish,
   // unpublish, delete) and reconciles them into local mounted state.
   await reconciler.start();
+  if (lattice.enabledRealms.length) {
+    publicationDispatcher = new LatticePublicationDispatcher({
+      dbAdapter,
+      lattice,
+      send: async (realmURL, roomId, event, signal) => {
+        let realm = await reconciler!.lookupOrMount(realmURL);
+        signal.throwIfAborted();
+        if (!realm)
+          throw new Error(`Publication realm unavailable: ${realmURL}`);
+        return realm.deliverPublicationEvent(roomId, event, signal);
+      },
+    });
+    await publicationDispatcher.start();
+  }
 
   // Cross-instance cache invalidation. Realm.write() emits NOTIFY
   // realm_file_changes; this listener receives those and forwards to the

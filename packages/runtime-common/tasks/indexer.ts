@@ -55,6 +55,16 @@ export interface IncrementalArgs extends WorkerArgs {
   changes: IncrementalChange[];
   ignoreData: Record<string, string>;
   coalescedCallers: CoalescedCaller[];
+  // Source revision per updated URL href: the content hash the realm
+  // computed as it wrote the file. Absent for a URL whose change did not
+  // come from a realm write (deletes, file-watcher events, other
+  // publishers). The coalesce decision uses it to tell the echo of one write
+  // from a newer write of the same URL, so a save never joins a running job
+  // that already read an older revision of its file (CS-12968 follow-up,
+  // ledger 4b review). Always present so the args object satisfies
+  // WorkerArgs's JSON-shape index signature; a job from an older publisher
+  // parses as `{}`.
+  revisions: Record<string, string>;
   // When true, this pass enqueues no prerender_html job of its own: it
   // returns its invalidation set on `deferredPrerenderHtml` instead, for a
   // later pass in the same write to carry. Set by the module→instance flush
@@ -171,6 +181,15 @@ export function mergeIncrementalChanges(
   return [...byUrl.values()];
 }
 
+// A pending job reads its files when it runs, so the merged job is for the
+// newest revision of each URL: the later caller's, when it carries one.
+export function mergeIncrementalRevisions(
+  existing: Record<string, string>,
+  incoming: Record<string, string>,
+): Record<string, string> {
+  return { ...existing, ...incoming };
+}
+
 function getCoalescedCallers(args: unknown): CoalescedCaller[] {
   if (!isObjectLike(args)) {
     return [];
@@ -212,6 +231,7 @@ function parseIncrementalArgsForCoalesce(
     ignoreData,
     changes,
     coalescedCallers,
+    revisions,
     deferPrerenderHtml,
     carriedPrerenderHtmlChanges,
   } = args;
@@ -231,6 +251,9 @@ function parseIncrementalArgsForCoalesce(
     coalescedCallers: Array.isArray(coalescedCallers)
       ? (coalescedCallers as CoalescedCaller[])
       : [],
+    revisions: isObjectLike(revisions)
+      ? (revisions as Record<string, string>)
+      : {},
     // Read loosely: a job enqueued by a worker predating these fields has
     // neither, and dropping them here would silently un-defer that job.
     deferPrerenderHtml: deferPrerenderHtml === true,
@@ -251,6 +274,37 @@ export function incrementalChangesCover(
   for (let change of incoming) {
     let match = existingByUrl.get(change.url);
     if (!match || match.operation !== change.operation) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Whether a job that is already RUNNING with `existing` args will have done
+// the incoming work. A running job has read its files, so an update is
+// covered only when it is the same source revision the job was enqueued
+// for; a newer revision of the same URL (a second save while the first is
+// still indexing) needs its own job or the later bytes are never indexed.
+// A URL without a revision on either side cannot be matched, so it is not
+// covered either. Deletes are idempotent and match on operation alone.
+export function inFlightIncrementalArgsCover(
+  existing: Pick<IncrementalArgs, 'changes' | 'revisions'>,
+  incoming: Pick<IncrementalArgs, 'changes' | 'revisions'>,
+): boolean {
+  if (!incrementalChangesCover(existing.changes, incoming.changes)) {
+    return false;
+  }
+  for (let change of incoming.changes) {
+    if (change.operation !== 'update') {
+      continue;
+    }
+    let incomingRevision = incoming.revisions[change.url];
+    let existingRevision = existing.revisions[change.url];
+    if (
+      incomingRevision === undefined ||
+      existingRevision === undefined ||
+      incomingRevision !== existingRevision
+    ) {
       return false;
     }
   }
@@ -292,6 +346,10 @@ function chooseIncrementalCoalesceDecision(
             existingArgs.coalescedCallers,
             incomingArgs.coalescedCallers,
           ),
+          revisions: mergeIncrementalRevisions(
+            existingArgs.revisions,
+            incomingArgs.revisions,
+          ),
           // AND, not OR: a caller that did not ask to defer is waiting for
           // this pass to enqueue the render. Deferring on its behalf would
           // hand the set to a write that has no later pass to fold it into.
@@ -313,9 +371,10 @@ function chooseIncrementalCoalesceDecision(
   // PATCH-path enqueue gets claimed by a worker before the file-watcher
   // echo (or any second wave of callers) can attach via pre-claim
   // coalesce. We piggyback on the running job, but only when its args
-  // already cover every (url, operation) we need — operation mismatch
-  // (update vs delete) means different work, so we must enqueue a new
-  // job in that case.
+  // already cover every (url, operation, revision) we need — operation
+  // mismatch (update vs delete) means different work, and a different or
+  // unknown source revision means the running job may have read older
+  // bytes — so we must enqueue a new job in those cases.
   let incomingArgs = parseIncrementalArgsForCoalesce(incoming.args);
   if (incomingArgs) {
     for (let candidate of inFlightCandidates) {
@@ -326,7 +385,7 @@ function chooseIncrementalCoalesceDecision(
       if (!existingArgs) {
         continue;
       }
-      if (incrementalChangesCover(existingArgs.changes, incomingArgs.changes)) {
+      if (inFlightIncrementalArgsCover(existingArgs, incomingArgs)) {
         return { type: 'join', jobId: candidate.id };
       }
     }
@@ -411,6 +470,8 @@ registerQueueJobDefinition({
 });
 
 const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
+  nativeCardIndexer,
+  nativeFileIndexer,
   log,
   reportStatus,
   reportProgress,
@@ -443,6 +504,8 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
     let _fetch = await getAuthedFetch(args);
     let reader = getReader(_fetch, realmURL);
     let currentRun = new IndexRunner({
+      nativeCardIndexer,
+      nativeFileIndexer,
       realmURL: new URL(realmURL),
       reader,
       indexWriter,
@@ -496,6 +559,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       fetch: _fetch,
       prerenderer,
       realmOwnerUserId: userId,
+      latticeRealmUsername: dbAdapter.kind === 'pg' ? realmUsername : undefined,
     });
     let { stats, ignoreData, invalidations, generation, phaseTimings } =
       await IndexRunner.fromScratch(currentRun);
@@ -539,6 +603,8 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
   };
 
 const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
+  nativeCardIndexer,
+  nativeFileIndexer,
   log,
   reportStatus,
   reportProgress,
@@ -579,6 +645,8 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
     let _fetch = await getAuthedFetch(args);
     let reader = getReader(_fetch, realmURL);
     let currentRun = new IndexRunner({
+      nativeCardIndexer,
+      nativeFileIndexer,
       realmURL: new URL(realmURL),
       reader,
       indexWriter,
@@ -642,6 +710,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       prerenderer,
       ignoreData: args.ignoreData,
       realmOwnerUserId: userId,
+      latticeRealmUsername: dbAdapter.kind === 'pg' ? realmUsername : undefined,
     });
     let {
       stats,

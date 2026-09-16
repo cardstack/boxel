@@ -1,4 +1,5 @@
 import type Controller from '@ember/controller';
+
 import { registerDestructor } from '@ember/destroyable';
 import { action } from '@ember/object';
 import Route from '@ember/routing/route';
@@ -45,6 +46,15 @@ import {
   isGatewayFailureStatus,
   serializableError,
 } from '@cardstack/runtime-common/error';
+import {
+  currentLatticeInputSnapshot,
+  LATTICE_INPUT_GENERATION_HEADER,
+} from '@cardstack/runtime-common/lattice-materialization';
+import {
+  currentLatticeRenderCheckpoint,
+  validateLatticeRenderCheckpoint,
+  type LatticeRenderReceipt,
+} from '@cardstack/runtime-common/lattice-render-checkpoint';
 
 import {
   windowErrorHandler,
@@ -91,6 +101,7 @@ import type { CardDef, QueryLoadMeta } from '@cardstack/base/card-api';
 type RenderStatus = 'loading' | 'ready' | 'error' | 'unusable';
 
 export type Model = {
+  latticeRenderReceipt?: LatticeRenderReceipt;
   instance?: CardDef;
   nonce: string;
   cardId: string;
@@ -220,6 +231,7 @@ export default class RenderRoute extends Route<Model> {
     // jobId-change clear (and by `resetState` on harder resets).
     (globalThis as any).__renderModel = undefined;
     (globalThis as any).__boxelRenderCapturedDeps = undefined;
+    (globalThis as any).__boxelRenderReadBrokenLinks = undefined;
     (globalThis as any).__docsInFlight = undefined;
     (globalThis as any).__boxelRenderStage = undefined;
     // CS-10872: also tear down the stage setter + timestamp. Without
@@ -413,7 +425,33 @@ export default class RenderRoute extends Route<Model> {
         throw error;
       }
     };
-    let key = `${id}|${nonce}|${canonicalOptions}`;
+    let checkpoint:
+      | { document: LooseSingleCardDocument; receipt: LatticeRenderReceipt }
+      | undefined;
+    if (parsedOptions.latticeRenderCheckpoint) {
+      let suppliedCheckpoint = currentLatticeRenderCheckpoint();
+      if (
+        !suppliedCheckpoint ||
+        !parsedOptions.cardRender ||
+        parsedOptions.fileExtract ||
+        parsedOptions.fileRender
+      ) {
+        throw new Error(
+          'Lattice HTML requires an explicit card pass and checkpoint',
+        );
+      }
+      // Keep one immutable input attempt even if the pooled page receives a
+      // later checkpoint while validation or module admission is awaiting.
+      let input = structuredClone(suppliedCheckpoint);
+      checkpoint = {
+        document: input.document,
+        receipt: await validateLatticeRenderCheckpoint(input, {
+          id,
+          loaderEpoch: parsedOptions.loaderEpoch,
+        }),
+      };
+    }
+    let key = `${id}|${nonce}|${canonicalOptions}|${checkpoint?.receipt.documentHash ?? ''}`;
     let existing = this.#modelPromises.get(key);
     if (existing) {
       return await existing;
@@ -442,7 +480,7 @@ export default class RenderRoute extends Route<Model> {
     // hook fire twice per prerender step: every format capture goes through a
     // parent transition (render), then to the actual child route, so the parent
     // model executes twice per prerender, hence the need to share the work.
-    let promise = this.#buildModel({ id, nonce }, parsedOptions);
+    let promise = this.#buildModel({ id, nonce }, parsedOptions, checkpoint);
     this.#modelPromises.set(key, promise);
     return await promise;
   }
@@ -450,6 +488,10 @@ export default class RenderRoute extends Route<Model> {
   async #buildModel(
     { id, nonce }: { id: string; nonce: string },
     parsedOptions: ReturnType<typeof parseRenderRouteOptions>,
+    checkpoint?: {
+      document: LooseSingleCardDocument;
+      receipt: LatticeRenderReceipt;
+    },
   ): Promise<Model> {
     // Reset before any await so a reader can never see a previous card's
     // settle-time snapshot; #settleModelAfterRender repopulates it.
@@ -460,6 +502,7 @@ export default class RenderRoute extends Route<Model> {
     // before any stage runs, so they leave this empty.
     this.#buildModelMs = {};
     this.#hydrateFieldsMs = undefined;
+    (globalThis as any).__boxelRenderReadBrokenLinks = undefined;
     // Bind the stores to this visit's render scope before anything is fetched
     // or hydrated. A tab serves visits from many scopes and holds the
     // instances they loaded, and a resident link target is handed to
@@ -471,6 +514,13 @@ export default class RenderRoute extends Route<Model> {
     // residency midway through the render that follows it.
     this.store.observeIndexingJob();
     this.cardContextStore.observeIndexingJob();
+    if (
+      this.loaderService.setModuleSourceCapture(
+        parsedOptions.captureModuleSources === true,
+      )
+    ) {
+      this.store.resetCache();
+    }
     // Loader-epoch synchronization: indexing renders thread the realm's
     // loader epoch (re-minted whenever an index pass invalidates executable
     // modules — see RealmGenerationsTable.loader_epoch). When it differs
@@ -647,41 +697,76 @@ export default class RenderRoute extends Route<Model> {
     this.#hydrateFieldsMs = hydrateFieldsMs;
 
     enterStage('buildModel:fetching-source', 'fetchSource');
-    let response: Response;
-    try {
-      response = await this.#authGuard.race(() =>
-        this.#fetchCardSourceWithGatewayRetry(id),
+    let latticeInput = currentLatticeInputSnapshot();
+    if (checkpoint && latticeInput) {
+      throw new Error(
+        'A Lattice HTML checkpoint cannot also be a recomputation input',
       );
-    } catch (err: any) {
-      if (this.#authGuard.isAuthError(err)) {
-        this.#processRenderError(err);
+    }
+    let response: Response;
+    let realmURL: string;
+    let lastModified: Date;
+    let doc: LooseSingleCardDocument | CardErrorsJSONAPI;
+    if (checkpoint) {
+      doc = checkpoint.document;
+      realmURL = checkpoint.receipt.realmURL;
+      lastModified = new Date(Number(doc.data.meta.lastModified ?? 0) * 1000);
+    } else {
+      try {
+        response = await this.#authGuard.race(() =>
+          latticeInput
+            ? this.network.authedFetch(id.replace(/\.json$/, ''), {
+                method: 'GET',
+                headers: {
+                  Accept: SupportedMimeType.CardJson,
+                  [LATTICE_INPUT_GENERATION_HEADER]: String(
+                    latticeInput.generation,
+                  ),
+                },
+              })
+            : this.#fetchCardSourceWithGatewayRetry(id),
+        );
+      } catch (err: any) {
+        if (this.#authGuard.isAuthError(err)) {
+          this.#processRenderError(err);
+          throw err;
+        }
         throw err;
       }
-      throw err;
-    }
 
-    // Guard the parse. This is the document-loading path the CS-12966 incident
-    // ran through: the render fetches the card's own document through the
-    // public balancer, and when that comes back a gateway error the body is
-    // the balancer's HTML error page, not a card document. Parsing it as one
-    // failed, and that parse failure was latched as the card's render verdict
-    // — one 502 that lasted milliseconds served 500 to every reader for days.
-    // A balancer 5xx, or any body that is not the JSON the request asked for,
-    // is a statement about the network rather than the card: surface it as a
-    // gateway failure the prerender server classifies and the write site
-    // withholds, instead of letting `response.json()` throw on the HTML.
-    let contentType = response.headers.get('content-type');
-    if (
-      isGatewayFailureStatus(response.status) ||
-      !isJsonContentType(contentType)
-    ) {
-      throw this.#gatewayFailureError(id, { response, contentType });
-    }
+      // Guard the parse. This is the document-loading path the CS-12966 incident
+      // ran through: the render fetches the card's own document through the
+      // public balancer, and when that comes back a gateway error the body is
+      // the balancer's HTML error page, not a card document. Parsing it as one
+      // failed, and that parse failure was latched as the card's render verdict
+      // — one 502 that lasted milliseconds served 500 to every reader for days.
+      // A balancer 5xx, or any body that is not the JSON the request asked for,
+      // is a statement about the network rather than the card: surface it as a
+      // gateway failure the prerender server classifies and the write site
+      // withholds, instead of letting `response.json()` throw on the HTML.
+      let contentType = response.headers.get('content-type');
+      if (
+        isGatewayFailureStatus(response.status) ||
+        !isJsonContentType(contentType)
+      ) {
+        throw this.#gatewayFailureError(id, { response, contentType });
+      }
 
-    let realmURL = response.headers.get('x-boxel-realm-url')!;
-    let lastModified = new Date(response.headers.get('last-modified')!);
-    let doc: LooseSingleCardDocument | CardErrorsJSONAPI =
-      await response.json();
+      realmURL = response.headers.get('x-boxel-realm-url')!;
+      lastModified = new Date(response.headers.get('last-modified')!);
+      doc = await response.json();
+    }
+    if (latticeInput && 'data' in doc && doc.data.meta.publication) {
+      // This is the owner being recomputed. Its previous membership is an
+      // output, never an input seed for the new generation's query.
+      for (let field of doc.data.meta.publication.queryFields) {
+        for (let key of Object.keys(doc.data.relationships ?? {})) {
+          if (key === field || key.startsWith(`${field}.`))
+            delete doc.data.relationships![key];
+        }
+      }
+      delete doc.data.meta.publication;
+    }
     let canonicalId = id.replace(/\.json$/, '');
 
     let state = new TrackedMap<string, unknown>();
@@ -725,29 +810,70 @@ export default class RenderRoute extends Route<Model> {
         throw new Error(JSON.stringify(doc.errors[0], null, 2));
       }
       enterStage('buildModel:deriving-type', 'deriveType');
+      let sourceDoc = doc;
       let { derivedCardType, hydratedInstance } = await this.#authGuard.race(
         async () => {
+          let renderDoc: LooseSingleCardDocument = sourceDoc;
+          let latticeUseSnapshot: true | undefined = checkpoint
+            ? true
+            : undefined;
           let derivedCardType = await deriveCardTypeFromDoc(
-            doc,
+            renderDoc,
             id,
             this.loaderService.loader,
           );
 
+          if (checkpoint) {
+            let Klass = await loadCardDef(renderDoc.data.meta.adoptsFrom, {
+              loader: this.loaderService.loader,
+              relativeTo: this.network.virtualNetwork.toURL(canonicalId),
+            });
+            if (!(Klass as typeof CardDef).materialized) {
+              throw new Error(
+                'Lattice HTML checkpoint requires a materialized card definition',
+              );
+            }
+          } else if (parsedOptions.latticeUseSnapshot && !latticeInput) {
+            let Klass = await loadCardDef(renderDoc.data.meta.adoptsFrom, {
+              loader: this.loaderService.loader,
+              relativeTo: this.network.virtualNetwork.toURL(canonicalId),
+            });
+            if ((Klass as typeof CardDef).materialized) {
+              let indexedResponse = await this.network.authedFetch(
+                canonicalId,
+                {
+                  headers: { Accept: SupportedMimeType.CardJson },
+                },
+              );
+              let indexed = await indexedResponse.json();
+              if (
+                !indexedResponse.ok ||
+                indexed.data?.meta?.publication?.state !== 'ready'
+              ) {
+                throw new Error(
+                  'Lattice HTML requires a ready published materialization',
+                );
+              }
+              renderDoc = indexed as LooseSingleCardDocument;
+              latticeUseSnapshot = true;
+            }
+          }
+
           await this.realm.ensureRealmMeta(realmURL);
           let screenshotsMeta = await this.declarationScreenshotsMeta(
-            doc,
+            renderDoc,
             canonicalId,
             realmURL,
           );
 
           let enhancedDoc: LooseSingleCardDocument = {
-            ...doc,
+            ...renderDoc,
             data: {
-              ...doc.data,
+              ...renderDoc.data,
               id: canonicalId,
               type: 'card',
               meta: {
-                ...doc.data.meta,
+                ...renderDoc.data.meta,
                 lastModified: lastModified.getTime(),
                 realmURL: realmURL as RealmIdentifier,
                 realmInfo: { ...this.realm.info(id) },
@@ -762,6 +888,7 @@ export default class RenderRoute extends Route<Model> {
             realm: realmURL,
             doNotPersist: true,
             hydrateFieldsMs,
+            latticeUseSnapshot,
           });
           // What the settle drains is attributed the same way module
           // evaluations are: the store's completed-load histories are
@@ -787,6 +914,7 @@ export default class RenderRoute extends Route<Model> {
       );
       instance = hydratedInstance;
       model.instance = instance;
+      model.latticeRenderReceipt = checkpoint?.receipt;
     } catch (e: any) {
       console.warn(
         `Encountered error when deserializing doc for ${id}: ${e.message}: ${e.responseText}`,
@@ -1154,6 +1282,30 @@ export default class RenderRoute extends Route<Model> {
     // same tab can never read a predecessor's snapshot.
     (globalThis as any).__boxelRenderCapturedDeps =
       this.network.virtualNetwork.unresolveURLs(model.capturedDeps);
+    // HTML-only visits skip render.meta. Read the settled terminal link states
+    // after all formats have run, without fetching links or serializing the card.
+    // An explicit empty result proves a restored slot; an absent reader does not.
+    // A queued settle may finish after deactivate or a newer model. It must
+    // not reinstall a closure onto a card that no longer owns this page.
+    if ((globalThis as any).__renderModel === model) {
+      (globalThis as any).__boxelRenderReadBrokenLinks = async () => {
+        let api = await this.cardService.getAPI();
+        if (
+          (globalThis as any).__renderModel !== model ||
+          !model.instance ||
+          !model.ready ||
+          typeof api.getBrokenLinks !== 'function'
+        )
+          return undefined;
+        return api
+          .getBrokenLinks(model.instance)
+          .map(({ fieldName, reference, kind }) => ({
+            fieldName,
+            reference,
+            kind,
+          }));
+      };
+    }
     // The dependency tracker keeps accumulating for this card's session after
     // settle — child-route renders (a declared screenshot's capture-only
     // component, ancestor format renders) load through the same tracker but
@@ -1190,7 +1342,10 @@ export default class RenderRoute extends Route<Model> {
     });
   }
 
-  async #waitForRenderLoadStability(cardId: string): Promise<void> {
+  async #waitForRenderLoadStability(cardId: string): Promise<{
+    storeLoadWaitMs: number;
+    frameWaitMs: number;
+  }> {
     (globalThis as any).__boxelSetRenderStage?.('waiting-stability');
     let settleStartMs = nowMs();
     let stablePasses = 0;
@@ -1240,6 +1395,7 @@ export default class RenderRoute extends Route<Model> {
         `waitForRenderLoadStability hit max passes cardId=${cardId} stablePasses=${stablePasses} requiredStablePasses=${READY_SETTLE_REQUIRED_STABLE_PASSES} totalMs=${formatMs(totalSettleMs)}`,
       );
     }
+    return { storeLoadWaitMs, frameWaitMs };
   }
 
   async #waitForNextRenderFrame(): Promise<void> {
@@ -1333,6 +1489,7 @@ export default class RenderRoute extends Route<Model> {
       (globalThis as any).__boxelRenderContext = undefined;
       (globalThis as any).__renderModel = undefined;
       (globalThis as any).__boxelRenderCapturedDeps = undefined;
+      (globalThis as any).__boxelRenderReadBrokenLinks = undefined;
       (globalThis as any).__docsInFlight = undefined;
       (globalThis as any).__waitForRenderLoadStability = undefined;
       (globalThis as any).__boxelLastAttemptedRenderCardId = undefined;

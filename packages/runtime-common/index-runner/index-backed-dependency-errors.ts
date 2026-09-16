@@ -16,6 +16,7 @@ interface IndexBackedDependencyErrorOptions {
     moduleIds: string[],
   ): Promise<DefinitionCacheEntries>;
   getDependencyRows(urls: string[]): Promise<DependencyIndexRow[]>;
+  getDirectDependencyErrorRows?(urls: string[]): Promise<DependencyIndexRow[]>;
   getInvalidations(): string[];
   canonicalURLMemo: CanonicalURLMemo;
 }
@@ -27,6 +28,9 @@ export class IndexBackedDependencyErrors {
     moduleIds: string[],
   ) => Promise<DefinitionCacheEntries>;
   #getDependencyRows: (urls: string[]) => Promise<DependencyIndexRow[]>;
+  #getDirectDependencyErrorRows?: (
+    urls: string[],
+  ) => Promise<DependencyIndexRow[]>;
   #getInvalidations: () => string[];
   #canonicalURLMemo: CanonicalURLMemo;
   #relationshipDependencyRows = new Map<string, DependencyIndexRow[]>();
@@ -36,6 +40,7 @@ export class IndexBackedDependencyErrors {
     virtualNetwork,
     readDefinitionCacheEntries,
     getDependencyRows,
+    getDirectDependencyErrorRows,
     getInvalidations,
     canonicalURLMemo,
   }: IndexBackedDependencyErrorOptions) {
@@ -43,6 +48,7 @@ export class IndexBackedDependencyErrors {
     this.#virtualNetwork = virtualNetwork;
     this.#readDefinitionCacheEntries = readDefinitionCacheEntries;
     this.#getDependencyRows = getDependencyRows;
+    this.#getDirectDependencyErrorRows = getDirectDependencyErrorRows;
     this.#getInvalidations = getInvalidations;
     this.#canonicalURLMemo = canonicalURLMemo;
   }
@@ -387,7 +393,21 @@ export class IndexBackedDependencyErrors {
       return [];
     }
 
-    let rowsByUrl = await this.getRelationshipDependencyRows(urls);
+    // Lattice: the common no-error check needs flags and error docs, not every
+    // dependency's own (potentially megabyte-sized) dependency array. Keep
+    // these rows out of the traversal cache: a real error still needs the
+    // complete graph in collectRelationshipErrors.
+    let rowsByUrl: Map<string, DependencyIndexRow[]>;
+    if (this.#getDirectDependencyErrorRows) {
+      rowsByUrl = new Map();
+      for (let row of await this.#getDirectDependencyErrorRows(urls)) {
+        let rows = rowsByUrl.get(row.url) ?? [];
+        rows.push(row);
+        rowsByUrl.set(row.url, rows);
+      }
+    } else {
+      rowsByUrl = await this.getRelationshipDependencyRows(urls);
+    }
     let collected: SerializedError[] = [];
     let seenErrors = new Set<string>();
     let pendingInvalidations = new Set(

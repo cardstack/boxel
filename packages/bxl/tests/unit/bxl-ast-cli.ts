@@ -158,6 +158,8 @@ const boundedProfileCases = [
 
 for (const profile of boundedProfiles) {
   for (const testCase of boundedProfileCases) {
+    // `derive` allows user-defined helpers; see the cases below.
+    if (profile === 'derive' && testCase.suffix === 'def-banned') continue;
     expectProfileIssue(
       testCase.expression,
       profile,
@@ -165,6 +167,30 @@ for (const profile of boundedProfiles) {
       { readableSyntax: testCase.readableSyntax },
     );
   }
+}
+
+// def is banned in every bounded profile except `derive`, where a helper body
+// is still screened by the same call and context bans.
+{
+  const program = parseBxlAst('def triple(x): x * 3; triple(2)', {
+    attachment: 'formula',
+    profile: 'derive',
+  });
+  deepStrictEqual(
+    program.profileIssues,
+    [],
+    'derive accepts a user-defined helper',
+  );
+  expectProfileIssue('def stamp: now; stamp', 'derive', 'derive-call-banned', {
+    readableSyntax: false,
+  });
+}
+for (const profile of ['mutation'] as BxlProfile[]) {
+  expectProfileIssue(
+    'def triple(x): x * 3; triple(2)',
+    profile,
+    `${profile}-def-banned`,
+  );
 }
 
 // reduce / foreach are banned in `policy` and `predicate` only — `derive`

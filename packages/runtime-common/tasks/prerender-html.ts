@@ -20,6 +20,9 @@ import {
   type IncrementalChange,
 } from './indexer.ts';
 import type { Stats } from '../worker.ts';
+import { LATTICE_PRIORITY } from '../jobs/lattice.ts';
+import { userInitiatedPriority } from '../queue.ts';
+import { enqueueLatticeRenderRetry } from '../jobs/lattice-render.ts';
 
 export { prerenderHtml };
 
@@ -120,8 +123,15 @@ function choosePrerenderHtmlCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
   let { incoming, candidates, inFlightCandidates } = context;
+  // Never merge a per-owner retry with a normal dependency-expanding job or
+  // piggyback on an attempt that may already have rejected its captured input.
+  if (isObjectLike(incoming.args) && incoming.args.latticeRenderRetryOwner) {
+    return { type: 'insert' };
+  }
   let sameTypeCandidate = candidates.find(
-    (candidate) => candidate.jobType === incoming.jobType,
+    (candidate) =>
+      candidate.jobType === incoming.jobType &&
+      !(isObjectLike(candidate.args) && candidate.args.latticeRenderRetryOwner),
   );
   if (sameTypeCandidate) {
     let existingArgs = parsePrerenderHtmlArgsForCoalesce(
@@ -181,7 +191,10 @@ function choosePrerenderHtmlCoalesceDecision(
   let incomingArgs = parsePrerenderHtmlArgsForCoalesce(incoming.args);
   if (incomingArgs) {
     for (let candidate of inFlightCandidates) {
-      if (candidate.jobType !== incoming.jobType) {
+      if (
+        candidate.jobType !== incoming.jobType ||
+        (isObjectLike(candidate.args) && candidate.args.latticeRenderRetryOwner)
+      ) {
         continue;
       }
       let existingArgs = parsePrerenderHtmlArgsForCoalesce(candidate.args);
@@ -247,9 +260,26 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
     );
     let auth = createPrerenderAuth(userId, prerenderPermissions);
 
+    let latticeEnabled = indexWriter.isLatticeEnabled(realmURL);
+    // The pass retains pending owners as durable retry jobs. Do not filter
+    // them away: a later data publication may not change this owner's value.
+    // Background HTML shares renderer capacity with materialization. Keep it
+    // below data work even when owners are clean at job start: new source
+    // changes can arrive throughout a realm-wide pass. Explicit publish-awaited
+    // renders retain priority.
+    let renderPriority = jobInfo?.priority ?? 0;
+    if (latticeEnabled && renderPriority < userInitiatedPriority) {
+      renderPriority = Math.min(renderPriority, LATTICE_PRIORITY - 1);
+    }
     let _fetch = await getAuthedFetch(args);
     let reader = getReader(_fetch, realmURL);
-    let { invalidations, stats, preWarmMs } = await runPrerenderHtmlPass({
+    let {
+      invalidations,
+      notificationInvalidations,
+      stats,
+      preWarmMs,
+      generation: renderedGeneration,
+    } = await runPrerenderHtmlPass({
       realmURL: new URL(realmURL),
       changes,
       generation,
@@ -276,23 +306,46 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
         priority: 0,
         queueWaitMs: null,
       },
-      jobPriority: jobInfo?.priority,
+      jobPriority: renderPriority,
       onProgress: reportProgress,
       // Declared-screenshot persistence. Optional: a worker without a
       // MediaCache configured still renders HTML, it just captures nothing.
       dbAdapter,
       mediaCacheAdapter,
+      expandDependencies: latticeEnabled && !args.latticeRenderRetryOwner,
+      onLatticeDeferred: latticeEnabled
+        ? async (ownerURL) => {
+            await dbAdapter.withWriteLock(
+              `lattice:index:${realmURL}`,
+              async (tx) => {
+                if (!tx)
+                  throw new Error(
+                    'Lattice retry requires a pinned transaction',
+                  );
+                await enqueueLatticeRenderRetry(
+                  tx,
+                  args,
+                  ownerURL,
+                  jobInfo?.jobId ?? -1,
+                  renderPriority,
+                );
+              },
+            );
+          }
+        : undefined,
     });
 
     // Fresh HTML is live — tell subscribed hosts so open live searches
     // re-run and pick up the new renderings / corrected full-text
     // membership. Rides the worker→manager→realm-server event bridge.
-    reportRealmEvent?.({
-      eventName: 'prerender_html',
-      realmURL,
-      generation,
-      invalidations,
-    });
+    if (notificationInvalidations.length) {
+      reportRealmEvent?.({
+        eventName: 'prerender_html',
+        realmURL,
+        generation: renderedGeneration,
+        invalidations: notificationInvalidations,
+      });
+    }
 
     reportStatus(jobInfo, 'finish');
     log.debug(
@@ -300,7 +353,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
     );
     return {
       invalidations,
-      generation,
+      generation: renderedGeneration,
       stats,
       phaseTimings: preWarmMs !== undefined ? { preWarmMs } : null,
     };

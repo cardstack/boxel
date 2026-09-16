@@ -16,8 +16,13 @@ export function installRealmServerAssertOwnRealmServerBypassPatch(): {
 
   // Intercept page acquisition so we can inject one browser-runtime patch
   // before route transitions/captures run.
-  PagePool.prototype.getPage = async function (this: PagePool, realm: string) {
-    let pageInfo = await originalGetPage.call(this, realm);
+  PagePool.prototype.getPage = async function (
+    this: PagePool,
+    ...args: Parameters<PagePool['getPage']>
+  ) {
+    // Keep the module lane and cancellation/priority options. Defaulting every
+    // acquisition to the file lane can deadlock a query's nested module load.
+    let pageInfo = await originalGetPage.apply(this, args);
     let page = pageInfo.page as any;
     let originalEvaluate = page?.evaluate?.bind(page);
 

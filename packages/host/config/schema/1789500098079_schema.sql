@@ -7,14 +7,14 @@
    command TEXT NOT NULL,
    command_filter BLOB NOT NULL,
    created_at NOT NULL,
-   PRIMARY KEY ( id ) 
+   PRIMARY KEY ( id )
 );
 
  CREATE TABLE IF NOT EXISTS bot_registrations (
    id NOT NULL,
    username TEXT NOT NULL,
    created_at NOT NULL,
-   PRIMARY KEY ( id ) 
+   PRIMARY KEY ( id )
 );
 
  CREATE TABLE IF NOT EXISTS boxel_index (
@@ -37,7 +37,8 @@
    has_error BOOLEAN DEFAULT false NOT NULL,
    last_known_good_deps BLOB,
    diagnostics BLOB,
-   PRIMARY KEY ( url, realm_url, type ) 
+   valid_until,
+   PRIMARY KEY ( url, realm_url, type )
 );
 
  CREATE TABLE IF NOT EXISTS boxel_index_working (
@@ -61,7 +62,8 @@
    last_known_good_deps BLOB,
    diagnostics BLOB,
    job_id INTEGER,
-   PRIMARY KEY ( url, realm_url, type ) 
+   valid_until,
+   PRIMARY KEY ( url, realm_url, type )
 );
 
  CREATE TABLE IF NOT EXISTS incoming_webhooks (
@@ -73,7 +75,127 @@
    signing_secret TEXT NOT NULL,
    created_at NOT NULL,
    updated_at NOT NULL,
-   PRIMARY KEY ( id ) 
+   PRIMARY KEY ( id )
+);
+
+ CREATE TABLE IF NOT EXISTS lattice_code_artifacts (
+   realm_url TEXT NOT NULL,
+   file_url TEXT NOT NULL,
+   realm_username TEXT NOT NULL,
+   work_version DEFAULT 1 NOT NULL,
+   dirty BOOLEAN DEFAULT true NOT NULL,
+   runtime_revision TEXT,
+   actor_user_id TEXT,
+   scope BLOB,
+   receipt BLOB,
+   dependency_keys BLOB DEFAULT '[]' NOT NULL,
+   PRIMARY KEY ( realm_url, file_url )
+);
+
+ CREATE TABLE IF NOT EXISTS lattice_code_realms (
+   realm_url TEXT NOT NULL,
+   actor_user_id TEXT NOT NULL,
+   runtime_revision TEXT NOT NULL,
+   policy_revision TEXT NOT NULL,
+   PRIMARY KEY ( realm_url )
+);
+
+ CREATE TABLE IF NOT EXISTS lattice_index_events (
+   realm_url TEXT NOT NULL,
+   generation NOT NULL,
+   url TEXT NOT NULL,
+   previous_row BLOB,
+   next_row BLOB NOT NULL,
+   PRIMARY KEY ( realm_url, generation, url )
+);
+
+ CREATE TABLE IF NOT EXISTS lattice_input_artifacts (
+   realm_url TEXT NOT NULL,
+   url TEXT NOT NULL,
+   type TEXT NOT NULL,
+   digest TEXT NOT NULL,
+   resource BLOB NOT NULL,
+   row_xmin TEXT,
+   row_cmin TEXT,
+   row_ctid TEXT,
+   row_filenode TEXT,
+   captured_xid TEXT,
+   PRIMARY KEY ( realm_url, url, type )
+);
+
+ CREATE TABLE IF NOT EXISTS lattice_owner_code (
+   realm_url TEXT NOT NULL,
+   owner_url TEXT NOT NULL,
+   generation NOT NULL,
+   reference BLOB NOT NULL,
+   PRIMARY KEY ( realm_url, owner_url )
+);
+
+ CREATE TABLE IF NOT EXISTS lattice_owners (
+   realm_url TEXT NOT NULL,
+   owner_url TEXT NOT NULL,
+   published_generation NOT NULL,
+   input_generation NOT NULL,
+   dirty_generation,
+   definition_revision TEXT NOT NULL,
+   retired BOOLEAN DEFAULT false NOT NULL,
+   attributes_json TEXT,
+   attributes_generation,
+   code_bound BOOLEAN DEFAULT false NOT NULL,
+   PRIMARY KEY ( realm_url, owner_url )
+);
+
+ CREATE TABLE IF NOT EXISTS lattice_pending_generations (
+   realm_url TEXT NOT NULL,
+   generation NOT NULL,
+   definition_revision TEXT NOT NULL,
+   PRIMARY KEY ( realm_url, generation )
+);
+
+ CREATE TABLE IF NOT EXISTS lattice_query_watches (
+   realm_url TEXT NOT NULL,
+   owner_url TEXT NOT NULL,
+   field_path TEXT NOT NULL,
+   query BLOB NOT NULL,
+   routing_tokens BLOB DEFAULT '["[\"\",\"\"]"]' NOT NULL,
+   PRIMARY KEY ( realm_url, owner_url, field_path )
+);
+
+ CREATE TABLE IF NOT EXISTS lattice_retained_bodies (
+   realm_url TEXT NOT NULL,
+   digest TEXT NOT NULL,
+   kind TEXT NOT NULL,
+   document BLOB NOT NULL,
+   PRIMARY KEY ( realm_url, digest )
+);
+
+ CREATE TABLE IF NOT EXISTS lattice_retained_snapshots (
+   realm_url TEXT NOT NULL,
+   owner_url TEXT NOT NULL,
+   field_path TEXT NOT NULL,
+   source_realm_url TEXT NOT NULL,
+   source_url TEXT NOT NULL,
+   validated_through NOT NULL,
+   digest TEXT NOT NULL,
+   definition_seal TEXT NOT NULL,
+   captured_at NOT NULL,
+   state_generation NOT NULL,
+   status TEXT NOT NULL,
+   since,
+   pinned BOOLEAN DEFAULT false NOT NULL,
+   note TEXT,
+   PRIMARY KEY ( realm_url, owner_url, field_path, source_realm_url, source_url, validated_through )
+);
+
+ CREATE TABLE IF NOT EXISTS lattice_work_failures (
+   realm_url TEXT NOT NULL,
+   owner_url TEXT NOT NULL,
+   obligation NOT NULL,
+   definition_revision TEXT NOT NULL,
+   code_version TEXT,
+   attempts INTEGER NOT NULL,
+   reason TEXT NOT NULL,
+   PRIMARY KEY ( realm_url, owner_url )
 );
 
  CREATE TABLE IF NOT EXISTS media_cache_ledger (
@@ -91,7 +213,7 @@
    width INTEGER,
    height INTEGER,
    diagnostics BLOB,
-   PRIMARY KEY ( realm_url, source_url, capture_spec_hash, source_generation ) 
+   PRIMARY KEY ( realm_url, source_url, capture_spec_hash, source_generation )
 );
 
  CREATE TABLE IF NOT EXISTS module_transpile_cache (
@@ -102,7 +224,7 @@
    dependency_keys BLOB,
    generation DEFAULT 0 NOT NULL,
    created_at,
-   PRIMARY KEY ( realm_url, canonical_path ) 
+   PRIMARY KEY ( realm_url, canonical_path )
 );
 
  CREATE TABLE IF NOT EXISTS modules (
@@ -117,7 +239,7 @@
    file_alias TEXT,
    url_hash TEXT GENERATED ALWAYS AS (url) STORED NOT NULL,
    diagnostics BLOB,
-   PRIMARY KEY ( url, cache_scope, auth_user_id ) 
+   PRIMARY KEY ( url, cache_scope, auth_user_id )
 );
 
  CREATE TABLE IF NOT EXISTS prerendered_html (
@@ -139,7 +261,7 @@
    rendered_at,
    diagnostics BLOB,
    screenshots BLOB,
-   PRIMARY KEY ( url, realm_url, type ) 
+   PRIMARY KEY ( url, realm_url, type )
 );
 
  CREATE TABLE IF NOT EXISTS prerendered_html_working (
@@ -162,7 +284,7 @@
    job_id INTEGER,
    diagnostics BLOB,
    screenshots BLOB,
-   PRIMARY KEY ( url, realm_url, type ) 
+   PRIMARY KEY ( url, realm_url, type )
 );
 
  CREATE TABLE IF NOT EXISTS realm_file_meta (
@@ -171,14 +293,14 @@
    created_at INTEGER NOT NULL,
    content_hash TEXT,
    content_size INTEGER,
-   PRIMARY KEY ( realm_url, file_path ) 
+   PRIMARY KEY ( realm_url, file_path )
 );
 
  CREATE TABLE IF NOT EXISTS realm_generations (
    realm_url TEXT NOT NULL,
    current_generation INTEGER NOT NULL,
    loader_epoch TEXT DEFAULT '0' NOT NULL,
-   PRIMARY KEY ( realm_url ) 
+   PRIMARY KEY ( realm_url )
 );
 
  CREATE TABLE IF NOT EXISTS realm_meta (
@@ -186,7 +308,7 @@
    generation INTEGER NOT NULL,
    value BLOB NOT NULL,
    indexed_at,
-   PRIMARY KEY ( realm_url, generation ) 
+   PRIMARY KEY ( realm_url, generation )
 );
 
  CREATE TABLE IF NOT EXISTS realm_metadata (
@@ -196,7 +318,7 @@
    created_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
    updated_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
    archived_at,
-   PRIMARY KEY ( url ) 
+   PRIMARY KEY ( url )
 );
 
  CREATE TABLE IF NOT EXISTS realm_registry (
@@ -210,7 +332,7 @@
    pinned BOOLEAN DEFAULT false NOT NULL,
    created_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
    updated_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
-   PRIMARY KEY ( id ) 
+   PRIMARY KEY ( id )
 );
 
  CREATE TABLE IF NOT EXISTS realm_type_generations (
@@ -218,7 +340,7 @@
    type_key TEXT NOT NULL,
    index_generation INTEGER DEFAULT 0 NOT NULL,
    html_generation INTEGER DEFAULT 0 NOT NULL,
-   PRIMARY KEY ( realm_url, type_key ) 
+   PRIMARY KEY ( realm_url, type_key )
 );
 
  CREATE TABLE IF NOT EXISTS realm_user_permissions (
@@ -227,7 +349,7 @@
    read BOOLEAN NOT NULL,
    write BOOLEAN NOT NULL,
    realm_owner BOOLEAN DEFAULT false NOT NULL,
-   PRIMARY KEY ( realm_url, username ) 
+   PRIMARY KEY ( realm_url, username )
 );
 
  CREATE TABLE IF NOT EXISTS scoped_css (
@@ -235,7 +357,7 @@
    hash TEXT NOT NULL,
    css TEXT NOT NULL,
    last_interned_at NOT NULL,
-   PRIMARY KEY ( realm_url, hash ) 
+   PRIMARY KEY ( realm_url, hash )
 );
 
  CREATE TABLE IF NOT EXISTS unlisted_realm_paths (
@@ -245,7 +367,7 @@
    owner_user_id TEXT NOT NULL,
    created_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
    updated_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
-   PRIMARY KEY ( id ) 
+   PRIMARY KEY ( id )
 );
 
  CREATE TABLE IF NOT EXISTS webhook_commands (
@@ -255,5 +377,5 @@
    command_filter BLOB,
    created_at NOT NULL,
    updated_at NOT NULL,
-   PRIMARY KEY ( id ) 
+   PRIMARY KEY ( id )
 );

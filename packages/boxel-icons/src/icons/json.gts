@@ -23,4 +23,10 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
 
 // @ts-expect-error this is the only way to set a name on a Template Only Component currently
 IconComponent.name = 'json';
+Object.defineProperty(IconComponent, Symbol.for('boxel:static-icon-svg'), {
+  value: Object.freeze({
+    svg: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="icon icon-tabler icons-tabler-outline icon-tabler-json" viewBox="0 0 24 24"><path stroke="none" d="M0 0h24v24H0z"/><path d="M20 16V8l3 8V8M15 8a2 2 0 0 1 2 2v4a2 2 0 1 1-4 0v-4a2 2 0 0 1 2-2M1 8h3v6.5a1.5 1.5 0 0 1-3 0V14M7 15a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1H8a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1"/></svg>',
+    contentHash: '5b34ddcb11039c19d308a85007dcf002',
+  }),
+});
 export default IconComponent;

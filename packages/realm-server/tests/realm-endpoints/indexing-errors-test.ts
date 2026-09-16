@@ -403,6 +403,195 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
+    test('render link diagnostics follow the current successful render without replacing data diagnostics', async function (assert) {
+      await sourceRealm.realmIndexUpdater.fullIndex();
+      let cardURL = `${sourceRealm.url}broken-instance.json`;
+      let missing = (reference: string) => ({
+        fieldName: 'author',
+        reference,
+        kind: 'not-found',
+      });
+      let original = missing('https://example.com/old');
+      let latest = missing('https://example.com/latest');
+      let toolSchemaErrors = [
+        { toolName: 'preserved', message: 'Other data finding' },
+      ];
+      await dbAdapter.execute(
+        `UPDATE boxel_index SET generation=100, has_error=FALSE, error_doc=NULL,
+          diagnostics=$1::jsonb WHERE url=$2 AND realm_url=$3 AND type='instance'`,
+        {
+          bind: [
+            JSON.stringify({ brokenLinks: [original], toolSchemaErrors }),
+            cardURL,
+            sourceRealm.url,
+          ],
+        },
+      );
+      async function renderRow(
+        generation: number,
+        diagnostics: unknown,
+        options: {
+          error?: boolean;
+          deleted?: boolean;
+          realm?: string;
+          type?: string;
+        } = {},
+      ) {
+        await dbAdapter.execute(
+          `INSERT INTO prerendered_html(url,file_alias,realm_url,type,generation,diagnostics,error_doc,is_deleted)
+           VALUES($1,$1,$2,$3,$4,$5::jsonb,$6::jsonb,$7)
+           ON CONFLICT(url,realm_url,type) DO UPDATE SET generation=EXCLUDED.generation,
+             diagnostics=EXCLUDED.diagnostics,error_doc=EXCLUDED.error_doc,is_deleted=EXCLUDED.is_deleted`,
+          {
+            bind: [
+              cardURL,
+              options.realm ?? sourceRealm.url,
+              options.type ?? 'instance',
+              generation,
+              JSON.stringify(diagnostics),
+              options.error
+                ? JSON.stringify({ message: 'Render failed' })
+                : null,
+              options.deleted ?? false,
+            ],
+          },
+        );
+      }
+      async function findings() {
+        let response = await request
+          .get(`${new URL(sourceRealm.url).pathname}_indexing-errors`)
+          .set('Accept', SupportedMimeType.JSONAPI)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(sourceRealm, ownerUserId, DEFAULT_PERMISSIONS)}`,
+          );
+        assert.strictEqual(response.status, 200);
+        let entries = response.body.data.filter(
+          (entry: any) =>
+            entry.attributes.url === cardURL &&
+            entry.attributes.entryType === 'instance',
+        );
+        assert.deepEqual(
+          entries.find((entry: any) => entry.type === 'tool-schema-error')
+            ?.attributes.toolSchemaErrors,
+          toolSchemaErrors,
+          'unrelated data diagnostics survive',
+        );
+        return (
+          entries.find((entry: any) => entry.type === 'broken-link')?.attributes
+            .brokenLinks ?? []
+        );
+      }
+      await renderRow(100, { brokenLinks: [latest] });
+      assert.deepEqual(
+        await findings(),
+        [latest],
+        'equal-generation successful rendering supplies the live finding',
+      );
+      await renderRow(101, { brokenLinks: [] });
+      assert.deepEqual(
+        await findings(),
+        [],
+        'newer explicit empty findings clear a restored slot',
+      );
+      await renderRow(
+        200,
+        { brokenLinks: [latest] },
+        { realm: 'http://example.com/foreign/' },
+      );
+      await renderRow(200, { brokenLinks: [latest] }, { type: 'file' });
+      assert.deepEqual(
+        await findings(),
+        [],
+        'foreign realm and file rows cannot supply instance findings',
+      );
+      for (let variant of [
+        { name: 'older', generation: 99, diagnostics: { brokenLinks: [] } },
+        { name: 'missing capture', generation: 101, diagnostics: {} },
+        {
+          name: 'invalid capture',
+          generation: 101,
+          diagnostics: { brokenLinks: null },
+        },
+        {
+          name: 'failed',
+          generation: 101,
+          diagnostics: { brokenLinks: [] },
+          error: true,
+        },
+        {
+          name: 'tombstoned',
+          generation: 101,
+          diagnostics: { brokenLinks: [] },
+          deleted: true,
+        },
+      ]) {
+        await renderRow(variant.generation, variant.diagnostics, variant);
+        assert.deepEqual(
+          await findings(),
+          [original],
+          `${variant.name} rendering cannot clear the data finding`,
+        );
+      }
+      await renderRow(101, { brokenLinks: [latest] });
+      await dbAdapter.execute(
+        `UPDATE boxel_index SET generation=102 WHERE url=$1 AND realm_url=$2 AND type='instance'`,
+        { bind: [cardURL, sourceRealm.url] },
+      );
+      assert.deepEqual(
+        await findings(),
+        [original],
+        'a newer data row supersedes the preceding render findings',
+      );
+      await dbAdapter.execute(
+        `UPDATE boxel_index SET generation=100, diagnostics=$1::jsonb WHERE url=$2 AND realm_url=$3 AND type='instance'`,
+        {
+          bind: [
+            JSON.stringify({ toolSchemaErrors }),
+            cardURL,
+            sourceRealm.url,
+          ],
+        },
+      );
+      await renderRow(
+        105,
+        { brokenLinks: [latest], brokenLinksGeneration: 100 },
+        { error: true },
+      );
+      assert.deepEqual(
+        await findings(),
+        [latest],
+        'a failed render retains a proven render-only capture with no data finding',
+      );
+      await dbAdapter.execute(
+        `UPDATE boxel_index SET generation=101 WHERE url=$1 AND realm_url=$2 AND type='instance'`,
+        { bind: [cardURL, sourceRealm.url] },
+      );
+      assert.deepEqual(
+        await findings(),
+        [],
+        'the capture is older than new data despite the newer failed row generation',
+      );
+      await renderRow(106, {
+        brokenLinks: [latest],
+        brokenLinksGeneration: 100,
+      });
+      assert.deepEqual(
+        await findings(),
+        [],
+        'an uncaptured healthy render also cannot refresh old capture provenance',
+      );
+      await renderRow(106, {
+        brokenLinks: [latest],
+        brokenLinksGeneration: null,
+      });
+      assert.deepEqual(
+        await findings(),
+        [],
+        'a copied unvalidated finding is not a legacy fresh capture',
+      );
+    });
+
     test('surfaces frontmatter-error rows even when has_error is FALSE', async function (assert) {
       await sourceRealm.realmIndexUpdater.fullIndex();
 

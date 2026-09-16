@@ -8,6 +8,7 @@ import type {
   Prerenderer,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import type { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import Router from '@koa/router';
 import { createRequire } from 'module';
 import handleCreateSessionRequest from './handlers/handle-create-session.ts';
@@ -88,6 +89,7 @@ import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
 
 export type CreateRoutesArgs = {
+  lattice?: LatticeRealmConfig;
   serverURL: string;
   dbAdapter: DBAdapter;
   definitionLookup: DefinitionLookup;
@@ -248,6 +250,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_federated-search',
     multiRealmAuthorization(args),
     handleSearch({
+      lattice: args.lattice,
       reconciler: args.reconciler,
       searchCache,
       dbAdapter: args.dbAdapter,

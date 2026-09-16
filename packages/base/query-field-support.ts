@@ -15,6 +15,7 @@ import type {
   SerializedError,
 } from '@cardstack/runtime-common';
 import {
+  currentLatticeInputSnapshot,
   getField,
   getSingularRelationship,
   identifyCard,
@@ -35,6 +36,8 @@ import { initSharedState } from './shared-state';
 import {
   bumpFieldLoadingSignal,
   getDataBucket,
+  LatticeQueryInputsPending,
+  readLatticeQueryInputs,
   type LinkErrorValue,
   type LinkNotFoundValue,
 } from './field-support';
@@ -212,7 +215,12 @@ export function ensureQueryFieldSearchResource(
 
   let seedRecords = fieldState.seedRecords;
   let args = () => {
-    return resolveQueryAndRealm(store, instance, field, fieldDefinition);
+    try {
+      return resolveQueryAndRealm(store, instance, field, fieldDefinition);
+    } catch (error) {
+      if (!(error instanceof LatticeQueryInputsPending)) throw error;
+      return undefined;
+    }
   };
 
   // Inside a prerender the parent doc's `relationships.{field}.data` is
@@ -374,6 +382,19 @@ export function peekQueryFieldSearchResource(
   fieldName: string,
 ): StoreSearchResource | undefined {
   return queryFieldStates.get(instance)?.get(fieldName)?.searchResource;
+}
+
+// Scheduling evidence for this identity and field only. A resource may not
+// have begun its first search yet; its existing startup barrier lets the
+// caller re-read readiness once that load has been registered.
+export function queryFieldInputLoads(
+  instance: BaseDef,
+  fieldName: string,
+): Promise<unknown>[] {
+  let state = queryFieldStates.get(instance)?.get(fieldName);
+  return [state?.renderCycleBarrier, state?.searchResource?.pendingLoad].filter(
+    (load): load is Promise<void> => load !== undefined,
+  );
 }
 
 // Whether the realms this field targets all answered when its results were
@@ -861,30 +882,34 @@ function resolveQueryAndRealm(
   // (prefix form for mapped realms, URL otherwise) and is a valid base for
   // relative code-ref resolution. The index and the client-side filter matcher
   // both tolerate either spelling in the resulting query.
-  let normalized = normalizeQueryDefinition({
-    fieldDefinition,
-    queryDefinition: field.queryDefinition ?? {},
-    realmURL,
-    fieldName: field.name,
-    fieldPath,
-    resolvePathValue: (path) => resolveInstancePathValue(instance, path),
-    relativeTo: (instance as CardDef).id
-      ? rri((instance as CardDef).id)
-      : realmURL,
-    // A card definition never holds the realm mappings, so the store answers
-    // which realm a reference belongs to — the same boundary `resolveURL` and
-    // `canonicalizeId` sit on. A reference the store can't place falls back to
-    // the containing realm only when it actually lives there; otherwise the
-    // normalizer drops it rather than searching the wrong realm.
-    resolveRealmForReference: (reference) => {
-      let realm = store.realmForId(reference);
-      if (realm) {
-        return realm;
-      }
-      return reference.startsWith(realmURL.href) ? realmURL.href : undefined;
-    },
-  });
+  let normalize = () =>
+    normalizeQueryDefinition({
+      fieldDefinition,
+      queryDefinition: field.queryDefinition ?? {},
+      realmURL,
+      fieldName: field.name,
+      fieldPath,
+      resolvePathValue: (path) => resolveInstancePathValue(instance, path),
+      relativeTo: (instance as CardDef).id
+        ? rri((instance as CardDef).id)
+        : realmURL,
+      // A card definition never holds the realm mappings, so the store answers
+      // which realm a reference belongs to — the same boundary `resolveURL` and
+      // `canonicalizeId` sit on. A reference the store can't place falls back to
+      // the containing realm only when it actually lives there; otherwise the
+      // normalizer drops it rather than searching the wrong realm.
+      resolveRealmForReference: (reference) => {
+        let realm = store.realmForId(reference);
+        if (realm) {
+          return realm;
+        }
+        return reference.startsWith(realmURL.href) ? realmURL.href : undefined;
+      },
+    });
 
+  let normalized = currentLatticeInputSnapshot()
+    ? readLatticeQueryInputs(instance, field, normalize)
+    : normalize();
   if (!normalized) {
     return undefined;
   }
@@ -929,6 +954,36 @@ function resolveInstancePathValue(instance: BaseDef, path: string): any {
     return undefined;
   }
   return current;
+}
+
+export function publicationQueryWatch(
+  store: CardStore,
+  instance: BaseDef,
+  field: Field,
+) {
+  let definition = buildFieldDefinition(field);
+  if (!definition)
+    throw new Error(`Lattice cannot resolve query field '${field.name}'`);
+  let normalized = resolveQueryAndRealm(store, instance, field, definition);
+  if (!normalized)
+    throw new Error(
+      `Lattice cannot resolve query parameters for '${field.name}'`,
+    );
+  let realm = (instance as any)[realmURLSymbol] as URL | undefined;
+  if (
+    !realm ||
+    normalized.realmHrefs.length !== 1 ||
+    normalized.realmHrefs[0] !== realm.href
+  ) {
+    throw new Error(
+      'Lattice materialization currently requires same-realm queries',
+    );
+  }
+  return {
+    fieldPath: field.name,
+    query: normalized.query,
+    searchURL: normalized.searchURL,
+  };
 }
 
 function buildFieldDefinition(field: Field): FieldDefinition | undefined {

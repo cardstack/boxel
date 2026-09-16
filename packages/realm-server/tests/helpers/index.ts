@@ -1,3 +1,5 @@
+import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
+import type { LatticeNativeCardIndexer } from '@cardstack/runtime-common/lattice-native-index';
 import fsExtra from 'fs-extra';
 const {
   writeFileSync,
@@ -257,9 +259,11 @@ export async function waitUntil<T>(
 }
 
 export const testRealm = 'http://test-realm/';
-export const localBaseRealm = isEnvironmentMode()
-  ? `${serviceURL('realm-server')}/base`
-  : 'http://localhost:4201/base';
+export const localBaseRealm =
+  process.env.RESOLVED_BASE_REALM_URL?.replace(/\/$/, '') ??
+  (isEnvironmentMode()
+    ? `${serviceURL('realm-server')}/base`
+    : 'http://localhost:4201/base');
 export const matrixURL = new URL(
   isEnvironmentMode() ? serviceURL('matrix') : 'http://localhost:8008',
 );
@@ -438,6 +442,7 @@ export function makeTestReconciler(
     serverURL: URL;
     definitionLookup: CachingDefinitionLookup;
     enableFileWatcher?: boolean;
+    lattice?: LatticeRealmConfig;
   },
 ): RealmRegistryReconciler {
   let reconciler = new RealmRegistryReconciler({
@@ -474,6 +479,7 @@ export function makeTestReconciler(
         matrixClient: dynamicMountDeps.matrixClient,
         realmServerURL: dynamicMountDeps.serverURL.href,
         definitionLookup: dynamicMountDeps.definitionLookup,
+        lattice: dynamicMountDeps.lattice,
       });
       realms.push(reconciledRealm);
       dynamicMountDeps.virtualNetwork.mount(reconciledRealm.handle);
@@ -1127,6 +1133,7 @@ export function setupDB(
     beforeEach?: BeforeAfterCallback;
     afterEach?: BeforeAfterCallback;
     templateDatabase?: TestDatabaseTemplateProvider;
+    lattice?: LatticeRealmConfig;
   } = {},
 ) {
   let dbAdapter: PgAdapter | undefined;
@@ -1145,7 +1152,11 @@ export function setupDB(
     trackedDbAdapters.add(dbAdapter);
     publisher = new PgQueuePublisher(dbAdapter);
     trackedQueuePublishers.add(publisher);
-    runner = new PgQueueRunner({ adapter: dbAdapter, workerId: 'test-worker' });
+    runner = new PgQueueRunner({
+      adapter: dbAdapter,
+      workerId: 'test-worker',
+      lattice: args.lattice,
+    });
     trackedQueueRunners.add(runner);
   };
 
@@ -1269,6 +1280,7 @@ export async function createRealm({
   readIndexDrainBudgetMs,
   liveReadsResolveLinksOnly,
   cardDocumentCache = new CardDocumentCache(),
+  lattice,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -1320,6 +1332,7 @@ export async function createRealm({
   // instance to read its stats, or `ttlMs: 0` to keep coalescing while
   // disabling retention.
   cardDocumentCache?: CardDocumentCache;
+  lattice?: LatticeRealmConfig;
 }): Promise<{ realm: Realm; adapter: RealmAdapter }> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
@@ -1347,7 +1360,7 @@ export async function createRealm({
     }
     let prerenderer = providedPrerenderer ?? (await getTestPrerenderer());
     worker = new Worker({
-      indexWriter: new IndexWriter(dbAdapter),
+      indexWriter: new IndexWriter(dbAdapter, { lattice }),
       queue: runner,
       dbAdapter,
       queuePublisher: publisher,
@@ -1368,6 +1381,7 @@ export async function createRealm({
   let realm = new Realm(
     {
       url: realmURL,
+      lattice,
       adapter,
       secretSeed: realmSecretSeed,
       virtualNetwork,
@@ -1461,6 +1475,9 @@ export async function runTestRealmServer({
   readIndexDrainBudgetMs,
   liveReadsResolveLinksOnly,
   cardDocumentCache,
+  nativeCardIndexer,
+  latticeEnabled,
+  assetsURL,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -1491,9 +1508,13 @@ export async function runTestRealmServer({
   liveReadsResolveLinksOnly?: true;
   // Inject a cache configured for the test; omit for the production default.
   cardDocumentCache?: CardDocumentCache;
+  nativeCardIndexer?: LatticeNativeCardIndexer;
+  latticeEnabled?: boolean;
+  assetsURL?: URL;
 }) {
   stripTlsEnvVars();
   let prerenderer = providedPrerenderer ?? (await getTestPrerenderer());
+  let lattice = new LatticeRealmConfig(latticeEnabled ? [realmURL.href] : []);
   let definitionLookup = new CachingDefinitionLookup(
     dbAdapter,
     prerenderer,
@@ -1501,7 +1522,7 @@ export async function runTestRealmServer({
     testCreatePrerenderAuth,
   );
   let worker = new Worker({
-    indexWriter: new IndexWriter(dbAdapter),
+    indexWriter: new IndexWriter(dbAdapter, { lattice }),
     queue: runner,
     dbAdapter,
     queuePublisher: publisher,
@@ -1511,6 +1532,7 @@ export async function runTestRealmServer({
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
+    nativeCardIndexer,
     // The indexing worker persists declared screenshots when a store is
     // configured — same wiring as the production worker child.
     mediaCacheAdapter,
@@ -1535,6 +1557,7 @@ export async function runTestRealmServer({
     readIndexDrainBudgetMs,
     ...(liveReadsResolveLinksOnly ? { liveReadsResolveLinksOnly } : {}),
     ...(cardDocumentCache ? { cardDocumentCache } : {}),
+    lattice,
   });
 
   await testRealm.logInToMatrix();
@@ -1548,6 +1571,7 @@ export async function runTestRealmServer({
   });
 
   let reconciler = makeTestReconciler(dbAdapter, realms, {
+    lattice,
     realmsRootPath,
     virtualNetwork,
     queue: publisher,
@@ -1558,6 +1582,7 @@ export async function runTestRealmServer({
   });
   let testRealmServer = new RealmServer({
     realms,
+    lattice,
     reconciler,
     virtualNetwork,
     matrixClient,
@@ -1571,7 +1596,7 @@ export async function runTestRealmServer({
     grafanaSecret,
     aiBotDelegationSecret,
     serverURL: new URL(realmURL.origin),
-    assetsURL: new URL(`http://example.com/notional-assets-host/`),
+    assetsURL: assetsURL ?? new URL(`http://example.com/notional-assets-host/`),
     domainsForPublishedRealms,
     definitionLookup,
     prerenderer,
@@ -2205,6 +2230,9 @@ type InternalPermissionedRealmSetupOptions = {
   readIndexDrainBudgetMs?: number;
   liveReadsResolveLinksOnly?: true;
   cardDocumentCache?: CardDocumentCache;
+  nativeCardIndexer?: LatticeNativeCardIndexer;
+  latticeEnabled?: boolean;
+  assetsURL?: URL;
 };
 
 async function startPermissionedRealmFixture(
@@ -2227,6 +2255,9 @@ async function startPermissionedRealmFixture(
     readIndexDrainBudgetMs,
     liveReadsResolveLinksOnly,
     cardDocumentCache,
+    nativeCardIndexer,
+    latticeEnabled,
+    assetsURL,
   }: InternalPermissionedRealmSetupOptions,
 ): Promise<{
   testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2300,6 +2331,9 @@ async function startPermissionedRealmFixture(
     readIndexDrainBudgetMs,
     liveReadsResolveLinksOnly,
     cardDocumentCache,
+    nativeCardIndexer,
+    latticeEnabled,
+    assetsURL,
   });
 
   let request = supertest(testRealmServer.testRealmHttpServer);
@@ -2372,6 +2406,9 @@ export function setupPermissionedRealm(
     readIndexDrainBudgetMs,
     liveReadsResolveLinksOnly,
     cardDocumentCache,
+    nativeCardIndexer,
+    latticeEnabled,
+    assetsURL,
   }: {
     permissions: RealmPermissions;
     realmURL?: URL;
@@ -2409,6 +2446,9 @@ export function setupPermissionedRealm(
     // computation open, so a second request is guaranteed to join rather than
     // race). Omit for the production default.
     cardDocumentCache?: CardDocumentCache;
+    nativeCardIndexer?: LatticeNativeCardIndexer;
+    latticeEnabled?: boolean;
+    assetsURL?: URL;
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2417,6 +2457,9 @@ export function setupPermissionedRealm(
 
   setupDB(hooks, {
     templateDatabase: dbTemplateDatabase,
+    lattice: new LatticeRealmConfig(
+      latticeEnabled ? [(realmURL ?? testRealmURL).href] : [],
+    ),
     [mode]: async (
       dbAdapter: PgAdapter,
       publisher: QueuePublisher,
@@ -2442,6 +2485,9 @@ export function setupPermissionedRealm(
         readIndexDrainBudgetMs,
         liveReadsResolveLinksOnly,
         cardDocumentCache,
+        nativeCardIndexer,
+        latticeEnabled,
+        assetsURL,
       });
       testRealmServer = server;
 
@@ -2468,7 +2514,7 @@ export function setupPermissionedRealm(
 
 type SetupPermissionedRealmCachedOptions = Omit<
   Parameters<typeof setupPermissionedRealm>[1],
-  'dbTemplateDatabase'
+  'dbTemplateDatabase' | 'nativeCardIndexer' | 'latticeEnabled'
 >;
 
 function permissionedRealmTemplateCacheKey(

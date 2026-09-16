@@ -206,8 +206,7 @@ examples, direct fact derivation, a generated `def` decision program, and a
 stored decision trace.
 
 The generated `def` programs intentionally use direct `prepareBxlSafe()`, whose
-general runtime accepts user helpers. They are not `computeVia` formulas;
-moving them to that derive-profile surface would produce `derive-def-banned`.
+general runtime accepts user helpers. They are not `computeVia` formulas.
 
 Keeping these categories separate prevents a count of JSON strings from being
 mistaken for the executable gateway corpus while still preserving useful test

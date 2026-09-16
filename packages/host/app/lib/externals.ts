@@ -80,6 +80,12 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   );
 
   virtualNetwork.shimModule('@cardstack/runtime-common', runtime);
+  // Source analysis is a FileDef capability. Its compiler/parser chunk loads
+  // with GtsFileDef, without adding it to ordinary card imports.
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/runtime-common/lattice-gts-analysis',
+    resolve: () => import('@cardstack/runtime-common/lattice-gts-analysis'),
+  });
   virtualNetwork.shimModule(
     '@cardstack/boxel-ui/components',
     boxelUiComponents,

@@ -1,3 +1,6 @@
+import type { LatticeRead } from './lattice-adapters.ts';
+import { latticeReadState } from './lattice-materialization.ts';
+import { LatticeRealmConfig } from './lattice-config.ts';
 import { isScopedCSSRequest, scopedCSSServingHref } from './scoped-css.ts';
 import { cloneDeep } from 'lodash-es';
 import {
@@ -19,6 +22,7 @@ import {
   type DBAdapter,
   type QueryOptions,
   type InstanceOrError,
+  type LatticeLinkedInstance,
   type IndexedFile,
   type DefinitionLookup,
   type ResolvedCodeRef,
@@ -29,7 +33,7 @@ import {
   isScopedReference,
   codeRefFromInternalKey,
 } from './index.ts';
-import type { Realm } from './realm.ts';
+import type { Realm, RealmInfo } from './realm.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import { FILE_META_RESERVED_KEYS } from './realm.ts';
 import { RealmPaths } from './paths.ts';
@@ -107,7 +111,18 @@ import {
 // uses the same depth for repeated card types).
 const RECURSING_DEPTH = 3;
 
+// Lattice exposed how compound-card reads repeatedly load the same schemas
+// for every linked row. Keep promises only for this assembly, so parallel
+// siblings share work and later requests still observe definition changes.
+const latticeAssemblyDefinitions = Symbol('latticeAssemblyDefinitions');
+type AssemblyDefinitions = Map<
+  string,
+  Promise<import('./definitions.ts').Definition | undefined>
+>;
+
 type Options = {
+  [latticeAssemblyDefinitions]?: AssemblyDefinitions;
+  latticeInput?: boolean;
   loadLinks?: true;
   linkFields?: string[];
   // When true, populateQueryFields will only use cached definitions from the
@@ -236,6 +251,11 @@ export interface SearchResultError {
   };
 }
 
+type CrossRealmLink = {
+  resource: CardResource<Saved> | FileMetaResource;
+  materialized: boolean;
+};
+
 type QueryFieldErrorType = 'authorization' | 'network' | 'unknown';
 
 type QueryFieldErrorDetail = {
@@ -263,6 +283,15 @@ function absolutizeInstanceURL(
   setURL(virtualNetwork.resolveURL(url, resourceId).href);
 }
 
+type LatticeStoredDocument = Omit<
+  NonNullable<
+    Awaited<ReturnType<IndexQueryEngine['getLatticeStoredDocument']>>
+  >,
+  'resource'
+> & { type: 'doc'; doc: SingleCardDocument; deps: string[] };
+
+type LatticeStoredRead = { url: URL; have?: string };
+
 export class RealmIndexQueryEngine {
   #realm: Realm;
   #realmURL: URL | undefined;
@@ -270,17 +299,25 @@ export class RealmIndexQueryEngine {
   #indexQueryEngine: IndexQueryEngine;
   #definitionLookup: DefinitionLookup;
   #log = logger('realm:index-query-engine');
+  // A restart or new URL-mapping context requires re-admission of cached
+  // documents. Tokens do not grant permission and are not durable authority.
+  readonly #lattice: LatticeRealmConfig;
+  readonly #latticeEnabled: boolean;
+  #latticeInputContext: string | undefined;
+  readonly lattice?: LatticeRead<LatticeStoredRead, LatticeStoredDocument>;
 
   constructor({
     realm,
     dbAdapter,
     fetch,
     definitionLookup,
+    lattice,
   }: {
     realm: Realm;
     dbAdapter: DBAdapter;
     fetch: typeof globalThis.fetch;
     definitionLookup: DefinitionLookup;
+    lattice?: LatticeRealmConfig;
   }) {
     if (!dbAdapter) {
       throw new Error(
@@ -293,12 +330,59 @@ export class RealmIndexQueryEngine {
       realm.virtualNetwork,
     );
     this.#definitionLookup = definitionLookup;
+    this.#latticeDB = dbAdapter;
     this.#realm = realm;
+    this.#lattice = lattice ?? new LatticeRealmConfig();
+    this.#latticeEnabled = this.#lattice.isEnabled(realm.url);
+    if (this.#latticeEnabled) {
+      this.#latticeInputContext = globalThis.crypto.randomUUID();
+      this.lattice = { read: (request) => this.readPublication(request) };
+    }
     this.#fetch = fetch;
   }
 
   private get realmURL() {
     return (this.#realmURL ??= new URL(this.#realm.url));
+  }
+  #latticeDB: DBAdapter;
+
+  // Metadata cannot enable the serving realm. Remove inactive protocol stamps
+  // before ordinary assembly so the receiving Store cannot infer authority.
+  private clearInactiveLatticeMetadata(
+    resource: LooseCardResource | FileMetaResource,
+  ) {
+    if (resource.type === FileMetaResourceType) return;
+    if (!resource.meta?.publication) return;
+    resource.meta = { ...resource.meta };
+    delete resource.meta.publication;
+  }
+
+  private async latticeReadResource(
+    resource: LooseCardResource,
+    realmURL: URL,
+    opts?: Options,
+  ) {
+    if (!resource.meta.publication || !resource.id) return;
+    let url =
+      this.#realm.virtualNetwork
+        .toURL(resource.id)
+        .href.replace(/\.json$/, '') + '.json';
+    resource.meta = {
+      ...resource.meta,
+      publication: {
+        ...resource.meta.publication,
+        // Inventory is minted for this read, never inherited from stored JSON.
+        have: undefined,
+        hasPublishedSnapshot: resource.meta.publication.state === 'ready',
+        state: await latticeReadState(
+          this.#latticeDB,
+          realmURL.href,
+          url,
+          resource.meta.publication,
+          opts,
+        ),
+      },
+    };
   }
 
   // The entry engine. Runs the parsed entry query — the
@@ -333,6 +417,9 @@ export class RealmIndexQueryEngine {
     // 'instance', 'files' -> 'file', 'all'/absent -> 'all'.
     entryTypeScopeOverride?: 'instance' | 'file' | 'all',
   ): Promise<EntryCollectionDocument> {
+    if (!this.#latticeEnabled && opts?.latticeInput) {
+      opts = { ...opts, latticeInput: false };
+    }
     let {
       itemQuery: query,
       htmlQuery,
@@ -375,7 +462,7 @@ export class RealmIndexQueryEngine {
       sqlOpts = engineOpts;
     }
     let runSql = () =>
-      this.#indexQueryEngine.search(
+      this.searchEngineForOpts(opts).search(
         new URL(this.#realm.url),
         query,
         sqlOpts,
@@ -612,6 +699,11 @@ export class RealmIndexQueryEngine {
           id: cardUrl as RealmResourceIdentifier,
           links: { self: cardUrl },
         };
+        // This check also applies when assembly is omitted or fields are
+        // sparse; neither path may advertise a dirty snapshot as ready.
+        if (this.#latticeEnabled)
+          await this.latticeReadResource(item, this.realmURL, opts);
+        else this.clearInactiveLatticeMetadata(item);
         if (fieldset.item.kind === 'sparse') {
           item = buildSparseItemResource(item, fieldset.item.fields);
         } else {
@@ -787,12 +879,136 @@ export class RealmIndexQueryEngine {
     return [];
   }
 
+  private async readPublication({ url, have }: LatticeStoredRead) {
+    let realmInfo = await this.#realm.getRealmInfo();
+    let stored = await this.#indexQueryEngine.getLatticeStoredDocument(
+      url,
+      this.realmURL,
+      { have, context: JSON.stringify([this.#latticeInputContext, realmInfo]) },
+    );
+    if (!stored) return undefined;
+    let doc: SingleCardDocument = {
+      data: { ...stored.resource, links: { self: url.href } },
+    };
+    await this.latticeReadResource(doc.data, this.realmURL);
+    relativizeDocument(doc, this.realmURL, this.#realm.virtualNetwork);
+    await this.attachRealmInfo(doc);
+    if (stored.token && doc.data.meta.publication)
+      doc.data.meta.publication.have = stored.token;
+    return {
+      type: 'doc' as const,
+      doc,
+      generation: stored.generation,
+      indexedAt: stored.indexedAt,
+      screenshots: stored.screenshots,
+      deps: [],
+      attributesJSON: stored.attributesJSON,
+      reuse: stored.reuse,
+      token: stored.token,
+    };
+  }
+
   async cardDocument(
     url: URL,
     opts?: Options,
   ): Promise<SearchResult | undefined> {
+    let instance = await this.instance(url, {
+      ...opts,
+      latticeData: this.#latticeEnabled,
+    });
+    return this.cardDocumentFromInstance(url, instance, opts);
+  }
+
+  // One identity lookup for the computation store's current read batch. No
+  // query evaluation or relationship expansion; each result uses the same
+  // document/freshness mapping as the single-card input endpoint.
+  async latticeInputDocuments(
+    urls: URL[],
+    have = new Map<string, string>(),
+    retainLinks = false,
+  ) {
+    if (!this.#latticeEnabled)
+      throw new CardError('Lattice is disabled for this realm', {
+        status: 404,
+      });
+    let opts = { latticeInput: true };
+    let realmInfo = await this.#realm.getRealmInfo();
+    let instances = await this.#indexQueryEngine.getLatticeInputs(
+      urls,
+      have,
+      JSON.stringify([this.#latticeInputContext, realmInfo]),
+      retainLinks,
+    );
+    return new Map<
+      string,
+      | (SearchResult & {
+          token?: string;
+          receipt?: import('./lattice-browser-inputs.ts').LatticeInputRowReceipt;
+        })
+      | {
+          type: 'lattice-reuse';
+          token: string;
+          receipt?: import('./lattice-browser-inputs.ts').LatticeInputRowReceipt;
+        }
+      | undefined
+    >(
+      await Promise.all(
+        urls.map(async (url) => {
+          let found = instances.get(url.href);
+          if (found?.entry.type === 'lattice-reuse') {
+            // Dirty/failed materialized feeders must still fail closed, even
+            // when their last published body matches the caller's inventory.
+            await this.latticeReadResource(
+              found.entry.resource,
+              this.realmURL,
+              opts,
+            );
+            if (
+              found.entry.resource.meta.publication &&
+              found.entry.resource.meta.publication.state !== 'ready'
+            ) {
+              throw new CardError(
+                'Lattice feeder is pending; defer its dependent owner',
+                { status: 409 },
+              );
+            }
+            return [
+              url.href,
+              {
+                type: 'lattice-reuse' as const,
+                token: found.token!,
+                ...(found.receipt ? { receipt: found.receipt } : {}),
+              },
+            ] as const;
+          }
+          let result = await this.cardDocumentFromInstance(
+            url,
+            found?.entry,
+            opts,
+            realmInfo,
+          );
+          return [
+            url.href,
+            result
+              ? {
+                  ...result,
+                  token: found?.token,
+                  ...(found?.receipt ? { receipt: found.receipt } : {}),
+                }
+              : undefined,
+          ] as const;
+        }),
+      ),
+    );
+  }
+
+  private async cardDocumentFromInstance(
+    url: URL,
+    instance: InstanceOrError | undefined,
+    opts?: Options,
+    realmInfo?: RealmInfo,
+  ): Promise<SearchResult | undefined> {
     let doc: SingleCardDocument | undefined;
-    let instance = await this.instance(url, opts);
     if (!instance) {
       return undefined;
     }
@@ -819,7 +1035,13 @@ export class RealmIndexQueryEngine {
       );
     }
     let queryBacked = false;
-    if (opts?.loadLinks) {
+    if (this.#latticeEnabled)
+      await this.latticeReadResource(doc.data, this.realmURL, opts);
+    else this.clearInactiveLatticeMetadata(doc.data);
+    if (
+      opts?.loadLinks &&
+      !(this.#latticeEnabled && doc.data.meta.publication)
+    ) {
       let included = await this.loadLinks(
         {
           realmURL: this.realmURL,
@@ -839,7 +1061,7 @@ export class RealmIndexQueryEngine {
       }
     }
     relativizeDocument(doc, this.realmURL, this.#realm.virtualNetwork);
-    await this.attachRealmInfo(doc);
+    await this.attachRealmInfo(doc, realmInfo);
     return {
       type: 'doc',
       doc,
@@ -855,6 +1077,9 @@ export class RealmIndexQueryEngine {
     url: URL,
     opts?: QueryOptions,
   ): Promise<InstanceOrError | undefined> {
+    if (!this.#latticeEnabled && (opts?.latticeInput || opts?.latticeData)) {
+      opts = { ...opts, latticeInput: false, latticeData: false };
+    }
     return await this.#indexQueryEngine.getInstance(url, opts);
   }
 
@@ -1034,12 +1259,33 @@ export class RealmIndexQueryEngine {
     codeRef: import('./code-ref.ts').ResolvedCodeRef,
     opts: Options | undefined,
   ): Promise<import('./definitions.ts').Definition | undefined> {
-    if (opts?.cacheOnlyDefinitions) {
-      return await this.#definitionLookup.lookupCachedDefinition(codeRef);
+    let cache = opts?.[latticeAssemblyDefinitions];
+    if (!cache) {
+      return opts?.cacheOnlyDefinitions
+        ? this.#definitionLookup.lookupCachedDefinition(codeRef)
+        : this.#definitionLookup.lookupDefinition(codeRef, {
+            ...(opts?.priority !== undefined
+              ? { priority: opts.priority }
+              : {}),
+          });
     }
-    return await this.#definitionLookup.lookupDefinition(codeRef, {
-      ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
-    });
+    let key = JSON.stringify([
+      codeRef,
+      Boolean(opts?.cacheOnlyDefinitions),
+      opts?.priority,
+    ]);
+    let pending = cache?.get(key);
+    if (!pending) {
+      pending = opts?.cacheOnlyDefinitions
+        ? this.#definitionLookup.lookupCachedDefinition(codeRef)
+        : this.#definitionLookup.lookupDefinition(codeRef, {
+            ...(opts?.priority !== undefined
+              ? { priority: opts.priority }
+              : {}),
+          });
+      cache?.set(key, pending);
+    }
+    return await pending;
   }
 
   // Populate query-based relationship fields using pre-extracted metadata
@@ -1082,6 +1328,12 @@ export class RealmIndexQueryEngine {
         opts,
       });
     }
+  }
+
+  private searchEngineForOpts(opts?: Options): IndexQueryEngine {
+    return this.#latticeEnabled
+      ? this.#indexQueryEngine.compilationScope(opts?.priority)
+      : this.#indexQueryEngine;
   }
 
   private async executeQueryForField({
@@ -1177,17 +1429,15 @@ export class RealmIndexQueryEngine {
       if (realm === this.realmURL.href) {
         try {
           if (await this.queryTargetsFileMeta(query.filter, opts)) {
-            let { files, meta } = await this.#indexQueryEngine.searchFiles(
-              this.realmURL,
-              query,
+            let { files, meta } = await this.searchEngineForOpts(
               opts,
-            );
+            ).searchFiles(this.realmURL, query, opts);
             realmResults = files.map((fileEntry) =>
               fileResourceFromIndex(new URL(fileEntry.canonicalURL), fileEntry),
             );
             addToTotal(meta?.page?.total);
           } else {
-            let collection = await this.#indexQueryEngine.searchCards(
+            let collection = await this.searchEngineForOpts(opts).searchCards(
               this.realmURL,
               query,
               opts,
@@ -1554,8 +1804,9 @@ export class RealmIndexQueryEngine {
 
   private async attachRealmInfo(
     doc: SingleCardDocument | EntryCollectionDocument,
+    realmInfo?: RealmInfo,
   ): Promise<void> {
-    let realmInfo = await this.#realm.getRealmInfo();
+    realmInfo ??= await this.#realm.getRealmInfo();
     let resources = Array.isArray(doc.data) ? doc.data : [doc.data];
     for (let resource of [...resources, ...(doc.included ?? [])]) {
       // Only `card` / `file-meta` resources carry realm metadata. An entry
@@ -1578,73 +1829,96 @@ export class RealmIndexQueryEngine {
     invocationId: string,
     layerIndex: number,
     linkContext?: Map<string, { fieldName: string }>,
-  ): Promise<Map<string, CardResource<Saved> | FileMetaResource>> {
+  ): Promise<Map<string, CrossRealmLink>> {
     let entries = await Promise.all(
       urls.map(async (url) => {
-        let response: Response;
-        // A file link (the URL ends in a known FileDef extension; card ids
-        // never do) is requested with the file-meta mime so the serving
-        // realm returns the index-enriched document — consumers rely on
-        // index-derived attributes like a markdown skill's `kind`, which
-        // the card-mime fallback for file paths omits.
-        let accept = urlNamesFile(new URL(url))
-          ? SupportedMimeType.FileMeta
-          : SupportedMimeType.CardJson;
         try {
-          response = await this.#fetch(url, {
-            headers: { Accept: accept },
-          });
-        } catch (err: unknown) {
-          let message =
-            err instanceof Error ? err.message : String(err ?? 'unknown');
-          this.#log.warn(
-            `[loadLinks ${invocationId}] layer=${layerIndex} cross-realm fetch threw for ${url}: ${message}`,
-          );
-          throw err;
-        }
-        if (!response.ok) {
-          this.#log.warn(
-            `[loadLinks ${invocationId}] layer=${layerIndex} cross-realm fetch failed for ${url} status=${response.status}`,
-          );
-          throw await CardError.fromFetchResponse(url, response);
-        }
-        // `links.self` should resolve to a card or file document, but a
-        // mistake (human or AI-generated) can leave a non-card URL here.
-        // Gate on Content-Type so a binary body never reaches JSON.parse.
-        let contentType = response.headers.get('content-type');
-        if (!isJsonContentType(contentType)) {
-          let fieldName = linkContext?.get(url)?.fieldName;
-          let fieldLabel = fieldName
-            ? `Relationship \`${fieldName}\``
-            : 'A relationship';
+          let response: Response;
+          // A file link (the URL ends in a known FileDef extension; card ids
+          // never do) is requested with the file-meta mime so the serving
+          // realm returns the index-enriched document — consumers rely on
+          // index-derived attributes like a markdown skill's `kind`, which
+          // the card-mime fallback for file paths omits.
+          let accept = urlNamesFile(new URL(url))
+            ? SupportedMimeType.FileMeta
+            : SupportedMimeType.CardJson;
+          try {
+            response = await this.#fetch(url, {
+              headers: { Accept: accept },
+            });
+          } catch (err: unknown) {
+            let message =
+              err instanceof Error ? err.message : String(err ?? 'unknown');
+            this.#log.warn(
+              `[loadLinks ${invocationId}] layer=${layerIndex} cross-realm fetch threw for ${url}: ${message}`,
+            );
+            throw err;
+          }
+          if (!response.ok) {
+            this.#log.warn(
+              `[loadLinks ${invocationId}] layer=${layerIndex} cross-realm fetch failed for ${url} status=${response.status}`,
+            );
+            throw await CardError.fromFetchResponse(url, response);
+          }
+          // `links.self` should resolve to a card or file document, but a
+          // mistake (human or AI-generated) can leave a non-card URL here.
+          // Gate on Content-Type so a binary body never reaches JSON.parse.
+          let contentType = response.headers.get('content-type');
+          if (!isJsonContentType(contentType)) {
+            let fieldName = linkContext?.get(url)?.fieldName;
+            let fieldLabel = fieldName
+              ? `Relationship \`${fieldName}\``
+              : 'A relationship';
+            throw new Error(
+              `${fieldLabel} links to a non-card URL (${
+                contentType ?? 'unknown content type'
+              }): ${url}. The link should resolve to a card or file document; it likely points at a binary resource (e.g. an image) instead.`,
+            );
+          }
+          let json = await response.json();
+          // Cross-realm links can target either a card or a file (e.g. a card
+          // instantiated from a catalog still links to the catalog's image
+          // file). Both kinds are valid linked resources; only an unrecognized
+          // payload is an error.
+          if (isSingleCardDocument(json) || isSingleFileMetaDocument(json)) {
+            let linkResource: CardResource<Saved> | FileMetaResource = {
+              ...json.data,
+              ...{ links: { self: json.data.id } },
+            };
+            const sourceRealm = response.headers.get('x-boxel-realm-url');
+            const materialized =
+              linkResource.type !== FileMetaResourceType &&
+              linkResource.id !== undefined &&
+              Boolean(linkResource.meta.publication) &&
+              sourceRealm !== null &&
+              this.#lattice.isEnabled(sourceRealm) &&
+              url.startsWith(sourceRealm) &&
+              this.#realm.virtualNetwork
+                .toURL(linkResource.id)
+                .href.startsWith(sourceRealm);
+            return [url, { resource: linkResource, materialized }] as const;
+          }
           throw new Error(
-            `${fieldLabel} links to a non-card URL (${
-              contentType ?? 'unknown content type'
-            }): ${url}. The link should resolve to a card or file document; it likely points at a binary resource (e.g. an image) instead.`,
+            `linked resource ${url} is not a card or file document. it is: ${JSON.stringify(
+              json,
+              null,
+              2,
+            )}`,
           );
+        } catch (error) {
+          if (!this.#latticeEnabled) throw error;
+          // Included resources are optional read-time expansion. Keep the
+          // relationship identity unresolved, just as for an unavailable local
+          // link; do not fabricate a card or persist a missing-slot result.
+          // A subsequent read must retry this peer with its own authorization.
+          this.#log.warn(
+            `[loadLinks ${invocationId}] layer=${layerIndex} leaving remote link unresolved ${url}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          return undefined;
         }
-        let json = await response.json();
-        // Cross-realm links can target either a card or a file (e.g. a card
-        // instantiated from a catalog still links to the catalog's image
-        // file). Both kinds are valid linked resources; only an unrecognized
-        // payload is an error.
-        if (isSingleCardDocument(json) || isSingleFileMetaDocument(json)) {
-          let linkResource: CardResource<Saved> | FileMetaResource = {
-            ...json.data,
-            ...{ links: { self: json.data.id } },
-          };
-          return [url, linkResource] as const;
-        }
-        throw new Error(
-          `linked resource ${url} is not a card or file document. it is: ${JSON.stringify(
-            json,
-            null,
-            2,
-          )}`,
-        );
       }),
     );
-    return new Map(entries);
+    return new Map(entries.filter((entry) => entry !== undefined));
   }
 
   // TODO The caller should provide a list of fields to be included via JSONAPI
@@ -1669,6 +1943,13 @@ export class RealmIndexQueryEngine {
     },
     opts?: Options,
   ): Promise<(CardResource<Saved> | FileMetaResource)[]> {
+    if (this.#latticeEnabled) {
+      opts = {
+        ...opts,
+        [latticeAssemblyDefinitions]:
+          opts?.[latticeAssemblyDefinitions] ?? new Map(),
+      };
+    }
     // Diagnostic correlation id — lets us match log lines from the same
     // loadLinks invocation across layers when investigating CI failures.
     let invocationId = `${Date.now().toString(36)}-${Math.random()
@@ -1711,6 +1992,7 @@ export class RealmIndexQueryEngine {
       // recursive caller cloned a resource only after the recursive call
       // had already mutated its relationship.data fields).
       isRoot: boolean;
+      materialized?: boolean;
     };
     let layer: LayerItem[] = [];
     for (let resource of rootResources) {
@@ -1777,14 +2059,25 @@ export class RealmIndexQueryEngine {
       // that query instead.
       try {
         await Promise.all(
-          layer.map(async ({ resource, isRoot }) => {
-            if (!isRoot) {
+          layer.map(async (item) => {
+            let { resource, isRoot } = item;
+            // A remote GET already applied its own publication gate. Its
+            // authenticated serving-realm header carries this capability;
+            // authored metadata alone cannot enable it.
+            if (item.materialized) return;
+            if (
+              this.#latticeEnabled &&
+              resource.type !== FileMetaResourceType &&
+              resource.meta.publication &&
+              resource.id &&
+              realmPath.inRealm(this.#realm.virtualNetwork.toURL(resource.id))
+            ) {
+              item.materialized = true;
+              await this.latticeReadResource(resource, realmURL, opts);
               return;
             }
-            // A root carries `linkFields` as the caller passed it — the
-            // narrowing this pass reads directly, and the one step 2 strips
-            // below the root layer so a side-loaded card's stored links still
-            // expand.
+            this.clearInactiveLatticeMetadata(resource);
+            if (!isRoot) return;
             let timings = opts?.timings;
             let storedDefs = (
               resource.meta as {
@@ -1912,6 +2205,13 @@ export class RealmIndexQueryEngine {
 
         for (let entry of relationshipEntries(resource.relationships)) {
           let { relationship, key, fieldName } = entry;
+          if (
+            item.materialized &&
+            (
+              resource as LooseCardResource
+            ).meta.publication?.queryFields.includes(fieldName)
+          )
+            continue;
           if (processed.has(key)) {
             continue;
           }
@@ -2031,17 +2331,22 @@ export class RealmIndexQueryEngine {
       // per kind (instances + file-meta); cross-realm links fan out one
       // fetch per unique URL via Promise.all alongside the DB round-trips.
       let batchStart = Date.now();
-      let instanceMap: Map<string, InstanceOrError>;
+      let instanceMap: Map<string, LatticeLinkedInstance>;
       let fileMap: Map<string, IndexedFile>;
-      let crossRealmMap: Map<string, CardResource<Saved> | FileMetaResource>;
+      let crossRealmMap: Map<string, CrossRealmLink>;
       try {
         [instanceMap, fileMap, crossRealmMap] = await Promise.all([
           inRealmCardURLs.size > 0
-            ? this.#indexQueryEngine.getInstances(
-                [...inRealmCardURLs].map((u) => new URL(u)),
-                opts,
-              )
-            : Promise.resolve(new Map<string, InstanceOrError>()),
+            ? this.#latticeEnabled
+              ? this.#indexQueryEngine.getInstancesForLinks(
+                  [...inRealmCardURLs].map((u) => new URL(u)),
+                  opts,
+                )
+              : this.#indexQueryEngine.getInstances(
+                  [...inRealmCardURLs].map((u) => new URL(u)),
+                  opts,
+                )
+            : Promise.resolve(new Map<string, LatticeLinkedInstance>()),
           inRealmFileURLs.size > 0
             ? this.#indexQueryEngine.getFiles(
                 [...inRealmFileURLs].map((u) => new URL(u)),
@@ -2055,9 +2360,7 @@ export class RealmIndexQueryEngine {
                 currentLayerIndex,
                 crossRealmFieldNames,
               )
-            : Promise.resolve(
-                new Map<string, CardResource<Saved> | FileMetaResource>(),
-              ),
+            : Promise.resolve(new Map<string, CrossRealmLink>()),
         ]);
       } catch (err: unknown) {
         let message =
@@ -2070,6 +2373,9 @@ export class RealmIndexQueryEngine {
       this.#log.debug(
         `[loadLinks ${invocationId}] layer=${currentLayerIndex} batch fetched in ${Date.now() - batchStart}ms instances=${instanceMap.size}/${inRealmCardURLs.size} files=${fileMap.size}/${inRealmFileURLs.size} crossRealm=${crossRealmMap.size}/${crossRealmURLs.size}`,
       );
+      // Isolating a peer failure must not turn a cancelled caller's read into
+      // a successful partial response, including when there is no next layer.
+      if (this.#latticeEnabled) opts?.signal?.throwIfAborted();
 
       // A cross-realm link is served by its own realm, where it is that
       // request's root — so it arrives with its query-backed fields already
@@ -2082,7 +2388,7 @@ export class RealmIndexQueryEngine {
       // `applyQueryResults` — the only other place that fires this — does
       // not run for a resource this realm did not resolve.
       if (opts?.onQueryFieldApplied) {
-        for (let resource of crossRealmMap.values()) {
+        for (let { resource } of crossRealmMap.values()) {
           let relationships = resource.relationships;
           if (!relationships) {
             continue;
@@ -2145,7 +2451,7 @@ export class RealmIndexQueryEngine {
             }
           }
         } else {
-          linkResource = crossRealmMap.get(entry.linkURL.href);
+          linkResource = crossRealmMap.get(entry.linkURL.href)?.resource;
         }
 
         let descendStack =
@@ -2182,6 +2488,9 @@ export class RealmIndexQueryEngine {
               stack: descendStack,
               applyLinkFields: false,
               isRoot: false,
+              materialized:
+                !entry.inRealm &&
+                crossRealmMap.get(entry.linkURL.href)?.materialized,
             });
             foundLinks = true;
           } else if (linkResource.id != null) {

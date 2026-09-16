@@ -1,4 +1,8 @@
 import Koa from 'koa';
+import {
+  validateLatticeRenderCheckpoint,
+  type LatticeRenderCheckpoint,
+} from '@cardstack/runtime-common/lattice-render-checkpoint';
 import Router from '@koa/router';
 import type { Server } from 'http';
 import { createServer } from 'http';
@@ -1308,6 +1312,24 @@ export function buildPrerenderApp(options: {
           ? rawRenderScope
           : undefined;
 
+      let inputSnapshot = attrs.inputSnapshot;
+      if (
+        inputSnapshot !== undefined &&
+        (!inputSnapshot ||
+          typeof inputSnapshot !== 'object' ||
+          inputSnapshot.realmURL !== realm ||
+          !Number.isSafeInteger(inputSnapshot.generation) ||
+          inputSnapshot.generation < 0)
+      ) {
+        ctxt.status = 400;
+        ctxt.body = {
+          errors: [
+            { status: 400, message: 'Invalid Lattice indexed input snapshot' },
+          ],
+        };
+        return;
+      }
+
       let start = Date.now();
       // Hoisted so a re-render after a host-shell change replays the same
       // visit rather than an approximation of it.
@@ -1327,8 +1349,37 @@ export function buildPrerenderApp(options: {
         ...(jobId ? { jobId } : {}),
         ...(screenshots ? { screenshots } : {}),
         ...(renderScope ? { renderScope } : {}),
+        ...(inputSnapshot ? { inputSnapshot } : {}),
+        ...(attrs.latticeRenderCheckpoint
+          ? {
+              latticeRenderCheckpoint:
+                attrs.latticeRenderCheckpoint as LatticeRenderCheckpoint,
+            }
+          : {}),
         signal: ac.signal,
       };
+      if (attrs.latticeRenderCheckpoint !== undefined) {
+        try {
+          if (
+            visitType !== 'prerender-html' ||
+            inputSnapshot ||
+            !renderOptions?.cardRender
+          )
+            throw new Error('Lattice checkpoints require an HTML-only visit');
+          await validateLatticeRenderCheckpoint(
+            visitArgs.latticeRenderCheckpoint!,
+            {
+              id: url,
+              realmURL: realm,
+              loaderEpoch: renderOptions?.loaderEpoch,
+            },
+          );
+        } catch (e: any) {
+          ctxt.status = 400;
+          ctxt.body = { errors: [{ status: 400, message: e.message }] };
+          return;
+        }
+      }
       let shellAtStart = options.getHostShellHash?.();
       // Distinguishes a sampler that ran and found nothing (`null`) from no
       // sampler at all (`undefined`), which the row has to keep apart.

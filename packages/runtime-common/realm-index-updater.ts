@@ -75,6 +75,8 @@ export interface IncrementalIndexOptions {
   // the read endpoints' read-your-writes drain — see
   // #incrementalIndexingDeferreds.
   initiatedBy?: string | null;
+  // Source revisions fence distinct writes to the same URL.
+  revisions?: Map<string, string>;
   // See IncrementalArgs. `onDeferredPrerenderHtml` receives the set the pass
   // declined to enqueue; it runs inside the deferred lifecycle, alongside
   // onInvalidation, so a caller can carry the set forward before
@@ -339,6 +341,15 @@ export class RealmIndexUpdater {
           url: url.href,
           operation,
         })),
+        revisions: opts?.revisions
+          ? Object.fromEntries(
+              changes.flatMap(({ url, operation }) => {
+                if (operation === 'delete') return [];
+                let revision = opts.revisions!.get(url.href);
+                return revision === undefined ? [] : [[url.href, revision]];
+              }),
+            )
+          : {},
         realmURL: this.#realm.url,
         realmUsername: await this.#realm.getRealmOwnerUsername(),
         ignoreData: { ...this.#ignoreData },
@@ -426,6 +437,7 @@ export class RealmIndexUpdater {
       | 'deferPrerenderHtml'
       | 'carriedPrerenderHtmlChanges'
       | 'onDeferredPrerenderHtml'
+      | 'revisions'
     > & { delete?: true },
   ): Promise<void> {
     let { settled } = await this.enqueueUpdate(urls, opts);
@@ -444,6 +456,7 @@ export class RealmIndexUpdater {
       | 'deferPrerenderHtml'
       | 'carriedPrerenderHtmlChanges'
       | 'onDeferredPrerenderHtml'
+      | 'revisions'
     >,
   ): Promise<void> {
     let { settled } = await this.enqueueChanges(changes, opts);

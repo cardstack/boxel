@@ -1,7 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import type { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
+import { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
 import {
   canonicalURL,
   type CanonicalURLMemo,
@@ -108,6 +108,91 @@ module(basename(import.meta.filename), function () {
         resolveCount(),
         2,
         'a cleared memo recomputes on the next call',
+      );
+    });
+
+    test('Lattice: absolute and prefix dependencies are shared across card bases', function (assert) {
+      let network = new VirtualNetwork();
+      network.addRealmMapping('@lattice/test/', 'http://test/realm/');
+      let memo: CanonicalURLMemo = new Map();
+      let dependencies = [
+        'http://test/realm/person.gts?version=1#export',
+        '@lattice/test/person.gts?version=1#export',
+        `@lattice/test/person.gts.${'YQ'.repeat(500)}.glimmer-scoped.css`,
+      ];
+      let expected = dependencies.map((dep) =>
+        canonicalURL(dep, 'http://test/realm/first.json', network),
+      );
+      let correct = true;
+      for (let i = 0; i < 10_000; i++) {
+        for (let [j, dep] of dependencies.entries()) {
+          correct &&=
+            canonicalURL(
+              dep,
+              `http://test/realm/card-${i}.json`,
+              network,
+              memo,
+            ) === expected[j];
+        }
+      }
+      assert.true(correct, 'all canonical dependency identities are preserved');
+      assert.strictEqual(
+        memo.size,
+        dependencies.length,
+        'one key per dependency',
+      );
+    });
+
+    test('Lattice: root-relative and protocol-relative references still depend on their base', function (assert) {
+      let network = new VirtualNetwork();
+      let memo: CanonicalURLMemo = new Map();
+      for (let base of ['http://one.test/a/', 'https://two.test/b/']) {
+        for (let dep of [
+          './card',
+          '/card',
+          '//cdn.test/style.css',
+          'https:card',
+        ]) {
+          assert.strictEqual(
+            canonicalURL(dep, base, network, memo),
+            canonicalURL(dep, base, network),
+            `${dep} under ${base}`,
+          );
+        }
+      }
+    });
+
+    test('Lattice: unique inputs and oversized CSS do not grow the memo without bound', function (assert) {
+      let network = new VirtualNetwork();
+      let memo: CanonicalURLMemo = new Map();
+      for (let i = 0; i < 25_000; i++) {
+        canonicalURL(
+          './card',
+          `http://test/dir-${i}/source.json`,
+          network,
+          memo,
+        );
+      }
+      assert.true(
+        memo.size <= 20_000,
+        'unique relative inputs have a fixed cap',
+      );
+      assert.strictEqual(
+        canonicalURL('./card', 'http://test/dir-0/source.json', network, memo),
+        'http://test/dir-0/card',
+        'an evicted entry is recomputed correctly',
+      );
+      let size = memo.size;
+      let css = `http://test/view.gts.${'YQ'.repeat(10_000)}.glimmer-scoped.css`;
+      assert.strictEqual(
+        canonicalURL(css, 'http://test/source.json', network, memo),
+        css,
+        'oversized CSS remains a dependency',
+      );
+      assert.strictEqual(
+        memo.size,
+        size,
+        'oversized identifiers bypass the cache',
       );
     });
   });

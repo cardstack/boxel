@@ -17,7 +17,6 @@ import {
   Deferred,
   definitionDisplayName,
   definitionKind,
-  getFieldDefinitions,
   identifyCard,
   internalKeyFor,
   isBaseDef,
@@ -52,8 +51,11 @@ import {
   isCardErrorJSONAPI,
   type SerializedError,
 } from '@cardstack/runtime-common/error';
+import { getLatticeFieldDefinitions } from '@cardstack/runtime-common/lattice-compute-definitions';
 
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
+import { getFileIndexMetadata } from '../utils/file-def-attributes-extractor';
+
 import { registerBoxelTransitionTo } from '../utils/register-boxel-transition';
 import { ensureMessageIncludesUrl, stripSelfDeps } from '../utils/render-error';
 import {
@@ -514,11 +516,23 @@ function makeDefinitionLookup(
   return async (codeRef: CodeRef) => {
     try {
       let card = await loadCardDef(codeRef, { loader });
-      let { fields, fieldDefs } = getFieldDefinitions(api, card);
+      let {
+        fields,
+        fieldDefs,
+        nativeCodec,
+        nativeIndex,
+        nativeQueryInputs,
+        nativeLinkInputs,
+      } = getLatticeFieldDefinitions(api, card);
       return {
         codeRef,
         fields,
         fieldDefs,
+        nativeCodec,
+        nativeIndex,
+        nativeQueryInputs,
+        nativeLinkInputs,
+        nativeFileIndex: getFileIndexMetadata(api, card),
         type: definitionKind(card),
         displayName: definitionDisplayName(card),
       };
@@ -605,12 +619,24 @@ async function makeDefinition(
     let api = await context.loaderService.loader.import<typeof CardAPI>(
       '@cardstack/base/card-api',
     );
-    let { fields, fieldDefs } = getFieldDefinitions(api, def);
+    let {
+      fields,
+      fieldDefs,
+      nativeCodec,
+      nativeIndex,
+      nativeQueryInputs,
+      nativeLinkInputs,
+    } = getLatticeFieldDefinitions(api, def);
     let codeRef = identifyCard(def) as ResolvedCodeRef;
     let definition: Definition = {
       codeRef,
       fields,
       fieldDefs,
+      nativeCodec,
+      nativeIndex,
+      nativeQueryInputs,
+      nativeLinkInputs,
+      nativeFileIndex: getFileIndexMetadata(api, def),
       type: definitionKind(def),
       displayName: definitionDisplayName(def),
     };

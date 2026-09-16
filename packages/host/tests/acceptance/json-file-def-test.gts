@@ -151,6 +151,18 @@ module('Acceptance | json file def', function (hooks) {
       'counts the top-level keys',
     );
     assert.strictEqual(result.searchDoc?.name, 'config.json');
+    assert.ok(
+      result.staticIcon?.svg.startsWith('<svg'),
+      'the type supplies its generated SVG',
+    );
+    assert.ok(
+      result.staticIcon?.contentHash,
+      'the SVG carries its own content revision',
+    );
+    assert.notOk(
+      result.searchDoc?.staticIcon,
+      'icon metadata is not searchable file content',
+    );
   });
 
   test('falls back when JsonFileDef is used for non-json extensions', async function (assert) {

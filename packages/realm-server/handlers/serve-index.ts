@@ -1,4 +1,5 @@
 import type Koa from 'koa';
+import type { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import { JSDOM } from 'jsdom';
 import { merge } from 'lodash-es';
 import type {
@@ -23,6 +24,7 @@ import {
   sanitizeHeadHTMLToString,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import { latticeHasMaterializations } from '@cardstack/runtime-common/lattice-materialization';
 import {
   ensureSingleTitle,
   injectHeadHTML,
@@ -43,6 +45,7 @@ import {
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 
 export type ServeIndexDeps = {
+  lattice?: LatticeRealmConfig;
   serverURL: URL;
   assetsURL: URL;
   realms: Realm[];
@@ -485,8 +488,15 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       publishedRealmInfo = await getPublishedRealmInfo(requestURL, routingDeps);
     }
     let lastPublishedAt = publishedRealmInfo?.lastPublishedAt;
+    // A deployment timestamp cannot validate mutable materialized output.
+    // Keep a cached ready page from bypassing the queued-write/HTML checks.
+    let latticeRealm =
+      routedRealm &&
+      deps.lattice?.isEnabled(routedRealm.url) &&
+      (await latticeHasMaterializations(dbAdapter, [routedRealm.url]));
+    if (latticeRealm) ctxt.set('Cache-Control', 'no-store');
     let etag =
-      lastPublishedAt && indexHTMLHash
+      !latticeRealm && lastPublishedAt && indexHTMLHash
         ? `"${lastPublishedAt}-${indexHTMLHash}"`
         : null;
 
@@ -596,11 +606,15 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     let [headHTML, isolatedHTML, scopedCSS] = await Promise.all([
       retrieveHeadHTML({
         cardURL,
+        realmURL: routedRealm?.url,
+        lattice: deps.lattice,
         dbAdapter,
         log: headLog,
       }),
       retrieveIsolatedHTML({
         cardURL,
+        realmURL: routedRealm?.url,
+        lattice: deps.lattice,
         dbAdapter,
         log: isolatedLog,
       }),

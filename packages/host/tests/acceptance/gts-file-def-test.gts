@@ -12,6 +12,8 @@ import {
   SupportedMimeType,
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
+import { computeContentHash } from '@cardstack/runtime-common/content-hash';
+import type { LatticeGtsAnalysis } from '@cardstack/runtime-common/lattice-gts-analysis';
 import type { Realm } from '@cardstack/runtime-common/realm';
 
 import type NetworkService from '@cardstack/host/services/network';
@@ -148,6 +150,36 @@ export class SampleCard extends CardDef {
       'content includes full source',
     );
     assert.strictEqual(result.searchDoc?.name, 'sample-card.gts');
+    assert.strictEqual(result.searchDoc?.latticeAnalysisStatus, 'analyzed');
+    assert.strictEqual(
+      result.searchDoc?.latticeAnalysis,
+      null,
+      'full plan stays out of the search document',
+    );
+    const analysis = result.resource?.attributes
+      ?.latticeAnalysis as LatticeGtsAnalysis;
+    assert.strictEqual(
+      analysis.fileId,
+      url,
+      'analysis belongs to the source file identity',
+    );
+    assert.strictEqual(
+      analysis.sourceRevision.digest,
+      computeContentHash(
+        new TextEncoder().encode(String(result.searchDoc?.content)),
+      ),
+      'analysis receipt covers this source',
+    );
+    assert.strictEqual(analysis.exports[0].name, 'SampleCard');
+    assert.strictEqual(
+      analysis.exports[0].indexing,
+      'requires-linking',
+      'template does not force data execution into Chrome, nor prove Node eligibility',
+    );
+    assert.deepEqual(
+      analysis.exports[0].fields.map((field) => field.name),
+      ['firstName', 'lastName'],
+    );
   });
 
   test('falls back when gts def is used for non-.gts files', async function (assert) {
@@ -170,6 +202,12 @@ export class SampleCard extends CardDef {
     let fileEntry = await realm.realmIndexQueryEngine.file(fileURL);
 
     assert.ok(fileEntry, 'file entry exists');
+    assert.strictEqual(fileEntry?.searchDoc?.latticeAnalysisStatus, 'analyzed');
+    assert.strictEqual(
+      fileEntry?.searchDoc?.latticeAnalysis,
+      null,
+      'index search row omits full plan',
+    );
     assert.strictEqual(
       fileEntry?.searchDoc?.title,
       'sample-card',
@@ -188,6 +226,15 @@ export class SampleCard extends CardDef {
     assert.true(response.ok, 'file meta request succeeds');
 
     let body = await response.json();
+    const analysis = body?.data?.attributes
+      ?.latticeAnalysis as LatticeGtsAnalysis;
+    assert.strictEqual(analysis.fileId, fileURL.href);
+    assert.strictEqual(
+      analysis.exports[0].name,
+      'SampleCard',
+      'file metadata retains the analysis',
+    );
+    assert.strictEqual(analysis.coverage, 'local-syntax');
     assert.strictEqual(body?.data?.type, 'file-meta');
     assert.strictEqual(
       body?.data?.attributes?.title,

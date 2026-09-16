@@ -28,6 +28,7 @@ export interface Param {
   pg?: PgPrimitive;
   sqlite?: PgPrimitive;
   kind: 'param';
+  dataType?: 'text-array';
 }
 
 // pg/sqlite carries either a raw SQL fragment (scalar) or an inline
@@ -194,6 +195,13 @@ export function param(
     };
   }
   return { param: value, kind: 'param' };
+}
+
+// Lattice set lookups need a native Postgres array: a JSON-to-array subquery
+// hides the actual set from the planner and can prevent a selective GIN plan.
+// SQLite receives the same values as JSON for its json_each membership test.
+export function textArrayParam(values: string[]): Param {
+  return { kind: 'param', param: values, dataType: 'text-array' };
 }
 
 export function isParam(expression: any): expression is Param {
@@ -542,7 +550,11 @@ export function expressionToSql(
     } else if (isParam(element)) {
       let value = element[dbAdapterKind] ?? element.param ?? null;
       values.push(
-        value && typeof value === 'object' ? JSON.stringify(value) : value,
+        element.dataType === 'text-array' && dbAdapterKind === 'pg'
+          ? value
+          : value && typeof value === 'object'
+            ? JSON.stringify(value)
+            : value,
       );
       return `$${values.length}`;
     } else if (typeof element === 'string') {

@@ -1,4 +1,5 @@
 import {
+  currentLatticeInputSnapshot,
   getField,
   isBaseInstance,
   isCardInstance,
@@ -57,6 +58,81 @@ const deserializedData = initSharedState(
   'deserializedData',
   () => new WeakMap<BaseDef, Map<string, any>>(),
 );
+
+// Lattice's reader overlay is separate from authored/default values. The caller
+// must validate the indexed revision before requesting snapshot deserialization.
+// A contained edit leaves snapshot mode for the entire owner graph.
+export interface LatticeSnapshotScope {
+  active: boolean;
+  pending?: boolean;
+}
+const latticeSnapshots = initSharedState(
+  'latticeSnapshots',
+  () =>
+    new WeakMap<
+      BaseDef,
+      {
+        scope: LatticeSnapshotScope;
+        values: Map<string, unknown>;
+        queryFields: Set<string>;
+      }
+    >(),
+);
+
+export function setLatticeSnapshot(
+  instance: BaseDef,
+  snapshot?: {
+    scope: LatticeSnapshotScope;
+    values: Map<string, unknown>;
+    queryFields: Set<string>;
+  },
+): void {
+  let previous = latticeSnapshots.get(instance);
+  if (previous && previous.scope !== snapshot?.scope)
+    previous.scope.active = false;
+  if (snapshot) latticeSnapshots.set(instance, snapshot);
+  else latticeSnapshots.delete(instance);
+}
+
+export function leaveLatticeSnapshot(instance: BaseDef): void {
+  let snapshot = latticeSnapshots.get(instance);
+  if (snapshot) snapshot.scope.active = false;
+}
+
+export function hasLatticeSnapshot(instance: BaseDef): boolean {
+  return Boolean(latticeSnapshots.get(instance)?.scope.active);
+}
+
+export function latticeSnapshotState(
+  instance: BaseDef,
+): 'live' | 'ready' | 'pending' {
+  entangleWithCardTracking(instance);
+  let scope = latticeSnapshots.get(instance)?.scope;
+  return scope?.active ? (scope.pending ? 'pending' : 'ready') : 'live';
+}
+
+export function markLatticePending(instance: BaseDef): void {
+  setLatticeSnapshotPending(instance, true);
+}
+
+export function setLatticeSnapshotPending(
+  instance: BaseDef,
+  pending: boolean,
+): void {
+  let scope = latticeSnapshots.get(instance)?.scope;
+  if (scope?.active && Boolean(scope.pending) !== pending) {
+    scope.pending = pending;
+    notifyCardTracking(instance);
+  }
+}
+
+export function hasLatticeQueryMembership(
+  instance: BaseDef,
+  fieldName: string,
+): boolean {
+  let snapshot = latticeSnapshots.get(instance);
+  return Boolean(snapshot?.scope.active && snapshot.queryFields.has(fieldName));
+}
 // Cache for resolved field configurations per instance/field
 const fieldConfigurationCache = initSharedState(
   'fieldConfigurationCache',
@@ -162,11 +238,15 @@ export function getter<CardT extends BaseDefConstructor>(
   cardTracking.get(instance);
 
   if (field.computeVia) {
+    let snapshot = latticeSnapshots.get(instance);
+    if (snapshot?.scope.active && snapshot.values.has(field.name)) {
+      return snapshot.values.get(field.name) as BaseInstanceType<CardT>;
+    }
     // Fast path when no pass is open: skip the counter + memo entirely
     // so production reads pay only one branch on the module-local null
     // check. JIT branch-predicts this and the original behaviour is
     // unchanged.
-    if (passComputeMemo === null) {
+    if (passComputeMemo === null || isReadingLatticeQueryInputs()) {
       let value = field.computeVia.bind(instance)();
       if (value === undefined) {
         value = field.emptyValue(instance);
@@ -1098,7 +1178,36 @@ export function serializedGet<CardT extends BaseDefConstructor>(
       `tried to serializedGet field ${fieldName} which does not exist in card ${model.constructor.name}`,
     );
   }
-  return field.serialize(peekAtField(model, fieldName), doc, visited, opts);
+  let resource = field.serialize(
+    peekAtField(model, fieldName),
+    doc,
+    visited,
+    opts,
+  );
+  if (field.computeVia && currentLatticeInputSnapshot()) {
+    // Check after the field's serializer, before merging/stringifying can turn
+    // live instances in JSON-valued computations into apparently valid {}.
+    assertLatticeOutputData(resource.attributes, 'attributes', new WeakSet());
+  }
+  return resource;
+}
+
+function assertLatticeOutputData(
+  value: unknown,
+  path: string,
+  seen: WeakSet<object>,
+): void {
+  if (value === null || typeof value !== 'object') return;
+  if (isBaseInstance in value) {
+    throw new Error(
+      `Lattice output contains a live card at ${path}; use an explicit data projection`,
+    );
+  }
+  if (seen.has(value)) return;
+  seen.add(value);
+  for (let [key, child] of Object.entries(value)) {
+    assertLatticeOutputData(child, `${path}.${key}`, seen);
+  }
 }
 
 type Scalar =
@@ -1198,6 +1307,104 @@ export function propagateRealmContext(
   } else if (isArrayOfField(target)) {
     for (let v of target) {
       setRealmContextOnField(v, realmURLString);
+    }
+  }
+}
+
+// Keep query input tracking with relationship state so disabled realms retain
+// their ordinary module dependencies.
+type InputRead = { pending: boolean; loads: Set<Promise<unknown>> };
+let currentRead: InputRead | undefined;
+const resolving = new WeakMap<BaseDef, Set<string>>();
+let inputLoads:
+  | ((instance: BaseDef, field: Field) => readonly Promise<unknown>[])
+  | undefined;
+
+export function registerLatticeQueryInputLoads(
+  readLoads: NonNullable<typeof inputLoads>,
+): void {
+  inputLoads = readLoads;
+}
+
+export class LatticeQueryInputsPending extends Error {
+  readonly loads: readonly Promise<unknown>[];
+  constructor(field: string, loads: readonly Promise<unknown>[] = []) {
+    super(`Lattice query '${field}' is waiting for its input relationships`);
+    this.loads = loads;
+  }
+}
+
+export function isReadingLatticeQueryInputs(): boolean {
+  return currentRead !== undefined;
+}
+
+// Parameter expressions are synchronous, even when reading a relationship
+// starts an asynchronous load. Never interpret their placeholder value as a
+// confirmed parameter, including a computed that defaults to an empty list.
+export function readLatticeQueryInputs<T>(
+  instance: BaseDef,
+  field: Field,
+  read: () => T,
+): T {
+  let fields = resolving.get(instance);
+  if (!fields) resolving.set(instance, (fields = new Set()));
+  if (fields.has(field.name)) {
+    throw new Error(`Lattice query dependency cycle at '${field.name}'`);
+  }
+  fields.add(field.name);
+  let parent = currentRead;
+  let capture: InputRead = { pending: false, loads: new Set() };
+  currentRead = capture;
+  try {
+    let value: T;
+    try {
+      value = read();
+    } catch (error) {
+      // A computed may dereference an unavailable target without optional
+      // chaining. Retry after that target loads; an error with ready inputs
+      // still propagates unchanged.
+      if (!capture.pending) throw error;
+      throw new LatticeQueryInputsPending(field.name, [...capture.loads]);
+    }
+    if (capture.pending)
+      throw new LatticeQueryInputsPending(field.name, [...capture.loads]);
+    return value;
+  } finally {
+    currentRead = parent;
+    if (parent && capture.pending) {
+      parent.pending = true;
+      for (let load of capture.loads) parent.loads.add(load);
+    }
+    fields.delete(field.name);
+  }
+}
+
+// Invoked after a declared relationship getter has initiated its normal load.
+// Computed relationships are traced through the declared inputs they read;
+// probing the computed itself would recursively evaluate it again.
+export function recordLatticeQueryInput(instance: BaseDef, field: Field): void {
+  if (
+    !currentRead ||
+    field.computeVia ||
+    (field.fieldType !== 'linksTo' && field.fieldType !== 'linksToMany')
+  )
+    return;
+  let state = getRelationshipMembershipState(instance as CardDef, field.name);
+  if (state.isPartial) {
+    throw new Error(
+      `Lattice query input '${field.name}' has incomplete membership`,
+    );
+  }
+  if (
+    !state.isLoaded ||
+    state.membership?.some((member) => member.kind === 'not-loaded') ||
+    (field.queryDefinition &&
+      field.fieldType === 'linksToMany' &&
+      state.totalMatchCount === undefined)
+  ) {
+    currentRead.pending = true;
+    for (let load of inputLoads?.(instance, field) ?? []) {
+      currentRead.loads.add(load);
     }
   }
 }

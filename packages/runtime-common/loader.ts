@@ -77,6 +77,51 @@ type Module =
   | EvaluatedModule
   | BrokenModule;
 
+// An inventory of consumed code, not a freshness certificate. In particular,
+// shim identities need host-build authority and hashes need validation against
+// the serving realm before they can authorize reuse or publication.
+export type LoaderModuleSource = {
+  key: string;
+  url: string;
+  // Encoded CSS and data URLs can contain the entire source. Their identity
+  // travels as a digest, never as another copy of that source in metadata.
+  identityKind?: 'sha256' | 'unavailable';
+  state: Module['state'];
+} & ({ kind: 'source'; sourceHash: string } | { kind: 'shim' | 'unavailable' });
+
+type ModuleSourceIdentity = {
+  key: string;
+  url: string;
+  identityKind: 'sha256';
+};
+
+type LoadedModuleSource = {
+  type: 'source';
+  source: string;
+  url: string;
+  sourceHash?: string;
+  identity?: ModuleSourceIdentity;
+};
+
+function needsCompactIdentity(identifier: string): boolean {
+  return (
+    identifier.length > 1024 ||
+    identifier.startsWith('data:') ||
+    identifier.startsWith('blob:') ||
+    identifier.endsWith('.glimmer-scoped.css')
+  );
+}
+
+async function moduleDigest(value: string): Promise<string> {
+  let digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(value),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('');
+}
+
 type EvaluatableModule =
   | RegisteredCompletingDepsModule
   | RegisteredWithDepsModule
@@ -239,6 +284,12 @@ export class Loader {
 
   private moduleShims = new Map<string, Record<string, any>>();
   private moduleCanonicalURLs = new Map<string, string>();
+  private captureModuleSources: boolean;
+  private moduleSources = new Map<
+    string,
+    | { kind: 'source'; sourceHash: string; identity?: ModuleSourceIdentity }
+    | { kind: 'shim' }
+  >();
   // Cache the flattened dependency sets for evaluated modules. Once a module is
   // evaluated its consumedModules never change, so the result of
   // collectKnownModuleDependencies is stable and can be reused across repeated
@@ -276,6 +327,7 @@ export class Loader {
     options?: {
       retrySleep?: (ms: number) => Promise<void>;
       virtualNetwork?: VirtualNetwork;
+      captureModuleSources?: boolean;
     },
   ) {
     this.fetchImplementation = fetch;
@@ -283,6 +335,7 @@ export class Loader {
       resolveImport ?? ((moduleIdentifier) => moduleIdentifier);
     this.retrySleep = options?.retrySleep;
     this.virtualNetwork = options?.virtualNetwork;
+    this.captureModuleSources = options?.captureModuleSources ?? false;
     // Module caches are keyed by canonical RRI form (see moduleCacheKey), whose
     // relationship to a real URL is only stable between realm-mapping changes.
     // Discard the RRI-keyed caches whenever a mapping is added or removed so an
@@ -290,6 +343,7 @@ export class Loader {
     this.unsubscribeMappingChange = this.virtualNetwork?.onMappingChange(() => {
       this.modules.clear();
       this.moduleCanonicalURLs.clear();
+      this.moduleSources.clear();
       this.knownDepsCache.clear();
       this.trackingKeyCache.clear();
     });
@@ -312,6 +366,7 @@ export class Loader {
     let clone = new Loader(loader.fetchImplementation, loader.resolveImport, {
       retrySleep: loader.retrySleep,
       virtualNetwork: loader.virtualNetwork,
+      captureModuleSources: loader.captureModuleSources,
     });
     for (let [moduleIdentifier, module] of loader.moduleShims) {
       clone.shimModule(moduleIdentifier, module);
@@ -394,6 +449,11 @@ export class Loader {
     this.setCanonicalModuleURL(moduleIdentifier, moduleIdentifier);
 
     this.moduleShims.set(moduleIdentifier, module);
+    if (this.captureModuleSources) {
+      this.moduleSources.set(this.moduleCacheKey(moduleIdentifier), {
+        kind: 'shim',
+      });
+    }
 
     this.setModule(moduleIdentifier, {
       state: 'evaluated',
@@ -594,6 +654,43 @@ export class Loader {
   // Every module this loader has loaded, in the key form `moduleKey` returns.
   get loadedModuleKeys(): string[] {
     return [...this.modules.keys()];
+  }
+
+  // Stopping diagnostics does not invalidate code. Starting capture again
+  // requires a new Loader: resident modules cannot acquire source receipts
+  // retroactively. In-flight loads check this flag before installing receipts.
+  stopModuleSourceCapture(): void {
+    this.captureModuleSources = false;
+    this.moduleSources.clear();
+  }
+
+  // Opt-in metadata only: source strings are hashed while load() already owns
+  // them and are not retained here. Include every resident entry (also pending,
+  // broken and shimmed entries), rather than implying an incomplete import
+  // closure is safe to reuse. Returns detached values and performs no fetches.
+  get moduleSourceInventory(): LoaderModuleSource[] | undefined {
+    if (!this.captureModuleSources) return undefined;
+    return [...this.modules].map(([key, module]) => {
+      let url = this.moduleCanonicalURLs.get(key) ?? key;
+      let source = this.moduleSources.get(key);
+      let identity =
+        source?.kind === 'source' && source.identity
+          ? source.identity
+          : needsCompactIdentity(key) || needsCompactIdentity(url)
+            ? {
+                key: 'unavailable',
+                url: 'unavailable',
+                identityKind: 'unavailable' as const,
+              }
+            : { key, url };
+      return {
+        ...identity,
+        state: module.state,
+        ...(source?.kind === 'source'
+          ? { kind: 'source' as const, sourceHash: source.sourceHash }
+          : { kind: source?.kind ?? ('unavailable' as const) }),
+      };
+    });
   }
 
   // Where this loader got a module from, in the spelling it recorded: for a
@@ -1322,7 +1419,7 @@ export class Loader {
     this.setModule(moduleIdentifier, module);
 
     let loaded:
-      | { type: 'source'; source: string; url: string }
+      | LoadedModuleSource
       | { type: 'shimmed'; module: Record<string, unknown>; url: string };
 
     try {
@@ -1369,6 +1466,19 @@ export class Loader {
       this.getCanonicalModuleURL(moduleIdentifier) ||
       moduleIdentifier;
     this.setCanonicalModuleURL(moduleIdentifier, canonicalURL);
+
+    if (this.captureModuleSources) {
+      let key = this.moduleCacheKey(moduleIdentifier);
+      if (loaded.type === 'shimmed') {
+        this.moduleSources.set(key, { kind: 'shim' });
+      } else if (loaded.sourceHash) {
+        this.moduleSources.set(key, {
+          kind: 'source',
+          sourceHash: loaded.sourceHash,
+          identity: loaded.identity,
+        });
+      }
+    }
 
     if (loaded.type === 'shimmed') {
       this.captureIdentitiesOfModuleExports(loaded.module, moduleIdentifier);
@@ -1555,7 +1665,7 @@ export class Loader {
   private async load(
     moduleURL: URL,
   ): Promise<
-    | { type: 'source'; source: string; url: string }
+    | LoadedModuleSource
     | { type: 'shimmed'; module: Record<string, unknown>; url: string }
   > {
     let response: MaybeCachedResponse;
@@ -1624,7 +1734,29 @@ export class Loader {
     }
     let source = await response.text();
     response.cacheResponse?.(source);
-    return { type: 'source', source, url: canonicalURL };
+    let sourceHash: string | undefined;
+    let identity: ModuleSourceIdentity | undefined;
+    if (this.captureModuleSources) {
+      let key = this.moduleCacheKey(moduleURL.href);
+      let compact =
+        needsCompactIdentity(key) || needsCompactIdentity(canonicalURL);
+      let [bodyHash, keyHash, urlHash] = await Promise.all([
+        moduleDigest(source),
+        compact ? moduleDigest(key) : undefined,
+        compact ? moduleDigest(canonicalURL) : undefined,
+      ]);
+      sourceHash = bodyHash;
+      if (keyHash && urlHash) {
+        identity = {
+          key: `sha256:${keyHash}`,
+          url: `sha256:${urlHash}`,
+          identityKind: 'sha256',
+        };
+      }
+    }
+    // fetchModule checks that this load still belongs to the current cache
+    // entry after this await, before installing either code or its inventory.
+    return { type: 'source', source, url: canonicalURL, sourceHash, identity };
   }
 
   private prefetchDependencies(dependencyList: UnregisteredDep[]) {

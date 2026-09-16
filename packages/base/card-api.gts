@@ -1,7 +1,20 @@
 import type Modifier from 'ember-modifier';
+import {
+  baseCardTitle,
+  baseCardDescription,
+  baseCardTheme,
+  baseCardThumbnailURL,
+} from '@cardstack/runtime-common';
 import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash-es';
 import { WatchedArray, rawArrayValues } from './watched-array';
+import {
+  currentLatticeInputSnapshot,
+  latticeSnapshotFields,
+  type PublicationReceipt,
+  isLatticeDisplayReuse,
+  isLatticeDisplayToken,
+} from '@cardstack/runtime-common';
 import {
   BoxelInput,
   BrokenLinkTemplate,
@@ -25,6 +38,7 @@ import { LinksToEditor } from './links-to-editor';
 import { getLinksToManyComponent } from './links-to-many-component';
 import {
   assertIsSerializerName,
+  baseFileData,
   baseRef,
   Deferred,
   byteStreamToUint8Array,
@@ -38,8 +52,6 @@ import {
   getSerializer,
   humanReadable,
   identifyCard,
-  computeContentHash,
-  inferContentType,
   isBaseInstance,
   isCardError,
   isCardInstance as _isCardInstance,
@@ -116,8 +128,11 @@ import {
 import {
   captureQueryFieldSeedData,
   ensureQueryFieldSearchResource,
+  peekQueryFieldSearchResource,
+  queryFieldInputLoads,
   queryFieldHasUnreachableRealms,
   resolveQueryFieldEagerly,
+  publicationQueryWatch,
   validateRelationshipQuery,
 } from './query-field-support';
 import { isSavedInstance } from './-private';
@@ -186,7 +201,17 @@ import {
   getFieldOverrides,
   getFields,
   getRelationshipMembershipState,
+  LatticeQueryInputsPending,
+  recordLatticeQueryInput,
+  registerLatticeQueryInputLoads,
   getter,
+  hasLatticeQueryMembership,
+  hasLatticeSnapshot,
+  markLatticePending,
+  leaveLatticeSnapshot,
+  setLatticeSnapshot,
+  setLatticeSnapshotPending,
+  latticeSnapshotState,
   registerRelationshipProbe,
   relationshipStateForEntry,
   readFieldLoadingSignal,
@@ -235,6 +260,42 @@ import type {
 } from '@cardstack/runtime-common';
 
 export const BULK_GENERATED_ITEM_COUNT = 3;
+export { hasLatticeSnapshot, markLatticePending } from './field-support';
+
+// Advertise only a completely applied server snapshot, never an edited overlay.
+export function getLatticeDisplayToken(instance: CardDef): string | undefined {
+  let token = instance[meta]?.publication?.have;
+  return hasLatticeSnapshot(instance) &&
+    instance[meta]?.publication?.hasPublishedSnapshot === true &&
+    isLatticeDisplayToken(token)
+    ? token
+    : undefined;
+}
+
+export function applyLatticeDisplayReuse(
+  instance: CardDef,
+  reply: unknown,
+): boolean {
+  if (
+    !isLatticeDisplayReuse(reply) ||
+    getLatticeDisplayToken(instance) !== reply.lattice.token ||
+    instance.id !== reply.lattice.id
+  )
+    return false;
+  let current = instance[meta]!;
+  latticeSnapshotFields(
+    { id: instance.id, type: 'card', meta: current },
+    { allowPending: true },
+  );
+  // No deserialization, graph expansion or replacement of contained values.
+  // The shared scope makes contained computed values reflect the same state.
+  instance[meta] = {
+    ...current,
+    publication: { ...current.publication!, state: reply.lattice.state },
+  };
+  setLatticeSnapshotPending(instance, reply.lattice.state === 'pending');
+  return true;
+}
 
 interface CardOrFieldTypeIconSignature {
   Element: SVGSVGElement;
@@ -368,6 +429,9 @@ interface Options {
 }
 
 interface RelationshipOptions extends Options {
+  // Lattice retains loaded links by default in enabled realms. Opt out when
+  // this relationship must never keep a consumer-owned copy.
+  snapshot?: false;
   query?: QueryWithInterpolations;
   // Whether a query-backed relationship resolves as soon as its owner
   // deserializes, rather than waiting for something to read the field.
@@ -421,6 +485,7 @@ export interface FieldConstructor<T> {
   name: string;
   queryDefinition?: QueryWithInterpolations;
   eager?: boolean;
+  snapshot?: false;
 }
 
 type CardChangeSubscriber = (
@@ -521,6 +586,9 @@ export async function flushLogs() {
 }
 
 export interface StoreSearchResource<T extends CardDef | FileDef = CardDef> {
+  // Internal materialization scheduling only: settling wakes a readiness
+  // re-check; it does not prove membership, freshness, or query success.
+  readonly pendingLoad?: Promise<void>;
   readonly instances: T[];
   readonly instancesByRealm: { realm: string; cards: T[] }[];
   readonly isLoading: boolean;
@@ -734,6 +802,8 @@ export interface Field<
   // Whether a query-backed relationship resolves when its owner deserializes.
   // Absent is the same as true; only an explicit false defers to first read.
   eager?: boolean;
+  // Trusted declaration policy; never inferred from instance metadata.
+  snapshot?: false;
   captureQueryFieldSeedData?(
     instance: BaseDef,
     value: any,
@@ -1370,6 +1440,22 @@ function serializeNonPresentLink(
   };
 }
 
+function assertLatticeInputLink(value: unknown): void {
+  if (
+    currentLatticeInputSnapshot() &&
+    (isLinkError(value) ||
+      (isLinkNotFound(value) &&
+        (value.errorDoc.status !== 404 || value.errorDoc.awaitingIndex)))
+  ) {
+    // Interactive cards may render around a broken link. An indexed aggregate
+    // must not turn a failed fetch into a missing row and publish it as current.
+    // A confirmed 404 remains the normal absent-link state after deletion.
+    throw new Error(
+      `Lattice cannot materialize failed relationship input ${value.reference}: ${value.errorDoc.message}`,
+    );
+  }
+}
+
 class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   readonly fieldType = 'linksTo';
   private cardThunk: () => CardT;
@@ -1382,6 +1468,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   readonly configuration?: ConfigurationInput<any>;
   readonly queryDefinition?: QueryWithInterpolations;
   readonly eager?: boolean;
+  readonly snapshot?: false;
   constructor({
     cardThunk,
     declaredCardThunk,
@@ -1391,6 +1478,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     searchable,
     queryDefinition,
     eager,
+    snapshot,
   }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
     this.declaredCardThunk = declaredCardThunk ?? cardThunk;
@@ -1400,6 +1488,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     this.searchable = searchable;
     this.queryDefinition = queryDefinition;
     this.eager = eager;
+    if (snapshot === false) this.snapshot = false;
   }
 
   get card(): CardT {
@@ -1414,7 +1503,10 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     let deserialized = getDataBucket(instance);
     entangleWithCardTracking(instance);
 
-    if (this.queryDefinition) {
+    if (
+      this.queryDefinition &&
+      !hasLatticeQueryMembership(instance, this.name)
+    ) {
       let dependencyTrackingContext = runtimeQueryDependencyContext({
         queryField: this.name,
         consumer: instance.id,
@@ -1432,6 +1524,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       // sentinel surfaces as `undefined`, and `getRelationshipMembershipState` is the
       // structured read.
       let bucketEntry = deserialized.get(this.name);
+      assertLatticeInputLink(bucketEntry);
       if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
         return undefined;
       }
@@ -1455,6 +1548,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     // not-loaded link produces) and are NOT retried — re-reading must not kick
     // off another fetch. `getRelationshipMembershipState` is the only way to observe the
     // structured failure from outside this module.
+    assertLatticeInputLink(maybeNotLoaded);
     if (isLinkError(maybeNotLoaded) || isLinkNotFound(maybeNotLoaded)) {
       return undefined;
     }
@@ -1522,7 +1616,12 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
         `linksTo field '${this.name}' cannot serialize a FileDef without an id`,
       );
     }
-    if (visited.has(value.id)) {
+    if (opts?.includeLinkedResources === false && !value.id) {
+      throw new Error(
+        `linksTo field '${this.name}' cannot serialize an unsaved card without linked resources`,
+      );
+    }
+    if (opts?.includeLinkedResources === false || visited.has(value.id)) {
       return {
         relationships: {
           [this.name]: {
@@ -1847,6 +1946,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
   readonly configuration?: ConfigurationInput<any>;
   readonly queryDefinition?: QueryWithInterpolations;
   readonly eager?: boolean;
+  readonly snapshot?: false;
   constructor({
     cardThunk,
     declaredCardThunk,
@@ -1856,6 +1956,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     searchable,
     queryDefinition,
     eager,
+    snapshot,
   }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
     this.declaredCardThunk = declaredCardThunk ?? cardThunk;
@@ -1865,6 +1966,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     this.searchable = searchable;
     this.queryDefinition = queryDefinition;
     this.eager = eager;
+    if (snapshot === false) this.snapshot = false;
   }
 
   get card(): FieldT {
@@ -1890,7 +1992,10 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
 
     let deserialized = getDataBucket(instance);
 
-    if (this.queryDefinition) {
+    if (
+      this.queryDefinition &&
+      !hasLatticeQueryMembership(instance, this.name)
+    ) {
       let dependencyTrackingContext = runtimeQueryDependencyContext({
         queryField: this.name,
         consumer: instance.id,
@@ -1907,6 +2012,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       // unit, not per element). The empty array hands callers a usable
       // shape; the structured failure surfaces through `getRelationshipMembershipState`.
       let bucketEntry = deserialized.get(this.name);
+      assertLatticeInputLink(bucketEntry);
       if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
         return this.emptyValue(instance) as BaseInstanceType<FieldT>;
       }
@@ -1939,6 +2045,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     // an empty array to userland and do NOT retrigger the loader. Per-slot
     // terminal sentinels living inside the array are handled below — they are
     // simply skipped by the not-loaded retrigger scan.
+    assertLatticeInputLink(value);
     if (isLinkError(value) || isLinkNotFound(value)) {
       return this.emptyValue(instance) as BaseInstanceType<FieldT>;
     }
@@ -1956,6 +2063,9 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     // backing array — not the hiding proxy — so the not-loaded slots are still
     // visible to kick off their lazy load.
     let rawEntries = rawArrayValues(value);
+    if (currentLatticeInputSnapshot()) {
+      for (let entry of rawEntries) assertLatticeInputLink(entry);
+    }
     let hasNotLoaded = false;
     for (let entry of rawEntries) {
       if (isNotLoadedValue(entry)) {
@@ -2094,7 +2204,12 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
           `linksToMany field '${this.name}' cannot serialize a FileDef without an id`,
         );
       }
-      if (visited.has(value.id)) {
+      if (opts?.includeLinkedResources === false && !value.id) {
+        throw new Error(
+          `linksToMany field '${this.name}' cannot serialize an unsaved card without linked resources`,
+        );
+      }
+      if (opts?.includeLinkedResources === false || visited.has(value.id)) {
         relationships[`${this.name}.${i}`] = {
           links: {
             self: makeRelativeURL(value.id, opts),
@@ -2605,7 +2720,7 @@ export function linksTo<CardT extends LinkableDefConstructor>(
 ): BaseInstanceType<CardT> {
   return {
     setupField(fieldName: string, ownerPrototype: BaseDef) {
-      let { computeVia, searchable, query, eager } = options ?? {};
+      let { computeVia, searchable, query, eager, snapshot } = options ?? {};
       let fieldCardThunk = cardThunk(cardOrThunk, {
         fieldName,
         ownerPrototype,
@@ -2621,6 +2736,7 @@ export function linksTo<CardT extends LinkableDefConstructor>(
         searchable,
         queryDefinition: query,
         eager,
+        snapshot,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
@@ -2635,7 +2751,7 @@ export function linksToMany<CardT extends LinkableDefConstructor>(
 ): BaseInstanceType<CardT>[] {
   return {
     setupField(fieldName: string, ownerPrototype: BaseDef) {
-      let { computeVia, searchable, query, eager } = options ?? {};
+      let { computeVia, searchable, query, eager, snapshot } = options ?? {};
       let fieldCardThunk = cardThunk(cardOrThunk, {
         fieldName,
         ownerPrototype,
@@ -2651,6 +2767,7 @@ export function linksToMany<CardT extends LinkableDefConstructor>(
         searchable,
         queryDefinition: query,
         eager,
+        snapshot,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
@@ -3830,31 +3947,11 @@ export class FileDef extends BaseDef {
     getStream: () => Promise<ByteStream>,
     options: { contentHash?: string; contentSize?: number } = {},
   ): Promise<SerializedFile> {
-    let parsed = new URL(url);
-    let name = decodeURIComponent(
-      parsed.pathname.split('/').pop() ?? parsed.pathname,
-    );
-    let contentType = inferContentType(name);
-    let contentHash: string | undefined = options.contentHash;
-    let contentSize: number | undefined = options.contentSize;
-    if (!contentHash || contentSize === undefined) {
-      let bytes = await byteStreamToUint8Array(await getStream());
-      if (!contentHash) {
-        contentHash = computeContentHash(bytes);
-      }
-      if (contentSize === undefined) {
-        contentSize = bytes.byteLength;
-      }
-    }
-
-    return {
-      sourceUrl: url,
+    return baseFileData(
       url,
-      name,
-      contentType,
-      contentHash,
-      contentSize,
-    };
+      async () => byteStreamToUint8Array(await getStream()),
+      options,
+    );
   }
 
   serialize() {
@@ -3951,6 +4048,30 @@ export class CardInfoField extends FieldDef {
 }
 
 export class CardDef extends BaseDef {
+  // Lattice POC: explicit, inherited opt-in for an indexed summary definition.
+  // Normal views stay on their existing live-computation path.
+  static materialized = false;
+  static queryInputs:
+    | Record<
+        string,
+        import('@cardstack/runtime-common/definitions').LatticeDataProjection
+      >
+    | undefined;
+  // Lattice POC: what a declared `linksTo`/`linksToMany` carries when this
+  // card is computed natively (links are otherwise identities only). Keyed by
+  // link field name; the value is the projection applied to the linked
+  // card(s), the same shape as `queryInputs` (`{}` for attributes only,
+  // `{ links: … }` to follow further links). For feeders whose computeds
+  // read through their links.
+  static linkInputs:
+    | Record<
+        string,
+        import('@cardstack/runtime-common/definitions').LatticeDataProjection
+      >
+    | undefined;
+  get publicationState() {
+    return latticeSnapshotState(this);
+  }
   readonly [localId]: string = uuidv4();
   [isSavedInstance] = false;
   get [fieldsUntracked](): Record<string, typeof BaseDef> | undefined {
@@ -3975,19 +4096,17 @@ export class CardDef extends BaseDef {
   @field cardInfo = contains(CardInfoField);
   @field cardTitle = contains(StringField, {
     computeVia: function (this: CardDef) {
-      return this.cardInfo.name?.trim()?.length
-        ? this.cardInfo.name
-        : `Untitled ${this.constructor.displayName}`;
+      return baseCardTitle(this.cardInfo, () => this.constructor.displayName);
     },
   });
   @field cardDescription = contains(StringField, {
     computeVia: function (this: CardDef) {
-      return this.cardInfo.summary;
+      return baseCardDescription(this.cardInfo);
     },
   });
   @field cardTheme: InstanceType<typeof Theme> | null = linksTo(() => Theme, {
     computeVia: function (this: CardDef) {
-      return this.cardInfo.theme;
+      return baseCardTheme(this.cardInfo);
     },
   });
   // The thumbnail fallback chain: an author-set URL wins, then an authored
@@ -4002,10 +4121,8 @@ export class CardDef extends BaseDef {
   // URL — it must not mask the rungs below it.
   @field cardThumbnailURL = contains(MaybeBase64Field, {
     computeVia: function (this: CardDef) {
-      return (
-        this.cardInfo.cardThumbnailURL ||
-        this.cardInfo.cardThumbnail?.url ||
-        thumbnailScreenshotURL(this)
+      return baseCardThumbnailURL(this.cardInfo, () =>
+        thumbnailScreenshotURL(this),
       );
     },
   });
@@ -4450,6 +4567,7 @@ function lazilyLoadLink(
           { store, dependencyTrackingContext },
         )) as FileDef;
       } else {
+        let indexedInput = currentLatticeInputSnapshot();
         let cardDoc = await store.loadCardDocument(reference, {
           dependencyTrackingContext,
         });
@@ -4463,7 +4581,11 @@ function lazilyLoadLink(
           cardDoc.data,
           cardDoc,
           cardDoc.data.id!,
-          { store, dependencyTrackingContext },
+          {
+            store,
+            dependencyTrackingContext,
+            ...(indexedInput ? { latticePublication: 'input' as const } : {}),
+          },
         )) as CardDef;
       }
       if (pluralArgs) {
@@ -4503,10 +4625,15 @@ function lazilyLoadLink(
       }
     } catch (e) {
       let error = e as Error;
-      let isMissingFile =
-        (isCardError(error) && error.status === 404) ||
-        (typeof error?.message === 'string' &&
-          /not found/i.test(error.message));
+      let indexedInput = currentLatticeInputSnapshot();
+      // Ordinary cards retain their existing missing-link presentation. An
+      // indexed computation needs authoritative absence: a DNS/upstream error
+      // containing "not found", or a source awaiting indexing, is not a 404 slot.
+      let isMissingFile = indexedInput
+        ? isCardError(error) && error.status === 404 && !error.awaitingIndex
+        : (isCardError(error) && error.status === 404) ||
+          (typeof error?.message === 'string' &&
+            /not found/i.test(error.message));
       // The realm file the broken reference stands for: a card instance is
       // served out of `<id>.json`, while a reference that names a file is
       // already the file. The field's own type settles it when the field is
@@ -4521,7 +4648,9 @@ function lazilyLoadLink(
           ? reference
           : `${reference}.json`;
       let payloadError: Pick<SerializedError, 'status' | 'message'> &
-        Partial<Pick<SerializedError, 'title' | 'stack' | 'deps'>> & {
+        Partial<
+          Pick<SerializedError, 'title' | 'stack' | 'deps' | 'awaitingIndex'>
+        > & {
           additionalErrors?: Array<
             Partial<
               Pick<SerializedError, 'title' | 'status' | 'message' | 'stack'>
@@ -4536,6 +4665,9 @@ function lazilyLoadLink(
           ? `missing file ${referenceForMissingFile}`
           : (error?.message ?? String(e)),
         stack: error?.stack,
+        ...(indexedInput && isCardError(error) && error.awaitingIndex
+          ? { awaitingIndex: true as const }
+          : {}),
       };
       let deps = new Set<string>([referenceForMissingFile]);
       if (isCardError(error)) {
@@ -4641,6 +4773,16 @@ function hasInflightLoadForField(
   return false;
 }
 
+// Scheduling reads observe existing work for exactly this instance and field.
+// They never initiate a load or imply that a completed request is authoritative.
+registerLatticeQueryInputLoads((instance, field) => {
+  if (field.queryDefinition) return queryFieldInputLoads(instance, field.name);
+  let prefix = `${field.name}/`;
+  return [...(inflightLinkLoads.get(instance as CardDef) ?? [])]
+    .filter(([key]) => key.startsWith(prefix))
+    .map(([, load]) => load);
+});
+
 // Supply `getRelationshipMembershipState` with the loading status and query-field membership
 // that live above field-support: in-flight link loads (here) and per-field
 // search resources (in query-field-support). In-flight link loads are observed
@@ -4650,6 +4792,24 @@ registerRelationshipProbe((instance, field) => {
   // bump (load start / settle, or query resource creation) re-evaluates this.
   readFieldLoadingSignal(instance, field.name);
   if (field.queryDefinition) {
+    if (hasLatticeQueryMembership(instance, field.name)) {
+      let value = getDataBucket(instance).get(field.name);
+      let entries = Array.isArray(value)
+        ? rawArrayValues(value)
+        : value == null
+          ? []
+          : [value];
+      return {
+        isLoading: false,
+        isQueryField: true,
+        queryMembership: entries.map((entry) =>
+          relationshipStateForEntry(entry),
+        ),
+        queryTotalMatchCount: entries.length,
+        queryIsPartial: false,
+        queryHasUnreachableRealms: false,
+      };
+    }
     // Asking a query field for its state is a demand for the field. A card that
     // renders a pending state while `isLoaded` is false, and reaches its rows
     // only once loaded, would otherwise wait forever on a search nothing had
@@ -4732,8 +4892,10 @@ registerRelationshipProbe((instance, field) => {
 
 // Replace any linksTo / linksToMany bucket entry on `consumer` that points
 // to `deletedRef` with a `link-not-found` sentinel, and notify subscribers
-// so the placeholder render takes over the slot. Returns true when at
-// least one slot was rewritten. The host's store calls this from its
+// so the placeholder render takes over the slot. Materialized consumers instead
+// retain the last complete publication and become pending until replacement.
+// Returns true when a slot was rewritten or its publication was invalidated.
+// The host's store calls this from its
 // realm-event handler when an instance is removed: the deleted target's
 // loaded card is still hard-referenced by every consumer that has it in
 // memory, and without this rewrite the consumer's render stays stale
@@ -4762,9 +4924,33 @@ export function notifyLinksToTargetDeleted(
       additionalErrors: null,
     } as SerializedError,
   });
+  let snapshot = hasLatticeSnapshot(consumer);
+  let isDeletedTarget = (value: unknown) =>
+    value !== null &&
+    typeof value === 'object' &&
+    'id' in value &&
+    value.id === referenceWithoutJson;
   let changed = false;
   for (let [fieldName, field] of Object.entries(fields)) {
     if (!field) {
+      continue;
+    }
+    if (snapshot) {
+      // A target deletion invalidates this publication; it is not an authored
+      // edit of the owner. Keep its complete membership and computed values
+      // together until the replacement publication arrives. Announcing a field
+      // change here would leave snapshot mode, start queries and autosave the
+      // dashboard merely because another card was deleted.
+      let current = bucket.get(fieldName);
+      if (
+        (field.fieldType === 'linksTo' && isDeletedTarget(current)) ||
+        (field.fieldType === 'linksToMany' &&
+          Array.isArray(current) &&
+          current.some(isDeletedTarget))
+      ) {
+        markLatticePending(consumer);
+        changed = true;
+      }
       continue;
     }
     if (field.fieldType === 'linksTo') {
@@ -4979,6 +5165,29 @@ async function getDeserializedValue<CardT extends BaseDefConstructor>({
   if (!field) {
     throw new Error(`could not find field ${fieldName} in card ${card.name}`);
   }
+  if (opts?.latticeSnapshot) {
+    let snapshot = opts.latticeSnapshot;
+    if (field.fieldType === 'contains' || field.fieldType === 'containsMany') {
+      let prefix = `${fieldName}.${field.fieldType === 'containsMany' ? '*.' : ''}`;
+      opts = {
+        ...opts,
+        latticeSnapshot: {
+          ...snapshot,
+          computedFields: snapshot.computedFields
+            .filter((path) => path.startsWith(prefix))
+            .map((path) => path.slice(prefix.length)),
+          queryFields: snapshot.queryFields
+            .filter((path) => path.startsWith(prefix))
+            .map((path) => path.slice(prefix.length)),
+        },
+      };
+    } else {
+      // Carry membership IDs without inflating the included input graph. An
+      // explicit later link read uses the ordinary lazy/identity-map path.
+      if (snapshot.queryFields.includes(fieldName)) doc = { data: resource };
+      opts = { ...opts, latticeSnapshot: undefined };
+    }
+  }
   let result = await field.deserialize(
     value,
     doc,
@@ -5150,7 +5359,63 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   });
 }
 
-async function _updateFromSerialized<T extends BaseDefConstructor>({
+const latticeDeserializations = initSharedState(
+  'latticeDeserializations',
+  () => new WeakMap<BaseDef, Promise<unknown>>(),
+);
+
+async function _updateFromSerialized<T extends BaseDefConstructor>(args: {
+  instance: BaseInstanceType<T>;
+  resource: LooseCardResource;
+  doc: LooseSingleCardDocument | CardDocument;
+  store: CardStore;
+  opts?: DeserializeOpts;
+}): Promise<BaseInstanceType<T>> {
+  let { instance, resource, opts } = args;
+  if (
+    opts?.latticePublication &&
+    resource.meta.publication &&
+    !opts.latticeSnapshot
+  ) {
+    opts = {
+      ...opts,
+      latticeSnapshot: latticeSnapshotFields(resource, {
+        allowPending: opts.latticePublication === 'display',
+      }),
+    };
+    args = { ...args, opts };
+  }
+  if (!opts?.latticeSnapshot || !resource.meta.publication)
+    return _applySerialized(args);
+  // Serializing admitted root updates protects their contained-field assembly:
+  // rejecting an old root after await is too late if it mutated contained values.
+  let previous = latticeDeserializations.get(instance);
+  let update = (previous ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(async () => {
+      let accepted = (instance as any)[meta]?.publication;
+      let incoming = resource.meta.publication;
+      if (
+        hasLatticeSnapshot(instance) &&
+        Number.isSafeInteger(accepted?.outputRevision) &&
+        Number.isSafeInteger(incoming?.outputRevision) &&
+        (incoming!.outputRevision! < accepted.outputRevision ||
+          (incoming!.outputRevision === accepted.outputRevision &&
+            incoming!.validatedThrough < accepted.validatedThrough))
+      )
+        return instance;
+      return _applySerialized(args);
+    });
+  latticeDeserializations.set(instance, update);
+  try {
+    return await update;
+  } finally {
+    if (latticeDeserializations.get(instance) === update)
+      latticeDeserializations.delete(instance);
+  }
+}
+
+async function _applySerialized<T extends BaseDefConstructor>({
   instance,
   resource,
   doc,
@@ -5163,6 +5428,95 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   store: CardStore;
   opts?: DeserializeOpts;
 }): Promise<BaseInstanceType<T>> {
+  if (opts?.latticeSnapshot) {
+    if (
+      opts.latticeSnapshot.scope?.pending &&
+      !resource.meta.publication?.hasPublishedSnapshot
+    ) {
+      // An invalidation changes freshness, not the identity or displayed
+      // contents of an existing view. Keep its last published values until
+      // a complete newer snapshot can replace them on this same instance.
+      // A cold pending read with a completed publication hydrates that payload
+      // below, retaining pending freshness. Only discovery has empty output.
+      if (hasLatticeSnapshot(instance)) {
+        if (resource.meta.publication) {
+          // Advance the accepted revision even while retaining older values,
+          // so a delayed ready response cannot clear a newer invalidation.
+          (instance as any)[meta] = {
+            ...(instance as any)[meta],
+            publication: resource.meta.publication,
+            generation: resource.meta.generation,
+          };
+        }
+        markLatticePending(instance);
+        return instance;
+      }
+      // A pending child must not abort its parent's assembly. Keep authored
+      // identity/navigation fields, suppress unfinished outputs, and prevent
+      // query-input expansion. Renderers can show the tracked pending state.
+      resource = {
+        ...resource,
+        attributes: { ...resource.attributes },
+        relationships: { ...resource.relationships },
+      };
+      for (let path of opts.latticeSnapshot.computedFields) {
+        let name = path.split('.')[0];
+        let field = getField(instance, name);
+        resource.attributes![name] =
+          field?.fieldType === 'containsMany' ? [] : null;
+      }
+      for (let name of opts.latticeSnapshot.queryFields) {
+        if (name.includes('.')) continue;
+        for (let key of Object.keys(resource.relationships!)) {
+          if (key.startsWith(`${name}.`)) delete resource.relationships![key];
+        }
+        resource.relationships![name] = { data: [], meta: { total: 0 } };
+      }
+    }
+    for (let path of opts.latticeSnapshot.computedFields) {
+      let name = path.split('.')[0];
+      if (
+        !Object.prototype.hasOwnProperty.call(resource.attributes ?? {}, name)
+      ) {
+        throw new Error(
+          `Lattice snapshot is missing computed output '${path}'`,
+        );
+      }
+    }
+    for (let name of opts.latticeSnapshot.queryFields) {
+      if (name.includes('.')) continue; // checked by contained deserialization
+      let relationship = resource.relationships?.[name];
+      if (Array.isArray(relationship)) {
+        throw new Error(
+          `Lattice snapshot query '${name}' needs complete umbrella membership`,
+        );
+      }
+      let membership = relationship?.data;
+      let count = Array.isArray(membership)
+        ? membership.length
+        : membership === null
+          ? 0
+          : membership
+            ? 1
+            : undefined;
+      if (
+        count === undefined ||
+        relationship?.meta?.total !== count ||
+        relationship?.meta?.errors?.length
+      ) {
+        throw new Error(
+          `Lattice snapshot query '${name}' is missing, partial or errored`,
+        );
+      }
+    }
+    opts = {
+      ...opts,
+      latticeSnapshot: {
+        ...opts.latticeSnapshot,
+        scope: opts.latticeSnapshot.scope ?? { active: true },
+      },
+    };
+  }
   // because our store uses a tracked map for its identity map all the assembly
   // work that we are doing to deserialize the instance below is "live". so we
   // add the actual instance silently in a non-tracked way and only track it at
@@ -5466,6 +5820,9 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     }
     let deserialized = getDataBucket(instance);
 
+    let snapshotOptions = opts?.latticeSnapshot;
+    let snapshotValues = new Map<string, unknown>();
+
     for (let [field, value] of values) {
       if (!field) {
         continue;
@@ -5490,8 +5847,25 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         applySubscribersToInstanceValue(instance, field, existingValue, value);
       }
       deserialized.set(field.name as string, value);
+      if (
+        snapshotOptions?.computedFields.includes(field.name) &&
+        field.computeVia
+      ) {
+        snapshotValues.set(field.name, value);
+      }
       field.captureQueryFieldSeedData?.(instance, value, resource);
     }
+
+    setLatticeSnapshot(
+      instance,
+      snapshotOptions
+        ? {
+            scope: snapshotOptions.scope!,
+            values: snapshotValues,
+            queryFields: new Set(snapshotOptions.queryFields),
+          }
+        : undefined,
+    );
 
     // assign the realm meta before we compute as computeds may be relying on this
     if (!isFieldInstance(instance) && resource.id != null) {
@@ -5538,7 +5912,10 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       for (let field of Object.values(
         getFields(instance, { includeComputeds: true }),
       )) {
-        if (field?.queryDefinition) {
+        if (
+          field?.queryDefinition &&
+          !hasLatticeQueryMembership(instance, field.name)
+        ) {
           resolveQueryFieldEagerly(store, instance, field, isDocumentSubject);
         }
       }
@@ -5570,7 +5947,9 @@ function makeDescriptor<
     enumerable: true,
   };
   descriptor.get = function (this: BaseInstanceType<CardT>) {
-    return field.getter(this);
+    let value = field.getter(this);
+    recordLatticeQueryInput(this, field);
+    return value;
   };
   if (field.computeVia) {
     descriptor.set = function () {
@@ -5614,6 +5993,7 @@ function setField(instance: BaseDef, field: Field, value: any) {
   propagateRealmContext(value, instance);
   // TODO: refactor validate to not have a return value and accomplish this normalization another way
   value = field.validate(instance, value);
+  leaveLatticeSnapshot(instance);
   let deserialized = getDataBucket(instance);
   deserialized.set(field.name, value);
   notifySubscribers(instance, field.name, value);
@@ -5626,6 +6006,7 @@ function notifySubscribers(
   value: any,
   visited = new WeakSet<BaseDef>(),
 ) {
+  leaveLatticeSnapshot(instance);
   if (visited.has(instance)) {
     return;
   }
@@ -5902,6 +6283,227 @@ declare module 'ember-provide-consume-context/context-registry' {
   }
 }
 
+// Pull a materialized owner's declared query inputs before collecting its
+// computed output. Kept explicit so ordinary cards retain their lazy policy.
+export async function preparePublicationQueries(
+  instance: CardDef,
+): Promise<void> {
+  if (!(instance.constructor as typeof CardDef).materialized) return;
+  let fields = Object.values(
+    getFields(instance, { includeComputeds: true }),
+  ).filter((field) => field.queryDefinition);
+  let store = getStore(instance);
+  // Each query waits on the exact relationship loads its parameter read
+  // encountered. An unrelated slow query must not prevent ready work starting.
+  // Join every preparation before returning so a failed sibling cannot leave
+  // work running against the next render scope.
+  let preparations = await Promise.allSettled(
+    fields.map(async (field) => {
+      if (field.fieldType !== 'linksToMany') {
+        throw new Error(
+          'Lattice currently materializes complete linksToMany queries',
+        );
+      }
+      for (let pass = 0; pass < 32; pass++) {
+        try {
+          publicationQueryWatch(store, instance, field);
+          ensureQueryFieldSearchResource(store, instance, field);
+          return;
+        } catch (error) {
+          if (!(error instanceof LatticeQueryInputsPending)) throw error;
+          if (error.loads.length) {
+            await Promise.allSettled(error.loads);
+          } else {
+            // Older resources may not expose a load. Keep the conservative
+            // drain as a fallback; it cannot authorize an unresolved input.
+            await store.loaded();
+          }
+        }
+      }
+      throw new Error(`Lattice query inputs did not settle: ${field.name}`);
+    }),
+  );
+  await store.loaded();
+  for (let result of preparations) {
+    if (result.status === 'rejected') throw result.reason;
+  }
+}
+
+// Observe resident declared/query relationships without invoking a computed or
+// lazy getter. Contained paths stay with their card; crossing a link starts a
+// new identity. Raw-source and foreign retention need separate receipt adapters.
+export function latticeLoadedLinks(
+  instance: CardDef,
+): Array<{ ownerURL: string; fieldPath: string; sourceURL: string }> {
+  const edges: Array<{
+    ownerURL: string;
+    fieldPath: string;
+    sourceURL: string;
+  }> = [];
+  const cards = new Set<BaseDef>();
+  let nodes = 0;
+  const visitCard = (card: CardDef) => {
+    if (cards.has(card)) return;
+    cards.add(card);
+    const ownerURL = resolveInstanceURL(card, card.id)?.href.replace(
+      /\.json$/,
+      '',
+    );
+    if (!ownerURL)
+      throw new Error('Retained links require a saved owning card');
+    const visit = (value: BaseDef, prefix: string, ancestors: Set<BaseDef>) => {
+      if (++nodes > 16384 || ancestors.has(value))
+        throw new Error(
+          'Retained link traversal exceeds contained shape bounds',
+        );
+      const next = new Set(ancestors).add(value);
+      const bucket = getDataBucket(value);
+      for (const [name, field] of Object.entries(
+        getFields(value, { includeComputeds: true }),
+      )) {
+        // Computed fields are not resident bucket entries. Their declared
+        // inputs are visited, but capture must not re-execute them to find links.
+        if (field.computeVia || (!field.queryDefinition && !bucket.has(name)))
+          continue;
+        const path = prefix + name;
+        if (
+          field.fieldType === 'linksTo' ||
+          field.fieldType === 'linksToMany'
+        ) {
+          const state = getRelationshipMembershipState(value as CardDef, name);
+          for (const member of state.membership ?? []) {
+            if (member.kind !== 'present' || !isCardInstance(member.value))
+              continue;
+            const target = member.value;
+            const sourceURL = resolveInstanceURL(
+              target,
+              target.id,
+            )?.href.replace(/\.json$/, '');
+            if (!sourceURL) continue;
+            if (field.snapshot !== false) {
+              if (edges.length >= 16384)
+                throw new Error('Retained link bound exceeded');
+              edges.push({ ownerURL, fieldPath: path, sourceURL });
+            }
+            // Opt-out belongs to this edge only. The target's own loaded links
+            // still have independent policies at its card identity.
+            visitCard(target);
+          }
+        } else if (
+          field.fieldType === 'contains' ||
+          field.fieldType === 'containsMany'
+        ) {
+          const child = bucket.get(name);
+          if (Array.isArray(child)) {
+            child.forEach((item, i) => {
+              if (isCardOrField(item)) visit(item, `${path}.${i}.`, next);
+            });
+          } else if (isCardOrField(child)) visit(child, path + '.', next);
+        }
+      }
+    };
+    visit(card, '', new Set());
+  };
+  visitCard(instance);
+  return edges;
+}
+
+// serializeCard continues to omit query fields, so it never recursively
+// serializes the input graph. Add complete membership umbrellas directly.
+export function publicationManifest(
+  instance: CardDef,
+  doc: LooseSingleCardDocument,
+  inputGeneration?: number,
+): PublicationReceipt | undefined {
+  if (!(instance.constructor as typeof CardDef).materialized) return;
+  let computedFields: string[] = [];
+  let watches: PublicationReceipt['watches'] = [];
+  let collect = (
+    value: BaseDef,
+    prefix = '',
+    ancestors = new Set<BaseDef>(),
+  ) => {
+    if (ancestors.has(value))
+      throw new Error('Lattice does not support cyclic contained outputs');
+    let nextAncestors = new Set(ancestors).add(value);
+    for (let [name, field] of Object.entries(
+      getFields(value, { includeComputeds: true }),
+    )) {
+      if (name === 'id') continue;
+      let path = `${prefix}${name}`;
+      if (field.queryDefinition) {
+        if (prefix || field.fieldType !== 'linksToMany') {
+          throw new Error(
+            'Lattice currently requires top-level linksToMany queries',
+          );
+        }
+        let watch = publicationQueryWatch(getStore(instance), instance, field);
+        watches.push({ fieldPath: path, query: watch.query });
+        if (inputGeneration === undefined) continue;
+        let resource = peekQueryFieldSearchResource(instance, name);
+        let membership = getRelationshipMembershipState(instance, name);
+        if (
+          !resource ||
+          resource.isLoading ||
+          resource.errors?.length ||
+          !membership.isLoaded ||
+          membership.isPartial ||
+          membership.totalMatchCount !== membership.membership?.length ||
+          membership.membership?.some((member) => member.kind !== 'present')
+        ) {
+          throw new Error(
+            `Lattice query '${name}' is unresolved, partial or errored`,
+          );
+        }
+        doc.data.relationships ??= {};
+        doc.data.relationships[name] = {
+          links: { self: null, search: watch.searchURL },
+          data: membership.membership!.map((member) => ({
+            type: 'card',
+            id: member.reference!,
+          })),
+          meta: { total: membership.totalMatchCount },
+        };
+        continue;
+      }
+      if (field.computeVia) {
+        if (
+          field.fieldType !== 'contains' &&
+          field.fieldType !== 'containsMany'
+        ) {
+          // Computed links (including CardDef.cardTheme) retain their ordinary
+          // lazy behavior. Only contained outputs are covered by this stamp.
+          continue;
+        }
+        computedFields.push(path);
+      }
+      if (
+        primitive in field.card ||
+        (field.fieldType !== 'contains' && field.fieldType !== 'containsMany')
+      )
+        continue;
+      let child = (value as any)[name];
+      if (field.fieldType === 'containsMany') {
+        for (let item of child ?? []) {
+          if (item) collect(item, `${path}.*.`, nextAncestors);
+        }
+      } else if (child) collect(child, `${path}.`, nextAncestors);
+    }
+  };
+  collect(instance);
+  return {
+    version: 1,
+    state: 'pending',
+    computedFields: [...new Set(computedFields)],
+    queryFields: watches.map((watch) => watch.fieldPath),
+    watches,
+    // A discovery pass registers watches but cannot publish an authoritative
+    // result. Only the writer, after checking the pinned input revision, may
+    // change this marker to ready.
+    validatedThrough: inputGeneration ?? 0,
+  };
+}
+
 function getStore(instance: BaseDef): CardStore {
   return stores.get(instance as BaseDef) ?? new FallbackCardStore();
 }
@@ -6076,7 +6678,12 @@ class FallbackCardStore implements CardStore {
     opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
     trackRuntimeInstanceDependency(url, opts?.dependencyTrackingContext);
-    let promise = loadCardDocument(fetch, url, this.#requireVirtualNetwork());
+    let promise = loadCardDocument(
+      fetch,
+      url,
+      this.#requireVirtualNetwork(),
+      currentLatticeInputSnapshot(),
+    );
     this.trackLoad(promise);
     return await promise;
   }

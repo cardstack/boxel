@@ -12,12 +12,18 @@ import type {
 import type { JobInfo, IndexingProgressEvent } from '../worker.ts';
 import type { MediaCacheAdapter } from '../media-cache.ts';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
+import type {
+  LatticeNativeCardIndexer,
+  LatticeNativeFileIndexer,
+} from '../lattice-native-index.ts';
 export type * from './lint.ts';
 export * from '#lint-task';
 export * from './full-reindex.ts';
 export * from './daily-credit-grant.ts';
 export * from './copy.ts';
 export * from './indexer.ts';
+export * from './lattice.ts';
+export * from './lattice-clock-sweep.ts';
 export * from './media-cache-gc.ts';
 export * from './scoped-css-gc.ts';
 export * from './prerender-html.ts';
@@ -32,6 +38,8 @@ export interface TaskArgs {
   queuePublisher: QueuePublisher;
   indexWriter: IndexWriter;
   prerenderer: Prerenderer;
+  nativeCardIndexer?: LatticeNativeCardIndexer;
+  nativeFileIndexer?: LatticeNativeFileIndexer;
   definitionLookup: DefinitionLookup;
   virtualNetwork: VirtualNetwork;
   log: LoggerInstance;

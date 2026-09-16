@@ -645,6 +645,152 @@ check('{ as: Cls } materializes from unwrapped output over a cycle', () => {
   strictEqual(out.total, 3200);
 });
 
+check('date and datetime fields read as their serialized strings', () => {
+  // card-api's date serializer parses `yyyy-MM-dd` to local midnight; jq
+  // would otherwise see that as a UTC instant whose calendar day depends on
+  // the viewer's offset. The expression must read what Node-side derivation
+  // reads from the stored card.
+  const FIELD_SERIALIZER = Symbol.for('cardstack-field-serializer');
+  class DateFieldStub {
+    static [FIELD_SERIALIZER] = 'date';
+  }
+  class DateTimeFieldStub {
+    static [FIELD_SERIALIZER] = 'datetime';
+  }
+  class PersonStub extends StubBase {
+    get id() {
+      return 'person-1';
+    }
+    get birthday() {
+      return new Date(2018, 2, 3);
+    }
+    get closedDates() {
+      return [new Date(2026, 8, 14), new Date(2026, 11, 31)];
+    }
+    get updatedAt() {
+      return new Date(Date.UTC(2026, 8, 14, 18, 5));
+    }
+    get untyped() {
+      return new Date(Date.UTC(2026, 0, 15));
+    }
+  }
+  fieldMaps.set(PersonStub, {
+    birthday: { fieldType: 'contains', card: DateFieldStub },
+    closedDates: { fieldType: 'containsMany', card: DateFieldStub },
+    updatedAt: { fieldType: 'contains', card: DateTimeFieldStub },
+    untyped: { fieldType: 'contains' },
+  });
+  const person = new PersonStub();
+  strictEqual(run('.birthday', person), '2018-03-03');
+  strictEqual(run('.birthday | split("-") | .[2]', person), '03');
+  deepStrictEqual(run('.closedDates', person), ['2026-09-14', '2026-12-31']);
+  strictEqual(run('.updatedAt', person), '2026-09-14T18:05:00.000Z');
+  ok(
+    run('.untyped', person) instanceof Date,
+    'a Date on a field without a date serializer stays raw',
+  );
+});
+
+check('contained field values read and copy as their stored JSON', () => {
+  // A card-api FieldDef instance serializes only the subfields that were set,
+  // and enumerates its links and bookkeeping too. Copied into a JSON output it
+  // must look like the attributes the card stores, the same input Lattice's
+  // Node derivation reads.
+  const FIELD_SERIALIZER = Symbol.for('cardstack-field-serializer');
+  class StringFieldStub {}
+  class DateFieldStub {
+    static [FIELD_SERIALIZER] = 'date';
+  }
+  class ImageStub extends StubBase {
+    get id() {
+      return 'image-1';
+    }
+  }
+  class EnumStub extends StubBase {
+    static isFieldDef = true;
+    get id() {
+      return undefined;
+    }
+    get value() {
+      return undefined;
+    }
+  }
+  class LocationStub extends StubBase {
+    static isFieldDef = true;
+    get id() {
+      return undefined;
+    }
+    get label() {
+      return 'Room 1A';
+    }
+    get since() {
+      return new Date(2026, 8, 14);
+    }
+    get status() {
+      return new EnumStub();
+    }
+    get photo() {
+      return new ImageStub();
+    }
+    get note() {
+      return undefined;
+    }
+    get bookkeeping() {
+      return 'not a field';
+    }
+  }
+  class HolderStub extends StubBase {
+    get id() {
+      return 'holder-1';
+    }
+    get location() {
+      return new LocationStub();
+    }
+  }
+  fieldMaps.set(EnumStub, {
+    value: { fieldType: 'contains', card: StringFieldStub },
+  });
+  fieldMaps.set(LocationStub, {
+    label: { fieldType: 'contains', card: StringFieldStub },
+    since: { fieldType: 'contains', card: DateFieldStub },
+    status: { fieldType: 'contains', card: EnumStub },
+    photo: { fieldType: 'linksTo', card: ImageStub },
+    note: { fieldType: 'contains', card: StringFieldStub },
+  });
+  fieldMaps.set(HolderStub, {
+    location: { fieldType: 'contains', card: LocationStub },
+  });
+  const holder = new HolderStub();
+  const stored = {
+    label: 'Room 1A',
+    since: '2026-09-14',
+    status: { value: null },
+    note: null,
+  };
+  deepStrictEqual(run('{loc: .location}', holder), { loc: stored });
+  deepStrictEqual(run('[.location] | {all: .}', holder), { all: [stored] });
+  deepStrictEqual(run('.location | keys', holder), [
+    'label',
+    'note',
+    'since',
+    'status',
+  ]);
+  deepStrictEqual(run('.location | delpaths([["note"]])', holder), {
+    label: 'Room 1A',
+    since: '2026-09-14',
+    status: { value: null },
+  });
+  strictEqual(
+    run('.location.photo.id', holder),
+    'image-1',
+    'links stay reachable by path',
+  );
+  ok(
+    run('.location', holder) instanceof LocationStub,
+    'a top-level field value stays a live instance for FieldDef-typed computeds',
+  );
+});
+
 check('the view is read-only and refuses to be frozen', () => {
   const view = materializeCardInput({ n: 1 }) as Record<string, unknown>;
   throws(

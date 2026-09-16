@@ -134,6 +134,11 @@ export const FRONTMATTER_PARSE_ERROR_SYMBOL = Symbol.for(
 // `search_doc`), `extractAttributes` routes the enriched copy under this key
 // and the host file extractor stamps it onto the resource, leaving the
 // search doc's `frontmatter` as authored.
+// FileDef extraction can persist declared opaque values on the file resource
+// without duplicating them in search_doc. The string-keyed extraction fields
+// remain the searchable projection; this bag supplies resource-only values.
+export const FILE_META_VALUES_SYMBOL = Symbol.for('boxel:file-meta-values');
+
 export const FRONTMATTER_FILE_META_VALUE_SYMBOL = Symbol.for(
   'boxel:file-frontmatter-file-meta-value',
 );
@@ -350,6 +355,9 @@ export interface PrerenderMetaDiagnostics extends BuildModelDiagnostics {
   searchableLoadMs?: number;
   // Wall-clock of the host-side serializeCard call.
   serializeMs?: number;
+  // Query registration, search and initial member loads before evaluating a
+  // Lattice card. Separate from query compilation warmup in the index worker.
+  latticeQueryPreparationMs?: number;
   // Wall-clock of the searchable walk that produced the doc — the first
   // walk against a stable load generation. It never waits on getter-fired
   // loads (those mark a walk unstable and it is discarded), but it can
@@ -372,6 +380,16 @@ export interface PrerenderMetaDiagnostics extends BuildModelDiagnostics {
   // host-side; the cap logs a warning). Zero when the first walk settled —
   // the card fired no lazy getter loads.
   searchDocSettlePasses?: number;
+  // Bounded by the render route's settle-pass cap. Walk time can include
+  // awaited searchable links; loadWaitMs is the subsequent store drain.
+  // Computed counters cover only each walk's initiating synchronous turn.
+  searchDocPasses?: Array<{
+    walkMs: number;
+    loadWaitMs: number;
+    stable: boolean;
+    computedCalls?: number;
+    computedCacheHits?: number;
+  }>;
   // Per-field inclusive evaluation timings from the timed searchDoc walk,
   // keyed by dotted field path from the indexed card's root (a parent's
   // time includes its children's, so a slow leaf appears alongside its
@@ -389,10 +407,10 @@ export interface PrerenderMetaDiagnostics extends BuildModelDiagnostics {
   // load). Omitted when empty.
   searchDocLinkLoads?: SearchDocLinkLoad[];
   // Broken `linksTo` / `linksToMany` targets found on the rendered
-  // instance after the store settled. Captured by the render.meta scan
-  // and persisted to `boxel_index.diagnostics.brokenLinks` so
-  // cards-with-broken-links are cheaply enumerable. Omitted entirely
-  // when the card has no broken links.
+  // instance after the store settled. Index visits persist the render.meta
+  // scan in boxel_index; HTML-only visits capture after the formats and persist
+  // it in prerendered_html. An HTML visit emits [] to clear a restored finding;
+  // omission means no capture. The diagnostic endpoint selects current findings.
   brokenLinks?: BrokenLinkSummary[];
   // Declared-screenshot slots whose capture failed during the
   // prerender-html visit. The row publishes normally — a failed capture is
@@ -450,6 +468,11 @@ export interface PrerenderMetaDiagnostics extends BuildModelDiagnostics {
 // Shared type produced by the host app when visiting the render.meta route and
 // consumed by the server.
 export interface PrerenderMeta {
+  retainedInputs?: import('./lattice-browser-inputs.ts').LatticeBrowserInputCapture;
+  // Earliest time-grain boundary among the card's clock-reading computeds
+  // (ISO instant), from a native computation; null when none. The browser
+  // producer never sets it.
+  validUntil?: string | null;
   serialized: SingleCardDocument | null;
   searchDoc: Record<string, any> | null;
   displayNames: string[] | null;
@@ -459,6 +482,9 @@ export interface PrerenderMeta {
   // `response.meta.diagnostics` so it persists to
   // `boxel_index.diagnostics` for SQL-side perf triage.
   diagnostics?: PrerenderMetaDiagnostics;
+  // Consumed code inventory, not current authority. A later admission/publication
+  // check must validate these sources and the host's opaque shim identities.
+  moduleSources?: import('./loader.ts').LoaderModuleSource[];
 }
 
 // A render.meta payload that also carries the file-extract result for the
@@ -780,6 +806,9 @@ export interface FileExtractResponse {
   // chain (e.g. `['Markdown', 'File']`). Persisted as `boxel_index.display_names`
   // so CardsGrid's "All Files" sidebar can label each subtype.
   displayNames?: string[] | null;
+  // Build-time SVG from a literal icon component. Independent of file data;
+  // the extractor's ordinary module dependencies govern code invalidation.
+  staticIcon?: import('./static-icon.ts').StaticIconSvg;
   deps: string[];
   error?: RenderError;
   mismatch?: true;
@@ -942,6 +971,10 @@ export interface IndexVisitClientTimings {
 // `PrerenderMetaDiagnostics` (computed-field counters plus `brokenLinks`).
 export interface Diagnostics
   extends RenderTimeoutDiagnostics, PrerenderMetaDiagnostics {
+  // Storage-owned validation generation of the last complete render link scan.
+  // A failed/uncaptured attempt can advance its row without refreshing this.
+  // null means a copied finding has no validation in the destination realm.
+  brokenLinksGeneration?: number | null;
   invalidationId?: string;
   indexedAt?: number;
   // 0-based position of this row among the batch's row writes, stamped when
@@ -979,6 +1012,13 @@ export interface Diagnostics
   //
   // Absent on a tombstoned row and on rows written before the stamp existed.
   writeSeq?: number;
+  // This row requires a new native revision receipt on retry; its process-local
+  // transaction check cannot be recovered from working-table bytes alone.
+  latticeNative?: true;
+  latticeNativeFile?: true;
+  latticeNativeFileMs?: { admission: number; computeAndAssemble: number };
+  latticeNativeMs?: import('./lattice-native-index.ts').LatticeNativeIndexTimings;
+  latticeNativeCompute?: import('./lattice-native-index.ts').LatticeNativeComputeMeasurements;
   // Host-shell token the prerender server had been told was current when this
   // render started, and again when its response was assembled. Two different
   // values mean the render straddled a host redeploy: the page resolved
@@ -1181,6 +1221,8 @@ export type VisitPass = (typeof VISIT_PASS_ORDER)[number];
 export type PrerenderVisitType = 'index' | 'prerender-html';
 
 export type PrerenderVisitArgs = {
+  latticeRenderCheckpoint?: import('./lattice-render-checkpoint.ts').LatticeRenderCheckpoint;
+  inputSnapshot?: import('./lattice-materialization.ts').LatticeInputSnapshot;
   affinityType: AffinityType;
   affinityValue: string;
   realm: string;
@@ -1338,6 +1380,7 @@ export type ReleaseBatchArgs = {
 // instead, because the page is still healthy, just not authorized for the
 // current caller.
 export interface RenderVisitResponse {
+  latticeRenderReceipt?: import('./lattice-render-checkpoint.ts').LatticeRenderReceipt;
   card?: RenderResponse;
   fileExtract?: FileExtractResponse;
   fileRender?: FileRenderResponse;
@@ -2296,3 +2339,33 @@ export {
   type BotCommandFilter,
   type BotCommandMatrixFilter,
 } from './bot-command.ts';
+export {
+  isLatticeDisplayReuse,
+  isLatticeDisplayToken,
+  LATTICE_DISPLAY_HAVE_HEADER,
+  LATTICE_DISPLAY_BATCH_SIZE,
+  latticeDisplayBatchRequest,
+  latticeDisplayBatchResults,
+  type LatticeDisplayReuse,
+  type LatticeDisplayBatchRequest,
+  type LatticeDisplayBatchResponse,
+  type LatticeDisplayBatchResult,
+} from './lattice-display.ts';
+export {
+  currentLatticeInputSnapshot,
+  latticeSnapshotFields,
+  type PublicationReceipt,
+} from './lattice-materialization.ts';
+export {
+  baseCardTitle,
+  baseJsonQueryableValue,
+  baseCardDescription,
+  baseCardTheme,
+  baseCardThumbnailURL,
+} from './base-card-computations.ts';
+export {
+  baseFileData,
+  codeFileData,
+  jsonFileData,
+  jsonValueKind,
+} from './base-file-data.ts';

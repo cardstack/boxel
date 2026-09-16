@@ -374,6 +374,8 @@ export interface IncrementalIndexEnqueueArgs {
   realmUsername: string;
   changes: IncrementalChange[];
   ignoreData: Record<string, string>;
+  // See IncrementalArgs.revisions.
+  revisions?: Record<string, string>;
   // See IncrementalArgs for both of these.
   deferPrerenderHtml?: boolean;
   carriedPrerenderHtmlChanges?: IncrementalChange[];
@@ -391,6 +393,7 @@ export function makeIncrementalArgsWithCallerMetadata(
     changes: args.changes,
     ignoreData: args.ignoreData,
     coalescedCallers,
+    revisions: args.revisions ?? {},
     deferPrerenderHtml: args.deferPrerenderHtml === true,
     carriedPrerenderHtmlChanges: args.carriedPrerenderHtmlChanges ?? [],
   };

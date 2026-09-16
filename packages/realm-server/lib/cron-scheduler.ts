@@ -20,6 +20,12 @@ import {
   createPrerenderHtmlReconcileCronJob,
 } from './prerender-html-reconcile-config.ts';
 import { enqueueMediaCacheGc } from '../scripts/media-cache-gc.ts';
+import { enqueueLatticeClockSweep } from '../scripts/lattice-clock-sweep.ts';
+import {
+  LATTICE_CLOCK_SWEEP_CRON_SCHEDULE,
+  LATTICE_CLOCK_SWEEP_CRON_TZ,
+  createLatticeClockSweepCronJob,
+} from './lattice-clock-sweep-config.ts';
 import {
   MEDIA_CACHE_GC_CRON_SCHEDULE,
   MEDIA_CACHE_GC_CRON_TZ,
@@ -57,10 +63,36 @@ export function startCronJobs(): void {
     jobs.push(mediaCacheGcJob);
   }
 
+  let clockSweepJob = startLatticeClockSweepCron();
+  if (clockSweepJob) {
+    jobs.push(clockSweepJob);
+  }
   let scopedCssGcJob = startScopedCssGcCron();
   if (scopedCssGcJob) {
     jobs.push(scopedCssGcJob);
   }
+}
+
+// Lattice time grain: re-index rows whose valid_until has passed. Only
+// realms with grained computeds ever have such rows; the job is a no-op
+// otherwise.
+function startLatticeClockSweepCron(): CronJob | undefined {
+  if (process.env.LATTICE_CLOCK_SWEEP_DISABLED === 'true') {
+    return undefined;
+  }
+  let job = createLatticeClockSweepCronJob(async () => {
+    try {
+      await enqueueLatticeClockSweep({ priority: systemInitiatedPriority });
+    } catch (error) {
+      Sentry.captureException(error);
+      log.error('lattice-clock-sweep cron failed to enqueue job', error);
+    }
+  });
+  job.start();
+  log.info(
+    `lattice-clock-sweep cron scheduled (${LATTICE_CLOCK_SWEEP_CRON_SCHEDULE} ${LATTICE_CLOCK_SWEEP_CRON_TZ})`,
+  );
+  return job;
 }
 
 export function stopCronJobs(): void {

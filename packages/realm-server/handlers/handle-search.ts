@@ -1,6 +1,14 @@
 import type Koa from 'koa';
+import type { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
+import {
+  assertLatticeGeneration,
+  latticeRequestedGeneration,
+  latticeHasMaterializations,
+  LATTICE_INPUT_GENERATION_HEADER,
+} from '@cardstack/runtime-common/lattice-materialization';
 import {
   applyServerSearchPageBound,
+  CardError,
   buildSearchErrorResponse,
   DURING_PRERENDER_HEADER,
   ifNoneMatchMatches,
@@ -92,8 +100,9 @@ export default function handleSearch(opts: {
   // displays. Carries the same setting the realms are constructed with, since
   // the fan-out builds its own opts rather than reading them off a realm.
   liveReadsResolveLinksOnly?: boolean;
+  lattice?: LatticeRealmConfig;
 }): (ctxt: Koa.Context) => Promise<void> {
-  let { reconciler, searchCache, dbAdapter, virtualNetwork } = opts;
+  let { reconciler, searchCache, dbAdapter, virtualNetwork, lattice } = opts;
   let liveReadsResolveLinksOnly = opts.liveReadsResolveLinksOnly ?? false;
   let liveSearchCache = opts.liveSearchCache ?? new LiveSearchCache();
   return async function (ctxt: Koa.Context) {
@@ -113,6 +122,11 @@ export default function handleSearch(opts: {
       loggingCorrelationId !== null ? new RequestTimings() : undefined;
 
     let { realmList } = getMultiRealmAuthorization(ctxt);
+    // Authorization has already selected the exact realm list. Operator policy
+    // decides protocol participation without mounting a realm or probing data.
+    let latticeRealms = lattice
+      ? realmList.filter((realm) => lattice.isEnabled(realm))
+      : [];
 
     let parsed;
     let request = await fetchRequestFromContext(ctxt);
@@ -224,6 +238,10 @@ export default function handleSearch(opts: {
     // ride the run-time opts instead.
     let runSearchOpts = {
       ...searchOpts,
+      ...(latticeRealms.length > 0 &&
+      request.headers.has(LATTICE_INPUT_GENERATION_HEADER)
+        ? { latticeInput: true }
+        : {}),
       ...(loggingCorrelationId !== null ? { loggingCorrelationId } : {}),
       ...(timings ? { timings } : {}),
     };
@@ -325,6 +343,56 @@ export default function handleSearch(opts: {
 
     let jobId = searchCache ? prerenderJobId : null;
     try {
+      let latticeGeneration = latticeRealms.length
+        ? latticeRequestedGeneration(request)
+        : undefined;
+      if (latticeGeneration !== undefined) {
+        if (realmList.length !== 1) {
+          throw new CardError('Lattice inputs require exactly one realm', {
+            status: 400,
+          });
+        }
+        await assertLatticeGeneration(
+          dbAdapter,
+          realmList[0],
+          latticeGeneration,
+        );
+        let body = await runSearch();
+        await assertLatticeGeneration(
+          dbAdapter,
+          realmList[0],
+          latticeGeneration,
+        );
+        await setContextResponse(
+          ctxt,
+          new Response(body, {
+            headers: {
+              'content-type': SupportedMimeType.CardJson,
+              'cache-control': 'no-store',
+            },
+          }),
+        );
+        emitTelemetry();
+        return;
+      }
+      // Generation-keyed caches cannot see a queued source write until its
+      // first index swap. Lattice responses must revalidate pending state.
+      if (
+        latticeRealms.length > 0 &&
+        (await latticeHasMaterializations(dbAdapter, latticeRealms))
+      ) {
+        await setContextResponse(
+          ctxt,
+          new Response(await runSearch(), {
+            headers: {
+              'content-type': SupportedMimeType.CardJson,
+              'cache-control': 'no-store',
+            },
+          }),
+        );
+        emitTelemetry();
+        return;
+      }
       await respondWithJobScopedSearchCache(ctxt, {
         searchCache,
         jobId,
@@ -361,7 +429,7 @@ export default function handleSearch(opts: {
       // The per-request time budget fired inside `runSearch`. A bounded search
       // is never cacheable (cacheable ⟹ during-prerender ⟹ not bounded), so
       // this only surfaces on the fresh-compute path and leaves no cache entry.
-      if (e instanceof SearchBoundError) {
+      if (e instanceof SearchBoundError || e instanceof CardError) {
         await setContextResponse(
           ctxt,
           buildSearchErrorResponse(e.message, e.status),

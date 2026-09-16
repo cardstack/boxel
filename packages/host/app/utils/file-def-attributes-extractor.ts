@@ -3,12 +3,11 @@ import { isEqual } from 'lodash-es';
 import {
   baseRef,
   CardError,
-  fileMetaTimestamps,
   FRONTMATTER_DIAGNOSTICS_SYMBOL,
+  FILE_META_VALUES_SYMBOL,
   FRONTMATTER_FILE_META_VALUE_SYMBOL,
   FRONTMATTER_PARSE_ERROR_SYMBOL,
   identifyCard,
-  inferContentType,
   internalKeyFor,
   SupportedMimeType,
   unixTime,
@@ -17,12 +16,19 @@ import {
   type FileMetaResource,
   type FrontmatterParseError,
   type QueryFieldMeta,
-  type RealmResourceIdentifier,
   type RenderError,
   type ResolvedCodeRef,
   type ToolContext,
 } from '@cardstack/runtime-common';
-import { getFieldDefinitions } from '@cardstack/runtime-common/definitions';
+import {
+  getFieldDefinitions,
+  type Definition,
+} from '@cardstack/runtime-common/definitions';
+import { buildFileResource } from '@cardstack/runtime-common/file-resource';
+
+import type { StaticIconSvg } from '@cardstack/runtime-common/static-icon';
+
+import { getStaticIconSvg } from './static-icon';
 
 import type { createAuthErrorGuard } from './auth-error-guard';
 
@@ -30,6 +36,8 @@ import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
 import type { BaseDef } from '@cardstack/base/card-api';
 import type * as CardAPI from '@cardstack/base/card-api';
+
+export { buildFileResource } from '@cardstack/runtime-common/file-resource';
 
 export type FileDefExport = {
   extractAttributes: (
@@ -53,6 +61,7 @@ export type FileDefExtractResult = {
   resource?: FileMetaResource;
   types?: string[];
   displayNames?: string[];
+  staticIcon?: StaticIconSvg;
   deps: string[];
   error?: RenderError;
   mismatch?: true;
@@ -301,6 +310,10 @@ export class FileDefAttributesExtractor {
         if (fileMetaFrontmatter) {
           delete cleanedBag[FRONTMATTER_FILE_META_VALUE_SYMBOL];
         }
+        let fileMetaValues = cleanedBag[FILE_META_VALUES_SYMBOL] as
+          | Record<string, unknown>
+          | undefined;
+        delete cleanedBag[FILE_META_VALUES_SYMBOL];
         let resource = buildFileResource(
           this.#fileURL,
           cleanedDoc,
@@ -312,16 +325,24 @@ export class FileDefAttributesExtractor {
             createdAt: this.#createdAt ?? this.#headerCreatedAt,
           },
         );
+        if (fileMetaValues) {
+          resource.attributes = { ...resource.attributes, ...fileMetaValues };
+        }
         if (fileMetaFrontmatter) {
           (resource.attributes as Record<string, unknown>).frontmatter =
             fileMetaFrontmatter;
         }
+        let staticIcon = getStaticIconSvg(
+          klass as typeof BaseDef,
+          baseFileDefModule.BaseDef as unknown as typeof BaseDef,
+        );
         return {
           status: 'ready',
           searchDoc: cleanedDoc,
           resource,
           types,
           displayNames,
+          ...(staticIcon ? { staticIcon } : {}),
           deps,
           ...(error ? { error } : {}),
           ...(mismatch ? { mismatch: true } : {}),
@@ -477,9 +498,9 @@ export class FileDefAttributesExtractor {
   }
 }
 
-export function getTypes(klass: FileDefConstructor): CodeRef[] {
+export function getTypes(klass: object): CodeRef[] {
   let types = [];
-  let current: FileDefConstructor | undefined = klass;
+  let current: object | null = klass;
 
   while (current) {
     let ref = identifyCard(current as unknown as typeof BaseDef);
@@ -493,7 +514,7 @@ export function getTypes(klass: FileDefConstructor): CodeRef[] {
     if (isEqual(ref, baseRef)) {
       break;
     }
-    current = Reflect.getPrototypeOf(current) as FileDefConstructor | undefined;
+    current = Reflect.getPrototypeOf(current);
   }
   return types;
 }
@@ -502,9 +523,9 @@ export function getTypes(klass: FileDefConstructor): CodeRef[] {
 // `static displayName` (e.g. `MarkdownDef.displayName === 'Markdown'`).
 // Mirrors the card-side getDisplayNames in routes/render/meta.ts so the same
 // `boxel_index.display_names` semantics apply to file rows.
-export function getDisplayNames(klass: FileDefConstructor): string[] {
+export function getDisplayNames(klass: object): string[] {
   let displayNames: string[] = [];
-  let current: FileDefConstructor | undefined = klass;
+  let current: object | null = klass;
   while (current) {
     let ref = identifyCard(current as unknown as typeof BaseDef);
     if (!ref || isEqual(ref, baseRef)) {
@@ -519,7 +540,7 @@ export function getDisplayNames(klass: FileDefConstructor): string[] {
     } else if (typeof kAny.name === 'string' && kAny.name) {
       displayNames.push(kAny.name);
     }
-    current = Reflect.getPrototypeOf(current) as FileDefConstructor | undefined;
+    current = Reflect.getPrototypeOf(current);
   }
   return displayNames;
 }
@@ -534,47 +555,18 @@ function headerEpochSeconds(value: string | null): number | undefined {
   return Number.isNaN(ms) ? undefined : unixTime(ms);
 }
 
-export function buildFileResource(
-  fileURL: string,
-  attributes: Record<string, any>,
-  adoptsFrom: CodeRef,
-  queryFieldDefs?: Record<string, QueryFieldMeta>,
-  fieldsMeta?: NonNullable<FileMetaResource['meta']['fields']>,
-  // Stamped through `fileMetaTimestamps` like every other file-meta producer,
-  // so a FileDef hydrated from this resource reads them through the same
-  // `meta` keys as one hydrated from a served document. Left off entirely
-  // when neither is known.
-  timestamps?: { lastModified?: number; createdAt?: number },
-): FileMetaResource {
-  let name = new URL(fileURL).pathname.split('/').pop() ?? fileURL;
-  let baseAttributes = {
-    name: attributes.name ?? name,
-    url: attributes.url ?? fileURL,
-    sourceUrl: attributes.sourceUrl ?? fileURL,
-    contentType: attributes.contentType ?? inferContentType(name),
-  };
-  let mergedAttributes: Record<string, unknown> = { ...baseAttributes };
-  for (let [key, value] of Object.entries(attributes)) {
-    if (value !== undefined && !(key in mergedAttributes)) {
-      mergedAttributes[key] = value;
-    }
-  }
+// Captured once with the normal module definition; execution still requires a
+// separately reviewed native extractor policy on the server.
+export function getFileIndexMetadata(
+  api: typeof CardAPI,
+  klass: typeof BaseDef,
+): Definition['nativeFileIndex'] {
+  if (klass !== api.FileDef && !(klass.prototype instanceof api.FileDef))
+    return undefined;
+  let staticIcon = getStaticIconSvg(klass, api.BaseDef);
   return {
-    id: fileURL as RealmResourceIdentifier,
-    type: 'file-meta',
-    attributes: mergedAttributes,
-    meta: {
-      adoptsFrom,
-      ...(timestamps?.lastModified !== undefined ||
-      timestamps?.createdAt !== undefined
-        ? fileMetaTimestamps(timestamps.lastModified, timestamps.createdAt)
-        : {}),
-      // Per-field subclass overrides for nested polymorphic fields (e.g.
-      // `frontmatter` → SkillFrontmatterField). Without this the field rehydrates
-      // as its declared base type. Supplied by `extractAttributes` (see below).
-      ...(fieldsMeta ? { fields: fieldsMeta } : {}),
-      ...(queryFieldDefs ? { queryFieldDefs } : {}),
-    },
-    links: { self: fileURL },
+    types: getTypes(klass),
+    displayNames: getDisplayNames(klass),
+    ...(staticIcon ? { staticIcon } : {}),
   };
 }

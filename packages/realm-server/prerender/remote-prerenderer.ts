@@ -286,6 +286,8 @@ export function createRemotePrerenderer(
       jobId,
       screenshots,
       renderScope,
+      inputSnapshot,
+      latticeRenderCheckpoint,
     }: PrerenderVisitArgs): Promise<RenderVisitResponse> {
       return await requestWithRetry<RenderVisitResponse>(
         'prerender-visit',
@@ -306,6 +308,8 @@ export function createRemotePrerenderer(
           ...(jobId ? { jobId } : {}),
           ...(screenshots ? { screenshots } : {}),
           ...(renderScope ? { renderScope } : {}),
+          ...(inputSnapshot ? { inputSnapshot } : {}),
+          ...(latticeRenderCheckpoint ? { latticeRenderCheckpoint } : {}),
         },
       );
     },

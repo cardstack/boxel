@@ -31,6 +31,7 @@ import { runPrerenderHtmlPass } from '@cardstack/runtime-common/index-runner/pre
 import '@cardstack/runtime-common/tasks/prerender-html';
 import type { PrerenderHtmlArgs } from '@cardstack/runtime-common/tasks/prerender-html';
 import type { PgAdapter } from '@cardstack/postgres';
+import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import {
   createTestPgAdapter,
   prepareTestDB,
@@ -112,6 +113,49 @@ module(basename(import.meta.filename), function () {
     test('inserts when there is no candidate to merge into', function (assert) {
       let decision = coalesce(context());
       assert.deepEqual(decision, { type: 'insert' });
+    });
+
+    test('a durable Lattice owner retry cannot be swallowed by normal or in-flight coalescing', function (assert) {
+      let ordinary = prerenderHtmlArgs();
+      let retry = prerenderHtmlArgs({
+        latticeRenderRetryOwner: `${testRealm}1.json`,
+      });
+      assert.deepEqual(
+        coalesce(
+          context({
+            incoming: spec(retry),
+            candidates: [candidate(1, ordinary)],
+          }),
+        ),
+        { type: 'insert' },
+      );
+      assert.deepEqual(
+        coalesce(
+          context({
+            incoming: spec(ordinary),
+            candidates: [candidate(1, retry)],
+          }),
+        ),
+        { type: 'insert' },
+      );
+      assert.deepEqual(
+        coalesce(
+          context({
+            incoming: spec(ordinary),
+            inFlightCandidates: [candidate(1, retry)],
+          }),
+        ),
+        { type: 'insert' },
+      );
+      assert.deepEqual(
+        coalesce(
+          context({
+            incoming: spec(retry),
+            inFlightCandidates: [candidate(1, retry)],
+          }),
+        ),
+        { type: 'insert' },
+      );
     });
 
     test('joins a pending job, merging changes update-wins and taking the max generation', function (assert) {
@@ -885,6 +929,199 @@ module(basename(import.meta.filename), function () {
       row = await productionRow(url);
       assert.strictEqual(row.isolated_html, '<h1>v6</h1>');
       assert.strictEqual(row.generation, 6);
+    });
+
+    test('render link diagnostics clear on restoration and survive stale rendering publication', async function (assert) {
+      let url = `${testRealm}1.json`;
+      let missing = [
+        {
+          fieldName: 'wall',
+          reference: `${testRealm}missing`,
+          kind: 'not-found' as const,
+        },
+      ];
+      await writeInstance(5, url, '<div>Missing</div>', {
+        diagnostics: { brokenLinks: missing },
+      });
+      assert.deepEqual(
+        (await productionRow(url)).diagnostics?.brokenLinks,
+        missing,
+      );
+      await writeInstance(6, url, '<div>Restored</div>', {
+        diagnostics: { brokenLinks: [] },
+      });
+      assert.deepEqual(
+        (await productionRow(url)).diagnostics?.brokenLinks,
+        [],
+        'a fresh successful render clears findings',
+      );
+      await writeInstance(5, url, '<div>Old missing</div>', {
+        diagnostics: { brokenLinks: missing },
+      });
+      let row = await productionRow(url);
+      assert.strictEqual(row.generation, 6);
+      assert.deepEqual(
+        row.diagnostics?.brokenLinks,
+        [],
+        'the existing transaction fence also protects diagnostic restoration',
+      );
+    });
+
+    test('only enabled realms retain render link captures across an uncaptured render', async function (assert) {
+      for (let enabled of [false, true]) {
+        indexWriter = new IndexWriter(adapter, {
+          lattice: new LatticeRealmConfig(enabled ? [testRealm] : []),
+        });
+        let url = `${testRealm}capture-${enabled}.json`;
+        let missing = [
+          {
+            fieldName: 'wall',
+            reference: `${testRealm}missing`,
+            kind: 'not-found' as const,
+          },
+        ];
+        await writeInstance(5, url, '<div>Missing</div>', {
+          diagnostics: { brokenLinks: missing },
+        });
+        await writeInstance(6, url, '<div>No capture</div>');
+        let row = await productionRow(url);
+        assert.deepEqual(
+          row.diagnostics?.brokenLinks,
+          enabled ? missing : undefined,
+          `retained findings require enabled=${enabled}`,
+        );
+        assert.strictEqual(
+          row.diagnostics?.brokenLinksGeneration,
+          enabled ? 5 : undefined,
+          `capture provenance requires enabled=${enabled}`,
+        );
+      }
+    });
+
+    test('render link recovery retains a complete capture without advancing its generation', async function (assert) {
+      indexWriter = new IndexWriter(adapter, {
+        lattice: new LatticeRealmConfig([testRealm]),
+      });
+      let url = `${testRealm}1.json`;
+      let missing = [
+        {
+          fieldName: 'wall',
+          reference: `${testRealm}missing`,
+          kind: 'not-found' as const,
+        },
+      ];
+      await writeInstance(5, url, '<div>Missing</div>', {
+        diagnostics: { brokenLinks: missing },
+      });
+      let failure = await makeBatch(6);
+      await failure.updatePrerenderedHtmlEntry(new URL(url), {
+        type: 'instance-error',
+        error: {
+          message: 'Render interrupted',
+          status: 500,
+          additionalErrors: [],
+        },
+        diagnostics: { brokenLinks: [] },
+      });
+      await failure.done();
+      let row = await productionRow(url);
+      assert.deepEqual(
+        row.diagnostics?.brokenLinks,
+        missing,
+        'a failed partial capture cannot clear a complete one',
+      );
+      assert.strictEqual(
+        row.diagnostics?.brokenLinksGeneration,
+        5,
+        'failure does not validate the old finding through generation 6',
+      );
+      assert.strictEqual(row.error_doc?.message, 'Render interrupted');
+      assert.deepEqual(
+        row.error_doc?.diagnostics?.brokenLinks,
+        [],
+        'the error document still describes the failed attempt',
+      );
+      await writeInstance(7, url, '<div>Older host</div>');
+      row = await productionRow(url);
+      assert.deepEqual(
+        row.diagnostics?.brokenLinks,
+        missing,
+        'an uncaptured successful visit is not confirmed restoration',
+      );
+      assert.strictEqual(row.diagnostics?.brokenLinksGeneration, 5);
+      await writeInstance(8, url, '<div>Restored</div>', {
+        diagnostics: { brokenLinks: [] },
+      });
+      await writeInstance(6, url, '<div>Zombie</div>', {
+        diagnostics: { brokenLinks: missing },
+      });
+      row = await productionRow(url);
+      assert.deepEqual(
+        row.diagnostics?.brokenLinks,
+        [],
+        'explicit restoration survives a zombie',
+      );
+      assert.strictEqual(row.diagnostics?.brokenLinksGeneration, 8);
+      let deletion = await makeBatch(9);
+      await deletion.seedPrerenderedHtmlInvalidations([
+        { url, operation: 'delete' },
+      ]);
+      await deletion.done();
+      await writeInstance(10, url, '<div>Recreated, uncaptured</div>');
+      row = await productionRow(url);
+      assert.notOk(
+        row.diagnostics?.brokenLinks,
+        'a tombstone ends the previous capture lifetime',
+      );
+    });
+
+    test('render link recovery merges against the capture current at publication', async function (assert) {
+      indexWriter = new IndexWriter(adapter, {
+        lattice: new LatticeRealmConfig([testRealm]),
+      });
+      let url = `${testRealm}1.json`;
+      await writeInstance(5, url, '<div>Initial</div>', {
+        diagnostics: { brokenLinks: [] },
+      });
+      let late = await makeBatch(7);
+      await late.updatePrerenderedHtmlEntry(new URL(url), {
+        type: 'instance',
+        isolatedHtml: '<div>No capture</div>',
+        deps: [],
+      });
+      // Reserve the prepared row outside the shared working table while a
+      // different attempt publishes, then resume it through the actual swap.
+      await adapter.execute(
+        'CREATE TABLE lattice_l1b_prepared_render AS SELECT * FROM prerendered_html_working WHERE url=$1',
+        { bind: [url] },
+      );
+      let missing = [
+        {
+          fieldName: 'wall',
+          reference: `${testRealm}missing`,
+          kind: 'not-found' as const,
+        },
+      ];
+      await writeInstance(6, url, '<div>New capture</div>', {
+        diagnostics: { brokenLinks: missing },
+      });
+      await adapter.execute(
+        'DELETE FROM prerendered_html_working WHERE url=$1',
+        { bind: [url] },
+      );
+      await adapter.execute(
+        'INSERT INTO prerendered_html_working SELECT * FROM lattice_l1b_prepared_render',
+      );
+      await adapter.execute('DROP TABLE lattice_l1b_prepared_render');
+      await late.done();
+      let row = await productionRow(url);
+      assert.strictEqual(row.generation, 7);
+      assert.deepEqual(
+        row.diagnostics?.brokenLinks,
+        missing,
+        'publication retains the intervening generation 6 finding',
+      );
+      assert.strictEqual(row.diagnostics?.brokenLinksGeneration, 6);
     });
 
     test('a newer-generation tombstone survives a zombie older-generation render', async function (assert) {

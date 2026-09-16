@@ -1,4 +1,8 @@
-import { byteStreamToUint8Array } from '@cardstack/runtime-common';
+import {
+  byteStreamToUint8Array,
+  jsonFileData,
+  jsonValueKind as kindOf,
+} from '@cardstack/runtime-common';
 import { htmlSafe } from '@ember/template';
 import JsonIcon from '@cardstack/boxel-icons/json';
 import GlimmerComponent from '@glimmer/component';
@@ -19,7 +23,6 @@ import {
 import type { FilePreviewSignature } from './file-formats/file-preview-stage';
 import { fencedCodeBlock } from './markdown-helpers';
 
-const EXCERPT_MAX_LENGTH = 500;
 // A very large document would otherwise render into megabytes of tree markup;
 // stop after this many nodes and show a truncation note. The embedded shell is
 // a fixed-height pane inside a collection, so it gets a much smaller budget —
@@ -70,25 +73,6 @@ function getExtension(url: string): string {
   }
 }
 
-function fileNameWithoutExtension(name: string): string {
-  let dot = name.lastIndexOf('.');
-  if (dot === -1) {
-    return name;
-  }
-  let slash = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
-  if (dot < slash) {
-    return name;
-  }
-  return name.slice(0, dot);
-}
-
-function truncateExcerpt(text: string): string {
-  if (text.length <= EXCERPT_MAX_LENGTH) {
-    return text;
-  }
-  return `${text.slice(0, EXCERPT_MAX_LENGTH - 3).trimEnd()}...`;
-}
-
 type JsonValue =
   | null
   | boolean
@@ -96,29 +80,6 @@ type JsonValue =
   | string
   | JsonValue[]
   | { [key: string]: JsonValue };
-
-// 'object' | 'array' | 'string' | 'number' | 'boolean' | 'null'
-function kindOf(value: unknown): string {
-  if (value === null) {
-    return 'null';
-  }
-  if (Array.isArray(value)) {
-    return 'array';
-  }
-  return typeof value;
-}
-
-// The top-level entry count: object keys, array items, or 0 for a scalar root.
-function entryCount(value: unknown): number {
-  let kind = kindOf(value);
-  if (kind === 'array') {
-    return (value as unknown[]).length;
-  }
-  if (kind === 'object') {
-    return Object.keys(value as object).length;
-  }
-  return 0;
-}
 
 function leafValueHtml(value: unknown, kind: string): string {
   if (kind === 'string') {
@@ -564,34 +525,9 @@ export class JsonFileDef extends FileDef {
     let base = await super.extractAttributes(url, memoizedStream, options);
     let bytes = await memoizedStream();
     let text = new TextDecoder().decode(bytes);
-    let fallbackTitle = fileNameWithoutExtension(base.name ?? '');
-
-    // Parse once for the structural facts; invalid JSON keeps its content and
-    // reports an empty root rather than failing the whole file.
-    let rootType = '';
-    let keyCount = 0;
-    try {
-      let parsed = JSON.parse(text) as JsonValue;
-      rootType = kindOf(parsed);
-      keyCount = entryCount(parsed);
-    } catch {
-      rootType = '';
-      keyCount = 0;
-    }
-
     return {
       ...base,
-      title: fallbackTitle || 'Untitled JSON',
-      excerpt: truncateExcerpt(text.trim()),
-      content: text,
-      rootType,
-      keyCount,
-      // Normalize CRLF/CR to LF first so the count is the same across newline
-      // styles; a trailing newline shouldn't inflate the count, and empty
-      // content is zero lines.
-      lineCount: text
-        ? text.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n').length
-        : 0,
+      ...jsonFileData(text, base.name ?? ''),
     };
   }
 }

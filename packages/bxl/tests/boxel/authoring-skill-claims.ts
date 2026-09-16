@@ -262,7 +262,6 @@ check('every call the skill lists as refused is refused', () => {
     ['@Env', () => expression(fx`@Env.region`), 'derive-context-banned'],
     ['$new', () => expression(fx`$new.total`), 'derive-context-banned'],
     ['$old', () => expression(fx`$old.total`), 'derive-context-banned'],
-    ['def', () => expression(jq`def f: . + 1; f`), 'derive-def-banned'],
     [
       ['try', 'catch'],
       () => expression(jq`try .a catch "x"`),
@@ -434,6 +433,11 @@ check(
       ['to_entries', () => expression(jq`to_entries | length`).call(card), 8],
       ['keys', () => expression(jq`keys | length`).call(card), 8],
       ['tojson', () => expression(jq`tojson | length > 0`).call(card), true],
+      [
+        'def',
+        () => expression(jq`def twice: . * 2; .a | twice`).call(card),
+        14,
+      ],
     ];
     listsExactly(
       ALLOWED_LEAD,

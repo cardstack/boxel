@@ -1,21 +1,59 @@
-import type { DBAdapter } from '@cardstack/runtime-common';
-import { query } from '@cardstack/runtime-common';
+import type { DBAdapter, PublicationReceipt } from '@cardstack/runtime-common';
+import { CardError, query, param } from '@cardstack/runtime-common';
+import type { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
+import { latticeReadState } from '@cardstack/runtime-common/lattice-materialization';
 import {
   indexURLCandidates,
   indexCandidateExpressions,
 } from './index-url-utils.ts';
 
-export async function retrieveHeadHTML({
-  cardURL,
-  dbAdapter,
-  log,
-}: {
+type LatticeHTMLRow = {
+  url: string;
+  realm_url: string;
+  generation: string | number;
+  html_generation: string | number;
+  html_error: unknown;
+  lattice: PublicationReceipt | string | null;
+};
+
+async function latticeHTMLIsCurrent(db: DBAdapter, row?: LatticeHTMLRow) {
+  if (!row?.lattice) return true;
+  if (row.html_error || Number(row.html_generation) !== Number(row.generation))
+    return false;
+  let stamp =
+    typeof row.lattice === 'string' ? JSON.parse(row.lattice) : row.lattice;
+  try {
+    return (
+      (await latticeReadState(db, row.realm_url, row.url, stamp)) === 'ready'
+    );
+  } catch (error) {
+    // Leave the shell to show the explicit JSON failure after boot, rather
+    // than injecting a previous successful dashboard into a failed page.
+    if (error instanceof CardError && error.status === 503) return false;
+    throw error;
+  }
+}
+
+type HTMLReadOptions = {
   cardURL: URL;
+  // The caller resolves the serving realm through its routing authority.
+  // Source stamps and a URL prefix cannot opt this read into materialization.
+  realmURL?: string;
+  lattice?: LatticeRealmConfig;
   dbAdapter: DBAdapter;
   log?: {
     debug: (...args: unknown[]) => void;
   };
-}): Promise<string | null> {
+};
+
+export async function retrieveHeadHTML({
+  cardURL,
+  realmURL,
+  lattice,
+  dbAdapter,
+  log,
+}: HTMLReadOptions): Promise<string | null> {
+  let enabled = realmURL !== undefined && lattice?.isEnabled(realmURL) === true;
   let candidates = indexURLCandidates(cardURL);
 
   log?.debug(
@@ -31,7 +69,13 @@ export async function retrieveHeadHTML({
   // lookup to a live instance row and supplies the generation for logging.
   let rows = await query(dbAdapter, [
     `
-      SELECT ph.head_html AS head_html, i.generation
+      SELECT ph.head_html AS head_html, i.generation${
+        enabled
+          ? `, i.url, i.realm_url,
+        ph.generation AS html_generation, ph.error_doc AS html_error,
+        i.pristine_doc->'meta'->'publication' AS lattice`
+          : ''
+      }
       FROM boxel_index AS i
       JOIN prerendered_html AS ph
         ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
@@ -41,6 +85,7 @@ export async function retrieveHeadHTML({
        AND
     `,
     ...indexCandidateExpressions(candidates, 'i'),
+    ...(enabled ? ['AND i.realm_url =', param(realmURL!)] : []),
     `
       ORDER BY i.generation DESC
       LIMIT 1
@@ -48,6 +93,15 @@ export async function retrieveHeadHTML({
   ]);
 
   log?.debug('Head query result for %s', cardURL.href, rows);
+
+  if (
+    enabled &&
+    !(await latticeHTMLIsCurrent(
+      dbAdapter,
+      rows[0] as LatticeHTMLRow | undefined,
+    ))
+  )
+    return null;
 
   let headRow = rows[0] as
     | { head_html?: string | null; generation?: string | number }
@@ -65,15 +119,12 @@ export async function retrieveHeadHTML({
 
 export async function retrieveIsolatedHTML({
   cardURL,
+  realmURL,
+  lattice,
   dbAdapter,
   log,
-}: {
-  cardURL: URL;
-  dbAdapter: DBAdapter;
-  log?: {
-    debug: (...args: unknown[]) => void;
-  };
-}): Promise<string | null> {
+}: HTMLReadOptions): Promise<string | null> {
+  let enabled = realmURL !== undefined && lattice?.isEnabled(realmURL) === true;
   let candidates = indexURLCandidates(cardURL);
 
   log?.debug(
@@ -89,7 +140,13 @@ export async function retrieveIsolatedHTML({
   // the lookup to a live instance row and supplies the generation for logging.
   let rows = await query(dbAdapter, [
     `
-      SELECT ph.isolated_html AS isolated_html, i.generation
+      SELECT ph.isolated_html AS isolated_html, i.generation${
+        enabled
+          ? `, i.url, i.realm_url,
+        ph.generation AS html_generation, ph.error_doc AS html_error,
+        i.pristine_doc->'meta'->'publication' AS lattice`
+          : ''
+      }
       FROM boxel_index AS i
       JOIN prerendered_html AS ph
         ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
@@ -99,6 +156,7 @@ export async function retrieveIsolatedHTML({
         AND
       `,
     ...indexCandidateExpressions(candidates, 'i'),
+    ...(enabled ? ['AND i.realm_url =', param(realmURL!)] : []),
     `
       ORDER BY i.generation DESC
       LIMIT 1
@@ -106,6 +164,15 @@ export async function retrieveIsolatedHTML({
   ]);
 
   log?.debug('Isolated query result for %s', cardURL.href, rows);
+
+  if (
+    enabled &&
+    !(await latticeHTMLIsCurrent(
+      dbAdapter,
+      rows[0] as LatticeHTMLRow | undefined,
+    ))
+  )
+    return null;
 
   let isolatedRow = rows[0] as
     | { isolated_html?: string | null; generation?: string | number }
