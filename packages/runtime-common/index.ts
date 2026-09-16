@@ -11,6 +11,9 @@ import type { RenderRouteOptions } from './render-route-options.ts';
 import type { Definition } from './definitions.ts';
 import type { OperationLoweringIssue } from './card-operations/types.ts';
 import type {
+  CaptureContentType,
+  CaptureMedia,
+  CaptureOutputType,
   ScreenshotFormat,
   ScreenshotImageType,
   ScreenshotManifest,
@@ -1403,6 +1406,18 @@ export type ScreenshotCaptureOverrides = {
   // envelope, so a batch of differing envelopes yields differently-sized PNGs
   // off one render.
   envelope?: { width: number; height: number };
+  // Output encoding of the capture. `png` (the default, elided from the
+  // canonical form) is the only value the engine honors today: the roster
+  // reserves `jpeg`/`webp`/`pdf` for the encode legs the capture engine grows
+  // next, and the shared parse refuses those values by name until it does.
+  // Part of the ledger identity — two encodings of one render are two cache
+  // entries.
+  type?: CaptureOutputType;
+  // CSS media the render settles under before capture. `screen` (the
+  // default, elided) is the rendering every screenshot has always captured;
+  // `print` — refused by the shared parse until the engine emulates it —
+  // engages the card's print CSS. Part of the ledger identity.
+  media?: CaptureMedia;
 };
 
 // One entry in a batch capture: a name plus the same per-capture overrides. An
@@ -1471,7 +1486,11 @@ export type ScreenshotPrerenderResponse = {
   base64?: string;
   width?: number;
   height?: number;
-  contentType?: 'image/png';
+  // The encoding of `base64` (and every entry in `captures` — a response is
+  // one encoding throughout). The engine produces only `image/png` today; the
+  // type is the full output union so the persist and serving paths
+  // discriminate on it rather than assuming an image.
+  contentType?: CaptureContentType;
   error?: string | null;
   meta?: PrerenderResponseMeta;
 };
