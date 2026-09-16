@@ -278,15 +278,72 @@ module(basename(import.meta.filename), function () {
       // The body is keyed by the URL's content hash alone, so the response
       // must not claim to vary on `Accept`: a browser cache stores one
       // variant per URL, and a `Vary` the route does not honor lets two
-      // `Accept` spellings evict each other's copy. What remains is
-      // `@koa/cors`'s own `Vary: Origin`, which the realm's hardcoded
-      // `Vary: Accept` had been overwriting — that one is honored (the
-      // response's CORS headers really do depend on `Origin`) and is
-      // constant for a given app, so it costs this population nothing.
-      assert.notOk(
-        response.headers['vary']?.includes('Accept'),
+      // `Accept` spellings evict each other's copy. What reaches the wire is
+      // `@koa/cors`'s own `Vary: Origin` — pinned exactly, so this asserts
+      // what the response carries rather than only what it omits. That one is
+      // no more honored than the header it replaces (the server configures
+      // `origin: '*'` with no credentials, so `Access-Control-Allow-Origin`
+      // is the literal `*` for every caller); it is harmless because its
+      // value is the same for every request, so it names one variant rather
+      // than splitting the population into several.
+      assert.strictEqual(
+        response.headers['vary'],
+        'Origin',
         'does not vary on Accept, so no Accept spelling can evict the stored entry',
       );
+    });
+
+    // Declining to vary on `Accept` asserts a contract, not just the absence
+    // of a header: every `Accept` gets this same response. A browser stores
+    // one variant per URL and holds it for the full year, so a spelling that
+    // routed somewhere else would be cached under this URL and served in
+    // place of the stylesheet — or the reverse. `text/html` is the spelling
+    // that can: it is what a tab navigation sends, and the index handler
+    // answers those with the app shell for realm paths it does not exempt.
+    test('every Accept spelling gets the same hashed scoped-CSS response', async function (assert) {
+      let interned = (await dbAdapter.execute(
+        `SELECT hash FROM scoped_css WHERE realm_url = $1 LIMIT 1`,
+        { bind: [testRealmURL.href] },
+      )) as { hash: string }[];
+      assert.strictEqual(
+        interned.length,
+        1,
+        'precondition: indexing interned scoped CSS for the fixture realm',
+      );
+      let path = `/_scoped-css/person.gts.md5-${interned[0].hash}.glimmer-scoped.css`;
+      let get = (accept: string) =>
+        request
+          .get(path)
+          .set('Accept', accept)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+          );
+
+      let baseline = await get(SupportedMimeType.All);
+      for (let accept of ['text/html', 'text/javascript', '*/*']) {
+        let response = await get(accept);
+        assert.strictEqual(
+          response.status,
+          baseline.status,
+          `same status for Accept: ${accept}`,
+        );
+        assert.strictEqual(
+          response.headers['content-type'],
+          baseline.headers['content-type'],
+          `same content type for Accept: ${accept}`,
+        );
+        assert.strictEqual(
+          response.headers['cache-control'],
+          baseline.headers['cache-control'],
+          `same cache-control for Accept: ${accept}`,
+        );
+        assert.strictEqual(
+          response.text,
+          baseline.text,
+          `same body for Accept: ${accept}`,
+        );
+      }
     });
 
     // Positive control for the two absence assertions above: the same realm,
