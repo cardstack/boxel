@@ -30,8 +30,10 @@ declare module '@cardstack/boxel-host/lib/signed-capture' {
     Blocks: { default: [string | undefined, string | undefined] };
   }>;
   export const SignedCaptureLink: ComponentLike<{
-    Args: { url?: string | null };
+    // `kind`/`size` pass through to the shared Button (typed as string here
+    // so programs without boxel-ui in their graph still check).
+    Args: { url?: string | null; kind?: string; size?: string };
     Blocks: { default: [] };
-    Element: HTMLAnchorElement;
+    Element: HTMLButtonElement | HTMLAnchorElement;
   }>;
 }

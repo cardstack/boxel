@@ -20,6 +20,13 @@ import { service } from '@ember/service';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import {
+  Button,
+  type BoxelButtonKind,
+  type BoxelButtonSize,
+} from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
+
 import type CaptureUrlSignerService from '../services/capture-url-signer';
 
 // Base cards' render-context signal: set during a server-side prerender,
@@ -117,20 +124,30 @@ interface SignedCaptureLinkSignature {
   Args: {
     // The durable capture URL the link targets.
     url?: string | null;
+    // Button styling passthroughs; the default is a link-styled anchor.
+    kind?: BoxelButtonKind;
+    size?: BoxelButtonSize;
   };
   Blocks: { default: [] };
-  Element: HTMLAnchorElement;
+  Element: HTMLButtonElement | HTMLAnchorElement;
 }
 
-// An anchor that opens its capture URL in a new tab with a fresh token. The
-// href stays the durable URL (right-click copy shares the stable reference;
-// public realms work without interception), and the click path follows the
-// popup-blocker discipline: the tab opens synchronously under the user
-// activation, then navigates once the mint resolves.
+// An anchor that opens its capture URL in a new tab with a fresh token,
+// rendered through the shared Button so it carries the themed states and
+// accessibility markup. The href stays the durable URL (right-click copy
+// shares the stable reference; public realms work without interception),
+// and the click path follows the popup-blocker discipline: the tab opens
+// synchronously under the user activation, then navigates once the mint
+// resolves.
 export class SignedCaptureLink extends GlimmerComponent<SignedCaptureLinkSignature> {
   @service declare private captureUrlSigner: CaptureUrlSignerService;
 
   @tracked errorMessage: string | undefined;
+  @tracked isPending = false;
+
+  private get kind(): BoxelButtonKind {
+    return this.args.kind ?? 'link-primary';
+  }
 
   @action
   private async openSigned(event: Event) {
@@ -140,6 +157,7 @@ export class SignedCaptureLink extends GlimmerComponent<SignedCaptureLinkSignatu
     }
     event.preventDefault();
     this.errorMessage = undefined;
+    this.isPending = true;
     let w = window.open('', '_blank');
     try {
       let signedUrl = await this.captureUrlSigner.getSignedUrl(url);
@@ -149,18 +167,25 @@ export class SignedCaptureLink extends GlimmerComponent<SignedCaptureLinkSignatu
     } catch (e) {
       w?.close();
       this.errorMessage = e instanceof Error ? e.message : String(e);
+    } finally {
+      this.isPending = false;
     }
   }
 
   <template>
-    <a
-      href={{@url}}
+    <Button
+      @as='anchor'
+      @href={{@url}}
+      @kind={{this.kind}}
+      @size={{@size}}
+      @disabled={{not @url}}
       target='_blank'
       rel='noopener noreferrer'
+      aria-busy={{if this.isPending 'true'}}
       data-signed-capture-link
       {{on 'click' this.openSigned}}
       ...attributes
-    >{{yield}}</a>
+    >{{yield}}</Button>
     {{#if this.errorMessage}}
       <span class='signed-capture-link-error' role='alert'>
         {{this.errorMessage}}
@@ -168,7 +193,7 @@ export class SignedCaptureLink extends GlimmerComponent<SignedCaptureLinkSignatu
     {{/if}}
     <style scoped>
       .signed-capture-link-error {
-        color: var(--boxel-error-100);
+        color: var(--destructive-ink);
         font-size: var(--boxel-font-size-sm);
       }
     </style>
