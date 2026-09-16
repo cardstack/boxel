@@ -1900,12 +1900,18 @@ module(basename(import.meta.filename), function () {
         };
 
         let before = await watermarks();
+        // `ringo` is a Pet and stays one, so this pass has no departed type to
+        // stamp: the only chains it can move are Pet's and that of `hassan`,
+        // the PetPerson that links to it. A card that changes what it adopts
+        // from also stamps the type it left, which is the next test's subject
+        // rather than this one's — writing one here would move a type this
+        // test asserts is untouched.
         await realm.write(
-          'vangogh.json',
+          'ringo.json',
           JSON.stringify({
             data: {
               type: 'card',
-              attributes: { firstName: 'Van Gogh' },
+              attributes: { firstName: 'Ringo Starr' },
               meta: {
                 adoptsFrom: { module: rri('./pet'), name: 'Pet' },
               },
