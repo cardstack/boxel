@@ -110,7 +110,8 @@ interface PermissionReceipt {
   realm_url: string;
   username: string;
   version: string;
-  metadata_version: string;
+  metadata_version: string | null;
+  bootstrap_version: string | null;
 }
 
 // No browser, GTS evaluation, remote visibility probe or cache populate. The
@@ -200,13 +201,18 @@ function createPostgresAdmission(
     username: string,
   ): Promise<PermissionReceipt | undefined> {
     const [row] = await query(db, [
-      // Require an existing metadata row so the commit check can lock archive
-      // state too. Bootstrap realms without that row use the ordinary indexer.
-      'SELECT p.realm_url,p.username,p.xmin::text AS version,r.xmin::text AS metadata_version FROM realm_user_permissions p JOIN realm_metadata r ON r.url=p.realm_url WHERE p.realm_url =',
+      // Source realms need archive metadata. Bootstrap realms may lack it;
+      // their registry kind prohibits archive and is locked at publication.
+      `SELECT p.realm_url,p.username,p.xmin::text AS version,
+         r.xmin::text AS metadata_version,b.xmin::text AS bootstrap_version
+       FROM realm_user_permissions p
+       LEFT JOIN realm_metadata r ON r.url=p.realm_url
+       LEFT JOIN realm_registry b ON b.url=p.realm_url AND b.kind='bootstrap' AND r.url IS NULL
+       WHERE p.realm_url =`,
       param(realmURL),
       'AND p.username =',
       param(username),
-      'AND p.read = TRUE AND r.archived_at IS NULL',
+      'AND p.read = TRUE AND r.archived_at IS NULL AND (r.url IS NOT NULL OR b.url IS NOT NULL)',
     ]);
     return row as unknown as PermissionReceipt | undefined;
   }
@@ -220,15 +226,35 @@ function createPostgresAdmission(
       (row) => !checked.has('permission:' + JSON.stringify(row)),
     );
     if (!pending.length) return;
-    const rows = await tx([
-      `SELECT p.realm_url,p.username,p.xmin::text AS version,r.xmin::text AS metadata_version FROM realm_user_permissions p
+    const metadata = pending.filter((row) => row.metadata_version !== null);
+    const bootstrap = pending.filter((row) => row.bootstrap_version !== null);
+    // Separate inner joins let PostgreSQL lock the actual authority row;
+    // FOR SHARE cannot lock the nullable side of an outer join.
+    const rows = metadata.length
+      ? await tx([
+          `SELECT p.realm_url,p.username,p.xmin::text AS version,r.xmin::text AS metadata_version,NULL::text AS bootstrap_version FROM realm_user_permissions p
        JOIN realm_metadata r ON r.url=p.realm_url
        JOIN jsonb_to_recordset(`,
-      param(JSON.stringify(pending)),
-      `::jsonb) AS e(realm_url text,username text) ON p.realm_url=e.realm_url AND p.username=e.username
+          param(JSON.stringify(metadata)),
+          `::jsonb) AS e(realm_url text,username text) ON p.realm_url=e.realm_url AND p.username=e.username
        WHERE p.read = TRUE AND r.archived_at IS NULL
        ORDER BY p.realm_url,p.username FOR SHARE OF p,r`,
-    ]);
+        ])
+      : [];
+    if (bootstrap.length)
+      rows.push(
+        ...(await tx([
+          `SELECT p.realm_url,p.username,p.xmin::text AS version,
+         NULL::text AS metadata_version,r.xmin::text AS bootstrap_version
+       FROM realm_user_permissions p JOIN realm_registry r ON r.url=p.realm_url
+       JOIN jsonb_to_recordset(`,
+          param(JSON.stringify(bootstrap)),
+          `::jsonb) AS e(realm_url text,username text) ON p.realm_url=e.realm_url AND p.username=e.username
+       WHERE p.read = TRUE AND r.kind='bootstrap'
+         AND NOT EXISTS (SELECT 1 FROM realm_metadata m WHERE m.url=r.url)
+       ORDER BY p.realm_url,p.username FOR SHARE OF p,r`,
+        ])),
+      );
     if (
       rows.length !== pending.length ||
       pending.some(
@@ -238,7 +264,8 @@ function createPostgresAdmission(
               actual.realm_url === expected.realm_url &&
               actual.username === expected.username &&
               actual.version === expected.version &&
-              actual.metadata_version === expected.metadata_version,
+              actual.metadata_version === expected.metadata_version &&
+              actual.bootstrap_version === expected.bootstrap_version,
           ),
       )
     )
@@ -543,7 +570,7 @@ function createPostgresAdmission(
       `SELECT m.url,m.resolved_realm_url AS realm_url,m.cache_scope,m.auth_user_id,
          m.xmin::text AS version,f.file_path,f.xmin::text AS file_version,
          f.content_hash,f.content_size,p.username,p.xmin::text AS permission_version,
-         r.xmin::text AS metadata_version
+         r.xmin::text AS metadata_version,b.xmin::text AS bootstrap_version
        FROM jsonb_to_recordset(`,
       param(
         JSON.stringify(
@@ -565,10 +592,15 @@ function createPostgresAdmission(
        JOIN realm_file_meta f ON f.realm_url=e.realm_url AND f.file_path=e.file_path
          AND f.content_hash=e.content_hash AND f.content_size IS NOT NULL
        JOIN realm_user_permissions p ON p.realm_url=e.realm_url AND p.username=e.username AND p.read=TRUE
-       JOIN realm_metadata r ON r.url=e.realm_url AND r.archived_at IS NULL
-       WHERE m.error_doc IS NULL`,
+       LEFT JOIN realm_metadata r ON r.url=e.realm_url
+       LEFT JOIN realm_registry b ON b.url=e.realm_url AND b.kind='bootstrap' AND r.url IS NULL
+       WHERE m.error_doc IS NULL AND r.archived_at IS NULL
+         AND (r.url IS NOT NULL OR b.url IS NOT NULL)`,
     ]);
-    if (moduleRows.length !== policy.modules.length) return refuse('line 538');
+    if (moduleRows.length !== policy.modules.length)
+      return refuse(
+        'reviewed module source, cache, read grant or realm authority is missing or changed',
+      );
     for (const module of policy.modules) {
       const row = moduleRows.find(
         (row) =>
@@ -583,7 +615,10 @@ function createPostgresAdmission(
         realm_url: module.realmURL,
         username: String(row.username),
         version: String(row.permission_version),
-        metadata_version: String(row.metadata_version),
+        metadata_version:
+          row.metadata_version == null ? null : String(row.metadata_version),
+        bootstrap_version:
+          row.bootstrap_version == null ? null : String(row.bootstrap_version),
       };
       permissions.set(JSON.stringify([grant.realm_url, grant.username]), grant);
       files.push({

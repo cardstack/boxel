@@ -155,6 +155,112 @@ worker either declines native admission or rejects obsolete work; inspect the
 reported reason before re-reviewing. A missing review does not make a native-only
 application safe for the Chrome path.
 
+### Prepare and verify a review
+
+1. Index the disposable realm normally, with its Lattice flag enabled and no
+   native review installed. Read the owner until `meta.publication.state` is
+   `ready`. Both the application and its reviewed base modules need actual
+   indexed source receipts and cached definitions in the worker's database.
+2. Review the source of each data implementation in the closure. For the
+   [Day/Observation example](../packages/realm-server/tests/helpers/lattice-parity-fixture.ts),
+   this includes `cards.gts`, base `card-api.gts`, base `number.gts` and base
+   `string.ts`. The string module is a re-export; its cached module URL can end
+   in `.gts` even though the source receipt names `string.ts`. Use the stored
+   identities, rather than guessing a source path from a module URL.
+3. With the worker's ordinary `PGHOST`, `PGPORT`, `PGUSER` and `PGDATABASE`
+   configuration, inspect each reviewed module using the read-only command
+   below. Set the three review variables to that module's exact identities.
+   Passing the connection variables after `mise exec` preserves your selected
+   database if mise also configures development defaults. The output is
+   inventory for review, not permission to execute code.
+
+```sh
+cd packages/realm-server
+export LATTICE_REVIEW_MODULE_URL='https://example.test/demo/cards.gts'
+export LATTICE_REVIEW_SOURCE_REALM='https://example.test/demo/'
+export LATTICE_REVIEW_SOURCE_PATH='cards.gts'
+mise exec -- env PGHOST="$PGHOST" PGPORT="$PGPORT" PGUSER="$PGUSER" \
+  PGDATABASE="$PGDATABASE" pnpm exec node --input-type=module <<'JS'
+import { PgAdapter } from '@cardstack/postgres';
+import { latticeDefinitionDigest } from './lib/lattice-postgres-admission.ts';
+const db = new PgAdapter({ autoMigrate: false });
+const url = process.env.LATTICE_REVIEW_MODULE_URL;
+const realm = process.env.LATTICE_REVIEW_SOURCE_REALM;
+const path = process.env.LATTICE_REVIEW_SOURCE_PATH;
+try {
+  const modules = await db.execute(
+    `SELECT cache_scope,auth_user_id,definitions FROM modules
+     WHERE url=$1 AND resolved_realm_url=$2 AND error_doc IS NULL`,
+    { bind: [url, realm] },
+  );
+  const files = await db.execute(
+    `SELECT file_path,content_hash,content_size FROM realm_file_meta
+     WHERE realm_url=$1 AND file_path=$2`, { bind: [realm, path] },
+  );
+  const grants = await db.execute(
+    'SELECT username,read FROM realm_user_permissions WHERE realm_url=$1',
+    { bind: [realm] },
+  );
+  const registry = await db.execute(
+    'SELECT kind FROM realm_registry WHERE url=$1', { bind: [realm] },
+  );
+  const metadata = await db.execute(
+    'SELECT archived_at FROM realm_metadata WHERE url=$1', { bind: [realm] },
+  );
+  console.log(JSON.stringify({ url, realm, files, grants, registry, metadata,
+    scopes: modules.map(({ definitions, ...scope }) => ({ ...scope,
+      definitions: Object.entries(definitions ?? {})
+        .filter(([, entry]) => entry.type === 'definition')
+        .map(([cacheKey, entry]) => ({ cacheKey, codeRef: entry.definition.codeRef,
+          definitionSHA256: latticeDefinitionDigest(entry.definition) })),
+    })),
+  }, null, 2));
+} finally { await db.close(); }
+JS
+```
+
+4. Write the JSON array of policies from the reviewed inventory. A module entry
+   uses `url`, `realmURL`, `cacheScope`, `authUserId`, `sourcePath` and
+   `sourceMD5` (the stored `content_hash`). A definition entry uses `codeRef`,
+   `moduleURL`, `cacheKey` and `definitionSHA256`. Select the authorized public
+   scope (`authUserId: ""` and a public read grant) or the policy actor's own
+   private scope. Do not copy another actor's cache identity. Include the
+   reviewed exported roots, `actorUserId`, `runtimeRevision` and
+   `noScreenshotThumbnail: true` as shown by the policy type above.
+5. Set `LATTICE_NATIVE_REVIEW_FILE` to that absolute file path and
+   `LATTICE_NATIVE_RUNTIME_REVISION` to the same deployed-runtime identity.
+   Set `LATTICE_NATIVE_ADMISSION_DEBUG=1` during verification. Restart the owned
+   indexing workers with this configuration and the same realm allow-list;
+   the review file is read at worker startup. Updating the file alone does not
+   renew a running worker's authority.
+6. Post an ordinary feeder edit. In the example, changing Observation/two to
+   `status: "done"` and one rating with `points: 8` changes Day/blue from count
+   **1**, total **5** to count **2**, total **13**. Require a ready publication
+   and complete selected IDs. Verify execution using the worker PID in its log
+   and the stored data diagnostics, not just the displayed value:
+
+```sql
+SELECT url, diagnostics->>'latticeNative' AS native
+FROM boxel_index
+WHERE type='instance' AND url IN (
+  'https://example.test/demo/Observation/two.json',
+  'https://example.test/demo/Day/blue.json'
+);
+```
+
+Both rows must say `true`. HTML may still render in Chrome; this identifies the
+data producer. Bootstrap realms such as base need their existing registry row
+and read grant, but do not need fabricated archive metadata. Source realms still
+require active archive metadata. Publication locks and rechecks the relevant
+authority, source bytes and definitions.
+
+Finally, change the reviewed example's score expression to multiply its sum by
+two without renewing the review. Require a native admission refusal. This
+Chrome-compatible example then reaches total **26** through Chrome, with no
+native data diagnostic on the new owner row. A correct-looking value alone does
+not prove native execution. Re-review changed definitions before installing a
+new policy; never update pinned hashes merely to silence a refusal.
+
 During Chrome materialization, a computed JSON value that still contains live
 card instances refuses with `Lattice output contains a live card` and its field
 path. The owner stays pending; no empty-object output is published. Project the
@@ -177,10 +283,12 @@ mise exec -- env -u LATTICE_ENABLED_REALMS -u LATTICE_NATIVE_REVIEW_FILE \
   pnpm --dir packages/realm-server test > /tmp/lattice-native-checks.log 2>&1
 ```
 
-These exercise captured/reviewed synthetic definitions. They do not prove that a
-hand-written policy for another realm is complete. A fresh-realm operator review
-walkthrough and its production-worker proof remain a release gate; do not use
-this section as evidence that gate has passed.
+These exercise captured/reviewed synthetic definitions. The fresh-realm operator
+walkthrough also passed using real indexed base/application receipts and the
+production worker: native feeder/owner total **13**, then stale-review refusal
+and Chrome total **26** after a code change. It did not fabricate admission
+receipts or activate automatic renewal. This does not prove that a hand-written
+policy for another realm is complete, or establish a latency target.
 
 ## Disable and report
 
