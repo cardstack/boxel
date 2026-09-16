@@ -432,6 +432,24 @@ function isDuringPrerenderRequest(request: Request): boolean {
   return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
 }
 
+// A request URL safe to write to a log line: the capture-URL token (a bearer
+// credential carried in `?token=`) is redacted, since these lines ship to
+// Loki. Mirrors the request-log middleware's `loggableRequestURL`, needed
+// again here because the realm's own logger (auth-failure and capture-token
+// warnings) bypasses that middleware. A no-op when no token param is present.
+function maskLoggedURL(urlString: string): string {
+  try {
+    let url = new URL(urlString);
+    if (!url.searchParams.has(CAPTURE_URL_TOKEN_PARAM)) {
+      return urlString;
+    }
+    url.searchParams.set(CAPTURE_URL_TOKEN_PARAM, 'REDACTED');
+    return url.href;
+  } catch {
+    return urlString;
+  }
+}
+
 // Opt-in signal a JSON-API card POST / PATCH caller sets to say "don't block my
 // write on the realm's in-flight incremental indexing — index deferred and
 // answer me from the document I sent". This is the write-side half of what
@@ -5469,13 +5487,13 @@ export class Realm {
       ) as unknown as CaptureURLTokenClaims & { iat: number; exp: number };
     } catch (e) {
       this.#log.warn(
-        `capture-url token failed verification for GET ${request.url}: ${e}`,
+        `capture-url token failed verification for GET ${maskLoggedURL(request.url)}: ${e}`,
       );
       return undefined;
     }
     if (claims.scope !== CAPTURE_URL_TOKEN_SCOPE) {
       this.#log.warn(
-        `capture-url token for GET ${request.url} carries scope ${JSON.stringify(
+        `capture-url token for GET ${maskLoggedURL(request.url)} carries scope ${JSON.stringify(
           (claims as { scope?: unknown }).scope,
         )}, not ${CAPTURE_URL_TOKEN_SCOPE}`,
       );
@@ -5483,20 +5501,20 @@ export class Realm {
     }
     if (ensureTrailingSlash(claims.realm) !== ensureTrailingSlash(this.url)) {
       this.#log.warn(
-        `capture-url token for GET ${request.url} is scoped to realm ${claims.realm}, not ${this.url}`,
+        `capture-url token for GET ${maskLoggedURL(request.url)} is scoped to realm ${claims.realm}, not ${this.url}`,
       );
       return undefined;
     }
     let binding = captureURLTokenBinding(localPath, searchParams);
     if (claims.url !== binding) {
       this.#log.warn(
-        `capture-url token for GET ${request.url} is bound to "${claims.url}", not "${binding}"`,
+        `capture-url token for GET ${maskLoggedURL(request.url)} is bound to "${claims.url}", not "${binding}"`,
       );
       return undefined;
     }
     if (await isSessionRevoked(this.#dbAdapter, claims.user, claims.iat)) {
       this.#log.warn(
-        `capture-url token for GET ${request.url} was issued at ${claims.iat}, which predates user ${claims.user}'s session revocation`,
+        `capture-url token for GET ${maskLoggedURL(request.url)} was issued at ${claims.iat}, which predates user ${claims.user}'s session revocation`,
       );
       return undefined;
     }
@@ -6390,7 +6408,7 @@ export class Realm {
     let authorizationString = request.headers.get('Authorization');
     if (!authorizationString) {
       this.#log.warn(
-        `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) missing auth header`,
+        `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}) missing auth header`,
       );
       throw new AuthenticationError(
         AuthenticationErrorMessages.MissingAuthHeader,
@@ -6408,7 +6426,7 @@ export class Realm {
       // sessions delegated on their behalf.
       if (await isSessionRevoked(this.#dbAdapter, token.user, token.iat)) {
         this.#log.warn(
-          `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), session for user ${token.user} was issued at ${token.iat} which predates that user's session revocation`,
+          `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), session for user ${token.user} was issued at ${token.iat} which predates that user's session revocation`,
         );
         throw new AuthenticationError(
           AuthenticationErrorMessages.SessionRevoked,
@@ -6440,7 +6458,7 @@ export class Realm {
           ensureTrailingSlash(token.realm) !== ensureTrailingSlash(this.url)
         ) {
           this.#log.warn(
-            `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} is scoped to realm ${token.realm}, not ${this.url}`,
+            `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), delegated session for user ${user} is scoped to realm ${token.realm}, not ${this.url}`,
           );
           throw new AuthenticationError(
             AuthenticationErrorMessages.TokenInvalid,
@@ -6448,13 +6466,13 @@ export class Realm {
         }
         if (requiredPermission !== 'read') {
           this.#log.warn(
-            `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} attempted ${requiredPermission}; delegated sessions are read-only`,
+            `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), delegated session for user ${user} attempted ${requiredPermission}; delegated sessions are read-only`,
           );
           throw new AuthorizationError('Delegated sessions are read-only');
         }
         if (!(await realmPermissionChecker.can(user, 'read'))) {
           this.#log.warn(
-            `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} but user lacks read permission`,
+            `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), delegated session for user ${user} but user lacks read permission`,
           );
           throw new AuthenticationError(
             AuthenticationErrorMessages.PermissionMismatch,
@@ -6487,7 +6505,7 @@ export class Realm {
           JSON.stringify(userPermissions.sort())
       ) {
         this.#log.warn(
-          `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), for user ${user} token permissions do not match realm permissions for user. token permissions: ${JSON.stringify(token.permissions?.sort())}, user's realm permissions: ${JSON.stringify(userPermissions.sort())}`,
+          `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), for user ${user} token permissions do not match realm permissions for user. token permissions: ${JSON.stringify(token.permissions?.sort())}, user's realm permissions: ${JSON.stringify(userPermissions.sort())}`,
         );
         throw new AuthenticationError(
           AuthenticationErrorMessages.PermissionMismatch,
@@ -6496,7 +6514,7 @@ export class Realm {
 
       if (!(await realmPermissionChecker.can(user, requiredPermission))) {
         this.#log.warn(
-          `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
+          `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
         );
         throw new AuthorizationError(
           'Insufficient permissions to perform this action',
@@ -6506,13 +6524,13 @@ export class Realm {
     } catch (e: any) {
       if (e?.constructor?.name === 'TokenExpiredError') {
         this.#log.warn(
-          `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
+          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
       if (e?.constructor?.name === 'JsonWebTokenError') {
         this.#log.warn(
-          `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}`,
+          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
       }
@@ -8071,7 +8089,7 @@ export class Realm {
       fragment: string = '',
     ) =>
       this.#readGateLog[level](
-        `outcome=${outcome}${fragment} url=${request.url}`,
+        `outcome=${outcome}${fragment} url=${maskLoggedURL(request.url)}`,
       );
     if (isDuringPrerenderRequest(request)) {
       emit('info', 'skipped-prerender');
@@ -8489,7 +8507,7 @@ export class Realm {
         error.status >= 400 && error.status <= 599 && error.status !== 404
           ? error.status
           : 500,
-      message: `cannot return card, ${request.url}, from index: ${error.title} - ${error.message}`,
+      message: `cannot return card, ${maskLoggedURL(request.url)}, from index: ${error.title} - ${error.message}`,
       id: request.url,
       additionalError: CardError.fromSerializableError({
         status: error.status,
@@ -8658,14 +8676,14 @@ export class Realm {
         return notAcceptable(
           request,
           requestContext,
-          `markdown representation unavailable: ${request.url} has an indexing error`,
+          `markdown representation unavailable: ${maskLoggedURL(request.url)} has an indexing error`,
         );
       }
       if (instanceEntry.markdown == null) {
         return notAcceptable(
           request,
           requestContext,
-          `markdown representation not available for ${request.url}`,
+          `markdown representation not available for ${maskLoggedURL(request.url)}`,
         );
       }
       return createResponse({
@@ -8689,7 +8707,7 @@ export class Realm {
         return notAcceptable(
           request,
           requestContext,
-          `markdown representation not available for ${request.url}`,
+          `markdown representation not available for ${maskLoggedURL(request.url)}`,
         );
       }
       return createResponse({
