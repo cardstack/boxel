@@ -198,6 +198,7 @@ function stub(opts: StubOptions = {}): Stub {
         writes: Object.entries(writes).map(([path, content]) => ({
           path,
           lastModified: 2000,
+          created: 500,
           contentHash: `hash-${content.length}`,
         })),
         generation: 9,

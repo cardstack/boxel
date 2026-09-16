@@ -141,7 +141,16 @@ export interface BatchCore {
       initiatingUser?: string | null;
     },
   ): Promise<{
-    writes: { path: string; lastModified: number; contentHash: string }[];
+    writes: {
+      path: string;
+      lastModified: number;
+      // When the realm first recorded this file. Read by the commit as it
+      // writes, inside the lock, so a caller reporting it never has to ask
+      // again afterwards — and a concurrent removal of the same path cannot
+      // take the row away between the commit and the answer.
+      created: number | null;
+      contentHash: string;
+    }[];
     generation: number | null;
   }>;
   serializeCard(
@@ -174,7 +183,41 @@ export interface CommitBatchOptions {
   // Whether to return only once the batch's index job has landed. Waiting is
   // the default: a caller that reports a version and a generation per entry
   // needs the generation, and a caller reading the cards back needs the rows.
+  //
+  // It settles a second thing, and a caller reaching for an early answer is
+  // choosing both: waiting also drains indexing already in flight before the
+  // batch stages. The two travel together because a caller that will not wait
+  // for its own indexing gains nothing from waiting for anyone else's — and
+  // for a card write there is nothing in the drain to lose, since serializing
+  // a card resolves its definitions through `lookupDefinition`, which reads a
+  // module off disk rather than out of the index, and the commit drops a
+  // rewritten module's cached definition as it writes the bytes. A write made
+  // from inside a render must skip both: the job it would wait on needs the
+  // render slot its caller is holding.
   waitForIndex?: boolean;
+  // Report the bytes each entry's primary file now holds, on the entry's
+  // `meta.storedContent`. Off by default: a batch's results say what a card
+  // is and what version it holds, and a caller wanting its document reads it
+  // back, so carrying every entry's document would make a batch of many
+  // entries answer with the realm's contents. It is here for a caller that
+  // has no read to make — one whose write indexes deferred and answers from
+  // what it wrote — which would otherwise have to go back to the file the
+  // commit just closed.
+  reportStoredContent?: boolean;
+  // What a link to a side-loaded resource the batch will not write means. Such
+  // a resource is one claiming another realm, which is not this batch's to
+  // create, so the link resolves to nothing either way — the question is
+  // whether that is the caller's mistake or its intent.
+  //
+  // `refuse` is the default and the answer a caller composing a batch wants:
+  // it sent the resource, so silently writing a card with that edge empty
+  // would describe a payload it did not send, and the remedy — name the card
+  // by URL, or stop claiming a realm for it — is one only the caller can
+  // apply. The card endpoints ask for `leave`, because a `POST` or `PATCH`
+  // carrying such a payload has always stored the card with the edge empty
+  // and answered success: serialization records a link it cannot resolve as
+  // an explicit null.
+  foreignSideLoadLink?: 'refuse' | 'leave';
 }
 
 // One entry's answer, in the order the entries were sent. A write reports the
@@ -199,7 +242,15 @@ export async function commitBatch(
     // each card against its type's definition, and a module written moments
     // earlier may still be indexing; without this a batch that follows a
     // module upload fails to resolve a type the realm already has on disk.
-    await core.drainIndexing();
+    //
+    // A batch that does not wait for its own indexing does not wait for
+    // anyone else's either — `CommitBatchOptions.waitForIndex` owns that
+    // trade, and the deadlock it exists to avoid is reached through this
+    // line: a write made from inside a render would wait here for a job that
+    // needs the render slot its caller is holding.
+    if (opts.waitForIndex !== false) {
+      await core.drainIndexing();
+    }
     // Every `lid` in the batch resolves to a URL before any executor runs. A
     // created card's file is named after its `lid`, so its URL is path math
     // over the type it adopts — no read and no write — which is what lets an
@@ -222,6 +273,7 @@ export async function commitBatch(
         paths,
         lids,
         foreignLids,
+        foreignSideLoadLink: opts.foreignSideLoadLink,
         stored,
         storedMeta,
         splices,
@@ -1089,6 +1141,10 @@ async function commitStaged(
         version: written.contentHash,
         generation: committed.generation,
         lastModified: written.lastModified,
+        created: written.created,
+        ...(opts.reportStoredContent
+          ? { storedContent: primaryContent(change) }
+          : {}),
         ...(change.diagnostics ? { diagnostics: change.diagnostics } : {}),
         // Compared against the fingerprint the file carried before the commit,
         // read inside this same lock. A mismatch is not an error — the write
@@ -1099,4 +1155,15 @@ async function commitStaged(
       },
     };
   });
+}
+
+// The content an entry staged for the file its result reports. Taken from the
+// staged change rather than read back afterwards: these are the bytes the
+// commit wrote, whereas the file has been open to every other writer since the
+// lock was released. Undefined where the entry described its file instead of
+// materializing it — an append names an addition, not the file's next content
+// — and where the content is raw bytes, which no caller reads a document from.
+function primaryContent(change: StagedChange): string | undefined {
+  let write = change.writes.find((write) => write.path === change.primaryPath);
+  return typeof write?.content === 'string' ? write.content : undefined;
 }

@@ -113,11 +113,13 @@ function stub(stored: Record<string, string> = {}): Stub {
           ...Object.entries(writes).map(([path, content]) => ({
             path,
             lastModified: 2000,
+            created: 500,
             contentHash: `hash-${content.length}`,
           })),
           ...Object.entries(appends).map(([path, content]) => ({
             path,
             lastModified: 2000,
+            created: 500,
             contentHash: `hash-${
               (writes[path] ?? stored[path] ?? '').length + content.length
             }`,

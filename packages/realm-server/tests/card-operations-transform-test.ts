@@ -105,6 +105,7 @@ function stub(opts: StubOptions = {}): { core: BatchCore; commits: Commit[] } {
         writes: Object.entries(writes).map(([path, content]) => ({
           path,
           lastModified: 2000,
+          created: 500,
           contentHash: `hash-${content.length}`,
         })),
         generation: 9,
