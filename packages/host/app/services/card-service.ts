@@ -238,6 +238,9 @@ export default class CardService extends Service {
     opts?: SerializeOpts & { withIncluded?: true },
   ): Promise<LooseSingleCardDocument> {
     let api = await this.getAPI();
+    if (opts?.includeComputeds) {
+      await this.settleQueryBackedFields(api, card);
+    }
     let serialized = api.serializeCard(card, {
       ...opts,
     });
@@ -245,6 +248,32 @@ export default class CardService extends Service {
       delete serialized.included;
     }
     return serialized;
+  }
+
+  // Asking for computed fields is asking for a document that stands on its own,
+  // and a computed reducing over a query-backed relationship cannot answer that
+  // on demand: such a relationship holds nothing until its search answers, and
+  // being read is what sends that search. A render is spared this because it
+  // re-renders when the answer lands. A document is written once, so it would
+  // record a rollup of nothing — indistinguishable from a card that genuinely
+  // has none. Reading the fields first puts their searches in flight; waiting
+  // on the store that owns the card is what makes the values settled by the
+  // time they are written.
+  private async settleQueryBackedFields(
+    api: typeof CardAPI,
+    card: CardDef,
+  ): Promise<void> {
+    let fields = api.getFields(card, { includeComputeds: true });
+    let queryBacked = Object.entries(fields).filter(
+      ([, field]) => field?.queryDefinition,
+    );
+    if (queryBacked.length === 0) {
+      return;
+    }
+    for (let [fieldName] of queryBacked) {
+      (card as unknown as Record<string, unknown>)[fieldName];
+    }
+    await api.getStore(card).loaded();
   }
 
   async getSource(

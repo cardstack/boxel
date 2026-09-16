@@ -760,6 +760,14 @@ export class RealmIndexQueryEngine {
     return fileMatch && !instanceMatch;
   }
 
+  // Every `boxel_index.types` membership key this ref can legitimately match:
+  // its own spelling plus its canonical defining-module spelling. The
+  // live-search cache key is scoped by these, so it addresses exactly the
+  // rows a filter anchored on this ref selects.
+  async typeKeysFor(ref: CodeRef): Promise<string[]> {
+    return await this.#indexQueryEngine.typeKeysFor(ref);
+  }
+
   async fetchCardTypeSummary() {
     let results = await this.#indexQueryEngine.fetchCardTypeSummary(
       new URL(this.#realm.url),
@@ -1750,16 +1758,15 @@ export class RealmIndexQueryEngine {
       // cards a caller named, that is nearly all of the work, and it lands on
       // cards present only as context for rendering a link.
       //
-      // No consumer is left without a way to get the value. A live one
-      // re-runs the query for itself whatever the document says —
-      // `ensureQueryFieldSearchResource` makes a query field's search
-      // resource live outside a render context — so a field resolved on a
-      // side-loaded card is work it discards, beyond seeding the first paint
-      // before its own query lands. A render resolves a query field only
-      // when a template reads it (`resolveQueryFieldEagerly` defers to the
-      // field getter inside a render context), so it reaches only the fields
-      // it displays; for those it runs the query itself rather than reading
-      // an answer off the document.
+      // No consumer is left without a way to get the value, because both of
+      // them resolve a side-loaded card's query field on demand rather than up
+      // front. A live consumer scopes its own eager pass to the card a document
+      // is about, and a render resolves a query field only when a template
+      // reads it (`resolveQueryFieldEagerly` defers to the field getter inside
+      // a render context). Either way the field reaches only what is asked
+      // for, and runs its own query for that rather than reading an answer off
+      // the document — so an answer written here for a side-loaded card is one
+      // nobody collects.
       //
       // A skipped field is left the way the pristine index row carries it:
       // no umbrella, so no `links.search` and no `data` — the shape an

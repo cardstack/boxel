@@ -1093,6 +1093,22 @@ module(basename(import.meta.filename), function () {
                 }
               }
             `,
+            // Tall under screen media — ~29 pages at Chrome's default paper
+            // (1056px of content per page at 96dpi letter with no margins),
+            // comfortably past SCREENSHOT_PDF_MAX_PAGES — so a pdf capture of
+            // it must error on the page cap rather than paginate it all.
+            'skyscraper.gts': `
+              import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
+              export class Skyscraper extends CardDef {
+                static displayName = "Skyscraper";
+                @field name = contains(StringField);
+                static isolated = class extends Component<typeof this> {
+                  <template>
+                    <div style="height: 30000px; background: linear-gradient(#fff, #000);">{{@model.name}}</div>
+                  </template>
+                }
+              }
+            `,
             // Named `paged-card`, not `paged`, for the same extensionless-id
             // reason as `disco`/`tall` above.
             'paged-card.json': {
@@ -1100,6 +1116,19 @@ module(basename(import.meta.filename), function () {
                 attributes: { name: 'Paged' },
                 meta: {
                   adoptsFrom: { module: rri('./paged'), name: 'Paged' },
+                },
+              },
+            },
+            // Named `skyscraper-card`, not `skyscraper`, for the same
+            // extensionless-id reason as `disco`/`tall` above.
+            'skyscraper-card.json': {
+              data: {
+                attributes: { name: 'Skyscraper' },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./skyscraper'),
+                    name: 'Skyscraper',
+                  },
                 },
               },
             },
@@ -1590,6 +1619,25 @@ module(basename(import.meta.filename), function () {
         countPixelsOfColor(afterPng, magenta),
         0,
         'the next capture settles under screen media again',
+      );
+    });
+
+    test('a pdf capture past the page cap errors naming the cap', async function (assert) {
+      // The skyscraper fixture is 30000px tall under screen media — well past
+      // the page cap at Chrome's default paper — so the capture must refuse
+      // it by name, never truncate it to a partial document.
+      let { response } = await screenshot(`${realmURL}skyscraper-card`, {
+        type: 'pdf',
+      });
+      assert.strictEqual(response.status, 'error', 'capture is refused');
+      assert.true(
+        (response.error ?? '').includes('page cap'),
+        `the error names the page cap (got: ${response.error})`,
+      );
+      assert.strictEqual(
+        response.base64,
+        undefined,
+        'no truncated document rides the error',
       );
     });
 

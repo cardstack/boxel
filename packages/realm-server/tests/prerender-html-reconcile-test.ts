@@ -13,6 +13,7 @@ import type {
 import {
   asExpressions,
   DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP,
+  GATEWAY_FAILURE_RETRY_CAP,
   STALE_SHELL_FAILURE_RETRY_CAP,
   findPrerenderHtmlRejectionStreaks,
   insert,
@@ -1447,6 +1448,99 @@ module(basename(import.meta.filename), function (hooks) {
       diagnostics: {
         staleShellFailure: ['instance'],
         staleShellFailureRenders: STALE_SHELL_FAILURE_RETRY_CAP,
+      },
+      renderedMinutesAgo: 600,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'a row that has exhausted its retries stops being re-driven',
+    );
+  });
+
+  test('a withheld gateway failure is re-driven once it is old enough', async function (assert) {
+    // A gateway/network failure withholds by clearing the error and keeping
+    // the prior render at the current generation — so, like a withheld
+    // stale-shell failure, the row reads as a healthy fresh render and nothing
+    // is left asking for the re-render once the network recovers. This lane is
+    // the only thing that re-drives it, which is what turns the CS-12966
+    // days-long latch into a sweep-cadence one.
+    const realmURL = 'http://example.com/gateway-retry/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      diagnostics: {
+        gatewayFailure: ['instance'],
+        gatewayFailureRenders: 1,
+      },
+      renderedMinutesAgo: 600,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 1, urlsEnqueued: 1, realmsInBackoff: 0 },
+      'the withheld row is enqueued for a fresh render',
+    );
+    assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 1);
+  });
+
+  test('a withheld gateway failure younger than the minimum age waits', async function (assert) {
+    const realmURL = 'http://example.com/gateway-fresh/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      diagnostics: {
+        gatewayFailure: ['instance'],
+        gatewayFailureRenders: 1,
+      },
+      renderedMinutesAgo: 1,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'a just-written withheld row is not re-rendered in the same tick',
+    );
+  });
+
+  test('a withheld gateway failure at the retry cap is terminal', async function (assert) {
+    // If the network problem never clears, retrying forever buys nothing — the
+    // diagnostics stay on the row for someone to read.
+    const realmURL = 'http://example.com/gateway-capped/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+      diagnostics: {
+        gatewayFailure: ['instance'],
+        gatewayFailureRenders: GATEWAY_FAILURE_RETRY_CAP,
       },
       renderedMinutesAgo: 600,
     });

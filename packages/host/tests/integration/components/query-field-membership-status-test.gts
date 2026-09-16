@@ -33,6 +33,7 @@ const HOST_URL = `${testRealmURL}Host/anchor`;
 module('Integration | query-field relationship status', function (hooks) {
   let loader: Loader;
   let cardApi: typeof import('@cardstack/base/card-api');
+  let queryFieldSupport: typeof import('@cardstack/base/query-field-support');
 
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
@@ -49,6 +50,9 @@ module('Integration | query-field relationship status', function (hooks) {
     provideConsumeContext(PermissionsContextName, permissions);
     loader = getService('loader-service').loader;
     cardApi = await loader.import('@cardstack/base/card-api');
+    queryFieldSupport = await loader.import(
+      '@cardstack/base/query-field-support',
+    );
 
     class Person extends CardDef {
       static displayName = 'Person';
@@ -68,6 +72,11 @@ module('Integration | query-field relationship status', function (hooks) {
       @field deferred = linksToMany(() => Person, {
         query: { filter: { eq: { name: '$this.cardTitle' } } },
         eager: false,
+      });
+      // Matches nothing, so its settled answer is an empty set — the state a
+      // field that has not resolved at all must stay distinguishable from.
+      @field unmatched = linksToMany(() => Person, {
+        query: { filter: { eq: { name: 'Nobody' } } },
       });
       // A page smaller than the match count, which is what a query field over
       // the server's ceiling reduces to: the field holds a prefix of what it
@@ -177,38 +186,53 @@ module('Integration | query-field relationship status', function (hooks) {
     );
   });
 
-  test('isLoaded separates an unresolved field from a settled one', async function (this: RenderingTestContext, assert) {
+  test('isLoaded separates a field still loading from a settled empty one', async function (this: RenderingTestContext, assert) {
     let { getRelationshipMembershipState } = cardApi;
     let host = await loadHost();
 
-    // `deferred` opts out of resolving with its owner, so nothing has resolved
-    // it: it reports neither loading nor loaded, the state `isLoading` alone
-    // cannot tell apart from a settled empty result.
+    // `deferred` opts out of resolving with its owner, so asking for its state
+    // is what starts it: it reports loading, which carries no membership, and
+    // `isLoading` alone cannot tell that apart from a result set that really is
+    // empty.
     let deferred = getRelationshipMembershipState(host, 'deferred');
-    assert.false(deferred.isLoading, 'an unresolved field is not loading');
-    assert.false(deferred.isLoaded, 'and it is not loaded either');
+    assert.true(deferred.isLoading, 'a field being resolved is loading');
+    assert.false(deferred.isLoaded, 'so it is not loaded');
     assert.strictEqual(
       deferred.membership,
       undefined,
-      'an unresolved field has no membership',
+      'and it has no membership to report yet',
+    );
+
+    // `unmatched` matches nothing, so its settled answer is an empty set. That
+    // is what `isLoaded` exists to separate from the state above.
+    let unmatched = getRelationshipMembershipState(host, 'unmatched');
+    assert.false(unmatched.isLoading, 'a settled field is not loading');
+    assert.true(unmatched.isLoaded, 'and it is loaded');
+    assert.strictEqual(
+      unmatched.membership?.length,
+      0,
+      'an empty result set is a membership, not the absence of one',
     );
 
     let matches = getRelationshipMembershipState(host, 'matches');
-    assert.false(matches.isLoading, 'a settled field is not loading');
-    assert.true(matches.isLoaded, 'and it is loaded');
+    assert.true(matches.isLoaded, 'a field with results is loaded too');
     assert.strictEqual(
       matches.membership?.length,
       2,
-      'a loaded field carries its membership',
+      'and it carries its membership',
     );
   });
 
   test('a field that opts out of eager resolution resolves on first read', async function (this: RenderingTestContext, assert) {
     let { getRelationshipMembershipState } = cardApi;
+    let { peekQueryFieldSearchResource } = queryFieldSupport;
     let host = (await loadHost()) as CardDefType & { deferred: unknown[] };
 
-    assert.false(
-      getRelationshipMembershipState(host, 'deferred').isLoaded,
+    // Peeked rather than read through the status API, which would itself
+    // resolve the field and so could not observe that nothing had.
+    assert.strictEqual(
+      peekQueryFieldSearchResource(host, 'deferred'),
+      undefined,
       'loading the owner does not resolve a field that opted out',
     );
 
@@ -222,6 +246,38 @@ module('Integration | query-field relationship status', function (hooks) {
       deferred.membership?.length,
       2,
       'and it carries the same membership as its eager twin',
+    );
+  });
+
+  test('asking an unresolved field for its state starts it', async function (this: RenderingTestContext, assert) {
+    let { getRelationshipMembershipState } = cardApi;
+    let { peekQueryFieldSearchResource } = queryFieldSupport;
+    let host = await loadHost();
+
+    assert.strictEqual(
+      peekQueryFieldSearchResource(host, 'deferred'),
+      undefined,
+      'nothing has resolved the field',
+    );
+
+    // A card that renders a pending state while `isLoaded` is false, and
+    // reaches its rows only once loaded, never reads the field itself. Asking
+    // for the state has to be the demand, or such a card waits on a search
+    // nobody started.
+    assert.false(
+      getRelationshipMembershipState(host, 'deferred').isLoaded,
+      'the first read of the state reports it not yet loaded',
+    );
+    assert.notStrictEqual(
+      peekQueryFieldSearchResource(host, 'deferred'),
+      undefined,
+      'and starts it',
+    );
+
+    await settled();
+    assert.true(
+      getRelationshipMembershipState(host, 'deferred').isLoaded,
+      'so the state settles without the field ever being read',
     );
   });
   test('isLoaded never claims a result set the seed has not applied yet', async function (this: RenderingTestContext, assert) {
@@ -281,12 +337,13 @@ module('Integration | query-field relationship status', function (hooks) {
     assert.false(status.isPartial, 'so nothing was cut short');
   });
 
-  test('an unresolved field claims no shortfall', async function (this: RenderingTestContext, assert) {
+  test('a field still loading claims no shortfall', async function (this: RenderingTestContext, assert) {
     let { getRelationshipMembershipState } = cardApi;
     let host = await loadHost();
 
-    // `deferred` opts out of resolving with its owner. `isPartial` asserts a
-    // membership falls short of a known total, and neither is known here.
+    // `deferred` opts out of resolving with its owner, so this read is what
+    // starts it and it is still in flight. `isPartial` asserts a membership
+    // falls short of a known total, and neither is known yet.
     let status = getRelationshipMembershipState(host, 'deferred');
     assert.strictEqual(status.totalMatchCount, undefined);
     assert.false(status.isPartial);

@@ -27,6 +27,7 @@ let getDeclaredOperations: (typeof OperationsModule)['getDeclaredOperations'];
 let params: (typeof OperationsModule)['params'];
 let actor: (typeof OperationsModule)['actor'];
 let instance: (typeof OperationsModule)['instance'];
+let realmConfig: (typeof OperationsModule)['realmConfig'];
 let card: (typeof OperationsModule)['card'];
 let bxl: (typeof OperationsModule)['bxl'];
 let linkTo: (typeof OperationsModule)['linkTo'];
@@ -74,6 +75,7 @@ module('Integration | operations', function (hooks) {
       params,
       actor,
       instance,
+      realmConfig,
       card,
       bxl,
       linkTo,
@@ -205,8 +207,13 @@ module('Integration | operations', function (hooks) {
     );
     assert.deepEqual(
       getOperations(FileDef),
-      { read: implied('read'), readSource: implied('readSource') },
-      "a file's metadata is read-only, so a file def carries only its two reads",
+      {
+        read: implied('read'),
+        readSource: implied('readSource'),
+        update: implied('update'),
+        appendLine: implied('appendLine'),
+      },
+      "a file's metadata is read-only, so what a file def carries beyond its two reads are the two writes that work on its bytes",
     );
     assert.deepEqual(
       getOperations(FieldDef),
@@ -282,6 +289,8 @@ module('Integration | operations', function (hooks) {
           dueOn: params('dueOn'),
           postedBy: actor(),
           classroom: instance('id'),
+          room: realmConfig('defaultRoom'),
+          settings: realmConfig(),
         },
       };
       @operation static addActivity = {
@@ -315,8 +324,10 @@ module('Integration | operations', function (hooks) {
         dueOn: { $ref: 'params', key: 'dueOn' },
         postedBy: { $ref: 'actor' },
         classroom: { $ref: 'instance', key: 'id' },
+        room: { $ref: 'realmConfig', key: 'defaultRoom' },
+        settings: { $ref: 'realmConfig' },
       },
-      'params, actor and instance references survive JSON round-tripping',
+      'every accessor reference survives JSON round-tripping, with and without a key',
     );
     assert.strictEqual(
       createActivity.of,
@@ -425,14 +436,39 @@ module('Integration | operations', function (hooks) {
     );
   });
 
-  test('a file definition can only declare document reads', function (assert) {
-    class Attachment extends FileDef {
+  test('a file definition declares reads and the writes that work on its bytes', function (assert) {
+    class LogFile extends FileDef {
       @operation static readRedacted = { base: 'read', output: { name: true } };
+      // The line is the payload, so an `appendLine` says which param carries
+      // it and nothing more.
+      @operation static record = {
+        base: 'appendLine',
+        params: { line: StringField },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static replace = { base: 'update' };
     }
     assert.deepEqual(
-      Object.keys(getDeclaredOperations(Attachment)),
-      ['readRedacted'],
-      'a read operation is declarable on a file definition',
+      Object.keys(getDeclaredOperations(LogFile)).sort(),
+      ['readRedacted', 'record', 'replace'],
+      'each is declarable on a file definition',
+    );
+    assert.strictEqual(
+      getOperations(LogFile).record,
+      LogFile.record,
+      'and an author-declared one comes back from the read every consumer dispatches from, as the declaration itself',
+    );
+    assert.deepEqual(
+      Object.keys(getOperations(LogFile)).sort(),
+      [
+        'appendLine',
+        'read',
+        'readRedacted',
+        'readSource',
+        'record',
+        'replace',
+        'update',
+      ],
+      'beside every base operation the def type carries — a declaration under a name of its own adds to them rather than standing in for one',
     );
     assert.throws(
       () => {
@@ -444,9 +480,177 @@ module('Integration | operations', function (hooks) {
         }
         return Mutable;
       },
-      /carries only "read", "readSource"/,
-      'file metadata is content-derived, so it has no mutation surface',
+      /carries only "read", "readSource", "update", "appendLine"/,
+      'file metadata is content-derived, so there is no JSON:API document to transform',
     );
+    assert.throws(
+      () => {
+        class Bare extends FileDef {
+          @operation static record = { base: 'appendLine' };
+        }
+        return Bare;
+      },
+      /declares a `line` param — or an `input` program that produces one/,
+      'an append with no line to append would be refused at every invocation',
+    );
+    assert.throws(
+      () => {
+        class Linked extends FileDef {
+          @operation static record = {
+            base: 'appendLine',
+            params: { line: linkTo(CardDef) },
+          };
+        }
+        return Linked;
+      },
+      /`params.line` is the text a line holds/,
+      'a link is a card identity, and what goes into a text file is text',
+    );
+  });
+
+  test('a card definition carries every behavior but the one that appends a line', function (assert) {
+    assert.throws(
+      () => {
+        class Ledger extends CardDef {
+          @operation static record = {
+            base: 'appendLine',
+            params: { line: StringField },
+          };
+        }
+        return Ledger;
+      },
+      /carries only "read", "readSource", "create", "update", "delete", "query", "transform", "appendContainsMany"/,
+      "a card's stored bytes are a JSON:API document, and a line appended to one is no longer a card",
+    );
+  });
+
+  test('an appendContainsMany names the fields it appends to and the item for each', function (assert) {
+    class EventLog extends CardDef {
+      @operation static log = {
+        base: 'appendContainsMany',
+        params: { body: StringField },
+        field: 'events',
+        item: { body: params('body'), at: actor() },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static logBoth = {
+        base: 'appendContainsMany',
+        params: { body: StringField, label: StringField },
+        fields: { events: { body: params('body') }, labels: params('label') },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    assert.deepEqual(
+      Object.keys(getDeclaredOperations(EventLog)).sort(),
+      ['log', 'logBoth'],
+      'both spellings are declarations',
+    );
+
+    let rejected: [string, () => unknown, RegExp][] = [
+      [
+        'both spellings at once',
+        () => {
+          class Both extends CardDef {
+            @operation static log = {
+              base: 'appendContainsMany',
+              field: 'events',
+              item: { body: 'x' },
+              fields: { events: { body: 'y' } },
+            };
+          }
+          return Both;
+        },
+        /names one field with its `item`, or several under `fields` — not both/,
+      ],
+      [
+        'neither spelling',
+        () => {
+          class Neither extends CardDef {
+            @operation static log = { base: 'appendContainsMany' };
+          }
+          return Neither;
+        },
+        /needs `field` and `item`, or `fields`/,
+      ],
+      [
+        'a field with no item',
+        () => {
+          class NoItem extends CardDef {
+            @operation static log = {
+              base: 'appendContainsMany',
+              field: 'events',
+            };
+          }
+          return NoItem;
+        },
+        /needs an `item` to append to "events"/,
+      ],
+      [
+        'an empty fields map',
+        () => {
+          class Empty extends CardDef {
+            @operation static log = {
+              base: 'appendContainsMany',
+              fields: {},
+            };
+          }
+          return Empty;
+        },
+        /`fields` must be an object mapping each `containsMany` field/,
+      ],
+    ];
+    for (let [name, build, pattern] of rejected) {
+      assert.throws(build, pattern, `${name} is refused`);
+    }
+  });
+
+  test('a declaration that runs no program carries no raw one', function (assert) {
+    // A program stored where nothing runs it is worse than a refusal: it reads
+    // as work the operation does.
+    let rejected: [string, () => unknown][] = [
+      [
+        'appendContainsMany',
+        () => {
+          class Ledger extends CardDef {
+            @operation static log = {
+              base: 'appendContainsMany',
+              transformations: bxl`.status = "logged";`,
+            };
+          }
+          return Ledger;
+        },
+      ],
+      [
+        'appendLine',
+        () => {
+          class LogFile extends FileDef {
+            @operation static record = {
+              base: 'appendLine',
+              params: { line: StringField },
+              transformations: bxl`.name = "x";`,
+            };
+          }
+          return LogFile;
+        },
+      ],
+      [
+        'update on a file def',
+        () => {
+          class Replaceable extends FileDef {
+            @operation static replace = {
+              base: 'update',
+              transformations: bxl`.name = "x";`,
+            };
+          }
+          return Replaceable;
+        },
+      ],
+    ];
+    for (let [name, build] of rejected) {
+      assert.throws(
+        build,
+        /so it carries no `transformations`/,
+        `${name} runs no program over a document`,
+      );
+    }
   });
 
   test('a stored-bytes read takes no declaration at all', function (assert) {
@@ -1539,6 +1743,11 @@ module('Integration | operations', function (hooks) {
       [
         'instance with a non-string key',
         () => instance(1 as never),
+        /takes the name of a member to read, or no argument at all/,
+      ],
+      [
+        'realmConfig with an empty key',
+        () => realmConfig(''),
         /takes the name of a member to read, or no argument at all/,
       ],
     ];
