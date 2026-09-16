@@ -222,6 +222,13 @@ module(basename(import.meta.filename), function () {
           'content-length',
           'accept-ranges',
         ]) {
+          // Pin the GET's value before comparing: a header absent from both
+          // responses satisfies equality, so the comparison alone would call
+          // that parity.
+          assert.ok(
+            get.headers[header],
+            `the GET carries ${header} for the HEAD to match`,
+          );
           assert.strictEqual(
             head.headers[header],
             get.headers[header],

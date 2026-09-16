@@ -755,6 +755,13 @@ module(basename(import.meta.filename), function () {
             // different route to the same header and worth holding here.
             'content-length',
           ]) {
+            // Pin the GET's value before comparing. A comparison on its own is
+            // satisfied by a header both responses omit, so parity would read
+            // as green for a response carrying none of these.
+            assert.ok(
+              get.headers[header],
+              `the GET carries ${header} for the HEAD to match`,
+            );
             assert.strictEqual(
               head.headers[header],
               get.headers[header],
