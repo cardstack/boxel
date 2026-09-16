@@ -514,6 +514,10 @@ export type OperationErrorCode =
   // The request named a `baseVersion` the target is no longer at, on an
   // operation that requires the base to match.
   | 'version-conflict'
+  // The operation reads the invoking actor and the request authenticated
+  // nobody. Distinct from `invalid-params` because nothing the caller sent is
+  // wrong: the remedy is credentials, which is what its 401 says.
+  | 'actor-required'
   // The bytes an operation would store are over the realm's ceiling for a
   // card or a file of that kind. Separate from `invalid-params` because the
   // payload is well formed and the remedy is to send less of it, and because
