@@ -1255,6 +1255,7 @@ export async function setupIntegrationTestRealm({
   permissions,
   mockMatrixUtils,
   skipBootIndex,
+  liveReadsResolveLinksOnly,
   startMatrix = true,
   fileSizeLimitBytes,
   audioSizeLimitBytes,
@@ -1273,6 +1274,10 @@ export async function setupIntegrationTestRealm({
   // Not the default: a test that queries, or that reads a card by id through
   // the store, needs the index populated and fails without it.
   skipBootIndex?: true;
+  // Serve card reads the way a realm configured for links-only live reads
+  // does: relationships carry their links, but the targets behind them are
+  // not side-loaded into `included`, so the reader resolves each one itself.
+  liveReadsResolveLinksOnly?: true;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
   audioSizeLimitBytes?: number;
@@ -1289,6 +1294,7 @@ export async function setupIntegrationTestRealm({
     permissions: permissions as RealmPermissions,
     mockMatrixUtils,
     skipBootIndex,
+    liveReadsResolveLinksOnly,
     startMatrix,
     fileSizeLimitBytes,
     audioSizeLimitBytes,
@@ -1372,6 +1378,7 @@ async function setupTestRealm({
   permissions = { '*': ['read', 'write'] },
   mockMatrixUtils,
   skipBootIndex,
+  liveReadsResolveLinksOnly,
   startMatrix = true,
   fileSizeLimitBytes,
   audioSizeLimitBytes,
@@ -1383,6 +1390,7 @@ async function setupTestRealm({
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
   skipBootIndex?: true;
+  liveReadsResolveLinksOnly?: true;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
   audioSizeLimitBytes?: number;
@@ -1488,7 +1496,10 @@ async function setupTestRealm({
     // one into the first argument type-checks — object spreads bypass
     // excess-property checking — and is then dropped by a destructuring that
     // never names it, so the option silently does nothing.
-    { ...(skipBootIndex ? { skipBootIndex } : {}) },
+    {
+      ...(skipBootIndex ? { skipBootIndex } : {}),
+      ...(liveReadsResolveLinksOnly ? { liveReadsResolveLinksOnly } : {}),
+    },
   );
 
   // Register the realm early so realm-server mock _info lookups can resolve
