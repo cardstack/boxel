@@ -3660,7 +3660,8 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.deepEqual(
       messages!.map((m) => m.role),
-      ['system', 'user', 'assistant', 'user'],
+      ['system', 'user', 'assistant', 'user', 'user'],
+      'the failed second block is reported in its own user message before the trailing context',
     );
     assert.equal(
       messageText(messages![2]),
@@ -3893,7 +3894,18 @@ Current date and time: 2025-06-11T11:43:00.533Z
       userMessages.some((message) =>
         messageText(message).includes('(The user has successfully'),
       ),
-      'Code patch result messages should be omitted',
+      'Applied code patches produce no message',
+    );
+    assert.strictEqual(
+      messageText(userMessages[1]),
+      'Code block 2 was not applied: The patch did not apply cleanly.',
+      'the failed block is recorded with its reason; the applied block is not mentioned',
+    );
+    assert.true(
+      messageText(messages![messages!.length - 1]).includes(
+        'Re-read the file and send a new block whose SEARCH lines are copied exactly from the current file. Do not send the same block again. Attempt 1 of 3.',
+      ),
+      'the retry instruction rides the trailing message, not history',
     );
   });
 
@@ -4078,12 +4090,141 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
     const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.ok(userMessages.length >= 1, 'Should have user messages');
+    assert.ok(userMessages.length >= 2, 'Should have user messages');
+    assert.strictEqual(
+      messageText(userMessages[1]),
+      'Code block 1 was not applied: The patch did not apply cleanly.',
+      'history records that the block failed and why',
+    );
+    let trailing = messageText(messages![messages!.length - 1]);
+    assert.true(
+      trailing.includes('Re-read the file and send a new block'),
+      'the trailing message tells the model to retry',
+    );
+    assert.true(trailing.includes('Attempt 1 of 3.'), 'the attempt is counted');
     assert.false(
-      userMessages.some((message) =>
-        messageText(message).includes('The user tried to apply code patch'),
+      trailing.includes('Do not send another patch'),
+      'the limit is not reached on the first failure',
+    );
+  });
+
+  // Append another bot reply with a patch block and its result to a fixture
+  // history, so retry rounds can be stacked without a fixture per round.
+  function appendPatchReply(
+    eventList: DiscreteMatrixEvent[],
+    round: number,
+    status: 'applied' | 'failed',
+  ) {
+    let last = eventList[eventList.length - 1];
+    let ts = (last.origin_server_ts ?? 0) + 1000;
+    let replyId = `$retry-${round}-reply`;
+    eventList.push({
+      type: 'm.room.message',
+      sender: '@aibot:localhost',
+      room_id: last.room_id,
+      origin_server_ts: ts,
+      event_id: replyId,
+      content: {
+        msgtype: 'app.boxel.message',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        body:
+          `Trying again (${round})...\nhttp://test.com/spaghetti-recipe.gts\n` +
+          `${SEARCH_MARKER}\nriveting ${round}\n${SEPARATOR_MARKER}\nengaging ${round}\n${REPLACE_MARKER}\n`,
+      },
+    } as unknown as DiscreteMatrixEvent);
+    eventList.push({
+      type: 'app.boxel.codePatchResult',
+      sender: '@user:localhost',
+      room_id: last.room_id,
+      origin_server_ts: ts + 500,
+      event_id: `$retry-${round}-result`,
+      content: {
+        msgtype: 'app.boxel.codePatchResult',
+        'm.relates_to': {
+          event_id: replyId,
+          key: status,
+          rel_type: 'app.boxel.codePatchAnnotation',
+        },
+        codeBlockIndex: 0,
+        ...(status === 'failed'
+          ? { failureReason: 'The patch did not apply cleanly.' }
+          : {}),
+        data: { context: { tools: [], functions: [], submode: 'code' } },
+      },
+    } as unknown as DiscreteMatrixEvent);
+  }
+
+  test('Stops asking for a retry once patches have failed as many times as the correctness cap', async function () {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          import.meta.dirname,
+          'resources/chats/one-code-block-one-failure.json',
+        ),
+        'utf-8',
       ),
-      'Code patch result messages should be omitted',
+    );
+    appendPatchReply(eventList, 2, 'failed');
+    appendPatchReply(eventList, 3, 'failed');
+
+    const { shouldRespond, messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(shouldRespond, true);
+    let trailing = messageText(messages![messages!.length - 1]);
+    assert.true(
+      trailing.includes(
+        'Code patches have failed to apply 3 times in a row. Do not send another patch.',
+      ),
+      'the third consecutive failure ends the retrying',
+    );
+    assert.false(
+      trailing.includes('Re-read the file and send a new block'),
+      'the retry instruction is gone',
+    );
+    const records = messages!.filter(
+      (m) => m.role === 'user' && messageText(m).includes('was not applied:'),
+    );
+    assert.strictEqual(
+      records.length,
+      3,
+      'each failed reply keeps its record in history',
+    );
+  });
+
+  test('Drops the retry instruction once a later patch applied, and keeps the record', async function () {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          import.meta.dirname,
+          'resources/chats/one-code-block-one-failure.json',
+        ),
+        'utf-8',
+      ),
+    );
+    appendPatchReply(eventList, 2, 'applied');
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    let trailing = messageText(messages![messages!.length - 1]);
+    assert.false(
+      trailing.includes('Re-read the file and send a new block'),
+      'no retry instruction after the fix landed',
+    );
+    assert.true(
+      messages!.some(
+        (m) =>
+          m.role === 'user' &&
+          messageText(m) ===
+            'Code block 1 was not applied: The patch did not apply cleanly.',
+      ),
+      'the record of the first failure stays in history',
     );
   });
 
