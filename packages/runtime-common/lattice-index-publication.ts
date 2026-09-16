@@ -414,6 +414,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
     if (!replayPrevious)
       await assertLatticeGeneration(this.db, realmURL, generation - 1, tx);
     const retained = new Set<string>();
+    const skipped: string[] = [];
     if (!prepared.rows.length && !prepared.hadOwners) return retained;
     if (inputGeneration !== undefined && inputGeneration !== generation - 1) {
       throw new Error('Lattice publication does not follow its input revision');
@@ -564,8 +565,8 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
 
         phaseAt = Date.now();
         timings.owners++;
-        if (
-          !(await this.registry.publish(tx, {
+        const publishOwner = (retain: boolean) =>
+          this.registry.publish(tx, {
             realmURL,
             ownerURL: row.url,
             generation,
@@ -573,17 +574,45 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
             definitionRevision,
             watches: prepared.watches.get(row.url)!,
             pending: !ready,
-            ...(retainOutput
-              ? { retainOutputGeneration: outputGeneration }
-              : {}),
-          }))
-        )
+            ...(retain ? { retainOutputGeneration: outputGeneration } : {}),
+          });
+        let retainsOutput = retainOutput;
+        let accepted = await publishOwner(retainOutput);
+        if (!accepted && retainOutput) {
+          // Retention pins the owner row's published generation to the
+          // retained output revision. A pending registration since that
+          // output (the owner's own card re-indexed) moves the row past it,
+          // and no retry can restore the match: publish a fresh revision.
+          retainsOutput = false;
+          accepted = await publishOwner(false);
+        }
+        if (!accepted) {
+          if (prepared.rows.length > 1 && !replayPrevious) {
+            // One obsolete member must not discard a whole materialization
+            // wave. Leave its last publication in place (drop this wave's
+            // working row) and let the owner take the next wave.
+            await tx([
+              'DELETE FROM boxel_index_working WHERE realm_url =',
+              param(realmURL),
+              'AND url =',
+              param(row.url),
+              "AND type = 'instance' AND generation =",
+              param(generation),
+            ]);
+            skipped.push(row.url);
+            timings.publishMs += Date.now() - phaseAt;
+            continue;
+          }
           throw new Error('Lattice rejected an obsolete owner publication');
+        }
+        const finalOutputGeneration = retainsOutput
+          ? outputGeneration
+          : generation;
         timings.publishMs += Date.now() - phaseAt;
         const publication: typeof manifest = {
           ...manifest,
           state: ready ? ('ready' as const) : ('pending' as const),
-          outputRevision: outputGeneration,
+          outputRevision: finalOutputGeneration,
           definitionRevision,
         };
         let resource = envelope
@@ -592,7 +621,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
         if (resource) resource.meta.publication = publication;
         if (ready) {
           published.add(row.url);
-          if (retainOutput) retained.add(row.url);
+          if (retainsOutput) retained.add(row.url);
           // Store the large attribute body in the same transaction as its
           // provenance. Serving only serializes the small, dynamic envelope.
           phaseAt = Date.now();
@@ -608,7 +637,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
                   "AND w.type = 'instance' AND w.generation =",
                   param(generation),
                   '), attributes_generation =',
-                  param(outputGeneration),
+                  param(finalOutputGeneration),
                   'WHERE realm_url =',
                   param(realmURL),
                   'AND owner_url =',
@@ -618,7 +647,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
                   'UPDATE lattice_owners SET attributes_json =',
                   param(JSON.stringify(resource!.attributes) ?? null),
                   ', attributes_generation =',
-                  param(outputGeneration),
+                  param(finalOutputGeneration),
                   'WHERE realm_url =',
                   param(realmURL),
                   'AND owner_url =',
@@ -635,7 +664,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
                   "UPDATE boxel_index_working SET pristine_doc = jsonb_set(pristine_doc, '{meta,publication}',",
                   param(JSON.stringify(publication)),
                   '::jsonb), job_id = NULL, generation =',
-                  param(outputGeneration),
+                  param(finalOutputGeneration),
                   'WHERE realm_url =',
                   param(realmURL),
                   'AND url =',
@@ -647,7 +676,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
                   'UPDATE boxel_index_working SET pristine_doc =',
                   param(JSON.stringify(resource)),
                   ', job_id = NULL, generation =',
-                  param(outputGeneration),
+                  param(finalOutputGeneration),
                   'WHERE realm_url =',
                   param(realmURL),
                   'AND url =',
@@ -734,6 +763,10 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
         'AND generation =',
         param(generation),
       ]);
+    if (skipped.length)
+      console.log(
+        `Lattice wave left ${skipped.length} obsolete owner(s) for the next wave: ${skipped.join(', ')}`,
+      );
     return retained;
   }
 }

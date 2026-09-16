@@ -160,6 +160,13 @@ export function isIdleRenderTimeout(result: IndexVisitRenderResult): boolean {
   );
 }
 
+// Owners published per follow-up materialization wave. LATTICE_WAVE_BATCH
+// overrides it; 1 restores one owner per wave.
+const LATTICE_WAVE_BATCH = Math.max(
+  1,
+  Number(process.env.LATTICE_WAVE_BATCH) || 32,
+);
+
 export class IndexRunner {
   #lattice?: LatticeIndexPublication;
   #latticeRealmUsername?: string;
@@ -876,7 +883,11 @@ export class IndexRunner {
     }
     // A leaf write can activate one new downstream owner per wave. Bound an
     // acyclic chain by all owners, not only the initially dirty subset.
-    if (followup) pending = pending.slice(0, 1);
+    // Every owner `ready` returns has settled inputs and reads no other
+    // pending owner, so one wave can publish a batch of them; a batch never
+    // reads its own members. The cap keeps one job's duration and input
+    // residency bounded.
+    if (followup) pending = pending.slice(0, LATTICE_WAVE_BATCH);
     let maxWaves = followup
       ? 1
       : pending.length
@@ -900,6 +911,7 @@ export class IndexRunner {
         this.#dependencyResolver.reset();
         this.#indexingInstances.clear();
         let succeeded = 0;
+        let recordedFailures = 0;
         const completedOwners: string[] = [];
         let failures: string[] = [];
         for (let { ownerURL, generation, codeVersion } of pending) {
@@ -975,16 +987,16 @@ export class IndexRunner {
               )}`,
             );
             if (followup) {
-              const message = `Lattice could not materialize pending owners: ${failures.join(', ')}`;
-              if (
-                await publication.failWork(
-                  work,
-                  message,
-                  followup.realmUsername,
-                  followup.wave - 1,
-                )
-              )
-                throw new LatticeWorkFailed(message);
+              // Record this owner's failure (which also re-enqueues the wave)
+              // and let the rest of the batch publish; a wave with no success
+              // still fails the job below.
+              const recorded = await publication.failWork(
+                work,
+                `Lattice could not materialize pending owners: ${failures.at(-1)}`,
+                followup.realmUsername,
+                followup.wave - 1,
+              );
+              if (recorded) recordedFailures++;
             }
             continue;
           }
@@ -996,10 +1008,12 @@ export class IndexRunner {
           succeeded++;
           this.#latticeTimings.latticeOwnersRendered++;
         }
-        if (!succeeded)
-          throw new Error(
-            `Lattice could not materialize pending owners: ${failures.join(', ')}`,
-          );
+        if (!succeeded) {
+          const message = `Lattice could not materialize pending owners: ${failures.join(', ')}`;
+          throw followup && recordedFailures
+            ? new LatticeWorkFailed(message)
+            : new Error(message);
+        }
         let swapStartedAt = Date.now();
         await this.batch.done({
           lattice: publication,
