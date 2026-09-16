@@ -72,10 +72,19 @@ export type CardJsonAssembly =
       lastModified: number | null | undefined;
       created: number | undefined;
     }
-  // The card's index row was gone by the time the assembly read it — the
-  // caller re-checks for a non-JSON file at the path and otherwise renders
-  // its own not-found.
-  | { kind: 'missing' }
+  // The path holds bytes rather than a card. Asked for as card+json it answers
+  // with the file's metadata document, which is derived from those bytes and
+  // has no index row behind it — so it carries neither a validator nor a
+  // cache directive, and is never retained.
+  | { kind: 'file-meta'; body: string }
+  // Nothing at this path, and nothing on its way: the caller renders its own
+  // not-found.
+  | { kind: 'not-found' }
+  // The card's source is on disk but the index has not caught up with it yet.
+  // A write lands on the file system first, so this is a card in waiting
+  // rather than a card that does not exist, and the caller says so — letting a
+  // client hold a placeholder until the realm broadcasts the index event.
+  | { kind: 'not-indexed' }
   // `paths.fileURL(localPath)` normalized to a different local path.
   | { kind: 'redirect'; foundPath: string }
   // The index has a row but it can't be served cleanly; the caller renders

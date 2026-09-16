@@ -302,6 +302,19 @@ export interface OperationRequest {
 // GET serves it.
 export interface OperationDocumentResult {
   document: SingleCardDocument | SingleFileMetaDocument;
+  // What the index row this document was assembled from says about itself, in
+  // the shape a headers-only read answers with. A caller computing HTTP
+  // response headers needs both halves out of one read: a validator has to
+  // describe the bytes it is sent with, and peeking again to obtain one lets a
+  // write land in between and pairs a body with a validator for a different
+  // one.
+  headers: OperationHeadResult;
+  // Whether assembling this document applied a query-backed field. Such a
+  // document is not a function of its own index row — a write to some other
+  // card that enters or leaves the query changes it without moving this card's
+  // `deps` or `indexed_at` — so nothing a caller keys on its validator would
+  // ever become unreachable, and it cannot be retained.
+  queryBacked: boolean;
 }
 
 // A headers-only read's answer. These are the values the card+json response
@@ -309,6 +322,12 @@ export interface OperationDocumentResult {
 // index-data generation and screenshot manifest that go into it. No body is
 // assembled to produce them.
 export interface OperationHeadResult {
+  // Which representation these headers describe, the same discrimination
+  // `data.type` makes on the document a full read answers with. A caller
+  // sending them has to know: a file's metadata document is derived from the
+  // bytes on disk and has no index row behind it, so it carries no validator
+  // and no cache directive, while a card's does.
+  type: 'card' | 'file-meta';
   indexedAt: number | null;
   lastModified: number | null;
   generation: number | null;
