@@ -1084,18 +1084,6 @@ export function parseCaptureSpecParams(
   // do; the shared validator names a bad or not-yet-supported value.
   let type = searchParams.get('type');
   if (type !== null) {
-    // Deliberately narrower than the POST /_screenshot-card roster: pdf
-    // output is capture-only — the ledger/GET-DSL serving contract does not
-    // yet persist or serve paged documents — so this surface refuses it by
-    // name rather than enqueueing a capture it could never serve.
-    if (type === 'pdf') {
-      return {
-        error: {
-          field: 'type',
-          message: 'type "pdf" is not supported by this serving surface',
-        },
-      };
-    }
     raw.type = type;
   }
   let media = searchParams.get('media');

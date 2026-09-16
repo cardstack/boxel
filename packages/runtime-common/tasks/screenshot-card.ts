@@ -128,6 +128,9 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
       runAs,
       format,
       prerenderRequestId: null,
+      // What the render actually produced; the completion emit overrides
+      // this, so null means the render never got that far.
+      contentType: null,
       ...(jobInfo?.queueWaitMs != null
         ? { queueWaitMs: jobInfo.queueWaitMs }
         : {}),
@@ -244,16 +247,14 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
       // generation bumps. One sha256 against a Chrome render. A batch,
       // fitted, or `target` render has no canonical identity (a target
       // crops to one element but sits outside the identity pick, so its
-      // hash would collapse onto the geometry-only key), and a pdf render
-      // is capture-only until the serving surfaces persist and serve paged
-      // documents, so no persist target can legitimately name any of them;
-      // those hash to null and always refuse.
+      // hash would collapse onto the geometry-only key), so no persist
+      // target can legitimately name one; those hash to null and always
+      // refuse.
       let renderedSpecHash =
         isCaptureFormat(format) &&
         !captureSpec?.captures &&
         !captureSpec?.envelope &&
-        !captureSpec?.target &&
-        captureSpec?.type !== 'pdf'
+        !captureSpec?.target
           ? await captureSpecHash({ format, ...(captureSpec ?? {}) })
           : null;
       if (renderedSpecHash !== persist.captureSpecHash) {
@@ -303,6 +304,10 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
       status: response.status,
       persistOutcome,
       prerenderRequestId: response.meta?.requestId ?? null,
+      contentType:
+        response.status === 'ready'
+          ? (response.contentType ?? 'image/png')
+          : null,
       permissionsMs,
       prerenderMs,
       ...(diagnostics.launchMs != null

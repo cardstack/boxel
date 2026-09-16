@@ -1586,10 +1586,7 @@ module(basename(import.meta.filename), function () {
       assert.false('captures' in attrs, 'no served URL without a persist');
     });
 
-    test('a pdf capture is capture-only: no persist identity, no served URL', async function (assert) {
-      // pdf output is not part of the ledger/GET-DSL serving contract yet, so
-      // an indexed card's pdf capture must return its bytes without minting a
-      // durable URL that the serving surface could never answer.
+    test('a pdf capture persists under its own identity and returns its ?type=pdf URL', async function (assert) {
       await seedInstanceRow();
       let { queue, published } = makePersistQueue('ready');
 
@@ -1600,24 +1597,36 @@ module(basename(import.meta.filename), function () {
         captureSpec: { type: 'pdf' },
       }).expect(201);
 
-      assert.strictEqual(
-        (published[0]?.args as any)?.persist,
-        null,
-        'an indexed card still gets no persist identity for a pdf capture',
-      );
       assert.deepEqual(
         (published[0]?.args as any)?.captureSpec,
         { type: 'pdf' },
         'the encoding rides the job args to the engine',
       );
-      let attrs = response.body.data.attributes;
-      assert.false('captures' in attrs, 'no served URL for a pdf capture');
+      assert.deepEqual(
+        (published[0]?.args as any)?.persist,
+        {
+          realmURL: REALM_URL,
+          sourceURL: CARD_ID,
+          captureSpecHash: await captureSpecHash({
+            format: 'isolated',
+            type: 'pdf',
+          }),
+          sourceGeneration: 1,
+          lane: 'on-demand',
+        },
+        'the persist identity hashes the encoding in',
+      );
+      assert.strictEqual(
+        response.body.data.attributes.captures[0].url,
+        `${REALM_URL}_screenshot/Person/fadhlan?type=pdf`,
+        'the served URL carries the encoding so it round-trips through the GET DSL',
+      );
     });
 
     test('a pdf capture reports its page count where a raster one reports dimensions', async function (assert) {
       // A paged document has no single pixel extent, so the page count the
-      // engine bounds it against is the only extent the caller can read — and
-      // this surface is the only one pdf reaches.
+      // engine bounds it against is the only extent the caller can read; it
+      // rides out beside the durable URL the capture persisted under.
       await seedInstanceRow();
       let pdfBase64 = Buffer.from('%PDF-1.4 fake-paged-bytes').toString(
         'base64',
@@ -1653,8 +1662,8 @@ module(basename(import.meta.filename), function () {
         attrs.captures,
         [
           {
-            name: 'default',
-            url: null,
+            name: null,
+            url: `${REALM_URL}_screenshot/Person/fadhlan?type=pdf`,
             width: null,
             height: null,
             deviceScaleFactor: 1,
@@ -1662,7 +1671,7 @@ module(basename(import.meta.filename), function () {
             base64: pdfBase64,
           },
         ],
-        'the page count rides out with the bytes, and no pixel extent is invented',
+        'the page count rides out with the served URL, and no pixel extent is invented',
       );
     });
 
