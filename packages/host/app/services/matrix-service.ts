@@ -4,6 +4,7 @@ import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import { cached, tracked } from '@glimmer/tracking';
 
@@ -169,6 +170,15 @@ const UNREACHABLE_RETRY_INTERVAL_MS = 10_000;
 const MAX_UNREACHABLE_RETRY_ATTEMPTS = 6;
 
 const realmEventsLogger = logger('realm:events');
+
+// Signing in is the one stretch of app work `settled()` cannot see on its own.
+// The sign-in button performs an ember-concurrency task, ember-concurrency has
+// no `@ember/test-waiters` integration, and the boot that task awaits is a
+// plain promise chain until its closing router refresh — so without this a test
+// that clicks Sign In resumes on an app that is still logged out. Held across
+// the credential exchange and across the whole boot, whose final router refresh
+// `settled()` does track. Compiles to a no-op outside a debug build.
+const signInWaiter = buildWaiter('matrix-service:sign-in');
 
 // Bound on the test-only `postLoginCompleted` transition record below. A boot
 // records one →true and a teardown one →false, so a handful of entries covers
@@ -1158,6 +1168,10 @@ export default class MatrixService extends Service {
     await this.profile.load.perform();
   }
 
+  // Every sign-in path — password, SSO hand-off, registration, and the boot
+  // from persisted auth — converges on the boot below, so holding the waiter
+  // here covers all of them, including the callers that float it rather than
+  // await it.
   async start(
     opts: {
       auth?: MatrixSDK.LoginResponse;
@@ -1165,6 +1179,19 @@ export default class MatrixService extends Service {
       registrationToken?: string;
     } = {},
   ) {
+    let token = signInWaiter.beginAsync();
+    try {
+      await this.boot(opts);
+    } finally {
+      signInWaiter.endAsync(token);
+    }
+  }
+
+  private async boot(opts: {
+    auth?: MatrixSDK.LoginResponse;
+    refreshRoutes?: true;
+    registrationToken?: string;
+  }) {
     await this.ready;
 
     let { auth, refreshRoutes, registrationToken } = opts;
@@ -2352,6 +2379,7 @@ export default class MatrixService extends Service {
   }
 
   async login(usernameOrEmail: string, password: string) {
+    let token = signInWaiter.beginAsync();
     try {
       const cred = await this.client.loginWithPassword(
         usernameOrEmail,
@@ -2368,6 +2396,8 @@ export default class MatrixService extends Service {
       } catch (error2) {
         throw error;
       }
+    } finally {
+      signInWaiter.endAsync(token);
     }
   }
 
