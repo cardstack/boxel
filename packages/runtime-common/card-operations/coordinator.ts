@@ -248,7 +248,14 @@ export async function commitBatch(
     // trade, and the deadlock it exists to avoid is reached through this
     // line: a write made from inside a render would wait here for a job that
     // needs the render slot its caller is holding.
-    if (opts.waitForIndex !== false) {
+    //
+    // And a batch that stages no content has nothing to resolve a definition
+    // for, so it waits for no one: a removal names a file and reads its
+    // bytes, and the drain is here for the serializing entries only. That
+    // matters because this wait happens with the realm's write lock held —
+    // a removal issued while a bulk import drains would otherwise park there
+    // holding the lock, with every other writer queued behind it.
+    if (opts.waitForIndex !== false && entries.some(stagesContent)) {
       await core.drainIndexing();
     }
     // Every `lid` in the batch resolves to a URL before any executor runs. A
@@ -1142,6 +1149,18 @@ async function commitStaged(
         generation: committed.generation,
         lastModified: written.lastModified,
         created: written.created,
+        // Whether this entry left the file holding something other than what
+        // it held when the entry staged. Read off the two hashes the commit
+        // already produced — the version the entry's work was computed over,
+        // and the version the file now carries — so it costs nothing and
+        // cannot disagree with what was written. A patch that changes nothing
+        // reports `false` here, which is how a caller tells "the realm agreed
+        // to this" from "the realm did something".
+        //
+        // Per entry rather than per file: where two entries name one card the
+        // second composes over what the first staged, so it reports whether
+        // *it* changed the answer, not whether the commit did.
+        changed: baseHashes[index] !== written.contentHash,
         ...(opts.reportStoredContent
           ? { storedContent: primaryContent(change) }
           : {}),
@@ -1155,6 +1174,16 @@ async function commitStaged(
       },
     };
   });
+}
+
+// Whether an entry produces content the realm has to make sense of, which is
+// what the pre-staging drain is for: serializing a card resolves the
+// definitions its type is built from, and a module written moments earlier may
+// still be indexing. A removal produces none — it names a file and reads the
+// bytes already there — so a batch of removals resolves nothing and has
+// nothing to wait for.
+function stagesContent(entry: BatchEntry): boolean {
+  return entry.op !== 'delete';
 }
 
 // The content an entry staged for the file its result reports. Taken from the
