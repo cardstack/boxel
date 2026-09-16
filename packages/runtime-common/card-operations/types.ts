@@ -389,6 +389,13 @@ export interface OperationSourceResult {
   // array, or an unread stream — so a caller hands it to a response body
   // rather than materializing it.
   //
+  // Reading this property is what opens a streaming adapter's stream, so it is
+  // the caller's decision when — and whether — that happens. The bytes mode
+  // reports the same metadata as the headers-only mode whether or not anything
+  // reads this, which is what lets a caller ask for the bytes and then answer
+  // 304, or serve a range from the handle, without stranding a stream it never
+  // sends.
+  //
   // The metadata above describes the handle as it opened; the bytes are read
   // from it afterwards. A write landing in between pairs one with the other,
   // the same way it does for a byte route reading the same handle.

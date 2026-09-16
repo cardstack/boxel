@@ -145,5 +145,19 @@ export async function readSourceOperation(
   }
   // The first and only touch of `content`, which is where a streaming adapter
   // opens its stream.
-  return { ...result, body: file.content };
+  // `body` carries the adapter's laziness out with it rather than resolving
+  // `content` here. The adapter opens a real stream on first touch, and a
+  // facade that asked for the bytes does not always end up sending them: a
+  // conditional request whose validator still matches answers 304, and a
+  // ranged one reads its slice from the handle instead. Resolving `content`
+  // for those would open a stream nothing goes on to consume — the same
+  // stranding the headers-only mode exists to avoid, reintroduced on the mode
+  // that does read bytes. A caller that sends the body touches this once and
+  // gets exactly what the other mode never opened.
+  return {
+    ...result,
+    get body() {
+      return file.content;
+    },
+  };
 }
