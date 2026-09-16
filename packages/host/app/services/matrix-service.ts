@@ -171,13 +171,14 @@ const MAX_UNREACHABLE_RETRY_ATTEMPTS = 6;
 
 const realmEventsLogger = logger('realm:events');
 
-// Signing in is the one stretch of app work `settled()` cannot see on its own.
-// The sign-in button performs an ember-concurrency task, ember-concurrency has
-// no `@ember/test-waiters` integration, and the boot that task awaits is a
-// plain promise chain until its closing router refresh — so without this a test
-// that clicks Sign In resumes on an app that is still logged out. Held across
-// the credential exchange and across the whole boot, whose final router refresh
-// `settled()` does track. Compiles to a no-op outside a debug build.
+// A sign-in is the stretch of app work `settled()` is most likely to resolve in
+// the middle of. The sign-in button performs an ember-concurrency task and
+// ember-concurrency carries no `@ember/test-waiters` integration, so the task
+// itself is invisible; and the boot that task awaits is only held in stretches,
+// because the matrix client is built without a `fetchFn` and its calls
+// therefore bypass the `fetcher` waiter that covers the app's own requests.
+// This waiter spans those gaps, from the credential exchange through to the
+// router refresh that ends the boot. Compiles to a no-op outside a debug build.
 const signInWaiter = buildWaiter('matrix-service:sign-in');
 
 // Bound on the test-only `postLoginCompleted` transition record below. A boot
@@ -1168,10 +1169,9 @@ export default class MatrixService extends Service {
     await this.profile.load.perform();
   }
 
-  // Every sign-in path — password, SSO hand-off, registration, and the boot
+  // Every sign-in path — password, token hand-off, registration, and the boot
   // from persisted auth — converges on the boot below, so holding the waiter
-  // here covers all of them, including the callers that float it rather than
-  // await it.
+  // here covers all of them whichever one a caller came in through.
   async start(
     opts: {
       auth?: MatrixSDK.LoginResponse;
@@ -1179,11 +1179,11 @@ export default class MatrixService extends Service {
       registrationToken?: string;
     } = {},
   ) {
-    let token = signInWaiter.beginAsync();
+    let waiterToken = signInWaiter.beginAsync();
     try {
       await this.boot(opts);
     } finally {
-      signInWaiter.endAsync(token);
+      signInWaiter.endAsync(waiterToken);
     }
   }
 
@@ -2379,7 +2379,7 @@ export default class MatrixService extends Service {
   }
 
   async login(usernameOrEmail: string, password: string) {
-    let token = signInWaiter.beginAsync();
+    let waiterToken = signInWaiter.beginAsync();
     try {
       const cred = await this.client.loginWithPassword(
         usernameOrEmail,
@@ -2397,7 +2397,7 @@ export default class MatrixService extends Service {
         throw error;
       }
     } finally {
-      signInWaiter.endAsync(token);
+      signInWaiter.endAsync(waiterToken);
     }
   }
 
@@ -2412,8 +2412,13 @@ export default class MatrixService extends Service {
   }
 
   async loginWithSsoToken(token: string) {
-    await this.ready;
-    return this.client.loginWithToken(token);
+    let waiterToken = signInWaiter.beginAsync();
+    try {
+      await this.ready;
+      return await this.client.loginWithToken(token);
+    } finally {
+      signInWaiter.endAsync(waiterToken);
+    }
   }
 
   getRoomData(roomId: string) {

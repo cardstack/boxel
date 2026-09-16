@@ -1278,15 +1278,28 @@ module('Acceptance | operator mode tests', function (hooks) {
       // Three things have to line up for the modal to be on screen, and the
       // assertion alone cannot say which one is missing. Report the session's
       // readiness, whether the request was acted on, and whether the URL still
-      // carries it, so a failure names the stage rather than the symptom.
-      let state = JSON.stringify({
-        url: currentURL(),
-        profileSettingsOpen: getService('operator-mode-state-service')
-          .profileSettingsOpen,
-        ...getService('matrix-service').loginReadinessDebug,
-      });
+      // carries it, so a failure names the stage rather than the symptom. A
+      // diagnostic must never mask the failure it explains, so a snapshot that
+      // cannot be read says so instead of throwing.
+      let state: string;
+      try {
+        state = JSON.stringify({
+          url: currentURL(),
+          profileSettingsOpen: getService('operator-mode-state-service')
+            .profileSettingsOpen,
+          ...getService('matrix-service').loginReadinessDebug,
+        });
+      } catch (error) {
+        state = `<unavailable: ${String(error)}>`;
+      }
 
-      assert.dom('[data-test-settings-modal]').exists(`login state: ${state}`);
+      // qunit-dom's own wording is lost when a message is supplied, and the
+      // element it names is half the headline, so carry it through.
+      assert
+        .dom('[data-test-settings-modal]')
+        .exists(
+          `Element [data-test-settings-modal] exists — login state: ${state}`,
+        );
       assert.strictEqual(
         getService('operator-mode-state-service').profileSettingsSection,
         'subscription',
