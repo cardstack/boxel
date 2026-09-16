@@ -19,6 +19,7 @@ import {
   ri,
   baseRRI,
   rri,
+  SKIP_INDEX_WAIT_HEADER,
   searchEntryWireQueryFromQuery,
   setWriteTimingSinkForTests,
   type LooseSingleCardDocument,
@@ -38,7 +39,10 @@ import {
   type RealmRequest,
   withRealmPath,
 } from './helpers/index.ts';
-import { expectIncrementalIndexEvent } from './helpers/indexing.ts';
+import {
+  ABSENT_OR_NULL_CLIENT_REQUEST_ID,
+  expectIncrementalIndexEvent,
+} from './helpers/indexing.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -1756,6 +1760,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: null,
               timeout: 5000,
             },
           );
@@ -1813,6 +1818,240 @@ module(basename(import.meta.filename), function () {
               },
             },
             'file contents are correct',
+          );
+        });
+
+        test("the incremental index event echoes the write's X-Boxel-Client-Request-Id", async function (assert) {
+          // The writing client recognizes its own event by this id and skips
+          // reloading over its own fresher local edits, so the echo is part of
+          // the wire contract, not a diagnostic.
+          let realmEventTimestampStart = Date.now();
+
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: rri('@cardstack/base/card-api'),
+                    name: 'CardDef',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-Boxel-Client-Request-Id', 'post-client-request-id');
+
+          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+
+          await expectIncrementalIndexEvent(
+            testRealmHref,
+            realmEventTimestampStart,
+            {
+              assert,
+              getMessagesSince,
+              realm: testRealmHref,
+              clientRequestId: 'post-client-request-id',
+              timeout: 5000,
+            },
+          );
+        });
+
+        test('a 201 answers as card+json and varies on Accept', async function (assert) {
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: rri('@cardstack/base/card-api'),
+                    name: 'CardDef',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(
+            response.get('content-type'),
+            'application/vnd.card+json',
+            'the 201 is typed as card+json',
+          );
+          assert.strictEqual(
+            response.get('vary'),
+            'Accept',
+            'the response varies on Accept',
+          );
+        });
+
+        test('the 201 reports the created card as the index holds it', async function (assert) {
+          // A create answers from the card read back out of the index, never
+          // from the serialization it just wrote: a computed field is derived
+          // at index time and never stored, so a body carrying one is the
+          // request having waited for the incremental index job its own write
+          // queued.
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Van Gogh' },
+                meta: {
+                  adoptsFrom: {
+                    // Absolute, because a created card is stored one directory
+                    // down and a relative ref would be resolved from there.
+                    module: rri(`${testRealmHref}person`),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            201,
+            `HTTP 201 status: ${response.text}`,
+          );
+          assert.strictEqual(
+            response.body.data.attributes?.cardTitle,
+            'Van Gogh',
+            'the 201 carries the computed field the stored file does not hold',
+          );
+        });
+
+        test('Content-Type routes the request when Accept matches no route', async function (assert) {
+          // The router's second chance: an unmatched Accept falls back to
+          // Content-Type, which is what makes a body-bearing POST route on the
+          // type of what it is sending rather than the type it wants back.
+          let response = await request
+            .post('/')
+            .set('Accept', 'application/x-unknown')
+            .set('Content-Type', 'application/vnd.card+json')
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'card',
+                  attributes: {},
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('@cardstack/base/card-api'),
+                      name: 'CardDef',
+                    },
+                  },
+                },
+              }),
+            );
+
+          assert.strictEqual(
+            response.status,
+            201,
+            `the create route still runs: ${response.text}`,
+          );
+        });
+
+        test('a local id written inside a relationship data array is refused', async function (assert) {
+          // A collection's edges are stored one key per member —
+          // `friends.0`, `friends.1` — and that is the only spelling whose
+          // links survive serialization. A local id written inside the
+          // `data` array has no key of its own to carry one, so the card
+          // would be stored with the edge missing and the write would report
+          // success.
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan' },
+                relationships: {
+                  friends: { data: [{ type: 'card', lid: 'local-id-7' }] },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('https://localhost:4202/node-test/friend'),
+                    name: 'Friend',
+                  },
+                },
+              },
+              included: [
+                {
+                  lid: 'local-id-7',
+                  type: 'card',
+                  attributes: { firstName: 'Boris' },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('https://localhost:4202/node-test/friend'),
+                      name: 'Friend',
+                    },
+                  },
+                },
+              ],
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            400,
+            `HTTP 400 status: ${response.text}`,
+          );
+        });
+
+        test('a local id no resource in the payload creates is refused', async function (assert) {
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan' },
+                relationships: {
+                  friend: { data: { type: 'card', lid: 'nobody-sent-this' } },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('https://localhost:4202/node-test/friend'),
+                    name: 'Friend',
+                  },
+                },
+              },
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            400,
+            `a local id naming nothing is the payload's fault: ${response.text}`,
+          );
+        });
+
+        test('a POST to an existing card URL is not a create route and 404s', async function (assert) {
+          // Create matches the realm root and directory paths only, so a POST
+          // aimed at a card 404s through the module/file fallback instead of
+          // replacing the card.
+          let response = await request
+            .post('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Van Gogh' },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            404,
+            `POST to a card URL 404s: ${response.text}`,
           );
         });
 
@@ -1934,6 +2173,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: null,
               type: 'Friend',
               timeout: 5000,
             },
@@ -2032,6 +2272,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: null,
               type: 'Friend',
               timeout: 5000,
             },
@@ -2913,8 +3154,8 @@ module(basename(import.meta.filename), function () {
           );
           for (let stage of [
             'lock',
-            'read',
-            'serialize',
+            'drain',
+            'stage',
             'write',
             'readback',
           ]) {
@@ -3434,6 +3675,60 @@ module(basename(import.meta.filename), function () {
             card.data.relationships?.['cardInfo.theme'],
             undefined,
             'the unset, non-searchable base-card link is not persisted (not in a searchable path and never set)',
+          );
+        });
+
+        test('a patch that changes nothing rewrites a card the index has never seen', async function (assert) {
+          // The short circuit that leaves an unchanged card alone needs the
+          // index to hold a document for the card. A card written straight to
+          // disk has no row at all, so there is nothing to answer from and the
+          // patch rewrites it in canonical serialized form instead — which is
+          // what gets it indexed. A client reaches this state by writing a
+          // card's source and patching it before the write's indexing lands.
+          let realmDir = join(dir.name, 'realm_server_1', 'test');
+          let cardFile = join(realmDir, 'unindexed-patch-target.json');
+          writeFileSync(
+            cardFile,
+            JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Pending' },
+                meta: {
+                  adoptsFrom: { module: './person.gts', name: 'Person' },
+                },
+              },
+            }),
+          );
+
+          let response = await request
+            .patch('/unindexed-patch-target')
+            .send({
+              data: {
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+          assert.strictEqual(
+            response.body.data.attributes?.firstName,
+            'Pending',
+            'the card is served back with what the file holds',
+          );
+          assert.strictEqual(
+            readJSONSync(cardFile).data.meta.adoptsFrom.module,
+            './person',
+            'the card was rewritten in canonical form, which indexes it',
           );
         });
 
@@ -4293,6 +4588,245 @@ module(basename(import.meta.filename), function () {
           }
         });
 
+        test("the incremental index event echoes the write's X-Boxel-Client-Request-Id", async function (assert) {
+          let realmEventTimestampStart = Date.now();
+
+          let response = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Van Gogh',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-Boxel-Client-Request-Id', 'patch-client-request-id');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+          await expectIncrementalIndexEvent(
+            `${testRealmHref}person-1.json`,
+            realmEventTimestampStart,
+            {
+              assert,
+              getMessagesSince,
+              realm: testRealmHref,
+              clientRequestId: 'patch-client-request-id',
+            },
+          );
+        });
+
+        test('a 200 answers as card+json and varies on Accept', async function (assert) {
+          let response = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Van Gogh',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('content-type'),
+            'application/vnd.card+json',
+            'the 200 is typed as card+json',
+          );
+          assert.strictEqual(
+            response.get('vary'),
+            'Accept',
+            'the response varies on Accept',
+          );
+        });
+
+        test('the 200 reports the patched card as the index holds it', async function (assert) {
+          // The same settled-state contract the create answers on: the patched
+          // card is read back out of the index, so its computed fields are
+          // resolved over the values this request just wrote rather than over
+          // whatever the index held before it.
+          let response = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Van Gogh' },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+          assert.strictEqual(
+            response.body.data.attributes?.cardTitle,
+            'Van Gogh',
+            'the 200 carries the computed field recomputed over the patch',
+          );
+        });
+
+        test('a no-op patch answers as card+json too', async function (assert) {
+          // A patch that changes nothing skips the file rewrite, and it still
+          // answers on the same wire contract as one that writes.
+          let patchBody = {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: rri('./person'),
+                  name: 'Person',
+                },
+              },
+            },
+          };
+          // The first patch of a hand-authored fixture may rewrite it into
+          // canonical serialized form; the second is the genuine no-op.
+          await request
+            .patch('/person-1')
+            .send(patchBody)
+            .set('Accept', 'application/vnd.card+json');
+
+          let response = await request
+            .patch('/person-1')
+            .send(patchBody)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('content-type'),
+            'application/vnd.card+json',
+            'the no-op 200 is typed as card+json',
+          );
+          assert.strictEqual(
+            response.get('vary'),
+            'Accept',
+            'the no-op response varies on Accept',
+          );
+        });
+
+        test('a no-op patch that defers its indexing still answers from the index', async function (assert) {
+          // Deferring indexing decides what happens after a write, and a
+          // patch that changes nothing makes no write to defer. So this
+          // request is answered the way every other unchanged patch is —
+          // from the card as the index holds it, computed fields and all —
+          // rather than from the bytes on disk, which carry neither.
+          let patchBody = {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: rri('./person'),
+                  name: 'Person',
+                },
+              },
+            },
+          };
+          // The first patch of a hand-authored fixture rewrites it into
+          // canonical serialized form; the second is the genuine no-op.
+          await request
+            .patch('/person-1')
+            .send(patchBody)
+            .set('Accept', 'application/vnd.card+json');
+
+          let response = await request
+            .patch('/person-1')
+            .send(patchBody)
+            .set('Accept', 'application/vnd.card+json')
+            .set(SKIP_INDEX_WAIT_HEADER, 'true');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+          assert.strictEqual(
+            response.body.data.attributes?.cardTitle,
+            'Mango',
+            'the computed field only the indexed document carries is present',
+          );
+          assert.ok(
+            response.get('etag'),
+            'the response carries the validator an indexed answer has',
+          );
+        });
+
+        test('a PATCH of the .json form of a card URL does not patch the card', async function (assert) {
+          // The patch route excludes the `.json` form, so the canonical
+          // no-extension URL is the only one that patches a card. The request
+          // lands on the module/file fallback instead, which finds the stored
+          // instance file and serves it back verbatim.
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'person-1.json',
+          );
+          let before = readJSONSync(cardFile);
+
+          let response = await request
+            .patch('/person-1.json')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Van Gogh',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('content-type'),
+            'application/json',
+            'the fallback types the response as the stored file, not card+json',
+          );
+          assert.deepEqual(
+            readJSONSync(cardFile),
+            before,
+            'the stored card is untouched',
+          );
+
+          let getResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            getResponse.body.data.attributes?.firstName,
+            'Mango',
+            'the served card still carries its pre-request value',
+          );
+        });
+
         test('a read issued straight after a deferred write serves the written state', async function (assert) {
           // A read drains the requester's own in-flight incremental indexing
           // before consulting the index, so a client never has to poll for its
@@ -4368,6 +4902,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: null,
             },
           );
         });
@@ -4848,7 +5383,51 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: ABSENT_OR_NULL_CLIENT_REQUEST_ID,
             },
+          );
+        });
+
+        test('the incremental index event carries no client request id, even when the request sends one', async function (assert) {
+          // Delete never reads `X-Boxel-Client-Request-Id`, so a client cannot
+          // recognize its own delete event the way it recognizes its own
+          // create or update.
+          let realmEventTimestampStart = Date.now();
+
+          let response = await request
+            .delete('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-Boxel-Client-Request-Id', 'delete-client-request-id');
+
+          assert.strictEqual(response.status, 204, 'HTTP 204 status');
+
+          await expectIncrementalIndexEvent(
+            `${testRealmHref}person-1.json`,
+            realmEventTimestampStart,
+            {
+              assert,
+              getMessagesSince,
+              realm: testRealmHref,
+              clientRequestId: ABSENT_OR_NULL_CLIENT_REQUEST_ID,
+            },
+          );
+        });
+
+        test('a 204 answers with no content type and varies on Accept', async function (assert) {
+          let response = await request
+            .delete('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 204, 'HTTP 204 status');
+          assert.strictEqual(
+            response.get('content-type'),
+            undefined,
+            'the 204 carries no content type',
+          );
+          assert.strictEqual(
+            response.get('vary'),
+            'Accept',
+            'the response varies on Accept',
           );
         });
 
