@@ -203,6 +203,17 @@ export interface RunOperationOptions {
   // that does not validate on `version` says so here and gets null for the
   // paths a hash would have had to be read for.
   skipContentFingerprint?: boolean;
+  // Answer without the realm's record of the path at all: `created` and
+  // `version` both null, and the row they come from left unread. That row is
+  // the only database work a stored-bytes read does, so a caller that reads
+  // neither value pays for neither.
+  //
+  // It is not only a saving. A caller may be holding a pinned pool connection
+  // for the whole of the work the read sits inside — the coordinated module
+  // compile does — and there a second checkout is what the coordination is
+  // built to avoid, not merely a cost. Such a caller has to be able to say
+  // that this read touches no connection.
+  skipStoredFileMeta?: boolean;
 }
 
 // One request's memo of the index-row peek. Dispatch reads a card's row to
