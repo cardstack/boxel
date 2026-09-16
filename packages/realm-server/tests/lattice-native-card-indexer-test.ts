@@ -140,7 +140,10 @@ module(basename(import.meta.filename), function (hooks) {
     mtimes: async () => ({ [fileURL]: 1 }),
   });
 
-  function nativeIndexer() {
+  function nativeIndexer(
+    snapshot = root,
+    options: Partial<Parameters<typeof createLatticeNativeCardIndexer>[0]> = {},
+  ) {
     return createLatticeNativeCardIndexer({
       worker,
       admit: async (request) => {
@@ -156,7 +159,7 @@ module(basename(import.meta.filename), function (hooks) {
         )
           throw new Error('Admission is stale');
         return {
-          root,
+          root: snapshot,
           ...(nativeFile
             ? {
                 file: {
@@ -221,6 +224,7 @@ module(basename(import.meta.filename), function (hooks) {
           },
         };
       },
+      ...options,
     });
   }
 
@@ -469,6 +473,70 @@ module(basename(import.meta.filename), function (hooks) {
       rows.length,
       0,
       'working bytes alone never prove publication authority',
+    );
+  });
+
+  test('source refusal falls back without swallowing owner errors or cancellation', async (assert) => {
+    const request: LatticeNativeCardIndexRequest = {
+      url: fileURL,
+      realmURL: realm,
+      sourceJSON,
+      generation: 2,
+      loaderEpoch: 'code-1',
+      lastModified: 1,
+      resourceCreatedAt: 1,
+    };
+    for (const kind of ['input', 'output'] as const) {
+      const snapshot = structuredClone(root);
+      const doubled = snapshot.definition.fieldDefs.doubled;
+      if (kind === 'input') doubled.bxl = formula('.undeclared');
+      else doubled.type = 'linksToMany';
+      assert.strictEqual(
+        await nativeIndexer(snapshot)(request),
+        undefined,
+        `unadmitted computed ${kind} yields no source candidate`,
+      );
+    }
+    const snapshot = structuredClone(root);
+    snapshot.definition.nativeIndex!.materialized = true;
+    const ownerRequest = {
+      ...request,
+      inputSnapshot: { realmURL: realm, generation: 1 },
+    };
+    const refusal = new Error('Unadmitted computed input: missing owner input');
+    let closed = 0;
+    const controller = new AbortController();
+    const indexer = nativeIndexer(snapshot, {
+      openInputs: async () => {
+        throw refusal;
+      },
+      openWork: async () => ({
+        signal: controller.signal,
+        close: async () => {
+          closed++;
+        },
+      }),
+    });
+    await assert.rejects(
+      indexer(ownerRequest),
+      (error: Error) => error === refusal,
+      'a materialized owner must retain its input refusal',
+    );
+    const cancellation = new Error('source changed');
+    controller.abort(cancellation);
+    await assert.rejects(
+      indexer(ownerRequest),
+      (error: Error) => error === cancellation,
+      'cancelled work never becomes fallback',
+    );
+    assert.strictEqual(closed, 2, 'both owner work scopes close');
+    await db.execute(
+      "UPDATE lattice_native_test_revisions SET revision='stale' WHERE identity='module'",
+    );
+    await assert.rejects(
+      nativeIndexer()(request),
+      /Admission is stale/,
+      'source admission failures still reject',
     );
   });
 

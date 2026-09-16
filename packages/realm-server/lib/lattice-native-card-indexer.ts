@@ -412,14 +412,24 @@ export function createLatticeNativeCardIndexer({
       };
     } catch (error) {
       // An unknown declared target needs source authority, which the existing
-      // browser producer can obtain. Never turn a cancelled work scope into a
-      // fallback, and never return the native attempt's partial data/receipts.
+      // browser producer can obtain. Ordinary source cards can also outgrow
+      // their reviewed native input/output projection. Decline that attempt
+      // instead of persisting an error that poisons downstream query owners.
+      // Owner snapshots retain their stricter input contract. Never turn a
+      // cancelled work scope into fallback or return partial data/receipts.
       work?.signal.throwIfAborted();
       if (debug)
         console.warn(
           `native indexer: ${request.url} failed: ${(error as Error)?.message}`,
         );
-      if (error instanceof LatticeUnknownLinkInput) return bail('line 407');
+      if (error instanceof LatticeUnknownLinkInput)
+        return bail('unknown-link-input');
+      if (
+        !request.inputSnapshot &&
+        error instanceof Error &&
+        /(?:^|: )Unadmitted computed (?:input|output):/.test(error.message)
+      )
+        return bail('unadmitted-source-computation');
       throw error;
     } finally {
       await work?.close();

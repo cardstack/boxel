@@ -145,6 +145,13 @@ worker either declines native admission or rejects obsolete work; inspect the
 reported reason before re-reviewing. A missing review does not make a native-only
 application safe for the Chrome path.
 
+Declare `static linkInputs` for every link read by a native computation, including
+nested reads. If an ordinary source card's native attempt rejects an undeclared
+input or unsupported computed output, indexing falls back to the existing Chrome
+producer. No partial native result is published. Materialized owners retain their
+input-snapshot guards; cancellation, obsolete work and admission failures are not
+converted into this fallback.
+
 The in-repo admission and parity checks are runnable separately:
 
 ```sh

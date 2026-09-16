@@ -202,6 +202,16 @@ function protectedInputs(
     );
   }
   return new Proxy(target, {
+    getOwnPropertyDescriptor(object, key) {
+      const descriptor = Reflect.getOwnPropertyDescriptor(object, key);
+      // BXL checks own-property coverage before reading a path. Record the
+      // missing input even if an optional operator catches this refusal.
+      if (!descriptor && typeof key === 'string' && key !== 'toJSON') {
+        missing.add(`${path}.${key}`);
+        throw new Error(`Unadmitted computed input: ${path}.${key}`);
+      }
+      return descriptor;
+    },
     get(object, key) {
       // JSON's own serializer probes this optional method. No user hook is
       // present: the target was parsed from bytes inside this worker.
