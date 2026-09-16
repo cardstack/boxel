@@ -85,6 +85,7 @@ export interface OperationCore {
   storedFileMeta(
     localPath: LocalPath,
     file: OperationStoredFile,
+    opts?: { skipContentFingerprint?: boolean },
   ): Promise<OperationStoredFileMeta>;
   // Whether the realm's ignore rules exclude this URL. An ignored path is
   // never visited, so no amount of waiting produces an index row for it.
@@ -191,6 +192,17 @@ export interface RunOperationOptions {
   // caller emits has to fold it in, since it distinguishes two documents
   // assembled from the same index row.
   resolveLinksOnly?: boolean;
+  // Report a stored-bytes read's `version` only where the realm already
+  // recorded one, rather than reading the file to fingerprint it.
+  //
+  // A recorded hash is free: it arrives on the same row the creation time does.
+  // Computing one is not — it reads up to the whole-content limit and hashes it
+  // synchronously — and the realm records a hash only for a path written
+  // through its own write API, so every file that reached disk another way
+  // (a deploy, a seeded realm) would pay that read on every request. A caller
+  // that does not validate on `version` says so here and gets null for the
+  // paths a hash would have had to be read for.
+  skipContentFingerprint?: boolean;
 }
 
 // One request's memo of the index-row peek. Dispatch reads a card's row to
