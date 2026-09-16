@@ -59,6 +59,36 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
     } as LooseSingleCardDocument;
   }
 
+  // A second shape whose link is a FileDef rather than a card, so the file leg
+  // of the same batched read is exercised without moving the card leg's counts.
+  fs['note.txt'] = 'a side-loaded file';
+
+  fs['file-source.gts'] = `
+    import { contains, field, linksTo, CardDef } from "@cardstack/base/card-api";
+    import StringField from "@cardstack/base/string";
+    import { FileDef } from "@cardstack/base/file-api";
+
+    export class FileSource extends CardDef {
+      @field name = contains(StringField);
+      @field attachment = linksTo(FileDef);
+    }
+  `;
+
+  fs['file-source-0.json'] = {
+    data: {
+      attributes: { name: 'File Source' },
+      relationships: {
+        attachment: { links: { self: './note.txt' } },
+      },
+      meta: {
+        adoptsFrom: {
+          module: rri('./file-source'),
+          name: 'FileSource',
+        },
+      },
+    },
+  } as LooseSingleCardDocument;
+
   for (let i = 0; i < NUM_SOURCES; i++) {
     let relationships: Record<string, { links: { self: string } }> = {};
     for (let j = 0; j < NUM_TARGETS; j++) {
@@ -318,6 +348,101 @@ module(basename(import.meta.filename), function () {
           screenshots,
         )}`,
       );
+    });
+
+    // The file leg of the same batched read. Its consumer builds a file-meta
+    // resource from the stored document, the search doc it falls back to and
+    // the timestamps — so the search doc is fetched here, unlike on the card
+    // leg, and the rendered output and dependency graphs still are not.
+    test('the file-target read fetches what a file-meta resource is built from and none of the rendered output', async function (assert) {
+      let originalExecute = testDbAdapter.execute.bind(testDbAdapter);
+      let dbExecute = testDbAdapter as {
+        execute: typeof testDbAdapter.execute;
+      };
+      let fileTargetSelects: string[] = [];
+
+      try {
+        dbExecute.execute = async (sql, opts) => {
+          let bind = opts?.bind ?? [];
+          let normalized = sql.replace(/\s+/g, ' ');
+          if (
+            /FROM boxel_index\b/.test(normalized) &&
+            /\bi\.url\s+IN\s*\(/.test(normalized) &&
+            bind.some((v) => v === 'file') &&
+            bind.some((v) => typeof v === 'string' && v.endsWith('/note.txt'))
+          ) {
+            fileTargetSelects.push(normalized.split(' FROM ')[0]);
+          }
+          return originalExecute(sql, opts);
+        };
+
+        let result = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              type: {
+                module: rri(`${testRealm}file-source`),
+                name: 'FileSource',
+              },
+            },
+          },
+          { loadLinks: true },
+        );
+
+        let attachment = result.included?.find((r) =>
+          r.id?.endsWith('/note.txt'),
+        );
+        assert.ok(attachment, 'the linked file is side-loaded');
+        assert.strictEqual(
+          attachment?.type,
+          'file-meta',
+          'and is assembled as a file-meta resource',
+        );
+        assert.ok(
+          fileTargetSelects.length > 0,
+          `the file targets were read in a batch, got ${fileTargetSelects.length} such queries`,
+        );
+
+        for (let select of fileTargetSelects) {
+          for (let column of [
+            'isolated_html',
+            'head_html',
+            'atom_html',
+            'embedded_html',
+            'fitted_html',
+            'markdown',
+            'icon_html',
+            'display_names',
+            'last_known_good_deps',
+            'deps',
+          ]) {
+            assert.notOk(
+              select.includes(column),
+              `the file-target read does not fetch ${column} — got: ${select}`,
+            );
+          }
+          assert.notOk(
+            select.includes('i.*'),
+            `the file-target read names its columns — got: ${select}`,
+          );
+          for (let column of [
+            'pristine_doc',
+            'search_doc',
+            'types',
+            'last_modified',
+            'resource_created_at',
+            'realm_url',
+            'screenshots',
+          ]) {
+            assert.ok(
+              select.includes(column),
+              `the file-target read fetches ${column} — got: ${select}`,
+            );
+          }
+        }
+      } finally {
+        dbExecute.execute = originalExecute;
+      }
     });
 
     // The narrow select is responsible for carrying the document itself, and

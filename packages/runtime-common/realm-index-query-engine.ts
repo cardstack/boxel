@@ -20,6 +20,7 @@ import {
   type QueryOptions,
   type InstanceOrError,
   type LinkTargetInstance,
+  type LinkTargetFile,
   type IndexedFile,
   type DefinitionLookup,
   type ResolvedCodeRef,
@@ -2033,7 +2034,7 @@ export class RealmIndexQueryEngine {
       // fetch per unique URL via Promise.all alongside the DB round-trips.
       let batchStart = Date.now();
       let instanceMap: Map<string, LinkTargetInstance>;
-      let fileMap: Map<string, IndexedFile>;
+      let fileMap: Map<string, LinkTargetFile>;
       let crossRealmMap: Map<string, CardResource<Saved> | FileMetaResource>;
       try {
         [instanceMap, fileMap, crossRealmMap] = await Promise.all([
@@ -2044,11 +2045,11 @@ export class RealmIndexQueryEngine {
               )
             : Promise.resolve(new Map<string, LinkTargetInstance>()),
           inRealmFileURLs.size > 0
-            ? this.#indexQueryEngine.getFiles(
+            ? this.#indexQueryEngine.getLinkTargetFiles(
                 [...inRealmFileURLs].map((u) => new URL(u)),
                 opts,
               )
-            : Promise.resolve(new Map<string, IndexedFile>()),
+            : Promise.resolve(new Map<string, LinkTargetFile>()),
           crossRealmURLs.size > 0
             ? this.fetchCrossRealmLinks(
                 [...crossRealmURLs],
@@ -2505,9 +2506,12 @@ function enumerateFileRenderings(file: IndexedFile): RowRendering[] {
   return candidates;
 }
 
+// Takes the narrow shape rather than a full `IndexedFile`, which is a
+// structural superset of it — so the search and single-file paths, which do
+// hold a full one, still assemble through here unchanged.
 function fileResourceFromIndex(
   fileURL: URL,
-  fileEntry: IndexedFile,
+  fileEntry: LinkTargetFile,
 ): FileMetaResource {
   let name = fileURL.pathname.split('/').pop() ?? fileURL.pathname;
   let inferredContentType = inferContentType(name);

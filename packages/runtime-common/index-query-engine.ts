@@ -211,6 +211,29 @@ export interface IndexedFile {
 // this path fetches bytes no caller can have asked for. A narrower type is
 // what keeps the next caller from quietly depending on fields this read does
 // not fetch.
+// The file-row counterpart of `LinkTargetInstance`, and narrow for the same
+// reason: `IndexedFile` promises the prerendered formats, the icon, the
+// display names and the dependency graph, none of which building a
+// side-loaded file-meta resource reads. Kept structurally a subset of
+// `IndexedFile` so the paths that do hold a full one can still be assembled
+// through the same function.
+export interface LinkTargetFile {
+  canonicalURL: string;
+  // The file row's stored document, and the search doc it falls back to for
+  // any attribute the document does not carry.
+  resource: FileMetaResource | null;
+  searchDoc: Record<string, any> | null;
+  // `types[0]` names the adopted FileDef ref; the resource's own
+  // `meta.adoptsFrom` is the fallback.
+  types: string[] | null;
+  lastModified: number | null;
+  resourceCreatedAt: number | null;
+  // Both the resource's `meta.realmURL` and the prefix test that decides
+  // whether the screenshot manifest applies to this URL.
+  realmURL: string;
+  screenshots: ScreenshotManifest | null;
+}
+
 export interface LinkTargetInstance {
   // The row's own spelling of its URL — a lookup may have addressed it by
   // `file_alias`, and the resource's local path is derived from this.
@@ -736,13 +759,20 @@ export class IndexQueryEngine {
     return this.#rowToIndexedFile(result[0]);
   }
 
-  // Batch variant of getFile.
-  // Keys are the LOOKUP URLs the caller passed in (matching either i.url or i.file_alias).
-  async getFiles(
+  // Batch read of the file-meta link targets `loadLinks` side-loads — the
+  // file leg of the same batch `getLinkTargetInstances` serves, narrow for the
+  // same reason. A side-loaded file's resource is assembled from its stored
+  // document, its search doc and its timestamps; the formats, the icon, the
+  // display names and the dependency graph are all fetched and discarded by a
+  // star select, and `deps` is the widest column on the row.
+  //
+  // Keys are the LOOKUP URLs the caller passed in (matching either `i.url` or
+  // `i.file_alias`).
+  async getLinkTargetFiles(
     urls: URL[],
     opts?: GetEntryOptions,
-  ): Promise<Map<string, IndexedFile>> {
-    let resultMap = new Map<string, IndexedFile>();
+  ): Promise<Map<string, LinkTargetFile>> {
+    let resultMap = new Map<string, LinkTargetFile>();
     if (urls.length === 0) {
       return resultMap;
     }
@@ -755,7 +785,12 @@ export class IndexQueryEngine {
       let chunkSet = new Set(chunk);
       let chunkParams = chunk.map((href) => [param(href)]);
       let rows = (await this.#query([
-        `SELECT i.*, ${PRERENDERED_HTML_SELECTS}, ${EFFECTIVE_ERROR_SELECTS}`,
+        // `ph.screenshots` is the join's only consumer here — the effective
+        // error expression below is in the WHERE, where this read already
+        // decided liveness before it was narrowed.
+        `SELECT i.url, i.file_alias, i.pristine_doc, i.search_doc, i.types,
+                i.last_modified, i.resource_created_at, i.realm_url,
+                ph.screenshots AS screenshots`,
         `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
          WHERE`,
         ...every([
@@ -770,13 +805,35 @@ export class IndexQueryEngine {
           [`NOT ${effectiveHasError()}`],
           any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
         ]),
-      ] as Expression)) as unknown as IndexRowWithHtml[];
+      ] as Expression)) as unknown as {
+        url: string | null;
+        file_alias: string | null;
+        pristine_doc: FileMetaResource | null;
+        search_doc: Record<string, any> | null;
+        types: string[] | null;
+        last_modified: string | number | null;
+        resource_created_at: string | number | null;
+        realm_url: string | null;
+        screenshots: ScreenshotManifest | null;
+      }[];
       for (let row of rows) {
-        let mapped = this.#rowToIndexedFile(row);
-        if (!mapped) {
+        if (!row.url) {
           continue;
         }
-        if (row.url && chunkSet.has(row.url)) {
+        // Postgres hands back a bigint column as a string; SQLite as a number.
+        let toEpoch = (v: string | number | null) =>
+          typeof v === 'string' ? parseInt(v) : (v ?? null);
+        let mapped: LinkTargetFile = {
+          canonicalURL: row.url,
+          resource: row.pristine_doc ?? null,
+          searchDoc: row.search_doc ?? null,
+          types: row.types ?? null,
+          lastModified: toEpoch(row.last_modified),
+          resourceCreatedAt: toEpoch(row.resource_created_at),
+          realmURL: row.realm_url ?? '',
+          screenshots: row.screenshots ?? null,
+        };
+        if (chunkSet.has(row.url)) {
           resultMap.set(row.url, mapped);
         }
         if (row.file_alias && chunkSet.has(row.file_alias)) {
