@@ -225,9 +225,19 @@ function hrefIn(href: unknown, index: number, paths: RealmPaths): string {
   return absolute.href;
 }
 
-// What the entry runs against. An entry naming an href targets that resource;
-// one naming none is creating a card that does not exist yet, and names the
-// type it mints the same way a card's stored JSON names its own.
+// What the entry runs against.
+//
+// An entry naming an href targets that resource. One naming none is scoped to
+// a type rather than to an instance — a create, which has no existing card to
+// bind to — and names that type in `data.meta.adoptsFrom`, the same member a
+// card's stored JSON names its own type in. The type named is the one whose
+// operations are being invoked; what a named create actually mints is its
+// declaration's, which the realm reads from the definition rather than from
+// the wire.
+//
+// The ref is handed on unchecked. Resolving one is the realm's, and a ref that
+// names nothing comes back from the lookup as a type that cannot be resolved,
+// which is the answer a caller needs either way.
 export function targetFor(
   entry: EnvelopeEntry,
   realmURL: string,
