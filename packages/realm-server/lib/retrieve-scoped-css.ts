@@ -2,7 +2,10 @@ import type { DBAdapter } from '@cardstack/runtime-common';
 import { expressionToSql, query } from '@cardstack/runtime-common';
 import { parseDeps } from '@cardstack/runtime-common/realm';
 import type { Expression } from '@cardstack/runtime-common/expression';
-import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
+import {
+  isScopedCSSRequest,
+  parseScopedCSSRequest,
+} from '@cardstack/runtime-common/scoped-css';
 import {
   indexURLCandidates,
   indexCandidateExpressions,
@@ -72,35 +75,60 @@ export async function retrieveScopedCSS({
       }
     | undefined;
 
+  let lookup = (hashes: string[]) => lookupScopedCSSByHash(dbAdapter, hashes);
+
   let deps = parseDeps(depsRow?.deps);
-  let scopedCSS = decodeScopedCSSFromDeps(deps);
+  let scopedCSS = await resolveScopedCSSFromDeps(deps, lookup);
 
   // Fall back to last_known_good_deps if no CSS found in deps
   if (!scopedCSS) {
     let lastKnownGoodDeps = parseDeps(depsRow?.last_known_good_deps);
-    scopedCSS = decodeScopedCSSFromDeps(lastKnownGoodDeps);
+    scopedCSS = await resolveScopedCSSFromDeps(lastKnownGoodDeps, lookup);
   }
 
   return scopedCSS;
 }
 
-export function decodeScopedCSSFromDeps(deps: string[]): string | null {
-  let cssBlocks = new Set<string>();
+// Resolve the stylesheets a deps list references, deduped and joined in dep
+// order. Deps carry scoped CSS in two forms: inline (the whole stylesheet
+// base64-embedded in the URL — decodes with no lookup) and hashed (the URL
+// carries a content hash; the bytes live in the `scoped_css` table). Both
+// forms appear in prefix-form RRIs (`@cardstack/base/...`) as well as
+// absolute URLs; parsing anchors on the trailing filename segment, so neither
+// needs a URL parse. A hash the table no longer holds is skipped.
+export async function resolveScopedCSSFromDeps(
+  deps: string[],
+  lookupCSSByHash: (hashes: string[]) => Promise<Map<string, string>>,
+): Promise<string | null> {
+  let entries: ({ css: string } | { hash: string })[] = [];
+  let hashes = new Set<string>();
 
   for (let dep of deps) {
-    if (typeof dep !== 'string') {
+    if (typeof dep !== 'string' || !isScopedCSSRequest(dep)) {
       continue;
     }
-    // Deps come in two forms: absolute URLs (realm-local modules) and
-    // prefix-form RRIs like `@cardstack/base/...` (registered realms). The
-    // decoder anchors on the trailing `.<encoded>.glimmer-scoped.css`, so
-    // both forms decode directly with no URL parse.
-    if (!isScopedCSSRequest(dep)) {
+    let parsed: ReturnType<typeof parseScopedCSSRequest>;
+    try {
+      parsed = parseScopedCSSRequest(dep);
+    } catch (_err) {
       continue;
     }
-    let decoded = decodeScopedCSSRequest(dep);
-    if (decoded?.css) {
-      cssBlocks.add(decoded.css);
+    if (parsed.form === 'inline') {
+      entries.push({ css: parsed.css });
+    } else {
+      entries.push({ hash: parsed.cssHash });
+      hashes.add(parsed.cssHash);
+    }
+  }
+
+  let cssByHash =
+    hashes.size > 0 ? await lookupCSSByHash([...hashes]) : new Map();
+
+  let cssBlocks = new Set<string>();
+  for (let entry of entries) {
+    let css = 'css' in entry ? entry.css : cssByHash.get(entry.hash);
+    if (css) {
+      cssBlocks.add(css);
     }
   }
 
@@ -108,4 +136,22 @@ export function decodeScopedCSSFromDeps(deps: string[]): string | null {
     return null;
   }
   return [...cssBlocks].join('\n');
+}
+
+// Interned stylesheets are content-addressed, so the lookup is by hash alone:
+// any realm's copy of the same bytes qualifies, which keeps deps on modules
+// from other realms (base-realm components) servable.
+export async function lookupScopedCSSByHash(
+  dbAdapter: DBAdapter,
+  hashes: string[],
+): Promise<Map<string, string>> {
+  if (hashes.length === 0) {
+    return new Map();
+  }
+  let placeholders = hashes.map((_, i) => `$${i + 1}`).join(', ');
+  let rows = (await dbAdapter.execute(
+    `SELECT hash, css FROM scoped_css WHERE hash IN (${placeholders})`,
+    { bind: hashes },
+  )) as { hash: string; css: string }[];
+  return new Map(rows.map(({ hash, css }) => [hash, css]));
 }

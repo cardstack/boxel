@@ -101,7 +101,7 @@ function refuseUnservedStages(
   definition: OperationDefinition,
 ): void {
   let stages = (
-    ['program', 'input', 'output', 'fill', 'of', 'query'] as const
+    ['program', 'input', 'output', 'fill', 'items', 'of', 'query'] as const
   ).filter((stage) => definition[stage] !== undefined);
   if (stages.length === 0) {
     return;

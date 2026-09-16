@@ -1,4 +1,4 @@
-import { isScopedCSSRequest } from './scoped-css.ts';
+import { isScopedCSSRequest, scopedCSSServingHref } from './scoped-css.ts';
 import { cssResourceId, type CssResource } from './resource-types.ts';
 import type { CodeRef } from './code-ref.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
@@ -26,13 +26,20 @@ export function parseUsedRenderType(
   };
 }
 
-// The scoped-CSS hrefs a row depends on, in dependency order. A scoped-CSS
-// "URL" base64-embeds the whole stylesheet in its filename, so the href is the
-// dep string verbatim — the host module-loads it as-is.
+// The scoped-CSS hrefs a row depends on, in dependency order — the host
+// module-loads each as-is. An inline-form dep passes through verbatim (the
+// whole stylesheet is base64-embedded in its filename, so it loads locally
+// with no network hop). A hashed-form dep is rewritten to the answering
+// realm's `_scoped-css/` serving space: that realm interned the stylesheet
+// bytes into its own `scoped_css` table when it indexed the row, so it — and
+// not the realm hosting the dep's module — is guaranteed to serve the hash.
 export function scopedCssHrefsFromDeps(
   deps: string[] | null | undefined,
+  servingRealmURL: string,
 ): string[] {
-  return (deps ?? []).filter((dep) => isScopedCSSRequest(dep));
+  return (deps ?? [])
+    .filter((dep) => isScopedCSSRequest(dep))
+    .map((dep) => scopedCSSServingHref(dep, servingRealmURL));
 }
 
 // A `css` resource: id is the content hash of the encoded href so identical

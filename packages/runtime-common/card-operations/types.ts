@@ -9,6 +9,7 @@ import type {
   SearchEntryWireFilter,
   SearchEntryWireQuery,
 } from '../search-entry.ts';
+import type { OperationDiagnostics } from './telemetry.ts';
 import type { BaseOperationName } from '@cardstack/base/operations';
 
 // ============================================================================
@@ -103,6 +104,18 @@ export interface OperationDefinition {
   // rather than a program: the coordinator resolves it by substitution, and a
   // link-typed param's value becomes a relationship.
   fill?: Record<string, OperationTemplate>;
+  // The item a named `appendContainsMany` appends, keyed by the `containsMany`
+  // field it goes into — a declaration naming several fields carries one entry
+  // per field. Templates for the same reason `fill` is one: an append
+  // substitutes values into a stored document and runs no program.
+  //
+  // Which members of an item are links, and so become relationship keys rather
+  // than array members, is not recorded here. The executor splits an item
+  // against the definition of the *stored card's* type, which a subclass makes
+  // a different type from the one this operation was lowered on — so the split
+  // is read where the card is, from the same definition cache, rather than
+  // frozen here.
+  items?: Record<string, OperationTemplate>;
   // A saved search, as an entry-wire query whose value slots may still hold
   // markers.
   query?: OperationQueryTemplate;
@@ -177,7 +190,22 @@ export type OperationLoweringIssueCode =
   // An operation declared under a name the realm resolves without reading a
   // definition. Such a name is answered before a stored entry is consulted, so
   // an operation kept under it would never run.
-  | 'reserved-name';
+  | 'reserved-name'
+  // A declaration built on a behavior its def type does not carry — an
+  // `appendLine` on a card, a `transform` on a file, anything at all on a
+  // field. The behavior is not there to specialize, so the operation has no
+  // runnable form.
+  | 'base-not-carried'
+  // A raw program declared on a base that runs none. The two appends edit the
+  // stored file and a file's content is replaced wholesale, so a program
+  // stored for one of them would never be reached.
+  | 'unrunnable-program'
+  // An `appendContainsMany` that does not say what to append where: no field,
+  // no item for a field it names, or both spellings at once with no rule for
+  // which wins. The decorator refuses each, so one only reaches a stored
+  // entry — where appending nothing, or a literal `null`, is worse than
+  // refusing.
+  | 'incomplete-append';
 
 // A problem found while lowering one operation. Recorded, never thrown:
 // definition build is decoupled in time from the edit that introduced the
@@ -395,6 +423,11 @@ export interface OperationIdentityResult {
     // the `baseVersion` the request named. A false here is not an error — the
     // write happened, and the caller decides what a moved base means.
     baseMatched?: boolean;
+    // What running the operation read, for the operations that run a program.
+    // A program reads from three layers and only one of them is the card's own
+    // stored document, so this is how a caller tells a value that was stale
+    // from one that was never there.
+    diagnostics?: OperationDiagnostics;
   };
 }
 

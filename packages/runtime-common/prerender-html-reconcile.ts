@@ -78,6 +78,21 @@ export const PRERENDER_HTML_VISIT_FAILURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
 export const STALE_SHELL_FAILURE_RETRY_CAP = 3;
 export const STALE_SHELL_FAILURE_RETRY_MIN_AGE_MS = 10 * 60 * 1000;
 
+// The gateway-failure twin of the stale-shell bounds. A withheld gateway
+// failure is the same shape of row — no `error_doc`, sitting at the current
+// generation while serving the last good pass's HTML — so it reads as a
+// healthy fresh render and nothing asks for the re-render once the network
+// recovers. This lane re-drives those rows instead. The min age can be shorter
+// than the stale-shell lane's: a stale shell may take a whole deploy overlap
+// to resolve, but the gateway failures this withholds — a balancer keep-alive
+// race, a task replacement, a brief upstream blip — have already passed by the
+// time the row is written, so re-rendering promptly is safe and is what turns
+// a days-long latch into a sweep-cadence one. Capped for the same reason:
+// a gateway failure that keeps recurring stops costing renders once the cap is
+// reached and leaves its diagnostics for someone to read.
+export const GATEWAY_FAILURE_RETRY_CAP = 3;
+export const GATEWAY_FAILURE_RETRY_MIN_AGE_MS = 5 * 60 * 1000;
+
 export const DECLARED_SCREENSHOT_CAPTURE_RETRY_CAP = 3;
 export const DECLARED_SCREENSHOT_CAPTURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
 
@@ -116,6 +131,16 @@ export const DECLARED_SCREENSHOT_CAPTURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
 // successfully along the way just heals early. A capped row is terminal —
 // the screenshots stay absent (thumbnail consumers fall through their
 // chain) until the URL's next invalidation.
+//
+// The fifth and sixth arms admit the withheld-failure lanes — stale-shell and
+// gateway. Both withhold by clearing the `error_doc` and keeping the prior
+// render at the current generation, so the row reads as healthy and no
+// `has_error` is left asking for a reindex; these arms re-drive such rows
+// while their `diagnostics.<verdict>` array is present and the matching
+// `<verdict>Renders` counter is below its cap, so a transient cause that
+// recovers gets its re-render without anyone watching and one that keeps
+// recurring stops costing renders at the cap. Their caps and min ages are
+// tuned per cause (see the constants above).
 //
 // The jsonb operators here are Postgres-only, like the `jobs`-table scans
 // in this module: the reconcile task that issues this query runs solely
@@ -157,7 +182,14 @@ export async function findStalePrerenderedHtmlRows(
              < ${STALE_SHELL_FAILURE_RETRY_CAP}
            AND ph.rendered_at
              < (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
-               - ${STALE_SHELL_FAILURE_RETRY_MIN_AGE_MS}))`,
+               - ${STALE_SHELL_FAILURE_RETRY_MIN_AGE_MS})
+         OR (ph.error_doc IS NULL
+           AND jsonb_typeof(ph.diagnostics->'gatewayFailure') = 'array'
+           AND COALESCE((ph.diagnostics->>'gatewayFailureRenders')::int, 1)
+             < ${GATEWAY_FAILURE_RETRY_CAP}
+           AND ph.rendered_at
+             < (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
+               - ${GATEWAY_FAILURE_RETRY_MIN_AGE_MS}))`,
   ] as Expression)) as {
     realm_url: string;
     url: string;

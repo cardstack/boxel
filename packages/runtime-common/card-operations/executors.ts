@@ -8,6 +8,13 @@ import {
   type FieldDefinition,
 } from '../definitions.ts';
 import { getCardDirectoryName } from '../helpers/card-directory-name.ts';
+import { isSingleCardDocument } from '../document-types.ts';
+import { hasExecutableExtension } from '../index.ts';
+import {
+  inferContentType,
+  isBinaryContentType,
+  isJSONContentType,
+} from '../infer-content-type.ts';
 import { mergeRelationships } from '../merge-relationships.ts';
 import type { RealmPaths } from '../paths.ts';
 import { ensureTrailingSlash, type LocalPath } from '../paths.ts';
@@ -36,7 +43,20 @@ import {
   type CardSourceLayout,
   type StoredContainer,
 } from './json-splice.ts';
-import { OperationFailure, type OperationDefinition } from './types.ts';
+import {
+  OperationFailure,
+  isOperationFailure,
+  type OperationDefinition,
+  type OperationErrorCode,
+  type OperationProgram,
+} from './types.ts';
+import {
+  OperationReadTally,
+  emitOperationPerf,
+  type OperationDiagnostics,
+  type OperationMissingReason,
+  type OperationOutcome,
+} from './telemetry.ts';
 import type { LooseSingleCardDocument } from '../index.ts';
 import { rri, type RealmResourceIdentifier } from '../realm-identifiers.ts';
 import type { OperationTemplate } from './types.ts';
@@ -89,6 +109,47 @@ export interface StoredFile {
   contentHash: string;
 }
 
+// What the batch knows about a stored file it never read: that it is there,
+// and which version it holds. Kept apart from `StoredFile` rather than folded
+// into it as an optional member, because the difference is the point — a
+// change that replaces a file's content wholesale has no merge base, so an
+// executor working from one of these has nothing to merge over and cannot
+// quietly come to depend on bytes that are not there. There is no modification
+// time here for the same reason there are no bytes: the one a result reports
+// is the one the commit produced, so the one the file carried before it is of
+// no use to anything.
+//
+// The fingerprint is the same value hashing the whole file would produce,
+// assembled from bounded reads instead (`computeContentHashFromRanges` states
+// why the two agree), so a caller can compare a `baseVersion` against it
+// whatever the file's size.
+export interface StoredMeta {
+  contentHash: string;
+}
+
+// What the index can say about a card, narrowed to the values a program reads
+// from it.
+//
+// Both are snapshots the indexer produced, so both lag the card's stored file
+// and both are absent until it has been indexed at all — which is the whole
+// reason they are kept apart from the stored document rather than merged into
+// it. Each carries the card's own stored fields alongside the ones only it can
+// answer, and that is fine: an overlay answers only where the stored document
+// holds nothing.
+export interface IndexedCardValues {
+  // `pristine_doc`: the card's own document with its computed fields filled
+  // in, as the JSON:API resource the index stores. Handed over whole rather
+  // than as its attributes, because a computed *link* is a relationship — it
+  // is never in `attributes`, and every card has one in `cardTheme`. The
+  // executor projects it into the shape a program reads before laying it
+  // over, using the same projection the stored document goes through, so the
+  // two describe a path the same way.
+  pristine: CardResource | undefined;
+  // `search_doc`: the card's searchable fields, with each `searchable` link's
+  // target expanded in place.
+  searchDoc: Record<string, unknown> | undefined;
+}
+
 // A stored file read in bounded pieces rather than whole: its byte length, and
 // a reader for `[start, end)`. What an executor works from when the file is
 // large enough that reading it is the cost to avoid.
@@ -135,16 +196,63 @@ export interface CreateEntry extends EntryCommon {
   directory?: string;
 }
 
+// Replace what is stored at the target. Two targets take an update and they
+// take different payloads: a card is patched with a JSON:API `document`, which
+// is merged over its stored document; a file's content is replaced wholesale
+// by `content`, since a file's metadata is derived from its bytes and there is
+// no document to merge. Which one an entry means is read off which of the two
+// it carries, so a caller never has to name the target's kind and the realm
+// never has to guess it from a URL.
 export interface UpdateEntry extends EntryCommon {
   op: 'update';
-  // The card being patched, as an absolute URL.
+  // The card being patched, or the file being replaced, as an absolute URL.
   href: string;
-  document: BatchDocument;
+  document?: BatchDocument;
+  // The file's new content. Text through the operations envelope; raw bytes
+  // when the facade dispatches an upload, which is why the two spellings are
+  // one member rather than a text one and a binary one.
+  content?: string | Uint8Array;
+  // Replace the bytes stored at the target verbatim, whatever they are — the
+  // one way an update reaches a module's source or a card's stored `.json`.
+  //
+  // It exists for the `card+source` `POST`, which writes exactly those and has
+  // to keep doing so once it dispatches through this operation. Nothing on the
+  // envelope path sets it: through the envelope an update on a card is the
+  // JSON:API merge above, and one on a module is refused — a client that could
+  // ask for a verbatim replacement of a card's source could write bytes that
+  // are no longer a card and leave the realm to find out at index time.
+  rawSource?: true;
+}
+
+// Add one line to the end of a text file, without reading what is already
+// there. The line arrives under `params.line`, which is where a declaration's
+// `line` param and an `input` program that shapes one both put it.
+export interface AppendLineEntry extends EntryCommon {
+  op: 'appendLine';
+  // The file being appended to, as an absolute URL. A file's URL is its path:
+  // nothing is appended to it to find the file, the way a card's `.json` is.
+  href: string;
 }
 
 export interface DeleteEntry extends EntryCommon {
   op: 'delete';
   href: string;
+}
+
+// Run a BXL program over the target's stored JSON:API document.
+export interface TransformEntry extends EntryCommon {
+  op: 'transform';
+  // The card the program runs against, as an absolute URL.
+  href: string;
+  // The program, for an entry invoking the base behavior rather than a named
+  // operation — the raw form, whose author writes the BXL out. A named
+  // operation's program comes from its declaration and is never read from
+  // here; `programFor` has the reason.
+  program?: OperationProgram;
+  // The name the operation was invoked under. It is what an author reads the
+  // operation by, so it is what the telemetry line and every refusal name.
+  // Absent for the base behavior, which is invoked as `transform`.
+  name?: string;
 }
 
 // Add items to one or more of the target's `containsMany` fields. The members
@@ -166,7 +274,9 @@ export type BatchEntry =
   | CreateEntry
   | UpdateEntry
   | DeleteEntry
-  | AppendContainsManyEntry;
+  | TransformEntry
+  | AppendContainsManyEntry
+  | AppendLineEntry;
 
 // One file the batch will write, and the content it will hold — either the
 // bytes themselves, or a description of them for a change that never
@@ -176,11 +286,26 @@ export interface StagedWrite {
   content: StagedContent;
 }
 
-export type StagedContent = string | SplicedSource;
+export type StagedContent = string | Uint8Array | SplicedSource;
+
+// Content one entry adds to the end of a file. Distinct from a write because
+// what it names is not the file's next content but an addition to it: the
+// entry that staged one never read the file and could not say what its content
+// will be, and two of them aimed at one file both land rather than the second
+// standing in for the first.
+//
+// Text, where the adapter primitive underneath takes bytes as well: the one
+// behavior that stages an append appends a line to a text file, and refuses
+// anything whose content type says otherwise.
+export interface StagedAppend {
+  path: LocalPath;
+  content: string;
+}
 
 // What one executor stages.
 export interface StagedChange {
   writes: StagedWrite[];
+  appends: StagedAppend[];
   deletes: LocalPath[];
   // The files this entry brings into existence, as opposed to the ones it
   // rewrites. A card already stored at one of these is not this entry's to
@@ -196,6 +321,22 @@ export interface StagedChange {
   // The file whose post-commit version and modification time the entry's
   // result reports. Absent on a delete — there is no file left to version.
   primaryPath?: LocalPath;
+  // Whether this entry's content replaces the file wholesale rather than
+  // composing over what is stored there. Two entries changing one card
+  // compose, because the later one merges over the bytes the earlier staged;
+  // a replacement reads nothing and merges nothing, so a second one on the
+  // same path is not a later step in one story — it is the earlier entry's
+  // content never landing while that entry reports success.
+  replacesContent?: true;
+  // Every card this entry records an edge to, as the identity the realm
+  // resolved it to. The coordinator holds the batch to not removing one of
+  // them, which is the half of "a link points at something" that no single
+  // entry can see.
+  links?: string[];
+  // What running this entry read and how long it took, for the entries that
+  // run a program. Reported back on the result so a caller can see which layer
+  // answered each of its program's reads without going to the logs.
+  diagnostics?: OperationDiagnostics;
 }
 
 // What the executors are given. Everything the realm owns arrives already
@@ -214,6 +355,10 @@ export interface StagingContext {
   // Every target's stored file, keyed by local path, read inside the write
   // lock before any executor runs.
   stored: ReadonlyMap<LocalPath, StoredFile>;
+  // What the batch knows about the targets it read the version of rather than
+  // the bytes of — a file whose content an entry replaces wholesale. Read
+  // inside the same lock and, like `stored`, kept in step as entries compose.
+  storedMeta: ReadonlyMap<LocalPath, StoredMeta>;
   // What an earlier entry staged for a file it described rather than read. An
   // append composes over this so two appends to one card both land, and it is
   // what tells an executor that needs the bytes whole that it cannot have
@@ -222,6 +367,18 @@ export interface StagingContext {
   // A stored file as a size and a bounded reader, for an executor that edits
   // bytes it must not hold. Undefined when nothing is stored at the path.
   openSourceBytes(localPath: LocalPath): Promise<SourceBytes | undefined>;
+  // Whether anything is stored at a path, which two executors ask for
+  // different reasons. It is what makes a card exist for a link to point at —
+  // the file is the card, and its index row is only the realm's reading of it
+  // — and it is the only question an append may ask about its own target,
+  // since establishing that a file is there costs a stat while opening it is
+  // the cost an append exists without.
+  fileExists(localPath: LocalPath): Promise<boolean>;
+  // The index's view of a card in this realm, narrowed to the two documents a
+  // program reads values from. Undefined where the index holds no clean row
+  // for the URL, which is what makes those values unavailable rather than
+  // empty.
+  indexedCardValues(url: URL): Promise<IndexedCardValues | undefined>;
   // The invoking actor, as the identity `actor()` resolves to. It comes from
   // the authenticated realm user the request's permission check verified, and
   // is supplied by the endpoint that verified it — an executor never derives
@@ -248,6 +405,11 @@ export interface StagingContext {
   // Resolving one needs the realm's fetch layer, which no executor reaches, so
   // it arrives bound — the same reason `resolveModuleId` and `codeRefKey` do.
   storedLink(selfLink: string, relativeTo: URL): string;
+  // The inverse: the card a stored `links.self` names. A program compares and
+  // rewrites card identities, so the stored spelling — relative inside this
+  // realm, a scoped reference outside it — is resolved before the program sees
+  // one.
+  resolvedLink(selfLink: string, relativeTo: URL): string;
   // The definition-cache entry for a type, or undefined when it cannot be
   // read.
   lookupDefinition(
@@ -303,6 +465,7 @@ export async function stageCreate(
   let lid = localIdOf(entry);
   return {
     writes,
+    appends: [],
     deletes: [],
     mints: writes.map((write) => write.path),
     id: identity.id,
@@ -425,6 +588,31 @@ export async function stageUpdate(
   ctx: StagingContext,
 ): Promise<StagedChange> {
   let url = targetURL(entry.href);
+  if (entry.content !== undefined) {
+    if (entry.document !== undefined) {
+      throw new OperationFailure({
+        id: url.href,
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid document',
+        detail:
+          `an update carries the patch to apply to a card or the content to ` +
+          `replace a file with, and this one carries both`,
+      });
+    }
+    return await stageFileUpdate(entry, entry.content, url, ctx);
+  }
+  if (entry.rawSource) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Invalid document',
+      detail:
+        `an update that replaces the stored bytes verbatim carries the ` +
+        `content to replace them with, and this one carries none`,
+    });
+  }
   let localPath = localPathIn(url, ctx);
   let sourcePath = `${localPath}.json` as LocalPath;
   if (ctx.splices.has(sourcePath)) {
@@ -579,6 +767,7 @@ export async function stageUpdate(
   }
   return {
     writes,
+    appends: [],
     deletes: [],
     // Nothing here is a mint. The primary rewrites a card that is already
     // there, and a side-load addressed by a local id the caller chose may
@@ -588,6 +777,240 @@ export async function stageUpdate(
     mints: [],
     id: url.href,
     primaryPath: sourcePath,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// `update` on a file
+// ---------------------------------------------------------------------------
+
+// Replace a file's content wholesale.
+//
+// A file's URL is its path — nothing is appended to it to find the bytes, the
+// way a card's `.json` is — and its metadata is derived from those bytes and
+// read-only, so there is no document to merge and nothing to serialize: what
+// the caller sends is what the file holds.
+//
+// Two stored things are addressed by their own path and are not files in this
+// sense: a module's source, and a card's stored `.json`. Both are refused,
+// because a caller replacing either wholesale through the operations envelope
+// would be writing bytes the realm serves as code or as a card while saying it
+// was changing a file — a card's update is the JSON:API merge, and a module's
+// source has no update at all. `rawSource` is how the one caller that must
+// reach them says so: the `card+source` `POST`, which writes exactly those
+// today and keeps writing them once it dispatches through here.
+async function stageFileUpdate(
+  entry: UpdateEntry,
+  content: string | Uint8Array,
+  url: URL,
+  ctx: StagingContext,
+): Promise<StagedChange> {
+  let path = localPathIn(url, ctx);
+  let refuse = (detail: string): never => {
+    throw new OperationFailure({
+      id: url.href,
+      status: 405,
+      code: 'operation-not-allowed',
+      title: 'Operation not allowed',
+      detail,
+    });
+  };
+  if (ctx.splices.has(path)) {
+    // An earlier entry edited this file without reading it, staging bytes that
+    // exist only as a description. Replacing them wholesale would drop that
+    // entry's change while it still reported success, so the pair is refused
+    // and the two changes are sent as separate batches.
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Conflicting entries',
+      detail:
+        `an earlier entry changes ${url.href} without reading it, so its ` +
+        `change would be lost by a replacement in the same batch`,
+    });
+  }
+  let stored = ctx.stored.get(path);
+  let meta = stored ?? ctx.storedMeta.get(path);
+  if (!entry.rawSource) {
+    if (hasExecutableExtension(path)) {
+      refuse(
+        `${url.href} is a module; its source is replaced through the ` +
+          `card source endpoint, not by an update on a file`,
+      );
+    }
+    if (stored && isSingleCardDocument(parsed(stored.content))) {
+      // A single card document and nothing wider. A `.json` holding a JSON:API
+      // *collection* is stored and served as a file and never becomes an
+      // instance row — the realm says so itself where it decides whether a
+      // path is a card awaiting its first index — so refusing a replacement of
+      // one as "a card's source" would contradict what the realm does with it
+      // everywhere else. The write ceiling classifies the two together, which
+      // is a different question: how many bytes the realm will store.
+      refuse(
+        `${url.href} holds a card's stored source; an update on a card is ` +
+          `the merge its document describes, not a replacement of its bytes`,
+      );
+    }
+    if (!meta && (await ctx.fileExists(`${path}.json` as LocalPath))) {
+      // The URL names a card rather than a file, so there are no bytes at it
+      // to replace. Said as a refusal rather than as "nothing is there",
+      // because something is: the caller reached a card with a file's payload
+      // and its remedy is to send the patch, not to look elsewhere.
+      refuse(
+        `${url.href} names a card; an update on one carries the patch to ` +
+          `apply rather than the content to replace it with`,
+      );
+    }
+  }
+  if (!meta && !entry.rawSource) {
+    // Creating a file is not an operation — the realm's upload routes own
+    // that — so an update has a file to replace or it has nothing to do. A
+    // verbatim source replacement is the exception, since the endpoint it
+    // stands in for creates the file it writes.
+    throw new OperationFailure({
+      id: url.href,
+      status: 404,
+      code: 'target-not-found',
+      title: 'Not found',
+      detail: `${url.href} does not exist in realm ${ctx.realmURL}`,
+    });
+  }
+  return {
+    writes: [{ path, content }],
+    appends: [],
+    deletes: [],
+    // A file already stored here is being replaced, and one that is not is
+    // being written by the endpoint that creates files. Neither is a mint in
+    // the sense the batch refuses — that is a create claiming a path a card
+    // already answers to.
+    mints: [],
+    id: url.href,
+    primaryPath: path,
+    replacesContent: true,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// `appendLine`
+// ---------------------------------------------------------------------------
+
+// Add one newline-terminated line to the end of a text file.
+//
+// Nothing here reads the target. That is the whole of why the behavior exists:
+// a log, a ledger, an audit trail is appended to far more often than it is
+// read, and expressing that as an update means holding the file's content to
+// produce the content it should hold next — so adding a line to a file of a
+// hundred megabytes costs a hundred megabytes. What is staged is the line, and
+// the realm's adapter adds it at the end of the file without reading it.
+//
+// So every check below is one that can be made without the bytes: what the
+// file's name says it holds, and whether anything is stored at the path, which
+// is a stat rather than a read.
+export async function stageAppendLine(
+  entry: AppendLineEntry,
+  ctx: StagingContext,
+): Promise<StagedChange> {
+  let url = targetURL(entry.href);
+  let path = localPathIn(url, ctx);
+  let line = entry.params?.line;
+  if (typeof line !== 'string') {
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Invalid line',
+      detail:
+        `an appendLine appends the line its payload carries under \`line\`, ` +
+        `and this one carries ${line === undefined ? 'none' : 'something that is not a string'}`,
+    });
+  }
+  if (/[\n\r]/.test(line)) {
+    // The terminator is the operation's to add, so a line carrying one of its
+    // own would append two lines under one call — and the result's version
+    // would describe a file the caller did not ask for. One call, one line.
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Invalid line',
+      detail:
+        `the line to append contains a line break; one call appends one ` +
+        `line, and the terminator is added for it`,
+    });
+  }
+  let refuse = (detail: string): never => {
+    throw new OperationFailure({
+      id: url.href,
+      status: 405,
+      code: 'operation-not-allowed',
+      title: 'Operation not allowed',
+      detail,
+    });
+  };
+  // Asked first, ahead of the checks the name alone settles, because a card's
+  // URL carries no extension and would otherwise be turned away as binary
+  // content — which is the right answer given in terms that describe nothing
+  // the caller sent.
+  if (await ctx.fileExists(`${path}.json` as LocalPath)) {
+    refuse(
+      `${url.href} names a card, whose stored source is a JSON document; a ` +
+        `line appended to one leaves bytes that are no longer a card`,
+    );
+  }
+  // Classified by name, which is what the realm serves the file's content type
+  // from, so the operation refuses exactly what a reader of the file would be
+  // told it is getting. An unknown extension resolves to a binary type and is
+  // refused with them, which is the byte-preserving side to be wrong on.
+  let contentType = inferContentType(path);
+  if (isBinaryContentType(contentType)) {
+    refuse(
+      `${url.href} holds ${contentType}, and a line of text appended to ` +
+        `binary content is not a line of anything`,
+    );
+  }
+  if (isJSONContentType(contentType)) {
+    // Text, but text whose shape a trailing line destroys: what follows a JSON
+    // document's closing brace is no longer a JSON document. A card's stored
+    // source addressed by its own path is the case that matters most, and it
+    // is the same objection for every other stored JSON, so the content type
+    // answers for all of them.
+    refuse(
+      `${url.href} holds ${contentType}, and a line appended after a JSON ` +
+        `document leaves bytes that are no longer one`,
+    );
+  }
+  if (hasExecutableExtension(path)) {
+    // Text as well, and appendable without breaking it — but a module is
+    // source the realm evaluates, and an operation meant for a log line is not
+    // how code is edited.
+    refuse(
+      `${url.href} is a module; its source is changed through the card ` +
+        `source endpoint, not by appending a line`,
+    );
+  }
+  // An earlier entry may have staged this file's content without it being on
+  // disk yet — a verbatim source write creates the file it writes — which is
+  // as good as stored for an append that lands after it in the same commit.
+  let staged = ctx.stored.has(path) || ctx.storedMeta.has(path);
+  if (!staged && !(await ctx.fileExists(path))) {
+    // Appending to a path holding nothing would create the file, and creating
+    // a file is not an operation.
+    throw new OperationFailure({
+      id: url.href,
+      status: 404,
+      code: 'target-not-found',
+      title: 'Not found',
+      detail: `${url.href} does not exist in realm ${ctx.realmURL}`,
+    });
+  }
+  return {
+    writes: [],
+    appends: [{ path, content: `${line}\n` }],
+    deletes: [],
+    mints: [],
+    id: url.href,
+    primaryPath: path,
   };
 }
 
@@ -636,7 +1059,778 @@ export function stageDelete(
       detail: `${url.href} is not a card in realm ${ctx.realmURL}`,
     });
   }
-  return { writes: [], deletes: [sourcePath], mints: [], id: url.href };
+  return {
+    writes: [],
+    appends: [],
+    deletes: [sourcePath],
+    mints: [],
+    id: url.href,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// `transform`
+// ---------------------------------------------------------------------------
+
+// BXL, and the shape of what this module asks of it.
+//
+// Stated here rather than imported, and loaded through a specifier TypeScript
+// cannot follow, because reaching for `@cardstack/bxl` at all — for a value or
+// for a type — pulls its sources into the typecheck program of every package
+// that reaches an executor. `packages/postgres` gets here through
+// `runtime-common/realm`, and compiles those sources under an older `lib` than
+// they are written for. Keeping BXL out of the static graph keeps a dependency
+// of this one behavior from becoming a dependency of everything upstream of
+// it.
+//
+// `bxl-mirror-check.ts` holds these shapes against the real ones. It imports
+// bxl and nothing imports it, so the check runs in this package's own
+// typecheck and reaches no consumer.
+export type OverlayTier = 'computed' | 'linked';
+
+export interface UnavailableOverlay {
+  path: string;
+  tier: OverlayTier;
+  reason: OperationMissingReason;
+}
+
+export interface ProgramOverlays {
+  computeds?: unknown;
+  linked?: unknown;
+  unavailable: UnavailableOverlay[];
+}
+
+export interface ProgramReadEvent {
+  path: string;
+  tier: 'source' | OverlayTier;
+  outcome: 'value' | 'null' | 'unavailable';
+}
+
+export interface ProgramError extends Error {
+  phase: string;
+  code: string;
+  statement: number;
+  details?: Record<string, unknown>;
+}
+
+export interface ProgramContext {
+  params?: Record<string, unknown>;
+  actor?: string;
+  instance?: Record<string, unknown>;
+}
+
+export interface BxlMutationModule {
+  isBxlMutationError(err: unknown): err is ProgramError;
+  mutationSchemaForCardSource(
+    definition: Definition,
+    options: {
+      lookupDefinition(codeRef: CodeRef): Promise<Definition | undefined>;
+    },
+  ): Promise<unknown>;
+  snapshotBxlCardSource(
+    document: { data: CardResource },
+    schema: unknown,
+    options: {
+      targetId?: string;
+      resolveReference?: (reference: string) => string;
+    },
+  ): unknown;
+  mutateBxlCardSource(
+    document: { data: CardResource },
+    source: string,
+    options: {
+      schema: unknown;
+      syntax: 'readable' | 'solidified';
+      programId: string;
+      targetId?: string;
+      context?: ProgramContext;
+      overlays?: ProgramOverlays;
+      resolveReference?: (reference: string) => string;
+      resolveCard?: (id: string) => unknown;
+      onRead?: (event: ProgramReadEvent) => void;
+    },
+  ): { document: { data: CardResource } };
+}
+
+// Resolved once per process. The module is pure and stateless, so holding it
+// costs one resolution rather than one per program.
+let bxlMutation: Promise<BxlMutationModule> | undefined;
+
+function loadBxlMutation(): Promise<BxlMutationModule> {
+  // The cast is what keeps the specifier opaque to TypeScript; see above.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+  bxlMutation ??= import('@cardstack/bxl/mutation' as string).then(
+    (module) => module as BxlMutationModule,
+  );
+  return bxlMutation;
+}
+
+// Change a card by running a BXL program over its stored JSON:API document.
+//
+// `update` is declarative — here are new values for these fields — and every
+// write it makes is knowable from the payload alone. `transform` is relative:
+// append this comment, add five to that counter, move this item ahead of that
+// one, and do none of it unless the status is still open. What the write turns
+// out to be depends on what the card already holds, so the program is planned
+// against the stored document and what comes back is a new document rather
+// than a patch.
+//
+// The program is the only author-supplied logic an operation runs, and it is
+// BXL rather than JavaScript on purpose: card modules are author-written and
+// the realm is a trusted context, so nothing here loads one. The type's shape
+// comes from its definition-cache entry, the values come from the stored file
+// and the index, and the program itself is data the definition carries.
+//
+// Three layers can answer a read, and only the first is authoritative. The
+// stored document holds the card's own values; the index's `pristine_doc`
+// holds its computed ones and its `search_doc` holds the fields of the cards
+// it links to, both produced by the indexer and so both able to lag the file
+// or be missing outright. `gatherOverlays` is where that is spelled out to
+// BXL, which lays the two snapshots *under* the stored document — a stored
+// value always wins — and refuses a read of a value the realm said it could
+// not supply rather than handing back an absent one.
+export async function stageTransform(
+  entry: TransformEntry,
+  ctx: StagingContext,
+): Promise<StagedChange> {
+  let url = targetURL(entry.href);
+  let name = entry.name ?? 'transform';
+  let tally = new OperationReadTally();
+  let startedAt = Date.now();
+  // Built once and handed to both readers, so what the caller is told and what
+  // the channel carries cannot describe the same run differently.
+  let describe = (
+    outcome: OperationOutcome,
+    code?: OperationErrorCode,
+  ): OperationDiagnostics => {
+    return {
+      operation: name,
+      base: 'transform',
+      target: url.href,
+      outcome,
+      ...(code ? { code } : {}),
+      totalMs: Date.now() - startedAt,
+      storedReads: tally.counts.stored,
+      computedReads: tally.counts.computed,
+      linkedReads: tally.counts.linked,
+      missingCount: tally.missing.length,
+      missing: [...tally.missing],
+    };
+  };
+  try {
+    let staged = await transform(entry, ctx, url, name, tally);
+    // Not emitted here. Staging only decides what the bytes would be — the
+    // batch can still be abandoned by a later entry, by one of the commit's
+    // own checks, or by the write itself, and a line saying `applied` for a
+    // file nothing wrote is a line a dashboard cannot correct for. The
+    // coordinator emits this record once the commit has landed, which is also
+    // what puts the channel and the caller's `meta.diagnostics` on the same
+    // population.
+    return {
+      ...staged.change,
+      diagnostics: describe(staged.changed ? 'applied' : 'unchanged'),
+    };
+  } catch (err: unknown) {
+    // A refusal is emitted here, because it is final: this entry produced no
+    // staged change, so nothing downstream carries a record for it, and what
+    // the program managed to read before it was refused is usually why.
+    emitOperationPerf({
+      realmURL: ctx.realmURL,
+      actor: ctx.actor || null,
+      ...describe(
+        'refused',
+        isOperationFailure(err) ? err.error.code : 'internal-error',
+      ),
+    });
+    throw err;
+  }
+}
+
+async function transform(
+  entry: TransformEntry,
+  ctx: StagingContext,
+  url: URL,
+  name: string,
+  tally: OperationReadTally,
+): Promise<{ change: StagedChange; changed: boolean }> {
+  let sourcePath = `${localPathIn(url, ctx)}.json` as LocalPath;
+  if (ctx.splices.has(sourcePath)) {
+    // An earlier entry appended to this card without reading it, so the bytes
+    // it staged exist only as a description. A program is planned against the
+    // whole document, which would mean materializing exactly the document the
+    // append avoided — and planning against the pre-append state would drop
+    // the append with nothing said. So the pair is refused, and the two
+    // changes are sent as separate batches.
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Conflicting entries',
+      detail:
+        `an earlier entry appends to ${url.href} without reading it, so a ` +
+        `transform in the same batch has no stored document to plan against`,
+    });
+  }
+  let stored = ctx.stored.get(sourcePath);
+  if (!stored) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 404,
+      code: 'target-not-found',
+      title: 'Not found',
+      detail: `${url.href} does not exist in realm ${ctx.realmURL}`,
+    });
+  }
+  let program = programFor(entry, url);
+  let params = resolvedParams(entry, ctx, url);
+  let resource = storedResource(stored.content, url);
+  let definition = await transformTargetDefinition(resource, url, ctx);
+  let bxl = await loadBxlMutation();
+  let schema = await bxl.mutationSchemaForCardSource(definition, {
+    lookupDefinition: async (codeRef) =>
+      await ctx.lookupDefinition(codeRef, url),
+  });
+  let fileURL = ctx.paths.fileURL(sourcePath);
+  // The index's rendering goes through the same projection the stored document
+  // does, so a path means the same thing in both and the overlay lands where
+  // the stored document leaves a gap rather than beside it.
+  let overlays = await gatherOverlays(
+    definition,
+    url,
+    schema,
+    (resource, against) =>
+      bxl.snapshotBxlCardSource({ data: resource }, against, {
+        targetId: url.href,
+        resolveReference: (reference) => ctx.resolvedLink(reference, fileURL),
+      }),
+    ctx,
+  );
+  let declaredMissing = overlays.unavailable ?? [];
+  // Every card the program says to link to, collected as the planner asks for
+  // them. Whether each one is there to link to is a question about this
+  // realm's stored state rather than about the program, so it is asked once
+  // the program has said which cards it means — nothing is written either
+  // way until the whole batch has staged.
+  let linked = new Set<string>();
+  let mutated: CardResource;
+  try {
+    let result = bxl.mutateBxlCardSource({ data: resource }, program.source, {
+      schema,
+      syntax: program.syntax,
+      programId: `${name}:${uuidV4()}`,
+      targetId: url.href,
+      context: contextFor(params, resource, url, ctx),
+      overlays,
+      // A relationship is stored relative to the file that holds it, and a
+      // program compares and rewrites card identities, so the stored spelling
+      // is resolved on the way in. The way out is the realm's own
+      // serialization, which spells every link it writes the same way however
+      // the write arrived.
+      resolveReference: (reference) => ctx.resolvedLink(reference, fileURL),
+      resolveCard: (id) => {
+        linked.add(id);
+        return { id };
+      },
+      onRead: (event) =>
+        tally.record(
+          event.path,
+          event.tier === 'source' ? 'stored' : event.tier,
+          event.outcome === 'unavailable'
+            ? reasonFor(event.path, declaredMissing)
+            : undefined,
+        ),
+    });
+    mutated = result.document.data;
+  } catch (err: unknown) {
+    throw programFailure(err, url, entry, bxl);
+  }
+  let links = await assertLinksExist(linked, ctx, url, fileURL);
+  if (isEqual(mutated, resource)) {
+    // The program ran and asked for nothing the card does not already hold, so
+    // the file is left exactly as it is — staging the bytes it already holds
+    // is what says so. The commit finds them unchanged, writes nothing, leaves
+    // the modification time alone and queues nothing for indexing, while the
+    // entry's result still reports the version the file holds. This is the
+    // same answer a patch that changes nothing gives, and for the same reason.
+    return {
+      change: {
+        writes: [{ path: sourcePath, content: stored.content }],
+        appends: [],
+        deletes: [],
+        mints: [],
+        links,
+        id: url.href,
+        primaryPath: sourcePath,
+      },
+      changed: false,
+    };
+  }
+  // The id lives in the file's name, not in its contents.
+  delete mutated.id;
+  return {
+    change: {
+      writes: [
+        {
+          path: sourcePath,
+          content: await serializeForStorage(
+            mutated,
+            { id: url.href, path: sourcePath },
+            ctx,
+          ),
+        },
+      ],
+      appends: [],
+      deletes: [],
+      // Nothing here is a mint: a transform changes a card that is already
+      // stored, and it stages no resource of its own.
+      mints: [],
+      links,
+      id: url.href,
+      primaryPath: sourcePath,
+    },
+    changed: true,
+  };
+}
+
+// The program this entry runs.
+//
+// A named operation's program comes from its declaration and from nowhere
+// else. An entry may carry one only where there is no declaration to read —
+// the base behavior, invoked with the BXL written out — so a caller cannot
+// hand a named operation a different program than the one its author wrote
+// and have the realm run it under that author's name.
+function programFor(entry: TransformEntry, url: URL): OperationProgram {
+  let program = entry.definition ? entry.definition.program : entry.program;
+  if (!program) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'No program',
+      detail: entry.definition
+        ? `operation "${entry.name ?? 'transform'}" is built on transform and ` +
+          `carries no program, so there is nothing for it to do`
+        : `a transform runs a program over the target's document, and this ` +
+          `entry carries none`,
+    });
+  }
+  return program;
+}
+
+// The card whose type the program is planned against. A card names its type in
+// its own stored JSON, which is what lets an operation reach a definition
+// without loading the card's module.
+async function transformTargetDefinition(
+  resource: CardResource,
+  url: URL,
+  ctx: StagingContext,
+): Promise<Definition> {
+  let definition = await ctx.lookupDefinition(resource.meta.adoptsFrom, url);
+  if (!definition) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 500,
+      code: 'internal-error',
+      title: 'Unknown type',
+      detail: `no definition for ${JSON.stringify(resource.meta.adoptsFrom)}`,
+    });
+  }
+  return definition;
+}
+
+// The request-scoped values the program reads through `params()`, `actor()`
+// and `instance()`.
+//
+// Each slot is supplied only where this invocation has something to put in it,
+// because a program that names a slot the realm left out fails loudly rather
+// than reading an empty one — which is the answer an author wants for
+// `actor()` in a request that authenticated nobody.
+//
+// `instance(…)` reads the target's stored values, keyed the same way the
+// named-create template reads them: the card's id, and its attributes. A link
+// is an edge in the document's relationship map rather than a member of the
+// stored value, so it is not something `instance(…)` names — the program
+// reads one with `.field`, against the document it is editing.
+//
+// `realmConfig()` has no slot here yet. The builtin and the `config` map in
+// `.realm.json` it reads arrive together, and supplying an empty map before
+// then would let a program that names a setting read nothing where it should
+// be told the realm has none.
+function contextFor(
+  params: Record<string, unknown> | undefined,
+  resource: CardResource,
+  url: URL,
+  ctx: StagingContext,
+): ProgramContext {
+  return {
+    ...(params ? { params } : {}),
+    ...(ctx.actor ? { actor: ctx.actor } : {}),
+    instance: {
+      id: url.href,
+      ...(resource.attributes ?? {}),
+    },
+  };
+}
+
+// The payload, checked against the schema the operation declares and resolved
+// into what a program reads.
+//
+// Checked before any BXL runs, because every way a payload can be wrong is the
+// caller's to fix and finding out inside the planner means finding out after
+// the work started. Three rules, each answering a different mistake: a
+// declared param with no value would reach the program as a missing key, an
+// undeclared one is a member the author never wrote and would be silently
+// ignored, and a value that is not JSON cannot reach a program at all.
+//
+// What is deliberately not checked is a scalar against its declared field
+// class. Deciding that a value is a valid `DateField` means running that
+// field's own deserialization, which is card JavaScript, and an operation runs
+// none — the value is held to being JSON here and to fitting the card by the
+// realm's serializer when the changed document is written.
+function resolvedParams(
+  entry: TransformEntry,
+  ctx: StagingContext,
+  url: URL,
+): Record<string, unknown> | undefined {
+  let declared = entry.definition?.params;
+  let sent = entry.params ?? {};
+  if (!declared) {
+    let [carried] = Object.keys(sent);
+    if (carried !== undefined) {
+      throw new OperationFailure({
+        id: url.href,
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid params',
+        detail:
+          `this transform declares no params, so it takes none, and the ` +
+          `payload carries "${carried}"`,
+      });
+    }
+    return undefined;
+  }
+  for (let key of Object.keys(declared)) {
+    if (own(sent, key) === undefined) {
+      throw new OperationFailure({
+        id: url.href,
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid params',
+        detail: `operation "${entry.name ?? 'transform'}" requires a value for params("${key}")`,
+      });
+    }
+  }
+  let resolved: Record<string, unknown> = {};
+  for (let key of Object.keys(sent)) {
+    let definition = own(declared, key);
+    if (!definition) {
+      throw new OperationFailure({
+        id: url.href,
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid params',
+        detail:
+          `operation "${entry.name ?? 'transform'}" declares no params("${key}"), ` +
+          `so nothing in it reads what the payload carries there`,
+      });
+    }
+    let value = own(sent, key);
+    resolved[key] =
+      definition.kind === 'link'
+        ? // A link param carries a card identity: the URL of a saved card, or
+          // the `lid` of one this batch creates, which resolves to the URL
+          // that create will answer to. What the program receives is the URL
+          // either way, so a program reads one kind of value there.
+          identityOf(
+            resolveLinkParam(value, ctx, `params("${key}")`),
+            `params("${key}")`,
+          )
+        : jsonParam(value, key, url);
+  }
+  return resolved;
+}
+
+// A param value held to being JSON. A program's context is plain data — the
+// planner walks it and refuses anything it cannot put in front of an
+// expression — so a value that is not JSON is refused here, where the message
+// can name the param that carries it.
+function jsonParam(value: unknown, key: string, url: URL): unknown {
+  let refuse = (why: string) => {
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Invalid params',
+      detail: `params("${key}") ${why}, and a program reads JSON`,
+    });
+  };
+  let walk = (node: unknown, path: string): void => {
+    if (node === null) {
+      return;
+    }
+    if (Array.isArray(node)) {
+      node.forEach((member, index) => walk(member, `${path}[${index}]`));
+      return;
+    }
+    switch (typeof node) {
+      case 'string':
+      case 'boolean':
+        return;
+      case 'number':
+        if (!Number.isFinite(node)) {
+          refuse(`holds ${node} at ${path}`);
+        }
+        return;
+      case 'object':
+        for (let [member, child] of Object.entries(
+          node as Record<string, unknown>,
+        )) {
+          walk(child, `${path}.${member}`);
+        }
+        return;
+      default:
+        refuse(`holds a ${typeof node} at ${path}`);
+    }
+  };
+  walk(value, `params("${key}")`);
+  return value;
+}
+
+// Why a read came back unavailable, matched against what this invocation said
+// it could not supply.
+//
+// A read is refused at the path it names, and the declaration that refuses it
+// may sit anywhere on that path: a whole subtree is incomplete when anything
+// under it is missing, and a value inside a missing subtree is missing with
+// it. So the path itself is looked for first, then a declaration nested under
+// it, then one above — the order the reader of these declarations resolves
+// them in, so the reason reported is the one that actually refused the read.
+function reasonFor(
+  path: string,
+  declared: readonly UnavailableOverlay[],
+): OperationMissingReason {
+  let exact = declared.find((entry) => entry.path === path);
+  let under = declared.find((entry) => entry.path.startsWith(`${path}.`));
+  let above = declared.find((entry) => path.startsWith(`${entry.path}.`));
+  return (exact ?? under ?? above)?.reason ?? 'key-absent';
+}
+
+// What the index can tell the program about values the stored document does
+// not hold, and what it cannot.
+//
+// Two snapshots come back as overlay layers: `pristine_doc`, the card with its
+// computed fields filled in, and `search_doc`, the fields of the cards it
+// links to denormalized into its own row. Both carry the card's own stored
+// fields alongside the ones only they can answer, which is fine and is why
+// they are handed over whole — an overlay answers only where the stored
+// document holds nothing.
+//
+// What the realm could *not* supply is listed as well, and that list is what
+// makes an absent value fail loudly instead of reading as empty. It names only
+// paths an overlay would have carried a value at:
+//
+//   - a computed field, whose value the card never stores;
+//   - the fields of a `linksTo` target, which `search_doc` expands in place.
+//
+// A plural link is deliberately not among them. No overlay reaches inside a
+// collection — a position is an identity only while nothing moves, and a
+// program that inserts or reorders renumbers everything after it — so the
+// values behind a `linksToMany` are not overlay territory, and claiming they
+// are unavailable would speak for a place no overlay speaks for.
+//
+// Two more are absent because this walk cannot reach them, which is a bound
+// rather than a decision. `Definition.fields` is the immediate field map —
+// dotted paths are resolved by chasing `fieldOrCard` at lookup time, never
+// pre-materialized — so a `linksTo` nested inside a contained value gets no
+// marker, and `linkedMembers` stops at the link's own immediate fields, so
+// `owner.friend.name` gets none either. A program reading one of those reads
+// it as empty rather than being refused. Reaching them means walking the
+// definition graph with a cycle guard, at a definition lookup per hop, on
+// every transform; the depth that earns that is worth measuring against real
+// declarations rather than guessing at here.
+async function gatherOverlays(
+  definition: Definition,
+  url: URL,
+  schema: unknown,
+  project: (resource: CardResource, schema: unknown) => unknown,
+  ctx: StagingContext,
+): Promise<ProgramOverlays> {
+  let row = await ctx.indexedCardValues(url);
+  let unavailable: UnavailableOverlay[] = [];
+  for (let [field, defId] of Object.entries(definition.fields)) {
+    let fieldDef = definition.fieldDefs[defId];
+    if (!fieldDef) {
+      continue;
+    }
+    if (fieldDef.isComputed) {
+      // A clean row means the indexer rendered this card, so every computed
+      // field holds whatever it computed to — including nothing, which is a
+      // value rather than an absence. Only the row's absence makes one
+      // unavailable.
+      if (!row) {
+        unavailable.push({
+          path: field,
+          tier: 'computed',
+          reason: 'not-indexed',
+        });
+      }
+      continue;
+    }
+    if (fieldDef.type !== 'linksTo') {
+      continue;
+    }
+    let reason: OperationMissingReason | undefined = !row
+      ? 'not-indexed'
+      : fieldDef.searchable == null
+        ? // The link's target is in the index, but nothing denormalized its
+          // fields into this row: `searchable` is what asks for that, and
+          // without it those values never reach an operation. Lowering
+          // refuses a declaration that reads one, so this is the backstop for
+          // a program that got past it — a raw one, or a stored declaration
+          // whose type has since dropped the annotation.
+          'not-searchable'
+        : undefined;
+    let expanded = own(row?.searchDoc, field);
+    for (let member of await linkedMembers(fieldDef, url, ctx)) {
+      let missing: OperationMissingReason | undefined =
+        reason ??
+        (isPlainRecord(expanded) && own(expanded, member) !== undefined
+          ? undefined
+          : 'key-absent');
+      if (missing) {
+        unavailable.push({
+          path: `${field}.${member}`,
+          tier: 'linked',
+          reason: missing,
+        });
+      }
+    }
+  }
+  return {
+    ...(row?.pristine ? { computeds: project(row.pristine, schema) } : {}),
+    ...(row?.searchDoc ? { linked: row.searchDoc } : {}),
+    unavailable,
+  };
+}
+
+// The fields of a linked card that its link's row would carry, `id` excepted.
+// A link's `id` is in the edge the card stores itself, so it is answered from
+// the stored document whether or not anything was denormalized, and saying it
+// is unavailable would take away a value the card has.
+async function linkedMembers(
+  fieldDef: FieldDefinition,
+  url: URL,
+  ctx: StagingContext,
+): Promise<string[]> {
+  let definition = await ctx.lookupDefinition(fieldDef.fieldOrCard, url);
+  if (!definition) {
+    return [];
+  }
+  return Object.keys(definition.fields).filter((field) => field !== 'id');
+}
+
+// Hold every card the program links to to being there to link to, and report
+// the identities it settled on.
+//
+// A relationship the realm stores is an edge to a card, and an edge to a URL
+// nothing answers is a card that will not load for anyone who follows it. The
+// realm can say this about its own cards: one it has stored, or one another
+// entry in this batch is minting. It cannot say it about a card in another
+// realm — that realm's index is not this one's to read and no operation
+// reaches the network — so a foreign link is recorded as sent, which is what
+// every other write path does with one.
+//
+// Which of those a card id is has to be decided the way the realm decides it,
+// not by asking whether the string parses as a URL. The planner hands over
+// whatever the program wrote, and the serializer resolves a relative
+// `links.self` against the file that holds it — so `./ghost` is not a URL here
+// and *is* a URL inside this realm by the time the write lands. Resolving
+// first is what puts both spellings in front of the same check; a genuinely
+// foreign reference still falls out of `paths.local`, since an unregistered
+// scoped reference comes back from `resolvedLink` unchanged.
+async function assertLinksExist(
+  linked: ReadonlySet<string>,
+  ctx: StagingContext,
+  url: URL,
+  fileURL: URL,
+): Promise<string[]> {
+  let minted = new Set([...ctx.lids.values()].map((identity) => identity.id));
+  let resolved = [...linked].map((id) => ctx.resolvedLink(id, fileURL));
+  let dangling = (
+    await Promise.all(
+      resolved.map(async (id) => {
+        if (minted.has(id)) {
+          return undefined;
+        }
+        let localPath: LocalPath;
+        try {
+          localPath = ctx.paths.local(new URL(id));
+        } catch {
+          // Not a card this realm holds, so not one it can answer for.
+          return undefined;
+        }
+        return (await ctx.fileExists(`${localPath}.json` as LocalPath))
+          ? undefined
+          : id;
+      }),
+    )
+  ).find((id) => id !== undefined);
+  if (dangling) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Invalid link',
+      detail:
+        `the program links to ${dangling}, and realm ${ctx.realmURL} holds ` +
+        `no card there`,
+    });
+  }
+  return resolved;
+}
+
+// What the caller is told when a program will not run or will not hold.
+//
+// A failed `assert` is its own answer: the author wrote the message for
+// exactly this, so it travels as the detail under the code that names a
+// precondition, rather than as one more planning error. Everything else the
+// planner refuses is a 400 carrying the phase and code it refused in, because
+// a program that does not parse, names a field the type does not have, or
+// reads a value the realm could not supply is a fault in the declaration or
+// in the payload — the realm is working exactly as it should by saying so.
+function programFailure(
+  err: unknown,
+  url: URL,
+  entry: TransformEntry,
+  bxl: BxlMutationModule,
+): unknown {
+  if (!bxl.isBxlMutationError(err)) {
+    return err;
+  }
+  if (err.code === 'assertion-failed') {
+    return new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'assertion-failed',
+      title: 'Assertion failed',
+      detail: err.message,
+      meta: { operation: entry.name ?? 'transform', statement: err.statement },
+    });
+  }
+  return new OperationFailure({
+    id: url.href,
+    status: 400,
+    code: 'invalid-params',
+    title: 'Cannot run program',
+    detail: err.message,
+    meta: {
+      operation: entry.name ?? 'transform',
+      phase: err.phase,
+      bxlCode: err.code,
+      statement: err.statement,
+      ...(err.details ? { details: err.details } : {}),
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1222,6 +2416,20 @@ function resolveMarker(
         isActor: false,
       };
     }
+    case 'realmConfig':
+      // A realm setting is a value the realm supplies, and nothing supplies
+      // one yet: the `config` map a marker reads from arrives with the builtin
+      // that reads it. Refused as the realm's own gap rather than the
+      // caller's, since the declaration is well formed and there is nothing a
+      // caller could send to satisfy it.
+      throw new OperationFailure({
+        status: 501,
+        code: 'internal-error',
+        title: 'Operation not implemented',
+        detail:
+          `\`${path}\` reads a realm setting, which this realm does not yet ` +
+          `supply to an operation`,
+      });
     default:
       throw new OperationFailure({
         status: 400,
@@ -1288,6 +2496,17 @@ function localPathIn(url: URL, ctx: StagingContext): LocalPath {
       title: 'Not found',
       detail: `realm ${ctx.realmURL} does not contain ${url.href}`,
     });
+  }
+}
+
+// A stored file's content as JSON, or undefined when it is not JSON at all.
+// What the predicates above are asked about is the document a file holds, and
+// a file that holds no document answers none of them.
+function parsed(content: string): unknown {
+  try {
+    return JSON.parse(content);
+  } catch {
+    return undefined;
   }
 }
 
@@ -1547,6 +2766,7 @@ export async function stageAppendContainsMany(
   }
   return {
     writes: [{ path: sourcePath, content: splice(base, edits) }],
+    appends: [],
     deletes: [],
     // Nothing here is a mint: an append changes a card that is already stored.
     mints: [],

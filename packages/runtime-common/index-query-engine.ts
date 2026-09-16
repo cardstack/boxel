@@ -1347,7 +1347,13 @@ export class IndexQueryEngine {
   //
   // A ref whose definition doesn't resolve keeps only its own key and matches
   // nothing (unless rows were stamped under that spelling).
-  private async typeKeysFor(ref: CodeRef): Promise<string[]> {
+  //
+  // Public because the live-search cache key is scoped by the same keys: it
+  // reads a per-type watermark for each of a query's type anchors, and those
+  // keys have to be the ones this engine matches rows on or the key would
+  // address a row nothing writes. Calling the engine rather than reproducing
+  // it is what keeps the two from drifting.
+  async typeKeysFor(ref: CodeRef): Promise<string[]> {
     let keys = [internalKeyFor(ref, undefined, this.#virtualNetwork)];
     if (isResolvedCodeRef(ref)) {
       try {

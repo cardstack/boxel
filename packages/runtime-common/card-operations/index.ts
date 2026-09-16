@@ -29,26 +29,46 @@ export type {
 } from './coordinator.ts';
 export {
   stageAppendContainsMany,
+  stageAppendLine,
   stageCreate,
   stageDelete,
+  stageTransform,
   stageUpdate,
 } from './executors.ts';
 export type {
   AppendContainsManyEntry,
+  AppendLineEntry,
   BatchDocument,
   BatchEntry,
   CreateEntry,
   DeleteEntry,
+  IndexedCardValues,
   LidIndex,
   SourceBytes,
+  StagedAppend,
   StagedChange,
   StagedContent,
   StagedIdentity,
   StagedWrite,
   StagingContext,
   StoredFile,
+  StoredMeta,
+  TransformEntry,
   UpdateEntry,
 } from './executors.ts';
+export {
+  OPERATIONS_CHANNEL,
+  emitOperationPerf,
+  setOperationPerfSink,
+} from './telemetry.ts';
+export type {
+  OperationDiagnostics,
+  OperationMissingRead,
+  OperationMissingReason,
+  OperationOutcome,
+  OperationPerfEvent,
+  OperationReadLayer,
+} from './telemetry.ts';
 export {
   MalformedCardSourceError,
   appendMembers,

@@ -859,10 +859,17 @@ export function registerRelationshipProbe(probe: RelationshipProbe): void {
 
 // Read the relationship status for a `linksTo` or `linksToMany` field. Always
 // returns a `Relationship` object (never a bare array): `isLoading` plus
-// `membership` (per the type above). Pure read — entangles with card tracking
-// via the shared field getter so templates re-render when sentinels change, but
-// never triggers `lazilyLoadLink` / the search and never mutates the data
-// bucket.
+// `membership` (per the type above). Entangles with card tracking via the
+// shared field getter, so templates re-render when sentinels change.
+//
+// A declared relationship is observed and never loaded: this does not trigger
+// `lazilyLoadLink`. A query-backed one is resolved, because asking such a field
+// for its state is the only demand a card ever makes of it — a card that shows
+// a pending state until `isLoaded` and reads its rows only afterwards never
+// touches the field itself, and would wait on a search nobody sent. Resolving
+// builds the field's search resource and mirrors any error it is already
+// carrying into the data bucket; it is idempotent, so reading the status
+// repeatedly observes rather than restarts.
 //
 // Render stability: this returns a fresh envelope on every call, so the
 // envelope's identity is NOT stable across renders. The stable anchors are each

@@ -25,6 +25,12 @@ import {
   MEDIA_CACHE_GC_CRON_TZ,
   createMediaCacheGcCronJob,
 } from './media-cache-gc-config.ts';
+import { enqueueScopedCssGc } from '../scripts/scoped-css-gc.ts';
+import {
+  SCOPED_CSS_GC_CRON_SCHEDULE,
+  SCOPED_CSS_GC_CRON_TZ,
+  createScopedCssGcCronJob,
+} from './scoped-css-gc-config.ts';
 
 let log = logger('cron-scheduler');
 
@@ -49,6 +55,11 @@ export function startCronJobs(): void {
   let mediaCacheGcJob = startMediaCacheGcCron();
   if (mediaCacheGcJob) {
     jobs.push(mediaCacheGcJob);
+  }
+
+  let scopedCssGcJob = startScopedCssGcCron();
+  if (scopedCssGcJob) {
+    jobs.push(scopedCssGcJob);
   }
 }
 
@@ -149,6 +160,26 @@ function startMediaCacheGcCron(): CronJob | undefined {
   job.start();
   log.info(
     `media-cache-gc cron scheduled for ${MEDIA_CACHE_GC_CRON_SCHEDULE} ${MEDIA_CACHE_GC_CRON_TZ}`,
+  );
+  return job;
+}
+
+function startScopedCssGcCron(): CronJob | undefined {
+  let job = createScopedCssGcCronJob(
+    async () => {
+      try {
+        await enqueueScopedCssGc();
+      } catch (error) {
+        Sentry.captureException(error);
+        log.error('scoped-css-gc cron failed to enqueue jobs', error);
+      }
+    },
+    { runOnInit: false },
+  );
+
+  job.start();
+  log.info(
+    `scoped-css-gc cron scheduled for ${SCOPED_CSS_GC_CRON_SCHEDULE} ${SCOPED_CSS_GC_CRON_TZ}`,
   );
   return job;
 }

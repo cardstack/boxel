@@ -1583,6 +1583,35 @@ module(basename(import.meta.filename), function () {
       assert.false('captures' in attrs, 'no served URL without a persist');
     });
 
+    test('a target capture is capture-only: no persist identity, no served URL', async function (assert) {
+      // `target` crops to one element but sits outside the identity pick
+      // (viewport/dsf/fullPage/clip), so persisting it would alias the
+      // element crop onto the geometry-only ledger key — the bare
+      // `_screenshot/` URL would then serve the crop.
+      await seedInstanceRow();
+      let { queue, published } = makePersistQueue('ready');
+
+      let response = await post(persistApp(queue), {
+        realmURL: REALM_URL,
+        cardId: CARD_ID,
+        format: 'isolated',
+        captureSpec: { target: '.avatar' },
+      }).expect(201);
+
+      assert.strictEqual(
+        (published[0]?.args as any)?.persist,
+        null,
+        'an indexed card still gets no persist identity for a target capture',
+      );
+      let attrs = response.body.data.attributes;
+      assert.strictEqual(
+        attrs.base64,
+        PNG_BASE64,
+        'the capture bytes come back',
+      );
+      assert.false('captures' in attrs, 'no served URL for a target capture');
+    });
+
     test('a caller without realm read never touches the ledger', async function (assert) {
       await seedInstanceRow();
       let ledgerBytes = new TextEncoder().encode('private-ledger-bytes');
@@ -1837,6 +1866,53 @@ module(basename(import.meta.filename), function () {
       let decision = chooseScreenshotCardCoalesceDecision({
         incoming: jobSpec(customSpecArgs()),
         candidates: [{ ...jobSpec(canonicalArgs()), id: 7 }],
+        inFlightCandidates: [],
+      });
+      assert.deepEqual(decision, { type: 'insert' });
+    });
+
+    test('an output-encoding or media mismatch is never a twin', function (assert) {
+      // Directly-constructed args: the wire parse still gates non-default
+      // type/media values, but the comparator must already refuse them so
+      // that unlocking a value cannot silently join a pdf request onto a
+      // png render (or a print-media render onto a screen one).
+      for (let extra of [{ type: 'pdf' }, { media: 'print' }]) {
+        let base = customSpecArgs();
+        let decision = chooseScreenshotCardCoalesceDecision({
+          incoming: jobSpec({
+            ...base,
+            captureSpec: { ...(base.captureSpec as object), ...extra },
+          }),
+          candidates: [{ ...jobSpec(customSpecArgs()), id: 7 }],
+          inFlightCandidates: [],
+        });
+        assert.deepEqual(
+          decision,
+          { type: 'insert' },
+          `a spec differing only in ${Object.keys(extra)[0]} does not join`,
+        );
+      }
+    });
+
+    test('an element-target mismatch is never a twin', function (assert) {
+      // `target` is dropped from the persist hash (canonicalOverrides elides
+      // it), so two element-crop jobs on the same card share a ledger
+      // identity — the comparator is all that keeps one caller from being
+      // handed the other's element crop.
+      let decision = chooseScreenshotCardCoalesceDecision({
+        incoming: jobSpec({
+          ...customSpecArgs(),
+          captureSpec: { target: '.header' },
+        }),
+        candidates: [
+          {
+            ...jobSpec({
+              ...customSpecArgs(),
+              captureSpec: { target: '.footer' },
+            }),
+            id: 7,
+          },
+        ],
         inFlightCandidates: [],
       });
       assert.deepEqual(decision, { type: 'insert' });
