@@ -199,7 +199,20 @@ export async function commitBatch(
     // each card against its type's definition, and a module written moments
     // earlier may still be indexing; without this a batch that follows a
     // module upload fails to resolve a type the realm already has on disk.
-    await core.drainIndexing();
+    //
+    // A batch that does not wait for its own indexing does not wait for
+    // anyone else's either — the same trade the realm's own commit makes for
+    // the same option, and for the same reason: draining would make each such
+    // write queue behind whatever indexing is still in flight, so a caller
+    // writing a run of files, like a realm push or an editor saving
+    // repeatedly, would pay the previous write's indexing on every one of
+    // them. What it gives up is the definition freshness above, which is why
+    // the option is not offered on the envelope: it is for a caller whose
+    // entries resolve no definition, and today that is the pair of file-write
+    // routes, whose entries replace bytes verbatim and serialize nothing.
+    if (opts.waitForIndex !== false) {
+      await core.drainIndexing();
+    }
     // Every `lid` in the batch resolves to a URL before any executor runs. A
     // created card's file is named after its `lid`, so its URL is path math
     // over the type it adopts — no read and no write — which is what lets an
