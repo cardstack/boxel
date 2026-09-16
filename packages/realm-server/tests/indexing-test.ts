@@ -1,7 +1,10 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import {
+  ALL_TYPES_KEY,
   internalKeyFor,
+  param,
+  query,
   rri,
   SupportedMimeType,
   Deferred,
@@ -11,10 +14,12 @@ import {
   VirtualNetwork,
   userInitiatedPriority,
   diffDoc,
+  sweepUnreferencedScopedCSS,
 } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
   DefinitionLookup,
+  Expression,
   LooseSingleCardDocument,
   Prerenderer,
   Realm,
@@ -892,6 +897,80 @@ module(basename(import.meta.filename), function () {
           `diagnostics.indexVisitClientMs.${bucket} persists on boxel_index, got: ${JSON.stringify(clientMs?.[bucket])}`,
         );
       }
+
+      // The model build's four stages ride the same channel. They are the
+      // dominant part of a card-instance visit's `indexRoutesMs.card.meta`
+      // bucket — the parent `render` route's model() runs inside the
+      // transition the runner times — so without them that bucket has no
+      // breakdown at all.
+      let buildModelMs = (
+        diagRow?.diagnostics as {
+          buildModelMs?: {
+            fetchSource?: unknown;
+            deriveType?: unknown;
+            hydrate?: unknown;
+            storeSettle?: unknown;
+          };
+        } | null
+      )?.buildModelMs;
+      for (let stage of [
+        'fetchSource',
+        'deriveType',
+        'hydrate',
+        'storeSettle',
+      ] as const) {
+        assert.strictEqual(
+          typeof buildModelMs?.[stage],
+          'number',
+          `diagnostics.buildModelMs.${stage} persists on boxel_index, got: ${JSON.stringify(buildModelMs?.[stage])}`,
+        );
+      }
+
+      // The meta route's own waits, which sit inside the same route bucket
+      // as the model build and are not part of it.
+      for (let phase of [
+        'cardApiLoadMs',
+        'readySettleMs',
+        'searchableLoadMs',
+      ] as const) {
+        let ms = (diagRow?.diagnostics as Record<string, unknown> | null)?.[
+          phase
+        ];
+        assert.strictEqual(
+          typeof ms,
+          'number',
+          `diagnostics.${phase} persists on boxel_index, got: ${JSON.stringify(ms)}`,
+        );
+      }
+
+      // The uncapped module-evaluation totals, which a reader needs in order
+      // to tell an empty `moduleEvaluationsMs` apart from a warm graph.
+      for (let field of [
+        'moduleEvaluationCount',
+        'moduleEvaluationTotalMs',
+      ] as const) {
+        let value = (diagRow?.diagnostics as Record<string, unknown> | null)?.[
+          field
+        ];
+        assert.strictEqual(
+          typeof value,
+          'number',
+          `diagnostics.${field} persists on boxel_index, got: ${JSON.stringify(value)}`,
+        );
+      }
+
+      // The residual: what the visit's wall-clock has left after every
+      // recorded step bucket. Emitted as a field so a reader accounting for
+      // a visit sees a complete set rather than doing the subtraction.
+      assert.strictEqual(
+        typeof (diagRow?.diagnostics as { unattributedMs?: unknown } | null)
+          ?.unattributedMs,
+        'number',
+        `diagnostics.unattributedMs persists on boxel_index, got: ${JSON.stringify(
+          (diagRow?.diagnostics as { unattributedMs?: unknown } | null)
+            ?.unattributedMs,
+        )}`,
+      );
     });
 
     // Note this particular test should only be a server test as the nature of
@@ -1712,6 +1791,216 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('a retry reports the adoption chain the attempt it resumes wrote', async function (assert) {
+        // A job that dies before its swap leaves real rows in the working
+        // table, and the retry resumes them rather than re-visiting — so the
+        // write path never sees them a second time. For a card that dead
+        // attempt created there is no production row to read a chain from
+        // either, which would leave its type unreported by the pass that
+        // ultimately publishes it.
+        let jobInfo = {
+          jobId: 4242,
+          reservationId: 1,
+          priority: 0,
+          queueWaitMs: null,
+        };
+        let url = new URL(`${testRealm}resumed-only.json`);
+        let resumedType = `${testRealm}resumed-only/ResumedOnly`;
+
+        let attempt1 = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+          virtualNetwork,
+          jobInfo,
+        );
+        await attempt1.updateEntry(url, {
+          type: 'file',
+          deps: new Set<string>(),
+          lastModified: Date.now(),
+          resourceCreatedAt: Date.now(),
+          types: [resumedType],
+        });
+        await attempt1.flushWriteBuffer();
+        // No done() — the attempt dies before its swap.
+
+        let attempt2 = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+          virtualNetwork,
+          jobInfo,
+        );
+        assert.true(
+          attempt2.resumedRows.has(url.href),
+          "the retry resumes the prior attempt's row",
+        );
+        assert.true(
+          attempt2.touchedTypes.includes(resumedType),
+          `the resumed row's chain is reported by the retry: ${attempt2.touchedTypes.join(', ')}`,
+        );
+      });
+
+      test('an invalidation pass records the adoption chains it touched, and only those', async function (assert) {
+        let keyFor = (module: string, name: string) =>
+          internalKeyFor(
+            { module: rri(`${testRealm}${module}`), name },
+            undefined,
+            realm.virtualNetwork,
+          );
+        let batch = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+          virtualNetwork,
+        );
+
+        // `ringo` is a Pet, and `hassan` is the PetPerson that links to it —
+        // so the fan-out reaches a second type, whose search doc genuinely can
+        // move. Nothing here is a Person or a Post.
+        await batch.invalidate([new URL(`${testRealm}ringo.json`)]);
+
+        let touched = batch.touchedTypes;
+        assert.true(
+          touched.includes(keyFor('pet', 'Pet')),
+          `the invalidated card's own type is recorded: ${touched.join(', ')}`,
+        );
+        assert.true(
+          touched.includes(keyFor('pet-person', 'PetPerson')),
+          `a dependent card's type is recorded too: ${touched.join(', ')}`,
+        );
+        assert.false(
+          touched.includes(keyFor('person', 'Person')),
+          'an untouched type is absent',
+        );
+        assert.false(
+          touched.includes(keyFor('post', 'Post')),
+          'a second untouched type is absent',
+        );
+      });
+
+      // The read side of these watermarks is the live-search cache key: a
+      // query anchored on a type reads that type's row, so a write only
+      // unreaches the cached searches whose types it could have moved.
+      test('an incremental pass stamps a watermark for the chains it touched, and only those', async function (assert) {
+        let keyFor = (module: string, name: string) =>
+          internalKeyFor(
+            { module: rri(`${testRealm}${module}`), name },
+            undefined,
+            realm.virtualNetwork,
+          );
+        let watermarks = async () => {
+          let rows = (await query(testDbAdapter, [
+            `SELECT type_key, index_generation FROM realm_type_generations WHERE realm_url =`,
+            param(realm.url),
+          ] as Expression)) as {
+            type_key: string;
+            index_generation: number;
+          }[];
+          return new Map(
+            rows.map(({ type_key, index_generation }) => [
+              type_key,
+              Number(index_generation),
+            ]),
+          );
+        };
+
+        let before = await watermarks();
+        // `ringo` is a Pet and stays one, so this pass has no departed type to
+        // stamp: the only chains it can move are Pet's and that of `hassan`,
+        // the PetPerson that links to it. A card that changes what it adopts
+        // from also stamps the type it left, which is the next test's subject
+        // rather than this one's — writing one here would move a type this
+        // test asserts is untouched.
+        await realm.write(
+          'ringo.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Ringo Starr' },
+              meta: {
+                adoptsFrom: { module: rri('./pet'), name: 'Pet' },
+              },
+            },
+          }),
+        );
+        let after = await watermarks();
+
+        let petKey = keyFor('pet', 'Pet');
+        assert.notStrictEqual(
+          after.get(petKey),
+          before.get(petKey),
+          `the written card's own type moves: ${after.get(petKey)}`,
+        );
+        assert.strictEqual(
+          after.get(keyFor('person', 'Person')),
+          before.get(keyFor('person', 'Person')),
+          'a type the pass never touched keeps its watermark, so a query anchored on it stays cached',
+        );
+        assert.strictEqual(
+          after.get(ALL_TYPES_KEY),
+          before.get(ALL_TYPES_KEY),
+          'a pass that can name its types leaves the catch-all key alone',
+        );
+      });
+
+      test('a write that changes what a card adopts from stamps the type it left', async function (assert) {
+        // The type a row departs is the one a cached search anchored on it
+        // still holds the row as a member of, and nothing else in the pass
+        // names it — so the pass has to read the row it is overwriting, not
+        // just the chain it writes.
+        let keyFor = (module: string, name: string) =>
+          internalKeyFor(
+            { module: rri(`${testRealm}${module}`), name },
+            undefined,
+            realm.virtualNetwork,
+          );
+        let watermarks = async () => {
+          let rows = (await query(testDbAdapter, [
+            `SELECT type_key, index_generation FROM realm_type_generations WHERE realm_url =`,
+            param(realm.url),
+          ] as Expression)) as {
+            type_key: string;
+            index_generation: number;
+          }[];
+          return new Map(
+            rows.map(({ type_key, index_generation }) => [
+              type_key,
+              Number(index_generation),
+            ]),
+          );
+        };
+        let asPet = JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Van Gogh' },
+            meta: { adoptsFrom: { module: rri('./pet'), name: 'Pet' } },
+          },
+        });
+        let asPerson = JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Van Gogh' },
+            meta: { adoptsFrom: { module: rri('./person'), name: 'Person' } },
+          },
+        });
+
+        await realm.write('vangogh.json', asPet);
+        let afterPet = await watermarks();
+        await realm.write('vangogh.json', asPerson);
+        let afterPerson = await watermarks();
+
+        assert.notStrictEqual(
+          afterPerson.get(keyFor('pet', 'Pet')),
+          afterPet.get(keyFor('pet', 'Pet')),
+          `the departed type moves: ${afterPerson.get(keyFor('pet', 'Pet'))}`,
+        );
+        assert.notStrictEqual(
+          afterPerson.get(keyFor('person', 'Person')),
+          afterPet.get(keyFor('person', 'Person')),
+          'and so does the type it joined',
+        );
+        assert.strictEqual(
+          afterPerson.get(ALL_TYPES_KEY),
+          afterPet.get(ALL_TYPES_KEY),
+          'a pass that read the row it overwrote needs no catch-all bump',
+        );
+      });
+
       // A batch reads the realm's loader epoch when it starts, and with no
       // executable in its invalidation set its own epoch getter returns that
       // same token. Committing it unconditionally would write the read-at-start
@@ -1825,6 +2114,78 @@ module(basename(import.meta.filename), function () {
         assert.true(
           rows.every((row) => row.is_deleted === true),
           'all matching rows were tombstoned',
+        );
+      });
+
+      // The sweep runs from the scheduled `scoped-css-gc` job, whose task
+      // shell adds nothing to the scan, so this direct test is what turns a
+      // broken scan or delete red.
+      test("sweepUnreferencedScopedCSS drops this realm's unreferenced rows and nothing else", async function (assert) {
+        let referencedRows = (await testDbAdapter.execute(
+          `SELECT hash FROM scoped_css WHERE realm_url = $1`,
+          { bind: [realm.url] },
+        )) as { hash: string }[];
+        assert.ok(
+          referencedRows.length > 0,
+          'precondition: indexing interned scoped CSS for the fixture realm',
+        );
+
+        let orphanHash = 'a'.repeat(32);
+        let freshOrphanHash = 'c'.repeat(32);
+        let foreignHash = 'b'.repeat(32);
+        let foreignRealmURL = 'http://example.com/other-realm/';
+        let sweepable = Date.now() - 2 * 24 * 60 * 60 * 1000;
+        await testDbAdapter.execute(
+          `INSERT INTO scoped_css (realm_url, hash, css, last_interned_at)
+           VALUES ($1, $2, $3, $4), ($5, $6, $7, $8), ($9, $10, $11, $12)`,
+          {
+            bind: [
+              realm.url,
+              orphanHash,
+              '.superseded {}',
+              sweepable,
+              realm.url,
+              freshOrphanHash,
+              '.just-interned {}',
+              Date.now(),
+              foreignRealmURL,
+              foreignHash,
+              '.foreign {}',
+              sweepable,
+            ],
+          },
+        );
+
+        let swept = await sweepUnreferencedScopedCSS(testDbAdapter, realm.url);
+
+        assert.strictEqual(swept, 1, 'exactly the stale orphan row was swept');
+        let remaining = (await testDbAdapter.execute(
+          `SELECT realm_url, hash FROM scoped_css ORDER BY realm_url, hash`,
+        )) as { realm_url: string; hash: string }[];
+        assert.false(
+          remaining.some(
+            (row) => row.realm_url === realm.url && row.hash === orphanHash,
+          ),
+          'the unreferenced row is gone',
+        );
+        assert.true(
+          remaining.some(
+            (row) =>
+              row.realm_url === realm.url && row.hash === freshOrphanHash,
+          ),
+          'an unreferenced row still inside the grace window survived',
+        );
+        assert.strictEqual(
+          remaining.filter((row) => row.realm_url === realm.url).length,
+          referencedRows.length + 1,
+          'every referenced row survived (plus the within-grace orphan)',
+        );
+        assert.true(
+          remaining.some(
+            (row) =>
+              row.realm_url === foreignRealmURL && row.hash === foreignHash,
+          ),
+          "another realm's rows are untouched, even unreferenced ones",
         );
       });
 
@@ -2069,6 +2430,18 @@ module(basename(import.meta.filename), function () {
             },
           );
 
+          // Both enqueues coalesce into a single pending job, but they land in
+          // two steps: `mixed-update` publishes the job (changes carry
+          // operation `update`), then `mixed-delete` joins and merges its
+          // delete in. Waiting for `rows.length === 1` alone races that second
+          // step — the poll can observe the update-only job before the delete
+          // has been folded in and read a spurious `update`. The job's
+          // `coalescedCallers` records one entry per joined caller, so gate on
+          // both clientRequestIds being present: that proves the delete has
+          // coalesced before we assert which operation won. Dominance stays
+          // under test — were it broken, `mixed-delete` would still merge (both
+          // callers present) yet leave the change as `update`, failing the
+          // assertion below rather than the wait.
           let row = (await waitUntil(
             async () => {
               let rows = (await testDbAdapter.execute(
@@ -2081,15 +2454,27 @@ module(basename(import.meta.filename), function () {
               )) as {
                 args: {
                   changes: { url: string; operation: 'update' | 'delete' }[];
+                  coalescedCallers?: { clientRequestId: string | null }[];
                 };
               }[];
-              return rows.length === 1 ? rows[0] : undefined;
+              if (rows.length !== 1) {
+                return undefined;
+              }
+              let clientRequestIds = new Set(
+                (rows[0].args.coalescedCallers ?? []).map(
+                  (caller) => caller.clientRequestId,
+                ),
+              );
+              let bothCoalesced =
+                clientRequestIds.has('mixed-update') &&
+                clientRequestIds.has('mixed-delete');
+              return bothCoalesced ? rows[0] : undefined;
             },
             {
               timeout: 3000,
               interval: 50,
               timeoutMessage:
-                'expected one pending incremental job during mixed-op burst',
+                'expected one pending incremental job carrying both the update and delete callers during mixed-op burst',
             },
           )) as {
             args: {

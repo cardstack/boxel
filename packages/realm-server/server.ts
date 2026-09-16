@@ -34,7 +34,7 @@ import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { createRoutes } from './routes.ts';
 import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import type { LiveSearchCache } from './live-search-cache.ts';
-import { createSendEvent } from './handlers/send-event.ts';
+import { createSendEvent } from '@cardstack/runtime-common/send-event';
 import { createServeFromRealm } from './handlers/serve-from-realm.ts';
 import { createServeIndex } from './handlers/serve-index.ts';
 import { findOrMountRealm } from './lib/realm-routing.ts';
@@ -171,7 +171,10 @@ export function createListener(
   // HTTP to the realm-server. Enabling h2 there (provisioning certs) is owned
   // separately; this branch is intentionally the plain-HTTP path.
   if (!certFile || !keyFile) {
-    return { server: http.createServer(app.callback()), proto: 'http' };
+    return {
+      server: withLoadBalancerKeepAlive(http.createServer(app.callback())),
+      proto: 'http',
+    };
   }
 
   // Standard local-dev mode: a browser hits this port directly, so wrap the h2
@@ -596,6 +599,30 @@ function withForcedConnectionClose(
   return server;
 }
 
+// An idle connection must outlive the load balancer's willingness to reuse it.
+// The balancer keeps a pooled connection and sends on it without asking; if
+// this server has closed it in the meantime, that request dies on a socket
+// already going away, and the balancer answers 502 with a body of its own
+// making — having no response to relay.
+//
+// Node's default is 5 seconds and the balancer in front of the hosted
+// deployments allows 4000, so this side has to be the more patient one. The
+// value sits far above any balancer setting we run rather than tracking one:
+// the failure is silent, and the cost of being generous is some idle sockets.
+//
+// `headersTimeout` is deliberately left at Node's default. Raising it above
+// `requestTimeout` does not extend the header deadline — the two are swapped
+// when headers is the larger, so the only effect is to silently stretch the
+// whole-request timeout. The header clock starts at a request's first byte
+// rather than when the connection went idle, so keep-alive time never counts
+// toward it and it needs no relationship to the value above.
+const LOAD_BALANCER_KEEP_ALIVE_MS = 4200 * 1000;
+
+export function withLoadBalancerKeepAlive<T extends http.Server>(server: T): T {
+  server.keepAliveTimeout = LOAD_BALANCER_KEEP_ALIVE_MS;
+  return server;
+}
+
 // Same-port 308 redirect for plain-text HTTP requests that land on the
 // HTTPS port. The dispatcher binds a single port so the inbound and
 // target ports agree; we just rewrite the scheme. Parses via URL so
@@ -682,6 +709,7 @@ export class RealmServer {
   private reconciler: RealmRegistryReconciler;
   private searchCache: JobScopedSearchCache;
   private liveSearchCache: LiveSearchCache | undefined;
+  private liveReadsResolveLinksOnly: boolean;
   private cachedApp: ReturnType<RealmServer['buildApp']> | undefined;
 
   constructor({
@@ -710,6 +738,7 @@ export class RealmServer {
     reportHostShell,
     searchCache,
     liveSearchCache,
+    liveReadsResolveLinksOnly,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -751,6 +780,11 @@ export class RealmServer {
     // production defaults; a test injects one configured with `ttlMs: 0`
     // (coalescing on, retention off) to force each caller to compute.
     liveSearchCache?: LiveSearchCache;
+    // When true, a live search answers each result's relationships but
+    // side-loads none of their targets. Carries the same setting the realms
+    // this server mounts are constructed with, since the search fan-out builds
+    // its own opts rather than reading them off a realm.
+    liveReadsResolveLinksOnly?: boolean;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -802,6 +836,7 @@ export class RealmServer {
     this.reportHostShell = reportHostShell;
     this.searchCache = searchCache ?? new JobScopedSearchCache(dbAdapter);
     this.liveSearchCache = liveSearchCache;
+    this.liveReadsResolveLinksOnly = liveReadsResolveLinksOnly ?? false;
   }
 
   get app() {
@@ -847,7 +882,7 @@ export class RealmServer {
           // this list the preflight fails and the player errors before any
           // bytes flow.
           allowHeaders:
-            'Authorization, Content-Type, If-Match, If-None-Match, If-Range, Range, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Consuming-Realm, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Boxel-Logging-Correlation-Id, X-Grafana-Device-Id, X-Grafana-Action',
+            'Authorization, Content-Type, If-Match, If-None-Match, If-Range, Range, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Skip-Index-Wait, X-Boxel-Consuming-Realm, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Boxel-Logging-Correlation-Id, X-Grafana-Device-Id, X-Grafana-Action',
           // Without an explicit expose list, @koa/cors only emits the
           // CORS-safelisted response headers (cache-control, content-*,
           // expires, last-modified, pragma). ETag is not on that list,
@@ -929,6 +964,7 @@ export class RealmServer {
           reconciler: this.reconciler,
           searchCache: this.searchCache,
           liveSearchCache: this.liveSearchCache,
+          liveReadsResolveLinksOnly: this.liveReadsResolveLinksOnly,
         }),
       )
       .use(

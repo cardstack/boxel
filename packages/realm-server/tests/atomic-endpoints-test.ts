@@ -340,8 +340,11 @@ module(basename(import.meta.filename), function () {
               },
             ],
           };
+          // The follow-up GET is credential-less, so it doesn't share this
+          // authenticated write's read-your-writes principal and won't wait
+          // on its indexing — make the write itself synchronous instead.
           let response = await request
-            .post('/_atomic')
+            .post('/_atomic?waitForIndex=true')
             .set('Accept', SupportedMimeType.JSONAPI)
             .set(
               'Authorization',
@@ -394,8 +397,11 @@ module(basename(import.meta.filename), function () {
             ],
           };
 
+          // Synchronous write for the same reason as the single-instance
+          // test: the credential-less GETs below don't wait on this
+          // authenticated write's indexing.
           let response = await request
-            .post('/_atomic')
+            .post('/_atomic?waitForIndex=true')
             .set('Accept', SupportedMimeType.JSONAPI)
             .set(
               'Authorization',
@@ -697,8 +703,10 @@ module(basename(import.meta.filename), function () {
               },
             ],
           };
+          // Synchronous write: the credential-less card+json GET below
+          // doesn't wait on this authenticated write's indexing.
           let response = await request
-            .post('/_atomic')
+            .post('/_atomic?waitForIndex=true')
             .set('Accept', SupportedMimeType.JSONAPI)
             .set(
               'Authorization',
@@ -775,8 +783,10 @@ module(basename(import.meta.filename), function () {
               },
             ],
           };
+          // Synchronous write: the credential-less card+json GET below
+          // doesn't wait on this authenticated write's indexing.
           let response = await request
-            .post('/_atomic')
+            .post('/_atomic?waitForIndex=true')
             .set('Accept', SupportedMimeType.JSONAPI)
             .set(
               'Authorization',

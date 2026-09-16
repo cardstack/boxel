@@ -220,19 +220,21 @@ export interface BxlMutationPrepareOptions {
  *
  * Every value arrives already resolved. This package never loads a card or
  * reaches a network, so `instance` is the stored document as the host read it
- * and `actor` is the caller as the host authenticated it.
+ * and `actor` is the user id the host authenticated the caller as.
  *
  * Each slot is optional and a program that asks for one the host left out
  * fails rather than reading `null`, so a host supplies exactly the slots its
- * operation declares. Every slot is a keyed object, because that is what the
- * builtins can read a key out of — a bare string or array would type-check
- * against a looser declaration and then fail every lookup at runtime.
+ * operation declares. `params` and `instance` are keyed objects, because that
+ * is what the builtins read a key out of — a bare string or array would
+ * type-check against a looser declaration and then fail every lookup at
+ * runtime. `actor` is a string, because `actor()` is the caller's user id and
+ * has no members to read.
  */
 export interface BxlMutationContext {
   /** What the caller sent, keyed by the operation's declared parameters. */
   params?: BxlMutationJsonObject;
-  /** The authenticated caller. `id` is the stable principal. */
-  actor?: { id: string; [key: string]: BxlMutationJson };
+  /** The authenticated caller's user id, and nothing else about them. */
+  actor?: string;
   /** The stored document the program is editing. */
   instance?: BxlMutationJsonObject;
 }

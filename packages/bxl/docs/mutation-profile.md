@@ -532,11 +532,15 @@ A program sees the document it is editing through `.`. Three builtins supply
 the rest of what a write operation needs, each reading a value the trusted
 host resolved before the program ran:
 
-| Call                             | Reads                                          |
-| -------------------------------- | ---------------------------------------------- |
-| `params("key")`                  | that entry of the payload the caller sent      |
-| `actor()` / `actor("key")`       | the authenticated caller, or one of its fields |
-| `instance()` / `instance("key")` | the stored document, or one of its fields      |
+| Call                             | Reads                                     |
+| -------------------------------- | ----------------------------------------- |
+| `params("key")`                  | that entry of the payload the caller sent |
+| `actor()`                        | the authenticated caller's user id        |
+| `instance()` / `instance("key")` | the stored document, or one of its fields |
+
+`actor` takes no argument. The host authenticates a caller as a user id and
+knows nothing else about them, so the id is the whole of what a program can
+read; `actor("key")` names no builtin and fails saying so.
 
 `actor()` is what a _program_ reads. It is distinct from the envelope's
 `actor`, which the host carries alongside the plan into authorization and
@@ -548,7 +552,7 @@ type BxlMutationJsonObject = { [key: string]: BxlMutationJson };
 
 interface BxlMutationContext {
   params?: BxlMutationJsonObject;
-  actor?: { id: string; [key: string]: BxlMutationJson };
+  actor?: string;
   instance?: BxlMutationJsonObject;
 }
 ```
@@ -572,8 +576,8 @@ Every failure is loud. Naming one of these where the host supplied no context,
 or asking for a key that is not there, fails the program — a `null` would land
 in the document as a missing comment author or a silently unset field. The
 operation layer validates declared keys before a program runs; the key check
-here is the backstop. `actor()` and `instance()` return the whole object, which
-is the reading to reach for when a key may legitimately be absent.
+here is the backstop. `instance()` returns the whole object, which is the
+reading to reach for when a key may legitimately be absent.
 
 A key is readable only if it is the object's own and its value is not
 `undefined`. A prototype-chain name would otherwise answer with a function,

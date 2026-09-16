@@ -14,6 +14,7 @@ import type {
   ResourceID,
 } from '@cardstack/runtime-common';
 import {
+  CardDocumentCache,
   isSingleCardDocument,
   ri,
   baseRRI,
@@ -28,6 +29,7 @@ import {
   setupPermissionedRealmsCached,
   setupMatrixRoom,
   closeServer,
+  waitUntil,
   testRealmInfo,
   createJWT,
   testRealmServerMatrixUserId,
@@ -1231,6 +1233,233 @@ module(basename(import.meta.filename), function () {
         });
       });
 
+      // Assembling a card+json body reads the index row and then expands the
+      // card's whole link closure into `included[]`, so the same card asked
+      // for repeatedly — by different readers, or by one tab re-reading after
+      // each neighbouring write — pays for those bytes again every time. The
+      // response cache collapses those reads onto one assembly and reports
+      // which of miss / join / hit each request took.
+      module('card+json response cache', function (hooks) {
+        setupPermissionedRealmCached(hooks, {
+          fixture: 'realistic',
+          realmURL,
+          permissions: {
+            '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          onRealmSetup,
+        });
+
+        test('a repeat read of an unchanged card is served from the cache', async function (assert) {
+          let first = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          let second = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(first.status, 200, `HTTP 200: ${first.text}`);
+          assert.strictEqual(second.status, 200, `HTTP 200: ${second.text}`);
+          assert.strictEqual(
+            first.get('x-boxel-card-cache'),
+            'miss',
+            'the first read assembles the document',
+          );
+          assert.strictEqual(
+            second.get('x-boxel-card-cache'),
+            'hit',
+            'the second read is served without reassembling',
+          );
+          assert.deepEqual(
+            second.body,
+            first.body,
+            'the cached read returns the same document',
+          );
+          assert.strictEqual(
+            second.get('etag'),
+            first.get('etag'),
+            'and the same validator',
+          );
+        });
+
+        // Freshness comes from the key, not from an eviction step: the write
+        // re-indexes the card, which rotates the validator the cache keys on,
+        // so the entry assembled before the write is simply unreachable.
+        test('a write makes the next read reassemble, with nothing evicted', async function (assert) {
+          let before = await request
+            .get('/hassan')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(before.status, 200, `HTTP 200: ${before.text}`);
+          let primed = await request
+            .get('/hassan')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            primed.get('x-boxel-card-cache'),
+            'hit',
+            'the card is cached before the write',
+          );
+
+          let patch = await request
+            .patch('/hassan')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan Abdel-Rahman' },
+                meta: {
+                  adoptsFrom: { module: rri('./friend.gts'), name: 'Friend' },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(patch.status, 200, `HTTP 200: ${patch.text}`);
+
+          let after = await request
+            .get('/hassan')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            after.get('x-boxel-card-cache'),
+            'miss',
+            'the read after the write assembles a fresh document',
+          );
+          assert.notStrictEqual(
+            after.get('etag'),
+            before.get('etag'),
+            'because the write rotated the validator the cache keys on',
+          );
+          assert.strictEqual(
+            after.body.data.attributes.firstName,
+            'Hassan Abdel-Rahman',
+            'and the fresh document carries the written value',
+          );
+        });
+
+        test('a conditional read of a cached card still answers 304', async function (assert) {
+          let first = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          let etag = first.get('etag') ?? '';
+          assert.ok(etag, 'the first read carries a validator');
+
+          let conditional = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-None-Match', etag);
+
+          assert.strictEqual(
+            conditional.status,
+            304,
+            'the conditional read still short-circuits to 304',
+          );
+          assert.strictEqual(
+            conditional.get('etag'),
+            etag,
+            'and echoes the validator',
+          );
+          assert.notOk(conditional.text, '304 response has no body');
+        });
+      });
+
+      // A cache whose assembly of one card waits on the test, so a second
+      // request for that card is guaranteed to arrive while the first is
+      // still assembling rather than racing it. Lives in its own module
+      // because the injected instance is shared by every test in the module
+      // it is passed to, where the per-test default is a fresh cache.
+      module('card+json response cache coalescing', function (hooks) {
+        class HoldableCardDocumentCache extends CardDocumentCache {
+          heldUrl: string | undefined;
+          release: Promise<void> | undefined;
+          onAssemblyStarted: (() => void) | undefined;
+          override getOrPopulate(
+            args: Parameters<CardDocumentCache['getOrPopulate']>[0],
+          ) {
+            let held = this.heldUrl && args.url.endsWith(this.heldUrl);
+            let { release, onAssemblyStarted } = this;
+            return super.getOrPopulate({
+              ...args,
+              populate: async () => {
+                if (held) {
+                  onAssemblyStarted?.();
+                  await release;
+                }
+                return args.populate();
+              },
+            });
+          }
+        }
+        let cache = new HoldableCardDocumentCache({
+          telemetryIntervalMs: 0,
+        });
+
+        setupPermissionedRealmCached(hooks, {
+          fixture: 'realistic',
+          realmURL,
+          permissions: {
+            '*': ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          onRealmSetup,
+          cardDocumentCache: cache,
+        });
+
+        test('a second read of a card still being assembled joins that assembly instead of starting its own', async function (assert) {
+          let releaseAssembly!: () => void;
+          cache.heldUrl = '/person-1';
+          cache.release = new Promise<void>(
+            (resolve) => (releaseAssembly = resolve),
+          );
+          let assemblyStarted = new Promise<void>(
+            (resolve) => (cache.onAssemblyStarted = resolve),
+          );
+
+          // supertest sends lazily; `.then` starts each request now.
+          let first = request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .then((response) => response);
+          await assemblyStarted;
+          let second = request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .then((response) => response);
+          await waitUntil(async () => cache.stats.joins === 1, {
+            timeout: 10_000,
+            interval: 10,
+            timeoutMessage: 'the second read to join the in-flight assembly',
+          });
+
+          releaseAssembly();
+          let [a, b] = await Promise.all([first, second]);
+
+          assert.strictEqual(a.status, 200, `HTTP 200: ${a.text}`);
+          assert.strictEqual(b.status, 200, `HTTP 200: ${b.text}`);
+          assert.strictEqual(
+            a.get('x-boxel-card-cache'),
+            'miss',
+            'the first read assembles',
+          );
+          assert.strictEqual(
+            b.get('x-boxel-card-cache'),
+            'join',
+            'the second read joins that assembly rather than running its own',
+          );
+          assert.strictEqual(
+            b.text,
+            a.text,
+            'and both receive byte-identical documents',
+          );
+
+          let third = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            third.get('x-boxel-card-cache'),
+            'hit',
+            'a read after the assembly settles is served from the entry it left behind',
+          );
+        });
+      });
+
       module('permissioned realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
           fixture: 'simple',
@@ -1343,6 +1572,50 @@ module(basename(import.meta.filename), function () {
             undefined,
             'realm is not public readable',
           );
+        });
+
+        // Read permission is realm-scoped and checked before the handler
+        // runs, so an unauthorized caller never reaches the response cache —
+        // a warm entry assembled for a reader who had permission is not a way
+        // around the gate.
+        test('a cached body is not reachable by a caller without read permission', async function (assert) {
+          let authorized = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
+            );
+          assert.strictEqual(authorized.status, 200, 'the reader is served');
+          assert.strictEqual(
+            authorized.get('x-boxel-card-cache'),
+            'miss',
+            'and their read populated the cache',
+          );
+
+          let unauthorized = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
+          assert.strictEqual(
+            unauthorized.status,
+            403,
+            'a caller without read permission is still refused',
+          );
+          assert.notOk(
+            unauthorized.body?.data,
+            'and receives no card document',
+          );
+
+          let anonymous = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            anonymous.status,
+            401,
+            'as is a caller with no credentials at all',
+          );
+          assert.notOk(anonymous.body?.data, 'who also receives no document');
         });
       });
     });
@@ -2575,6 +2848,91 @@ module(basename(import.meta.filename), function () {
         });
 
         let { getMessagesSince } = setupMatrixRoom(hooks, getRealmSetup);
+
+        // What is stored for a relationship depends on whether the link can be
+        // relativized against the writing realm. A scoped reference cannot be,
+        // and must not be resolved either: resolving one stores whatever URL
+        // the linked realm answers to in this environment, so a realm under
+        // version control ends up carrying a dev or staging host.
+        test('stores a scoped cross-realm link verbatim', async function (assert) {
+          let scopedLink = '@cardstack/catalog/Pet/vangogh';
+
+          let response = await request
+            .patch('/hassan')
+            .send({
+              data: {
+                type: 'card',
+                relationships: {
+                  friend: { links: { self: scopedLink } },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./friend.gts'),
+                    name: 'Friend',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'hassan.json',
+          );
+          let stored = JSON.parse(readFileSync(cardFile, 'utf8'));
+          assert.strictEqual(
+            stored.data.relationships.friend.links.self,
+            scopedLink,
+            'the stored link is the scoped reference the client sent',
+          );
+        });
+
+        test('still relativizes a same-realm link', async function (assert) {
+          let response = await request
+            .patch('/hassan')
+            .send({
+              data: {
+                type: 'card',
+                relationships: {
+                  friend: { links: { self: `${testRealmHref}jade` } },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./friend.gts'),
+                    name: 'Friend',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'hassan.json',
+          );
+          let stored = JSON.parse(readFileSync(cardFile, 'utf8'));
+          assert.strictEqual(
+            stored.data.relationships.friend.links.self,
+            './jade',
+            'an in-realm link is still stored relative',
+          );
+        });
 
         test('serves the request', async function (assert) {
           let entry = 'person-1.json';
@@ -4901,6 +5259,7 @@ boxel:
     const consumerRealmURL = 'http://127.0.0.1:5522/test/';
     const UNREACHABLE_REALM_URL = 'https://example.invalid/offline/';
     let consumerRequest: RealmRequest;
+    let providerRequest: RealmRequest;
 
     setupPermissionedRealmsCached(hooks, {
       realms: [
@@ -5002,6 +5361,10 @@ boxel:
       ],
       onRealmSetup({ realms }) {
         let latestRealms = realms.slice(-2);
+        providerRequest = withRealmPath(
+          supertest(latestRealms[0].realmHttpServer),
+          new URL(providerRealmURL),
+        );
         consumerRequest = withRealmPath(
           supertest(latestRealms[1].realmHttpServer),
           new URL(consumerRealmURL),
@@ -5011,6 +5374,62 @@ boxel:
 
     hooks.afterEach(() => {
       resetCatalogRealms();
+    });
+
+    // A query-backed field finds its targets by running a query when the card
+    // is read, and a write to a card that enters or leaves that query
+    // deliberately leaves the owner's `deps` and `indexed_at` alone. The
+    // response cache keys on a validator built from `indexed_at`, so such a
+    // document must never be retained — otherwise the owner would keep
+    // serving the pre-write answer until the entry aged out.
+    test('a query-backed document is re-resolved on every read rather than served from the cache', async function (assert) {
+      let first = await consumerRequest
+        .get('/favorite')
+        .set('Accept', 'application/vnd.card+json');
+      let second = await consumerRequest
+        .get('/favorite')
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(first.status, 200, `HTTP 200: ${first.text}`);
+      assert.strictEqual(second.status, 200, `HTTP 200: ${second.text}`);
+      assert.strictEqual(
+        second.get('x-boxel-card-cache'),
+        'miss',
+        'the repeat read runs the query again instead of reading a retained answer',
+      );
+      assert.strictEqual(
+        second.body.data.relationships.matches?.data?.[0]?.id,
+        `${providerRealmURL}person-remote`,
+        'and resolves the current top match',
+      );
+
+      // `matches` sorts by name descending and takes one, so a new provider
+      // card sorting after 'Zed' becomes the answer.
+      let write = await providerRequest
+        .post('/')
+        .send({
+          data: {
+            type: 'card',
+            attributes: { name: 'Zoe' },
+            meta: {
+              adoptsFrom: {
+                module: rri(`${providerRealmURL}person`),
+                name: 'Person',
+              },
+            },
+          },
+        })
+        .set('Accept', 'application/vnd.card+json');
+      assert.strictEqual(write.status, 201, `HTTP 201: ${write.text}`);
+
+      let afterWrite = await consumerRequest
+        .get('/favorite')
+        .set('Accept', 'application/vnd.card+json');
+      assert.strictEqual(
+        afterWrite.body.data.relationships.matches?.data?.[0]?.id,
+        write.body.data.id,
+        'the read after the write sees the new top match immediately, with no wait for an entry to expire',
+      );
     });
 
     test('linksTo query resolves the first aggregated result and includes it', async function (assert) {

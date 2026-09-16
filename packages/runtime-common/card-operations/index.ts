@@ -10,21 +10,85 @@ export {
   runOperation,
 } from './dispatch.ts';
 export type {
+  CanonicalizeOptions,
   OperationCore,
   OperationDefinitionLookup,
   OperationIndexQueryEngine,
   OperationScope,
+  OperationStoredFile,
+  OperationStoredFileMeta,
   RunOperationOptions,
 } from './dispatch.ts';
 export { readOperation } from './read.ts';
+export { commitBatch } from './coordinator.ts';
+export type {
+  BatchCore,
+  BatchEntryResult,
+  CommitBatchOptions,
+} from './coordinator.ts';
+export {
+  stageAppendContainsMany,
+  stageAppendLine,
+  stageCreate,
+  stageDelete,
+  stageTransform,
+  stageUpdate,
+} from './executors.ts';
+export type {
+  AppendContainsManyEntry,
+  AppendLineEntry,
+  BatchDocument,
+  BatchEntry,
+  CreateEntry,
+  DeleteEntry,
+  IndexedCardValues,
+  LidIndex,
+  SourceBytes,
+  StagedAppend,
+  StagedChange,
+  StagedContent,
+  StagedIdentity,
+  StagedWrite,
+  StagingContext,
+  StoredFile,
+  StoredMeta,
+  TransformEntry,
+  UpdateEntry,
+} from './executors.ts';
+export {
+  OPERATIONS_CHANNEL,
+  emitOperationPerf,
+  setOperationPerfSink,
+} from './telemetry.ts';
+export type {
+  OperationDiagnostics,
+  OperationMissingRead,
+  OperationMissingReason,
+  OperationOutcome,
+  OperationPerfEvent,
+  OperationReadLayer,
+} from './telemetry.ts';
+export {
+  MalformedCardSourceError,
+  appendMembers,
+  indentsFor,
+  renderMember,
+  renderValue,
+  scanCardSource,
+} from './json-splice.ts';
+export type { CardSourceLayout, StoredContainer } from './json-splice.ts';
+export { readSourceOperation } from './read-source.ts';
 export { lowerQueryOperation } from './query.ts';
 export type { QueryInvocation } from './query.ts';
 export {
+  DEFINITION_FREE_BASE_OPERATIONS,
   OperationFailure,
+  isDefinitionFreeBaseOperation,
   isDocumentResult,
   isHeadResult,
   isIdentityResult,
   isOperationFailure,
+  isSourceResult,
 } from './types.ts';
 export type {
   BaseOperation,
@@ -41,6 +105,8 @@ export type {
   OperationProgram,
   OperationRequest,
   OperationResult,
+  OperationSourceBody,
+  OperationSourceResult,
   OperationTarget,
   OperationTemplate,
 } from './types.ts';

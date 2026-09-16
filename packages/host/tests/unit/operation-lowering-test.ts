@@ -5,6 +5,7 @@ import {
   VirtualNetwork,
   baseRealm,
   fetcher,
+  definitionKind,
   getFieldDefinitions,
   identifyCard,
   loadCardDef,
@@ -13,7 +14,10 @@ import {
   type Definition,
   type LowerOperationDeclarationsResult,
 } from '@cardstack/runtime-common';
-import { lowerOperationDeclarations } from '@cardstack/runtime-common/card-operations';
+import {
+  DEFINITION_FREE_BASE_OPERATIONS,
+  lowerOperationDeclarations,
+} from '@cardstack/runtime-common/card-operations';
 
 import ENV from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';
@@ -76,7 +80,7 @@ module('Unit | operation lowering', function (hooks) {
       typeof import('@cardstack/base/number')
     >('@cardstack/base/number'));
 
-    let { field, contains, linksTo, CardDef, FieldDef } = api;
+    let { field, contains, linksTo, linksToMany, CardDef, FieldDef } = api;
 
     class Author extends CardDef {
       static displayName = 'Author';
@@ -89,13 +93,16 @@ module('Unit | operation lowering', function (hooks) {
     class Comment extends FieldDef {
       static displayName = 'Comment';
       @field body = contains(StringField);
+      @field postedBy = contains(StringField);
       @field author = linksTo(() => Author);
       @field where = contains(Address);
     }
     class Activity extends CardDef {
       static displayName = 'Activity';
       @field label = contains(StringField);
+      @field postedBy = contains(StringField);
       @field owner = linksTo(() => Author);
+      @field witnesses = linksToMany(() => Author);
     }
     shim({ Author, Address, Comment, Activity });
     fixtures = {
@@ -122,7 +129,11 @@ module('Unit | operation lowering', function (hooks) {
       displayName: (def as typeof CardDef).displayName ?? null,
       fields,
       fieldDefs,
-      type: 'card-def',
+      // The kind the module-prerender route records, not an assumption: it is
+      // what decides which behaviors a type may build an operation on, so a
+      // file def's declarations have to be lowered against the kind the
+      // definition cache would really carry for it.
+      type: definitionKind(def),
     };
   }
 
@@ -164,17 +175,21 @@ module('Unit | operation lowering', function (hooks) {
 
   test('append lowers to an append statement, with a link-typed member as a card identity', async function (assert) {
     let { field, contains, containsMany, CardDef } = api;
-    let { operation, params, actor } = operations;
+    let { operation, params, actor, linkTo } = operations;
     class Report extends CardDef {
       static displayName = 'Report';
       @field title = contains(StringField);
       @field comments = containsMany(fixtures.Comment);
       @operation static addComment = {
         base: 'transform',
-        params: { body: StringField },
+        params: { body: StringField, author: linkTo(() => fixtures.Author) },
         append: {
           to: 'comments',
-          value: { body: params('body'), author: actor() },
+          value: {
+            body: params('body'),
+            postedBy: actor(),
+            author: params('author'),
+          },
         },
       } satisfies OperationsModule.OperationDeclaration;
     }
@@ -188,15 +203,82 @@ module('Unit | operation lowering', function (hooks) {
         base: 'transform',
         params: {
           body: { kind: 'field', codeRef: identifyCard(StringField)! },
+          author: { kind: 'link', codeRef: identifyCard(fixtures.Author)! },
         },
         program: {
           source:
-            'append(.comments;{body:params("body"),author:card(actor("id"))});',
+            'append(.comments;{body:params("body"),postedBy:actor(),author:card(params("author"))});',
           syntax: 'solidified',
         },
         deterministic: true,
       },
-      "`author: actor()` on a linksTo member becomes the actor's card identity",
+      'a link-typed member becomes a card identity while a scalar one stays the bare builtin',
+    );
+  });
+
+  test('an actor in a link position is an authoring issue, not a spelling the lowering repairs', async function (assert) {
+    let { field, contains, containsMany, linksTo, CardDef } = api;
+    let { operation, actor } = operations;
+    class Report extends CardDef {
+      static displayName = 'Report';
+      @field title = contains(StringField);
+      @field owner = linksTo(() => fixtures.Author);
+      @field comments = containsMany(fixtures.Comment);
+      @operation static claim = {
+        base: 'transform',
+        set: { owner: actor() },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static addComment = {
+        base: 'transform',
+        append: { to: 'comments', value: { author: actor() } },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ Report });
+
+    let result = await lower(Report);
+    assert.deepEqual(codes(result), ['actor-not-a-card', 'actor-not-a-card']);
+    assert.deepEqual(
+      result.issues.map((issue) => issue.path),
+      ['set.owner', 'append.value.author'],
+      'both the field itself and a member of a contained value are reached',
+    );
+    assert.true(
+      result.issues[0].message.includes('linkTo(…)'),
+      'the message names the declaration that does express a link to a person',
+    );
+    assert.true(
+      result.operations.claim.invalid,
+      'an operation carrying the issue reports it rather than running',
+    );
+  });
+
+  test('a create fills a link field with a card identity, and the caller is not one', async function (assert) {
+    let { field, contains, CardDef } = api;
+    let { operation, actor } = operations;
+    class Classroom extends CardDef {
+      static displayName = 'Classroom';
+      @field name = contains(StringField);
+      @operation static addActivity = {
+        base: 'create',
+        of: () => fixtures.Activity,
+        fill: { owner: actor() },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static addWitnessed = {
+        base: 'create',
+        of: () => fixtures.Activity,
+        fill: { witnesses: [actor()] },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ Classroom });
+
+    let result = await lower(Classroom);
+    assert.deepEqual(
+      result.issues.map((issue) => [issue.code, issue.path]),
+      [
+        ['actor-not-a-card', 'fill.owner'],
+        ['actor-not-a-card', 'fill.witnesses[0]'],
+      ],
+      'a link collection is filled with a list, so every entry is an identity too',
     );
   });
 
@@ -207,14 +289,12 @@ module('Unit | operation lowering', function (hooks) {
       static displayName = 'Report';
       @field status = contains(StringField);
       @field closedBy = contains(StringField);
-      @field owner = api.linksTo(() => fixtures.Author);
       @operation static close = {
         base: 'transform',
         params: { note: StringField },
         set: {
           status: 'closed',
-          closedBy: actor('id'),
-          owner: actor(),
+          closedBy: actor(),
           'cardInfo.notes': params('note'),
         },
       } satisfies OperationsModule.OperationDeclaration;
@@ -227,11 +307,10 @@ module('Unit | operation lowering', function (hooks) {
       lowered.close.program?.source,
       [
         '.status="closed";',
-        '.closedBy=actor("id");',
-        '.owner=card(actor("id"));',
+        '.closedBy=actor();',
         '.cardInfo.notes=params("note");',
       ].join('\n'),
-      'a scalar field reads the builtin directly, a link wraps it in card()',
+      'a scalar field reads the builtin directly',
     );
   });
 
@@ -264,11 +343,20 @@ module('Unit | operation lowering', function (hooks) {
         base: 'transform',
         assert: { unique: 'reviewers', by: actor(), snapshot: true },
       } satisfies OperationsModule.OperationDeclaration;
+      @operation static tagSelf = {
+        base: 'transform',
+        assert: { unique: 'tags', by: actor() },
+        append: { to: 'tags', value: actor() },
+      } satisfies OperationsModule.OperationDeclaration;
     }
     shim({ Report });
 
     let { operations: lowered, issues } = await lower(Report);
-    assert.deepEqual(issues, [], 'every declaration lowers cleanly');
+    assert.deepEqual(
+      issues.map((issue) => [issue.code, issue.path]),
+      [['actor-not-a-card', 'assert.by']],
+      'only the comparison against a link collection is refused',
+    );
     assert.strictEqual(
       lowered.addTag.program?.source,
       [
@@ -283,9 +371,16 @@ module('Unit | operation lowering', function (hooks) {
       'a link collection compares the linked card id against the identity itself — not against a card() projection — and an omitted message gets a default',
     );
     assert.strictEqual(
-      lowered.claimReview.program?.source,
-      'assert(all(.reviewers[];.id!=actor("id"));"reviewers already holds this value");',
-      'a keyless actor() being compared narrows to the id it is compared against, the way it does on its way into a link — the whole record would never equal an id string, so the check would hold for every item',
+      lowered.tagSelf.program?.source,
+      [
+        'assert(all(.tags[];.!=actor());"tags already holds this value");',
+        'append(.tags;actor());',
+      ].join('\n'),
+      'a contained collection compares the caller id against the item itself',
+    );
+    assert.true(
+      lowered.claimReview.invalid,
+      'while a link collection compares against a linked card id, which the caller is not',
     );
     assert.true(
       lowered.addReviewer.snapshot,
@@ -308,7 +403,7 @@ module('Unit | operation lowering', function (hooks) {
         base: 'create',
         params: { label: StringField, teacher: linkTo(() => fixtures.Author) },
         of: () => fixtures.Activity,
-        fill: { label: params('label'), owner: actor() },
+        fill: { label: params('label'), postedBy: actor() },
       } satisfies OperationsModule.OperationDeclaration;
     }
     shim({ Classroom });
@@ -326,7 +421,7 @@ module('Unit | operation lowering', function (hooks) {
         of: identifyCard(fixtures.Activity),
         fill: {
           label: { $ref: 'params', key: 'label' },
-          owner: { $ref: 'actor' },
+          postedBy: { $ref: 'actor' },
         },
         deterministic: true,
       },
@@ -346,7 +441,7 @@ module('Unit | operation lowering', function (hooks) {
         query: {
           filter: {
             on: () => fixtures.Author,
-            eq: { name: actor('id') },
+            eq: { name: actor() },
           },
           sort: [{ by: 'name', on: () => fixtures.Author, direction: 'desc' }],
           page: { size: 20, number: 0 },
@@ -366,7 +461,7 @@ module('Unit | operation lowering', function (hooks) {
           every: [
             {
               'item.on': identifyCard(fixtures.Author),
-              eq: { 'item.name': { $ref: 'actor', key: 'id' } },
+              eq: { 'item.name': { $ref: 'actor' } },
             },
             { matches: { $ref: 'params', key: 'term' } },
           ],
@@ -420,7 +515,7 @@ module('Unit | operation lowering', function (hooks) {
       @field title = contains(StringField);
       @operation static read: OperationsModule.OperationDeclaration = {
         base: 'read',
-        output: { label: actor('id') },
+        output: { label: actor() },
       };
     }
     shim({ Report });
@@ -431,7 +526,7 @@ module('Unit | operation lowering', function (hooks) {
       lowered.read,
       {
         base: 'read',
-        output: { source: '{label:actor("id")}', syntax: 'solidified' },
+        output: { source: '{label:actor()}', syntax: 'solidified' },
         deterministic: true,
       },
       'a declarative projection and a raw program reach the realm in one form',
@@ -460,6 +555,172 @@ module('Unit | operation lowering', function (hooks) {
   });
 
   // -------------------------------------------------------------------------
+  // The source-level writes
+  // -------------------------------------------------------------------------
+
+  test('an appendLine on a file def lowers to its payload and nothing else', async function (assert) {
+    let { FileDef } = api;
+    let { operation } = operations;
+    class LogFile extends FileDef {
+      static displayName = 'LogFile';
+      @operation static record = {
+        base: 'appendLine',
+        params: { line: StringField },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ LogFile });
+
+    let { operations: lowered, issues } = await lower(LogFile);
+    assert.deepEqual(issues, [], 'the declaration lowers cleanly');
+    assert.deepEqual(
+      lowered.record,
+      {
+        base: 'appendLine',
+        params: {
+          line: { kind: 'field', codeRef: identifyCard(StringField)! },
+        },
+        deterministic: true,
+      },
+      'there is no program: the base operation appends the line the payload carries',
+    );
+  });
+
+  test('an appendContainsMany keeps its item a marker-carrying template, per field', async function (assert) {
+    let { field, contains, containsMany, CardDef } = api;
+    let { operation, params, linkTo } = operations;
+    class EventLog extends CardDef {
+      static displayName = 'EventLog';
+      @field title = contains(StringField);
+      @field events = containsMany(fixtures.Comment);
+      @field labels = containsMany(StringField);
+      @operation static log = {
+        base: 'appendContainsMany',
+        params: { body: StringField, author: linkTo(() => fixtures.Author) },
+        field: 'events',
+        item: { body: params('body'), author: params('author') },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static logBoth = {
+        base: 'appendContainsMany',
+        params: { body: StringField, label: StringField },
+        fields: {
+          events: { body: params('body') },
+          labels: params('label'),
+        },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ EventLog });
+
+    let { operations: lowered, issues } = await lower(EventLog);
+    assert.deepEqual(issues, [], 'both declarations lower cleanly');
+    assert.deepEqual(
+      lowered.log.items,
+      {
+        events: {
+          body: { $ref: 'params', key: 'body' },
+          author: { $ref: 'params', key: 'author' },
+        },
+      },
+      'the item reaches the realm as data to substitute into the stored file, not as a program',
+    );
+    assert.strictEqual(
+      lowered.log.program,
+      undefined,
+      'an append runs no BXL at all',
+    );
+    assert.deepEqual(
+      lowered.logBoth.items,
+      {
+        events: { body: { $ref: 'params', key: 'body' } },
+        labels: { $ref: 'params', key: 'label' },
+      },
+      'each named field carries its own item, and a collection of primitives takes a bare value',
+    );
+  });
+
+  test('an item member is lowered against the field it lands in', async function (assert) {
+    // An item is a record of the item type's fields, and nothing about its
+    // own shape says which of them hold a card identity — so each member is
+    // read against its own field, the way a `fill`'s members are. The caller
+    // is a user id and no card stands for one, so an actor in a link position
+    // names a link that cannot resolve.
+    let { field, containsMany, CardDef } = api;
+    let { operation, actor } = operations;
+    class EventLog extends CardDef {
+      static displayName = 'EventLog';
+      @field events = containsMany(fixtures.Comment);
+      @operation static log: OperationsModule.OperationDeclaration = {
+        base: 'appendContainsMany',
+        field: 'events',
+        // `body` is a string field and `author` a link, so the same marker
+        // would be read two different ways in the two slots.
+        item: { body: actor(), author: actor() },
+      };
+    }
+    shim({ EventLog });
+
+    let result = await lower(EventLog);
+    assert.deepEqual(
+      result.issues.map((issue) => [issue.code, issue.path]),
+      [['actor-not-a-card', 'item.author']],
+      'only the member whose field is a link is refused',
+    );
+    assert.deepEqual(
+      result.operations.log.items,
+      { events: { body: { $ref: 'actor' }, author: { $ref: 'actor' } } },
+      'and both are stored as written, so invoking it reports the finding',
+    );
+  });
+
+  test('a realmConfig reference lowers to the builtin in a program and stays a marker in a template', async function (assert) {
+    let { field, contains, containsMany, CardDef } = api;
+    let { operation, realmConfig } = operations;
+    class Report extends CardDef {
+      static displayName = 'Report';
+      @field status = contains(StringField);
+      @field tags = containsMany(StringField);
+      @field events = containsMany(fixtures.Comment);
+      @operation static escalate = {
+        base: 'transform',
+        set: { status: realmConfig('escalatedStatus') },
+        append: { to: 'tags', value: realmConfig() },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static logDefault = {
+        base: 'appendContainsMany',
+        field: 'events',
+        item: { body: realmConfig('defaultNote') },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static open = {
+        base: 'create',
+        of: () => fixtures.Activity,
+        fill: { label: realmConfig('defaultLabel') },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ Report });
+
+    let { operations: lowered, issues } = await lower(Report);
+    assert.deepEqual(issues, [], 'a setting name is never checked here');
+    assert.strictEqual(
+      lowered.escalate.program?.source,
+      '.status=realmConfig("escalatedStatus");\nappend(.tags;realmConfig());',
+      'the marker lowers to the builtin of the same name, with and without a setting to read',
+    );
+    assert.deepEqual(
+      lowered.logDefault.items,
+      { events: { body: { $ref: 'realmConfig', key: 'defaultNote' } } },
+      'a template carries the marker rather than a value, since which realm the operation runs in is not known here',
+    );
+    assert.deepEqual(
+      lowered.open.fill,
+      { label: { $ref: 'realmConfig', key: 'defaultLabel' } },
+      'the same in a create',
+    );
+    assert.true(
+      lowered.escalate.deterministic,
+      'a realm setting is fixed for a given request, the way the rest of the context is',
+    );
+  });
+
+  // -------------------------------------------------------------------------
   // Determinism
   // -------------------------------------------------------------------------
 
@@ -477,7 +738,7 @@ module('Unit | operation lowering', function (hooks) {
         base: 'transform',
         params: { note: StringField },
         set: { title: params('note') },
-        output: { who: actor('id') },
+        output: { who: actor() },
       } satisfies OperationsModule.OperationDeclaration;
     }
     shim({ Report });
@@ -646,7 +907,7 @@ module('Unit | operation lowering', function (hooks) {
 
   test('card() naming a link identity lowers the same as naming it bare', async function (assert) {
     let { field, contains, linksTo, linksToMany, CardDef } = api;
-    let { operation, actor, card } = operations;
+    let { operation, params, card, linkTo } = operations;
     class Report extends CardDef {
       static displayName = 'Report';
       @field title = contains(StringField);
@@ -656,29 +917,29 @@ module('Unit | operation lowering', function (hooks) {
       });
       @operation static assignBare = {
         base: 'transform',
-        set: { owner: actor() },
+        params: { who: linkTo(() => fixtures.Author) },
+        set: { owner: params('who') },
       } satisfies OperationsModule.OperationDeclaration;
       @operation static assignExplicit = {
         base: 'transform',
-        set: { owner: card(actor()) },
+        params: { who: linkTo(() => fixtures.Author) },
+        set: { owner: card(params('who')) },
       } satisfies OperationsModule.OperationDeclaration;
       @operation static enrolExplicit = {
         base: 'transform',
-        append: { to: 'reviewers', value: card(actor()) },
+        params: { who: linkTo(() => fixtures.Author) },
+        append: { to: 'reviewers', value: card(params('who')) },
       } satisfies OperationsModule.OperationDeclaration;
     }
     shim({ Report });
 
     let { operations: lowered, issues } = await lower(Report);
     assert.deepEqual(issues, [], 'the declarations lower cleanly');
-    // `card(…)` says "this value is a card", so the marker inside it is
-    // narrowed to the id the constructor takes, exactly as the bare spelling
-    // is. Emitting `card(actor())` instead hands the whole actor record to a
-    // constructor that wants one id string, so the more precise spelling
-    // would be the one that fails.
+    // `card(…)` says "this value is a card", which a link slot already says,
+    // so naming it changes nothing about what the program does.
     assert.strictEqual(
       lowered.assignExplicit.program?.source,
-      '.owner=card(actor("id"));',
+      '.owner=card(params("who"));',
     );
     assert.strictEqual(
       lowered.assignBare.program?.source,
@@ -687,7 +948,7 @@ module('Unit | operation lowering', function (hooks) {
     );
     assert.strictEqual(
       lowered.enrolExplicit.program?.source,
-      'append(.reviewers;card(actor("id")));',
+      'append(.reviewers;card(params("who")));',
     );
   });
 
@@ -1034,5 +1295,437 @@ module('Unit | operation lowering', function (hooks) {
       { operations: {}, issues: [] },
       'the base operations a def type carries are not declarations, so there is nothing to lower',
     );
+  });
+
+  test('a behavior the def type does not carry is refused rather than lowered', async function (assert) {
+    // The decorator refuses each of these at class-definition time, so no
+    // class can carry one and these are driven from raw records. Worth
+    // driving all the same: a type's entry outlives the code that built it,
+    // and dispatch hands an entry's `base` to that behavior's executor — so a
+    // stored `appendLine` on a card would reach the executor for a target
+    // with no line to append to.
+    let { field, contains, containsMany, CardDef, FieldDef, FileDef } = api;
+    class Ledger extends CardDef {
+      static displayName = 'Ledger';
+      @field entries = containsMany(StringField);
+    }
+    class Attachment extends FileDef {
+      static displayName = 'Attachment';
+    }
+    class Caption extends FieldDef {
+      static displayName = 'Caption';
+      @field text = contains(StringField);
+    }
+    shim({ Ledger, Attachment, Caption });
+
+    let refused: [string, typeof BaseDef, string][] = [
+      ['appendLine', Ledger as unknown as typeof BaseDef, 'card definition'],
+      [
+        'appendContainsMany',
+        Attachment as unknown as typeof BaseDef,
+        'file definition',
+      ],
+      ['transform', Attachment as unknown as typeof BaseDef, 'file definition'],
+      // Not "a field definition": a bare `BaseDef` subclass is recorded under
+      // the same kind, so the message describes what the entry says rather
+      // than asserting which of the two this is.
+      [
+        'create',
+        Caption as unknown as typeof BaseDef,
+        'definition recorded as a field',
+      ],
+    ];
+    for (let [base, def, kindLabel] of refused) {
+      let result = await lowerOperationDeclarations(
+        { doIt: { base } } as Record<
+          string,
+          OperationsModule.OperationDeclaration
+        >,
+        {
+          definition: buildDefinition(def),
+          lookupDefinition,
+          identifyCard: (target) => identifyCard(target),
+        },
+      );
+      assert.deepEqual(
+        codes(result),
+        ['base-not-carried'],
+        `a ${kindLabel} cannot build an operation on "${base}"`,
+      );
+      assert.strictEqual(result.issues[0].path, 'base');
+      assert.true(
+        result.issues[0].message.includes(kindLabel),
+        'the finding names the def kind',
+      );
+      assert.true(
+        result.issues[0].message.includes(`"${base}"`),
+        'and the behavior it cannot carry out',
+      );
+      assert.true(
+        result.operations.doIt?.invalid,
+        'the operation is stored flagged, so invoking it reports the refusal rather than reading as unknown',
+      );
+    }
+
+    // A def extending `BaseDef` directly carries the two reads, and the
+    // decorator lets it declare one — but the definition cache records it
+    // under the same kind a field gets, since the kind is derived from the
+    // class and neither is a card or a file. Lowering reads only the entry, so
+    // refusing a field's `read` here would refuse this one too and leave a def
+    // that can declare a read and never invoke it.
+    class Addressable extends api.BaseDef {
+      static displayName = 'Addressable';
+    }
+    shim({ Addressable });
+    assert.strictEqual(
+      buildDefinition(Addressable).type,
+      'field-def',
+      'the two land under one recorded kind',
+    );
+    let addressable = await lowerOperationDeclarations(
+      { readRedacted: { base: 'read', output: { name: true } } } as Record<
+        string,
+        OperationsModule.OperationDeclaration
+      >,
+      {
+        definition: buildDefinition(Addressable),
+        lookupDefinition,
+        identifyCard: (target) => identifyCard(target),
+      },
+    );
+    assert.deepEqual(codes(addressable), [], 'so the read lowers');
+    assert.notOk(addressable.operations.readRedacted.invalid);
+  });
+
+  test('an append names a containsMany field the type actually has', async function (assert) {
+    let { field, contains, containsMany, linksToMany, CardDef } = api;
+    let { operation } = operations;
+    class Ledger extends CardDef {
+      static displayName = 'Ledger';
+      @field title = contains(StringField);
+      @field helpers = linksToMany(() => fixtures.Author);
+      @field entries = containsMany(StringField);
+      @operation static toScalar = {
+        base: 'appendContainsMany',
+        field: 'title',
+        item: 'x',
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static toLinks = {
+        base: 'appendContainsMany',
+        field: 'helpers',
+        item: 'https://example.test/people/1',
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static toNothing = {
+        base: 'appendContainsMany',
+        field: 'entires',
+        item: 'x',
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ Ledger });
+
+    let result = await lower(Ledger);
+    assert.deepEqual(codes(result), [
+      'not-a-collection',
+      'not-a-collection',
+      'unknown-field',
+    ]);
+    assert.true(
+      result.issues[1].message.includes('linksToMany'),
+      'a link collection is not one a card holds in its own file, so an append cannot splice into it',
+    );
+    assert.strictEqual(result.issues[0].path, 'field');
+    assert.strictEqual(
+      result.operations.toScalar.items,
+      undefined,
+      'nothing is stored for the field that could not carry the item',
+    );
+  });
+
+  test("an appended item's members are held to the item type's own fields", async function (assert) {
+    let { field, contains, containsMany, CardDef } = api;
+    let { operation, params } = operations;
+
+    // An item is checked the way an `append` value and a `fill` are, and by
+    // the same two layers. A reference to a param the schema does not declare
+    // is structure the declaration API reads, so it refuses the declaration
+    // where the class is defined.
+    assert.throws(
+      () => {
+        class Flawed extends CardDef {
+          static displayName = 'Flawed';
+          @field events = containsMany(fixtures.Comment);
+          @operation static log = {
+            base: 'appendContainsMany',
+            params: { body: StringField },
+            field: 'events',
+            item: { body: params('note' as 'body') },
+          } satisfies OperationsModule.OperationDeclaration;
+        }
+        return Flawed;
+      },
+      /references the param "note", which the `params` schema does not declare/,
+      'an undeclared param inside an item never reaches lowering',
+    );
+
+    // Which members the item type declares is what only the definition
+    // reveals, so a misspelled one is lowering's to record.
+    class EventLog extends CardDef {
+      static displayName = 'EventLog';
+      @field title = contains(StringField);
+      @field events = containsMany(fixtures.Comment);
+      @field slug = contains(StringField, {
+        computeVia: function (this: EventLog) {
+          return this.title;
+        },
+      });
+      @operation static log: OperationsModule.OperationDeclaration = {
+        base: 'appendContainsMany',
+        params: { body: StringField },
+        field: 'events',
+        item: { bdy: params('body') },
+      };
+      @operation static logComputed: OperationsModule.OperationDeclaration = {
+        base: 'appendContainsMany',
+        field: 'slug',
+        item: 'x',
+      };
+    }
+    shim({ EventLog });
+
+    let result = await lower(EventLog);
+    assert.deepEqual(codes(result), ['unknown-field', 'computed-write']);
+    assert.strictEqual(
+      result.issues[0].path,
+      'item.bdy',
+      'the finding names where in the item the author wrote it',
+    );
+    assert.true(
+      result.issues[0].message.includes('Comment'),
+      'and the item type the member was checked against',
+    );
+    assert.deepEqual(
+      result.operations.log.items,
+      { events: { bdy: { $ref: 'params', key: 'body' } } },
+      'the item is stored as written, so invoking it reports the finding rather than appending something else',
+    );
+  });
+
+  test('a program declared on a base that runs none is recorded', async function (assert) {
+    let { field, containsMany, CardDef, FileDef } = api;
+    class EventLog extends CardDef {
+      static displayName = 'EventLog';
+      @field events = containsMany(StringField);
+    }
+    class LogFile extends FileDef {
+      static displayName = 'LogFile';
+    }
+    shim({ EventLog, LogFile });
+
+    // Each names work of its own as well, so the only thing left to report is
+    // the program that would never run.
+    for (let [def, base, clauses] of [
+      [
+        EventLog as unknown as typeof BaseDef,
+        'appendContainsMany',
+        { field: 'events', item: 'x' },
+      ],
+      [LogFile as unknown as typeof BaseDef, 'update', {}],
+    ] as const) {
+      let result = await lowerOperationDeclarations(
+        {
+          doIt: {
+            base,
+            ...clauses,
+            transformations: { $bxl: '.status = "closed";' },
+          },
+        } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+        {
+          definition: buildDefinition(def),
+          lookupDefinition,
+          identifyCard: (target) => identifyCard(target),
+        },
+      );
+      assert.deepEqual(
+        codes(result),
+        ['unrunnable-program'],
+        `a "${base}" writes to the stored file rather than running a program`,
+      );
+      assert.strictEqual(
+        result.operations.doIt.program,
+        undefined,
+        'and nothing is stored that could later be mistaken for one that runs',
+      );
+    }
+  });
+
+  test('an append that says nothing to append is recorded rather than stored as work', async function (assert) {
+    // The decorator refuses each of these, so one only ever arrives on a
+    // stored entry — where appending nothing, or a literal `null`, or picking
+    // between two spellings that disagree, is worse than refusing.
+    let { field, containsMany, CardDef } = api;
+    class Ledger extends CardDef {
+      static displayName = 'Ledger';
+      @field entries = containsMany(StringField);
+    }
+    shim({ Ledger });
+
+    let cases: [string, Record<string, unknown>, string][] = [
+      ['no field named', { base: 'appendContainsMany' }, 'field'],
+      [
+        'an empty fields map',
+        { base: 'appendContainsMany', fields: {} },
+        'field',
+      ],
+      [
+        'a field with no item',
+        { base: 'appendContainsMany', field: 'entries' },
+        'item',
+      ],
+      [
+        'both spellings at once',
+        {
+          base: 'appendContainsMany',
+          field: 'entries',
+          item: 'a',
+          fields: { entries: 'b' },
+        },
+        'fields',
+      ],
+    ];
+    for (let [label, declaration, path] of cases) {
+      let result = await lowerOperationDeclarations(
+        { log: declaration } as unknown as Record<
+          string,
+          OperationsModule.OperationDeclaration
+        >,
+        {
+          definition: buildDefinition(Ledger),
+          lookupDefinition,
+          identifyCard: (target) => identifyCard(target),
+        },
+      );
+      assert.deepEqual(
+        result.issues.map((issue) => [issue.code, issue.path]),
+        [['incomplete-append', path]],
+        `${label} is recorded`,
+      );
+      assert.strictEqual(
+        result.operations.log.items,
+        undefined,
+        `${label} stores nothing to append`,
+      );
+      assert.true(result.operations.log.invalid, `${label} is flagged`);
+    }
+  });
+
+  test('a finding under the fields spelling names the field it was written at', async function (assert) {
+    let { field, containsMany, CardDef } = api;
+    let { operation } = operations;
+    class EventLog extends CardDef {
+      static displayName = 'EventLog';
+      @field events = containsMany(fixtures.Comment);
+      @field labels = containsMany(StringField);
+      @operation static log: OperationsModule.OperationDeclaration = {
+        base: 'appendContainsMany',
+        fields: { notes: 'x', events: { bdy: 'y' } },
+      };
+    }
+    shim({ EventLog });
+
+    let result = await lower(EventLog);
+    assert.deepEqual(
+      result.issues.map((issue) => [issue.code, issue.path]),
+      [
+        ['unknown-field', 'fields.notes'],
+        ['unknown-field', 'fields.events.bdy'],
+      ],
+      'the plural spelling carries its own clause path, at the field and inside its item',
+    );
+  });
+
+  test("a file def's read keeps the program its output lowers to", async function (assert) {
+    // The two appends and a file's `update` write to the stored file and run
+    // no program. A `read` is not one of them whatever it is declared on: its
+    // `output` projects the document the read serves.
+    let { FileDef } = api;
+    let { operation, bxl } = operations;
+    class Attachment extends FileDef {
+      static displayName = 'Attachment';
+      @operation static readRedacted: OperationsModule.OperationDeclaration = {
+        base: 'read',
+        output: bxl`{ name: .name }`,
+      };
+    }
+    shim({ Attachment });
+
+    let result = await lower(Attachment);
+    assert.deepEqual(codes(result), [], 'the projection is not refused');
+    assert.deepEqual(result.operations.readRedacted.output, {
+      source: '{name:.name}',
+      syntax: 'solidified',
+    });
+  });
+
+  test('a realmConfig reference with no setting named cannot stand for a card identity', async function (assert) {
+    let { field, contains, linksTo, CardDef } = api;
+    let { operation, realmConfig } = operations;
+    class Report extends CardDef {
+      static displayName = 'Report';
+      @field title = contains(StringField);
+      @field owner = linksTo(() => fixtures.Author);
+      @operation static assign: OperationsModule.OperationDeclaration = {
+        base: 'transform',
+        set: { owner: realmConfig() },
+      };
+    }
+    shim({ Report });
+
+    let result = await lower(Report);
+    assert.deepEqual(codes(result), ['link-requires-identity']);
+    assert.strictEqual(
+      result.operations.assign.program?.source,
+      '.owner=card(realmConfig());',
+      'the refused form is stored as the executor would read it, so nothing quietly writes something else',
+    );
+  });
+
+  test('a reserved name is refused rather than lowered', async function (assert) {
+    // The decorator refuses these names, so no class can carry one and this
+    // branch is unreachable through a real declaration — which is why it is
+    // driven from a raw record. It is worth driving: a type's entry outlives
+    // the code that built it, and this refusal is the only thing standing
+    // between a stored entry under a definition-free name and the built-in
+    // running in place of it. The realm resolves the name before reading any
+    // definition, so a lowered entry here would be dispatched straight past
+    // rather than reported.
+    let { field, contains, CardDef } = api;
+    class Reserved extends CardDef {
+      static displayName = 'Reserved';
+      @field title = contains(StringField);
+    }
+    shim({ Reserved });
+
+    for (let name of DEFINITION_FREE_BASE_OPERATIONS) {
+      let result = await lowerOperationDeclarations(
+        { [name]: { base: 'read' } } as Record<
+          string,
+          OperationsModule.OperationDeclaration
+        >,
+        {
+          definition: buildDefinition(Reserved),
+          lookupDefinition,
+          identifyCard: (target) => identifyCard(target),
+        },
+      );
+      assert.deepEqual(
+        codes(result),
+        ['reserved-name'],
+        `${name} is recorded as reserved`,
+      );
+      assert.true(
+        result.operations[name]?.invalid,
+        `${name} is marked invalid rather than dropped, so a consumer reading the entry sees the refusal`,
+      );
+    }
   });
 });

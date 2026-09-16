@@ -1208,7 +1208,7 @@ strictEqual(
 // through `instance`; the host supplies all three through `context`.
 const requestContext = {
   params: { tag: 'typed', expectedStatus: 'language', caption: 'from Ada' },
-  actor: { id: 'user:ada', displayName: 'Ada' },
+  actor: 'user:ada',
   instance: { id: 'https://example.test/TierItem/typescript', revision: 7 },
 };
 
@@ -1217,7 +1217,7 @@ const contextResult = mutateBxlCardSource(
   contextSource,
   'assert(.tags[0] == params("expectedStatus"), "tags must still lead with the language");\n' +
     'append(.tags; params("tag"));\n' +
-    'append(.tags; actor("id"));\n' +
+    'append(.tags; actor());\n' +
     '.image = instance("id");',
   {
     schema,
@@ -1243,11 +1243,11 @@ deepStrictEqual(
   'the input source document is still immutable',
 );
 
-// `actor()` and `instance()` with no argument hand the program the whole
-// object, so a caption can be composed from several of its fields.
+// `instance()` with no argument hands the program the whole object, so a
+// caption can be composed from several of its fields alongside the caller.
 const wholeObjectResult = mutateBxlCardSource(
   sourceFixture(),
-  '.image = actor().displayName + " · " + (instance().revision | tostring);',
+  '.image = actor() + " · " + (instance().revision | tostring);',
   {
     schema,
     syntax: 'solidified',
@@ -1256,7 +1256,28 @@ const wholeObjectResult = mutateBxlCardSource(
     ...projectionOptions,
   },
 );
-strictEqual(wholeObjectResult.document.data.attributes?.image, 'Ada · 7');
+strictEqual(wholeObjectResult.document.data.attributes?.image, 'user:ada · 7');
+
+// `actor()` is the caller's user id and has nothing to read a key out of, so
+// a keyed read resolves to no builtin at all — and the failure says what to
+// write instead rather than leaving the author to guess why the name that
+// works keyless does not work keyed.
+throws(
+  () =>
+    mutateBxlCardSource(sourceFixture(), 'append(.tags; actor("id"));', {
+      schema,
+      syntax: 'solidified',
+      programId: 'request-context-keyed-actor',
+      context: requestContext,
+      ...projectionOptions,
+    }),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    /'actor\/1' is not defined\. `actor\(\)` takes no argument and returns the caller's user id/.test(
+      error.message,
+    ),
+  'a keyed actor read names the keyless form that replaces it',
+);
 
 // A false `assert` reading the payload fails the program rather than the
 // builtin: the value arrived, the precondition did not hold.
@@ -1298,7 +1319,7 @@ throws(
 // The same for a slot the host left out of the context it did supply.
 throws(
   () =>
-    mutateBxlCardSource(sourceFixture(), 'append(.tags; actor("id"));', {
+    mutateBxlCardSource(sourceFixture(), 'append(.tags; actor());', {
       schema,
       syntax: 'solidified',
       programId: 'request-context-missing-slot',
@@ -1307,7 +1328,7 @@ throws(
     }),
   (error: unknown) =>
     error instanceof BxlMutationError &&
-    /actor\(key\) needs the caller identity/.test(error.message),
+    /actor\(\) needs the caller identity/.test(error.message),
   'a program naming actor without an actor in the context fails',
 );
 
@@ -1723,11 +1744,12 @@ deepStrictEqual(withContext.document, withoutContext.document);
 deepStrictEqual(withContext.plan, withoutContext.plan);
 
 // Readable syntax reaches the same builtins. The call name passes through as
-// written; the quoted key is held literal by the compiler, which is what the
-// colliding-label case below relies on.
+// written, `params`' quoted key is held literal by the compiler — which is
+// what the colliding-label case below relies on — and `actor()` carries no
+// key to hold.
 const readableResult = mutateBxlCardSource(
   sourceFixture(),
-  'append(Tags, params("tag"));\nImage = actor("id");',
+  'append(Tags, params("tag"));\nImage = actor();',
   {
     schema,
     programId: 'request-context-readable',
@@ -1746,7 +1768,7 @@ strictEqual(readableResult.document.data.attributes?.image, 'user:ada');
 // of the accessor protocol rather than of any value, so they need host
 // objects that observe being read.
 {
-  const readProbe = prepareBxlMutation('.title = actor("lazy");', {
+  const readProbe = prepareBxlMutation('.title = instance("lazy");', {
     targetKind: 'card',
     syntax: 'solidified',
     schema: {
@@ -1765,7 +1787,7 @@ strictEqual(readableResult.document.data.attributes?.image, 'user:ada');
   // An accessor is read once per lookup, and the program receives the value
   // that was checked — not whatever a second read would return.
   let reads = 0;
-  const counting: Record<string, unknown> = { id: 'user:ada' };
+  const counting: Record<string, unknown> = { id: 'https://example.test/1' };
   Object.defineProperty(counting, 'lazy', {
     enumerable: true,
     get() {
@@ -1777,7 +1799,7 @@ strictEqual(readableResult.document.data.attributes?.image, 'user:ada');
     { title: null },
     {
       programId: 'request-context-single-read',
-      context: { actor: counting } as never,
+      context: { instance: counting } as never,
     },
   );
   strictEqual(
@@ -2065,6 +2087,47 @@ strictEqual(
     'cardInfo.theme',
   ).links?.self,
   darkTheme,
+);
+
+// A host that could not supply a linked Card's Fields names those Fields, not
+// the link. The Card stores the edge, so reading the edge is reading the Card's
+// own value and still answers; only the Fields beneath it are refused.
+const shadowedMembers: BxlMutationOverlays = {
+  unavailable: [
+    { path: 'cardInfo.theme.name', tier: 'linked', reason: 'not-searchable' },
+  ],
+};
+strictEqual(
+  overlayMutation('.image = .cardInfo.theme.id;', {
+    overlays: shadowedMembers,
+  }).document.data.attributes?.image,
+  'https://example.test/Theme/original',
+);
+doesNotThrow(
+  () =>
+    overlayMutation('assert(.cardInfo.theme != null;"needs a theme");', {
+      overlays: shadowedMembers,
+    }),
+  'an assert over the stored edge holds rather than demanding a snapshot',
+);
+strictEqual(
+  overlayError('.image = .cardInfo.theme.name;', {
+    overlays: shadowedMembers,
+  }).code,
+  'snapshot-unavailable',
+  'the Field the host could not supply is still refused',
+);
+
+// The relief above is keyed on the Card answering at that path of its own. The
+// root is excluded: every Card with any content answers there, so the test
+// cannot discriminate, and the whole Card is precisely what an overlay
+// completes.
+strictEqual(
+  overlayError('.image = (. | tostring);', {
+    overlays: shadowedMembers,
+  }).code,
+  'snapshot-unavailable',
+  'a read of the whole Card still reports what it is missing',
 );
 
 // The same holds however the overlay shapes the value: a computed Field the

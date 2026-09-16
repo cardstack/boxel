@@ -3,7 +3,9 @@ import type {
   Kind,
   FileRef,
   DBAdapter,
+  SplicedSource,
 } from '@cardstack/runtime-common';
+import { streamSpliced } from '@cardstack/runtime-common';
 import {
   createResponse,
   logger,
@@ -12,9 +14,13 @@ import {
   type TokenClaims,
   clearSessionRoom,
   fetchRealmSessionRooms,
+  isRealmServerNotInRoomError,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import type { LocalPath } from '@cardstack/runtime-common/paths';
+import {
+  partialWritePath,
+  type LocalPath,
+} from '@cardstack/runtime-common/paths';
 import type { ServerResponse } from 'http';
 import sane, { type Watcher } from 'sane';
 
@@ -23,16 +29,21 @@ import fsExtra from 'fs-extra';
 const {
   existsSync,
   writeFileSync,
+  appendFileSync,
   statSync,
   ensureDirSync,
   ensureFileSync,
   createReadStream,
+  createWriteStream,
+  renameSync,
   removeSync,
 } = fsExtra;
 import { join } from 'path';
 import { Duplex } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import type {
   RequestContext,
+  AdapterAppendResult,
   AdapterWriteResult,
 } from '@cardstack/runtime-common/realm';
 import type {
@@ -58,40 +69,6 @@ function statIfExists(absolutePath: string): Stats | undefined {
     }
     throw err;
   }
-}
-
-function parseMatrixSendEventError(error: unknown): {
-  status?: number;
-  errcode?: string;
-  error?: string;
-} | null {
-  if (!(error instanceof Error)) {
-    return null;
-  }
-
-  let match = error.message.match(/status (\d+) - (\{.*\})$/);
-  if (!match) {
-    return null;
-  }
-
-  let [, status, body] = match;
-  try {
-    return {
-      status: Number(status),
-      ...(JSON.parse(body) as { errcode?: string; error?: string }),
-    };
-  } catch (_err) {
-    return { status: Number(status) };
-  }
-}
-
-function isRealmServerNotInRoomError(error: unknown, roomId: string): boolean {
-  let details = parseMatrixSendEventError(error);
-  return Boolean(
-    details?.status === 403 &&
-    details?.errcode === 'M_FORBIDDEN' &&
-    details?.error?.includes(`not in room ${roomId}`),
-  );
 }
 
 export class NodeAdapter implements RealmAdapter {
@@ -258,6 +235,78 @@ export class NodeAdapter implements RealmAdapter {
       path: absolutePath,
       lastModified: unixTime(mtime.getTime()),
     };
+  }
+
+  // Opened in append mode, so the file system positions the write at the end
+  // of the file and nothing here reads or rewrites what is already stored
+  // there — which is what keeps the cost the added content's rather than the
+  // file's, and what makes the write safe to hand a path holding hundreds of
+  // megabytes.
+  //
+  // The length comes from the stat the modification time already needs, so it
+  // costs nothing beyond it and describes the same state.
+  async append(
+    path: LocalPath,
+    contents: string | Uint8Array,
+  ): Promise<AdapterAppendResult> {
+    let absolutePath = join(this.realmDir, path);
+    ensureFileSync(absolutePath);
+    appendFileSync(absolutePath, contents);
+    let { mtime, size } = statSync(absolutePath);
+    return {
+      path: absolutePath,
+      lastModified: unixTime(mtime.getTime()),
+      size,
+    };
+  }
+
+  // The described content's ranges name the very file being replaced, so it
+  // cannot be written straight over: the read would be reading what the write
+  // had already truncated. It is assembled beside the file and renamed onto
+  // it, which is atomic, so the file only ever holds the content it had or the
+  // content it now has — and the staging name is one the realm treats as no
+  // part of itself, so a half-written file is never indexed or served.
+  async writeSpliced(
+    path: LocalPath,
+    content: SplicedSource,
+  ): Promise<AdapterWriteResult> {
+    let absolutePath = join(this.realmDir, path);
+    let stagedPath = join(this.realmDir, partialWritePath(path));
+    try {
+      ensureFileSync(stagedPath);
+      await pipeline(
+        streamSpliced(content, (start, end) =>
+          // `end` is exclusive here and inclusive for a read stream.
+          createReadStream(absolutePath, { start, end: end - 1 }),
+        ),
+        createWriteStream(stagedPath),
+      );
+      renameSync(stagedPath, absolutePath);
+    } finally {
+      removeSync(stagedPath);
+    }
+    let { mtime } = statSync(absolutePath);
+    return {
+      path: absolutePath,
+      lastModified: unixTime(mtime.getTime()),
+    };
+  }
+
+  async *readRange(
+    path: LocalPath,
+    start: number,
+    end: number,
+  ): AsyncIterable<Uint8Array> {
+    if (end <= start) {
+      return;
+    }
+    // `end` is exclusive here and inclusive for a read stream.
+    for await (let chunk of createReadStream(join(this.realmDir, path), {
+      start,
+      end: end - 1,
+    })) {
+      yield chunk as Uint8Array;
+    }
   }
 
   async remove(path: LocalPath): Promise<void> {

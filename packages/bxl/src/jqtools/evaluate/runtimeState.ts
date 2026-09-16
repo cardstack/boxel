@@ -12,15 +12,47 @@ export interface NativeRuntimeSignal {
   readonly reason?: unknown;
 }
 
+// What `maxMillis` measures. 'wall' (the default) is elapsed time, so a
+// result can depend on host load. 'cpu' is process CPU time where the host
+// exposes it (Node's process.cpuUsage) and wall time elsewhere. A function
+// is an explicit clock in milliseconds, for tests and for hosts with a
+// better one. Any runtime limit, this one included, takes the streaming
+// evaluator instead of the compiled-scalar fast path.
+export type NativeRuntimeClock = 'wall' | 'cpu' | (() => number);
+
 export interface NativeRuntimeLimits {
   maxSteps?: number;
   maxOutputs?: number;
   maxOutputBytes?: number;
   maxMillis?: number;
+  clock?: NativeRuntimeClock;
   signal?: NativeRuntimeSignal;
 }
 
-const DEFAULT_RUNTIME_LIMITS: Required<Omit<NativeRuntimeLimits, 'signal'>> = {
+export function resolveRuntimeClock(
+  clock: NativeRuntimeClock | undefined,
+): () => number {
+  if (typeof clock === 'function') return clock;
+  if (clock === 'cpu') {
+    const proc = (
+      globalThis as {
+        process?: { cpuUsage?: () => { user: number; system: number } };
+      }
+    ).process;
+    if (typeof proc?.cpuUsage === 'function') {
+      const cpuUsage = proc.cpuUsage.bind(proc);
+      return () => {
+        const usage = cpuUsage();
+        return (usage.user + usage.system) / 1000;
+      };
+    }
+  }
+  return Date.now;
+}
+
+const DEFAULT_RUNTIME_LIMITS: Required<
+  Omit<NativeRuntimeLimits, 'signal' | 'clock'>
+> = {
   maxSteps: 250_000,
   maxOutputs: 10_000,
   maxOutputBytes: 5_000_000,
@@ -28,9 +60,11 @@ const DEFAULT_RUNTIME_LIMITS: Required<Omit<NativeRuntimeLimits, 'signal'>> = {
 };
 
 interface RuntimeContext extends NativeRuntimeDiagnostics {
-  limits: Required<Omit<NativeRuntimeLimits, 'signal'>> & {
+  limits: Required<Omit<NativeRuntimeLimits, 'signal' | 'clock'>> & {
     signal?: NativeRuntimeSignal;
+    clock?: NativeRuntimeClock;
   };
+  clock: () => number;
   startMillis: number;
   steps: number;
   outputs: number;
@@ -55,11 +89,13 @@ export class HaltSignal extends Error {
 
 export class RuntimeLimitError extends JqEvaluateError {
   readonly limit:
-    | keyof Required<Omit<NativeRuntimeLimits, 'signal'>>
+    | keyof Required<Omit<NativeRuntimeLimits, 'signal' | 'clock'>>
     | 'signal';
 
   constructor(
-    limit: keyof Required<Omit<NativeRuntimeLimits, 'signal'>> | 'signal',
+    limit:
+      | keyof Required<Omit<NativeRuntimeLimits, 'signal' | 'clock'>>
+      | 'signal',
     message: string,
   ) {
     super(message);
@@ -97,11 +133,13 @@ export function withRuntimeDiagnostics<T>(
     debugMessages: [],
     stderr: [],
     limits: normalizeRuntimeLimits(limits),
-    startMillis: Date.now(),
+    clock: resolveRuntimeClock(limits?.clock),
+    startMillis: 0,
     steps: 0,
     outputs: 0,
     outputBytes: 0,
   };
+  context.startMillis = context.clock();
   runtimeStack.push(context);
 
   try {
@@ -146,6 +184,29 @@ export interface NativeRequestContext {
 }
 
 const requestContextStack: NativeRequestContext[] = [];
+
+/**
+ * What to add to `'NAME/arity' is not defined` when the name is a
+ * request-context builtin written at an arity it does not have.
+ *
+ * Resolution is per `NAME/arity`, so `actor("id")` is not a wrong argument to
+ * a call that exists — it is a call that does not exist, and the bare "not
+ * defined" leaves an author to guess whether the builtin is unavailable here
+ * or merely spelled differently. The shape of each accessor is this module's
+ * subject, so the sentence that resolves that guess lives with it.
+ */
+const NOT_DEFINED_HINTS: Readonly<Record<string, string>> = {
+  'actor/1':
+    "`actor()` takes no argument and returns the caller's user id; there is " +
+    'no member to read out of it.',
+};
+
+/** The guidance {@link NOT_DEFINED_HINTS} holds for `name`, if any. */
+export function notDefinedHint(name: string): string | undefined {
+  return Object.prototype.hasOwnProperty.call(NOT_DEFINED_HINTS, name)
+    ? NOT_DEFINED_HINTS[name]
+    : undefined;
+}
 
 /**
  * Scope `context` to one `callback`, which is the only way a program reaches
@@ -266,7 +327,7 @@ export function checkRuntimeBudget(units = 1) {
   if (
     isFiniteLimit(context.limits.maxMillis) &&
     context.steps % 1024 === 0 &&
-    Date.now() - context.startMillis > context.limits.maxMillis
+    context.clock() - context.startMillis > context.limits.maxMillis
   ) {
     throw new RuntimeLimitError(
       'maxMillis',

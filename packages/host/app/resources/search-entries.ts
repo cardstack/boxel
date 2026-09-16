@@ -28,6 +28,7 @@ import {
   ri,
   rri,
   wireFilterHasMatches,
+  wireFilterTypeAnchors,
   RealmPaths,
   type CardResource,
   type ErrorEntry,
@@ -44,6 +45,10 @@ import {
 
 import { knownFileMetaUrls } from '../lib/known-file-meta-urls';
 import { LiveSearchRefreshScheduler } from '../lib/live-search-refresh-scheduler';
+import {
+  LiveSearchTypeGate,
+  stripJsonSuffix,
+} from '../lib/live-search-type-gate';
 import { normalizeRealms } from '../lib/realm-utils';
 import { searchErrorEntry } from '../lib/search-error-entry';
 
@@ -57,7 +62,6 @@ import type {
 } from '@cardstack/base/matrix-event';
 
 const waiter = buildWaiter('search-entries-resource:search-waiter');
-
 // `SearchEntryRendering` is the card-facing rendering view-model (it rides the
 // `@context` search surface), so it lives in runtime-common; re-exported
 // here because this resource builds it and call sites import it from here.
@@ -140,6 +144,18 @@ export class SearchEntriesResource extends Resource<Args> {
   // `realmsNeedingRefresh`.
   private pendingSelectiveRefresh: Map<string, number> | undefined;
 
+  // Decides which incremental index events are worth a re-run, by comparing
+  // the types an event names against the ones this query's filter anchors on.
+  // The prerender_html channel is not routed through it: that channel is
+  // handled below by refreshing the members the event carries newer HTML for,
+  // which already costs nothing when it names none of them.
+  #typeGate = new LiveSearchTypeGate({
+    anchors: () => wireFilterTypeAnchors(this.#previousQuery?.filter),
+    loader: () => this.loaderService.loader,
+    virtualNetwork: () => this.network.virtualNetwork,
+    isDestroyed: () => isDestroyed(this),
+  });
+
   // Bumped by every search-task run (and on teardown) so an in-flight
   // `#computeSelectiveRefresh` from a superseded run stops issuing GETs: the
   // task body's awaits are cancellable, but a plain async method keeps
@@ -197,6 +213,7 @@ export class SearchEntriesResource extends Resource<Args> {
       this.realmsNeedingRefresh.clear();
       this.pendingSelectiveRefresh = undefined;
       this.#refreshEpoch++;
+      this.#typeGate.forget();
     });
   }
 
@@ -263,6 +280,7 @@ export class SearchEntriesResource extends Resource<Args> {
       this.#previousRealms = undefined;
       this.realmsNeedingRefresh.clear();
       this.pendingSelectiveRefresh = undefined;
+      this.#typeGate.forget();
       this.#refreshScheduler.cancel();
       // An in-flight selective refresh must stop issuing GETs for the
       // cleared query, same as on teardown.
@@ -333,6 +351,20 @@ export class SearchEntriesResource extends Resource<Args> {
             return;
           }
 
+          // An incremental index event that provably can't have moved this
+          // query's membership costs nothing: without the test, a write to a
+          // type this query isn't anchored on re-runs it in full — on every
+          // client holding it, for every such query each of them holds.
+          if (
+            isIncrementalIndex &&
+            this.#typeGate.indexEventCannotMatch(event)
+          ) {
+            this.#log.info(
+              `incremental index event on ${realm} touched no type this query is anchored on; skipping refresh`,
+            );
+            return;
+          }
+
           // A prerender_html event can't change a structured query's
           // membership — only its members' renderings. So for a structured,
           // refreshable query, refresh just the members the event carries
@@ -372,6 +404,9 @@ export class SearchEntriesResource extends Resource<Args> {
     // in place would otherwise be compared against itself and never re-run.
     this.#previousQuery = structuredClone(query);
     this.#previousRealms = realms;
+    if (queryChanged) {
+      this.#typeGate.forget();
+    }
     // A query/realm change owns the whole result set again — including any
     // event-triggered refresh still waiting in the scheduler's window, whose
     // accumulated state was just cleared.
@@ -766,16 +801,26 @@ export class SearchEntriesResource extends Resource<Args> {
     return fields === undefined ? undefined : fields.join(',');
   }
 
-  // The `css` resources base64-embed their whole stylesheet in the href; the
-  // loader import is what registers each scoped stylesheet with the document,
-  // so entries are paint-ready when exposed.
+  // The loader import is what registers each scoped stylesheet with the
+  // document, so entries are paint-ready when exposed. An inline-form href
+  // resolves locally, but a hashed-form href is a network fetch that can fail
+  // (a post-sweep orphan, an unreachable realm) — a missing stylesheet
+  // degrades that entry's styling, never the result list.
   private async loadStylesheets(doc: EntryCollectionDocument) {
     let hrefs = (doc.included ?? [])
       .filter(isCssResource)
       .map((resource) => resource.attributes.href);
-    await Promise.all(
+    let results = await Promise.allSettled(
       hrefs.map((href) => this.loaderService.loader.import(href)),
     );
+    for (let [i, result] of results.entries()) {
+      if (result.status === 'rejected') {
+        this.#log.warn(
+          `could not load scoped stylesheet ${hrefs[i]}; results render unstyled`,
+          result.reason,
+        );
+      }
+    }
   }
 
   private buildEntries(doc: EntryCollectionDocument): SearchEntry[] {
@@ -926,21 +971,11 @@ function contentEquals(a: SearchEntry, b: SearchEntry): boolean {
   return isEqual(aContent, bContent);
 }
 
-// A prerender_html invalidation names the underlying file (`books/1.json`),
-// which can back TWO result rows: the card instance (id `books/1` — instance
-// ids never carry the extension) and the file-meta row (id `books/1.json` —
-// every file gets a file entry, card JSON included). Stripping a trailing
-// `.json` from both sides lets the one invalidation reach both rows without
-// knowing which kind a member is: the instance row needs the invalidation
-// normalized, and the file row then needs its own id normalized the same way
-// to keep matching. For every other file kind (`notes.md`, `book.gts`) the
-// strip is a no-op and the comparison is exact.
-function stripJsonSuffix(url: string): string {
-  return url.replace(/\.json$/, '');
-}
-
 // The highest generation among the queued invalidation URLs that name this
-// member, or undefined when none do.
+// member, or undefined when none do. Both sides are normalized because one
+// prerender_html invalidation can back two result rows — the card instance
+// and the file-meta row — and which kind a member is doesn't have to be
+// known to reach it.
 function invalidationGenerationFor(
   member: SearchEntry,
   invalidations: Map<string, number>,

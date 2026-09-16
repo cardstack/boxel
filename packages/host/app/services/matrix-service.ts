@@ -4,6 +4,7 @@ import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import { cached, tracked } from '@glimmer/tracking';
 
@@ -169,6 +170,16 @@ const UNREACHABLE_RETRY_INTERVAL_MS = 10_000;
 const MAX_UNREACHABLE_RETRY_ATTEMPTS = 6;
 
 const realmEventsLogger = logger('realm:events');
+
+// A sign-in is the stretch of app work `settled()` is most likely to resolve in
+// the middle of. The sign-in button performs an ember-concurrency task and
+// ember-concurrency carries no `@ember/test-waiters` integration, so the task
+// itself is invisible; and the boot that task awaits is only held in stretches,
+// because the matrix client is built without a `fetchFn` and its calls
+// therefore bypass the `fetcher` waiter that covers the app's own requests.
+// This waiter spans those gaps, from the credential exchange through to the
+// router refresh that ends the boot. Compiles to a no-op outside a debug build.
+const signInWaiter = buildWaiter('matrix-service:sign-in');
 
 // Bound on the test-only `postLoginCompleted` transition record below. A boot
 // records one →true and a teardown one →false, so a handful of entries covers
@@ -952,6 +963,81 @@ export default class MatrixService extends Service {
     });
 
     await this.appendRealmToAccountData(personalRealmURL.href);
+    return personalRealmURL;
+  }
+
+  // Whether login auto-provisions a personal workspace for a user who has none.
+  // On for any real deployment, off only in tests: `hostedEnvironment` is the
+  // realm-server's serve-time environment and is `local` in both the QUnit
+  // suite and the matrix e2e host (the realm server only overwrites it when it
+  // has a REALM_SENTRY_ENVIRONMENT), so provisioning never fires in tests but
+  // does on staging, production, and any self-hosted deployment. A settable
+  // field (not a getter) so a test can flip it on and exercise the real
+  // start()->provision path.
+  autoProvisionPersonalRealm = ENV.hostedEnvironment !== 'local';
+
+  // Fire-and-forget wrapper so boot doesn't block on realm creation and so a
+  // re-entrant start() never launches a second one. `dropTask` also lets a test
+  // await settled() for the provisioning to finish.
+  private ensurePersonalRealmTask = dropTask(async () => {
+    await this.ensurePersonalRealmForUserIfMissing();
+  });
+
+  // Give the signed-in user a personal workspace when they have none — the case
+  // for an account provisioned outside host sign-up (e.g. registered straight
+  // on Synapse). Idempotent: `_create-realm` rejects a duplicate with "already
+  // exists", which we treat as success.
+  async ensurePersonalRealmForUserIfMissing(): Promise<void> {
+    // Without a username we can't derive which `/personal/` realm is this
+    // user's own, and the server derives ownership from the JWT anyway — skip.
+    let username = this.userName;
+    if (!username) {
+      return;
+    }
+    // Match the user's *own* personal realm, not anyone's. A `/personal/` realm
+    // shared with this user (a grant into someone else's workspace — exactly
+    // what this PR's grant machinery enables) must not suppress provisioning.
+    // Mirror the server's URL derivation (create-realm.ts): a relative path
+    // resolved against the realm server's own (trailing-slash) origin.
+    let ownPersonalRealmURL = new URL(
+      `${username}/${PERSONAL_REALM_ENDPOINT}/`,
+      this.realmServer.url,
+    ).href;
+    let hasPersonalRealm = this.realmServer.userRealmIdentifiers.some(
+      (id) => String(id) === ownPersonalRealmURL,
+    );
+    if (hasPersonalRealm) {
+      return;
+    }
+    let displayName: string | undefined;
+    try {
+      displayName = this.userId
+        ? (await this.getProfileInfo(this.userId))?.displayname
+        : undefined;
+    } catch {
+      // A profile fetch hiccup must not block provisioning; fall back below.
+    }
+    let name = displayName ? `${displayName}'s Workspace` : 'My Workspace';
+    let iconSeed = displayName ?? 'workspace';
+    try {
+      await this.createPersonalRealmForUser({
+        endpoint: PERSONAL_REALM_ENDPOINT,
+        name,
+        iconURL: iconURLFor(iconSeed),
+        backgroundURL: getRandomBackgroundURL(),
+      });
+    } catch (e: any) {
+      // Idempotency backstop for a race against a concurrent tab or a prior
+      // login: `_create-realm` rejects a duplicate endpoint with the phrase
+      // "already exists" (realm-server create-realm.ts), which host
+      // `createRealm` wraps into the thrown message. The own-URL check above
+      // already prevents this in the common case, so this branch is a rarely-
+      // hit backstop; treat that one phrase as success and surface anything
+      // else.
+      if (!String(e?.message ?? '').includes('already exists')) {
+        console.error('Failed to provision personal realm on login', e);
+      }
+    }
   }
 
   public async appendRealmToAccountData(realmURLString: string) {
@@ -1083,6 +1169,9 @@ export default class MatrixService extends Service {
     await this.profile.load.perform();
   }
 
+  // Every sign-in path — password, token hand-off, registration, and the boot
+  // from persisted auth — converges on the boot below, so holding the waiter
+  // here covers all of them whichever one a caller came in through.
   async start(
     opts: {
       auth?: MatrixSDK.LoginResponse;
@@ -1090,6 +1179,19 @@ export default class MatrixService extends Service {
       registrationToken?: string;
     } = {},
   ) {
+    let waiterToken = signInWaiter.beginAsync();
+    try {
+      await this.boot(opts);
+    } finally {
+      signInWaiter.endAsync(waiterToken);
+    }
+  }
+
+  private async boot(opts: {
+    auth?: MatrixSDK.LoginResponse;
+    refreshRoutes?: true;
+    registrationToken?: string;
+  }) {
     await this.ready;
 
     let { auth, refreshRoutes, registrationToken } = opts;
@@ -1152,6 +1254,29 @@ export default class MatrixService extends Service {
         // the lazy migration that populates `app.boxel.realm-servers` has
         // run on all active accounts.
         let trustedServers = realmServersData?.realmServers ?? [];
+        // An account registered straight on Synapse (shared-secret batch
+        // creation) never goes through host sign-up, so it has neither
+        // account-data key — yet it may already hold realm permissions. With
+        // no trusted server to ask, boot would assemble an empty chooser and
+        // ignore those permissions. Tentatively assemble from this host's own
+        // realm server via `_realm-auth`. Scoped to accounts with no realm list
+        // at all: one that already has a legacy `app.boxel.realms` list keeps
+        // its existing assembly + lazy-migration path untouched. The seed is
+        // only persisted (and the session only flipped to the authoritative
+        // trusted path) once `_realm-auth` confirms the account actually holds
+        // permissioned realms — see the revert below — so an account with none
+        // stays on the legacy path where account-data updates (including
+        // foreign realm URLs the trusted path can't serve) still drive its list.
+        let seededOwnRealmServer = false;
+        if (trustedServers.length === 0) {
+          let seedRealmsData = (await this.client.getAccountDataFromServer(
+            APP_BOXEL_REALMS_EVENT_TYPE,
+          )) as { realms: string[] } | null;
+          if ((seedRealmsData?.realms ?? []).length === 0) {
+            trustedServers = [this.realmServer.url.href];
+            seededOwnRealmServer = true;
+          }
+        }
         // A session that first assembled from the legacy `app.boxel.realms`
         // list stays on the legacy path for the lifetime of this
         // MatrixService instance. The lazy migration below persists
@@ -1160,14 +1285,14 @@ export default class MatrixService extends Service {
         // test that re-boots to pick up a newly-added realm) would re-derive
         // the realm list from `_realm-auth` for no benefit and drop realms
         // that the trusted servers don't advertise.
-        let useTrustedServers =
+        const useTrustedServers =
           trustedServers.length > 0 && !this.bootedFromLegacyRealmsList;
         // The legacy `app.boxel.realms` AccountData event is re-emitted by
         // the matrix sync that runs inside `startClient()` below. Setting
         // this flag here makes that re-emission a no-op for the available-
         // realms list — the realm-servers path is the authoritative source.
         this.trustedRealmServersAuthoritative = useTrustedServers;
-        let userRealmURLs: string[];
+        let userRealmURLs: string[] = [];
         if (useTrustedServers) {
           if (isTesting())
             console.warn('[start-phase] fetchUserRealmsFromTrustedServers');
@@ -1175,7 +1300,8 @@ export default class MatrixService extends Service {
             await this.realmServer.fetchUserRealmsFromTrustedServers(
               trustedServers,
             );
-        } else {
+        }
+        if (!useTrustedServers) {
           this.bootedFromLegacyRealmsList = true;
           if (isTesting())
             console.warn('[start-phase] getAccountData(realms-legacy)');
@@ -1236,6 +1362,44 @@ export default class MatrixService extends Service {
           this.realmServer.fetchCatalogRealms(),
           this.realmServer.setAvailableRealmIdentifiers(userRealmURLs.map(ri)),
         ]);
+
+        // Commit or undo the keyless-account seed now that the list is
+        // assembled. `_realm-auth` returns the public base/catalog realms for
+        // every authenticated user, so a non-empty trusted result does NOT mean
+        // the account has a workspace of its own — those realms dedup into the
+        // base/catalog entries and leave `userRealmIdentifiers` empty. Only keep
+        // the account on the authoritative trusted path (and persist the seed)
+        // when it actually has a user realm; otherwise leave it on the legacy
+        // `app.boxel.realms` path so account-data updates (including foreign
+        // realm URLs the trusted path can't serve) keep driving its list.
+        if (seededOwnRealmServer) {
+          if (this.realmServer.userRealmIdentifiers.length === 0) {
+            this.trustedRealmServersAuthoritative = false;
+            this.bootedFromLegacyRealmsList = true;
+            if (isTesting())
+              console.warn('[start-phase] seed-revert getAccountData(realms)');
+            let legacyRealmsData = (await this.client.getAccountDataFromServer(
+              APP_BOXEL_REALMS_EVENT_TYPE,
+            )) as { realms: string[] } | null;
+            userRealmURLs = legacyRealmsData?.realms ?? [];
+            await this.realmServer.setAvailableRealmIdentifiers(
+              userRealmURLs.map(ri),
+            );
+          } else {
+            // Real user realms found: persist the seed so subsequent boots take
+            // the trusted path directly. Best-effort — assembly this boot
+            // already used the in-memory list, and the next login re-seeds if
+            // this write is lost.
+            try {
+              await this.setRealmServersInAccountData(trustedServers);
+            } catch (err) {
+              console.error(
+                'Failed to seed app.boxel.realm-servers with own realm server',
+                err,
+              );
+            }
+          }
+        }
 
         if (isTesting()) console.warn('[start-phase] prefetchRealmInfos');
         await this.realm.prefetchRealmInfos(
@@ -1311,6 +1475,21 @@ export default class MatrixService extends Service {
         // the reachable realms and retry the unreachable ones in the
         // background so they load (and the notice clears) once they recover.
         this.scheduleUnreachableRealmServerRetry();
+
+        // Ensure a personal workspace exists for an account provisioned outside
+        // host sign-up (e.g. registered straight on Synapse). Non-blocking, and
+        // the new realm surfaces live without a reload by whichever channel this
+        // session listens on: a session on the authoritative trusted path picks
+        // up the `realms-list-updated` event `_create-realm` emits (via
+        // `refreshRealmsList` -> re-run `_realm-auth`); a session on the legacy
+        // path (the keyless account with no realms of its own, this feature's
+        // primary target) picks up the `app.boxel.realms` write that
+        // `createPersonalRealmForUser` appends, via the AccountData listener.
+        // Off by default in the test suites (see autoProvisionPersonalRealm),
+        // and skipped for the new-user flow, which already creates one.
+        if (this.autoProvisionPersonalRealm && !this._isInitializingNewUser) {
+          this.ensurePersonalRealmTask.perform();
+        }
       } catch (e) {
         console.log('Error starting Matrix client', e);
         // Only tear the session down for a failure that happened before this
@@ -1501,7 +1680,10 @@ export default class MatrixService extends Service {
     try {
       let realmServers = await this.getRealmServersFromAccountData();
       if (realmServers.length === 0) {
-        return;
+        // No persisted trusted-servers entry (e.g. the login-time seed write
+        // was lost): fall back to this host's own realm server so a live grant
+        // still re-assembles from permissions rather than being dropped.
+        realmServers = [this.realmServer.url.href];
       }
       await this.applyTrustedRealmServersAccountData(realmServers);
       if (this.realmServer.isArchivedRealmsFetched) {
@@ -2212,6 +2394,7 @@ export default class MatrixService extends Service {
   }
 
   async login(usernameOrEmail: string, password: string) {
+    let waiterToken = signInWaiter.beginAsync();
     try {
       const cred = await this.client.loginWithPassword(
         usernameOrEmail,
@@ -2228,6 +2411,8 @@ export default class MatrixService extends Service {
       } catch (error2) {
         throw error;
       }
+    } finally {
+      signInWaiter.endAsync(waiterToken);
     }
   }
 
@@ -2242,8 +2427,13 @@ export default class MatrixService extends Service {
   }
 
   async loginWithSsoToken(token: string) {
-    await this.ready;
-    return this.client.loginWithToken(token);
+    let waiterToken = signInWaiter.beginAsync();
+    try {
+      await this.ready;
+      return await this.client.loginWithToken(token);
+    } finally {
+      signInWaiter.endAsync(waiterToken);
+    }
   }
 
   getRoomData(roomId: string) {

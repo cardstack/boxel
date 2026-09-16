@@ -20,12 +20,71 @@ import {
 } from './jobs/indexing.ts';
 import { enqueueReindexRealmJob } from './jobs/reindex-realm.ts';
 import type {
+  DeferredPrerenderHtml,
   FromScratchResult,
+  IncrementalChange,
   IncrementalDoneResult,
 } from './tasks/indexer.ts';
 import type { Realm } from './realm.ts';
-import { RealmPaths } from './paths.ts';
+import { RealmPaths, isPartialWritePath } from './paths.ts';
 import { ignore, type Ignore } from './ignore.ts';
+
+// One file's place in an index job's change set: whether the file is there to
+// be visited or gone. A job carries a set of these rather than one operation
+// for the whole job because a single commit can write some files and remove
+// others, and the invalidation fan-out for all of them has to be computed
+// against one snapshot of the realm.
+export interface IndexChange {
+  url: URL;
+  operation: 'update' | 'delete';
+}
+
+// What an index pass reports about itself alongside the URLs it invalidated.
+export interface IncrementalIndexMeta {
+  generation?: number;
+  // The deduped adoption-chain keys the pass touched. Absent when the pass
+  // couldn't report them (an older worker mid-deploy), which is the signal to
+  // subscribers that nothing can be ruled out from types alone.
+  invalidatedTypes?: string[];
+}
+
+export interface IncrementalIndexOptions {
+  onInvalidation?: (
+    invalidatedURLs: URL[],
+    meta: IncrementalIndexMeta,
+  ) => Promise<void>;
+  // Runs after the worker job resolves and onInvalidation finishes, but
+  // before the indexing deferred is fulfilled and removed from
+  // #incrementalIndexingDeferreds. This is the hook callers use for work that
+  // must happen before `realm.incrementalIndexing()` resolves — for example,
+  // the post-worker invalidation broadcast on the deferred-indexing path.
+  // Without this, an outer `.then()` would fire after the drain returns and
+  // could race with test teardown.
+  onSettled?: () => Promise<void> | void;
+  // Runs when the worker job rejects, inside the same deferred lifecycle
+  // as onSettled (before the quiescence deferred fulfills). A failed
+  // incremental job may still have persisted setup-phase error docs, so
+  // callers use this to run the cache-invalidation / broadcast work the
+  // success path routes through onInvalidation — otherwise those rows
+  // stay hidden behind stale caches and silent subscribers until the
+  // next successful swap. Best-effort: a hook failure is logged and the
+  // job's own rejection still propagates through `settled`.
+  onFailed?: (error: unknown) => Promise<void> | void;
+  clientRequestId?: string | null;
+  // Matrix user whose HTTP write produced this job, when known. Scopes
+  // the read endpoints' read-your-writes drain — see
+  // #incrementalIndexingDeferreds.
+  initiatedBy?: string | null;
+  // See IncrementalArgs. `onDeferredPrerenderHtml` receives the set the pass
+  // declined to enqueue; it runs inside the deferred lifecycle, alongside
+  // onInvalidation, so a caller can carry the set forward before
+  // `realm.incrementalIndexing()` resolves.
+  deferPrerenderHtml?: boolean;
+  carriedPrerenderHtmlChanges?: IncrementalChange[];
+  onDeferredPrerenderHtml?: (
+    deferred: DeferredPrerenderHtml,
+  ) => Promise<void> | void;
+}
 
 export class RealmIndexUpdater {
   #realm: Realm;
@@ -65,7 +124,16 @@ export class RealmIndexUpdater {
   // unrelated request happens to be awaiting the write-path gate, and
   // (b) become an unhandled promise rejection whenever a deferred-indexing
   // job fails while nothing is draining the gate.
-  #incrementalIndexingDeferreds = new Set<Deferred<void>>();
+  // Each incremental/copy deferred is tagged with the matrix user whose HTTP
+  // write produced the job, when known. Read endpoints use the tag to scope
+  // their read-your-writes drain to the requesting user's own writes
+  // (`incrementalIndexingInitiatedBy`) instead of parking every reader behind
+  // whatever indexing happens to be in flight. System-originated jobs (file
+  // watcher, realm copy) carry no tag.
+  #incrementalIndexingDeferreds = new Map<
+    Deferred<void>,
+    { initiatedBy?: string }
+  >();
   #fullIndexingDeferreds = new Set<Deferred<void>>();
 
   constructor({
@@ -116,7 +184,7 @@ export class RealmIndexUpdater {
   // hundreds of jobs and stall every PATCH for hours).
   indexing() {
     let pending = [
-      ...this.#incrementalIndexingDeferreds,
+      ...this.#incrementalIndexingDeferreds.keys(),
       ...this.#fullIndexingDeferreds,
     ];
     if (pending.length === 0) {
@@ -137,10 +205,26 @@ export class RealmIndexUpdater {
       return undefined;
     }
     return Promise.all(
-      [...this.#incrementalIndexingDeferreds].map(
+      [...this.#incrementalIndexingDeferreds.keys()].map(
         (deferred) => deferred.promise,
       ),
     ).then(() => undefined);
+  }
+
+  // Awaits only the incremental jobs whose write was initiated by `user` —
+  // the read-your-writes slice of `incrementalIndexing()`. Returns undefined
+  // when this user has nothing in flight, even while other users' or
+  // system-originated jobs are pending: those jobs can only make the caller's
+  // read fresher-than-requested, never wrong, because the production index
+  // rows stay live (and consistent) until the working-table swap lands.
+  incrementalIndexingInitiatedBy(user: string): Promise<void> | undefined {
+    let pending = [...this.#incrementalIndexingDeferreds.entries()]
+      .filter(([, { initiatedBy }]) => initiatedBy === user)
+      .map(([deferred]) => deferred.promise);
+    if (pending.length === 0) {
+      return undefined;
+    }
+    return Promise.all(pending).then(() => undefined);
   }
 
   publishFullIndex(
@@ -212,56 +296,56 @@ export class RealmIndexUpdater {
     }
   }
 
-  // Two-phase incremental update. Returns once the job is durably enqueued
-  // (the queue insert into Postgres has landed), with `settled` exposing the
-  // promise that resolves when the worker finishes and the optional
-  // onInvalidation/onSettled hooks run. Pre-enqueue failures
-  // (getRealmOwnerUsername, queue.publish) reject from this method so the
-  // caller knows the work was never queued and the realm is still
-  // consistent. Worker-time and post-worker failures reject from `settled`
-  // and surface via error_doc inside the worker.
-  //
-  // `onSettled` is part of the deferred lifecycle: it runs after the worker
-  // and onInvalidation finish, but before the indexing deferred is
-  // fulfilled and removed from #incrementalIndexingDeferreds. This is the
-  // hook callers use for work that must happen before `realm.incrementalIndexing()`
-  // resolves — for example, the post-worker invalidation broadcast on the
-  // deferred-indexing path. Without this, an outer `.then()` would fire
-  // after the drain returns and could race with test teardown.
+  // A change set whose every URL carries the same operation: `delete: true`
+  // for a set of removals, otherwise a set of updates.
   async enqueueUpdate(
     urls: URL[],
-    opts?: {
-      delete?: true;
-      onInvalidation?: (
-        invalidatedURLs: URL[],
-        meta: { generation?: number },
-      ) => Promise<void>;
-      onSettled?: () => Promise<void> | void;
-      // Runs when the worker job rejects, inside the same deferred lifecycle
-      // as onSettled (before the quiescence deferred fulfills). A failed
-      // incremental job may still have persisted setup-phase error docs, so
-      // callers use this to run the cache-invalidation / broadcast work the
-      // success path routes through onInvalidation — otherwise those rows
-      // stay hidden behind stale caches and silent subscribers until the
-      // next successful swap. Best-effort: a hook failure is logged and the
-      // job's own rejection still propagates through `settled`.
-      onFailed?: (error: unknown) => Promise<void> | void;
-      clientRequestId?: string | null;
-    },
+    opts?: IncrementalIndexOptions & { delete?: true },
+  ): Promise<{ settled: Promise<void> }> {
+    return await this.enqueueChanges(
+      urls.map((url) => ({
+        url,
+        operation: opts?.delete ? 'delete' : ('update' as const),
+      })),
+      opts,
+    );
+  }
+
+  // Two-phase incremental update over a change set that may mix removals with
+  // updates, so a batch that writes some files and removes others is indexed
+  // and invalidated as one unit rather than as two jobs whose fan-outs are
+  // computed against different snapshots of the realm.
+  //
+  // Returns once the job is durably enqueued (the queue insert into Postgres
+  // has landed), with `settled` exposing the promise that resolves when the
+  // worker finishes and the optional onInvalidation/onSettled hooks run.
+  // Pre-enqueue failures (getRealmOwnerUsername, queue.publish) reject from
+  // this method so the caller knows the work was never queued and the realm
+  // is still consistent. Worker-time and post-worker failures reject from
+  // `settled` and surface via error_doc inside the worker.
+  async enqueueChanges(
+    changes: IndexChange[],
+    opts?: IncrementalIndexOptions,
   ): Promise<{ settled: Promise<void> }> {
     let indexingDeferred = new Deferred<void>();
-    this.#incrementalIndexingDeferreds.add(indexingDeferred);
+    this.#incrementalIndexingDeferreds.set(indexingDeferred, {
+      initiatedBy: opts?.initiatedBy ?? undefined,
+    });
     let snapshotVersion = this.#ignoreDataVersion;
     let job: Job<IncrementalDoneResult>;
     try {
       let args: IncrementalIndexEnqueueArgs = {
-        changes: urls.map((url) => ({
+        changes: changes.map(({ url, operation }) => ({
           url: url.href,
-          operation: opts?.delete ? 'delete' : 'update',
+          operation,
         })),
         realmURL: this.#realm.url,
         realmUsername: await this.#realm.getRealmOwnerUsername(),
         ignoreData: { ...this.#ignoreData },
+        ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
+        ...(opts?.carriedPrerenderHtmlChanges?.length
+          ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
+          : {}),
       };
       let clientRequestId = opts?.clientRequestId ?? null;
       job = await this.#queue.publish<IncrementalDoneResult>({
@@ -283,7 +367,14 @@ export class RealmIndexUpdater {
     // quiescence gate always fulfills (see #incrementalIndexingDeferreds).
     let settled = (async () => {
       try {
-        let { invalidations, ignoreData, stats, generation } = await job.done;
+        let {
+          invalidations,
+          invalidatedTypes,
+          ignoreData,
+          stats,
+          generation,
+          deferredPrerenderHtml,
+        } = await job.done;
         this.#stats = stats;
         // Drop the result if a from-scratch index landed since we snapshotted.
         // Its ignoreData was computed from a stale snapshot and would clobber
@@ -294,8 +385,14 @@ export class RealmIndexUpdater {
         if (opts?.onInvalidation) {
           await opts.onInvalidation(
             invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
-            { generation },
+            {
+              generation,
+              ...(invalidatedTypes !== undefined ? { invalidatedTypes } : {}),
+            },
           );
+        }
+        if (deferredPrerenderHtml && opts?.onDeferredPrerenderHtml) {
+          await opts.onDeferredPrerenderHtml(deferredPrerenderHtml);
         }
         if (opts?.onSettled) {
           await opts.onSettled();
@@ -321,16 +418,35 @@ export class RealmIndexUpdater {
 
   async update(
     urls: URL[],
-    opts?: {
-      delete?: true;
-      onInvalidation?: (
-        invalidatedURLs: URL[],
-        meta: { generation?: number },
-      ) => Promise<void>;
-      clientRequestId?: string | null;
-    },
+    opts?: Pick<
+      IncrementalIndexOptions,
+      | 'onInvalidation'
+      | 'clientRequestId'
+      | 'initiatedBy'
+      | 'deferPrerenderHtml'
+      | 'carriedPrerenderHtmlChanges'
+      | 'onDeferredPrerenderHtml'
+    > & { delete?: true },
   ): Promise<void> {
     let { settled } = await this.enqueueUpdate(urls, opts);
+    await settled;
+  }
+
+  // The awaited form of `enqueueChanges`, for a caller that reads indexed
+  // state once the job has landed.
+  async updateChanges(
+    changes: IndexChange[],
+    opts?: Pick<
+      IncrementalIndexOptions,
+      | 'onInvalidation'
+      | 'clientRequestId'
+      | 'initiatedBy'
+      | 'deferPrerenderHtml'
+      | 'carriedPrerenderHtmlChanges'
+      | 'onDeferredPrerenderHtml'
+    >,
+  ): Promise<void> {
+    let { settled } = await this.enqueueChanges(changes, opts);
     await settled;
   }
 
@@ -339,7 +455,7 @@ export class RealmIndexUpdater {
     onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>,
   ): Promise<{ generation?: number }> {
     let indexingDeferred = new Deferred<void>();
-    this.#incrementalIndexingDeferreds.add(indexingDeferred);
+    this.#incrementalIndexingDeferreds.set(indexingDeferred, {});
     try {
       let args: CopyArgs = {
         realmURL: this.#realm.url,
@@ -390,7 +506,10 @@ export function isIgnored(
   }
   if (
     [`${realmURL.href}.template-lintrc.js`].includes(url.href) ||
-    url.href.startsWith(`${realmURL.href}.git/`)
+    url.href.startsWith(`${realmURL.href}.git/`) ||
+    // A file the realm is part-way through writing, or one left behind by a
+    // write that died. It is no part of the realm either way.
+    isPartialWritePath(url.href)
   ) {
     return true;
   }

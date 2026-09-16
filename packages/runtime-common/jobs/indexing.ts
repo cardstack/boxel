@@ -1,5 +1,6 @@
 import type {
   CoalescedCaller,
+  DeferredPrerenderHtml,
   IncrementalArgs,
   IncrementalChange,
   IncrementalDoneResult,
@@ -157,6 +158,48 @@ export function prerenderSpawnedPriority({
 // deadline only between requests, so an attempt started just under the wire
 // overshoots by up to the length of the hold. A shorter budget bounds that
 // overshoot; no budget removes it.
+// Why a realm that has never had an index built has none: the failure of the
+// newest from-scratch job in its index lane, when that job was rejected.
+// Undefined when the realm has an index, when no from-scratch job has run, or
+// when the newest one completed.
+//
+// "Never had an index built" is read from `realm_generations`: a pass inserts
+// the realm's row at generation 0 before it visits anything and advances the
+// generation only when it completes, so a row at 0 — or none — means no pass
+// has ever promoted rows. A rejected job over an index that a later pass built
+// is history and does not count. Both facts come from the rows every replica
+// reads, so the answer holds whichever replica ran the job and whichever path
+// enqueued it — a realm's own reindex endpoints, a publish, a system-wide
+// reindex — and a pass that completes from any of them clears it as it lands.
+export async function unbuiltIndexFailure(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+): Promise<string | undefined> {
+  if (dbAdapter.kind !== 'pg') {
+    return undefined;
+  }
+  let [generation] = (await query(dbAdapter, [
+    'SELECT current_generation FROM realm_generations WHERE realm_url =',
+    param(realmURL),
+  ])) as { current_generation: number | string }[];
+  if (generation && Number(generation.current_generation) > 0) {
+    return undefined;
+  }
+  let [job] = (await query(dbAdapter, [
+    `SELECT status, result FROM jobs WHERE job_type = 'from-scratch-index' AND concurrency_group =`,
+    param(indexingConcurrencyGroup(realmURL)),
+    'ORDER BY id DESC LIMIT 1',
+  ])) as { status: string; result: unknown }[];
+  if (!job || job.status !== 'rejected') {
+    return undefined;
+  }
+  let { result } = job;
+  if (isObjectLike(result) && typeof (result as any).message === 'string') {
+    return (result as any).message;
+  }
+  return typeof result === 'string' ? result : JSON.stringify(result);
+}
+
 export async function awaitRealmIndexSettled(
   dbAdapter: DBAdapter,
   realmURL: string,
@@ -249,10 +292,14 @@ function parseIncrementalResult(
   if (!isObjectLike(result) || Array.isArray(result)) {
     return undefined;
   }
-  let { invalidations, ignoreData, stats, generation } = result as Record<
-    string,
-    PgPrimitive
-  >;
+  let {
+    invalidations,
+    invalidatedTypes,
+    ignoreData,
+    stats,
+    generation,
+    deferredPrerenderHtml,
+  } = result as Record<string, PgPrimitive>;
   if (
     !Array.isArray(invalidations) ||
     !invalidations.every((value) => typeof value === 'string') ||
@@ -263,12 +310,63 @@ function parseIncrementalResult(
   ) {
     return undefined;
   }
+  // A result from a worker predating the type-carrying event simply has no
+  // `invalidatedTypes`; dropping a malformed one has the same effect, which is
+  // that subscribers re-run unconditionally the way they always did.
+  let parsedTypes =
+    Array.isArray(invalidatedTypes) &&
+    invalidatedTypes.every((value) => typeof value === 'string')
+      ? (invalidatedTypes as string[])
+      : undefined;
+  let deferred = parseDeferredPrerenderHtml(deferredPrerenderHtml);
   return {
     invalidations,
+    ...(parsedTypes !== undefined ? { invalidatedTypes: parsedTypes } : {}),
     ignoreData: ignoreData as Record<string, string>,
     stats: stats as IncrementalResult['stats'],
     ...(typeof generation === 'number' ? { generation } : {}),
+    ...(deferred ? { deferredPrerenderHtml: deferred } : {}),
   };
+}
+
+// A job run by a worker that predates `deferPrerenderHtml` returns no such
+// field, and a caller that never asked to defer must not be handed one, so
+// this reads loosely and yields undefined for anything but the full shape.
+// Losing the set here is not silent: the write's own pass still enqueues its
+// prerender job, so the deferred URLs simply go unrendered until the next
+// pass touches them, exactly as a dropped fire-and-forget enqueue does today.
+function parseDeferredPrerenderHtml(
+  value: PgPrimitive,
+): DeferredPrerenderHtml | undefined {
+  if (!isObjectLike(value) || Array.isArray(value)) {
+    return undefined;
+  }
+  let { changes, generation, loaderEpoch } = value as Record<
+    string,
+    PgPrimitive
+  >;
+  if (
+    !Array.isArray(changes) ||
+    typeof generation !== 'number' ||
+    typeof loaderEpoch !== 'string'
+  ) {
+    return undefined;
+  }
+  let parsedChanges: IncrementalChange[] = [];
+  for (let change of changes) {
+    if (!isObjectLike(change) || Array.isArray(change)) {
+      return undefined;
+    }
+    let { url, operation } = change as Record<string, PgPrimitive>;
+    if (
+      typeof url !== 'string' ||
+      (operation !== 'update' && operation !== 'delete')
+    ) {
+      return undefined;
+    }
+    parsedChanges.push({ url, operation });
+  }
+  return { changes: parsedChanges, generation, loaderEpoch };
 }
 
 export interface IncrementalIndexEnqueueArgs {
@@ -276,6 +374,9 @@ export interface IncrementalIndexEnqueueArgs {
   realmUsername: string;
   changes: IncrementalChange[];
   ignoreData: Record<string, string>;
+  // See IncrementalArgs for both of these.
+  deferPrerenderHtml?: boolean;
+  carriedPrerenderHtmlChanges?: IncrementalChange[];
 }
 
 export function makeIncrementalArgsWithCallerMetadata(
@@ -290,6 +391,8 @@ export function makeIncrementalArgsWithCallerMetadata(
     changes: args.changes,
     ignoreData: args.ignoreData,
     coalescedCallers,
+    deferPrerenderHtml: args.deferPrerenderHtml === true,
+    carriedPrerenderHtmlChanges: args.carriedPrerenderHtmlChanges ?? [],
   };
 }
 

@@ -1,3 +1,4 @@
+import type { Readable } from 'stream';
 import type { CodeRef } from '../code-ref.ts';
 import type { ScreenshotManifest } from '../capture-spec.ts';
 import type {
@@ -8,6 +9,7 @@ import type {
   SearchEntryWireFilter,
   SearchEntryWireQuery,
 } from '../search-entry.ts';
+import type { OperationDiagnostics } from './telemetry.ts';
 import type { BaseOperationName } from '@cardstack/base/operations';
 
 // ============================================================================
@@ -102,6 +104,18 @@ export interface OperationDefinition {
   // rather than a program: the coordinator resolves it by substitution, and a
   // link-typed param's value becomes a relationship.
   fill?: Record<string, OperationTemplate>;
+  // The item a named `appendContainsMany` appends, keyed by the `containsMany`
+  // field it goes into — a declaration naming several fields carries one entry
+  // per field. Templates for the same reason `fill` is one: an append
+  // substitutes values into a stored document and runs no program.
+  //
+  // Which members of an item are links, and so become relationship keys rather
+  // than array members, is not recorded here. The executor splits an item
+  // against the definition of the *stored card's* type, which a subclass makes
+  // a different type from the one this operation was lowered on — so the split
+  // is read where the card is, from the same definition cache, rather than
+  // frozen here.
+  items?: Record<string, OperationTemplate>;
   // A saved search, as an entry-wire query whose value slots may still hold
   // markers.
   query?: OperationQueryTemplate;
@@ -164,10 +178,34 @@ export type OperationLoweringIssueCode =
   // A class reference that no module exports under a name, so there is no
   // code ref to store.
   | 'unresolved-type'
+  // An `actor()` where a card identity belongs: a link field, a `by` on a link
+  // collection, or inside `card(…)`. The realm authenticates a caller as a
+  // user id and no card represents a user, so the link would name a card that
+  // does not exist.
+  | 'actor-not-a-card'
   // A raw BXL program that does not parse.
   | 'invalid-program'
   // A declared query the realm's own query grammar refuses.
-  | 'invalid-query';
+  | 'invalid-query'
+  // An operation declared under a name the realm resolves without reading a
+  // definition. Such a name is answered before a stored entry is consulted, so
+  // an operation kept under it would never run.
+  | 'reserved-name'
+  // A declaration built on a behavior its def type does not carry — an
+  // `appendLine` on a card, a `transform` on a file, anything at all on a
+  // field. The behavior is not there to specialize, so the operation has no
+  // runnable form.
+  | 'base-not-carried'
+  // A raw program declared on a base that runs none. The two appends edit the
+  // stored file and a file's content is replaced wholesale, so a program
+  // stored for one of them would never be reached.
+  | 'unrunnable-program'
+  // An `appendContainsMany` that does not say what to append where: no field,
+  // no item for a field it names, or both spellings at once with no rule for
+  // which wins. The decorator refuses each, so one only reaches a stored
+  // entry — where appending nothing, or a literal `null`, is worse than
+  // refusing.
+  | 'incomplete-append';
 
 // A problem found while lowering one operation. Recorded, never thrown:
 // definition build is decoupled in time from the edit that introduced the
@@ -201,11 +239,29 @@ export interface LowerOperationDeclarationsResult {
 // the payload, which are known only at invocation.
 // ============================================================================
 
-// The six built-in behaviors, under the operation runtime's own name. The
+// The built-in behaviors, under the operation runtime's own name. The
 // authoring API owns the list because that is where a declaration names one;
 // re-stating it here lets a consumer of the runtime types stay clear of the
 // card authoring surface, which only loads inside a card module.
 export type BaseOperation = BaseOperationName;
+
+// The base operations the realm resolves without reading a definition, which
+// is also the set of names nothing may be declared under: the realm answers
+// one of these before it would consult a type's entry, so an operation stored
+// under the name would be dispatched straight past rather than run.
+//
+// Stated here because both ends of that rule need it and this module is the
+// one both can reach — dispatch, which does the resolving, and lowering, which
+// keeps such a name out of a stored entry. The authoring decorator enforces
+// the same list from inside a card module, where it can refuse the
+// declaration outright.
+export const DEFINITION_FREE_BASE_OPERATIONS: readonly BaseOperation[] = [
+  'readSource',
+];
+
+export function isDefinitionFreeBaseOperation(name: string): boolean {
+  return (DEFINITION_FREE_BASE_OPERATIONS as readonly string[]).includes(name);
+}
 
 // What an operation runs against. An `instance` target is an existing card or
 // file, addressed by URL — the identity of a thing that already has stored
@@ -224,9 +280,9 @@ export type OperationTarget =
 
 export interface OperationRequest {
   target: OperationTarget;
-  // The name the operation is invoked under — a declared name, or one of the
-  // six base names for the built-in behavior. Never `base`: a `delete` built
-  // on `transform` is invoked as `delete`.
+  // The name the operation is invoked under — a declared name, or a base name
+  // for the built-in behavior. Never `base`: a `delete` built on `transform`
+  // is invoked as `delete`.
   name: string;
   // The payload, keyed the way the definition's `params` schema declares it.
   params?: Record<string, unknown>;
@@ -266,6 +322,66 @@ export interface OperationHeadResult {
   deps: string[] | null;
 }
 
+// The stored bytes of a resource, and what the byte-serve headers are computed
+// from. This is the representation the source and byte-serve routes answer
+// with: a card instance's `.json`, a module's text, an image's bytes — the
+// resource exactly as it sits on disk, with no assembly and no index read
+// behind it.
+export interface OperationSourceResult {
+  // Inferred from the path's extension by `inferContentType`, which is what
+  // both byte routes infer theirs with. A path with no extension the platform
+  // knows resolves to `application/octet-stream`, the byte-preserving
+  // default.
+  contentType: string;
+  lastModified: number;
+  // When the realm first saw this path, in epoch seconds, and null where it
+  // holds no record of it — a file written outside the realm's own write path,
+  // say. The byte serve omits `x-created` in that case rather than
+  // substituting the modification time, so this reports the absence rather
+  // than filling it in.
+  created: number | null;
+  // The content hash of the stored bytes — the same identity the rest of the
+  // project calls `version`.
+  //
+  // Two things a facade building a validator from it has to know. It is not by
+  // itself the byte routes' `ETag`: the source route builds one from a hash for
+  // a `.json` or an executable extension and from `lastModified` for
+  // everything else, so which of the two to reproduce is the facade's choice
+  // — but a content identity is reported for every path, whether or not the
+  // route serving it asks for one, so the choice is never forced by an absent
+  // value. Null means only that the realm could neither recall a fingerprint
+  // nor read one within a bounded cost. And `computeContentHash` samples above
+  // its whole-content limit, so a large file's hash covers its head, tail and
+  // length rather than all of it — `isSampledContentHash` tells one from the
+  // other, and the realm's own `ETag` joins a sampled hash with `lastModified`
+  // rather than trusting it alone.
+  version: string | null;
+  // The byte size, where the adapter knew it from the stat it already
+  // performed, and null where knowing it would cost reading the bytes — the
+  // same way the two values above report what the realm cannot say. A facade
+  // needs it for `Content-Length` and to decide whether it can offer a `Range`
+  // at all. The bounded-read capability itself does not travel here — it is a
+  // function on the adapter's handle — so a facade serving 206s reads from the
+  // handle rather than from this result.
+  size: number | null;
+  // The bytes. Absent in the headers-only mode, which is the whole difference
+  // between the two: a `HEAD` reports the metadata above and would discard
+  // this. Whatever form the realm's file adapter produced — a string, a byte
+  // array, or an unread stream — so a caller hands it to a response body
+  // rather than materializing it.
+  //
+  // The metadata above describes the handle as it opened; the bytes are read
+  // from it afterwards. A write landing in between pairs one with the other,
+  // the same way it does for a byte route reading the same handle.
+  body?: OperationSourceBody;
+}
+
+export type OperationSourceBody =
+  | string
+  | Uint8Array
+  | ReadableStream<Uint8Array>
+  | Readable;
+
 // A write's answer: the identity of what was written and the version it now
 // holds, without reprinting the document. A caller that wants the new state
 // reads it; a caller that wrote it already has it, and the common case is a
@@ -273,6 +389,12 @@ export interface OperationHeadResult {
 // nothing else.
 export interface OperationIdentityResult {
   id: string;
+  // Echoed by a create, so a caller can match the URL the realm minted back to
+  // the `lid` it named the card with. A `lid` is the caller's own id for a card
+  // that does not exist yet, so this is the only thing that ties the two
+  // together — nothing in the minted URL carries it once the realm has chosen
+  // one.
+  lid?: string;
   meta: {
     // The token a later request passes as `baseVersion`.
     version: string;
@@ -282,6 +404,11 @@ export interface OperationIdentityResult {
     // the `baseVersion` the request named. A false here is not an error — the
     // write happened, and the caller decides what a moved base means.
     baseMatched?: boolean;
+    // What running the operation read, for the operations that run a program.
+    // A program reads from three layers and only one of them is the card's own
+    // stored document, so this is how a caller tells a value that was stale
+    // from one that was never there.
+    diagnostics?: OperationDiagnostics;
   };
 }
 
@@ -290,6 +417,7 @@ export type OperationResult =
   | OperationDocumentResult
   | OperationHeadResult
   | OperationIdentityResult
+  | OperationSourceResult
   | null;
 
 export function isDocumentResult(
@@ -308,6 +436,15 @@ export function isIdentityResult(
   result: OperationResult,
 ): result is OperationIdentityResult {
   return result != null && 'id' in result;
+}
+
+// Keyed on `contentType` rather than on `body`, which the headers-only mode
+// leaves out: a guard that read the body would report false for exactly the
+// result a `HEAD` asks for.
+export function isSourceResult(
+  result: OperationResult,
+): result is OperationSourceResult {
+  return result != null && 'contentType' in result;
 }
 
 export type OperationErrorCode =
@@ -343,6 +480,11 @@ export type OperationErrorCode =
   // The request named a `baseVersion` the target is no longer at, on an
   // operation that requires the base to match.
   | 'version-conflict'
+  // The bytes an operation would store are over the realm's ceiling for a
+  // card or a file of that kind. Separate from `invalid-params` because the
+  // payload is well formed and the remedy is to send less of it, and because
+  // it carries the realm's own 413.
+  | 'payload-too-large'
   // The operation is sound but is not carried out here. A `query` is the case:
   // it is planned and run on the search engine, so reaching the operation core
   // with one means the caller used the wrong entry point.

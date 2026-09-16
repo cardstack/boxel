@@ -11,6 +11,9 @@ import type { RenderRouteOptions } from './render-route-options.ts';
 import type { Definition } from './definitions.ts';
 import type { OperationLoweringIssue } from './card-operations/types.ts';
 import type {
+  CaptureContentType,
+  CaptureMedia,
+  CaptureOutputType,
   ScreenshotFormat,
   ScreenshotImageType,
   ScreenshotManifest,
@@ -21,6 +24,7 @@ import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import type { FileDef } from '@cardstack/base/file-api';
 
+export { now, nowDate } from './clock.ts';
 export interface LooseSingleResourceDocument<T extends LinkableResource> {
   data: LooseLinkableResource<T>;
   included?: LooseLinkableResource<LinkableResource>[];
@@ -194,12 +198,129 @@ export interface SearchDocTimings {
   linkLoads?: SearchDocLinkLoad[];
 }
 
+// Wall-clock of the four phases the host's `render` route runs to build the
+// render model, before any child route (`render.meta`, `render.html`) does
+// its own work. The route sets a `renderStage` breadcrumb at each of these
+// transitions for the timeout path; these are the same boundaries, stamped
+// with elapsed time so a SUCCESSFUL visit accounts for them too.
+//
+// They matter because the model build is charged to whichever route step
+// happened to trigger the parent transition. On an index visit that is the
+// `render.meta` step, so `indexRoutesMs.card.meta` contains the whole model
+// build on top of the search doc and serialization it measures — which is
+// why a `meta` bucket can dwarf `searchDocMs + serializeMs` with nothing to
+// show for the difference. On a fused visit the isolated HTML render
+// triggers it instead, and the build lands in
+// `renderFormatsMs.card.isolated`.
+//
+// A model is built once per visit and shared by every route step in it, so
+// these four numbers are per-visit, not per-step. A stage is absent when it
+// did not complete — the model build that a render timeout interrupts
+// reports the stages it finished, and `renderStage` / `stageAgeMs` name the
+// one it was in.
+export interface BuildModelStagesMs {
+  // Fetching the card's source document from the realm.
+  fetchSource?: number;
+  // Resolving `adoptsFrom` — loading and evaluating the card's module graph
+  // — plus the realm-meta and declared-screenshot lookups that follow it.
+  // The dominant stage on a cold module graph; `moduleEvaluationsMs` names
+  // the individual modules.
+  deriveType?: number;
+  // Instantiating the card from the document: `store.add`, i.e. the
+  // recursive field deserialization. `hydrateFieldsMs` breaks it down per
+  // field.
+  hydrate?: number;
+  // Draining the loads hydration fired — `store.loaded()`.
+  // `storeSettleWaits` names what was awaited.
+  storeSettle?: number;
+}
+
+// One module the Loader evaluated during a visit's model build, with the
+// wall-clock of its synchronous body (Glimmer template compilation and
+// other top-level side effects). Attributed to the visit by diffing the
+// Loader's rolling evaluation history across the build, so a warm tab
+// reports only the modules THIS visit paid for — a second visit of the same
+// card type reports none, which is itself the reading that says the graph
+// was already warm.
+export interface ModuleEvaluation {
+  url: string;
+  ms: number;
+}
+
+// One thing `store.loaded()` waited on during the model build's settle
+// stage. `card` and `file` targets are the loaded URL; a `query` target is
+// the query load's `source` label, qualified by the owning field when the
+// load names one. Loads run concurrently, so entries overlap in time and do
+// not sum to `buildModelMs.storeSettle`.
+export interface StoreSettleWait {
+  kind: 'card' | 'file' | 'query';
+  target: string;
+  ms: number;
+}
+
+// The host render route's account of building the render model. Shared by
+// both diagnostic shapes that carry it, so a reader queries one set of keys
+// whichever path produced the row.
+//
+// The success path reports all of it on the `render.meta` payload
+// (`PrerenderMetaDiagnostics`). The timeout path reads what a stalled page
+// can still answer through `__boxelRenderDiagnostics`
+// (`RenderTimeoutDiagnostics`): the stage buckets that closed, and the
+// hydration breakdown collected so far — the two a stall inside the build
+// is diagnosed from. The module and settle-wait lists are assembled only
+// when the build completes, so a timed-out row carries neither.
+export interface BuildModelDiagnostics {
+  buildModelMs?: BuildModelStagesMs;
+  // The slowest modules evaluated during the model build. Bounded the same
+  // way as `searchDocFieldsMs`: only entries at/over a floor, slowest first,
+  // capped.
+  //
+  // Attributed to the visit by diffing the Loader's rolling slowest-N
+  // history, which is kept for the loader's whole life, not per render. That
+  // history SATURATES: one cold card can fill every slot, and a later card's
+  // modest evaluations are then dropped on insert and never show up in the
+  // diff. So an empty list does NOT mean "this visit evaluated nothing" —
+  // read `moduleEvaluationCount` for that, which cannot be evicted.
+  moduleEvaluationsMs?: ModuleEvaluation[];
+  // How many modules the visit's model build evaluated, and their summed
+  // wall-clock, from the Loader's monotonic counters. Unlike
+  // `moduleEvaluationsMs` these are complete: a count of zero is the only
+  // thing that means the module graph was already warm, and a large count
+  // with an empty list means the evaluations lost the slowest-N race to an
+  // earlier card in the same job rather than not happening.
+  moduleEvaluationCount?: number;
+  moduleEvaluationTotalMs?: number;
+  // Per-field hydration wall-clock, keyed by dotted field path from the
+  // card's root — the deserialization sibling of `searchDocFieldsMs`, and
+  // the breakdown of `buildModelMs.hydrate`. Same bounding, so a cheap card
+  // records nothing.
+  //
+  // The keys are a naming scheme, NOT a tree with an inclusive invariant,
+  // and two things break the "parent covers its children" reading:
+  //
+  //   - Sibling fields deserialize concurrently under one `Promise.all`, so
+  //     their spans overlap and do not sum to `hydrate`.
+  //   - A plural field's items all report under the OWNING field's path, so
+  //     a nested key accumulates across items while the owning field's own
+  //     key is a single span over those (concurrent) items. A child key can
+  //     therefore exceed its parent's, and the floor can keep a child while
+  //     pruning the parent out.
+  //
+  // So read each value as that key's own measured cost and use the path to
+  // locate the field, not to reconstruct a hierarchy.
+  hydrateFieldsMs?: Record<string, number>;
+  // The slowest loads the settle stage drained, same bounding again.
+  // Separates "hydration fired a slow link load" from "hydration itself was
+  // expensive" (a hot `hydrateFieldsMs` path with no matching wait).
+  storeSettleWaits?: StoreSettleWait[];
+}
+
 // Per-render computed-field counters captured by the host's render.meta
 // route. Emitted alongside PrerenderMeta so the Prerenderer can lift them
 // onto `response.meta.diagnostics` and the indexer can persist them onto
 // `boxel_index.diagnostics`. All fields optional — older host
 // builds that predate the counters omit the block entirely.
-export interface PrerenderMetaDiagnostics {
+export interface PrerenderMetaDiagnostics extends BuildModelDiagnostics {
   // Number of `computeVia` invocations that ran during the
   // serializeCard + searchDoc traversal for this card. After the
   // pass-scoped memo lands this is one call per distinct computed read
@@ -210,6 +331,23 @@ export interface PrerenderMetaDiagnostics {
   // computedCacheHits` is the total computed-read pressure of the
   // pass; the ratio tells you how much duplicate work the memo elided.
   computedCacheHits?: number;
+  // Wall-clock loading the `card-api` base module, the render.meta route's
+  // first await. Per-loader cached like `searchableLoadMs`, so the first
+  // card a tab renders pays the module load and the rest read ~0 — which is
+  // what makes a first-in-tab card's `meta` bucket an outlier.
+  cardApiLoadMs?: number;
+  // Wall-clock the render.meta route spent awaiting the render model's ready
+  // settle — the parent `render` route's load-stability loop, which it kicks
+  // off and returns from, so this await is where the settle is paid for. A
+  // serial phase of the `meta` route step and often the largest one after
+  // the model build itself. On a visit whose html render already drove the
+  // settle this is ~0 and the cost sits in that render's format bucket.
+  readySettleMs?: number;
+  // Wall-clock loading the `searchable` base module the search-doc generator
+  // lives in. Per-loader cached, so the first card in a job to reach it pays
+  // the whole module load and every card after it reads ~0 — which is what
+  // makes an otherwise unremarkable card's `meta` bucket an outlier.
+  searchableLoadMs?: number;
   // Wall-clock of the host-side serializeCard call.
   serializeMs?: number;
   // Wall-clock of the searchable walk that produced the doc — the first
@@ -271,6 +409,17 @@ export interface PrerenderMetaDiagnostics {
   // counter, which no name change can reset. A render that records no
   // capture errors drops it along with `screenshotErrors`.
   screenshotCaptureFailureRenders?: number;
+  // Consecutive renders that withheld a stale-shell failure for this row.
+  // Withholding removes the `has_error` that would have told an operator to
+  // reindex, so the reconcile sweep re-drives these instead — and this bounds
+  // that retrying, for the case where the shells never do agree.
+  staleShellFailureRenders?: number;
+  // The gateway-failure twin of `staleShellFailureRenders`: consecutive
+  // renders that withheld a gateway/network failure for this row. Withholding
+  // clears the `has_error` that would have asked for a reindex, so the
+  // reconcile sweep re-drives these — and this bounds that, for a gateway
+  // failure that keeps recurring rather than clearing on the next render.
+  gatewayFailureRenders?: number;
   // Per-slot wall-clock of the declared-screenshot captures this visit
   // performed, keyed by slot name — the per-name decomposition of the
   // `renderFormatsMs.card.screenshots` aggregate, so a slow capture is
@@ -365,7 +514,7 @@ export type { ErrorEntry } from './error.ts';
 // error document tells operators *where* the time went. All fields
 // are optional — this is a best-effort diagnostic payload and older
 // code paths that don't populate them still work.
-export interface RenderTimeoutDiagnostics {
+export interface RenderTimeoutDiagnostics extends BuildModelDiagnostics {
   // Correlation ID threaded from the client-side remote-prerenderer
   // through manager and prerender-server. Paste into a log search to
   // join all three stacks for this call.
@@ -463,6 +612,17 @@ export interface RenderTimeoutDiagnostics {
     card?: Record<string, number>;
     file?: Record<string, number>;
   };
+  // `renderElapsedMs` minus every step bucket the visit recorded
+  // (`indexRoutesMs` + `renderFormatsMs`) — the render plumbing that sits
+  // between the steps: the tab's own setup, the per-step CDP round trips,
+  // the terminal-error probes and the response assembly. Emitted as a
+  // measured field rather than left as arithmetic, so a reader accounting
+  // for a visit's wall-clock sees a complete set of buckets and a
+  // regression in the plumbing shows up on its own. Clamped at zero and
+  // omitted when the visit recorded no step buckets at all (a
+  // screenshot-capture visit, whose components are the `screenshot*`
+  // fields).
+  unattributedMs?: number;
   // Render-phase breadcrumb set by the host app as it progresses. If
   // missing, we never reached the host route (stalled in launch/fetch).
   renderStage?: string;
@@ -743,30 +903,82 @@ export interface IndexVisitClientTimings {
 // url). Named `Diagnostics` (not `TimingDiagnostics`) because the block is
 // not purely about timing: it also carries `brokenLinks`, the
 // broken-link findings the render surfaced. Extends
-// `RenderTimeoutDiagnostics` (which already carries `requestId`) with two
-// write-side stamps applied at `IndexWriter.updateEntry` time:
+// `RenderTimeoutDiagnostics` (which already carries `requestId`) with three
+// write-side stamps. Every live row either channel WRITES carries all three,
+// stamped as the row enters the IndexWriter's write path — so a row is
+// always attributable to the pass that wrote it, whether or not its render
+// reported anything. The exception is a row a realm COPY produced
+// (`Batch.copyFrom` / `copyPrerenderedHtmlFrom` clone the source realm's
+// rows rather than rendering them): those keep whatever the source row
+// carried, so they name the source realm's pass, or nothing at all if that
+// row predates these stamps. The three stamps are:
 //
-//   - `invalidationId` — one UUID per `Batch`; every row touched by
-//     the same indexing pass (incremental fan-out or fromScratch)
-//     shares it, so operators can `SELECT ... WHERE
-//     diagnostics->>'invalidationId' = '<id>'` and see the
-//     whole batch.
+//   - `invalidationId` — one UUID per invalidation fan-out: minted when the
+//     `Batch` is created, so a from-scratch pass (which never calls
+//     `invalidate()`) still has one, and refreshed at the top of each
+//     `invalidate()` call so the id names one triggering change rather than
+//     the batch's whole lifetime. An index pass invalidates once, so in
+//     practice the id covers the batch too, and operators can `SELECT ...
+//     WHERE diagnostics->>'invalidationId' = '<id>'` to read back the whole
+//     fan-out. The `prerender_html` job an index pass spawns is its own
+//     batch with its own id: each groups its own channel's fan-out, so join
+//     the two channels on `url` (plus `generation`), never on this.
 //   - `indexedAt` — wall-clock the write happened.
+//   - `writeSeq` — the row's position within that fan-out's write order.
 //
-// All fields are optional because writers populate incrementally:
-// render-side fields come from the Prerenderer's response meta, the
-// write-side stamps come from the IndexWriter. Any stage may skip
-// pieces that aren't applicable (e.g. non-timeout renders have no
+// A tombstone takes no position in the write order, so `writeSeq` is absent
+// on one. The index channel's tombstones do carry the other two: they are
+// written by `invalidate()` under the id it just minted, and a visited URL's
+// row then overwrites its tombstone. The render channel's tombstones clear
+// `diagnostics` outright and so carry none of the three.
+//
+// Every other field is optional because writers populate incrementally:
+// render-side fields come from the Prerenderer's response meta. Any stage
+// may skip pieces that aren't applicable (e.g. non-timeout renders have no
 // `renderStage`, in-process callers have no `requestId`).
 // Extends both render-side diagnostic shapes so the persisted blob types
 // every field that actually lands in it: server-observed timings from
 // `RenderTimeoutDiagnostics` and the host-side `render.meta` block from
 // `PrerenderMetaDiagnostics` (computed-field counters plus `brokenLinks`).
-// The two write-side stamps below are added at `IndexWriter.updateEntry`.
 export interface Diagnostics
   extends RenderTimeoutDiagnostics, PrerenderMetaDiagnostics {
   invalidationId?: string;
   indexedAt?: number;
+  // 0-based position of this row among the batch's row writes, stamped when
+  // the row enters the write path. `indexedAt` only resolves to the
+  // millisecond, and a batch's rows drain through buffered multi-row upserts
+  // that share one timestamp, so this is the only field that orders two rows
+  // written by the same batch. Grouped with `invalidationId`, it
+  // reconstructs the visit order of either channel. A card instance
+  // contributes two rows written back to back — its `file` row and its
+  // `instance` row — so reduce to one position per URL rather than selecting
+  // rows (a module, which has only a `file` row, is unaffected by the
+  // reduction):
+  //
+  //   SELECT url, min((diagnostics->>'writeSeq')::int) AS seq
+  //     FROM boxel_index
+  //    WHERE diagnostics->>'invalidationId' = '<id>'
+  //    GROUP BY url
+  //    ORDER BY seq
+  //
+  // An incremental index pass writes the URLs its triggering write named
+  // ahead of the dependents its fan-out discovered, so the targets hold the
+  // lowest sequences — with two qualifications, both from
+  // `prioritizeWrittenURLs`: a recorded dependency still puts a dependency
+  // ahead of the URL that depends on it, and modules are written before
+  // instances whether or not the write named them.
+  //
+  // Sequences are per batch, and a fused visit's two rows share one — its
+  // `boxel_index` half and its `prerendered_html` half describe one position,
+  // not two. A split pipeline's channels number independently, so a
+  // sequence is only comparable within one `invalidationId`.
+  //
+  // A row written more than once in a pass keeps the position of its first
+  // write, so a sequence marks where the pass's work on that row began and a
+  // fan-out's positions stay gapless.
+  //
+  // Absent on a tombstoned row and on rows written before the stamp existed.
+  writeSeq?: number;
   // Host-shell token the prerender server had been told was current when this
   // render started, and again when its response was assembled. Two different
   // values mean the render straddled a host redeploy: the page resolved
@@ -802,6 +1014,43 @@ export interface Diagnostics
   // card that is genuinely broken, so a reader must require presence.
   warmedHostShellHash?: string | null;
   warmedHostShellHashAtCompletion?: string | null;
+  // Set only when the prerender server has concluded that a module-resolution
+  // failure cannot be attributed to the card: the render failed on a missing
+  // export, a re-render on a recycled pool failed the same way, and the pool
+  // still could not be shown to have been on the shell being served. The
+  // server holding both tokens is the one that can decide this, so it states
+  // the conclusion rather than leaving every reader to re-derive it from the
+  // four tokens above — a predicate duplicated at the write site would be a
+  // second place for the presence rule to be got wrong.
+  //
+  // Absent means no verdict, never "attributable". A reader must require
+  // presence before suppressing anything, for the same reason the warmed
+  // tokens distinguish `null` from absence.
+  // Which of this URL's row types the verdict covers, because one visit can
+  // produce several and they fail independently. A card render can hit the
+  // stale bundle while the file extraction beside it fails for reasons of its
+  // own, and withholding both on one response-level flag would hide that
+  // second, genuine failure.
+  //
+  // An empty array is not written: absence means no verdict, and a reader must
+  // find its own row type listed before withholding anything.
+  staleShellFailure?: ('instance' | 'file')[];
+  // Set only when the prerender server has concluded that a render failed
+  // because a fetch it made returned a gateway or network failure — a
+  // balancer 502/503/504, a connection reset, or a body that is not the
+  // content type the request asked for — rather than because the card is
+  // broken. The document-loading path parses the balancer's HTML error page
+  // as the card document and the resulting failure would otherwise be latched
+  // as the card's verdict, serving 500 to every reader until an invalidation;
+  // a network event that lasted milliseconds must not become a durable
+  // statement about the card.
+  //
+  // Structurally identical to `staleShellFailure`, and read the same way: the
+  // list of row types whose *own* failure was the gateway error (a visit
+  // produces the instance and file rows independently and they fail for their
+  // own reasons), an empty array is never written, and absence means no
+  // verdict — a reader must find its own row type listed before withholding.
+  gatewayFailure?: ('instance' | 'file')[];
   // A row is produced by two prerender visits (index + prerender-html),
   // each its own HTTP request. `requestId` always carries the index visit's
   // id and this always carries the prerender-html visit's, whichever table
@@ -1158,6 +1407,17 @@ export type ScreenshotCaptureOverrides = {
   // envelope, so a batch of differing envelopes yields differently-sized PNGs
   // off one render.
   envelope?: { width: number; height: number };
+  // Output encoding of the capture. `png` (the default, elided from the
+  // canonical form) and `pdf` are the values the engine honors; the roster
+  // reserves `jpeg`/`webp` for the encode legs the capture engine grows next,
+  // and the shared parse refuses those values by name until it does. Part of
+  // the ledger identity — two encodings of one render are two cache entries.
+  type?: CaptureOutputType;
+  // CSS media the render settles under before capture. `screen` (the
+  // default, elided) is the rendering every screenshot has always captured;
+  // `print` — refused by the shared parse until the engine emulates it —
+  // engages the card's print CSS. Part of the ledger identity.
+  media?: CaptureMedia;
 };
 
 // One entry in a batch capture: a name plus the same per-capture overrides. An
@@ -1204,15 +1464,19 @@ export type ScreenshotPrerenderArgs = {
   jobId?: string;
 };
 
-// One captured image in a screenshot response. `deviceScaleFactor` is the
-// effective scale used for this capture, so a consumer can reconstruct physical
-// vs CSS pixel dimensions.
+// One captured artifact in a screenshot response. `deviceScaleFactor` is the
+// scale the render ran at, so a consumer can reconstruct physical vs CSS
+// pixel dimensions for raster output.
 export type ScreenshotCaptureResult = {
   name: string;
   base64: string;
-  width: number;
-  height: number;
+  // CSS dimensions of a raster capture; absent for pdf output, which has no
+  // single pixel extent — `pageCount` describes it instead.
+  width?: number;
+  height?: number;
   deviceScaleFactor: number;
+  // Page count of a pdf capture; absent for raster output.
+  pageCount?: number;
 };
 
 export type ScreenshotPrerenderResponse = {
@@ -1226,7 +1490,11 @@ export type ScreenshotPrerenderResponse = {
   base64?: string;
   width?: number;
   height?: number;
-  contentType?: 'image/png';
+  // The encoding of `base64` (and every entry in `captures` — a response is
+  // one encoding throughout). The engine produces `image/png` and
+  // `application/pdf`; the type is the full output union so the persist and
+  // serving paths discriminate on it rather than assuming an image.
+  contentType?: CaptureContentType;
   error?: string | null;
   meta?: PrerenderResponseMeta;
 };
@@ -1282,12 +1550,27 @@ export {
 } from './write-size-validation.ts';
 export {
   computeContentHash,
+  computeContentHashFromRanges,
   isSampledContentHash,
   CONTENT_HASH_WHOLE_LIMIT_BYTES,
   CONTENT_HASH_HEAD_BYTES,
   CONTENT_HASH_TAIL_BYTES,
 } from './content-hash.ts';
 export type { FileSizeLimits } from './write-size-validation.ts';
+export {
+  isSplicedSource,
+  splice,
+  streamSpliced,
+  wholeFile,
+  wholeText,
+} from './spliced-content.ts';
+export type {
+  FileSegment,
+  SpliceEdit,
+  SpliceSegment,
+  SplicedSource,
+  TextSegment,
+} from './spliced-content.ts';
 
 export interface ResourceObject {
   type: string;
@@ -1365,6 +1648,7 @@ export * from './matrix-constants.ts';
 export * from './session-token.ts';
 export * from './matrix-client.ts';
 export * from './queue.ts';
+export * from './host-shell-generation.ts';
 export * from './job-utils.ts';
 export * from './prerender-html-reconcile.ts';
 export * from './media-cache.ts';
@@ -1386,6 +1670,7 @@ export * from './realm-index-updater.ts';
 export * from './fetcher.ts';
 export * from './test-waiters.ts';
 export * from './scoped-css.ts';
+export * from './scoped-css-gc.ts';
 export * from './html-utils.ts';
 export * from './utils.ts';
 export * from './authorization-middleware.ts';
@@ -1396,9 +1681,12 @@ export * from './query.ts';
 export * from './query-signature.ts';
 export * from './instance-filter-matcher.ts';
 export * from './search-utils.ts';
+export * from './search-shape.ts';
 export * from './search-resource-helpers.ts';
 export * from './search-entry.ts';
 export * from './search-bounds.ts';
+export * from './ttl-response-cache.ts';
+export * from './card-document-cache.ts';
 export * from './request-timings.ts';
 export * from './prerendered-html-format.ts';
 export * from './query-field-utils.ts';
@@ -1453,6 +1741,7 @@ export * from './db-queries/realm-metadata-queries.ts';
 export * from './db-queries/realm-permission-queries.ts';
 export * from './db-queries/session-room-queries.ts';
 export * from './db-queries/user-queries.ts';
+export * from './send-event.ts';
 
 // From https://github.com/iliakan/detect-node
 export const isNode =
@@ -1696,6 +1985,17 @@ export interface CreateOptions {
   realm?: string;
   localDir?: LocalPath;
   relativeTo?: RealmResourceIdentifier | URL | undefined;
+  // When `true`, the card write tells the realm not to block on the realm's
+  // in-flight incremental indexing before responding — it indexes the write
+  // deferred and answers from the serialized document instead of reading it
+  // back out of the index (see SKIP_INDEX_WAIT_HEADER). Defaults to false
+  // (wait), which is the synchronous-indexing contract every existing caller
+  // relies on. The writer's own next card read still waits on the deferred
+  // job (card reads drain the requester's own writes); what goes eventually-
+  // consistent is search — _search/_federated-search have no such drain —
+  // plus other users' sessions and anonymous readers. Only the save path
+  // (store.add → persistAndUpdate) honors this; create()/copy ignore it.
+  skipIndexWait?: boolean;
 }
 
 export interface AddOptions extends CreateOptions {

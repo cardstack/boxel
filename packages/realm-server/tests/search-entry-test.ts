@@ -23,6 +23,7 @@ import {
   searchEntryRealms,
   searchEntryWireQueryFromQuery,
   wireFilterHasMatches,
+  wireFilterTypeAnchors,
   SearchRequestError,
   DEFAULT_HTML_QUERY,
   rri,
@@ -515,6 +516,121 @@ module(basename(import.meta.filename), function () {
           ],
         }),
       );
+    });
+  });
+
+  // The types an entry must be one of to satisfy a wire filter — what lets a
+  // live search sit out an index event that touched none of them.
+  module('wire filter type anchors', function () {
+    let bookRef: ResolvedCodeRef = {
+      module: rri(`${realmURL}book`),
+      name: 'Book',
+    };
+
+    test('an anchored node answers for its whole subtree', function (assert) {
+      assert.deepEqual(wireFilterTypeAnchors({ 'item.on': authorRef }), [
+        authorRef,
+      ]);
+      assert.deepEqual(
+        wireFilterTypeAnchors({
+          'item.on': authorRef,
+          eq: { 'item.status': 'ready' },
+        }),
+        [authorRef],
+      );
+      // The engine ANDs the node's own anchor with everything below it, so an
+      // unanchored branch underneath can't widen what the node matches.
+      assert.deepEqual(
+        wireFilterTypeAnchors({
+          'item.on': authorRef,
+          any: [{ eq: { 'item.status': 'ready' } }, { matches: 'pigeon' }],
+        }),
+        [authorRef],
+      );
+    });
+
+    test('every is satisfied by one anchored branch, any needs them all', function (assert) {
+      assert.deepEqual(
+        wireFilterTypeAnchors({
+          every: [{ eq: { 'item.status': 'ready' } }, { 'item.on': authorRef }],
+        }),
+        [authorRef],
+      );
+      assert.deepEqual(
+        wireFilterTypeAnchors({
+          any: [{ 'item.on': authorRef }, { 'item.on': bookRef }],
+        }),
+        [authorRef, bookRef],
+      );
+      assert.strictEqual(
+        wireFilterTypeAnchors({
+          any: [{ 'item.on': authorRef }, { eq: { 'item.status': 'ready' } }],
+        }),
+        undefined,
+        'an unanchored branch of `any` admits an entry of any type',
+      );
+    });
+
+    // `filterCondition` compiles one member of a node and ignores the rest,
+    // and it and `assertFilter` disagree about which one that is — so a node
+    // carrying several is only readable through its own anchor.
+    test('a node carrying more than one shape member anchors nothing', function (assert) {
+      assert.strictEqual(
+        wireFilterTypeAnchors({
+          eq: { 'item.status': 'ready' },
+          any: [{ 'item.on': authorRef }],
+        }),
+        undefined,
+        'the engine runs the eq untyped, so the any branch cannot be read',
+      );
+      assert.strictEqual(
+        wireFilterTypeAnchors({
+          not: { eq: { 'item.status': 'ready' } },
+          every: [{ 'item.on': authorRef }],
+        }),
+        undefined,
+        'a not alongside a connective is the same hazard',
+      );
+      // The node's own anchor is ANDed into whichever member runs, so it
+      // answers for the node however the ambiguity resolves.
+      assert.deepEqual(
+        wireFilterTypeAnchors({
+          'item.on': bookRef,
+          eq: { 'item.status': 'ready' },
+          any: [{ 'item.on': authorRef }],
+        }),
+        [bookRef],
+      );
+    });
+
+    test('an eq binding only the htmlQuery selection is not a shape member', function (assert) {
+      // The parser lifts that binding out of the node before it is compiled,
+      // so the connective beside it is what the engine actually runs.
+      assert.deepEqual(
+        wireFilterTypeAnchors({
+          eq: { htmlQuery: { eq: { format: 'fitted' } } },
+          any: [{ 'item.on': authorRef }, { 'item.on': bookRef }],
+        }),
+        [authorRef, bookRef],
+      );
+    });
+
+    test('a filter that admits any type anchors nothing', function (assert) {
+      for (let filter of [
+        undefined,
+        {},
+        { matches: 'pigeon' },
+        { eq: { 'item.status': 'ready' } },
+        { not: { 'item.on': authorRef } },
+        { every: [] },
+        { any: [] },
+      ]) {
+        assert.strictEqual(
+          wireFilterTypeAnchors(filter),
+          undefined,
+          `${JSON.stringify(filter)} → undefined`,
+        );
+      }
     });
   });
 

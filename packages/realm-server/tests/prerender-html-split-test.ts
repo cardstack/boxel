@@ -615,6 +615,29 @@ module(basename(import.meta.filename), function () {
       return rows[0];
     }
 
+    // Every live row on either channel carries the three write-side stamps
+    // in its `diagnostics` column (see `Diagnostics`). Assert they are there,
+    // then return the rest of the blob so a render-side assertion can compare
+    // exactly what the render produced. Not for `error_doc.diagnostics`: that
+    // mirror carries the render's own diagnostics only.
+    function withoutWriteSideStamps(
+      diagnostics: Record<string, unknown> | null | undefined,
+      label: string,
+      assert: Assert,
+    ): Record<string, unknown> {
+      assert.ok(diagnostics, `${label} carries a diagnostics blob`);
+      let rest: Record<string, unknown> = { ...(diagnostics ?? {}) };
+      for (let key of ['invalidationId', 'indexedAt', 'writeSeq']) {
+        assert.notStrictEqual(
+          rest[key],
+          undefined,
+          `${label} is stamped with ${key}`,
+        );
+        delete rest[key];
+      }
+      return rest;
+    }
+
     function stubReader(contents: Map<string, string>): Reader {
       return {
         async readFile(url: URL) {
@@ -632,6 +655,200 @@ module(basename(import.meta.filename), function () {
         },
       };
     }
+
+    // Withholding a stale-shell failure has to happen on THIS channel as well
+    // as on `boxel_index`, because `effectiveHasError()` is
+    // `COALESCE(i.has_error, FALSE) OR (ph.error_doc IS NOT NULL AND
+    // ph.generation >= i.generation)` — a current error doc here makes the row
+    // read as errored whatever the index channel says, and `effectiveErrorDoc()`
+    // then serves this column. Postgres uses the split channel by default, so a
+    // suppression that covered only the index channel would be inert in
+    // production.
+    module('withholding a stale-shell failure', function () {
+      async function writeError(
+        generation: number,
+        url: string,
+        opts: { diagnostics?: Diagnostics; message?: string } = {},
+      ) {
+        let batch = await makeBatch(generation);
+        await batch.seedPrerenderedHtmlInvalidations([
+          { url, operation: 'update' },
+        ]);
+        await batch.updatePrerenderedHtmlEntry(new URL(url), {
+          type: 'instance-error',
+          error: {
+            message: opts.message ?? 'has no exported member',
+            status: 500,
+            additionalErrors: null,
+          },
+          ...(opts.diagnostics ? { diagnostics: opts.diagnostics } : {}),
+        } as any);
+        await batch.done();
+      }
+
+      test('a covered verdict keeps the published render and writes no error', async function (assert) {
+        let url = `${testRealm}withheld.json`;
+        await writeInstance(1, url, '<div>good</div>');
+
+        await writeError(2, url, {
+          diagnostics: { staleShellFailure: ['instance'] } as Diagnostics,
+        });
+
+        let row = await productionRow(url);
+        assert.strictEqual(
+          row.error_doc,
+          null,
+          'no error doc, so `effectiveHasError` does not see a current render error',
+        );
+        assert.strictEqual(
+          row.isolated_html,
+          '<div>good</div>',
+          'and the last good render is still what readers get',
+        );
+      });
+
+      test('a verdict naming another row does not withhold this one', async function (assert) {
+        let url = `${testRealm}other-row.json`;
+        await writeInstance(1, url, '<div>good</div>');
+
+        // The card render hit the stale bundle; this instance row failed for
+        // its own reasons and must stay visible.
+        await writeError(2, url, {
+          diagnostics: { staleShellFailure: ['file'] } as Diagnostics,
+        });
+
+        let row = await productionRow(url);
+        assert.ok(
+          row.error_doc,
+          'the error is published, because the verdict did not cover this row',
+        );
+      });
+
+      test('an unmarked failure is published as before', async function (assert) {
+        let url = `${testRealm}unmarked.json`;
+        await writeInstance(1, url, '<div>good</div>');
+        await writeError(2, url);
+
+        let row = await productionRow(url);
+        assert.ok(
+          row.error_doc,
+          'absence of a verdict means no verdict, never "withhold"',
+        );
+      });
+
+      test('a first render has nothing to keep, so its failure surfaces', async function (assert) {
+        let url = `${testRealm}brand-new.json`;
+        // No prior good render at all — withholding here would leave the row
+        // blank rather than protecting anything.
+        await writeError(1, url, {
+          diagnostics: { staleShellFailure: ['instance'] } as Diagnostics,
+        });
+
+        let row = await productionRow(url);
+        assert.ok(
+          row.error_doc,
+          'the failure has to surface somewhere when there is no good content',
+        );
+      });
+    });
+
+    // The gateway-failure twin of the stale-shell suppression above. The
+    // write-side mechanism is identical — it reads `diagnostics.gatewayFailure`
+    // and withholds on this channel as well as `boxel_index`, because
+    // `effectiveHasError()` reads both — so these cases mirror the stale-shell
+    // ones, plus one for the re-drive counter that the reconcile sweep keys on.
+    module('withholding a gateway failure', function () {
+      async function writeError(
+        generation: number,
+        url: string,
+        opts: { diagnostics?: Diagnostics; message?: string } = {},
+      ) {
+        let batch = await makeBatch(generation);
+        await batch.seedPrerenderedHtmlInvalidations([
+          { url, operation: 'update' },
+        ]);
+        await batch.updatePrerenderedHtmlEntry(new URL(url), {
+          type: 'instance-error',
+          error: {
+            message: opts.message ?? 'Gateway or network failure',
+            status: 502,
+            additionalErrors: null,
+          },
+          ...(opts.diagnostics ? { diagnostics: opts.diagnostics } : {}),
+        } as any);
+        await batch.done();
+      }
+
+      test('a covered verdict keeps the published render and writes no error', async function (assert) {
+        let url = `${testRealm}gateway-withheld.json`;
+        await writeInstance(1, url, '<div>good</div>');
+
+        await writeError(2, url, {
+          diagnostics: { gatewayFailure: ['instance'] } as Diagnostics,
+        });
+
+        let row = await productionRow(url);
+        assert.strictEqual(
+          row.error_doc,
+          null,
+          'no error doc, so `effectiveHasError` does not see a current render error',
+        );
+        assert.strictEqual(
+          row.isolated_html,
+          '<div>good</div>',
+          'and the last good render is still what readers get',
+        );
+        assert.strictEqual(
+          (row.diagnostics as Diagnostics | null)?.gatewayFailureRenders,
+          1,
+          'the withheld row carries the re-drive counter the reconcile sweep reads',
+        );
+      });
+
+      test('a verdict naming another row does not withhold this one', async function (assert) {
+        let url = `${testRealm}gateway-other-row.json`;
+        await writeInstance(1, url, '<div>good</div>');
+
+        // The card render hit a gateway failure; this instance row failed for
+        // its own reasons and must stay visible.
+        await writeError(2, url, {
+          diagnostics: { gatewayFailure: ['file'] } as Diagnostics,
+        });
+
+        let row = await productionRow(url);
+        assert.ok(
+          row.error_doc,
+          'the error is published, because the verdict did not cover this row',
+        );
+      });
+
+      test('an unmarked failure is published as before', async function (assert) {
+        let url = `${testRealm}gateway-unmarked.json`;
+        await writeInstance(1, url, '<div>good</div>');
+        await writeError(2, url);
+
+        let row = await productionRow(url);
+        assert.ok(
+          row.error_doc,
+          'absence of a verdict means no verdict, never "withhold"',
+        );
+      });
+
+      test('a first render has nothing to keep, so its failure surfaces', async function (assert) {
+        let url = `${testRealm}gateway-brand-new.json`;
+        // No prior good render at all — withholding here would leave the row
+        // blank rather than protecting anything.
+        await writeError(1, url, {
+          diagnostics: { gatewayFailure: ['instance'] } as Diagnostics,
+        });
+
+        let row = await productionRow(url);
+        assert.ok(
+          row.error_doc,
+          'the failure has to surface somewhere when there is no good content',
+        );
+      });
+    });
 
     test('writes rendered rows and swaps them under the carried generation', async function (assert) {
       let url = `${testRealm}1.json`;
@@ -821,7 +1038,7 @@ module(basename(import.meta.filename), function () {
 
       let row = await productionRow(url);
       assert.deepEqual(
-        row.diagnostics,
+        withoutWriteSideStamps(row.diagnostics, 'the rendered row', assert),
         diagnostics as Record<string, unknown>,
         'the render diagnostics ride the row through the swap',
       );
@@ -860,14 +1077,14 @@ module(basename(import.meta.filename), function () {
         'the last-known-good HTML is preserved through the error cycle',
       );
       assert.deepEqual(
-        row.diagnostics,
+        withoutWriteSideStamps(row.diagnostics, 'the error row', assert),
         failing as Record<string, unknown>,
         "the failing render's diagnostics land on the row — not the last-known-good render's",
       );
       assert.deepEqual(
         row.error_doc?.diagnostics,
         failing as Record<string, unknown>,
-        'the same payload is mirrored onto the error doc',
+        'the same payload is mirrored onto the error doc, without the stamps',
       );
     });
 
@@ -971,9 +1188,152 @@ module(basename(import.meta.filename), function () {
         prerenderHtmlRequestId: 'render-req-9',
       };
       let instanceRow = await productionRow(cardURL, 'instance');
-      assert.deepEqual(instanceRow.diagnostics, expected);
+      assert.deepEqual(
+        withoutWriteSideStamps(
+          instanceRow.diagnostics,
+          'the instance row',
+          assert,
+        ),
+        expected,
+      );
       let fileRow = await productionRow(cardURL, 'file');
-      assert.deepEqual(fileRow.diagnostics, expected);
+      assert.deepEqual(
+        withoutWriteSideStamps(fileRow.diagnostics, 'the file row', assert),
+        expected,
+      );
+      assert.strictEqual(
+        instanceRow.diagnostics?.invalidationId,
+        fileRow.diagnostics?.invalidationId,
+        "both of the URL's rows are attributed to the pass that wrote them",
+      );
+    });
+
+    test('the pass stamps every rendering with its own grouping id and write order', async function (assert) {
+      // The render channel is its own fan-out: an operator asking "what did
+      // this prerender_html job render, and in what order?" reads the two
+      // stamps below off the rows, the same way they read an index pass's
+      // fan-out. The grouping id is per batch, so it is the render channel's
+      // own key and does not equal the spawning index pass's — the two
+      // channels join on url.
+      let urls = [
+        `${testRealm}zzz.json`,
+        `${testRealm}aaa.json`,
+        `${testRealm}bbb.json`,
+      ];
+      let batch = await makeBatch(4);
+      await batch.seedPrerenderedHtmlInvalidations(
+        urls.map((url) => ({ url, operation: 'update' as const })),
+      );
+      for (let [i, url] of urls.entries()) {
+        await batch.updatePrerenderedHtmlEntry(new URL(url), {
+          type: 'instance',
+          isolatedHtml: `<h1>${i}</h1>`,
+          deps: [],
+          // Only the middle rendering reports any diagnostics of its own, so
+          // this also pins that a rendering with none is still attributable.
+          ...(i === 1 ? { diagnostics: { renderElapsedMs: 7 } } : {}),
+        });
+      }
+      await batch.done();
+
+      let rows = (await adapter.execute(
+        `SELECT url, diagnostics FROM prerendered_html
+          WHERE realm_url = $1 AND type = 'instance'
+          ORDER BY (diagnostics->>'writeSeq')::int`,
+        { bind: [testRealm] },
+      )) as { url: string; diagnostics: Record<string, unknown> | null }[];
+
+      assert.deepEqual(
+        rows.map((row) => row.url),
+        urls,
+        'writeSeq orders the renderings the way the pass wrote them, not lexically',
+      );
+      assert.deepEqual(
+        rows.map((row) => row.diagnostics?.writeSeq),
+        [0, 1, 2],
+        'the sequence is 0-based and gapless across the pass',
+      );
+      assert.strictEqual(
+        new Set(rows.map((row) => row.diagnostics?.invalidationId)).size,
+        1,
+        'one grouping id covers the whole pass',
+      );
+      assert.strictEqual(
+        rows[1]?.diagnostics?.renderElapsedMs,
+        7,
+        "the stamps merge around a rendering's own diagnostics rather than replacing them",
+      );
+    });
+
+    test('the index channel stamps each write with its position, and a rewrite keeps the first', async function (assert) {
+      // The visit loop hands its rows to a write-behind buffer that drains
+      // them in one multi-row upsert, so a row's position has to be taken
+      // where it entered the buffer: `indexedAt` alone cannot separate rows
+      // one drain wrote, and the drain itself collapses two writes of the
+      // same row into one. A row written again keeps the position its first
+      // write took — on either side of a flush, since a rewrite can land on
+      // either side of one — while its contents are the last write's. The
+      // positions stay gapless: the rewrites below consume none of their own.
+      let batch = await indexWriter.createBatch(
+        new URL(testRealm),
+        virtualNetwork,
+        jobInfo(),
+      );
+      let file = (lastModified: number) => ({
+        type: 'file' as const,
+        lastModified,
+        resourceCreatedAt: lastModified,
+        deps: new Set<string>(),
+      });
+      let url = (path: string) => new URL(`${testRealm}${path}`);
+      await batch.invalidate([url('zzz.gts'), url('aaa.gts'), url('bbb.gts')]);
+      await batch.bufferEntry(url('zzz.gts'), file(1));
+      await batch.bufferEntry(url('aaa.gts'), file(2));
+      // Rewritten before the buffer drains — the same visit, correcting the
+      // row it already wrote.
+      await batch.bufferEntry(url('zzz.gts'), file(3));
+      await batch.flushWriteBuffer();
+      // Rewritten again after the drain, so the position has to outlive the
+      // buffer that carried it.
+      await batch.bufferEntry(url('zzz.gts'), file(4));
+      await batch.bufferEntry(url('bbb.gts'), file(5));
+      await batch.done();
+
+      let rows = (await adapter.execute(
+        `SELECT url, last_modified,
+                diagnostics->>'writeSeq' AS seq,
+                diagnostics->>'invalidationId' AS invalidation_id
+           FROM boxel_index
+          WHERE realm_url = $1 AND type = 'file'
+          ORDER BY (diagnostics->>'writeSeq')::int`,
+        { bind: [testRealm] },
+      )) as {
+        url: string;
+        last_modified: string | number | null;
+        seq: string | null;
+        invalidation_id: string | null;
+      }[];
+
+      assert.deepEqual(
+        rows.map((row) => row.url),
+        [url('zzz.gts').href, url('aaa.gts').href, url('bbb.gts').href],
+        'writeSeq replays the order the pass wrote its rows, not the lexical order',
+      );
+      assert.deepEqual(
+        rows.map((row) => row.seq),
+        ['0', '1', '2'],
+        'the rewrites kept zzz.gts at position 0 and consumed no position of their own',
+      );
+      assert.strictEqual(
+        Number(rows[0]?.last_modified),
+        4,
+        "the row's contents are the last write's, even though its position is the first write's",
+      );
+      assert.strictEqual(
+        new Set(rows.map((row) => row.invalidation_id)).size,
+        1,
+        'one grouping id covers the whole pass',
+      );
     });
 
     test('a retry resumes rows the prior attempt rendered instead of tombstoning them', async function (assert) {
@@ -1696,11 +2056,12 @@ module(basename(import.meta.filename), function () {
             type: 'indexing-started',
             realmURL: testRealm,
             jobId: info.jobId,
+            reservationId: info.reservationId,
             jobType: 'prerender_html',
             totalFiles: 4,
             files: [],
           },
-          'started carries the deduped total and the queue job-type label',
+          'started carries the deduped total, the job-type label, and the reservation a heartbeat is keyed by',
         );
         assert.deepEqual(
           rest.map((e) => [e.type, e.url, e.filesCompleted, e.totalFiles]),

@@ -150,6 +150,12 @@ export interface SearchEntryQuery {
   realms?: string[];
   cardUrls?: string[];
   scope?: SearchEntryScope;
+  // The card types an entry must be one of to satisfy this query's filter, or
+  // `undefined` when the filter admits an entry of any type — see
+  // `wireFilterTypeAnchors`. Read off the wire filter, which carries the
+  // `item.on` anchors the translation to `itemQuery` spreads across `on` and
+  // `type`.
+  typeAnchors?: CodeRef[];
 }
 
 function invalidQuery(message: string): SearchRequestError {
@@ -684,6 +690,9 @@ export function parseSearchEntryQueryFromPayload(
     realms,
     cardUrls,
     scope,
+    typeAnchors: wireFilterTypeAnchors(
+      record.filter as SearchEntryWireFilter | undefined,
+    ),
   };
 }
 
@@ -836,6 +845,107 @@ export function wireFilterHasMatches(
     return wireFilterHasMatches(filter.not);
   }
   return false;
+}
+
+// The card types an entry must be one of to satisfy this filter, or
+// `undefined` when the filter admits an entry of any type. An over-
+// approximation, and deliberately so: every entry the filter matches adopts
+// from at least one of the returned refs, but not every entry adopting from
+// one of them matches.
+//
+// That direction is what a live search needs. An index event names the types
+// it touched; a query whose anchors are disjoint from them cannot have gained
+// or lost a member, because a member would have to be of one of these types
+// and a row of one of these types would have named it in the event. The
+// reverse — narrowing the anchors — would let a real membership change slip
+// past, so every shape whose anchors can't be established returns `undefined`
+// and leaves the caller re-running unconditionally.
+//
+// The engine ANDs a node's own `item.on` with every branch it could take (see
+// `filterCondition`), so an anchored node answers for its whole subtree
+// whatever that subtree contains and whichever branch runs.
+//
+// An unanchored node is only readable when exactly one member decides what it
+// matches. A node carrying several is compiled from just one of them and the
+// rest are dead weight — and which one that is cannot be read off the node,
+// because `filterCondition` and the query validator disagree about the order
+// they choose in. Reading the wrong member would anchor a node the engine is
+// running untyped, so a multi-member node anchors nothing.
+//
+// Given the one member: `every` is satisfied by any one branch's anchors (a
+// match satisfies all the branches, so any one of them constrains it), `any`
+// needs all of its branches anchored because an unanchored branch admits an
+// entry of any type, and a bare `not` or operator member anchors nothing.
+export function wireFilterTypeAnchors(
+  filter: SearchEntryWireFilter | undefined,
+): CodeRef[] | undefined {
+  if (!filter) {
+    return undefined;
+  }
+  let anchor = filter[ITEM_ANCHOR];
+  if (anchor) {
+    return [anchor];
+  }
+  let member = soleShapeMember(filter);
+  if (member === 'every' && filter.every?.length) {
+    for (let branch of filter.every) {
+      let anchors = wireFilterTypeAnchors(branch);
+      if (anchors) {
+        return anchors;
+      }
+    }
+    return undefined;
+  }
+  if (member === 'any' && filter.any?.length) {
+    let anchors: CodeRef[] = [];
+    for (let branch of filter.any) {
+      let branchAnchors = wireFilterTypeAnchors(branch);
+      if (!branchAnchors) {
+        return undefined;
+      }
+      anchors.push(...branchAnchors);
+    }
+    return anchors;
+  }
+  return undefined;
+}
+
+// The members that decide what a filter node matches, as opposed to the
+// `item.on` anchor that gates whichever of them runs.
+const SHAPE_MEMBERS = [
+  'any',
+  'every',
+  'not',
+  'eq',
+  'in',
+  'contains',
+  'range',
+  'matches',
+] as const;
+
+// The single member that decides what an unanchored node matches, or
+// `undefined` when it carries none or several. An `eq` binding nothing but the
+// `htmlQuery` rendering selection doesn't count: the parser lifts that binding
+// out of the node, so it never decides anything.
+function soleShapeMember(
+  filter: SearchEntryWireFilter,
+): (typeof SHAPE_MEMBERS)[number] | undefined {
+  let members = SHAPE_MEMBERS.filter((member) => {
+    let value = filter[member];
+    if (value === undefined) {
+      return false;
+    }
+    return !(member === 'eq' && bindsOnlyHtmlQuery(value));
+  });
+  return members.length === 1 ? members[0] : undefined;
+}
+
+function bindsOnlyHtmlQuery(eq: unknown): boolean {
+  if (typeof eq !== 'object' || eq == null) {
+    return false;
+  }
+  let keys = Object.keys(eq);
+  return keys.length > 0 && keys.every((key) => key === HTML_QUERY);
 }
 
 // ---------------------------------------------------------------------------

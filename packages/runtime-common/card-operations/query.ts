@@ -24,9 +24,8 @@ import {
 // ============================================================================
 
 export interface QueryInvocation {
-  // The invoking user's identity, as `actor()` resolves to. Only the identity
-  // is available: resolving any other member of the actor would mean loading
-  // the actor's card, which a query is not entitled to do.
+  // The invoking user's id, which is what `actor()` resolves to and the whole
+  // of what the realm knows about the caller.
   actor: string;
   // The payload, keyed the way the definition's `params` schema declares it.
   params?: Record<string, unknown>;
@@ -138,12 +137,13 @@ function resolveMarker(
     }
     case 'actor':
       // A query compares against what the index holds, and what it holds for
-      // an actor is the actor's identity. A keyed `actor("name")` would need
-      // the actor's card loaded, so only the identity resolves.
-      if (marker.key !== undefined && marker.key !== 'id') {
+      // an actor is the caller's user id — which is the whole of what the
+      // realm knows about them, so the marker carries no key and a stored one
+      // names a member that does not exist.
+      if (marker.key !== undefined) {
         throw invalidParams(
           path,
-          `references actor("${String(marker.key)}"); a query can only compare against the actor's identity`,
+          `references actor("${String(marker.key)}"); the caller is a user id with no members to read`,
         );
       }
       return invocation.actor;
@@ -151,7 +151,19 @@ function resolveMarker(
       // The explicit "this is a card" spelling. In a query every card-valued
       // slot is a comparison against a stored identity rather than a write, so
       // what the marker wraps resolves to that identity and the wrapper adds
-      // nothing around it.
+      // nothing around it — which is why the caller cannot stand inside one.
+      // A user id is not a card identity, so the comparison would match no
+      // row rather than fail, and a saved search that silently finds nothing
+      // is worse than one that refuses.
+      if (
+        isPlainObject(marker.value) &&
+        (marker.value as Record<string, unknown>).$ref === 'actor'
+      ) {
+        throw invalidParams(
+          path,
+          `wraps actor() in card(); the caller is a user id rather than a card, so nothing stored would ever equal it`,
+        );
+      }
       return resolveMarkers(marker.value, definition, invocation, path);
     case 'instance':
       // A query is rooted in a type, not in one card, so there is no target
@@ -160,6 +172,18 @@ function resolveMarker(
         path,
         'references instance(), which a query has no target to resolve against',
       );
+    case 'realmConfig':
+      // A realm setting is a value the realm supplies, and nothing supplies
+      // one yet: the `config` map a marker reads from arrives with the builtin
+      // that reads it. Refused as the realm's own gap rather than the
+      // caller's, since the declaration is well formed and there is nothing a
+      // caller could send to satisfy it.
+      throw new OperationFailure({
+        status: 501,
+        code: 'internal-error',
+        title: 'Operation not implemented',
+        detail: `${path} reads a realm setting, which this realm does not yet supply to an operation`,
+      });
     default:
       throw invalidParams(
         path,

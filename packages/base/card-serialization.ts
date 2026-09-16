@@ -82,6 +82,18 @@ export interface SerializeOpts {
 export interface DeserializeOpts {
   ignoreBrokenLinks?: true;
   dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+  // Opt-in per-field hydration timing. When a caller supplies the collector,
+  // `_updateFromSerialized` accumulates each field's inclusive
+  // deserialization wall-clock into it, keyed by dotted path, and threads
+  // `hydrateFieldPath` down the recursion so a nested field's key names its
+  // whole path from the root. Absent for every other caller, which then pays
+  // one property read per field and allocates nothing — the interactive app
+  // deserializes on its hot path too.
+  hydrateFieldsMs?: Record<string, number>;
+  // The path of the field whose value is currently being deserialized, i.e.
+  // the prefix the next level down qualifies its own field names with. Set
+  // only alongside `hydrateFieldsMs`; the root call leaves it unset.
+  hydrateFieldPath?: string;
 }
 
 // --- Serialization Symbols ---

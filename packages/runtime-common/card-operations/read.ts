@@ -95,7 +95,7 @@ function refuseUnservedStages(
   definition: OperationDefinition,
 ): void {
   let stages = (
-    ['program', 'input', 'output', 'fill', 'of', 'query'] as const
+    ['program', 'input', 'output', 'fill', 'items', 'of', 'query'] as const
   ).filter((stage) => definition[stage] !== undefined);
   if (stages.length === 0) {
     return;
@@ -309,7 +309,7 @@ async function missingTarget(
   if (await core.isIgnored(pathsFor(core).fileURL(sourcePath))) {
     return notFound;
   }
-  let source = await core.readSource(sourcePath);
+  let source = await core.readFileAsText(sourcePath);
   if (source === undefined) {
     return notFound;
   }

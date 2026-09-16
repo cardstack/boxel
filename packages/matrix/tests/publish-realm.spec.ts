@@ -7,6 +7,7 @@ import {
   createSubscribedUserAndLogin,
   postCardSource,
   postNewCard,
+  waitForPublishedMarker,
 } from '../helpers/index.ts';
 
 let serverIndexUrl = new URL(appURL).origin;
@@ -296,16 +297,31 @@ test.describe('Publish realm', () => {
     page,
     request,
   }) => {
-    // Two full publish+index cycles plus a readiness wait — give this E2E
-    // flow more than the default per-attempt budget.
-    test.setTimeout(120_000);
-    // CS-11043 regression net. The bug was: a republish reported success
-    // server-side but the published URL kept serving the previous publish's
-    // rendered HTML, sometimes for tens of hours. Every existing
-    // publish-realm test does exactly one publish — this is the gap the
-    // bug slipped through. Here we publish, change content, publish
-    // again, and assert the published URL shows the new content (and not
-    // the old).
+    // A publish becomes visible on the published URL only once the published
+    // realm has re-indexed and re-rendered its HTML. That pipeline runs
+    // behind the POST's 202 and shares workers with every other realm on the
+    // shard, so it is routinely a minute wide. This test drives two complete
+    // publish cycles, so its budget is the workspace setup plus two of those
+    // waits — and each wait is bounded on its own, so an overrun fails inside
+    // the leg that overran (naming what the published URL was serving)
+    // instead of the enclosing deadline cutting an assertion short and
+    // reporting the assertion's stale value as the defect.
+    const PUBLISH_READY_TIMEOUT = 90_000;
+    const SETUP_BUDGET = 60_000;
+    // Held back from each wait's budget for the tab assertions that follow it.
+    const TAB_ASSERTION_RESERVE = 30_000;
+    // Also held back, for the two requests the timeout path makes before it
+    // throws. Both are bounded to half of it, so together they cannot outlive
+    // the test and swallow the message they exist to produce.
+    const DIAGNOSTIC_BUDGET = 10_000;
+    test.setTimeout(SETUP_BUDGET + 2 * PUBLISH_READY_TIMEOUT);
+    let testStartedAt = Date.now();
+    // The regression net: a republish can report success server-side while
+    // the published URL keeps serving the previous publish's rendered HTML.
+    // Every other publish-realm test does exactly one publish, so only this
+    // one covers the second cycle — publish, change the source, publish
+    // again, and require the published URL to show the new content and not
+    // the old.
 
     await clearLocalStorage(page, serverIndexUrl);
     user = await createSubscribedUserAndLogin(
@@ -316,6 +332,77 @@ test.describe('Publish realm', () => {
 
     let serverURL = new URL(serverIndexUrl);
     let defaultRealmURL = `${serverURL.protocol}//${serverURL.host}/${user.username}/new-workspace/`;
+    let publishedRealmURL = `${serverURL.protocol}//${user.username}.${serverURL.host}/new-workspace/`;
+
+    // Gate on the served HTML over plain HTTP rather than by reloading a
+    // browser tab: a reload re-boots the whole host app in a fresh document,
+    // which competes for CPU with the very prerender being waited on and
+    // stretches one poll iteration into tens of seconds.
+    //
+    // A timeout here has two very different causes, so report the evidence
+    // that separates them. `_readiness-check?awaitPrerenderHtml=true` answers
+    // 200 only once the published realm is both indexed and rendered, so a
+    // 503 alongside missing content means the publish pipeline is still
+    // running (contention, or this budget is too small), while a 200
+    // alongside the previous sentinel means the pipeline finished and the
+    // published URL is serving stale HTML — the defect this test exists to
+    // catch. Elapsed time is logged on success too, so a failure shows
+    // whether one leg was slow or the whole shard was.
+    async function waitForPublishedSentinel(
+      sentinel: string,
+      previousSentinel?: string,
+    ) {
+      let startedAt = Date.now();
+      // Never ask for more than the test has left. Whichever deadline is
+      // nearer, this wait has to be the one that fires: its message names
+      // what the published URL was serving, where the enclosing test
+      // deadline reports only whichever assertion it happened to interrupt.
+      // The floor keeps at least one poll — and so the diagnostic below —
+      // reachable even when nothing is left.
+      let budget = Math.max(
+        1_000,
+        Math.min(
+          PUBLISH_READY_TIMEOUT,
+          test.info().timeout -
+            (startedAt - testStartedAt) -
+            TAB_ASSERTION_RESERVE -
+            DIAGNOSTIC_BUDGET,
+        ),
+      );
+      try {
+        await waitForPublishedMarker(page, publishedRealmURL, sentinel, budget);
+      } catch (e) {
+        let body = await page.request
+          .get(publishedRealmURL, {
+            headers: { Accept: 'text/html' },
+            timeout: DIAGNOSTIC_BUDGET / 2,
+          })
+          .then((r) => r.text())
+          .catch(() => '');
+        let serving = !body
+          ? 'nothing readable'
+          : previousSentinel && body.includes(previousSentinel)
+            ? `the previous sentinel "${previousSentinel}"`
+            : 'a body carrying neither sentinel';
+        let readiness = await page.request
+          .get(`${publishedRealmURL}_readiness-check?awaitPrerenderHtml=true`, {
+            headers: { Accept: 'text/html' },
+            timeout: DIAGNOSTIC_BUDGET / 2,
+          })
+          .then((r) => `HTTP ${r.status()}`)
+          .catch((readinessError) => `unreachable (${readinessError.message})`);
+        throw new Error(
+          `${(e as Error).message}\npublished URL is serving ${serving} ` +
+            `after ${Date.now() - startedAt}ms; indexed+rendered readiness ` +
+            `reports ${readiness}`,
+        );
+      }
+      console.log(
+        `[publish-realm republish] "${sentinel}" live on ${publishedRealmURL} after ${
+          Date.now() - startedAt
+        }ms`,
+      );
+    }
 
     await createRealm(page, 'new-workspace', '1New Workspace');
 
@@ -372,7 +459,10 @@ test.describe('Publish realm', () => {
     await page.locator('[data-test-publish-button]').click();
     await page.waitForSelector('[data-test-unpublish-button]');
 
-    // Open the published URL and verify the initial sentinel renders.
+    // Wait for the first publish to reach the published URL, then open it in
+    // a tab that is already warm and verify the initial sentinel renders.
+    await waitForPublishedSentinel(initialSentinel);
+
     let firstTabPromise = page.waitForEvent('popup');
     await page
       .locator(
@@ -383,7 +473,6 @@ test.describe('Publish realm', () => {
     await firstTab.waitForLoadState();
     await expect(firstTab.locator('[data-test-sentinel-output]')).toHaveText(
       initialSentinel,
-      { timeout: 30_000 },
     );
     await firstTab.close();
     await page.bringToFront();
@@ -448,18 +537,18 @@ test.describe('Publish realm', () => {
     }
     let publishButton = page.locator('[data-test-publish-button]');
 
-    // Set up the network wait BEFORE clicking — the handler awaits
-    // the full reindex before returning 202, so when this resolves we
-    // know the publish is fully done. Caught so a transient hiccup
-    // downgrades to null rather than throwing; the published-URL
-    // assertion below has its own retry budget and is the
-    // load-bearing check either way.
+    // Set up the network wait BEFORE clicking so the POST cannot be missed.
+    // The handler enqueues the re-index and answers 202 straight away, so
+    // this only confirms the click reached the server — the published URL is
+    // what proves the republish landed. Caught so a transient hiccup
+    // downgrades to null and the published-URL wait below reports the
+    // failure, rather than this masking it with a response-event timeout.
     let publishResponsePromise = page
       .waitForResponse(
         (r) =>
           r.url().endsWith('/_publish-realm') &&
           r.request().method() === 'POST',
-        { timeout: 180_000 },
+        { timeout: PUBLISH_READY_TIMEOUT },
       )
       .catch(() => null);
     await publishButton.click();
@@ -467,13 +556,19 @@ test.describe('Publish realm', () => {
     if (publishResponse) {
       expect(
         publishResponse.status(),
-        'second publish should succeed',
+        'second publish should be accepted',
       ).toBeLessThan(300);
+    } else {
+      console.log(
+        '[publish-realm republish] no POST /_publish-realm observed for the second publish',
+      );
     }
 
-    // Open the published URL again and verify the UPDATED sentinel
-    // renders — and the initial sentinel does NOT. This is the
-    // load-bearing assertion CS-11043 would have failed.
+    // The load-bearing check: the published URL has to serve the updated
+    // sentinel, and the page rendered from it must show that value and not
+    // the initial one.
+    await waitForPublishedSentinel(updatedSentinel, initialSentinel);
+
     let secondTabPromise = page.waitForEvent('popup');
     await page
       .locator(
@@ -482,24 +577,9 @@ test.describe('Publish realm', () => {
       .click();
     let secondTab = await secondTabPromise;
     await secondTab.waitForLoadState();
-    // The publish handler returns 202 before the reindex finishes, and a tab
-    // that loaded before it landed won't re-fetch on its own — so reload until
-    // the published URL serves the updated sentinel. The retry budget gives the
-    // background reindex room to settle.
-    await expect
-      .poll(
-        async () => {
-          await secondTab.reload({ waitUntil: 'domcontentloaded' });
-          return (
-            (await secondTab
-              .locator('[data-test-sentinel-output]')
-              .textContent()
-              .catch(() => null)) ?? ''
-          );
-        },
-        { timeout: 60_000, intervals: [2_000] },
-      )
-      .toBe(updatedSentinel);
+    await expect(secondTab.locator('[data-test-sentinel-output]')).toHaveText(
+      updatedSentinel,
+    );
     await expect(secondTab.locator('body')).not.toContainText(initialSentinel);
     await secondTab.close();
     await page.bringToFront();
