@@ -3347,11 +3347,12 @@ module(basename(import.meta.filename), function () {
           );
         });
 
-        test('PATCH response carries an ETag and writes invalidate the previous one', async function (assert) {
-          // Capture the pre-patch ETag, mutate the card, and verify the PATCH
-          // response advertises a *different* ETag for the new state — that's
-          // the contract that lets the caller cache the post-patch body
-          // without an extra round-trip GET.
+        test('PATCH response omits the ETag; the write still advances the GET validator', async function (assert) {
+          // The write echo omits the link closure a GET assembles, so it must
+          // NOT carry the GET's validator — a client caching the echo body and
+          // revalidating with its ETag would be 304'd onto a closure-less
+          // representation. The write still rotates the validator a GET
+          // reports, so a follow-up conditional GET behaves correctly.
           let initialResponse = await request
             .get('/person-1')
             .set('Accept', 'application/vnd.card+json');
@@ -3375,16 +3376,9 @@ module(basename(import.meta.filename), function () {
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(patchResponse.status, 200, 'PATCH succeeds');
-          let patchEtag = patchResponse.get('etag') ?? '';
-          assert.ok(patchEtag, 'PATCH response carries an ETag');
-          assert.true(
-            /^"\d+(?:-[0-9a-f]+)?:card-rri"$/.test(patchEtag),
-            `PATCH ETag matches "<indexed_at>(-<realmInfoHash>)?:card-rri" pattern (got ${patchEtag})`,
-          );
-          assert.notStrictEqual(
-            patchEtag,
-            originalEtag,
-            'PATCH advances the ETag because indexed_at bumps on the rewrite',
+          assert.notOk(
+            patchResponse.get('etag'),
+            'the write echo carries no validator',
           );
 
           // Sending the OLD etag against If-None-Match must NOT short-circuit
@@ -3398,25 +3392,31 @@ module(basename(import.meta.filename), function () {
             200,
             'old ETag no longer matches → fresh 200',
           );
-          assert.strictEqual(
-            staleResponse.get('etag'),
-            patchEtag,
-            'GET reports the new ETag',
+          let newEtag = staleResponse.get('etag') ?? '';
+          assert.ok(newEtag, 'GET reports a validator');
+          assert.true(
+            /^"\d+(?:-[0-9a-f]+)?:card-rri"$/.test(newEtag),
+            `GET ETag matches "<indexed_at>(-<realmInfoHash>)?:card-rri" pattern (got ${newEtag})`,
+          );
+          assert.notStrictEqual(
+            newEtag,
+            originalEtag,
+            'the write advanced the GET validator because indexed_at bumps on the rewrite',
           );
 
-          // And the new etag from the PATCH must short-circuit on next GET.
+          // And the advanced validator must short-circuit on the next GET.
           let cachedResponse = await request
             .get('/person-1')
             .set('Accept', 'application/vnd.card+json')
-            .set('If-None-Match', patchEtag);
+            .set('If-None-Match', newEtag);
           assert.strictEqual(
             cachedResponse.status,
             304,
-            'new ETag from PATCH lets a follow-up GET short-circuit',
+            'the advanced validator lets a follow-up GET short-circuit',
           );
         });
 
-        test('no-op PATCH response carries an ETag matching the existing one', async function (assert) {
+        test('no-op PATCH response omits the ETag; the GET validator is unchanged', async function (assert) {
           // Prime once so the stored file is in canonical serialized form;
           // the no-op assertions below measure the steady state (see the
           // no-op lastModified test).
@@ -3456,10 +3456,20 @@ module(basename(import.meta.filename), function () {
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(patchResponse.status, 200, 'no-op PATCH succeeds');
-          assert.strictEqual(
+          assert.notOk(
             patchResponse.get('etag'),
+            'the no-op write echo carries no validator either',
+          );
+
+          // The no-op didn't rewrite the file, so a GET still reports the same
+          // validator it did before the PATCH.
+          let afterResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            afterResponse.get('etag'),
             initialEtag,
-            'no-op PATCH returns the same ETag (no rewrite, indexed_at unchanged)',
+            'the GET validator is unchanged (no rewrite, indexed_at unchanged)',
           );
         });
 

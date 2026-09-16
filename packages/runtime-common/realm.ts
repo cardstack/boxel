@@ -7964,11 +7964,10 @@ export class Realm {
           let createdAt = await this.getCreatedTime(
             this.paths.local(url) + '.json',
           );
-          // The PATCH echo is the same served representation as a GET —
-          // including the joined `meta.screenshots` (the store replaces an
-          // instance's meta wholesale from a save response, so an echo
-          // without it would wipe the key client-side until the next GET)
-          // and the same validator components.
+          // The PATCH echo carries the joined `meta.screenshots` a GET would
+          // (the store replaces an instance's meta wholesale from a save
+          // response, so an echo without it would wipe the key client-side
+          // until the next GET).
           if (entry.screenshots) {
             existingDoc.data.meta = {
               ...existingDoc.data.meta,
@@ -7978,18 +7977,11 @@ export class Realm {
               }),
             };
           }
-          // entry.doc came from cardDocument(), which already called
-          // attachRealmInfo() and (re)populated the realm-info cache —
-          // so the cached hash is current as of this response.
-          await this.getRealmInfo();
-          let foreignDeps = this.hasForeignRealmDeps(entry.deps);
-          let etag = foreignDeps
-            ? undefined
-            : buildCardJsonEtag(
-                entry.indexedAt,
-                this.getCachedRealmInfoHash(),
-                screenshotsEtagFingerprint(entry.screenshots),
-              );
+          // No validator on the write echo: the echo omits the link closure a
+          // GET assembles, so it is a different representation than the GET
+          // whose ETag it would otherwise share — emitting one would let a
+          // conditional GET 304 onto this closure-less body. The client
+          // discards the echo body anyway, so it has no validator to gain.
           this.#serveInstanceIdsAsRRI(existingDoc);
           return createResponse({
             body: JSON.stringify(existingDoc, null, 2),
@@ -7997,8 +7989,6 @@ export class Realm {
               headers: {
                 'content-type': SupportedMimeType.CardJson,
                 'cache-control': this.cardJsonCacheControl(requestContext),
-                ...(etag ? { etag } : {}),
-                ...etagSuppressedHeader(foreignDeps),
                 ...lastModifiedHeader(existingDoc),
                 ...(createdAt != null
                   ? { 'x-created': formatRFC7231(createdAt * 1000) }
@@ -8160,23 +8150,11 @@ export class Realm {
           };
         }
       }
-      // Same rationale as the no-op short-circuit branch above:
-      // cardDocument() above primed the realm-info cache via
-      // attachRealmInfo(), but only when entry was a non-error doc.
-      // On the error fallback we may still need to populate it.
-      await this.getRealmInfo();
-      let foreignDeps =
-        entry && entry.type !== 'error'
-          ? this.hasForeignRealmDeps(entry.deps)
-          : false;
-      let etag =
-        entry && entry.type !== 'error' && !foreignDeps
-          ? buildCardJsonEtag(
-              entry.indexedAt,
-              this.getCachedRealmInfoHash(),
-              screenshotsEtagFingerprint(entry.screenshots),
-            )
-          : undefined;
+      // No validator on the write echo (same rationale as the short-circuit
+      // branch above): the echo omits the link closure a GET assembles, so it
+      // is a different representation than the GET whose ETag it would share —
+      // emitting one would let a conditional GET 304 onto this closure-less
+      // body. The client discards the echo body anyway.
       this.#serveInstanceIdsAsRRI(doc);
       return createResponse({
         body: JSON.stringify(doc, null, 2),
@@ -8184,8 +8162,6 @@ export class Realm {
           headers: {
             'content-type': SupportedMimeType.CardJson,
             'cache-control': this.cardJsonCacheControl(requestContext),
-            ...(etag ? { etag } : {}),
-            ...etagSuppressedHeader(foreignDeps),
             ...lastModifiedHeader(doc),
             ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
           },
