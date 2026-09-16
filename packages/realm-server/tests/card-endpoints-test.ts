@@ -37,7 +37,10 @@ import {
   type RealmRequest,
   withRealmPath,
 } from './helpers/index.ts';
-import { expectIncrementalIndexEvent } from './helpers/indexing.ts';
+import {
+  ABSENT_OR_NULL_CLIENT_REQUEST_ID,
+  expectIncrementalIndexEvent,
+} from './helpers/indexing.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -1660,6 +1663,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: null,
               timeout: 5000,
             },
           );
@@ -1838,6 +1842,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: null,
               type: 'Friend',
               timeout: 5000,
             },
@@ -1936,6 +1941,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: null,
               type: 'Friend',
               timeout: 5000,
             },
@@ -4392,6 +4398,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: null,
             },
           );
         });
@@ -4872,6 +4879,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: ABSENT_OR_NULL_CLIENT_REQUEST_ID,
             },
           );
         });
