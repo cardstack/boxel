@@ -172,6 +172,7 @@ import {
   type FileMetaResource,
 } from './index.ts';
 import {
+  canonicalizeTarget,
   newOperationScope,
   resolveOperation,
   runOperation,
@@ -191,7 +192,6 @@ import {
   carriesOperationsExt,
   errorsDocument,
   isWrite,
-  labelEntry,
   needsActor,
   paramsFor,
   parseOperationsEnvelope,
@@ -4112,7 +4112,9 @@ export class Realm {
         detail: `the request body is not valid JSON`,
       });
     }
-    let entries = parseOperationsEnvelope(body, this.url);
+    let entries = parseOperationsEnvelope(body, this.url, {
+      resolveIdentifier: (href) => this.#resolveAtomicHref(href),
+    });
     let caller = this.#callerOf(request, requestContext);
     // One row peek per target for the whole resolution pass: entries often
     // name the same card, and which behavior a name resolves to is read off
@@ -4211,19 +4213,14 @@ export class Realm {
           throw atEntry(err, entry.index);
         }
       });
-      let committed: Awaited<ReturnType<typeof commitBatch>>;
-      try {
-        committed = await commitBatch(this.batchCore, staged, {
-          clientRequestId: caller.clientRequestId || null,
-          actor: caller.actor || undefined,
-        });
-      } catch (err: unknown) {
-        // The coordinator labels a refusal with the position in the batch it
-        // was handed, and that batch holds only the entries that write — so a
-        // mixed batch's positions are not the envelope's, and the caller is
-        // told about an entry it did not send unless they are mapped back.
-        throw labelEntry(err, (index) => writes[index].entry.index);
-      }
+      // Every staged entry carries the position the caller sent it under, so
+      // a refusal from the coordinator names that one rather than the position
+      // it took among the entries that write — in the key, in the key beside
+      // it naming a conflicting entry, and in the prose.
+      let committed = await commitBatch(this.batchCore, staged, {
+        clientRequestId: caller.clientRequestId || null,
+        actor: caller.actor || undefined,
+      });
       for (let [index, { entry }] of writes.entries()) {
         results[entry.index] = writeResult(committed[index], (url) =>
           this.#virtualNetwork.unresolveURL(url),
@@ -4233,8 +4230,11 @@ export class Realm {
 
     return this.#operationsResponse(
       {
-        'atomic:results': results.map((result, index) =>
-          answered(result, index),
+        // Built by index rather than by mapping the array: an unassigned
+        // position is a hole, `map` skips one, and the hole then serializes
+        // as `null` — which is what a delete reports.
+        'atomic:results': Array.from({ length: entries.length }, (_, index) =>
+          answered(results[index], index),
         ),
       },
       200,
@@ -4253,15 +4253,29 @@ export class Realm {
     scope: OperationScope,
   ): Promise<ResolvedEnvelopeEntry> {
     try {
-      let target = targetFor(entry, this.url);
+      // Canonicalized once, here, and everything downstream sees the result:
+      // the definition is resolved from it, the read runs against it, and the
+      // staged entry writes it. A trailing slash, a query string and a
+      // fragment all name the card they hang off, and the index is read by
+      // exact URL — so resolving the raw spelling would report a declared
+      // operation as unknown on a card whose type declares it, and would leave
+      // the entry's result carrying an id no other surface spells that way.
+      let target = canonicalizeTarget(
+        this.operationCore,
+        targetFor(entry, this.url),
+      );
+      let canonical =
+        target.kind === 'instance' && target.url !== entry.href
+          ? { ...entry, href: target.url }
+          : entry;
       let definition = await resolveOperation(
         this.operationCore,
         target,
-        entry.name,
+        canonical.name,
         scope,
       );
-      assertTravelsInEnvelope(entry, definition);
-      return { entry, target, definition };
+      assertTravelsInEnvelope(canonical, definition);
+      return { entry: canonical, target, definition };
     } catch (err: unknown) {
       throw atEntry(err, entry.index);
     }

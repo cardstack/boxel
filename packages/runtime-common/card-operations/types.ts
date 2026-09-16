@@ -129,6 +129,18 @@ export interface OperationDefinition {
   // holds — a non-deterministic one would land a different value locally than
   // the server computes, and reconciliation would report a phantom conflict.
   deterministic: boolean;
+  // Whether carrying this operation out needs to know who the caller is:
+  // whether any program it runs calls `actor()`, or any template it fills
+  // carries an actor marker. Recorded here rather than asked at invocation
+  // because it is a property of the declaration, fixed from the moment the
+  // module is indexed — so a transport can refuse a request that authenticated
+  // nobody before any of the batch runs, instead of part-way through by
+  // whichever entry reached the actor first.
+  //
+  // Absent means no, which is also what an entry built before this was
+  // recorded reports. A definition-cache entry is rebuilt on demand, so such
+  // an entry is replaced rather than corrected.
+  readsActor?: true;
   // Set when lowering found problems. The operation is stored either way, so
   // invoking it reports what is wrong with it rather than "unknown
   // operation".

@@ -1,6 +1,5 @@
 import { BOXEL_OPERATIONS_EXT } from '../supported-mime-type.ts';
 import { RealmPaths, type LocalPath } from '../paths.ts';
-import { callsActor } from './bxl-emit.ts';
 import {
   OperationFailure,
   isDocumentResult,
@@ -10,11 +9,10 @@ import {
   type OperationError,
   type OperationResult,
   type OperationTarget,
-  type OperationTemplate,
 } from './types.ts';
 import type { BatchEntryResult } from './coordinator.ts';
 import type { BatchEntry } from './executors.ts';
-import type { CodeRef } from '../code-ref.ts';
+import { isCodeRef } from '../card-document-shape.ts';
 import type { CardResource } from '../resource-types.ts';
 
 // ============================================================================
@@ -94,9 +92,20 @@ export interface EnvelopeEntry {
 // one: the coordinator takes no lock and announces nothing for it, so the
 // envelope answers with no results rather than inventing a refusal for a
 // request that would change nothing either way.
+export interface ParseEnvelopeOptions {
+  // A registered-prefix identifier as the absolute URL it names, and anything
+  // else unchanged. Identifier resolution belongs to the realm's fetch layer,
+  // so it arrives as a bound function rather than being reached from here —
+  // the same reason the operation core takes its code-ref resolver bound.
+  // Absent, an href is read exactly as it is written, which is what a caller
+  // with no prefixes registered would get anyway.
+  resolveIdentifier?: (href: string) => string;
+}
+
 export function parseOperationsEnvelope(
   body: unknown,
   realmURL: string,
+  opts: ParseEnvelopeOptions = {},
 ): EnvelopeEntry[] {
   if (!isPlainRecord(body)) {
     throw refuse(`the request body is not a JSON:API document`);
@@ -109,7 +118,7 @@ export function parseOperationsEnvelope(
   }
   let paths = new RealmPaths(new URL(realmURL));
   return operations.map((operation, index) =>
-    parseEntry(operation, index, paths),
+    parseEntry(operation, index, paths, opts),
   );
 }
 
@@ -117,6 +126,7 @@ function parseEntry(
   operation: unknown,
   index: number,
   paths: RealmPaths,
+  opts: ParseEnvelopeOptions,
 ): EnvelopeEntry {
   if (!isPlainRecord(operation)) {
     throw refuse(`entry ${index} is not an operation`, index);
@@ -124,7 +134,7 @@ function parseEntry(
   let op = operation.op;
   switch (op) {
     case 'invoke':
-      return parseInvocation(operation, index, paths);
+      return parseInvocation(operation, index, paths, opts);
     case 'parallel':
     case 'serial':
       throw refuse(
@@ -146,6 +156,7 @@ function parseInvocation(
   operation: Record<string, unknown>,
   index: number,
   paths: RealmPaths,
+  opts: ParseEnvelopeOptions,
 ): EnvelopeEntry {
   let name = operation['boxel:name'];
   if (typeof name !== 'string' || name.length === 0) {
@@ -176,7 +187,7 @@ function parseInvocation(
     name,
     ...(operation.href === undefined
       ? {}
-      : { href: hrefIn(operation.href, index, paths) }),
+      : { href: hrefIn(operation.href, index, paths, opts) }),
     ...(data ? { data } : {}),
     ...(lid === undefined ? {} : { lid }),
   };
@@ -194,20 +205,30 @@ function parseInvocation(
 // this realm is not something the endpoint can carry out rather than something
 // it declines to: there is no lock it could take that would make the write
 // atomic with the rest of the batch.
-function hrefIn(href: unknown, index: number, paths: RealmPaths): string {
+function hrefIn(
+  href: unknown,
+  index: number,
+  paths: RealmPaths,
+  opts: ParseEnvelopeOptions,
+): string {
   if (typeof href !== 'string' || href.length === 0) {
     throw refuse(`entry ${index} carries an "href" that is not a URL`, index);
   }
+  // A realm reached through a registered prefix is addressed by that prefix
+  // everywhere else — it is the form a result's id comes back in — so an href
+  // written that way names the card it appears to name rather than a path
+  // under the realm root that happens to start with it.
+  let resolved = opts.resolveIdentifier?.(href) ?? href;
   let absolute: URL;
   try {
-    absolute = new URL(href);
+    absolute = new URL(resolved);
   } catch {
     // Relative, so it names a path within the realm. A leading slash is the
     // spelling the extension documents and means the realm's root, not the
     // origin's, which is why this resolves through `fileURL` rather than
     // through URL resolution against the realm.
     try {
-      absolute = paths.fileURL(href.replace(/^\/+/, '') as LocalPath);
+      absolute = paths.fileURL(resolved.replace(/^\/+/, '') as LocalPath);
     } catch {
       throw refuse(`entry ${index} carries an "href" that is not a URL`, index);
     }
@@ -235,9 +256,11 @@ function hrefIn(href: unknown, index: number, paths: RealmPaths): string {
 // declaration's, which the realm reads from the definition rather than from
 // the wire.
 //
-// The ref is handed on unchecked. Resolving one is the realm's, and a ref that
-// names nothing comes back from the lookup as a type that cannot be resolved,
-// which is the answer a caller needs either way.
+// The ref's shape is checked here, recursively. Whether the type it names
+// exists is the lookup's answer and comes back as a type that cannot be
+// resolved; whether the thing is a code ref at all is not, and an object that
+// is not one reaches the resolver's `'type' in ref` recursion and throws out of
+// it — a malformed payload answered as a fault in the realm.
 export function targetFor(
   entry: EnvelopeEntry,
   realmURL: string,
@@ -253,11 +276,14 @@ export function targetFor(
       entry.index,
     );
   }
-  return {
-    kind: 'type',
-    codeRef: adoptsFrom as unknown as CodeRef,
-    realm: realmURL,
-  };
+  if (!isCodeRef(adoptsFrom)) {
+    throw refuse(
+      `entry ${entry.index} names a type in "data.meta.adoptsFrom" that is ` +
+        `not a code reference`,
+      entry.index,
+    );
+  }
+  return { kind: 'type', codeRef: adoptsFrom, realm: realmURL };
 }
 
 // One entry with the behavior its name resolved to. The name is the whole of
@@ -323,36 +349,19 @@ export function assertTravelsInEnvelope(
 
 // Whether carrying this operation out needs to know who the caller is.
 //
-// Decidable before anything runs, because every place an operation can read
-// the actor is part of its stored definition: the programs it runs, and the
-// template a named create fills. That is what makes it worth asking here —
-// an anonymous caller on a realm that lets anyone write is told its request
-// needs an identity, once for the whole batch, rather than having an entry
-// refuse part-way through for a reason that reads as a payload problem.
+// Read off the stored definition, where lowering recorded it with the whole
+// declaration in hand. Asking it here would mean reading program text, which
+// would put this module — and so every package that reaches the realm through
+// it — in the BXL package's typecheck program; and it would mean keeping a
+// list of the members a marker can hide in, which is the list lowering already
+// walks.
+//
+// The point of asking at all is that it is answerable before anything runs: an
+// anonymous caller on a realm that lets anyone write is told the request needs
+// an identity once, for the whole batch, rather than by whichever entry
+// reached the actor first for a reason that reads as a payload problem.
 export function needsActor(definition: OperationDefinition): boolean {
-  for (let program of [
-    definition.program,
-    definition.input,
-    definition.output,
-  ]) {
-    if (program && callsActor(program.source)) {
-      return true;
-    }
-  }
-  return definition.fill !== undefined && templateReadsActor(definition.fill);
-}
-
-function templateReadsActor(template: OperationTemplate): boolean {
-  if (Array.isArray(template)) {
-    return template.some(templateReadsActor);
-  }
-  if (template === null || typeof template !== 'object') {
-    return false;
-  }
-  if ((template as Record<string, unknown>).$ref === 'actor') {
-    return true;
-  }
-  return Object.values(template).some(templateReadsActor);
+  return definition.readsActor === true;
 }
 
 // One entry as the batch coordinator takes it.
@@ -368,6 +377,11 @@ export function batchEntryFor(
   definition: OperationDefinition,
 ): BatchEntry {
   let { index, name } = entry;
+  assertStagesAreServed(entry, definition);
+  // Every entry the coordinator stages carries the position the caller sent it
+  // under, so a batch holding only some of an envelope's entries still reports
+  // refusals against the envelope's numbering.
+  let common = { definition, label: index };
   switch (definition.base) {
     case 'create': {
       if (definition.of) {
@@ -376,7 +390,7 @@ export function batchEntryFor(
         // its href — when it has one — is the card it reads for context.
         return {
           op: 'create',
-          definition,
+          ...common,
           params: paramsFor(entry),
           ...(entry.href ? { href: entry.href } : {}),
           ...(entry.lid === undefined ? {} : { lid: entry.lid }),
@@ -396,7 +410,7 @@ export function batchEntryFor(
       }
       return {
         op: 'create',
-        definition,
+        ...common,
         document: { data: entry.data as unknown as CardResource },
       };
     }
@@ -417,11 +431,11 @@ export function batchEntryFor(
             href,
           );
         }
-        return { op: 'update', definition, href, content };
+        return { op: 'update', ...common, href, content };
       }
       return {
         op: 'update',
-        definition,
+        ...common,
         href,
         document: { data: entry.data as unknown as CardResource },
       };
@@ -429,13 +443,13 @@ export function batchEntryFor(
     case 'delete':
       return {
         op: 'delete',
-        definition,
+        ...common,
         href: hrefRequired(entry, 'delete'),
       };
     case 'transform':
       return {
         op: 'transform',
-        definition,
+        ...common,
         params: paramsFor(entry),
         href: hrefRequired(entry, 'transform'),
         name,
@@ -443,14 +457,14 @@ export function batchEntryFor(
     case 'appendLine':
       return {
         op: 'appendLine',
-        definition,
+        ...common,
         params: paramsFor(entry),
         href: hrefRequired(entry, 'appendLine'),
       };
     case 'appendContainsMany':
       return {
         op: 'appendContainsMany',
-        definition,
+        ...common,
         params: paramsFor(entry),
         href: hrefRequired(entry, 'appendContainsMany'),
         // Named the way the append executor names them, so the fields and
@@ -484,16 +498,64 @@ export function batchEntryFor(
 
 // The payload an operation's own params are read from.
 //
-// `lid` is the one member of `data` that is never a param: it is the caller's
-// id for the card the entry mints, which is what other entries link to it by,
-// and an operation declaring a param under that name would have the two
-// meanings arrive in one key.
+// `data` carries two kinds of thing at once: the values an operation declares
+// as params, and the members the envelope itself reads to work out what the
+// entry is — the local id a later entry links by, the type a class-scoped
+// entry is scoped to, and the field and items an append names. The second kind
+// is never a param, so an operation declaring one under the same name would
+// otherwise be handed the envelope's value instead of the caller's.
+//
+// The rule is the members this module reads, not a list of names to remember
+// to grow: anything added to that set belongs here in the same commit.
+const ENVELOPE_MEMBERS = [
+  'lid',
+  'meta',
+  'field',
+  'items',
+  'fields',
+  'content',
+] as const;
+
 export function paramsFor(entry: EnvelopeEntry): Record<string, unknown> {
-  if (entry.lid === undefined) {
-    return entry.data ?? {};
+  if (!entry.data) {
+    return {};
   }
-  let { lid: _lid, ...params } = entry.data ?? {};
+  let params: Record<string, unknown> = {};
+  for (let [key, value] of Object.entries(entry.data)) {
+    if ((ENVELOPE_MEMBERS as readonly string[]).includes(key)) {
+      continue;
+    }
+    params[key] = value;
+  }
   return params;
+}
+
+// A declaration may reshape its payload with an `input` program and project
+// its result with an `output` one. A batch runs neither, and carrying the
+// entry out as though the declaration said nothing answers a different
+// question well — the author's `input` was to produce the very value the
+// executor then reports as missing. So the refusal names the stage, the way
+// the read executor refuses a specialization it does not carry out.
+function assertStagesAreServed(
+  entry: EnvelopeEntry,
+  definition: OperationDefinition,
+): void {
+  let stages = (['input', 'output'] as const).filter(
+    (stage) => definition[stage] !== undefined,
+  );
+  if (stages.length === 0) {
+    return;
+  }
+  throw new OperationFailure({
+    ...(entry.href ? { id: entry.href } : {}),
+    status: 501,
+    code: 'internal-error',
+    title: 'Operation not implemented',
+    detail:
+      `operation "${entry.name}" specializes its behavior with ` +
+      `${stages.join(' and ')}, which a batch does not run`,
+    meta: { entry: entry.index },
+  });
 }
 
 function hrefRequired(entry: EnvelopeEntry, base: BaseOperation): string {
@@ -607,30 +669,10 @@ export function errorsDocument(error: OperationError): {
 // Label a refusal with the position of the entry that produced it, so a caller
 // reading one error knows which of the entries it sent is wrong.
 //
-// A refusal that already carries a position keeps it. The coordinator labels
-// what it stages with the position in the batch it was handed, which is not
-// the position in the envelope when the batch holds only the entries that
-// write — so `at` is what the two are reconciled through, and relabelling one
-// that arrived correct would overwrite an answer with a guess.
-export function labelEntry(
-  err: unknown,
-  at: (index: number) => number,
-): unknown {
-  if (!isOperationFailure(err)) {
-    return err;
-  }
-  let entry = err.error.meta?.entry;
-  if (typeof entry !== 'number') {
-    return err;
-  }
-  return new OperationFailure({
-    ...err.error,
-    meta: { ...err.error.meta, entry: at(entry) },
-  });
-}
-
-// The same, for a refusal raised where the position is known outright — an
-// entry parsed, resolved or staged one at a time.
+// For a refusal raised where the position is known outright — an entry parsed
+// or resolved one at a time. A staged entry carries its position into the
+// coordinator instead, which writes it everywhere a position appears rather
+// than leaving one key to be corrected afterwards.
 export function atEntry(err: unknown, index: number): unknown {
   if (!isOperationFailure(err)) {
     return err;

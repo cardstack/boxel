@@ -252,7 +252,8 @@ export async function commitBatch(
     // created card's file is named after its `lid`, so its URL is path math
     // over the type it adopts — no read and no write — which is what lets an
     // entry link to a card a later entry mints.
-    let { lids, foreignLids } = indexLids(entries, paths);
+    let positions = positionsOf(entries);
+    let { lids, foreignLids } = indexLids(entries, positions, paths);
     let { stored, storedMeta } = await readPreState(core, entries, paths);
     // What an append stages for a file it never read whole. Kept beside
     // `stored` rather than in it: the two describe the same file in different
@@ -265,7 +266,7 @@ export async function commitBatch(
     // entry to touch a file merged over.
     let baseHashes: (string | undefined)[] = [];
     for (let [index, entry] of entries.entries()) {
-      let change = await stageEntry(entry, index, {
+      let change = await stageEntry(entry, positions[index], {
         realmURL: core.realmURL,
         paths,
         lids,
@@ -293,15 +294,33 @@ export async function commitBatch(
       compose(stored, storedMeta, splices, entry, change);
       staged.push(change);
     }
-    assertWritesAllowed(staged);
-    assertLinkedCardsSurvive(staged, paths);
-    assertWritesFit(core, staged);
-    await assertRemovalsAllowed(core, paths, staged);
-    await assertDestinationsFree(core, staged);
+    assertWritesAllowed(staged, positions);
+    assertLinkedCardsSurvive(staged, paths, positions);
+    assertWritesFit(core, staged, positions);
+    await assertRemovalsAllowed(core, paths, staged, positions);
+    await assertDestinationsFree(core, staged, positions);
     // Everything above either produced bytes for every entry or threw, and a
     // throw leaves the realm as it was.
-    return await commitStaged(core, entries, staged, baseHashes, opts);
+    return await commitStaged(
+      core,
+      entries,
+      staged,
+      baseHashes,
+      positions,
+      opts,
+    );
   });
+}
+
+// The position each entry is reported under, in batch order.
+//
+// An entry that names its own is reported under that one everywhere a position
+// appears — the key on a refusal, the key beside it naming the entry it
+// collides with, and the prose — so the three cannot disagree with each other.
+// An entry that names none is reported under its position in this batch, which
+// is what a caller that sent exactly this list means by it.
+function positionsOf(entries: readonly BatchEntry[]): number[] {
+  return entries.map((entry, index) => entry.label ?? index);
 }
 
 // Fold what an entry staged into the state the next entry stages against. A
@@ -377,11 +396,11 @@ function compose(
 // which of the entries it sent produced it.
 async function stageEntry(
   entry: BatchEntry,
-  index: number,
+  position: number,
   ctx: StagingContext,
 ): Promise<StagedChange> {
   try {
-    assertVersionable(entry, index);
+    assertVersionable(entry, position);
     switch (entry.op) {
       case 'create':
         return await stageCreate(entry, ctx);
@@ -400,11 +419,11 @@ async function stageEntry(
           status: 400,
           code: 'invalid-params',
           title: 'Unknown entry',
-          detail: `entry ${index} names no staged operation`,
+          detail: `entry ${position} names no staged operation`,
         });
     }
   } catch (err: unknown) {
-    throw atEntry(err, index);
+    throw atEntry(err, position);
   }
 }
 
@@ -414,7 +433,7 @@ async function stageEntry(
 // transform plans a program against it. A create has no prior state to name, a
 // delete's result carries no state to report a match on, and an append never
 // reads the state it edits, so it has nothing to compare one against.
-function assertVersionable(entry: BatchEntry, index: number): void {
+function assertVersionable(entry: BatchEntry, position: number): void {
   if (
     entry.baseVersion === undefined ||
     entry.op === 'update' ||
@@ -426,25 +445,25 @@ function assertVersionable(entry: BatchEntry, index: number): void {
     status: 400,
     code: 'invalid-params',
     title: 'Invalid base version',
-    detail: `entry ${index} is a ${entry.op}, which has no base version`,
+    detail: `entry ${position} is a ${entry.op}, which has no base version`,
   });
 }
 
-function atEntry(err: unknown, index: number): OperationFailure {
+function atEntry(err: unknown, position: number): OperationFailure {
   if (isOperationFailure(err)) {
     return new OperationFailure({
       ...err.error,
-      meta: { ...err.error.meta, entry: index },
+      meta: { ...err.error.meta, entry: position },
     });
   }
   return new OperationFailure({
     status: 500,
     code: 'internal-error',
     title: 'Cannot stage batch',
-    detail: `entry ${index} could not be staged: ${
+    detail: `entry ${position} could not be staged: ${
       err instanceof Error ? err.message : String(err)
     }`,
-    meta: { entry: index },
+    meta: { entry: position },
   });
 }
 
@@ -461,6 +480,7 @@ function atEntry(err: unknown, index: number): OperationFailure {
 // as a link to a card nobody sent.
 function indexLids(
   entries: BatchEntry[],
+  positions: readonly number[],
   paths: RealmPaths,
 ): { lids: LidIndex; foreignLids: ReadonlySet<string> } {
   let lids = new Map<string, StagedIdentity>();
@@ -504,7 +524,7 @@ function indexLids(
           claim(
             primaryLid,
             createIdentity(entry, primary, paths, new Map()),
-            `entry ${index}`,
+            `entry ${positions[index]}`,
           );
         }
       }
@@ -529,11 +549,11 @@ function indexLids(
             entry.op === 'create' ? entry.directory : undefined,
             paths,
           ),
-          `entry ${index}, included[${offset}]`,
+          `entry ${positions[index]}, included[${offset}]`,
         );
       }
     } catch (err: unknown) {
-      throw atEntry(err, index);
+      throw atEntry(err, positions[index]);
     }
   }
   return { lids, foreignLids };
@@ -763,7 +783,10 @@ function cardSourcePathOf(
 // them once for all three. Removals are not covered, deliberately: they are
 // the recovery path for anything already stored under either name, which is
 // why the other two admit them as well.
-function assertWritesAllowed(staged: StagedChange[]): void {
+function assertWritesAllowed(
+  staged: StagedChange[],
+  positions: readonly number[],
+): void {
   for (let [index, change] of staged.entries()) {
     for (let write of [...change.writes, ...change.appends]) {
       let reserved = isCaptureServingPath(write.path)
@@ -780,7 +803,7 @@ function assertWritesAllowed(staged: StagedChange[]): void {
             title: 'Reserved path',
             detail: `cannot write "${write.path}": ${reserved}`,
           }),
-          index,
+          positions[index],
         );
       }
     }
@@ -801,6 +824,7 @@ function assertWritesAllowed(staged: StagedChange[]): void {
 function assertLinkedCardsSurvive(
   staged: StagedChange[],
   paths: RealmPaths,
+  positions: readonly number[],
 ): void {
   let removed = new Set<LocalPath>();
   for (let change of staged) {
@@ -828,10 +852,10 @@ function assertLinkedCardsSurvive(
             code: 'invalid-params',
             title: 'Conflicting entries',
             detail:
-              `entry ${index} links to ${id}, which this batch removes; the ` +
-              `edge would point at nothing once the batch commits`,
+              `entry ${positions[index]} links to ${id}, which this batch ` +
+              `removes; the edge would point at nothing once the batch commits`,
           }),
-          index,
+          positions[index],
         );
       }
     }
@@ -848,6 +872,7 @@ async function assertRemovalsAllowed(
   core: BatchCore,
   paths: RealmPaths,
   staged: StagedChange[],
+  positions: readonly number[],
 ): Promise<void> {
   for (let [index, change] of staged.entries()) {
     for (let path of change.deletes) {
@@ -861,7 +886,7 @@ async function assertRemovalsAllowed(
               `${paths.fileURL(path).href} is under a path the realm ` +
               `ignores, so it holds no card to remove`,
           }),
-          index,
+          positions[index],
         );
       }
     }
@@ -874,7 +899,11 @@ async function assertRemovalsAllowed(
 // it enqueues anything — over a payload the caller could have been told about
 // while the realm was still untouched. So the ceiling is applied to every
 // staged write here, where a refusal still costs nothing.
-function assertWritesFit(core: BatchCore, staged: StagedChange[]): void {
+function assertWritesFit(
+  core: BatchCore,
+  staged: StagedChange[],
+  positions: readonly number[],
+): void {
   for (let [index, change] of staged.entries()) {
     // An append is held to the ceiling by what it adds rather than by what the
     // file will hold: the limit is over the bytes a caller hands the realm,
@@ -900,7 +929,7 @@ function assertWritesFit(core: BatchCore, staged: StagedChange[]): void {
                 detail: err.message,
               })
             : err,
-          index,
+          positions[index],
         );
       }
     }
@@ -925,6 +954,7 @@ function assertWritesFit(core: BatchCore, staged: StagedChange[]): void {
 async function assertDestinationsFree(
   core: BatchCore,
   staged: StagedChange[],
+  positions: readonly number[],
 ): Promise<void> {
   let removedBefore: Set<LocalPath>[] = [];
   let removed = new Set<LocalPath>();
@@ -956,7 +986,7 @@ async function assertDestinationsFree(
       detail:
         `a card is already stored at ${taken.path}; a create mints a card ` +
         `rather than replacing one`,
-      meta: { entry: taken.index },
+      meta: { entry: positions[taken.index] },
     });
   }
 }
@@ -966,6 +996,7 @@ async function commitStaged(
   entries: BatchEntry[],
   staged: StagedChange[],
   baseHashes: (string | undefined)[],
+  positions: readonly number[],
   opts: CommitBatchOptions,
 ): Promise<BatchEntryResult[]> {
   // One entry per file, in batch order. Two entries may name one card, and
@@ -997,10 +1028,13 @@ async function commitStaged(
           code: 'invalid-params',
           title: 'Conflicting entries',
           detail:
-            `entry ${index} replaces the content of ${write.path}, which ` +
-            `entry ${appender} appends to; a batch appends to a file after ` +
-            `it writes one, not before`,
-          meta: { entry: index, conflictsWith: appender },
+            `entry ${positions[index]} replaces the content of ` +
+            `${write.path}, which entry ${positions[appender]} appends to; a ` +
+            `batch appends to a file after it writes one, not before`,
+          meta: {
+            entry: positions[index],
+            conflictsWith: positions[appender],
+          },
         });
       }
       if (deleted.has(write.path)) {
@@ -1013,9 +1047,10 @@ async function commitStaged(
           code: 'invalid-params',
           title: 'Conflicting entries',
           detail:
-            `entry ${index} writes ${write.path}, which an earlier entry ` +
-            `removes; a batch cannot both remove a card and write it`,
-          meta: { entry: index },
+            `entry ${positions[index]} writes ${write.path}, which an ` +
+            `earlier entry removes; a batch cannot both remove a card and ` +
+            `write it`,
+          meta: { entry: positions[index] },
         });
       }
       let owner = writtenBy.get(write.path);
@@ -1032,10 +1067,10 @@ async function commitStaged(
           code: 'invalid-params',
           title: 'Conflicting entries',
           detail:
-            `entries ${owner} and ${index} both replace the content of ` +
-            `${write.path}; a replacement composes over nothing, so only ` +
-            `one of them could land`,
-          meta: { entry: index, conflictsWith: owner },
+            `entries ${positions[owner]} and ${positions[index]} both ` +
+            `replace the content of ${write.path}; a replacement composes ` +
+            `over nothing, so only one of them could land`,
+          meta: { entry: positions[index], conflictsWith: positions[owner] },
         });
       }
       if (owner !== undefined && write.path !== change.primaryPath) {
@@ -1049,10 +1084,11 @@ async function commitStaged(
           code: 'invalid-params',
           title: 'Conflicting entries',
           detail:
-            `entries ${owner} and ${index} both write ${write.path}, and ` +
-            `entry ${index} carries it as a side-load, which replaces the ` +
-            `card rather than merging over it`,
-          meta: { entry: index, conflictsWith: owner },
+            `entries ${positions[owner]} and ${positions[index]} both ` +
+            `write ${write.path}, and entry ${positions[index]} carries it ` +
+            `as a side-load, which replaces the card rather than merging ` +
+            `over it`,
+          meta: { entry: positions[index], conflictsWith: positions[owner] },
         });
       }
       writes.set(write.path, write.content);
@@ -1071,9 +1107,10 @@ async function commitStaged(
           code: 'invalid-params',
           title: 'Conflicting entries',
           detail:
-            `entry ${index} appends to ${append.path}, which an earlier ` +
-            `entry removes; a batch cannot both remove a file and add to it`,
-          meta: { entry: index },
+            `entry ${positions[index]} appends to ${append.path}, which an ` +
+            `earlier entry removes; a batch cannot both remove a file and ` +
+            `add to it`,
+          meta: { entry: positions[index] },
         });
       }
       appends.set(
@@ -1140,7 +1177,7 @@ async function commitStaged(
         code: 'internal-error',
         title: 'Missing write result',
         detail: `the commit reported no result for ${change.primaryPath}`,
-        meta: { entry: index },
+        meta: { entry: positions[index] },
       });
     }
     let { baseVersion } = entries[index];

@@ -86,7 +86,85 @@ export function extractSupportedMimeType(
       return candidateMimeType as SupportedMimeType;
     }
   }
+  // A media type is its type and subtype; its parameters qualify it without
+  // making it a different type. The pass above compares whole header values,
+  // so it answers only for the one spelling a registered type is written in —
+  // which is every spelling anything sent until a registered type carried a
+  // parameter of its own. One does now: the operations envelope is
+  // `application/vnd.api+json` with an `ext` naming its extension, and the
+  // ways a client legitimately writes that (a space after the semicolon, an
+  // unquoted value, a `charset` alongside, its URI in a list with another
+  // extension's) are all the same media type and none of them is that string.
+  //
+  // So a second pass compares the parts. It only ever adds a match where the
+  // first pass found none, and it prefers the registered type whose own
+  // extensions the candidate carries — otherwise a body that named the
+  // envelope's extension would route to the plain JSON:API family and be
+  // answered as though it had named none.
+  for (const candidateMimeType of acceptMimeTypes) {
+    let matched = matchParameterized(candidateMimeType, supportedMimeTypes);
+    if (matched) {
+      return matched;
+    }
+  }
   return undefined;
+}
+
+interface ParsedMediaType {
+  type: string;
+  // The extension URIs the `ext` parameter names, which JSON:API writes as a
+  // space-separated list. Compared case-sensitively — they are URIs — while
+  // the type and the parameter's name are not.
+  extensions: string[];
+}
+
+function parseMediaType(value: string): ParsedMediaType {
+  let [type, ...parameters] = value.split(';');
+  let extensions: string[] = [];
+  for (let parameter of parameters) {
+    let separator = parameter.indexOf('=');
+    if (separator === -1) {
+      continue;
+    }
+    if (parameter.slice(0, separator).trim().toLowerCase() !== 'ext') {
+      continue;
+    }
+    let raw = parameter.slice(separator + 1).trim();
+    if (raw.startsWith('"') && raw.endsWith('"')) {
+      raw = raw.slice(1, -1);
+    }
+    extensions.push(...raw.split(/\s+/).filter(Boolean));
+  }
+  return { type: type.trim().toLowerCase(), extensions };
+}
+
+function matchParameterized(
+  candidate: string,
+  supportedMimeTypes: SupportedMimeType[],
+): SupportedMimeType | undefined {
+  let sent = parseMediaType(candidate);
+  if (!sent.type) {
+    return undefined;
+  }
+  let plain: SupportedMimeType | undefined;
+  for (let supported of supportedMimeTypes) {
+    let registered = parseMediaType(supported);
+    if (registered.type !== sent.type) {
+      continue;
+    }
+    if (registered.extensions.length === 0) {
+      plain ??= supported;
+      continue;
+    }
+    if (
+      registered.extensions.every((extension) =>
+        sent.extensions.includes(extension),
+      )
+    ) {
+      return supported;
+    }
+  }
+  return plain;
 }
 
 export type RouteTable<T> = Map<SupportedMimeType, Map<Method, Map<string, T>>>;

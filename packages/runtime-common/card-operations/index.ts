@@ -87,7 +87,6 @@ export {
   carriesOperationsExt,
   errorsDocument,
   isWrite,
-  labelEntry,
   needsActor,
   paramsFor,
   parseOperationsEnvelope,
