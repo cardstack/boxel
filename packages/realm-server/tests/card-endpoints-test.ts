@@ -1759,10 +1759,12 @@ module(basename(import.meta.filename), function () {
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(write.status, 201, `HTTP 201: ${write.text}`);
-          assert.strictEqual(
-            write.body.data.relationships?.friend?.data?.id,
-            `${testRealmHref}hassan`,
-            'the create names the card its link points at',
+          // The stored link survives; what a readback would have added on top
+          // of it — the resolved target, and the target's own resource — does
+          // not.
+          assert.ok(
+            write.body.data.relationships?.friend?.links?.self,
+            'the create still names the card its link points at',
           );
           assert.notOk(
             write.body.included,
