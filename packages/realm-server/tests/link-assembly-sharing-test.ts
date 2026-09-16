@@ -14,12 +14,15 @@ import {
   searchCardsForTest,
 } from './helpers/index.ts';
 
-const testRealm = new URL('http://127.0.0.1:4460/test/');
+const testRealm = new URL('http://127.0.0.1:4478/test/');
 // Two disjoint sets of source cards linking to the same targets: the shape a
 // dashboard render has, where many searches over different types reach one
 // pool of staff, students and settings cards.
 const SOURCES_PER_GROUP = 4;
 const NUM_TARGETS = 3;
+// Longer than `maxLinkDepth`, so the walk reaches cards past the depth at
+// which a target stops expanding its own links.
+const CHAIN_LENGTH = 8;
 
 let testDbAdapter: DBAdapter;
 // Held by the test rather than defaulted by the helper, so the assertions can
@@ -82,6 +85,33 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
     } as LooseSingleCardDocument;
   }
 
+  // A chain longer than the link-expansion depth, so the closure runs past
+  // the point where a target stops expanding its own links. A card reached
+  // there keeps its relationships exactly as the index row carries them,
+  // where a shallower reach of the same card rewrites them — two different
+  // sets of bytes for one row, which the assembly key cannot tell apart.
+  fs['chain.gts'] = `
+    import { contains, field, linksTo, CardDef } from "@cardstack/base/card-api";
+    import StringField from "@cardstack/base/string";
+
+    export class Chain extends CardDef {
+      @field name = contains(StringField);
+      @field next = linksTo(() => Chain);
+    }
+  `;
+
+  for (let i = 0; i < CHAIN_LENGTH; i++) {
+    fs[`chain-${i}.json`] = {
+      data: {
+        attributes: { name: `Chain ${i}` },
+        ...(i + 1 < CHAIN_LENGTH
+          ? { relationships: { next: { links: { self: `./chain-${i + 1}` } } } }
+          : {}),
+        meta: { adoptsFrom: { module: rri('./chain'), name: 'Chain' } },
+      },
+    } as LooseSingleCardDocument;
+  }
+
   for (let group of ['a', 'b']) {
     for (let i = 0; i < SOURCES_PER_GROUP; i++) {
       let relationships: Record<string, { links: { self: string } }> = {};
@@ -99,6 +129,15 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
   }
 
   return fs;
+}
+
+function chainQuery(name: string) {
+  return {
+    filter: {
+      on: { module: rri(`${testRealm}chain`), name: 'Chain' },
+      eq: { name },
+    },
+  };
 }
 
 function groupQuery(group: string) {
@@ -341,6 +380,46 @@ module(basename(import.meta.filename), function () {
       );
       assert.deepEqual(
         danglingRelationshipIds(after),
+        [],
+        'with nothing left dangling',
+      );
+    });
+
+    // The depth rule the assembly key cannot express: past the expansion
+    // depth a card keeps the relationships its index row carries, so those
+    // bytes must never stand in for a shallower reach of the same card, or
+    // the other way round. Running the one search twice puts the second run
+    // on whatever the first filed.
+    test('a closure deeper than the expansion depth assembles the same document warm as cold', async function (assert) {
+      let cold = await searchCardsForTest(
+        realm.realmIndexQueryEngine,
+        chainQuery('Chain 0'),
+        { loadLinks: true },
+      );
+      let warm = await searchCardsForTest(
+        realm.realmIndexQueryEngine,
+        chainQuery('Chain 0'),
+        { loadLinks: true },
+      );
+
+      assert.strictEqual(cold.data.length, 1, 'the search found the root');
+      assert.ok(cold.included.length > 0, 'the walk followed the chain');
+      assert.ok(
+        cold.included.length < CHAIN_LENGTH,
+        `and stopped short of the whole ${CHAIN_LENGTH}-card chain, carrying ${cold.included.length}`,
+      );
+      assert.deepEqual(
+        canonical(warm.included),
+        canonical(cold.included),
+        'the second run carries the same resources with the same content',
+      );
+      assert.deepEqual(
+        warm.included.map((r) => `${r.type}:${r.id}`),
+        cold.included.map((r) => `${r.type}:${r.id}`),
+        'and in the same order',
+      );
+      assert.deepEqual(
+        danglingRelationshipIds(warm),
         [],
         'with nothing left dangling',
       );
