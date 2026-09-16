@@ -593,6 +593,7 @@ export class IndexQueryEngine {
     filter: Filter | undefined,
   ): Promise<Array<{ path: string; value: string }> | undefined> {
     assertLatticeFilter(filter);
+    let pluralTermPaths = new Set<string>();
     let extract = async (
       part: Filter | undefined,
       inheritedOn: CodeRef,
@@ -600,10 +601,25 @@ export class IndexQueryEngine {
       if (!part) return undefined;
       let on = 'on' in part && part.on ? part.on : inheritedOn;
       if ('every' in part) {
+        // Any one conjunct's terms are a sound routing set (a document that
+        // matches the conjunction matches the conjunct). Prefer the most
+        // selective: a plural string field over a scalar one, ties to the
+        // first. A season-plus-batter watch then routes by the batter, not
+        // by the season shared with every other game.
+        let best: Array<{ path: string; value: string }> | undefined;
+        let bestRank = -1;
         for (let child of part.every) {
           let terms = await extract(child, on);
-          if (terms) return terms;
+          if (!terms) continue;
+          let rank = terms.some((term) => pluralTermPaths.has(term.path))
+            ? 2
+            : 1;
+          if (rank > bestRank) {
+            best = terms;
+            bestRank = rank;
+          }
         }
+        if (best) return best;
       } else if ('any' in part) {
         let branches = await Promise.all(
           part.any.map((child) => extract(child, on)),
@@ -637,15 +653,20 @@ export class IndexQueryEngine {
             this.#virtualNetwork,
           );
           if (
-            field.type === 'contains' &&
+            (field.type === 'contains' || field.type === 'containsMany') &&
             field.isPrimitive &&
             !field.serializerName &&
             [
               `${baseRealmRRI}string/default`,
               `${baseRealmRRI}card-api/StringField`,
             ].includes(key)
-          )
+          ) {
+            // A containsMany string field's search-doc value is an array;
+            // the registry tokenizes each element, so the term routes on
+            // membership.
+            if (field.type === 'containsMany') pluralTermPaths.add(path);
             return values.map((value) => ({ path, value: value as string }));
+          }
         }
       }
       // An explicit on/type is a required positive guard in the forward

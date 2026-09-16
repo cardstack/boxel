@@ -233,7 +233,9 @@ export class LatticeQueryRegistry
       paths.add(watch.fieldPath);
       // Page and sort affect the output, but never narrow invalidation. Even a
       // non-returned match can change an aggregate or displace a page member.
-      let terms = await compiler.reverseRoutingTerms(watch.query.filter);
+      let terms =
+        latticeInputIdTerms(watch) ??
+        (await compiler.reverseRoutingTerms(watch.query.filter));
       prepared.push({
         ...watch,
         terms: terms?.length ? terms : [{ path: '', value: '' }],
@@ -436,8 +438,13 @@ export class LatticeQueryRegistry
         tokens.add(routingToken('$lattice.type', type));
       }
       for (let [path, value] of Object.entries(document.search_doc ?? {})) {
-        if (typeof value !== 'string') continue;
-        tokens.add(routingToken(path, value));
+        if (typeof value === 'string') tokens.add(routingToken(path, value));
+        // A containsMany string field: one token per member, so a watch on
+        // that field routes by membership instead of the broad sentinel.
+        else if (Array.isArray(value))
+          for (let member of value)
+            if (typeof member === 'string')
+              tokens.add(routingToken(path, member));
       }
     }
     let expression: Expression = [
@@ -818,6 +825,29 @@ export class LatticeQueryRegistry
       ['owner_url =', param(ownerURL)],
     ]) as Expression;
   }
+}
+
+// The native input watch (`@lattice/inputs`) lists the exact resolved ids
+// the owner read, in the form the search doc's `id` carries, so it routes on
+// those ids rather than the sentinel every changed row matches.
+function latticeInputIdTerms(
+  watch: LatticeWatch,
+): Array<{ path: string; value: string }> | undefined {
+  if (watch.fieldPath !== '@lattice/inputs') return undefined;
+  let filter = watch.query.filter;
+  if (
+    !filter ||
+    Object.keys(filter).length !== 1 ||
+    !('in' in filter) ||
+    Object.keys(filter.in).length !== 1 ||
+    !Array.isArray(filter.in.id) ||
+    filter.in.id.length === 0 ||
+    !filter.in.id.every(
+      (id) => typeof id === 'string' && id.length > 0 && id.length <= 2048,
+    )
+  )
+    return undefined;
+  return filter.in.id.map((value) => ({ path: 'id', value: value as string }));
 }
 
 function routingToken(path: string, value: string): string {
