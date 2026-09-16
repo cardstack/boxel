@@ -19,3 +19,19 @@ declare module '@cardstack/boxel-host/lib/pdfjs-loader' {
   // Matches `loadPdfjs` in `packages/host/app/lib/pdfjs-loader.ts`.
   export function loadPdfjs(): Promise<any>;
 }
+
+declare module '@cardstack/boxel-host/lib/signed-capture' {
+  // Matches `packages/host/app/lib/signed-capture.gts`. `SignedCapture`
+  // yields [signedUrl, errorMessage]; `SignedCaptureLink` renders an anchor
+  // that opens its capture URL in a new tab with a fresh token.
+  import type { ComponentLike } from '@glint/template';
+  export const SignedCapture: ComponentLike<{
+    Args: { url?: string | null };
+    Blocks: { default: [string | undefined, string | undefined] };
+  }>;
+  export const SignedCaptureLink: ComponentLike<{
+    Args: { url?: string | null };
+    Blocks: { default: [] };
+    Element: HTMLAnchorElement;
+  }>;
+}
