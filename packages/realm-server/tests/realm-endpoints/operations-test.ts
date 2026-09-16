@@ -107,7 +107,7 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
     'report.gts': `
       import { contains, containsMany, field, linksTo, CardDef, FieldDef, Component } from "@cardstack/base/card-api";
       import StringField from "@cardstack/base/string";
-      import { operation, params, actor, instance } from "@cardstack/base/operations";
+      import { operation, params, actor } from "@cardstack/base/operations";
       import { Person } from "./person";
 
       export class ReportComment extends FieldDef {
@@ -135,9 +135,9 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
           },
         };
 
-        @operation static openReports = {
+        @operation static knownReviewers = {
           base: 'query',
-          query: { filter: { on: ExternalReport, eq: { status: 'open' } } },
+          query: { filter: { on: Person, eq: { firstName: 'Reviewer' } } },
         };
 
         static isolated = class Isolated extends Component<typeof this> {
@@ -334,7 +334,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
       test('an entry naming a query is sent to the search engine', async function (assert) {
         let response = await query(
-          envelope(invoke('openReports', { href: '/report-kept' })),
+          envelope(invoke('knownReviewers', { href: '/report-kept' })),
         );
 
         assert.strictEqual(response.status, 400, 'HTTP 400 status');
@@ -712,7 +712,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
     module('identity', function () {
       test('an operation that reads the actor refuses a request that authenticated nobody', async function (assert) {
-        let response = await post(
+        let response = await anonymousPost(
           envelope(
             invoke('addComment', {
               href: '/report-anonymous',
@@ -733,7 +733,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       });
 
       test('an operation that reads no actor is carried out for an anonymous caller', async function (assert) {
-        let response = await post(
+        let response = await anonymousPost(
           envelope(invoke('escalate', { href: '/report-anonymous' })),
         );
 
@@ -746,28 +746,21 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       });
 
       test('the actor an operation reads is the user the realm authenticated', async function (assert) {
-        let response = await request
-          .post('/_operations')
-          .set('Accept', OPERATIONS)
-          .set('Content-Type', OPERATIONS)
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(realm, '@tester:localhost', ['read', 'write'])}`,
-          )
-          .send(
-            envelope(
-              invoke('addComment', {
-                href: '/report-identified',
-                data: { body: 'Reviewed.' },
-              }),
-            ),
-          );
+        let response = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-identified',
+              data: { body: 'Reviewed.' },
+            }),
+          ),
+        );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         assert.deepEqual(
           storedCard('report-identified.json').data.attributes?.comments,
-          [{ body: 'Reviewed.', postedBy: '@tester:localhost' }],
-          'the comment records the caller the realm verified',
+          [{ body: 'Reviewed.', postedBy: TESTER }],
+          'the comment records the caller the realm verified, and no other ' +
+            'identity is invented for it',
         );
       });
     });
