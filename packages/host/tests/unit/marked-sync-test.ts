@@ -9,6 +9,7 @@ import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/h
 import {
   markedSync,
   markdownToHtml,
+  splitCodePatchFencesGluedToProse,
   widenFencesAroundCodePatches,
 } from '@cardstack/runtime-common/marked-sync';
 
@@ -20,7 +21,9 @@ import { parseHtmlContent } from '@cardstack/host/lib/formatted-message/utils';
 // the applier matches it against the target file.
 function renderBodyToCodeData(body: string) {
   let html = markdownToHtml(
-    widenFencesAroundCodePatches(escapeHtmlOutsideCodeBlocks(body)!),
+    widenFencesAroundCodePatches(
+      splitCodePatchFencesGluedToProse(escapeHtmlOutsideCodeBlocks(body)!),
+    ),
     {
       sanitize: false,
       escapeHtmlInCodeBlocks: true,
@@ -67,6 +70,69 @@ ${REPLACE_MARKER}
 `;
 
 module('Unit | marked-sync', function () {
+  test('a patch whose opening fence ends a prose line still renders as a code block', function (assert) {
+    // The renderer opens a fence only at the start of a line, so a patch that
+    // begins "Let's write the block!```json" is prose to it: no code block,
+    // nothing applied, and the bot waits for a result that never comes.
+    let body = `I'll create the theme now. Let's write the block!\`\`\`json
+https://example.com/realm/moon-theme.json (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+{ "data": { "type": "card" } }
+${REPLACE_MARKER}
+\`\`\`
+`;
+    let blocks = renderBodyToCodeData(body);
+
+    assert.deepEqual(
+      blocks.map((b) => b.fileUrl),
+      ['https://example.com/realm/moon-theme.json'],
+      'the patch is found with its url on the first line',
+    );
+    assert.true(
+      blocks[0].searchReplaceBlock!.includes('{ "data": { "type": "card" } }'),
+      'the file content survives',
+    );
+  });
+
+  test('splitCodePatchFencesGluedToProse moves only the fence to its own line', function (assert) {
+    let body = `Let's write the block!\`\`\`json
+https://example.com/realm/a.json (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+{}
+${REPLACE_MARKER}
+\`\`\`
+`;
+    assert.strictEqual(
+      splitCodePatchFencesGluedToProse(body),
+      `Let's write the block!\n\`\`\`json\n` +
+        body.split('\n').slice(1).join('\n'),
+    );
+  });
+
+  test('splitCodePatchFencesGluedToProse leaves prose that ends in backticks alone', function (assert) {
+    let inlineCode = 'Use the helper ```\nnot a patch\nsome more text\n';
+    assert.strictEqual(
+      splitCodePatchFencesGluedToProse(inlineCode),
+      inlineCode,
+    );
+
+    let properFence = `\`\`\`json
+https://example.com/realm/a.json (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+{}
+${REPLACE_MARKER}
+\`\`\`
+`;
+    assert.strictEqual(
+      splitCodePatchFencesGluedToProse(properFence),
+      properFence,
+      'a fence already on its own line is unchanged',
+    );
+  });
+
   test('a patch that writes markdown with fenced code inside renders as one block, and the patch after it keeps its url', function (assert) {
     // Without widening, the first bare ``` inside the plan closes the patch's
     // fence; the fence meant to close the patch then opens a block that
