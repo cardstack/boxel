@@ -53,14 +53,19 @@
 // consult, and cannot move at all until it has been held for the minimum
 // dwell.
 //
-// The realm is the unit because the realm is the scope the decision has to be
-// consistent over: one realm's validators and one realm's response cache. The
-// load reading behind it is process-wide today — in-flight searches are
-// counted per process, which is where the heap they hold lives — so realms
-// mounted in one process move together in practice. What the per-realm state
-// buys is that a realm only ever transitions on a read of its own, so a quiet
-// realm neither changes level nor reports one, and every transition record
-// names the realm whose cache it fragmented.
+// The realm is the unit because it is the scope one process's response cache
+// is consistent over. That scope is also the whole of what this mechanism
+// reaches: the ladder is a `Map` in process memory with no shared store, each
+// replica's reading is fed only by its own admissions, and a realm's dwell
+// advances only on the reads that replica served. So two replicas behind one
+// load balancer can hold the same realm at different rungs, and a conditional
+// GET that lands on the other one is answered `200` with a body rather than
+// `304` — most likely under load, when their readings diverge most.
+// Correctness is unaffected, since a validator always describes the bytes it
+// ships with; the cost is a missed revalidation. What per-realm state buys
+// within a process is that a realm only transitions on a read of its own, so a
+// quiet realm neither changes level nor reports one, and every transition
+// names the realm whose cache entries it fragmented.
 //
 // # The caller states a preference the server may overrule
 //
@@ -92,6 +97,11 @@ import {
 } from './search-bounds.ts';
 
 export const LINK_SHAPE_POLICY_CHANNEL = 'boxel:link-shape-policy';
+
+// Elapsed spans inside one process, from a source that cannot step.
+function monotonicNow(): number {
+  return performance.now();
+}
 
 // The request header a caller states its preference on. Absent means the
 // closure: that is the shape a caller gets when no policy is engaged, so an
@@ -129,14 +139,18 @@ export interface LinkShapeDecision {
   // one served-mode field cannot distinguish "the caller asked for links-only"
   // from "the caller asked for the closure and was downgraded".
   requested: LinkShapeMode;
-  downgraded: boolean;
   // The decision's inputs, recorded on the request they decided. Recording the
   // inputs rather than only the outcome is what separates "the policy did the
   // right thing on bad inputs" from "the policy misjudged good inputs" — those
   // need different fixes, and by the time anyone asks, the load that caused
   // the decision is gone.
-  level: LinkShapeLevel;
-  load: number;
+  //
+  // Both are null together, and mean the same thing: no ladder decided this.
+  // A pinned policy answers one shape whatever the load, so reporting a level
+  // and a reading it never consulted would make "the ladder ran and engaged
+  // nothing" and "no ladder is wired into this process" the same two fields.
+  level: LinkShapeLevel | null;
+  load: number | null;
   rowClass: LinkShapeRowClass;
 }
 
@@ -166,9 +180,12 @@ export interface LinkShapePolicyEvent {
   // against.
   load: number;
   limit: number;
-  // How many realms this process currently holds at each level. Heartbeat
-  // only — on a transition they would describe the moment after the change and
-  // invite being read as its cause.
+  // How many realms this process has served since start, counted at the level
+  // each was last left in. Not the realms it currently mounts: a realm is
+  // added on its first read and never dropped, so one that has since been
+  // unmounted keeps being counted, and one that is mounted but unread is
+  // absent. Heartbeat only — on a transition these would describe the moment
+  // after the change and invite being read as its cause.
   realmsAtFull: number | null;
   realmsAtMultiRow: number | null;
   realmsAtAll: number | null;
@@ -255,7 +272,11 @@ export class LinkShapePolicy {
     this.#release = release;
     this.#minDwellMs = opts.minDwellMs ?? LINK_SHAPE_MIN_DWELL_MS;
     this.#heartbeatMs = opts.heartbeatMs ?? LINK_SHAPE_HEARTBEAT_MS;
-    this.#now = opts.now ?? Date.now;
+    // `performance.now()`, not `Date.now()`: the dwell floor measures an
+    // elapsed span inside one process, and a forward wall-clock step can
+    // satisfy a whole dwell interval at once, letting a realm take a rung it
+    // had just been blocked from.
+    this.#now = opts.now ?? monotonicNow;
     this.#lastHeartbeatAt = this.#now();
   }
 
@@ -300,9 +321,8 @@ export class LinkShapePolicy {
       return {
         mode,
         requested,
-        downgraded: requested === 'full' && mode === 'links-only',
-        level: this.#pinned === 'links-only' ? 'all' : 'full',
-        load: 0,
+        level: null,
+        load: null,
         rowClass,
       };
     }
@@ -321,7 +341,6 @@ export class LinkShapePolicy {
     return {
       mode,
       requested,
-      downgraded: requested === 'full' && mode === 'links-only',
       level,
       load,
       rowClass,
@@ -350,8 +369,8 @@ export class LinkShapePolicy {
       let decision = this.decide({ realm, rowClass, requested });
       if (
         !worst ||
-        LINK_SHAPE_LEVELS.indexOf(decision.level) >
-          LINK_SHAPE_LEVELS.indexOf(worst.level)
+        LINK_SHAPE_LEVELS.indexOf(decision.level ?? 'full') >
+          LINK_SHAPE_LEVELS.indexOf(worst.level ?? 'full')
       ) {
         worst = decision;
       }
@@ -360,9 +379,9 @@ export class LinkShapePolicy {
       worst ?? {
         mode: requested === 'links-only' ? 'links-only' : 'full',
         requested,
-        downgraded: false,
-        level: 'full',
-        load: this.load,
+        // No realm was named, so no realm's ladder was consulted.
+        level: null,
+        load: null,
         rowClass,
       }
     );
@@ -470,26 +489,39 @@ export function requestedLinkShape(
 
 // Classify a search by whether its result count is bounded at one. Takes the
 // post-clamp page size, since that is the page the query will actually run
-// with. An absent or unparseable size means the server default applies, which
-// is far above one.
+// with.
+//
+// Only an explicit page of exactly one is bounded at one row. Every other
+// value — absent, unparseable, zero, negative — is a page the clamp replaces
+// with the server default, which is far above one, so all of them classify as
+// multi-row. Reading a zero as "at most one row" would invert the very clamp
+// this function is meant to read, and the classification does not always run
+// after it: the page bound is applied only on the item leg, so a fieldset that
+// skips it reaches here with whatever the caller wrote.
 export function rowClassForPageSize(
   pageSize: number | null | undefined,
 ): LinkShapeRowClass {
-  return typeof pageSize === 'number' &&
-    Number.isFinite(pageSize) &&
-    pageSize <= 1
-    ? 'single-row'
-    : 'multi-row';
+  return pageSize === 1 ? 'single-row' : 'multi-row';
 }
 
 // Keep the ladder monotonic and under the cap it is measured against.
 //
-// Two invariants matter and neither is guaranteed by the env overrides that
+// Three invariants matter and none is guaranteed by the env overrides that
 // feed this: a release at or above its own engage would make a level
 // self-cancelling (it would engage and immediately release, once per dwell
-// interval, forever), and an engage at or above the admission cap would put
-// the rung past the point where the process has already started shedding —
-// which is precisely the ordering this policy exists to invert.
+// interval, forever); an engage at or above the admission cap would put the
+// rung past the point where the process has already started shedding, which is
+// precisely the ordering this policy exists to invert; and a release of zero
+// would make the rung a one-way door, since the reading it is compared against
+// is a decaying exponential mean that reaches exactly zero only by float
+// underflow — about a day and a half of unbroken idleness at the shipped
+// half-life. The env parser floors the release knobs at zero, so that last one
+// is a plausible number an operator can type.
+// The lowest release the reading can actually cross. The mean decays toward
+// zero without arriving, so a release must sit above it for the rung to be
+// two-way.
+const MIN_RELEASE = 0.5;
+
 function normalizeThresholds(
   engage: [number, number],
   release: [number, number],
@@ -497,11 +529,17 @@ function normalizeThresholds(
 ): { engage: [number, number]; release: [number, number] } {
   // Every engage strictly below the cap, and the upper rung no lower than the
   // lower one.
-  let ceiling = Math.max(1, limit - 1);
-  let multiRowEngage = Math.min(engage[0], ceiling);
+  // Every engage at least one clear of the release below it, and strictly
+  // below the cap, so both bands have width and both rungs sit under the point
+  // where the process shed.
+  let ceiling = Math.max(MIN_RELEASE + 1, limit - 1);
+  let multiRowEngage = Math.min(Math.max(engage[0], MIN_RELEASE + 1), ceiling);
   let allEngage = Math.min(Math.max(engage[1], multiRowEngage), ceiling);
-  // Every release strictly below its own engage, so a band always has width.
-  let multiRowRelease = Math.min(release[0], multiRowEngage - 1);
+  // Every release reachable by the reading, and strictly below its own engage.
+  let multiRowRelease = Math.min(
+    Math.max(release[0], MIN_RELEASE),
+    multiRowEngage - 1,
+  );
   let allRelease = Math.min(
     Math.max(release[1], multiRowRelease),
     allEngage - 1,

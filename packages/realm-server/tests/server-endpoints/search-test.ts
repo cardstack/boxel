@@ -1149,9 +1149,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       );
       assert.strictEqual(
         event.linkShapeLevel,
-        'full',
-        'the fleet is quiet, so the policy imposed nothing',
+        null,
+        'no ladder is wired into this server, which is not the same as a quiet one',
       );
+      assert.strictEqual(event.linkShapeLoad, null);
     });
 
     test('a downgraded search reports both modes and the load that decided it', async function (assert) {

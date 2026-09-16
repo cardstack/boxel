@@ -182,6 +182,8 @@ A policy that reacts to load is only debuggable if it records the conditions it 
 
 ### "Was this page served a degraded shape, and why?"
 
+**Scope first: these per-request fields cover the federated search only.** `boxel:search-shape` is emitted from the `_federated-search` handler and nowhere else, while the policy also decides the card+json `GET`/`HEAD` and the card+html item read — which emit nothing on this channel. So for a card read there is no line to find, and an absent line does not mean "not degraded". Those are also the two routes whose validators and response-cache entries a rung change fragments, so a "why did this stop 304-ing" investigation lands exactly where the channel is silent. For a card read, use the transition channel below to establish which rung the realm was on at that timestamp.
+
 Start from the per-request fields. Given a `correlationId` from the browser (`x-boxel-logging-correlation-id`, carried on `boxel:client-perf` `server-request`):
 
 ```logql
@@ -220,9 +222,11 @@ sum by (realm) (count_over_time(<policy> | changed="true" [30m]))
 # the short dwells, which are the ones that cost cache entries
 <policy> | changed="true" | unwrap dwellMs | __error__="" [30m]
 
-# how much of the fleet is degraded right now
+# the level distribution this process is reporting
 <policy> | changed="false" | line_format "load={{.load}} full={{.realmsAtFull}} multi={{.realmsAtMultiRow}} all={{.realmsAtAll}}"
 ```
+
+Those counts are over realms the process has **served since start**, each at the level it was last left in — not the realms it currently mounts. A realm enters on its first read and is never dropped, so one that has since been unmounted keeps being counted, and a mounted realm nothing has read is absent. On a server that mounts lazily and unmounts, `realmsAtAll` therefore drifts up and does not come back down; read it as a high-water description of what the policy has done, and use the transition rate above to judge whether it is over-engaging.
 
 A `dwellMs` of `null` is a realm's first move, not a zero-length dwell — it had no prior level to have dwelt in.
 

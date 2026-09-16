@@ -59,7 +59,7 @@ export class SearchAdmissionGate {
     this.#halfLifeMs = normalizeHalfLife(
       opts?.halfLifeMs ?? LINK_SHAPE_LOAD_HALF_LIFE_MS,
     );
-    this.#now = opts?.now ?? Date.now;
+    this.#now = opts?.now ?? monotonicNow;
     this.#sustainedAt = this.#now();
   }
 
@@ -97,13 +97,21 @@ export class SearchAdmissionGate {
   // across it. Called before every change to `#inFlight` — after the change the
   // old value is gone, and charging the span at the new one would credit a
   // burst that has not happened yet (or discount one that just ended).
+  //
+  // Elapsed time here is measured with `performance.now()` rather than
+  // `Date.now()`. Both only ever measure spans inside one process, and a wall
+  // clock can step: a forward NTP correction of a few seconds collapses the
+  // decay weight toward zero, which snaps the reading to the instantaneous count
+  // — the one behaviour this smoother exists to prevent, arriving at a moment
+  // nothing in the load explains. A monotonic source cannot step, so the
+  // backwards guard below is left only for a clock a test supplies.
   #advance(): void {
     let now = this.#now();
     let dt = now - this.#sustainedAt;
     if (dt <= 0) {
-      // A clock that did not move (or went backwards) contributes no span.
-      // Re-anchoring is still right: it keeps a backwards step from being
-      // charged twice once the clock recovers.
+      // A clock that did not move contributes no span. Re-anchoring is still
+      // right: with a test-supplied clock that can go backwards, it keeps the
+      // step from being charged twice once the clock recovers.
       this.#sustainedAt = now;
       return;
     }
@@ -195,6 +203,12 @@ function normalizeLimit(limit: number): number {
   }
   let floored = Math.floor(limit);
   return floored < 1 ? 1 : floored;
+}
+
+// Elapsed spans inside one process, from a source that cannot step. See
+// `#advance`.
+function monotonicNow(): number {
+  return performance.now();
 }
 
 // A half-life divides an elapsed span, so a non-positive or non-finite one

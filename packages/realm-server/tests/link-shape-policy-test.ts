@@ -10,6 +10,7 @@ import {
   type LinkShapePolicyEvent,
 } from '@cardstack/runtime-common';
 import {
+  admitSearchUnconditionally,
   SearchAdmissionGate,
   getSearchSustainedInFlight,
   resetSearchAdmissionForTests,
@@ -84,7 +85,11 @@ module(basename(import.meta.filename), function () {
       let decision = read();
       assert.strictEqual(decision.level, 'full');
       assert.strictEqual(decision.mode, 'full');
-      assert.false(decision.downgraded, 'nothing was overruled');
+      assert.strictEqual(
+        decision.requested,
+        decision.mode,
+        'nothing was overruled',
+      );
       assert.strictEqual(
         events.length,
         0,
@@ -234,8 +239,9 @@ module(basename(import.meta.filename), function () {
         'links-only',
         'the server never does more work than it was asked for',
       );
-      assert.false(
-        decision.downgraded,
+      assert.strictEqual(
+        decision.requested,
+        decision.mode,
         'and getting what you asked for is not a downgrade',
       );
     });
@@ -251,7 +257,6 @@ module(basename(import.meta.filename), function () {
         'what the caller asked for',
       );
       assert.strictEqual(decision.mode, 'links-only', 'what it was served');
-      assert.true(decision.downgraded, 'and that the two differ');
       assert.strictEqual(
         decision.load,
         20,
@@ -297,7 +302,12 @@ module(basename(import.meta.filename), function () {
         requested: 'full',
       });
       assert.strictEqual(decision.mode, 'full');
-      assert.strictEqual(decision.level, 'full');
+      assert.strictEqual(
+        decision.level,
+        null,
+        'no realm was named, so no realm ladder was consulted',
+      );
+      assert.strictEqual(decision.load, null);
     });
 
     test('a transition records the realm, both levels, the threshold and the dwell', function (assert) {
@@ -428,7 +438,17 @@ module(basename(import.meta.filename), function () {
         requested: 'full',
       });
       assert.strictEqual(decision.mode, 'links-only');
-      assert.true(decision.downgraded, 'the caller asked for the closure');
+      assert.strictEqual(
+        decision.requested,
+        'full',
+        'the caller asked for the closure',
+      );
+      assert.strictEqual(
+        decision.level,
+        null,
+        'and no ladder decided otherwise — a pinned policy consults none',
+      );
+      assert.strictEqual(decision.load, null);
     });
 
     test('a full pin still honours a links-only preference', function (assert) {
@@ -443,7 +463,7 @@ module(basename(import.meta.filename), function () {
         'links-only',
         'so the two reasons a response can be links-only stay distinguishable',
       );
-      assert.false(decision.downgraded);
+      assert.strictEqual(decision.level, null, 'still no ladder');
     });
   });
 
@@ -516,7 +536,12 @@ module(basename(import.meta.filename), function () {
 
     test('a page bounded at one row is the only single-row class', function (assert) {
       assert.strictEqual(rowClassForPageSize(1), 'single-row');
-      assert.strictEqual(rowClassForPageSize(0), 'single-row');
+      assert.strictEqual(
+        rowClassForPageSize(0),
+        'multi-row',
+        'a page the clamp replaces with the server default is not bounded at one row',
+      );
+      assert.strictEqual(rowClassForPageSize(-1), 'multi-row');
       assert.strictEqual(rowClassForPageSize(2), 'multi-row');
       assert.strictEqual(rowClassForPageSize(100), 'multi-row');
       assert.strictEqual(
@@ -616,14 +641,32 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('the module-level reading comes from the process gate', function (assert) {
+    // Asserting only that a fresh gate reads 0 would pass against a reading
+    // wired to nothing, since 0 is also the seed. The reading has to be made
+    // non-zero through the module surface the policy actually calls.
+    test('the module-level reading tracks the process gate', function (assert) {
       let clock = 0;
       setSearchAdmissionForTests({
         limit: 30,
         halfLifeMs: 10_000,
         now: () => clock,
       });
-      assert.strictEqual(getSearchSustainedInFlight(), 0);
+      assert.strictEqual(getSearchSustainedInFlight(), 0, 'idle to begin with');
+
+      let release = admitSearchUnconditionally();
+      clock += 10_000; // one half-life held at 1
+      let loaded = getSearchSustainedInFlight();
+      assert.ok(
+        Math.abs(loaded - 0.5) < 0.01,
+        `the module reading followed the gate, got ${loaded}`,
+      );
+
+      release();
+      clock += 100_000;
+      assert.ok(
+        getSearchSustainedInFlight() < 0.01,
+        'and follows it back down',
+      );
     });
   });
 });
