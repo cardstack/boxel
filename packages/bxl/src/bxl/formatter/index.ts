@@ -861,6 +861,9 @@ function shouldInsertReadableSpace(
     current.type === 'ident' &&
     JQ_BINDING_KEYWORDS.has(current.value.toLowerCase())
   ) {
+    // Compiled output only: a keyword field the author wrote as `.label`
+    // reaches here respelled `."label"`, so a bare keyword after the dot is
+    // always a binding (`. as $root`) and keeps its space.
     return true;
   }
   if (

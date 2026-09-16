@@ -155,9 +155,14 @@ function applyDirective(
   date: Date,
   mode: TimeMode,
   epochSeconds: number,
+  noPadding = false,
 ): string {
   const parts = brokenDownFromDate(date, epochSeconds, mode);
   const [year, month, day, hour, minute, second, weekday, yearDay] = parts;
+  // The glibc/BSD `-` flag (`%-d`): no zero padding. jq on Linux and macOS
+  // honours it; locale-style labels such as "March 4" need it.
+  const num = (value: number, width = 2) =>
+    noPadding ? `${Math.trunc(value)}` : pad(value, width);
 
   switch (directive) {
     case '%':
@@ -165,20 +170,20 @@ function applyDirective(
     case 'Y':
       return pad(year, 4);
     case 'm':
-      return pad(month + 1);
+      return num(month + 1);
     case 'd':
-      return pad(day);
+      return num(day);
     case 'e':
       return `${day}`.padStart(2, ' ');
     case 'H':
-      return pad(hour);
+      return num(hour);
     case 'M':
-      return pad(minute);
+      return num(minute);
     case 'S':
-      return pad(Math.trunc(second));
+      return num(Math.trunc(second));
     case 'I': {
       const clock = hour % 12 || 12;
-      return pad(clock);
+      return num(clock);
     }
     case 'p':
       return hour < 12 ? 'AM' : 'PM';
@@ -196,7 +201,7 @@ function applyDirective(
     case 'u':
       return `${weekday === 0 ? 7 : weekday}`;
     case 'j':
-      return pad(yearDay + 1, 3);
+      return num(yearDay + 1, 3);
     case 'F':
       return `${pad(year, 4)}-${pad(month + 1)}-${pad(day)}`;
     case 'R':
@@ -310,10 +315,21 @@ export function strftime(
     }
 
     index += 1;
+    let noPadding = false;
+    if (format[index] === '-') {
+      noPadding = true;
+      index += 1;
+    }
     if (index >= format.length) {
       throw new JqArgumentError('Trailing % in strftime format');
     }
-    output += applyDirective(format[index]!, date, mode, epochSeconds);
+    output += applyDirective(
+      format[index]!,
+      date,
+      mode,
+      epochSeconds,
+      noPadding,
+    );
   }
 
   return output;
