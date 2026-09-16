@@ -10,10 +10,8 @@ import {
   SCREENSHOT_DEFAULT_IMAGE_TYPE,
   SCREENSHOT_MAX_CAPTURES,
   SCREENSHOT_MAX_PHYSICAL_EDGE_PX,
-  SCREENSHOT_PDF_MAX_BYTES,
-  SCREENSHOT_PDF_MAX_PAGES,
   captureOutputContentType,
-  countPdfPages,
+  checkPdfCaptureBounds,
   screenshotContentType,
   type CaptureContentType,
   type DeclaredScreenshotCaptureResult,
@@ -1572,16 +1570,22 @@ async function captureOneEntry(
   output?: DeclaredEntryOutput,
 ): Promise<ScreenshotCaptureItem | RenderError> {
   // A pdf capture paginates the settled render onto paper instead of
-  // rasterizing the viewport. Same settle sequence, different capture call —
-  // and its bounds (page count, byte size) exist only once Chrome has
-  // paginated, so they are enforced here, the fullPage late-check pattern.
+  // rasterizing the viewport: same settle sequence and emulated media as a
+  // raster capture, but `page.pdf()` lays the document out at the paper's
+  // content width (the card's own `@page { size }` rule, or Chrome's default
+  // paper), not at a capture viewport — which is why the shared parse refuses
+  // a viewport on a pdf spec. The bounds (page count, byte size) exist only
+  // once Chrome has paginated, so they are enforced here, the fullPage
+  // late-check pattern.
   if (entry.type === 'pdf') {
-    // Defensive: the shared parse refuses these combinations; a direct
-    // prerender-server caller could still send one.
-    if (entry.target || entry.clip || entry.fullPage) {
+    // Defensive: every wire surface (the realm-server request bodies and the
+    // prerender server's /prerender-screenshot route) refuses these
+    // combinations through the shared parse; this guards the in-process
+    // callers that assemble capture entries directly.
+    if (entry.target || entry.clip || entry.fullPage || entry.viewport) {
       return buildInvalidRenderResponseError(
         page,
-        `capture "${entry.name}" cannot combine pdf output with target, clip, or fullPage`,
+        `capture "${entry.name}" cannot combine pdf output with target, clip, fullPage, or viewport`,
         { title: 'Invalid screenshot capture spec' },
       );
     }
@@ -1589,9 +1593,9 @@ async function captureOneEntry(
     // page settled under. The `media` axis is the caller's control over that,
     // so pin the emulated media to what the spec asks — `screen` today (the
     // default, and the only value the shared parse admits), which keeps the
-    // paged document the same render the raster path would capture. Cleared in
-    // `finally` so a reused pooled page carries no media override into the
-    // next capture.
+    // paged document on the same styles the raster path captures, laid out at
+    // paper width. Cleared in `finally` so a reused pooled page carries no
+    // media override into the next capture.
     let media = entry.media ?? 'screen';
     await page.emulateMediaType(media);
     try {
@@ -1601,20 +1605,11 @@ async function captureOneEntry(
         // paper applies when the card declares none.
         preferCSSPageSize: true,
       });
-      if (bytes.byteLength > SCREENSHOT_PDF_MAX_BYTES) {
-        return buildInvalidRenderResponseError(
-          page,
-          `pdf capture "${entry.name}" produced ${bytes.byteLength} bytes, over the ${SCREENSHOT_PDF_MAX_BYTES}-byte cap`,
-          { title: 'PDF capture too large' },
-        );
-      }
-      let pageCount = countPdfPages(bytes);
-      if (pageCount > SCREENSHOT_PDF_MAX_PAGES) {
-        return buildInvalidRenderResponseError(
-          page,
-          `pdf capture "${entry.name}" produced ${pageCount} pages, over the ${SCREENSHOT_PDF_MAX_PAGES}-page cap`,
-          { title: 'PDF capture too large' },
-        );
+      let bounds = checkPdfCaptureBounds(entry.name, bytes);
+      if (bounds.error !== undefined) {
+        return buildInvalidRenderResponseError(page, bounds.error, {
+          title: 'PDF capture too large',
+        });
       }
       return {
         name: entry.name,
@@ -1622,12 +1617,16 @@ async function captureOneEntry(
         // Pagination has no single pixel extent; the scale is the render's,
         // reported for parity with raster captures.
         deviceScaleFactor,
-        pageCount,
+        pageCount: bounds.pageCount,
       };
     } finally {
       // Restore the default (screen) media so the next capture on this pooled
       // page renders exactly as an un-emulated one would.
-      await page.emulateMediaType();
+      try {
+        await page.emulateMediaType();
+      } catch {
+        // Page may be closing/evicted; a best-effort restore is enough.
+      }
     }
   }
   // A `target` is an element-handle screenshot, a capture call distinct from
@@ -1794,9 +1793,11 @@ export async function captureScreenshot(
 
   // Defensive: `fullPage`, `clip`, and `target` are mutually exclusive — a
   // fullPage capture ignores a clip, and an element (`target`) screenshot
-  // honors neither. The shared capture-spec parse already 400s these on both
-  // request surfaces, but a direct prerender-server caller could still send one
-  // — fail cleanly rather than return a silently-wrong screenshot.
+  // honors neither. Every wire surface (the realm-server request bodies and
+  // the prerender server's /prerender-screenshot route) already 400s these
+  // through the shared capture-spec parse; this guards the in-process callers
+  // that assemble capture options directly — fail cleanly rather than return
+  // a silently-wrong screenshot.
   for (let entry of entries) {
     if (entry.fullPage && entry.clip) {
       return buildInvalidRenderResponseError(
@@ -1819,9 +1820,9 @@ export async function captureScreenshot(
         { title: 'Invalid screenshot capture spec' },
       );
     }
-    // pdf output is singular-only (one contentType per response) and honors
-    // none of the raster crop modes; the shared parse refuses both, this
-    // guards direct prerender-server callers.
+    // pdf output is singular-only (one contentType per response); every wire
+    // surface refuses a pdf batch through the shared parse, so this guards
+    // the in-process callers that assemble capture options directly.
     if (entry.type === 'pdf' && entries.length > 1) {
       return buildInvalidRenderResponseError(
         page,

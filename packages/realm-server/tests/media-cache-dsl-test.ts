@@ -22,11 +22,14 @@ import type {
 import {
   Deferred,
   MEDIA_CACHE_MAX_AGE_SECONDS,
+  SCREENSHOT_PDF_MAX_BYTES,
+  SCREENSHOT_PDF_MAX_PAGES,
   VirtualNetwork,
   asExpressions,
   canonicalCaptureSpecQuery,
   canonicalCaptureSpecString,
   captureSpecHash,
+  checkPdfCaptureBounds,
   countPdfPages,
   findMediaCacheEntry,
   insert,
@@ -377,7 +380,10 @@ module(basename(import.meta.filename), function () {
         'the normalized spec carries the encoding',
       );
 
-      // Raster crop modes are contradictions, not compositions.
+      // Raster geometry is a contradiction, not a composition: crop modes
+      // because pagination cannot honor them, viewport because `page.pdf()`
+      // lays the document out at paper width — admitting it would mint
+      // distinct ledger identities over byte-identical documents.
       for (let [raw, message] of [
         [
           { type: 'pdf', fullPage: true },
@@ -392,6 +398,10 @@ module(basename(import.meta.filename), function () {
           'captureSpec cannot set both type "pdf" and target',
         ],
         [
+          { type: 'pdf', viewport: { width: 1280, height: 800 } },
+          'captureSpec cannot set both type "pdf" and viewport',
+        ],
+        [
           { captures: [{ name: 'doc', type: 'pdf' }] },
           'captureSpec.captures[0].type "pdf" is only valid on a singular capture',
         ],
@@ -401,6 +411,20 @@ module(basename(import.meta.filename), function () {
           message,
         );
       }
+
+      // A viewport spelling the engine default elides to the same canonical
+      // form as omitting it, so it stays admitted — equivalent spellings must
+      // behave identically.
+      let defaultViewport = parseScreenshotCaptureSpec(
+        { type: 'pdf', viewport: { width: 800, height: 600 } },
+        'isolated',
+      );
+      assert.strictEqual(defaultViewport.error, undefined);
+      assert.deepEqual(
+        defaultViewport.captureSpec,
+        { type: 'pdf' },
+        'the default-valued viewport elides away',
+      );
     });
 
     test('countPdfPages counts page objects, with the page-tree count as a floor', function (assert) {
@@ -426,6 +450,57 @@ module(basename(import.meta.filename), function () {
         countPdfPages(pdfWith('')),
         0,
         'no page markers means zero, never a guess',
+      );
+    });
+
+    test('checkPdfCaptureBounds enforces the byte and page caps by name', function (assert) {
+      let pagesPdf = (count: number) =>
+        new TextEncoder().encode(
+          `%PDF-1.4\n1 0 obj << /Type /Pages /Count ${count} >> endobj\n%%EOF`,
+        );
+
+      let within = checkPdfCaptureBounds('doc', pagesPdf(3));
+      assert.strictEqual(within.error, undefined, 'within both caps');
+      assert.strictEqual(within.pageCount, 3, 'reports the page count');
+
+      let atPageCap = checkPdfCaptureBounds(
+        'doc',
+        pagesPdf(SCREENSHOT_PDF_MAX_PAGES),
+      );
+      assert.strictEqual(
+        atPageCap.error,
+        undefined,
+        'the cap itself is within bounds',
+      );
+
+      let overPages = checkPdfCaptureBounds(
+        'doc',
+        pagesPdf(SCREENSHOT_PDF_MAX_PAGES + 1),
+      );
+      assert.strictEqual(
+        overPages.error,
+        `pdf capture "doc" produced ${SCREENSHOT_PDF_MAX_PAGES + 1} pages, over the ${SCREENSHOT_PDF_MAX_PAGES}-page cap`,
+        'over the page cap is an error naming the cap',
+      );
+
+      let overBytes = checkPdfCaptureBounds(
+        'doc',
+        new Uint8Array(SCREENSHOT_PDF_MAX_BYTES + 1),
+      );
+      assert.strictEqual(
+        overBytes.error,
+        `pdf capture "doc" produced ${SCREENSHOT_PDF_MAX_BYTES + 1} bytes, over the ${SCREENSHOT_PDF_MAX_BYTES}-byte cap`,
+        'over the byte cap is an error naming the cap',
+      );
+
+      let atByteCap = checkPdfCaptureBounds(
+        'doc',
+        new Uint8Array(SCREENSHOT_PDF_MAX_BYTES),
+      );
+      assert.strictEqual(
+        atByteCap.error,
+        undefined,
+        'the byte cap itself is within bounds',
       );
     });
 
