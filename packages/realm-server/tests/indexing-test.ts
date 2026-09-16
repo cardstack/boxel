@@ -11,6 +11,7 @@ import {
   VirtualNetwork,
   userInitiatedPriority,
   diffDoc,
+  sweepUnreferencedScopedCSS,
 } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
@@ -1984,6 +1985,78 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      // The sweep runs from the scheduled `scoped-css-gc` job, whose task
+      // shell adds nothing to the scan, so this direct test is what turns a
+      // broken scan or delete red.
+      test("sweepUnreferencedScopedCSS drops this realm's unreferenced rows and nothing else", async function (assert) {
+        let referencedRows = (await testDbAdapter.execute(
+          `SELECT hash FROM scoped_css WHERE realm_url = $1`,
+          { bind: [realm.url] },
+        )) as { hash: string }[];
+        assert.ok(
+          referencedRows.length > 0,
+          'precondition: indexing interned scoped CSS for the fixture realm',
+        );
+
+        let orphanHash = 'a'.repeat(32);
+        let freshOrphanHash = 'c'.repeat(32);
+        let foreignHash = 'b'.repeat(32);
+        let foreignRealmURL = 'http://example.com/other-realm/';
+        let sweepable = Date.now() - 2 * 24 * 60 * 60 * 1000;
+        await testDbAdapter.execute(
+          `INSERT INTO scoped_css (realm_url, hash, css, last_interned_at)
+           VALUES ($1, $2, $3, $4), ($5, $6, $7, $8), ($9, $10, $11, $12)`,
+          {
+            bind: [
+              realm.url,
+              orphanHash,
+              '.superseded {}',
+              sweepable,
+              realm.url,
+              freshOrphanHash,
+              '.just-interned {}',
+              Date.now(),
+              foreignRealmURL,
+              foreignHash,
+              '.foreign {}',
+              sweepable,
+            ],
+          },
+        );
+
+        let swept = await sweepUnreferencedScopedCSS(testDbAdapter, realm.url);
+
+        assert.strictEqual(swept, 1, 'exactly the stale orphan row was swept');
+        let remaining = (await testDbAdapter.execute(
+          `SELECT realm_url, hash FROM scoped_css ORDER BY realm_url, hash`,
+        )) as { realm_url: string; hash: string }[];
+        assert.false(
+          remaining.some(
+            (row) => row.realm_url === realm.url && row.hash === orphanHash,
+          ),
+          'the unreferenced row is gone',
+        );
+        assert.true(
+          remaining.some(
+            (row) =>
+              row.realm_url === realm.url && row.hash === freshOrphanHash,
+          ),
+          'an unreferenced row still inside the grace window survived',
+        );
+        assert.strictEqual(
+          remaining.filter((row) => row.realm_url === realm.url).length,
+          referencedRows.length + 1,
+          'every referenced row survived (plus the within-grace orphan)',
+        );
+        assert.true(
+          remaining.some(
+            (row) =>
+              row.realm_url === foreignRealmURL && row.hash === foreignHash,
+          ),
+          "another realm's rows are untouched, even unreferenced ones",
+        );
+      });
+
       test('batch invalidation clears has_error and error_doc when tombstoning a previously-errored row', async function (assert) {
         // The primary key is `(url, realm_url, type)` — no `generation` —
         // so a tombstone upsert always collides with the prior row for the
@@ -2225,6 +2298,18 @@ module(basename(import.meta.filename), function () {
             },
           );
 
+          // Both enqueues coalesce into a single pending job, but they land in
+          // two steps: `mixed-update` publishes the job (changes carry
+          // operation `update`), then `mixed-delete` joins and merges its
+          // delete in. Waiting for `rows.length === 1` alone races that second
+          // step — the poll can observe the update-only job before the delete
+          // has been folded in and read a spurious `update`. The job's
+          // `coalescedCallers` records one entry per joined caller, so gate on
+          // both clientRequestIds being present: that proves the delete has
+          // coalesced before we assert which operation won. Dominance stays
+          // under test — were it broken, `mixed-delete` would still merge (both
+          // callers present) yet leave the change as `update`, failing the
+          // assertion below rather than the wait.
           let row = (await waitUntil(
             async () => {
               let rows = (await testDbAdapter.execute(
@@ -2237,15 +2322,27 @@ module(basename(import.meta.filename), function () {
               )) as {
                 args: {
                   changes: { url: string; operation: 'update' | 'delete' }[];
+                  coalescedCallers?: { clientRequestId: string | null }[];
                 };
               }[];
-              return rows.length === 1 ? rows[0] : undefined;
+              if (rows.length !== 1) {
+                return undefined;
+              }
+              let clientRequestIds = new Set(
+                (rows[0].args.coalescedCallers ?? []).map(
+                  (caller) => caller.clientRequestId,
+                ),
+              );
+              let bothCoalesced =
+                clientRequestIds.has('mixed-update') &&
+                clientRequestIds.has('mixed-delete');
+              return bothCoalesced ? rows[0] : undefined;
             },
             {
               timeout: 3000,
               interval: 50,
               timeoutMessage:
-                'expected one pending incremental job during mixed-op burst',
+                'expected one pending incremental job carrying both the update and delete callers during mixed-op burst',
             },
           )) as {
             args: {

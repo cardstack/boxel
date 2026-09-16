@@ -1,4 +1,4 @@
-import { isScopedCSSRequest } from './scoped-css.ts';
+import { isScopedCSSRequest, scopedCSSServingHref } from './scoped-css.ts';
 import { cloneDeep } from 'lodash-es';
 import {
   SupportedMimeType,
@@ -434,7 +434,10 @@ export class RealmIndexQueryEngine {
           );
           let cssIds: string[] = [];
           if (matched.length > 0) {
-            for (let href of scopedCssHrefsFromDeps(file.deps)) {
+            for (let href of scopedCssHrefsFromDeps(
+              file.deps,
+              this.realmURL.href,
+            )) {
               let css = buildCssResource(href);
               if (!cssById.has(css.id)) {
                 cssById.set(css.id, css);
@@ -533,6 +536,7 @@ export class RealmIndexQueryEngine {
         if (matched.length > 0) {
           for (let href of scopedCssHrefsFromDeps(
             row.deps as string[] | null,
+            this.realmURL.href,
           )) {
             let css = buildCssResource(href);
             if (!cssById.has(css.id)) {
@@ -785,7 +789,9 @@ export class RealmIndexQueryEngine {
       return undefined;
     }
     if (instance.type === 'instance-error') {
-      let scopedCssUrls = (instance.deps ?? []).filter(isScopedCSSRequest);
+      let scopedCssUrls = (instance.deps ?? [])
+        .filter(isScopedCSSRequest)
+        .map((dep) => scopedCSSServingHref(dep, this.realmURL.href));
       return {
         type: 'error',
         error: {

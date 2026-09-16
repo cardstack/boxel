@@ -241,13 +241,17 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
       // render satisfies; re-derive the hash from the spec the job actually
       // rendered and refuse a mismatch — a wrong-identity persist would
       // serve this render on some other spec's durable URL until the source
-      // generation bumps. One sha256 against a Chrome render. A batch or
-      // fitted render has no canonical identity, so no persist target can
-      // legitimately name one; those hash to null and always refuse.
+      // generation bumps. One sha256 against a Chrome render. A batch,
+      // fitted, or `target` render has no canonical identity (a target
+      // crops to one element but sits outside the identity pick, so its
+      // hash would collapse onto the geometry-only key), so no persist
+      // target can legitimately name one; those hash to null and always
+      // refuse.
       let renderedSpecHash =
         isCaptureFormat(format) &&
         !captureSpec?.captures &&
-        !captureSpec?.envelope
+        !captureSpec?.envelope &&
+        !captureSpec?.target
           ? await captureSpecHash({ format, ...(captureSpec ?? {}) })
           : null;
       if (renderedSpecHash !== persist.captureSpecHash) {

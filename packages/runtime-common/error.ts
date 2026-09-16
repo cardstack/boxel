@@ -54,6 +54,18 @@ export interface SerializedError {
   // consumer holds a placeholder and waits for the realm's index event
   // instead of committing to a broken reference.
   awaitingIndex?: true;
+  // Set when a render failed because a fetch it made returned a gateway or
+  // network failure — a balancer 502/503/504, a connection reset, or a body
+  // that is not the content type the request asked for — rather than because
+  // the card is broken. Stamped only at the fetch boundary that met the
+  // failure (the render route's card-document fetch guard, and
+  // `CardError.fromFetchResponse` for a gateway status), never inferred from
+  // status: a card-originated failure can carry a gateway status too (a render
+  // timeout is a 504), so the marker, not the number, is what tells a network
+  // event apart from the card. The prerender classifier withholds a row whose
+  // failure carries this instead of latching the transient failure as the
+  // card's verdict.
+  gatewayFailure?: true;
 }
 
 // A persisted error document: the `SerializedError` plus the index metadata
@@ -66,6 +78,23 @@ export interface ErrorEntry {
   types?: string[];
   searchData?: Record<string, any>;
   cardType?: string;
+}
+
+// HTTP statuses a load balancer or proxy returns when it, not the upstream,
+// is the thing that failed: the upstream was unreachable, timed out, or
+// answered unintelligibly. A fetch that came back with one of these met the
+// network between the caller and the realm, not a broken resource. Used at the
+// fetch boundary — the render route's card-document guard and
+// `CardError.fromFetchResponse` — to recognize such a failure and stamp it
+// with the `gatewayFailure` marker the prerender classifier withholds on. It
+// is deliberately not used to classify a persisted error after the fact: the
+// same status can originate from a card render (a render timeout is a 504), so
+// classification keys on the marker rather than re-deriving intent from the
+// number.
+export const GATEWAY_ERROR_STATUSES = [502, 503, 504];
+
+export function isGatewayFailureStatus(status: unknown): boolean {
+  return typeof status === 'number' && GATEWAY_ERROR_STATUSES.includes(status);
 }
 
 // Postgres `jsonb` containers store child offsets in 28 bits, so a
@@ -499,6 +528,7 @@ export class CardError extends Error implements SerializedError {
     | null = null;
   deps?: string[];
   awaitingIndex?: true;
+  gatewayFailure?: true;
 
   constructor(
     message: string,
@@ -538,6 +568,9 @@ export class CardError extends Error implements SerializedError {
     if (err.awaitingIndex) {
       result.awaitingIndex = true;
     }
+    if (err.gatewayFailure) {
+      result.gatewayFailure = true;
+    }
     if (err.additionalErrors) {
       result.additionalErrors = err.additionalErrors.map((inner) =>
         CardError.fromSerializableError(inner),
@@ -572,6 +605,13 @@ export class CardError extends Error implements SerializedError {
       } catch (err) {
         /* it's ok if we can't parse it*/
       }
+      // A gateway status is the network between us and the realm failing, not
+      // the fetched resource being broken — mark it so a render that met it
+      // withholds the failure rather than latching it as the card's verdict.
+      // Stamped here, at the boundary that actually saw the status, so the
+      // downstream classifier keys on the marker and never re-infers intent
+      // from a number a card render can also produce.
+      let gatewayFailure = isGatewayFailureStatus(response.status);
       // TODO probably we should refactor this--i don't think our errors follow
       // this shape anymore
       if (
@@ -584,6 +624,9 @@ export class CardError extends Error implements SerializedError {
         let error = CardError.fromSerializableError(maybeErrorJSON.errors[0]);
         if ([404, 406].includes(response.status)) {
           error.deps = [response.url];
+        }
+        if (gatewayFailure) {
+          error.gatewayFailure = true;
         }
 
         return error;
@@ -604,6 +647,9 @@ export class CardError extends Error implements SerializedError {
       // but we can't give it to you because it is in an error state.
       if ([404, 406].includes(response.status)) {
         error.deps = [response.url];
+      }
+      if (gatewayFailure) {
+        error.gatewayFailure = true;
       }
       return error;
     }

@@ -29,7 +29,6 @@ import type CardService from '../services/card-service';
 import type LoaderService from '../services/loader-service';
 import type { ExtendedClient } from '../services/matrix-sdk-loader';
 import type NetworkService from '../services/network';
-import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
 import type { default as Base64ImageFieldType } from '@cardstack/base/base64-image';
 import type { CardDef } from '@cardstack/base/card-api';
@@ -136,7 +135,6 @@ export default class FileDefManagerImpl
   @service declare private toolService: ToolService;
   @service declare private loaderService: LoaderService;
   @service declare private network: NetworkService;
-  @service declare private store: StoreService;
 
   constructor({
     owner,
@@ -340,23 +338,10 @@ export default class FileDefManagerImpl
           await this.loaderService.loader.import<{
             default: typeof Base64ImageFieldType;
           }>('@cardstack/base/base64-image');
-        let serializeOnce = () =>
-          this.cardService.serializeCard(card, {
-            omitFields: [Base64ImageField],
-            ...opts,
-          });
-        // Serialized twice on purpose, because this snapshot carries computed
-        // fields and one of them can reduce over a query-backed relationship.
-        // Such a relationship holds nothing until its search answers, and being
-        // read is what sends that search — so a single pass reads zero rows and
-        // records a rollup of zero, which is indistinguishable from a card that
-        // genuinely has none. A render is spared this by re-rendering when the
-        // answer lands; a snapshot has no second chance. So the first pass asks
-        // the questions, the store's loads settle, and the second pass records
-        // the answers.
-        await serializeOnce();
-        await this.store.loaded();
-        let serialization = await serializeOnce();
+        let serialization = await this.cardService.serializeCard(card, {
+          omitFields: [Base64ImageField],
+          ...opts,
+        });
         return { card, serialization };
       }),
     );

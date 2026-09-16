@@ -16,9 +16,7 @@ import {
   trackRuntimeInstanceDependency,
   logger,
   type Query,
-  type QueryResultsMeta,
   type RuntimeDependencyTrackingContext,
-  type ErrorEntry,
   type CardErrorJSONAPI,
   type CardError,
   type SingleCardDocument,
@@ -81,42 +79,17 @@ type StoreHooks = {
   // Absent means it would not — an owner that watches nothing keeps every
   // link edge loading for itself.
   receivesIndexEventsFor?(id: string): boolean;
+  // Spelled as the shared options type rather than re-declared field by field.
+  // A hop that lists the options by hand is where one silently goes missing:
+  // the object is forwarded whole, so TypeScript never excess-property-checks
+  // it, and the flag keeps riding through until someone forwards field by field
+  // instead — at which point the behavior it controls (a seed's match count,
+  // whether a search queues) reverts with no type error to notice it.
   getSearchResource<T extends CardDef | FileDef = CardDef>(
     parent: object,
     getQuery: () => Query | undefined,
     getRealms?: () => string[] | undefined,
-    opts?: {
-      isLive?: boolean;
-      doWhileRefreshing?: (() => void) | undefined;
-      dependencyTracking?: RuntimeDependencyTrackingContext;
-      seed?:
-        | {
-            cards: T[];
-            searchURL?: string;
-            realms?: string[];
-            meta?: QueryResultsMeta;
-            errors?: ErrorEntry[];
-            queryErrors?: Array<{
-              realm: string;
-              type: string;
-              message: string;
-              status?: number;
-            }>;
-            // Declared on every hop the seed travels, not just at its ends. The
-            // flag exists to stop a match count being inferred from the rows,
-            // so a hop that forwards the seed field by field rather than whole
-            // would drop it and restore exactly the inference it prevents.
-            totalUnknown?: boolean;
-            // Here for the same reason: the identity is what stops a result set
-            // being re-applied over one the resource already holds, and a hop
-            // that dropped it would put that back. The generation is what
-            // orders the two when they do differ.
-            identity?: string;
-            generation?: number;
-            realm?: string;
-          }
-        | undefined;
-    },
+    opts?: GetSearchResourceFuncOpts<T>,
   ): StoreSearchResource<T>;
 };
 

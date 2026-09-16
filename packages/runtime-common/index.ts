@@ -410,6 +410,12 @@ export interface PrerenderMetaDiagnostics extends BuildModelDiagnostics {
   // reindex, so the reconcile sweep re-drives these instead — and this bounds
   // that retrying, for the case where the shells never do agree.
   staleShellFailureRenders?: number;
+  // The gateway-failure twin of `staleShellFailureRenders`: consecutive
+  // renders that withheld a gateway/network failure for this row. Withholding
+  // clears the `has_error` that would have asked for a reindex, so the
+  // reconcile sweep re-drives these — and this bounds that, for a gateway
+  // failure that keeps recurring rather than clearing on the next render.
+  gatewayFailureRenders?: number;
   // Per-slot wall-clock of the declared-screenshot captures this visit
   // performed, keyed by slot name — the per-name decomposition of the
   // `renderFormatsMs.card.screenshots` aggregate, so a slow capture is
@@ -1025,6 +1031,22 @@ export interface Diagnostics
   // An empty array is not written: absence means no verdict, and a reader must
   // find its own row type listed before withholding anything.
   staleShellFailure?: ('instance' | 'file')[];
+  // Set only when the prerender server has concluded that a render failed
+  // because a fetch it made returned a gateway or network failure — a
+  // balancer 502/503/504, a connection reset, or a body that is not the
+  // content type the request asked for — rather than because the card is
+  // broken. The document-loading path parses the balancer's HTML error page
+  // as the card document and the resulting failure would otherwise be latched
+  // as the card's verdict, serving 500 to every reader until an invalidation;
+  // a network event that lasted milliseconds must not become a durable
+  // statement about the card.
+  //
+  // Structurally identical to `staleShellFailure`, and read the same way: the
+  // list of row types whose *own* failure was the gateway error (a visit
+  // produces the instance and file rows independently and they fail for their
+  // own reasons), an empty array is never written, and absence means no
+  // verdict — a reader must find its own row type listed before withholding.
+  gatewayFailure?: ('instance' | 'file')[];
   // A row is produced by two prerender visits (index + prerender-html),
   // each its own HTTP request. `requestId` always carries the index visit's
   // id and this always carries the prerender-html visit's, whichever table
@@ -1625,6 +1647,7 @@ export * from './realm-index-updater.ts';
 export * from './fetcher.ts';
 export * from './test-waiters.ts';
 export * from './scoped-css.ts';
+export * from './scoped-css-gc.ts';
 export * from './html-utils.ts';
 export * from './utils.ts';
 export * from './authorization-middleware.ts';
@@ -1635,6 +1658,7 @@ export * from './query.ts';
 export * from './query-signature.ts';
 export * from './instance-filter-matcher.ts';
 export * from './search-utils.ts';
+export * from './search-shape.ts';
 export * from './search-resource-helpers.ts';
 export * from './search-entry.ts';
 export * from './search-bounds.ts';
@@ -1938,6 +1962,17 @@ export interface CreateOptions {
   realm?: string;
   localDir?: LocalPath;
   relativeTo?: RealmResourceIdentifier | URL | undefined;
+  // When `true`, the card write tells the realm not to block on the realm's
+  // in-flight incremental indexing before responding — it indexes the write
+  // deferred and answers from the serialized document instead of reading it
+  // back out of the index (see SKIP_INDEX_WAIT_HEADER). Defaults to false
+  // (wait), which is the synchronous-indexing contract every existing caller
+  // relies on. The writer's own next card read still waits on the deferred
+  // job (card reads drain the requester's own writes); what goes eventually-
+  // consistent is search — _search/_federated-search have no such drain —
+  // plus other users' sessions and anonymous readers. Only the save path
+  // (store.add → persistAndUpdate) honors this; create()/copy ignore it.
+  skipIndexWait?: boolean;
 }
 
 export interface AddOptions extends CreateOptions {

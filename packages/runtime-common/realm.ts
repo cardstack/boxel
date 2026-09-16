@@ -122,6 +122,10 @@ import {
   maybeURL,
   insertPermissions,
   maybeHandleScopedCSSRequest,
+  isHashedScopedCSSRequest,
+  parseScopedCSSRequest,
+  scopedCSSInjectorSource,
+  SCOPED_CSS_SERVING_PREFIX,
   authorizationMiddleware,
   internalKeyFor,
   unixTime,
@@ -401,6 +405,33 @@ export type RealmIndexCounts = {
 export const DURING_PRERENDER_HEADER = 'x-boxel-during-prerender';
 function isDuringPrerenderRequest(request: Request): boolean {
   return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
+}
+
+// Opt-in signal a JSON-API card POST / PATCH caller sets to say "don't block my
+// write on the realm's in-flight incremental indexing — index deferred and
+// answer me from the document I sent". This is the write-side half of what
+// DURING_PRERENDER_HEADER does, without the search-path changes (cacheOnly-
+// Definitions, skipQueryBackedExpansion) that header also triggers, so an
+// ordinary interactive save can take it safely.
+//
+// Motivation: the default synchronous-indexing contract makes a single-card
+// save await `incrementalIndexing()`, which resolves only once EVERY in-flight
+// incremental/copy job for the realm settles — so an unrelated reindex
+// draining in the worker pool can stall (and time out) the save. A caller that
+// consumes the returned instance directly (e.g. SaveCardCommand) doesn't need
+// the freshly-indexed read-back and can opt out.
+//
+// The tradeoff is narrower than full read-your-write loss. The writer's own
+// next card read still waits: the deferred job is tagged with the writer
+// (`initiatedBy`), and card/file reads drain the requester's own indexing
+// (`drainRequestersOwnIndexing`, bounded by READ_INDEX_DRAIN_BUDGET_MS). What
+// goes eventually-consistent is search — `searchEntriesResponse` has no drain,
+// so _search/_federated-search can miss the write until the job lands — plus
+// anonymous readers, other users' sessions, and any read that exhausts the
+// drain budget.
+export const SKIP_INDEX_WAIT_HEADER = 'x-boxel-skip-index-wait';
+function isSkipIndexWaitRequest(request: Request): boolean {
+  return (request.headers.get(SKIP_INDEX_WAIT_HEADER) ?? '').length > 0;
 }
 
 export interface FileRef {
@@ -4149,6 +4180,25 @@ export class Realm {
           localPath.slice(CAPTURE_SERVING_PREFIX.length),
         );
       }
+      // Hashed scoped-CSS serving also dispatches on the path rather than
+      // the router table: the request is a module load (`loader.import` of a
+      // `css` resource's href from search results), whose Accept header
+      // matches no supported mime type. The URL carries only a content hash —
+      // the stylesheet bytes live in the `scoped_css` table — so unlike the
+      // inline form (which `maybeHandleScopedCSSRequest` answers locally with
+      // no network hop) this form must be answered here. Gated on the
+      // `_scoped-css/` prefix, not just the filename shape, so a realm file
+      // whose path merely looks hashed isn't shadowed — `scopedCSSServingHref`
+      // is the only producer of these hrefs and always roots them under the
+      // prefix. Placed after checkPermission so it inherits realm-read auth;
+      // GET only for the same HEAD-oracle reason as screenshot serving above.
+      if (
+        request.method === 'GET' &&
+        localPath.startsWith(SCOPED_CSS_SERVING_PREFIX) &&
+        isHashedScopedCSSRequest(localPath)
+      ) {
+        return await this.serveHashedScopedCSS(request, requestContext);
+      }
       // A file the realm is part-way through assembling, or one a write that
       // died left behind. It is never indexed, so serving it would hand back
       // content the realm does not otherwise acknowledge exists.
@@ -5184,6 +5234,57 @@ export class Realm {
       parsed.spec,
       perf,
     );
+  }
+
+  // Serve a hashed scoped-CSS module request (the `_scoped-css/` serving
+  // space `scopedCSSServingHref` roots under this realm): look the stylesheet
+  // up by content hash among THIS realm's interned rows and answer with the
+  // same style-injecting JS module the inline form produces locally. The
+  // realm-scoped lookup is always satisfiable — indexing interned every
+  // stylesheet this realm's rows reference under this realm's own
+  // `realm_url` — and it keeps a caller from probing whether some other
+  // realm's stylesheet bytes exist by guessing hashes. The body is a pure
+  // function of the URL, so it caches as immutable; visibility follows realm
+  // readability like the sibling capture-serving route.
+  //
+  // A `.css` URL served as `text/javascript` is deliberate, not a mixup: the
+  // consumer is `loader.import`, so like any bundler's CSS import the URL
+  // must resolve to a JS module whose evaluation injects the `<style>` tag,
+  // and the content-type describes that body truthfully. The
+  // `.glimmer-scoped.css` suffix is the upstream `glimmer-scoped-css` naming
+  // that every scoped-CSS choke point keys on — in particular the Node-side
+  // loader answers such URLs with an empty module instead of fetching, so an
+  // injector that touches `document` never evaluates where none exists.
+  private async serveHashedScopedCSS(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<ResponseWithNodeStream> {
+    let pathname = new URL(request.url).pathname;
+    let parsed = parseScopedCSSRequest(pathname);
+    if (parsed.form !== 'hashed') {
+      return notFound(request, requestContext);
+    }
+    let rows = (await query(this.#dbAdapter, [
+      `SELECT css FROM scoped_css WHERE hash =`,
+      param(parsed.cssHash),
+      `AND realm_url =`,
+      param(this.url),
+      `LIMIT 1`,
+    ])) as { css: string }[];
+    if (rows.length === 0 || typeof rows[0].css !== 'string') {
+      return notFound(request, requestContext);
+    }
+    return createResponse({
+      body: scopedCSSInjectorSource(pathname, rows[0].css),
+      init: {
+        status: 200,
+        headers: {
+          'content-type': 'text/javascript',
+          'cache-control': `${mediaCacheVisibility(requestContext)}, max-age=31536000, immutable`,
+        },
+      },
+      requestContext,
+    });
   }
 
   // The stage clocks `serveScreenshot` accumulates before the hit/miss
@@ -6639,25 +6740,34 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<Response> {
     let duringPrerender = isDuringPrerenderRequest(request);
+    // A skip-index-wait caller (see SKIP_INDEX_WAIT_HEADER) gets the same
+    // write-side treatment as a prerender write: index deferred, answer from
+    // the serialized echo. `answerFromEcho` gates exactly those two decisions
+    // (the pre-write drain, and reading the card back out of the index vs.
+    // echoing it) and nothing prerender-specific beyond them.
+    let answerFromEcho = duringPrerender || isSkipIndexWaitRequest(request);
     // Drain any in-flight incremental indexing before serializing the new
-    // card. fileSerialization runs lookupDefinition on the card's
-    // adoptsFrom module, and with CS-11003's deferred +source POST a
-    // module that was just uploaded may not be indexed yet —
-    // serialization would then throw FilterRefersToNonexistentTypeError
-    // and the +json POST would fail. Draining here makes the JSON-API
-    // path tolerant of an immediately-preceding +source POST without
-    // disturbing the +json POST's own synchronous-indexing contract.
+    // card, so the JSON-API path tolerates an immediately-preceding deferred
+    // +source POST without disturbing the +json POST's own
+    // synchronous-indexing contract.
     //
-    // A prerender-originated write skips the drain: the job it would wait on
-    // needs the render slot (and, on the queued-command path, the worker) the
-    // caller is holding, so waiting deadlocks. Serialization still resolves a
-    // definition it has never seen — `lookupDefinition` reads through to
-    // `prerenderModule`, which serves the module off disk rather than out of
-    // the index. A module the same caller just rewrote reads through for the
-    // same reason: `_batchWriteUnlocked` drops that module's cached
-    // definition as it writes the bytes, so no indexing-dependent step
-    // stands between a module rewrite and the serialization that follows it.
-    if (!duringPrerender) {
+    // Why any caller may skip it: serialization's only cross-file dependency
+    // is `fileSerialization` → `lookupDefinition`, and that lookup is
+    // caller-agnostic — the definition service never sees this request, and a
+    // cache miss reads the module through `prerenderModule`, off disk rather
+    // than out of the index. A module the caller just rewrote reads through
+    // the same way: `_batchWriteUnlocked` drops the module's cached
+    // definition and mints a loader epoch as it writes the bytes. So no
+    // indexing-dependent step stands between a module write and the
+    // serialization that follows it, for prerender and skip-index-wait
+    // callers alike — which likely makes this drain vestigial for the default
+    // path too; removing it is a separate change that must re-prove the
+    // module-POST-then-card-POST race it guards.
+    //
+    // A prerender-originated write additionally MUST skip it: the job it
+    // would wait on needs the render slot (and, on the queued-command path,
+    // the worker) the caller is holding, so waiting deadlocks.
+    if (!answerFromEcho) {
       let pending = this.incrementalIndexing();
       if (pending) {
         await pending;
@@ -6761,12 +6871,12 @@ export class Realm {
     let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
       initiatingUser: requestContext.authenticatedUser ?? null,
-      ...(duringPrerender ? { waitForIndex: false } : {}),
+      ...(answerFromEcho ? { waitForIndex: false } : {}),
     });
 
     let newURL = primaryResourceURL.href.replace(/\.json$/, '');
     let doc: SingleCardDocument;
-    if (duringPrerender) {
+    if (answerFromEcho) {
       // See serializedInstanceEcho: the write indexed deferred, so there is
       // nothing to read back yet.
       doc = await this.serializedInstanceEcho(
@@ -6833,6 +6943,11 @@ export class Realm {
     let url = this.paths.fileURL(localPath);
     let instanceURL = url.href.replace(/\.json$/, '');
     let duringPrerender = isDuringPrerenderRequest(request);
+    // A skip-index-wait caller (see SKIP_INDEX_WAIT_HEADER) takes the same
+    // write-side path as a prerender write — index deferred, answer from the
+    // serialized echo — without the prerender-only serialization tweaks
+    // (skipQueryBackedExpansion) that stay gated on `duringPrerender` below.
+    let answerFromEcho = duringPrerender || isSkipIndexWaitRequest(request);
 
     let { data: patch, included: maybeIncluded } = await request.json();
     if (!isCardResource(patch)) {
@@ -7101,10 +7216,10 @@ export class Realm {
       let [{ lastModified, created }] = await this._batchWriteUnlocked(files, {
         clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
         initiatingUser: requestContext.authenticatedUser ?? null,
-        ...(duringPrerender ? { waitForIndex: false } : {}),
+        ...(answerFromEcho ? { waitForIndex: false } : {}),
       });
       let doc: SingleCardDocument;
-      if (duringPrerender) {
+      if (answerFromEcho) {
         // See serializedInstanceEcho: the write indexed deferred, so there is
         // nothing to read back yet.
         doc = await this.serializedInstanceEcho(

@@ -1450,7 +1450,7 @@ module('Integration | search-entries resource', function (hooks) {
       }
     });
 
-    test('a stylesheet-import failure during a member refresh falls back to a full re-run', async function (assert) {
+    test('a stylesheet-import failure during a member refresh degrades that entry to unstyled without a full re-run', async function (assert) {
       let cssHref = `${testRealmURL}book.gts.deadbeef.glimmer-scoped.css`;
       let searchCount = 0;
       let originalSearchEntries = storeService.searchEntries.bind(storeService);
@@ -1504,21 +1504,24 @@ module('Integration | search-entries resource', function (hooks) {
         }) as Loader['import'];
 
         relayPrerenderHtml([`${testRealmURL}books/1.json`], 2);
-        await waitUntil(() => searchCount > baseline, { timeout: 10_000 });
+        await waitUntil(() => search.entries[0]?.htmlGeneration === 2, {
+          timeout: 10_000,
+        });
         await settled();
 
         assert.true(
           importCalls.includes(cssHref),
           'the member refresh actually attempted the stylesheet import',
         );
-        assert.ok(
-          searchCount > baseline,
-          'the failed stylesheet import falls back to the coarse re-run',
+        assert.strictEqual(
+          searchCount,
+          baseline,
+          'a failed stylesheet import degrades the entry rather than triggering the coarse re-run',
         );
         assert.strictEqual(
           search.entries[0]?.htmlGeneration,
-          1,
-          "the failed member's refresh was not applied",
+          2,
+          "the member's refresh is applied even though its stylesheet failed to load",
         );
       } finally {
         storeService.searchEntries = originalSearchEntries;
