@@ -423,11 +423,15 @@ export class IndexQueryEngine {
   // caller cannot have asked for prerendered HTML.
   //
   // A `SELECT i.*` costs more than those formats, though: it also drags
-  // `deps` and `last_known_good_deps`, which hold a few hundred dependency
-  // URLs apiece and dwarf everything else on the row. Measured over a realm
-  // of a couple of thousand instances, the wide shape moves roughly 660 KB
-  // per link target to use about 2 KB of it. Hence an explicit column list
-  // rather than a star — the cost is in what a star quietly includes.
+  // `deps` and `last_known_good_deps`, each holding a few hundred dependency
+  // URLs, which together dwarf everything else on the row. Both stay far
+  // larger than the document even if a scoped-CSS dep stops carrying its
+  // stylesheet inline, since the row's cost there is the number of deps
+  // rather than the width of any one.
+  //
+  // So the select names its columns rather than starring: what a star
+  // quietly includes is the whole of the expense, and two of the columns it
+  // includes are ones nothing on this path reads.
   //
   // Returns a map keyed by the LOOKUP URL (matching either `i.url` or
   // `i.file_alias`), matching rows on the same type/tombstone predicate
