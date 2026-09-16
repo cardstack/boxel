@@ -171,7 +171,11 @@ module('Integration | Command | patch-fields', function (hooks) {
         this: StoreService,
         id,
         patch,
-        opts: { doNotWaitForPersist?: true },
+        opts: {
+          doNotPersist?: true;
+          doNotWaitForPersist?: true;
+          clientRequestId?: string;
+        },
       ) {
         patchOptions = opts;
         return await originalPatch.call(this, id, patch, opts);
