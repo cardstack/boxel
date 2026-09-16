@@ -1431,6 +1431,38 @@ export class Counter extends CardDef { @field count = contains(NumberField); @fi
     }
   });
 
+  test('reviewed bootstrap dependencies use registry authority without archive metadata', async (assert) => {
+    await db.execute('DELETE FROM realm_metadata WHERE url=$1', {
+      bind: [base],
+    });
+    await db.execute(
+      `INSERT INTO realm_registry (url,kind,disk_id,owner_username)
+       VALUES ($1,'source','native-base','system')`,
+      { bind: [base] },
+    );
+    assert.strictEqual(
+      await indexer()(request),
+      undefined,
+      'a source registry row cannot replace missing archive authority',
+    );
+    await db.execute(
+      "UPDATE realm_registry SET kind='bootstrap' WHERE url=$1",
+      { bind: [base] },
+    );
+    const result = await candidate();
+    assert.strictEqual(result.card.searchDoc?.doubled, 6);
+    await validate(result);
+    await db.execute("UPDATE realm_registry SET kind='source' WHERE url=$1", {
+      bind: [base],
+    });
+    await assert.rejects(validate(result), /read permission changed/);
+    assert.strictEqual(
+      await indexer()(request),
+      undefined,
+      'the changed registry no longer authorizes native work',
+    );
+  });
+
   const admissionChanges: [string, () => void | Promise<unknown>][] = [
     [
       'different source bytes',
