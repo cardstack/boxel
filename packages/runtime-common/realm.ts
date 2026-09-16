@@ -86,6 +86,15 @@ import {
 } from './paths.ts';
 import type ms from 'ms';
 import {
+  CAPTURE_URL_TOKEN_PARAM,
+  CAPTURE_URL_TOKEN_SCOPE,
+  CAPTURE_URL_TOKEN_TTL,
+  CAPTURE_URL_TOKEN_TTL_MS,
+  MAX_CAPTURE_URLS_PER_SIGNING_REQUEST,
+  captureURLTokenBinding,
+  type CaptureURLTokenClaims,
+} from './capture-url-token.ts';
+import {
   DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
@@ -1771,6 +1780,11 @@ export class Realm {
         '/_session',
         SupportedMimeType.Session,
         this.createSession.bind(this),
+      )
+      .query(
+        '/_sign-capture-urls',
+        SupportedMimeType.JSON,
+        this.signCaptureURLs.bind(this),
       )
       .get(
         '/_permissions',
@@ -4528,7 +4542,25 @@ export class Realm {
 
     try {
       if (!isLocal) {
-        await this.checkPermission(request, requestContext, requiredPermission);
+        // A capture-URL token (`?token=` on a `_screenshot/` GET) authorizes
+        // exactly this request without an Authorization header — the door for
+        // fetches the host's auth service worker cannot reach (`<object>`/
+        // `<embed>` loads, top-level navigations). A missing or failing token
+        // falls through to the normal permission check, so a public realm
+        // still serves and a private realm still 401s the usual way.
+        let captureTokenUser =
+          request.method === 'GET' && isCaptureServingPath(localPath)
+            ? await this.verifyCaptureURLToken(request, localPath)
+            : undefined;
+        if (captureTokenUser !== undefined) {
+          requestContext.authenticatedUser = captureTokenUser;
+        } else {
+          await this.checkPermission(
+            request,
+            requestContext,
+            requiredPermission,
+          );
+        }
         // An archived realm is sealed for everyone, owner included: once a
         // caller is authorized, every external content request is
         // short-circuited with 403 (archived). The seal runs AFTER
@@ -5409,6 +5441,165 @@ export class Realm {
     });
   }
 
+  // Verifies a capture-URL token (`?token=` on a `_screenshot/` GET) and
+  // returns the user it authenticates, or undefined so the caller falls back
+  // to the normal permission check. Every rejection is a fall-through, never
+  // a thrown 401: an invalid token must not fail a request that public
+  // permissions would authorize. The checks mirror the invariants the other
+  // token families enforce: the scope claim keeps session JWTs out of query
+  // strings, the realm claim keeps a token minted for realm A from replaying
+  // against realm B (all realms share the signing seed), the URL binding
+  // keeps it from replaying against any other capture, and the revocation
+  // check keeps an operator revocation authoritative over every family —
+  // the handler-verifies-itself precedent from handle-download-realm.
+  private async verifyCaptureURLToken(
+    request: Request,
+    localPath: LocalPath,
+  ): Promise<string | undefined> {
+    let searchParams = new URL(request.url).searchParams;
+    let tokenString = searchParams.get(CAPTURE_URL_TOKEN_PARAM);
+    if (!tokenString) {
+      return undefined;
+    }
+    let claims: CaptureURLTokenClaims & { iat: number; exp: number };
+    try {
+      claims = this.#adapter.verifyJWT(
+        tokenString,
+        this.#realmSecretSeed,
+      ) as unknown as CaptureURLTokenClaims & { iat: number; exp: number };
+    } catch (e) {
+      this.#log.warn(
+        `capture-url token failed verification for GET ${request.url}: ${e}`,
+      );
+      return undefined;
+    }
+    if (claims.scope !== CAPTURE_URL_TOKEN_SCOPE) {
+      this.#log.warn(
+        `capture-url token for GET ${request.url} carries scope ${JSON.stringify(
+          (claims as { scope?: unknown }).scope,
+        )}, not ${CAPTURE_URL_TOKEN_SCOPE}`,
+      );
+      return undefined;
+    }
+    if (ensureTrailingSlash(claims.realm) !== ensureTrailingSlash(this.url)) {
+      this.#log.warn(
+        `capture-url token for GET ${request.url} is scoped to realm ${claims.realm}, not ${this.url}`,
+      );
+      return undefined;
+    }
+    let binding = captureURLTokenBinding(localPath, searchParams);
+    if (claims.url !== binding) {
+      this.#log.warn(
+        `capture-url token for GET ${request.url} is bound to "${claims.url}", not "${binding}"`,
+      );
+      return undefined;
+    }
+    if (await isSessionRevoked(this.#dbAdapter, claims.user, claims.iat)) {
+      this.#log.warn(
+        `capture-url token for GET ${request.url} was issued at ${claims.iat}, which predates user ${claims.user}'s session revocation`,
+      );
+      return undefined;
+    }
+    return claims.user;
+  }
+
+  // Mints capture-URL tokens: signed variants of this realm's `_screenshot/`
+  // URLs that authorize their own GET without a header, for the fetches the
+  // host's auth service worker cannot reach. Routed as QUERY (a pure
+  // computation with a body), so the realm-read gate the serving path
+  // enforces is exactly the gate on minting — the token grants nothing the
+  // caller doesn't already hold; it only makes that grant portable. An
+  // anonymous caller (a public realm's reader) gets the URLs echoed back
+  // unsigned: there is no user to bind a token to, and none is needed where
+  // anonymous read already serves.
+  private async signCaptureURLs(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let urls: unknown;
+    try {
+      let body = JSON.parse(await request.text()) as { urls?: unknown };
+      urls = body.urls;
+    } catch {
+      return badRequest({
+        message: 'Request body must be JSON with a "urls" array',
+        requestContext,
+      });
+    }
+    if (
+      !Array.isArray(urls) ||
+      urls.length === 0 ||
+      urls.length > MAX_CAPTURE_URLS_PER_SIGNING_REQUEST ||
+      !urls.every((u): u is string => typeof u === 'string')
+    ) {
+      return badRequest({
+        message: `"urls" must be an array of 1-${MAX_CAPTURE_URLS_PER_SIGNING_REQUEST} strings`,
+        requestContext,
+      });
+    }
+    let user = requestContext.authenticatedUser;
+    let signed: {
+      url: string;
+      signedUrl: string;
+      expiresAt: string | null;
+    }[] = [];
+    for (let urlString of urls) {
+      let url: URL;
+      try {
+        url = new URL(urlString);
+      } catch {
+        return badRequest({
+          message: `"${urlString}" is not a valid URL`,
+          requestContext,
+        });
+      }
+      if (!this.paths.inRealm(url)) {
+        return badRequest({
+          message: `"${urlString}" is not in realm ${this.url}`,
+          requestContext,
+        });
+      }
+      let localPath = this.paths.local(url);
+      if (!isCaptureServingPath(localPath)) {
+        return badRequest({
+          message: `"${urlString}" is not a ${CAPTURE_SERVING_PREFIX} URL`,
+          requestContext,
+        });
+      }
+      if (!user) {
+        signed.push({ url: urlString, signedUrl: urlString, expiresAt: null });
+        continue;
+      }
+      let claims: CaptureURLTokenClaims = {
+        user,
+        realm: this.url,
+        scope: CAPTURE_URL_TOKEN_SCOPE,
+        url: captureURLTokenBinding(localPath, url.searchParams),
+      };
+      let token = this.#adapter.createJWT(
+        claims as unknown as TokenClaims,
+        CAPTURE_URL_TOKEN_TTL,
+        this.#realmSecretSeed,
+      );
+      let signedUrl = new URL(url.href);
+      signedUrl.searchParams.set(CAPTURE_URL_TOKEN_PARAM, token);
+      signed.push({
+        url: urlString,
+        signedUrl: signedUrl.href,
+        expiresAt: new Date(
+          Date.now() + CAPTURE_URL_TOKEN_TTL_MS,
+        ).toISOString(),
+      });
+    }
+    return createResponse({
+      body: JSON.stringify({ signed }),
+      init: {
+        headers: { 'content-type': SupportedMimeType.JSON },
+      },
+      requestContext,
+    });
+  }
+
   // The realm's screenshot-serving surface: `_screenshot/{instanceLocalPath}`
   // resolves a capture of one instance and streams it from the MediaCache
   // with content-hash ETags and short-max-age revalidation (see
@@ -5440,6 +5631,11 @@ export class Realm {
       instanceLocalPath.replace(/\.json$/, ''),
     );
     let searchParams = new URL(request.url).searchParams;
+    // The capture-URL token is an authorization credential, not addressing —
+    // verified upstream in internalHandle. Dropped here so it reaches neither
+    // the `name=` exclusivity check nor the capture-spec parse (which refuses
+    // unknown params by name), and so it can never enter the ledger identity.
+    searchParams.delete(CAPTURE_URL_TOKEN_PARAM);
 
     // `name=` addresses a declared screenshot through the instance's
     // manifest — a different addressing form from the capture-spec params,

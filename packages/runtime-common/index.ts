@@ -1655,6 +1655,7 @@ export * from './media-cache.ts';
 export * from './media-cache-serving.ts';
 export * from './screenshot-perf.ts';
 export * from './capture-spec.ts';
+export * from './capture-url-token.ts';
 export * from './expression.ts';
 export * from './searchable-parity.ts';
 export * from './infer-content-type.ts';
