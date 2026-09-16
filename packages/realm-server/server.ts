@@ -4,7 +4,11 @@ import http from 'http';
 import http2 from 'http2';
 import net from 'net';
 import { readFileSync } from 'fs';
-import type { DefinitionLookup, Realm } from '@cardstack/runtime-common';
+import type {
+  DefinitionLookup,
+  LinkShapePolicy,
+  Realm,
+} from '@cardstack/runtime-common';
 import {
   logger,
   SupportedMimeType,
@@ -709,7 +713,7 @@ export class RealmServer {
   private reconciler: RealmRegistryReconciler;
   private searchCache: JobScopedSearchCache;
   private liveSearchCache: LiveSearchCache | undefined;
-  private liveReadsResolveLinksOnly: boolean;
+  private linkShapePolicy: LinkShapePolicy | undefined;
   private cachedApp: ReturnType<RealmServer['buildApp']> | undefined;
 
   constructor({
@@ -738,7 +742,7 @@ export class RealmServer {
     reportHostShell,
     searchCache,
     liveSearchCache,
-    liveReadsResolveLinksOnly,
+    linkShapePolicy,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -780,11 +784,11 @@ export class RealmServer {
     // production defaults; a test injects one configured with `ttlMs: 0`
     // (coalescing on, retention off) to force each caller to compute.
     liveSearchCache?: LiveSearchCache;
-    // When true, a live search answers each result's relationships but
-    // side-loads none of their targets. Carries the same setting the realms
-    // this server mounts are constructed with, since the search fan-out builds
-    // its own opts rather than reading them off a realm.
-    liveReadsResolveLinksOnly?: boolean;
+    // Decides how much of each result's link graph a live search carries. The
+    // same instance the realms this server mounts are constructed with, since
+    // the search fan-out builds its own opts rather than reading them off a
+    // realm, and the policy's levels are held per realm.
+    linkShapePolicy?: LinkShapePolicy;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -836,7 +840,7 @@ export class RealmServer {
     this.reportHostShell = reportHostShell;
     this.searchCache = searchCache ?? new JobScopedSearchCache(dbAdapter);
     this.liveSearchCache = liveSearchCache;
-    this.liveReadsResolveLinksOnly = liveReadsResolveLinksOnly ?? false;
+    this.linkShapePolicy = linkShapePolicy;
   }
 
   get app() {
@@ -964,7 +968,7 @@ export class RealmServer {
           reconciler: this.reconciler,
           searchCache: this.searchCache,
           liveSearchCache: this.liveSearchCache,
-          liveReadsResolveLinksOnly: this.liveReadsResolveLinksOnly,
+          linkShapePolicy: this.linkShapePolicy,
         }),
       )
       .use(

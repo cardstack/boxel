@@ -1685,6 +1685,7 @@ export * from './search-shape.ts';
 export * from './search-resource-helpers.ts';
 export * from './search-entry.ts';
 export * from './search-bounds.ts';
+export * from './link-shape-policy.ts';
 export * from './ttl-response-cache.ts';
 export * from './card-document-cache.ts';
 export * from './request-timings.ts';
