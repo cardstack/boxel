@@ -2089,6 +2089,47 @@ strictEqual(
   darkTheme,
 );
 
+// A host that could not supply a linked Card's Fields names those Fields, not
+// the link. The Card stores the edge, so reading the edge is reading the Card's
+// own value and still answers; only the Fields beneath it are refused.
+const shadowedMembers: BxlMutationOverlays = {
+  unavailable: [
+    { path: 'cardInfo.theme.name', tier: 'linked', reason: 'not-searchable' },
+  ],
+};
+strictEqual(
+  overlayMutation('.image = .cardInfo.theme.id;', {
+    overlays: shadowedMembers,
+  }).document.data.attributes?.image,
+  'https://example.test/Theme/original',
+);
+doesNotThrow(
+  () =>
+    overlayMutation('assert(.cardInfo.theme != null;"needs a theme");', {
+      overlays: shadowedMembers,
+    }),
+  'an assert over the stored edge holds rather than demanding a snapshot',
+);
+strictEqual(
+  overlayError('.image = .cardInfo.theme.name;', {
+    overlays: shadowedMembers,
+  }).code,
+  'snapshot-unavailable',
+  'the Field the host could not supply is still refused',
+);
+
+// The relief above is keyed on the Card answering at that path of its own. The
+// root is excluded: every Card with any content answers there, so the test
+// cannot discriminate, and the whole Card is precisely what an overlay
+// completes.
+strictEqual(
+  overlayError('.image = (. | tostring);', {
+    overlays: shadowedMembers,
+  }).code,
+  'snapshot-unavailable',
+  'a read of the whole Card still reports what it is missing',
+);
+
 // The same holds however the overlay shapes the value: a computed Field the
 // schema declares is the schema's to answer for.
 const computedContainer: BxlMutationOverlays = {

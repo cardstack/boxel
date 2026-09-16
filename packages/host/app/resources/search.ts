@@ -36,6 +36,8 @@ import {
   canonicalQuerySignature,
   parseSearchURL,
   ri,
+  searchEntryWireQueryFromQuery,
+  wireFilterTypeAnchors,
   RealmPaths,
   runtimeDependencyContextWithSource,
   type CardAPIForMatching,
@@ -46,6 +48,7 @@ import {
 import type { Filter, Query } from '@cardstack/runtime-common/query';
 
 import { LiveSearchRefreshScheduler } from '../lib/live-search-refresh-scheduler';
+import { LiveSearchTypeGate } from '../lib/live-search-type-gate';
 import { searchErrorEntry } from '../lib/search-error-entry';
 
 import type LoaderService from '../services/loader-service';
@@ -290,6 +293,24 @@ export class SearchResource<
   #refreshScheduler = new LiveSearchRefreshScheduler(() =>
     this.#flushLiveRefresh(),
   );
+  // Decides which realm events are worth a re-run. Anchors are read out of the
+  // wire translation of the active query so the anchor rules are the entry
+  // grammar's, which is what the server compiles this query against. The
+  // prerender_html correlation is on because that channel is a second,
+  // independent re-run trigger here: this search excludes rows with an
+  // effective error, so membership can move on a render result alone.
+  #typeGate = new LiveSearchTypeGate({
+    anchors: () =>
+      this.#previousQuery === undefined
+        ? undefined
+        : wireFilterTypeAnchors(
+            searchEntryWireQueryFromQuery(this.#previousQuery).filter,
+          ),
+    loader: () => this.loaderService.loader,
+    virtualNetwork: () => this.network.virtualNetwork,
+    isDestroyed: () => isDestroyed(this),
+    correlatePrerenderHtml: true,
+  });
   // No match count is known yet and one must not be inferred. Tracked, because
   // `totalMatchCount` is read during render and has to re-derive when a seed or
   // a live search supplies a real count.
@@ -473,6 +494,7 @@ export class SearchResource<
     super(owner);
     registerDestructor(this, () => {
       this.#refreshScheduler.cancel();
+      this.#typeGate.forget();
       for (let instance of this._instances) {
         this.runtimeStore.dropReference(instance.id);
       }
@@ -554,7 +576,7 @@ export class SearchResource<
         let { query: seedQuery } = parseSearchURL(seed.searchURL);
         this.#previousQueryString = this.querySignature(seedQuery);
       }
-      this.#previousQuery = query;
+      this.#adoptQuery(query);
       if (seed.realms) {
         this.#previousRealms = seed.realms;
       }
@@ -589,7 +611,7 @@ export class SearchResource<
         // signature drift between the parent doc's `links.search` and
         // the recomputed query doesn't sneak a fetch back in.
         this.#previousRealms = realms;
-        this.#previousQuery = query;
+        this.#adoptQuery(query);
         this.#previousQueryString = this.querySignature(query);
         return;
       }
@@ -649,6 +671,32 @@ export class SearchResource<
                 this.#pendingRefreshFloors.set(realm, generation);
               }
             }
+
+            // Both channels carry the floor above whether or not they earn a
+            // re-run: the generation states where the realm's index is, which
+            // is true of an event this query sits out just as much as of one
+            // it answers, and a query whose membership the event provably left
+            // alone already reflects that index. What the gate decides is only
+            // whether a search has to run to find that out.
+            //
+            // Without it a write to any type in the realm re-queries every
+            // realm this query spans, on every client holding it, for every
+            // such query each of them holds — and the two channels double it,
+            // since one write announces itself on both.
+            if (isIncrementalIndex) {
+              if (this.#typeGate.indexEventCannotMatch(event)) {
+                this.#log.info(
+                  `incremental index event on ${realm} touched no type this query is anchored on; skipping refresh`,
+                );
+                return;
+              }
+            } else if (this.#typeGate.prerenderEventCannotMatch(event)) {
+              this.#log.info(
+                `prerender_html event on ${realm} re-rendered no row of a type this query is anchored on; skipping refresh`,
+              );
+              return;
+            }
+
             this.#refreshScheduler.schedule();
           }),
         };
@@ -671,7 +719,7 @@ export class SearchResource<
     }
 
     this.#previousRealms = realms;
-    this.#previousQuery = query;
+    this.#adoptQuery(query);
     this.#previousQueryString = queryString;
     // This run reads the index at least as fresh as any event still waiting
     // on the scheduler's window, so fold the pending flush into it rather
@@ -687,6 +735,23 @@ export class SearchResource<
     );
     this.#pendingRefreshFloors = new Map();
     this.trackStoreLoad(this.search.perform(query, floors), 'search');
+  }
+
+  // Take `query` as the one this resource is running.
+  //
+  // Snapshot, don't alias: everything derived from this query — the signature
+  // it is compared by, the floors stamped on its results, and the type gate's
+  // resolved anchor keys — describes the query as it stood here. A caller that
+  // mutates a long-lived query object in place would otherwise move the filter
+  // out from under all three, leaving the gate skipping events for an anchor
+  // the searches are no longer running.
+  //
+  // The gate's keys describe the anchors they came from, so they are dropped
+  // here rather than at each call site — a key set that outlived its query
+  // would gate the new one against the old one's anchors.
+  #adoptQuery(query: Query): void {
+    this.#previousQuery = structuredClone(query);
+    this.#typeGate.forget();
   }
 
   // Spelling-tolerant query identity, so a server-produced seed query
