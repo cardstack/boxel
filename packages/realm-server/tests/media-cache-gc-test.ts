@@ -135,6 +135,59 @@ module(basename(import.meta.filename), function (hooks) {
     await seedIndexRow({ url: sourceURL, realmURL, isDeleted: true });
   }
 
+  // A live production prerendered row whose `screenshots` manifest is the
+  // unreferenced arm's liveness set. `manifestSpecHashes` seeds one entry per
+  // hash (names are irrelevant to the arm); null seeds a manifest-less row.
+  async function seedPrerenderedRow({
+    url,
+    fileAlias = url,
+    realmURL = 'http://test-realm/a/',
+    type = 'instance',
+    manifestSpecHashes,
+    renderedAt,
+  }: {
+    url: string;
+    fileAlias?: string;
+    realmURL?: string;
+    type?: 'instance' | 'file';
+    manifestSpecHashes: string[] | null;
+    renderedAt: number;
+  }) {
+    let screenshots =
+      manifestSpecHashes === null
+        ? null
+        : Object.fromEntries(
+            manifestSpecHashes.map((specHash, i) => [
+              `slot-${i}`,
+              {
+                specHash,
+                objectKey: `object-for-${specHash}`,
+                contentType: 'image/png',
+                width: 170,
+                height: 250,
+                deviceScaleFactor: 2,
+              },
+            ]),
+          );
+    let { nameExpressions, valueExpressions } = asExpressions(
+      {
+        url,
+        file_alias: fileAlias,
+        realm_url: realmURL,
+        type,
+        generation: 1,
+        is_deleted: false,
+        rendered_at: renderedAt,
+        screenshots,
+      },
+      { jsonFields: ['screenshots'] },
+    );
+    await query(
+      dbAdapter,
+      insert('prerendered_html', nameExpressions, valueExpressions),
+    );
+  }
+
   async function ledgerRows(): Promise<
     { source_generation: number; object_key: string }[]
   > {
@@ -317,6 +370,194 @@ module(basename(import.meta.filename), function (hooks) {
       ['idle-on-demand'],
       'only the idle on-demand capture is reclaimed',
     );
+  });
+
+  test('reclaims a declared row the current manifest no longer references', async function (assert) {
+    let now = Date.now();
+    // The slot was re-specced: the current manifest carries only the new
+    // hash, so nothing ever supersedes the old row (a new hash is a new
+    // capture identity) and this arm is its only reclamation path.
+    await seedLedgerRow({
+      captureSpecHash: 'spec-old',
+      sourceGeneration: 1,
+      objectKey: 'old-spec-object',
+      createdAt: now - 3 * DAY,
+    });
+    await seedLedgerRow({
+      captureSpecHash: 'spec-new',
+      sourceGeneration: 2,
+      objectKey: 'new-spec-object',
+      createdAt: now - 2 * DAY,
+    });
+    await seedPrerenderedRow({
+      url: 'http://test-realm/a/card-1.json',
+      fileAlias: 'http://test-realm/a/card-1',
+      manifestSpecHashes: ['spec-new'],
+      renderedAt: now - 2 * DAY,
+    });
+
+    let result = await runGc();
+
+    assert.strictEqual(result.rowsDeleted, 1);
+    assert.deepEqual(adapter.deleted, ['old-spec-object']);
+    assert.deepEqual(
+      (await ledgerRows()).map((row) => row.object_key),
+      ['new-spec-object'],
+      'the manifest-referenced capture survives',
+    );
+  });
+
+  test('a manifest-less live row reclaims all declared captures of its source', async function (assert) {
+    let now = Date.now();
+    // Every slot was deleted from the declaration: the source's current row
+    // publishes no manifest at all, so nothing references the old capture.
+    await seedLedgerRow({
+      captureSpecHash: 'spec-deleted-slot',
+      sourceGeneration: 1,
+      objectKey: 'deleted-slot-object',
+      createdAt: now - 3 * DAY,
+    });
+    await seedPrerenderedRow({
+      url: 'http://test-realm/a/card-1.json',
+      fileAlias: 'http://test-realm/a/card-1',
+      manifestSpecHashes: null,
+      renderedAt: now - 2 * DAY,
+    });
+
+    let result = await runGc();
+
+    assert.strictEqual(result.rowsDeleted, 1);
+    assert.deepEqual(adapter.deleted, ['deleted-slot-object']);
+  });
+
+  test('a freshly published manifest collects nothing until it has held for min-age', async function (assert) {
+    let now = Date.now();
+    // The manifest dropped the hash moments ago — an author mid-iteration,
+    // or a capture failure the retry lane is still working. The stability
+    // guard waits a full min-age window before believing it.
+    await seedLedgerRow({
+      captureSpecHash: 'spec-old',
+      sourceGeneration: 1,
+      objectKey: 'maybe-orphaned-object',
+      createdAt: now - 3 * DAY,
+    });
+    await seedPrerenderedRow({
+      url: 'http://test-realm/a/card-1.json',
+      fileAlias: 'http://test-realm/a/card-1',
+      manifestSpecHashes: ['spec-new'],
+      renderedAt: now - 1 * HOUR,
+    });
+
+    let result = await runGc();
+
+    assert.strictEqual(result.rowsDeleted, 0, 'nothing reclaimed yet');
+    assert.deepEqual(adapter.deleted, []);
+  });
+
+  test('a carried-forward capture survives: its hash stays in the manifest across generations', async function (assert) {
+    let now = Date.now();
+    // A file-content-keyed capture is never re-persisted while the bytes are
+    // unchanged: its ledger row stays at the old generation while the
+    // manifest (republished at each new generation) keeps naming its hash.
+    // No newer ledger row exists, so the superseded arm can't touch it — and
+    // the manifest reference is exactly what keeps this arm off it too.
+    await seedLedgerRow({
+      captureSpecHash: 'spec-carried',
+      sourceGeneration: 1,
+      objectKey: 'carried-forward-object',
+      createdAt: now - 60 * DAY,
+    });
+    await seedPrerenderedRow({
+      url: 'http://test-realm/a/card-1.json',
+      fileAlias: 'http://test-realm/a/card-1',
+      manifestSpecHashes: ['spec-carried'],
+      renderedAt: now - 2 * DAY,
+    });
+
+    let result = await runGc();
+
+    assert.strictEqual(result.rowsDeleted, 0);
+    assert.ok(adapter.objects.has('carried-forward-object'));
+  });
+
+  test('a source with no prerendered row keeps its declared captures', async function (assert) {
+    let now = Date.now();
+    // No live row means no manifest to consult — a source mid-first-index,
+    // or a realm whose prerender pass hasn't landed. Absence of evidence
+    // must not read as an empty roster.
+    await seedLedgerRow({
+      captureSpecHash: 'spec-1',
+      sourceGeneration: 1,
+      objectKey: 'unjudgeable-object',
+      createdAt: now - 60 * DAY,
+    });
+
+    let result = await runGc();
+
+    assert.strictEqual(result.rowsDeleted, 0);
+    assert.ok(adapter.objects.has('unjudgeable-object'));
+  });
+
+  test('each realm-copied capture answers to its own realm manifest', async function (assert) {
+    let now = Date.now();
+    // The capture was realm-copied along with its prerendered row; the
+    // source realm then re-specced the slot while the destination kept it.
+    // Only the source realm's copy is reclaimed.
+    for (let realmURL of ['http://test-realm/a/', 'http://test-realm/b/']) {
+      await seedLedgerRow({
+        realmURL,
+        sourceURL: `${realmURL}card-1`,
+        captureSpecHash: 'spec-shared',
+        sourceGeneration: 1,
+        objectKey: `object-${realmURL.endsWith('a/') ? 'a' : 'b'}`,
+        createdAt: now - 3 * DAY,
+      });
+    }
+    await seedPrerenderedRow({
+      url: 'http://test-realm/a/card-1.json',
+      fileAlias: 'http://test-realm/a/card-1',
+      realmURL: 'http://test-realm/a/',
+      manifestSpecHashes: ['spec-respecced'],
+      renderedAt: now - 2 * DAY,
+    });
+    await seedPrerenderedRow({
+      url: 'http://test-realm/b/card-1.json',
+      fileAlias: 'http://test-realm/b/card-1',
+      realmURL: 'http://test-realm/b/',
+      manifestSpecHashes: ['spec-shared'],
+      renderedAt: now - 2 * DAY,
+    });
+
+    let result = await runGc();
+
+    assert.strictEqual(result.rowsDeleted, 1);
+    assert.deepEqual(adapter.deleted, ['object-a']);
+    assert.ok(adapter.objects.has('object-b'));
+  });
+
+  test('the manifest arm never touches on-demand captures', async function (assert) {
+    let now = Date.now();
+    // An on-demand capture's spec hash is naturally absent from any declared
+    // manifest — that lane lives and dies by its access TTL alone.
+    await seedLedgerRow({
+      captureSpecHash: 'spec-dsl',
+      sourceGeneration: 1,
+      objectKey: 'active-dsl-object',
+      lane: 'on-demand',
+      createdAt: now - 60 * DAY,
+      lastAccessedAt: now - 1 * DAY,
+    });
+    await seedPrerenderedRow({
+      url: 'http://test-realm/a/card-1.json',
+      fileAlias: 'http://test-realm/a/card-1',
+      manifestSpecHashes: ['spec-declared'],
+      renderedAt: now - 2 * DAY,
+    });
+
+    let result = await runGc();
+
+    assert.strictEqual(result.rowsDeleted, 0);
+    assert.ok(adapter.objects.has('active-dsl-object'));
   });
 
   test('an object still referenced by a surviving row keeps its bytes', async function (assert) {

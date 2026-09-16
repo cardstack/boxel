@@ -276,20 +276,37 @@ function prerenderedHtmlEntryFrom(
   };
 }
 
-// Whether a verdict from the prerender server covers the row type about to be
-// written. Presence *and* membership: the mark names which of a visit's rows it
-// applies to, so a card render that hit a stale bundle cannot withhold a file
-// row that failed for its own reasons.
+// Whether a single verdict array names the row type about to be written.
+// Presence *and* membership: the mark names which of a visit's rows it applies
+// to, so a card render that failed for the environment's reasons cannot
+// withhold a file row that failed for its own.
 //
 // Absence means no verdict, never "attributable" — a response from anything
 // that does not stamp this (a server predating the field, which a worker sees
 // throughout a rolling deploy) must not read as licence to withhold a row.
+function verdictArrayCoversRow(
+  verdict: ('instance' | 'file')[] | undefined,
+  type: 'instance' | 'file',
+): boolean {
+  return Array.isArray(verdict) && verdict.includes(type);
+}
+
+// Whether *any* of the prerender server's unattributability verdicts covers
+// this row. The verdicts differ only in why the failure was the environment's
+// — a stale host shell mid-deploy, or a gateway/network failure on a fetch the
+// render made — and the write site treats them the same: keep the prior good
+// render rather than publish the failure as the card's content. Kept as
+// distinct fields so the recorded reason survives for an operator to read and
+// so each cause can have its own reconcile cadence, but unified here because
+// the withholding decision is identical.
 function verdictCoversRow(
   diagnostics: Diagnostics | undefined,
   type: 'instance' | 'file',
 ): boolean {
-  let covered = diagnostics?.staleShellFailure;
-  return Array.isArray(covered) && covered.includes(type);
+  return (
+    verdictArrayCoversRow(diagnostics?.staleShellFailure, type) ||
+    verdictArrayCoversRow(diagnostics?.gatewayFailure, type)
+  );
 }
 
 // Rows held in the write-behind buffer before a flush is forced (see
@@ -1746,17 +1763,27 @@ export class Batch {
         if (withholdHtmlFailure) {
           // Withholding keeps the prior render published and clears the error
           // that would otherwise have flagged the row — so nothing is left
-          // asking for the re-render once the shells agree again. The
-          // reconcile sweep picks these up instead, and this is the run length
-          // that bounds how long it keeps trying. Extend the prior row's run;
-          // a successful render replaces the row outright and ends it.
-          let priorRun =
-            (production?.diagnostics as Diagnostics | null)
-              ?.staleShellFailureRenders ?? 0;
-          diagnostics = {
-            ...diagnostics,
-            staleShellFailureRenders: priorRun + 1,
-          };
+          // asking for the re-render once the environment recovers. The
+          // reconcile sweep picks these up instead, and this run length bounds
+          // how long it keeps trying. Extend the prior row's run for whichever
+          // verdict actually covers this row, so a cause that keeps recurring
+          // converges on its own cap; a successful render replaces the row
+          // outright and ends the run.
+          let priorDiagnostics = production?.diagnostics as Diagnostics | null;
+          if (verdictArrayCoversRow(diagnostics?.staleShellFailure, type)) {
+            diagnostics = {
+              ...diagnostics,
+              staleShellFailureRenders:
+                (priorDiagnostics?.staleShellFailureRenders ?? 0) + 1,
+            };
+          }
+          if (verdictArrayCoversRow(diagnostics?.gatewayFailure, type)) {
+            diagnostics = {
+              ...diagnostics,
+              gatewayFailureRenders:
+                (priorDiagnostics?.gatewayFailureRenders ?? 0) + 1,
+            };
+          }
         }
         if (errorDoc.visitRequestFailure) {
           // Consecutive-failure bookkeeping for the reconcile sweep's

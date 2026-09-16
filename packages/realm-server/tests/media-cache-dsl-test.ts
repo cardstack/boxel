@@ -910,6 +910,55 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('the task refuses to persist a target render under any claimed identity', async function (assert) {
+      // A target capture has no canonical identity: the crop sits outside
+      // the identity pick, so hashing the rendered spec would collapse it
+      // onto the geometry-only key. The task hashes such a render to null
+      // and refuses whatever identity the producer claimed, keeping
+      // element-cropped bytes off the whole-viewport URL.
+      await seedInstanceRow('card-1');
+      await startWorker();
+
+      let job = await enqueueScreenshotCardJob(
+        {
+          realmURL: REALM_URL,
+          realmUsername: OWNER,
+          runAs: OWNER,
+          cardId: `${REALM_URL}card-1`,
+          format: 'isolated',
+          captureSpec: { target: '.avatar' },
+          persist: {
+            realmURL: REALM_URL,
+            sourceURL: `${REALM_URL}card-1`,
+            captureSpecHash: await captureSpecHash({ format: 'isolated' }),
+            sourceGeneration: 1,
+            lane: 'on-demand',
+          },
+          surface: 'post',
+          loggingCorrelationId: null,
+        },
+        publisher,
+        dbAdapter,
+        0,
+      );
+      let result = await job.done;
+      assert.strictEqual(
+        result.status,
+        'ready',
+        'the capture itself still succeeds',
+      );
+      assert.strictEqual(
+        await findMediaCacheEntry(dbAdapter, {
+          realmURL: REALM_URL,
+          sourceURL: `${REALM_URL}card-1`,
+          captureSpecHash: await captureSpecHash({ format: 'isolated' }),
+          sourceGeneration: 1,
+        }),
+        undefined,
+        'the element crop never lands under the geometry-only key',
+      );
+    });
+
     test('concurrent misses for one spec coalesce onto one capture', async function (assert) {
       // A custom geometry rather than the bare URL: the persist identity's
       // spec hash is what keys the twin match, so this exercises coalescing

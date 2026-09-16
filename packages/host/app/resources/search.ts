@@ -133,6 +133,10 @@ export interface Args<T extends CardDef | FileDef = CardDef> {
     // concurrency). Set only by `StoreService.getSearchResource` (the card
     // `@context` surface); host-internal `getSearch` callers leave it unset.
     cardInitiated?: boolean;
+    // Take a slot in the store's search concurrency ceiling without
+    // the other card caps. Set by query-field resolution, whose fan-out is one
+    // search per query field per deserialized card.
+    throttled?: boolean;
     // The realm a no-realm card search targets (the realm the `@context` was
     // provided with). Only meaningful with `cardInitiated`.
     getDefaultRealm?: () => string | undefined;
@@ -226,6 +230,12 @@ export class SearchResource<
   @tracked private activeQuery: Query | undefined;
   #isLive = false;
   #cardInitiated = false;
+  #throttled = false;
+  // Bumped by each run of the search task, so a run can tell whether it is
+  // still the current one. What a queued throttled search is asked when its
+  // turn comes: a restart moved this past it, and the result it would fetch has
+  // no consumer left.
+  #searchEpoch = 0;
   #getDefaultRealm: (() => string | undefined) | undefined;
   #seedApplied = false;
   // Identity of the seeded result set this resource holds, cleared once a search
@@ -482,6 +492,7 @@ export class SearchResource<
       owner,
       storeService,
       cardInitiated,
+      throttled,
       getDefaultRealm,
     } = named;
 
@@ -493,6 +504,9 @@ export class SearchResource<
     }
     if (cardInitiated !== undefined) {
       this.#cardInitiated = cardInitiated;
+    }
+    if (throttled !== undefined) {
+      this.#throttled = throttled;
     }
     if (getDefaultRealm !== undefined) {
       this.#getDefaultRealm = getDefaultRealm;
@@ -1155,6 +1169,7 @@ export class SearchResource<
 
   private search = restartableTask(
     async (query: Query, refreshFloors?: Map<RealmIdentifier, number>) => {
+      let epoch = ++this.#searchEpoch;
       this.#log.info(
         `search task start; realms=${this.realmsToSearch.join(',')}; query=${JSON.stringify(query)}`,
       );
@@ -1170,7 +1185,10 @@ export class SearchResource<
           // A card-`@context` search runs card-initiated — under the page,
           // realms, and concurrency caps inside `store.search`. `realmsToSearch`
           // has already resolved a no-realm card search to the current realm
-          // (see modify). Host-internal searches pass no flag and are unbounded.
+          // (see modify). A query-field search takes only the concurrency slot,
+          // since clamping its page or its realms would change which cards the
+          // field reports as members. Host-internal searches pass neither flag
+          // and are unbounded.
           let { instances, meta } = await this.runtimeStore.search<T>(
             query,
             this.realmsToSearch,
@@ -1178,6 +1196,16 @@ export class SearchResource<
               includeMeta: true,
               dependencyTrackingContext,
               cardInitiated: this.#cardInitiated,
+              throttled: this.#throttled,
+              // A search that queued behind the concurrency ceiling can outlive
+              // its reason to run: a newer query restarts this task, or the
+              // resource is torn down with the request still waiting. Either
+              // way this run's result is discarded, so it gives the slot back
+              // instead of fetching.
+              isObsolete: () =>
+                this.#searchEpoch !== epoch ||
+                isDestroyed(this) ||
+                isDestroying(this),
             },
           );
           this.#log.info(
@@ -1265,6 +1293,7 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
     isLive?: boolean;
     storeService?: StoreService;
     cardInitiated?: boolean;
+    throttled?: boolean;
     getDefaultRealm?: () => string | undefined;
     doWhileRefreshing?: (() => void) | undefined;
     seed?:
@@ -1295,6 +1324,7 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
       isLive: opts?.isLive != null ? opts.isLive : false,
       storeService: opts?.storeService,
       cardInitiated: opts?.cardInitiated,
+      throttled: opts?.throttled,
       getDefaultRealm: opts?.getDefaultRealm,
       // TODO refactor this out
       doWhileRefreshing: opts?.doWhileRefreshing,
