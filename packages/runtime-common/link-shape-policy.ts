@@ -96,6 +96,16 @@ export const LINK_SHAPE_POLICY_CHANNEL = 'boxel:link-shape-policy';
 // The request header a caller states its preference on. Absent means the
 // closure: that is the shape a caller gets when no policy is engaged, so an
 // unstated preference is a request for it.
+//
+// Deliberately not declared in `Vary`. What keeps a cache honest here is the
+// validator, not the varied-on header: the served shape is folded into the
+// card+json and card+html ETags, and both are served `must-revalidate`, so a
+// client holding a validator it obtained for one shape revalidates and is
+// answered `200` with the other rather than `304` with the body it already
+// had. A `Vary` entry would add nothing to that and would cost something — a
+// browser cache keeps one stored variant per URL, so two populations asking
+// for different shapes at one URL would evict each other's entry on every
+// request.
 export const X_BOXEL_LINK_SHAPE_HEADER = 'x-boxel-link-shape';
 
 // The two shapes a live read can be served in. `full` assembles the closure;

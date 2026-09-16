@@ -294,6 +294,36 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    // The same guarantee as the cross-shape revalidation above, reached the
+    // other way: the shape changed because the caller asked, not because the
+    // load did. Card+json is served `must-revalidate`, so this is the path a
+    // client takes on every request once it holds a validator — and a `304`
+    // here would hand back the closure body to a caller that asked not to have
+    // it, which no amount of `Vary` would prevent.
+    test('a stated preference does not revalidate against the other shape', async function (assert) {
+      let closure = await request
+        .get(cardPath)
+        .set('Accept', SupportedMimeType.CardJson);
+      let closureEtag = closure.headers.etag;
+      assert.strictEqual((closure.body.included ?? []).length, 1);
+
+      let asked = await request
+        .get(cardPath)
+        .set('Accept', SupportedMimeType.CardJson)
+        .set(X_BOXEL_LINK_SHAPE_HEADER, 'links-only')
+        .set('If-None-Match', closureEtag);
+      assert.strictEqual(
+        asked.status,
+        200,
+        'the validator it holds describes a shape it no longer wants',
+      );
+      assert.strictEqual(
+        (asked.body.included ?? []).length,
+        0,
+        'so it is answered with the shape it asked for',
+      );
+    });
+
     test('an unrecognized preference reads as the closure', async function (assert) {
       let response = await request
         .get(cardPath)
