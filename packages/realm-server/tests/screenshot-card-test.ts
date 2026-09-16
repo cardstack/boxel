@@ -1583,6 +1583,35 @@ module(basename(import.meta.filename), function () {
       assert.false('captures' in attrs, 'no served URL without a persist');
     });
 
+    test('a target capture is capture-only: no persist identity, no served URL', async function (assert) {
+      // `target` crops to one element but sits outside the identity pick
+      // (viewport/dsf/fullPage/clip), so persisting it would alias the
+      // element crop onto the geometry-only ledger key — the bare
+      // `_screenshot/` URL would then serve the crop.
+      await seedInstanceRow();
+      let { queue, published } = makePersistQueue('ready');
+
+      let response = await post(persistApp(queue), {
+        realmURL: REALM_URL,
+        cardId: CARD_ID,
+        format: 'isolated',
+        captureSpec: { target: '.avatar' },
+      }).expect(201);
+
+      assert.strictEqual(
+        (published[0]?.args as any)?.persist,
+        null,
+        'an indexed card still gets no persist identity for a target capture',
+      );
+      let attrs = response.body.data.attributes;
+      assert.strictEqual(
+        attrs.base64,
+        PNG_BASE64,
+        'the capture bytes come back',
+      );
+      assert.false('captures' in attrs, 'no served URL for a target capture');
+    });
+
     test('a caller without realm read never touches the ledger', async function (assert) {
       await seedInstanceRow();
       let ledgerBytes = new TextEncoder().encode('private-ledger-bytes');

@@ -597,6 +597,12 @@ export type StoreSearchSeed<T extends CardDef | FileDef = CardDef> = {
 
 export type GetSearchResourceFuncOpts<T extends CardDef | FileDef = CardDef> = {
   isLive?: boolean;
+  // Queue this search behind the concurrency ceiling of the store it runs
+  // against, instead of putting it on the wire the moment the resource is
+  // created. Independent of the caps applied to card `@context` searches (page
+  // size, realms fan-out): this changes when a search runs, never what it
+  // returns.
+  throttled?: boolean;
   doWhileRefreshing?: (() => void) | undefined;
   dependencyTracking?: RuntimeDependencyTrackingContext;
   seed?: StoreSearchSeed<T>;

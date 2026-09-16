@@ -95,6 +95,12 @@ export class JobScopedSearchCache {
     query: Query;
     opts: unknown | undefined;
     populate: () => Promise<string>;
+    // Fires the moment the cache decides how it will satisfy the request, and
+    // before `populate` runs on a miss — the same contract as
+    // `LiveSearchCache`'s seam, so a caller reporting which cache answered can
+    // report it the same way for both. The per-job hit/miss tallies below are
+    // aggregates dropped at `clearJob`; this reports the individual request.
+    onOutcome?: (outcome: 'hit' | 'miss') => void;
   }): Promise<string> {
     let hash = searchRequestKeyHash(args.realms, args.query, args.opts);
     let existing = await this.#getCachedByHash(args.jobId, hash);
@@ -104,9 +110,11 @@ export class JobScopedSearchCache {
         stat.hits += 1;
         stat.lastTouchedAt = Date.now();
       }
+      args.onOutcome?.('hit');
       return existing;
     }
 
+    args.onOutcome?.('miss');
     let result = await args.populate();
     // Count the miss only after populate resolves: if it throws we count
     // nothing and never allocate a #stats entry for a jobId that produced no
