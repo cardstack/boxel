@@ -1310,6 +1310,26 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           );
         });
 
+        // A capture URL (`_screenshot/…`) is served by the realm on every
+        // Accept value: a tab navigation to a card's PDF must get the PDF (or
+        // the realm's own miss/auth answer), never the app shell — the shell
+        // would try to open the capture URL as a card.
+        test('an address-bar navigation to a capture URL is answered by the realm, not the app shell', async function (assert) {
+          let response = await request
+            .get('/test/_screenshot/person-1?type=pdf&media=print')
+            .set('Accept', FRAME_STYLE_ACCEPT)
+            .set('Sec-Fetch-Dest', 'document');
+
+          assert.notOk(
+            response.headers['content-type']?.includes('text/html'),
+            `the realm answers, not the shell (got ${response.status} ${response.headers['content-type']})`,
+          );
+          assert.notOk(
+            (response.text ?? '').includes('<title>'),
+            'the app shell is not served for a capture URL',
+          );
+        });
+
         test('an address-bar navigation to the same file URL still opens the app', async function (assert) {
           let response = await request
             .get('/test/report.pdf')

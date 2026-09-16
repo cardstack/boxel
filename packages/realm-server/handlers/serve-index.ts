@@ -7,6 +7,7 @@ import type {
   Realm,
 } from '@cardstack/runtime-common';
 import {
+  CAPTURE_SERVING_PREFIX,
   PREFIX_REALMS,
   foreignQueryParams,
   hasExtension,
@@ -78,6 +79,21 @@ const scopedCSSLog = logger('realm-server:scoped-css');
 function isDocumentEmbedRequest(ctxt: Koa.Context): boolean {
   let destination = ctxt.header['sec-fetch-dest'];
   return destination === 'embed' || destination === 'object';
+}
+
+// A capture URL — `{realm}_screenshot/…` — names bytes the realm serves (a
+// PNG or a PDF), never a card the app could open. A tab navigation to one (a
+// "Download PDF" link opened in a new tab) advertises text/html like any
+// navigation, and the shell would boot the app against a URL that is not a
+// card; the realm's own route serves the capture whatever the request
+// accepts. GET only, matching the realm's dispatch: it serves captures on GET
+// alone, so any other method falls through to the ordinary negotiation. The
+// match is on the `_screenshot/` path segment, the same test the host's auth
+// service worker applies to these URLs.
+function isCaptureServingRequest(ctxt: Koa.Context): boolean {
+  return (
+    ctxt.method === 'GET' && ctxt.path.includes(`/${CAPTURE_SERVING_PREFIX}`)
+  );
 }
 
 export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
@@ -242,9 +258,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
   }
 
   let serveIndex = async (ctxt: Koa.Context, next: Koa.Next) => {
-    if (isDocumentEmbedRequest(ctxt)) {
-      // Fall through to the realm, which serves the file's own bytes and
-      // lets its content type decide what the embed renders.
+    if (isDocumentEmbedRequest(ctxt) || isCaptureServingRequest(ctxt)) {
+      // Fall through to the realm, which serves the file's (or capture's)
+      // own bytes and lets its content type decide what the browser renders.
       return next();
     }
     let acceptHeader = ctxt.header.accept ?? '';
