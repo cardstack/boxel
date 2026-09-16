@@ -1630,6 +1630,12 @@ export default class MatrixService extends Service {
   ) {
     let roomData = this.ensureRoomData(roomId);
     return roomData.mutex.dispatch(async () => {
+      // TEMPORARY (CS-12937): the attachment tests read the LAST room event
+      // and find one without `data`, so this reports what is sent and in what
+      // order.
+      console.warn(
+        `[send-stage] sendEvent type=${eventType} hasData=${'data' in content}`,
+      );
       if ('data' in content) {
         const encodedContent = {
           ...content,
