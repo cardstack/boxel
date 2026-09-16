@@ -1,7 +1,10 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import {
+  ALL_TYPES_KEY,
   internalKeyFor,
+  param,
+  query,
   rri,
   SupportedMimeType,
   Deferred,
@@ -16,6 +19,7 @@ import {
 import type {
   DBAdapter,
   DefinitionLookup,
+  Expression,
   LooseSingleCardDocument,
   Prerenderer,
   Realm,
@@ -1866,6 +1870,134 @@ module(basename(import.meta.filename), function () {
         assert.false(
           touched.includes(keyFor('post', 'Post')),
           'a second untouched type is absent',
+        );
+      });
+
+      // The read side of these watermarks is the live-search cache key: a
+      // query anchored on a type reads that type's row, so a write only
+      // unreaches the cached searches whose types it could have moved.
+      test('an incremental pass stamps a watermark for the chains it touched, and only those', async function (assert) {
+        let keyFor = (module: string, name: string) =>
+          internalKeyFor(
+            { module: rri(`${testRealm}${module}`), name },
+            undefined,
+            realm.virtualNetwork,
+          );
+        let watermarks = async () => {
+          let rows = (await query(testDbAdapter, [
+            `SELECT type_key, index_generation FROM realm_type_generations WHERE realm_url =`,
+            param(realm.url),
+          ] as Expression)) as {
+            type_key: string;
+            index_generation: number;
+          }[];
+          return new Map(
+            rows.map(({ type_key, index_generation }) => [
+              type_key,
+              Number(index_generation),
+            ]),
+          );
+        };
+
+        let before = await watermarks();
+        // `ringo` is a Pet and stays one, so this pass has no departed type to
+        // stamp: the only chains it can move are Pet's and that of `hassan`,
+        // the PetPerson that links to it. A card that changes what it adopts
+        // from also stamps the type it left, which is the next test's subject
+        // rather than this one's — writing one here would move a type this
+        // test asserts is untouched.
+        await realm.write(
+          'ringo.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Ringo Starr' },
+              meta: {
+                adoptsFrom: { module: rri('./pet'), name: 'Pet' },
+              },
+            },
+          }),
+        );
+        let after = await watermarks();
+
+        let petKey = keyFor('pet', 'Pet');
+        assert.notStrictEqual(
+          after.get(petKey),
+          before.get(petKey),
+          `the written card's own type moves: ${after.get(petKey)}`,
+        );
+        assert.strictEqual(
+          after.get(keyFor('person', 'Person')),
+          before.get(keyFor('person', 'Person')),
+          'a type the pass never touched keeps its watermark, so a query anchored on it stays cached',
+        );
+        assert.strictEqual(
+          after.get(ALL_TYPES_KEY),
+          before.get(ALL_TYPES_KEY),
+          'a pass that can name its types leaves the catch-all key alone',
+        );
+      });
+
+      test('a write that changes what a card adopts from stamps the type it left', async function (assert) {
+        // The type a row departs is the one a cached search anchored on it
+        // still holds the row as a member of, and nothing else in the pass
+        // names it — so the pass has to read the row it is overwriting, not
+        // just the chain it writes.
+        let keyFor = (module: string, name: string) =>
+          internalKeyFor(
+            { module: rri(`${testRealm}${module}`), name },
+            undefined,
+            realm.virtualNetwork,
+          );
+        let watermarks = async () => {
+          let rows = (await query(testDbAdapter, [
+            `SELECT type_key, index_generation FROM realm_type_generations WHERE realm_url =`,
+            param(realm.url),
+          ] as Expression)) as {
+            type_key: string;
+            index_generation: number;
+          }[];
+          return new Map(
+            rows.map(({ type_key, index_generation }) => [
+              type_key,
+              Number(index_generation),
+            ]),
+          );
+        };
+        let asPet = JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Van Gogh' },
+            meta: { adoptsFrom: { module: rri('./pet'), name: 'Pet' } },
+          },
+        });
+        let asPerson = JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Van Gogh' },
+            meta: { adoptsFrom: { module: rri('./person'), name: 'Person' } },
+          },
+        });
+
+        await realm.write('vangogh.json', asPet);
+        let afterPet = await watermarks();
+        await realm.write('vangogh.json', asPerson);
+        let afterPerson = await watermarks();
+
+        assert.notStrictEqual(
+          afterPerson.get(keyFor('pet', 'Pet')),
+          afterPet.get(keyFor('pet', 'Pet')),
+          `the departed type moves: ${afterPerson.get(keyFor('pet', 'Pet'))}`,
+        );
+        assert.notStrictEqual(
+          afterPerson.get(keyFor('person', 'Person')),
+          afterPet.get(keyFor('person', 'Person')),
+          'and so does the type it joined',
+        );
+        assert.strictEqual(
+          afterPerson.get(ALL_TYPES_KEY),
+          afterPet.get(ALL_TYPES_KEY),
+          'a pass that read the row it overwrote needs no catch-all bump',
         );
       });
 
