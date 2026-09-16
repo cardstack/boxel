@@ -877,8 +877,7 @@ export function parseScreenshotCaptureSpec(
   // every entry paginates/rasterizes under the same CSS media. A batch that
   // mixed media would settle its later entries under the wrong one — refused
   // rather than silently rendered wrong, per the module contract. (An
-  // all-default `screen` batch, the only shape reachable before this axis was
-  // honored, is uniform and unaffected.)
+  // all-default batch is uniform under `screen` and passes.)
   let mediaValues = new Set(
     entries.map((entry) => entry.media ?? DEFAULT_CAPTURE_MEDIA),
   );
