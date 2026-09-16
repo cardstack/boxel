@@ -200,8 +200,8 @@ module('Integration | Lattice query readiness', function (hooks) {
           'the prerequisite and independent query start while roster inputs are held',
         );
         let readiness = await loader.import<
-          typeof import('@cardstack/base/lattice-query-inputs')
-        >('@cardstack/base/lattice-query-inputs');
+          typeof import('@cardstack/base/field-support')
+        >('@cardstack/base/field-support');
         api.beginComputePass();
         try {
           assert.deepEqual(
@@ -307,8 +307,8 @@ module('Integration | Lattice query readiness', function (hooks) {
     let loader = getService('loader-service').loader;
     let api = await getService('card-service').getAPI();
     let readiness = await loader.import<
-      typeof import('@cardstack/base/lattice-query-inputs')
-    >('@cardstack/base/lattice-query-inputs');
+      typeof import('@cardstack/base/field-support')
+    >('@cardstack/base/field-support');
     class Input extends CardDef {}
     class Owner extends CardDef {
       @field inputs = linksToMany(Input);

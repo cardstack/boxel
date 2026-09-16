@@ -201,6 +201,9 @@ import {
   getFieldOverrides,
   getFields,
   getRelationshipMembershipState,
+  LatticeQueryInputsPending,
+  recordLatticeQueryInput,
+  registerLatticeQueryInputLoads,
   getter,
   hasLatticeQueryMembership,
   hasLatticeSnapshot,
@@ -235,11 +238,6 @@ import {
   type RelationshipStatus,
   type RelationshipState,
 } from './field-support';
-import {
-  LatticeQueryInputsPending,
-  recordLatticeQueryInput,
-  registerLatticeQueryInputLoads,
-} from './lattice-query-inputs';
 import { TextInputValidator } from './text-input-validator';
 import { type GetMenuItemParams, getDefaultCardMenuItems } from './menu-items';
 import { getDefaultFileMenuItems } from './file-menu-items';

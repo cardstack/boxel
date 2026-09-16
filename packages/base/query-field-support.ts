@@ -5,10 +5,6 @@ import type {
   Field,
   StoreSearchResource,
 } from './card-api';
-import {
-  LatticeQueryInputsPending,
-  readLatticeQueryInputs,
-} from './lattice-query-inputs';
 import type {
   ErrorEntry,
   FieldDefinition,
@@ -40,6 +36,8 @@ import { initSharedState } from './shared-state';
 import {
   bumpFieldLoadingSignal,
   getDataBucket,
+  LatticeQueryInputsPending,
+  readLatticeQueryInputs,
   type LinkErrorValue,
   type LinkNotFoundValue,
 } from './field-support';
