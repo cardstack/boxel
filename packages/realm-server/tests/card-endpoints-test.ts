@@ -1792,6 +1792,42 @@ module(basename(import.meta.filename), function () {
           );
         });
 
+        test('the 201 reports the created card as the index holds it', async function (assert) {
+          // A create answers from the card read back out of the index, never
+          // from the serialization it just wrote: a computed field is derived
+          // at index time and never stored, so a body carrying one is the
+          // request having waited for the incremental index job its own write
+          // queued.
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Van Gogh' },
+                meta: {
+                  adoptsFrom: {
+                    // Absolute, because a created card is stored one directory
+                    // down and a relative ref would be resolved from there.
+                    module: rri(`${testRealmHref}person`),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            201,
+            `HTTP 201 status: ${response.text}`,
+          );
+          assert.strictEqual(
+            response.body.data.attributes?.cardTitle,
+            'Van Gogh',
+            'the 201 carries the computed field the stored file does not hold',
+          );
+        });
+
         test('Content-Type routes the request when Accept matches no route', async function (assert) {
           // The router's second chance: an unmatched Accept falls back to
           // Content-Type, which is what makes a body-bearing POST route on the
@@ -3488,6 +3524,60 @@ module(basename(import.meta.filename), function () {
           );
         });
 
+        test('a patch that changes nothing rewrites a card the index has never seen', async function (assert) {
+          // The short circuit that leaves an unchanged card alone needs the
+          // index to hold a document for the card. A card written straight to
+          // disk has no row at all, so there is nothing to answer from and the
+          // patch rewrites it in canonical serialized form instead — which is
+          // what gets it indexed. A client reaches this state by writing a
+          // card's source and patching it before the write's indexing lands.
+          let realmDir = join(dir.name, 'realm_server_1', 'test');
+          let cardFile = join(realmDir, 'unindexed-patch-target.json');
+          writeFileSync(
+            cardFile,
+            JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Pending' },
+                meta: {
+                  adoptsFrom: { module: './person.gts', name: 'Person' },
+                },
+              },
+            }),
+          );
+
+          let response = await request
+            .patch('/unindexed-patch-target')
+            .send({
+              data: {
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+          assert.strictEqual(
+            response.body.data.attributes?.firstName,
+            'Pending',
+            'the card is served back with what the file holds',
+          );
+          assert.strictEqual(
+            readJSONSync(cardFile).data.meta.adoptsFrom.module,
+            './person',
+            'the card was rewritten in canonical form, which indexes it',
+          );
+        });
+
         test('patches card when index entry is an error without pristine doc', async function (assert) {
           let cardURL = `${testRealmHref}person-1`;
           let errorDoc = {
@@ -4560,6 +4650,39 @@ module(basename(import.meta.filename), function () {
             response.get('vary'),
             'Accept',
             'the response varies on Accept',
+          );
+        });
+
+        test('the 200 reports the patched card as the index holds it', async function (assert) {
+          // The same settled-state contract the create answers on: the patched
+          // card is read back out of the index, so its computed fields are
+          // resolved over the values this request just wrote rather than over
+          // whatever the index held before it.
+          let response = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Van Gogh' },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+          assert.strictEqual(
+            response.body.data.attributes?.cardTitle,
+            'Van Gogh',
+            'the 200 carries the computed field recomputed over the patch',
           );
         });
 
