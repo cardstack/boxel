@@ -95,7 +95,11 @@ export {
   targetFor,
   writeResult,
 } from './envelope.ts';
-export type { EnvelopeEntry, EnvelopeResult } from './envelope.ts';
+export type {
+  EnvelopeEntry,
+  EnvelopeResult,
+  ResolvedEnvelopeEntry,
+} from './envelope.ts';
 export { lowerQueryOperation } from './query.ts';
 export type { QueryInvocation } from './query.ts';
 export {

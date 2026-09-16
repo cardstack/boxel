@@ -250,6 +250,15 @@ export function targetFor(
   };
 }
 
+// One entry with the behavior its name resolved to. The name is the whole of
+// what the wire says; which behavior that is comes from the target's own
+// definition, so an entry is only actionable once the two are together.
+export interface ResolvedEnvelopeEntry {
+  entry: EnvelopeEntry;
+  target: OperationTarget;
+  definition: OperationDefinition;
+}
+
 // The behaviors that change stored state, which is what decides the permission
 // the request needed and therefore which method may carry the batch.
 //

@@ -200,6 +200,7 @@ import {
   writeResult,
   type EnvelopeEntry,
   type EnvelopeResult,
+  type ResolvedEnvelopeEntry,
 } from './card-operations/envelope.ts';
 import {
   OperationFailure,
@@ -207,11 +208,9 @@ import {
   isHeadResult,
   isOperationFailure,
   isSourceResult,
-  type OperationDefinition,
   type OperationRequest,
   type OperationResult,
   type OperationSourceResult,
-  type OperationTarget,
 } from './card-operations/types.ts';
 import { erroredTargetRow } from './card-operations/read.ts';
 import type { BatchCore } from './card-operations/coordinator.ts';
@@ -4119,8 +4118,20 @@ export class Realm {
     // name the same card, and which behavior a name resolves to is read off
     // the target's stored type.
     let scope = newOperationScope(this.operationCore);
-    let resolved = await Promise.all(
+    // Settled rather than raced, so the entry a refusal names is the earliest
+    // one the caller got wrong rather than whichever index read came back
+    // first. A batch with two bad entries would otherwise report a different
+    // one run to run.
+    let outcomes = await Promise.allSettled(
       entries.map((entry) => this.#resolveEnvelopeEntry(entry, scope)),
+    );
+    let refused = outcomes.find((outcome) => outcome.status === 'rejected');
+    if (refused) {
+      throw refused.reason;
+    }
+    let resolved = outcomes.map(
+      (outcome) =>
+        (outcome as PromiseFulfilledResult<ResolvedEnvelopeEntry>).value,
     );
 
     // `QUERY` is the read-only spelling, and the realm derives the permission
@@ -4204,7 +4215,7 @@ export class Realm {
       try {
         committed = await commitBatch(this.batchCore, staged, {
           clientRequestId: caller.clientRequestId || null,
-          actor: requestContext.authenticatedUser ?? undefined,
+          actor: caller.actor || undefined,
         });
       } catch (err: unknown) {
         // The coordinator labels a refusal with the position in the batch it
@@ -4238,11 +4249,7 @@ export class Realm {
   async #resolveEnvelopeEntry(
     entry: EnvelopeEntry,
     scope: OperationScope,
-  ): Promise<{
-    entry: EnvelopeEntry;
-    target: OperationTarget;
-    definition: OperationDefinition;
-  }> {
+  ): Promise<ResolvedEnvelopeEntry> {
     try {
       let target = targetFor(entry, this.url);
       let definition = await resolveOperation(
