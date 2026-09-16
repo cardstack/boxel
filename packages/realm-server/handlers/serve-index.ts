@@ -8,9 +8,12 @@ import type {
   Realm,
 } from '@cardstack/runtime-common';
 import {
+  CAPTURE_SERVING_PREFIX,
   PREFIX_REALMS,
+  RealmPaths,
   foreignQueryParams,
   hasExtension,
+  isCaptureServingPath,
   isRedirectRoutingRule,
   logger,
   param,
@@ -81,6 +84,45 @@ const scopedCSSLog = logger('realm-server:scoped-css');
 function isDocumentEmbedRequest(ctxt: Koa.Context): boolean {
   let destination = ctxt.header['sec-fetch-dest'];
   return destination === 'embed' || destination === 'object';
+}
+
+// A capture URL — `{realm}_screenshot/…` — names bytes the realm serves (a
+// PNG or a PDF), never a card the app could open. A tab navigation to one (a
+// "Download PDF" link opened in a new tab) advertises text/html like any
+// navigation, and the shell would boot the app against a URL that is not a
+// card; the realm's own route serves the capture whatever the request
+// accepts. GET only, matching the realm's dispatch: it serves captures on GET
+// alone, so any other method falls through to the ordinary negotiation.
+//
+// The realm reserves `_screenshot/` only at its root (`isCaptureServingPath`
+// on the realm-local path), so a nested `folder/_screenshot/card` is an
+// ordinary card path that must keep opening the app. The path-segment test
+// is a cheap pre-filter; the realm lookup that decides runs only for URLs
+// that pass it.
+async function isCaptureServingRequest(
+  ctxt: Koa.Context,
+  requestURL: URL,
+  routingDeps: RealmRoutingDeps,
+): Promise<boolean> {
+  if (
+    ctxt.method !== 'GET' ||
+    !requestURL.pathname.includes(`/${CAPTURE_SERVING_PREFIX}`)
+  ) {
+    return false;
+  }
+  let realm = await findOrMountRealm(requestURL, routingDeps);
+  if (!realm) {
+    return false;
+  }
+  // Match on the request's protocol, as findOrMountRealm does: a realm
+  // registered as https is still this request's realm behind a
+  // TLS-terminating proxy that hands the server http.
+  let realmURL = new URL(realm.url);
+  realmURL.protocol = requestURL.protocol;
+  let paths = new RealmPaths(realmURL);
+  return (
+    paths.inRealm(requestURL) && isCaptureServingPath(paths.local(requestURL))
+  );
 }
 
 export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
@@ -245,16 +287,6 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
   }
 
   let serveIndex = async (ctxt: Koa.Context, next: Koa.Next) => {
-    if (isDocumentEmbedRequest(ctxt)) {
-      // Fall through to the realm, which serves the file's own bytes and
-      // lets its content type decide what the embed renders.
-      return next();
-    }
-    let acceptHeader = ctxt.header.accept ?? '';
-    let lowerAcceptHeader = acceptHeader.toLowerCase();
-    let includesVndMimeType = lowerAcceptHeader.includes('application/vnd.');
-    let includesHtmlMimeType = lowerAcceptHeader.includes('text/html');
-
     // Derive the request URL via fullRequestURL so the protocol honors
     // `x-forwarded-proto` from a TLS-terminating proxy (ALB/Traefik), matching
     // the rest of the request pipeline. Building it from the raw `ctxt.protocol`
@@ -262,6 +294,19 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // probe (isIndexedCardInstance → hasExtensionlessSourceModule) throw on the
     // http-vs-https mismatch and mis-serve a module URL as the HTML page.
     let requestURL = fullRequestURL(ctxt);
+
+    if (
+      isDocumentEmbedRequest(ctxt) ||
+      (await isCaptureServingRequest(ctxt, requestURL, routingDeps))
+    ) {
+      // Fall through to the realm, which serves the file's (or capture's)
+      // own bytes and lets its content type decide what the browser renders.
+      return next();
+    }
+    let acceptHeader = ctxt.header.accept ?? '';
+    let lowerAcceptHeader = acceptHeader.toLowerCase();
+    let includesVndMimeType = lowerAcceptHeader.includes('application/vnd.');
+    let includesHtmlMimeType = lowerAcceptHeader.includes('text/html');
 
     // Track published realm info from routing checks to avoid redundant
     // DB queries in the ETag logic below.

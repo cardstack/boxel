@@ -644,7 +644,7 @@ export class RenderRunner {
           base64: first.base64,
           width: first.width,
           height: first.height,
-          contentType: 'image/png',
+          contentType: shot.contentType,
           // Step timings ride on meta.diagnostics so they survive the remote
           // wire: `decorateRenderErrorsWithTimings` merges its own (disjoint)
           // timing fields onto this block, and the remote prerenderer client

@@ -23,6 +23,7 @@ import {
   screenshotsMetaFromRoster,
   SupportedMimeType,
   isCardError,
+  isJsonContentType,
   rri,
   type CardErrorsJSONAPI,
   type DeclaredScreenshotRoster,
@@ -40,7 +41,9 @@ import {
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import {
+  CardError,
   coerceErrorMessage,
+  isGatewayFailureStatus,
   serializableError,
 } from '@cardstack/runtime-common/error';
 import {
@@ -711,24 +714,17 @@ export default class RenderRoute extends Route<Model> {
     } else {
       try {
         response = await this.#authGuard.race(() =>
-          this.network.authedFetch(
-            latticeInput ? id.replace(/\.json$/, '') : id,
-            {
-              method: 'GET',
-              headers: {
-                Accept: latticeInput
-                  ? SupportedMimeType.CardJson
-                  : SupportedMimeType.CardSource,
-                ...(latticeInput
-                  ? {
-                      [LATTICE_INPUT_GENERATION_HEADER]: String(
-                        latticeInput.generation,
-                      ),
-                    }
-                  : {}),
-              },
-            },
-          ),
+          latticeInput
+            ? this.network.authedFetch(id.replace(/\.json$/, ''), {
+                method: 'GET',
+                headers: {
+                  Accept: SupportedMimeType.CardJson,
+                  [LATTICE_INPUT_GENERATION_HEADER]: String(
+                    latticeInput.generation,
+                  ),
+                },
+              })
+            : this.#fetchCardSourceWithGatewayRetry(id),
         );
       } catch (err: any) {
         if (this.#authGuard.isAuthError(err)) {
@@ -736,6 +732,24 @@ export default class RenderRoute extends Route<Model> {
           throw err;
         }
         throw err;
+      }
+
+      // Guard the parse. This is the document-loading path the CS-12966 incident
+      // ran through: the render fetches the card's own document through the
+      // public balancer, and when that comes back a gateway error the body is
+      // the balancer's HTML error page, not a card document. Parsing it as one
+      // failed, and that parse failure was latched as the card's render verdict
+      // — one 502 that lasted milliseconds served 500 to every reader for days.
+      // A balancer 5xx, or any body that is not the JSON the request asked for,
+      // is a statement about the network rather than the card: surface it as a
+      // gateway failure the prerender server classifies and the write site
+      // withholds, instead of letting `response.json()` throw on the HTML.
+      let contentType = response.headers.get('content-type');
+      if (
+        isGatewayFailureStatus(response.status) ||
+        !isJsonContentType(contentType)
+      ) {
+        throw this.#gatewayFailureError(id, { response, contentType });
       }
 
       realmURL = response.headers.get('x-boxel-realm-url')!;
@@ -936,6 +950,92 @@ export default class RenderRoute extends Route<Model> {
     (globalThis as any).__renderModel = model;
     this.currentTransition = undefined;
     return model;
+  }
+
+  // Fetch the card's source document, retrying once when the first attempt
+  // fails at or above the gateway layer — a balancer 5xx, or a network-level
+  // failure that never produced a response at all. The dominant trigger for
+  // CS-12966 was a keep-alive race producing 502s that lasted milliseconds; a
+  // single retry would have turned that incident into a non-event, and it is
+  // cheaper than any classification of the failure after the fact. An auth
+  // failure is never a gateway failure, so it is rethrown untouched and never
+  // spends the one retry — the caller's auth handling deals with it.
+  async #fetchCardSourceWithGatewayRetry(id: string): Promise<Response> {
+    let attempt = () =>
+      this.network.authedFetch(id, {
+        method: 'GET',
+        headers: {
+          Accept: SupportedMimeType.CardSource,
+        },
+      });
+    let response: Response | undefined;
+    let networkError: unknown;
+    try {
+      response = await attempt();
+    } catch (err: any) {
+      if (this.#authGuard.isAuthError(err)) {
+        throw err;
+      }
+      networkError = err;
+    }
+    if (!response || response.status >= 500) {
+      try {
+        return await attempt();
+      } catch (err: any) {
+        if (this.#authGuard.isAuthError(err)) {
+          throw err;
+        }
+        // Both attempts failed at the network level, so no response document
+        // exists to parse: this is unambiguously the network and not the card.
+        throw this.#gatewayFailureError(id, {
+          networkError: err ?? networkError,
+        });
+      }
+    }
+    return response;
+  }
+
+  // A render failure attributable to the network between the render and the
+  // realm rather than to the card. Carries a gateway status (502/503/504, or a
+  // synthesized 502 when a body could not be read as a card document or the
+  // fetch never returned) so the prerender server classifies it as
+  // unattributable and the write site withholds it — keeping the card's prior
+  // good render rather than latching a transient failure as its verdict. Its
+  // message names the URL and what actually came back, so an operator reading
+  // the row on the paths where withholding does not apply (a first render, no
+  // prior content to protect) still sees a diagnosable error.
+  #gatewayFailureError(
+    id: string,
+    opts: {
+      response?: Response;
+      contentType?: string | null;
+      networkError?: unknown;
+    },
+  ): CardError {
+    let status =
+      opts.response && isGatewayFailureStatus(opts.response.status)
+        ? opts.response.status
+        : 502;
+    let detail = opts.response
+      ? `the balancer answered HTTP ${opts.response.status}${
+          opts.contentType ? ` with content type ${opts.contentType}` : ''
+        }`
+      : `the fetch failed at the network level (${
+          (opts.networkError as Error)?.message ?? 'no error message'
+        })`;
+    let error = new CardError(
+      `Gateway or network failure while fetching the card document for ${id}: ${detail}. ` +
+        `The render's fetch of the card document went through the public balancer and did not ` +
+        `return a card document, so this describes the network rather than the card.`,
+      { status },
+    );
+    // The positive marker the prerender classifier withholds on. Stamped here,
+    // where the fetch boundary knows the failure is the network's, so the
+    // classifier never has to infer that from the status — a card render can
+    // carry a gateway status too (a render timeout is a 504), and only this
+    // marker distinguishes the two.
+    error.gatewayFailure = true;
+    return error;
   }
 
   // The loads that landed while the model build's settle stage was draining

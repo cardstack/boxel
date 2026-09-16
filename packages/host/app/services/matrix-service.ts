@@ -4,6 +4,7 @@ import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import { cached, tracked } from '@glimmer/tracking';
 
@@ -169,6 +170,16 @@ const UNREACHABLE_RETRY_INTERVAL_MS = 10_000;
 const MAX_UNREACHABLE_RETRY_ATTEMPTS = 6;
 
 const realmEventsLogger = logger('realm:events');
+
+// A sign-in is the stretch of app work `settled()` is most likely to resolve in
+// the middle of. The sign-in button performs an ember-concurrency task and
+// ember-concurrency carries no `@ember/test-waiters` integration, so the task
+// itself is invisible; and the boot that task awaits is only held in stretches,
+// because the matrix client is built without a `fetchFn` and its calls
+// therefore bypass the `fetcher` waiter that covers the app's own requests.
+// This waiter spans those gaps, from the credential exchange through to the
+// router refresh that ends the boot. Compiles to a no-op outside a debug build.
+const signInWaiter = buildWaiter('matrix-service:sign-in');
 
 // Bound on the test-only `postLoginCompleted` transition record below. A boot
 // records one →true and a teardown one →false, so a handful of entries covers
@@ -1158,6 +1169,9 @@ export default class MatrixService extends Service {
     await this.profile.load.perform();
   }
 
+  // Every sign-in path — password, token hand-off, registration, and the boot
+  // from persisted auth — converges on the boot below, so holding the waiter
+  // here covers all of them whichever one a caller came in through.
   async start(
     opts: {
       auth?: MatrixSDK.LoginResponse;
@@ -1165,6 +1179,19 @@ export default class MatrixService extends Service {
       registrationToken?: string;
     } = {},
   ) {
+    let waiterToken = signInWaiter.beginAsync();
+    try {
+      await this.boot(opts);
+    } finally {
+      signInWaiter.endAsync(waiterToken);
+    }
+  }
+
+  private async boot(opts: {
+    auth?: MatrixSDK.LoginResponse;
+    refreshRoutes?: true;
+    registrationToken?: string;
+  }) {
     await this.ready;
 
     let { auth, refreshRoutes, registrationToken } = opts;
@@ -2359,6 +2386,7 @@ export default class MatrixService extends Service {
   }
 
   async login(usernameOrEmail: string, password: string) {
+    let waiterToken = signInWaiter.beginAsync();
     try {
       const cred = await this.client.loginWithPassword(
         usernameOrEmail,
@@ -2375,6 +2403,8 @@ export default class MatrixService extends Service {
       } catch (error2) {
         throw error;
       }
+    } finally {
+      signInWaiter.endAsync(waiterToken);
     }
   }
 
@@ -2389,8 +2419,13 @@ export default class MatrixService extends Service {
   }
 
   async loginWithSsoToken(token: string) {
-    await this.ready;
-    return this.client.loginWithToken(token);
+    let waiterToken = signInWaiter.beginAsync();
+    try {
+      await this.ready;
+      return await this.client.loginWithToken(token);
+    } finally {
+      signInWaiter.endAsync(waiterToken);
+    }
   }
 
   getRoomData(roomId: string) {

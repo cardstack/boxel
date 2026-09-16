@@ -20,7 +20,9 @@ import {
 } from './jobs/indexing.ts';
 import { enqueueReindexRealmJob } from './jobs/reindex-realm.ts';
 import type {
+  DeferredPrerenderHtml,
   FromScratchResult,
+  IncrementalChange,
   IncrementalDoneResult,
 } from './tasks/indexer.ts';
 import type { Realm } from './realm.ts';
@@ -75,6 +77,15 @@ export interface IncrementalIndexOptions {
   initiatedBy?: string | null;
   // Source revisions fence distinct writes to the same URL.
   revisions?: Map<string, string>;
+  // See IncrementalArgs. `onDeferredPrerenderHtml` receives the set the pass
+  // declined to enqueue; it runs inside the deferred lifecycle, alongside
+  // onInvalidation, so a caller can carry the set forward before
+  // `realm.incrementalIndexing()` resolves.
+  deferPrerenderHtml?: boolean;
+  carriedPrerenderHtmlChanges?: IncrementalChange[];
+  onDeferredPrerenderHtml?: (
+    deferred: DeferredPrerenderHtml,
+  ) => Promise<void> | void;
 }
 
 export class RealmIndexUpdater {
@@ -342,6 +353,10 @@ export class RealmIndexUpdater {
         realmURL: this.#realm.url,
         realmUsername: await this.#realm.getRealmOwnerUsername(),
         ignoreData: { ...this.#ignoreData },
+        ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
+        ...(opts?.carriedPrerenderHtmlChanges?.length
+          ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
+          : {}),
       };
       let clientRequestId = opts?.clientRequestId ?? null;
       job = await this.#queue.publish<IncrementalDoneResult>({
@@ -363,8 +378,14 @@ export class RealmIndexUpdater {
     // quiescence gate always fulfills (see #incrementalIndexingDeferreds).
     let settled = (async () => {
       try {
-        let { invalidations, invalidatedTypes, ignoreData, stats, generation } =
-          await job.done;
+        let {
+          invalidations,
+          invalidatedTypes,
+          ignoreData,
+          stats,
+          generation,
+          deferredPrerenderHtml,
+        } = await job.done;
         this.#stats = stats;
         // Drop the result if a from-scratch index landed since we snapshotted.
         // Its ignoreData was computed from a stale snapshot and would clobber
@@ -380,6 +401,9 @@ export class RealmIndexUpdater {
               ...(invalidatedTypes !== undefined ? { invalidatedTypes } : {}),
             },
           );
+        }
+        if (deferredPrerenderHtml && opts?.onDeferredPrerenderHtml) {
+          await opts.onDeferredPrerenderHtml(deferredPrerenderHtml);
         }
         if (opts?.onSettled) {
           await opts.onSettled();
@@ -407,7 +431,13 @@ export class RealmIndexUpdater {
     urls: URL[],
     opts?: Pick<
       IncrementalIndexOptions,
-      'onInvalidation' | 'clientRequestId' | 'initiatedBy' | 'revisions'
+      | 'onInvalidation'
+      | 'clientRequestId'
+      | 'initiatedBy'
+      | 'deferPrerenderHtml'
+      | 'carriedPrerenderHtmlChanges'
+      | 'onDeferredPrerenderHtml'
+      | 'revisions'
     > & { delete?: true },
   ): Promise<void> {
     let { settled } = await this.enqueueUpdate(urls, opts);
@@ -420,7 +450,13 @@ export class RealmIndexUpdater {
     changes: IndexChange[],
     opts?: Pick<
       IncrementalIndexOptions,
-      'onInvalidation' | 'clientRequestId' | 'initiatedBy' | 'revisions'
+      | 'onInvalidation'
+      | 'clientRequestId'
+      | 'initiatedBy'
+      | 'deferPrerenderHtml'
+      | 'carriedPrerenderHtmlChanges'
+      | 'onDeferredPrerenderHtml'
+      | 'revisions'
     >,
   ): Promise<void> {
     let { settled } = await this.enqueueChanges(changes, opts);

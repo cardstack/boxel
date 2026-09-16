@@ -28,7 +28,10 @@ export {
   calendarDate as bxlCalendarDate,
   type BxlClock,
 } from './bxl/bridge/clock.ts';
-import type { NativeRuntimeLimits } from './jqtools/evaluate/runtimeState.ts';
+import type {
+  NativeRuntimeClock,
+  NativeRuntimeLimits,
+} from './jqtools/evaluate/runtimeState.ts';
 import type {
   ReadableSchema,
   ReadableSyntaxCompileResult,
@@ -160,7 +163,7 @@ export type {
   PreparedBoxelRuntime,
 } from './boxel-runtime.ts';
 
-export const VERSION = '0.7.0-unstable.6';
+export const VERSION = '0.7.0-unstable.7';
 
 /**
  * Runtime identity: the version plus the set of behaviors this build of the
@@ -267,6 +270,7 @@ export type {
   BxlSqlPredicateModule,
   BuiltinLibraryName,
   JqToReadableBxlResult,
+  NativeRuntimeClock,
   NativeRuntimeLimits,
   ReadableSchema,
   ReadableSyntaxCompileResult,

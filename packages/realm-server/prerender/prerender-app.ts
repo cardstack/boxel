@@ -341,6 +341,71 @@ export function stampStaleShellFailure(
   };
 }
 
+// The row types whose *own* failure was a gateway or network failure the
+// render's fetch met — a balancer 502/503/504, the 502 the render's fetch
+// guard synthesizes for a body it could not read as a card document or a fetch
+// that never returned, or a linked-card fetch `card-service` failed with the
+// balancer's status. The render loads the card's document through the public
+// balancer, so a gateway error there is a statement about the network and not
+// the card; recording it as the card's verdict is the failure that latched a
+// card into serving 500 for days from one 502 that lasted milliseconds.
+//
+// Answered per row type rather than per response for the same reason as
+// `unattributableRowTypes`: one visit produces the instance and file rows
+// independently, and a gateway error on the card render says nothing about a
+// file extraction that failed beside it for its own reasons.
+//
+// Keyed on the `gatewayFailure` marker the fetch boundary stamps, not on the
+// error status. The status alone is ambiguous — a render timeout is a
+// card-originated 504 — so inferring the verdict from the number would withhold
+// every render timeout, exactly the failure that most needs to stay visible.
+// The marker is set only where a fetch actually met the network failure, so its
+// presence is the conclusion without any invariant to defend.
+function gatewayFailureRowTypes(
+  response: RenderVisitResponse,
+): ('instance' | 'file')[] {
+  let types = new Set<'instance' | 'file'>();
+  let consider = (
+    candidate: { error?: { gatewayFailure?: unknown } } | undefined,
+    type: 'instance' | 'file',
+  ) => {
+    if (candidate?.error?.gatewayFailure === true) {
+      types.add(type);
+    }
+  };
+  consider(response.card?.error, 'instance');
+  consider(response.fileExtract?.error, 'file');
+  consider(response.fileRender?.error, 'file');
+  // A page that never became usable produced neither render, so the failure
+  // belongs to both rows rather than to one of them.
+  if (response.pageUnusableError?.error?.gatewayFailure === true) {
+    types.add('instance');
+    types.add('file');
+  }
+  return [...types];
+}
+
+// The gateway-failure twin of `stampStaleShellFailure`: record that these
+// rows' failures were the network's and not the card's, so the write site
+// declines to publish them as the card's content. Same contract — the write
+// site checks for the field's presence and nothing else, so the rule has one
+// implementation rather than two that can drift.
+export function stampGatewayFailure(
+  response: RenderVisitResponse,
+  rowTypes: ('instance' | 'file')[],
+): void {
+  if (rowTypes.length === 0) {
+    return;
+  }
+  response.meta = {
+    ...(response.meta ?? {}),
+    diagnostics: {
+      ...(response.meta?.diagnostics ?? {}),
+      gatewayFailure: rowTypes,
+    },
+  };
+}
+
 // A one-shot notification that shutdown has begun, which the holder releases
 // when it no longer needs it.
 type DrainSubscription = {
@@ -1493,6 +1558,22 @@ export function buildPrerenderApp(options: {
         pool.affinityValue,
         poolFlagSuffix,
       );
+      // A gateway/network failure is a statement about the network, not the
+      // card, so mark the rows it hit unattributable regardless of whether the
+      // stale-shell re-render path ran — the two verdicts are independent. This
+      // one reads the `gatewayFailure` marker the fetch boundary stamped rather
+      // than inferring intent from the error status, so a card-originated
+      // gateway status (a render timeout is a 504) is not caught here. The
+      // write site withholds it exactly as it does the stale-shell verdict.
+      let gatewayFailure = gatewayFailureRowTypes(response);
+      if (gatewayFailure.length > 0) {
+        log.warn(
+          'visit of %s failed with a gateway/network error on the %s row(s); marking the failure unattributable to the card',
+          url,
+          gatewayFailure.join(', '),
+        );
+        stampGatewayFailure(response, gatewayFailure);
+      }
       decorateRenderErrorDiagnostics(response, requestId);
       stampHostShellTokens(response, {
         atStart: shellAtStart,

@@ -71,6 +71,7 @@ import type { RealmMetaTable } from './index-structure.ts';
 import type { FileMetaResource } from './resource-types.ts';
 import type { DeclaredScreenshotError, Diagnostics } from './index.ts';
 import {
+  ALL_TYPES_KEY,
   coerceTypes,
   type BoxelIndexTable,
   type CardTypeSummary,
@@ -79,6 +80,13 @@ import {
 } from './index-structure.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
 import { computeContentHash } from './content-hash.ts';
+import { md5 } from 'super-fast-md5';
+import {
+  isScopedCSSRequest,
+  isHashedScopedCSSRequest,
+  parseScopedCSSRequest,
+  encodeHashedScopedCSSRequest,
+} from './scoped-css.ts';
 
 export class IndexWriter {
   #dbAdapter: DBAdapter;
@@ -321,20 +329,37 @@ function prerenderedHtmlEntryFrom(
   };
 }
 
-// Whether a verdict from the prerender server covers the row type about to be
-// written. Presence *and* membership: the mark names which of a visit's rows it
-// applies to, so a card render that hit a stale bundle cannot withhold a file
-// row that failed for its own reasons.
+// Whether a single verdict array names the row type about to be written.
+// Presence *and* membership: the mark names which of a visit's rows it applies
+// to, so a card render that failed for the environment's reasons cannot
+// withhold a file row that failed for its own.
 //
 // Absence means no verdict, never "attributable" — a response from anything
 // that does not stamp this (a server predating the field, which a worker sees
 // throughout a rolling deploy) must not read as licence to withhold a row.
+function verdictArrayCoversRow(
+  verdict: ('instance' | 'file')[] | undefined,
+  type: 'instance' | 'file',
+): boolean {
+  return Array.isArray(verdict) && verdict.includes(type);
+}
+
+// Whether *any* of the prerender server's unattributability verdicts covers
+// this row. The verdicts differ only in why the failure was the environment's
+// — a stale host shell mid-deploy, or a gateway/network failure on a fetch the
+// render made — and the write site treats them the same: keep the prior good
+// render rather than publish the failure as the card's content. Kept as
+// distinct fields so the recorded reason survives for an operator to read and
+// so each cause can have its own reconcile cadence, but unified here because
+// the withholding decision is identical.
 function verdictCoversRow(
   diagnostics: Diagnostics | undefined,
   type: 'instance' | 'file',
 ): boolean {
-  let covered = diagnostics?.staleShellFailure;
-  return Array.isArray(covered) && covered.includes(type);
+  return (
+    verdictArrayCoversRow(diagnostics?.staleShellFailure, type) ||
+    verdictArrayCoversRow(diagnostics?.gatewayFailure, type)
+  );
 }
 
 // Rows held in the write-behind buffer before a flush is forced (see
@@ -342,6 +367,12 @@ function verdictCoversRow(
 // memory across long runs of dependency-free files. Renders dwarf the writes,
 // so even a forced flush lands in a render's shadow.
 const WRITE_BUFFER_FLUSH_THRESHOLD = 100;
+
+// Type-watermark rows written per statement. The set is bounded by the
+// realm's type vocabulary rather than its row count, so this only has to keep
+// a realm with an unusually large one inside the driver's bound-parameter
+// ceiling.
+const TYPE_STAMP_CHUNK = 200;
 
 // One `boxel_index` row as `existingIndexTypes` reads it back.
 interface ExistingIndexRowType {
@@ -468,6 +499,9 @@ export class Batch {
   #latticeTransaction: Querier | undefined;
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
+  // CSS content hashes this batch has already interned into the `scoped_css`
+  // table, so a stylesheet shared by many rows in one pass is written once.
+  #internedScopedCSSHashes = new Set<string>();
   #nodeResolvedInvalidations: string[] | undefined;
   // URLs already written to boxel_index_working by an earlier attempt
   // of *this same job*, with the last_modified value the previous
@@ -487,6 +521,18 @@ export class Batch {
   // representation here. Keys are `internalKeyFor` spellings, the same form
   // `boxel_index.types` stores and a type filter compiles to.
   #touchedTypes = new Set<string>();
+  // URLs whose production adoption chain this batch read before writing —
+  // the pre-pass half of `#touchedTypes`, recorded by `tombstoneEntries` for
+  // every URL in the set it is handed. A row written without that read can be
+  // *leaving* a type nothing else in the pass names, so `#touchedTypes` only
+  // accounts for everything that moved when this set covers every URL the
+  // swap promotes (see `typeSetIsComplete`).
+  #preReadURLs = new Set<string>();
+  // Whether `applyBatchUpdates` published this pass's `prerendered_html` rows,
+  // which decides whether the pass stamps the HTML leg of its type
+  // watermarks. Set there rather than recomputed at stamp time so the two
+  // cannot drift.
+  #publishedPrerenderedHtml = false;
   #tombstonedLiveTypes = new Map<string, BoxelIndexTable['type'][]>();
   #prerenderedHtmlTombstonedLiveTypes = new Map<
     string,
@@ -1819,13 +1865,18 @@ export class Batch {
     // form. Normalizing here keeps one canonical form on disk; dependency
     // invalidation already searches both the real and prefix forms.
     if (preparedEntry.deps) {
-      preparedEntry.deps = this.virtualNetwork.unresolveURLs(
-        preparedEntry.deps,
+      preparedEntry.deps = await this.internScopedCSSDeps(
+        this.virtualNetwork.unresolveURLs(preparedEntry.deps),
       );
     }
     if (preparedEntry.last_known_good_deps) {
-      preparedEntry.last_known_good_deps = this.virtualNetwork.unresolveURLs(
-        preparedEntry.last_known_good_deps,
+      preparedEntry.last_known_good_deps = await this.internScopedCSSDeps(
+        this.virtualNetwork.unresolveURLs(preparedEntry.last_known_good_deps),
+      );
+    }
+    if (preparedEntry.error_doc?.deps) {
+      preparedEntry.error_doc.deps = await this.internScopedCSSDeps(
+        preparedEntry.error_doc.deps,
       );
     }
 
@@ -2081,17 +2132,27 @@ export class Batch {
         if (withholdHtmlFailure) {
           // Withholding keeps the prior render published and clears the error
           // that would otherwise have flagged the row — so nothing is left
-          // asking for the re-render once the shells agree again. The
-          // reconcile sweep picks these up instead, and this is the run length
-          // that bounds how long it keeps trying. Extend the prior row's run;
-          // a successful render replaces the row outright and ends it.
-          let priorRun =
-            (production?.diagnostics as Diagnostics | null)
-              ?.staleShellFailureRenders ?? 0;
-          diagnostics = {
-            ...diagnostics,
-            staleShellFailureRenders: priorRun + 1,
-          };
+          // asking for the re-render once the environment recovers. The
+          // reconcile sweep picks these up instead, and this run length bounds
+          // how long it keeps trying. Extend the prior row's run for whichever
+          // verdict actually covers this row, so a cause that keeps recurring
+          // converges on its own cap; a successful render replaces the row
+          // outright and ends the run.
+          let priorDiagnostics = production?.diagnostics as Diagnostics | null;
+          if (verdictArrayCoversRow(diagnostics?.staleShellFailure, type)) {
+            diagnostics = {
+              ...diagnostics,
+              staleShellFailureRenders:
+                (priorDiagnostics?.staleShellFailureRenders ?? 0) + 1,
+            };
+          }
+          if (verdictArrayCoversRow(diagnostics?.gatewayFailure, type)) {
+            diagnostics = {
+              ...diagnostics,
+              gatewayFailureRenders:
+                (priorDiagnostics?.gatewayFailureRenders ?? 0) + 1,
+            };
+          }
         }
         if (errorDoc.visitRequestFailure) {
           // Consecutive-failure bookkeeping for the reconcile sweep's
@@ -2145,6 +2206,17 @@ export class Batch {
         throw new Error(
           `Unsupported prerendered-html entry type: ${(entry as { type: string }).type}`,
         );
+    }
+    for (let key of ['deps', 'last_known_good_deps'] as const) {
+      if (Array.isArray(payload[key])) {
+        payload[key] = await this.internScopedCSSDeps(payload[key] as string[]);
+      }
+    }
+    let payloadErrorDoc = payload.error_doc as SerializedError | null;
+    if (payloadErrorDoc?.deps) {
+      payloadErrorDoc.deps = await this.internScopedCSSDeps(
+        payloadErrorDoc.deps,
+      );
     }
     let preparedEntry = {
       url: url.href,
@@ -2326,6 +2398,16 @@ export class Batch {
       // zombie job a per-row no-op.
       await this.#query(['BEGIN']);
       await this.promotePrerenderedHtmlWorking({ monotonicGuard: true });
+      await this.stampTypeGenerations({
+        // `prerendered_html` carries no adoption chain of its own, so the
+        // types this swap published are read from the `boxel_index` rows the
+        // same URLs hold. That read is the reason these watermarks live in a
+        // table the write side maintains rather than being aggregated per
+        // request: it is one query per batch, not one per search.
+        types: await this.publishedHtmlTypes(),
+        channels: { html: true },
+        monotonicGuard: true,
+      });
       await this.#query(['COMMIT']);
       if (opts?.countIndexEntries === false) return;
       return { totalIndexEntries: this.#invalidations.size };
@@ -2502,6 +2584,11 @@ export class Batch {
         publicationTimings.promoteMs = Date.now() - phaseStartedAt;
         phaseStartedAt = Date.now();
         await this.pruneObsoleteEntries();
+        await this.stampTypeGenerations({
+          types: this.touchedTypes,
+          channels: { index: true, html: this.#publishedPrerenderedHtml },
+          bumpAllTypes: !this.typeSetIsComplete,
+        });
         publicationTimings.pruneMs = Date.now() - phaseStartedAt;
         if (!tx) await this.#query(['COMMIT']);
       } catch (error) {
@@ -2880,8 +2967,174 @@ export class Batch {
         // Swap the working HTML rows into production in the same
         // transaction, keyed by the same invalidation set and generation.
         await this.promotePrerenderedHtmlWorking();
+        this.#publishedPrerenderedHtml = true;
       }
     }
+  }
+
+  // Whether `#touchedTypes` is a complete account of what this pass moved.
+  //
+  // The swap promotes exactly `#invalidations`, and each of those rows
+  // contributes two chains: the one it lands on, recorded by the write path,
+  // and the one it held before, recorded only where `tombstoneEntries` read
+  // production first. A row written without that read can be leaving a type
+  // no other row in the pass names — a card that changes what it adopts from
+  // is the plain case — so the departed type's watermark would stay put while
+  // a search anchored on it still holds the card as a member.
+  //
+  // It is a property of the rows, not of which entry point ran: a pass can
+  // call `invalidate()` for a deleted URL and then go on to write every file
+  // in the realm, which is what a from-scratch rebuild does when nothing on
+  // disk matches the index. A pass whose reads do not cover its writes moves
+  // the catch-all key instead, so absence reads as "unknown".
+  private get typeSetIsComplete(): boolean {
+    for (let url of this.#invalidations) {
+      if (!this.#preReadURLs.has(url)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // The card types this pass moved, stamped against the generation it
+  // committed. A live search folds the watermarks of the types its filter is
+  // anchored on into its cache key, so a write only unreaches the cached
+  // searches it could have changed the membership of, rather than every
+  // cached search in the realm.
+  //
+  // The two sides of this deliberately disagree, and that asymmetry is what
+  // gives the key its selectivity. Here the *full adoption chain* of every
+  // row the pass touched is stamped, so a `DailyReport` write moves
+  // `DailyReport`, `CardDef`, and everything between. A reader resolves only
+  // its own filter's spelling — never that spelling's ancestors — so a query
+  // anchored on `Student` reads the `Student` watermark alone and survives
+  // that write, while a write to a *subtype* of `Student` does move `Student`
+  // and correctly invalidates it. Resolving ancestors on the read side
+  // instead would put `CardDef` in every query's key, which every write
+  // moves, and leave no selectivity at all.
+  //
+  // Only the channels the caller names are written; the other column keeps
+  // whatever it holds. The index and HTML legs advance independently once
+  // prerendering is split off the indexing pass, and a search reads both — it
+  // excludes rows with an effective error, and a render error lands on the
+  // HTML channel.
+  private async stampTypeGenerations(args: {
+    types: string[];
+    channels: { index?: boolean; html?: boolean };
+    // Also move the catch-all key, which every lookup folds in. For a pass
+    // whose type set cannot be taken as complete: absence has to read as
+    // "unknown", never as "unaffected".
+    bumpAllTypes?: boolean;
+    // Make a stale (lower-generation) stamp a per-row no-op, matching the
+    // guard the `prerendered_html` swap it accompanies applies. Lowering a
+    // watermark is sound — it moves the key, so readers recompute — but an
+    // expired-reservation zombie job would otherwise churn every reader's
+    // key on its way out. The predicate is built from the channels this call
+    // writes, so it can never compare a column the statement is not setting.
+    monotonicGuard?: boolean;
+  }): Promise<void> {
+    let channels: string[] = [];
+    if (args.channels.index) {
+      channels.push('index_generation');
+    }
+    if (args.channels.html) {
+      channels.push('html_generation');
+    }
+    if (channels.length === 0) {
+      return;
+    }
+    let columns: string[][] = [
+      ['realm_url'],
+      ['type_key'],
+      ...channels.map((channel) => [channel]),
+    ];
+    let keys = new Set(args.types);
+    if (args.bumpAllTypes) {
+      keys.add(ALL_TYPES_KEY);
+    }
+    if (keys.size === 0) {
+      return;
+    }
+    // A row absent from this table reads as generation 0, which is why the
+    // channels the caller omits can be left to the column default on insert:
+    // a type no pass has stamped on that channel cannot have moved on it.
+    // Every channel column carries this batch's generation.
+    let rows = [...keys].map((typeKey) => [
+      [param(this.realmURL.href)],
+      [param(typeKey)],
+      ...channels.map(() => [param(this.generation)]),
+    ]) as Expression[][];
+    // Chunked so a realm with a large type vocabulary stays inside the
+    // driver's bound-parameter ceiling.
+    for (let offset = 0; offset < rows.length; offset += TYPE_STAMP_CHUNK) {
+      await this.#query([
+        ...upsertMultipleRows(
+          'realm_type_generations',
+          'realm_type_generations_pkey',
+          columns,
+          rows.slice(offset, offset + TYPE_STAMP_CHUNK),
+        ),
+        ...(args.monotonicGuard
+          ? [
+              `WHERE ${channels
+                .map(
+                  (channel) =>
+                    `realm_type_generations.${channel} <= EXCLUDED.${channel}`,
+                )
+                .join(' AND ')}`,
+            ]
+          : []),
+      ] as Expression);
+    }
+  }
+
+  // The adoption chains behind the rows a `prerenderHtmlOnly` swap published.
+  // Read from `boxel_index` because the HTML channel stores no chain of its
+  // own, and from production rather than the working table because the index
+  // half of these URLs landed in an earlier pass.
+  //
+  // The distinct keys are extracted in SQL rather than by reading each row's
+  // `types` array back and deduping here: the swap that follows a from-scratch
+  // index covers every card in the realm, and this runs on the commit path, so
+  // the payload has to be bounded by the realm's type vocabulary — the same
+  // bound `TYPE_STAMP_CHUNK` asserts — and not by its row count.
+  // Lattice also exercises separate HTML publication in SQLite, where array
+  // expansion is a table-valued function rather than a select-list function.
+  private async publishedHtmlTypes(): Promise<string[]> {
+    let urls = [...new Set(this.#invalidations)];
+    if (urls.length === 0) {
+      return [];
+    }
+    let rows = (await this.#query([
+      dbExpression({
+        pg: 'SELECT DISTINCT jsonb_array_elements_text(i.types) AS type_key FROM boxel_index i',
+        sqlite:
+          'SELECT DISTINCT t.value AS type_key FROM boxel_index i, json_each(i.types) t',
+      }),
+      'WHERE',
+      ...every([
+        ['i.realm_url =', param(this.realmURL.href)],
+        // Only rows whose chain is actually an array. `jsonb_array_elements_text`
+        // raises on anything else, and this runs inside the swap transaction —
+        // a row holding a JSON `null` or a scalar would take the whole
+        // publish down with it, and the HTML it was publishing with it. The
+        // SQL-NULL case falls out of the same test, since `jsonb_typeof`
+        // returns NULL there.
+        [
+          dbExpression({
+            pg: "jsonb_typeof(i.types) = 'array'",
+            sqlite: "json_type(i.types) = 'array'",
+          }),
+        ],
+        [
+          'i.url IN',
+          ...addExplicitParens(
+            separatedByCommas(urls.map((url) => [param(url)])),
+          ),
+        ],
+      ]),
+    ] as Expression)) as { type_key: string }[];
+    return rows.map(({ type_key }) => type_key);
   }
 
   // Swap `prerendered_html_working` rows into production `prerendered_html`,
@@ -3042,6 +3295,12 @@ export class Batch {
       for (let { cardTypes } of entries) {
         this.#recordTouchedTypes(cardTypes);
       }
+    }
+    // Every URL read above now has its prior chain in `#touchedTypes`,
+    // including the ones production holds no row for — those have no prior
+    // chain to leave. This is the read `typeSetIsComplete` asks about.
+    for (let url of invalidations) {
+      this.#preReadURLs.add(url);
     }
     if (toTombstone.length === 0) {
       return;
@@ -3878,6 +4137,70 @@ export class Batch {
     } catch (_err) {
       return dep;
     }
+  }
+
+  // Rewrite inline scoped-CSS deps (the `glimmer-scoped-css` form that
+  // base64-embeds the entire stylesheet in the URL) to their hashed form,
+  // interning the CSS bytes into the content-addressed `scoped_css` table.
+  // The stylesheet text was by far the largest share of `deps` storage; the
+  // hashed form keeps the dependency identity (and the realm's ability to
+  // serve the stylesheet — by hash lookup) without carrying the bytes in
+  // every referencing row. Non-scoped-CSS deps, already-hashed deps, and
+  // unparseable entries pass through verbatim.
+  private async internScopedCSSDeps(deps: string[]): Promise<string[]> {
+    let toInsert: { hash: string; css: string }[] = [];
+    let rewritten = deps.map((dep) => {
+      if (
+        typeof dep !== 'string' ||
+        !isScopedCSSRequest(dep) ||
+        isHashedScopedCSSRequest(dep)
+      ) {
+        return dep;
+      }
+      let parsed: ReturnType<typeof parseScopedCSSRequest>;
+      try {
+        parsed = parseScopedCSSRequest(dep);
+      } catch (_err) {
+        return dep;
+      }
+      if (parsed.form !== 'inline') {
+        return dep;
+      }
+      let hash = md5(parsed.css);
+      if (!this.#internedScopedCSSHashes.has(hash)) {
+        this.#internedScopedCSSHashes.add(hash);
+        toInsert.push({ hash, css: parsed.css });
+      }
+      return encodeHashedScopedCSSRequest(parsed.fromFile, hash);
+    });
+    // Modest chunks: each value carries a whole stylesheet, and a from-scratch
+    // pass interns at most one row per distinct stylesheet in the realm.
+    // The upsert refreshing `last_interned_at` on conflict is load-bearing:
+    // the scheduled GC's grace window (see `sweepUnreferencedScopedCSS`)
+    // relies on every intern — including one whose bytes were already
+    // stored — marking the row recently touched, so a pass that re-interns a
+    // currently-unreferenced row protects it until the pass promotes.
+    const rowsPerUpsert = 20;
+    for (let i = 0; i < toInsert.length; i += rowsPerUpsert) {
+      let slice = toInsert.slice(i, i + rowsPerUpsert);
+      let expressions = slice.map(({ hash, css }) =>
+        asExpressions({
+          realm_url: this.realmURL.href,
+          hash,
+          css,
+          last_interned_at: Date.now(),
+        }),
+      );
+      await this.#query([
+        ...upsertMultipleRows(
+          'scoped_css',
+          'scoped_css_pkey',
+          expressions[0].nameExpressions,
+          expressions.map((e) => e.valueExpressions),
+        ),
+      ]);
+    }
+    return rewritten;
   }
 
   private updateIds(obj: any, fromRealm: URL) {

@@ -38,6 +38,7 @@ import {
   Type,
   typeIsOneOf,
   typeOf,
+  ownValue,
 } from './utils/utils.ts';
 import { generateObjects } from './generateObjects.ts';
 import { generateCombinations } from './generateCombinations.ts';
@@ -95,7 +96,7 @@ function accessStaticStringPath(value: unknown, path: string[]): unknown {
       continue;
     }
     if (typeof current === 'object' && !Array.isArray(current)) {
-      current = (current as Record<string, unknown>)[key] ?? null;
+      current = ownValue(current, key);
       continue;
     }
     current = access(current, key);
@@ -924,7 +925,7 @@ class Environment {
                     ? [key]
                     : collectValues(this.evaluate(key, single(item))),
                   value === undefined
-                    ? [item.value[key]]
+                    ? [access(item.value, key)]
                     : collectValues(this.evaluate(value, single(item))),
                 ];
               }),

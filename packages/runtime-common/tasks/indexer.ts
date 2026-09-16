@@ -22,6 +22,7 @@ import {
 } from '../jobs/indexing.ts';
 import {
   enqueuePrerenderHtmlJob,
+  mergePrerenderHtmlChanges,
   skipsPrerenderHtml,
 } from '../jobs/prerender-html.ts';
 import type { Stats, IndexPhaseTimings } from '../worker.ts';
@@ -64,6 +65,35 @@ export interface IncrementalArgs extends WorkerArgs {
   // WorkerArgs's JSON-shape index signature; a job from an older publisher
   // parses as `{}`.
   revisions: Record<string, string>;
+  // When true, this pass enqueues no prerender_html job of its own: it
+  // returns its invalidation set on `deferredPrerenderHtml` instead, for a
+  // later pass in the same write to carry. Set by the module→instance flush
+  // inside a mixed batch write, whose dependents include the very instances
+  // the write is about to overwrite — rendering them now would render content
+  // that is already stale, and the write's own pass renders them again
+  // moments later. False on every other index path. Non-optional, like
+  // FromScratchArgs's `clearLastModified`, so the args object still satisfies
+  // WorkerArgs's JSON-shape index signature (which rejects `undefined`).
+  deferPrerenderHtml: boolean;
+  // Invalidation sets deferred by earlier passes of the same write, unioned
+  // into the prerender_html job this pass spawns so one write pays for one
+  // render of each URL. The URLs ride at THIS pass's generation and loader
+  // epoch, which is correct: the render reads current source, so the newest
+  // pass's stamp is the right one for every merged URL — the same rule
+  // `choosePrerenderHtmlCoalesceDecision` applies when it merges two publishes.
+  // Empty on every other index path; see `deferPrerenderHtml` for why it is
+  // not optional.
+  carriedPrerenderHtmlChanges: IncrementalChange[];
+}
+
+// An invalidation set an index pass computed but deliberately did not enqueue
+// a prerender_html job for. The generation and loader epoch are the spawning
+// pass's own, needed only when nothing carries the set forward and the caller
+// has to enqueue it directly.
+export interface DeferredPrerenderHtml extends JSONTypes.Object {
+  changes: IncrementalChange[];
+  generation: number;
+  loaderEpoch: string;
 }
 
 export interface IncrementalResult {
@@ -83,6 +113,10 @@ export interface IncrementalResult {
   // Between-visit phase decomposition of the job wall (see IndexPhaseTimings).
   // Optional so a result from a worker predating the instrumentation parses.
   phaseTimings?: IndexPhaseTimings;
+  // Present only when the job ran with `deferPrerenderHtml`: the invalidation
+  // set no prerender_html job was enqueued for. The caller either carries it
+  // into a later pass of the same write or enqueues it itself.
+  deferredPrerenderHtml?: DeferredPrerenderHtml;
 }
 
 export interface IncrementalDoneResult extends IncrementalResult {
@@ -198,6 +232,8 @@ function parseIncrementalArgsForCoalesce(
     changes,
     coalescedCallers,
     revisions,
+    deferPrerenderHtml,
+    carriedPrerenderHtmlChanges,
   } = args;
   if (
     typeof realmURL !== 'string' ||
@@ -218,6 +254,12 @@ function parseIncrementalArgsForCoalesce(
     revisions: isObjectLike(revisions)
       ? (revisions as Record<string, string>)
       : {},
+    // Read loosely: a job enqueued by a worker predating these fields has
+    // neither, and dropping them here would silently un-defer that job.
+    deferPrerenderHtml: deferPrerenderHtml === true,
+    carriedPrerenderHtmlChanges: Array.isArray(carriedPrerenderHtmlChanges)
+      ? (carriedPrerenderHtmlChanges as IncrementalChange[])
+      : [],
   };
 }
 
@@ -307,6 +349,18 @@ function chooseIncrementalCoalesceDecision(
           revisions: mergeIncrementalRevisions(
             existingArgs.revisions,
             incomingArgs.revisions,
+          ),
+          // AND, not OR: a caller that did not ask to defer is waiting for
+          // this pass to enqueue the render. Deferring on its behalf would
+          // hand the set to a write that has no later pass to fold it into.
+          // The merged job therefore only defers when every caller wants it
+          // to, and the un-deferred case loses nothing — the job it spawns
+          // renders the union below.
+          deferPrerenderHtml:
+            existingArgs.deferPrerenderHtml && incomingArgs.deferPrerenderHtml,
+          carriedPrerenderHtmlChanges: mergePrerenderHtmlChanges(
+            existingArgs.carriedPrerenderHtmlChanges,
+            incomingArgs.carriedPrerenderHtmlChanges,
           ),
         },
       },
@@ -580,6 +634,14 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
     );
     let auth = createPrerenderAuth(userId, prerenderPermissions);
 
+    let deferPrerenderHtml = args.deferPrerenderHtml === true;
+    let carriedPrerenderHtmlChanges = Array.isArray(
+      args.carriedPrerenderHtmlChanges,
+    )
+      ? args.carriedPrerenderHtmlChanges
+      : [];
+    let deferredPrerenderHtml: DeferredPrerenderHtml | undefined;
+
     let _fetch = await getAuthedFetch(args);
     let reader = getReader(_fetch, realmURL);
     let currentRun = new IndexRunner({
@@ -600,13 +662,32 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
         generation,
         loaderEpoch,
       }) => {
+        let changes = htmlChanges.map(({ url, operation }) => ({
+          url,
+          operation,
+        }));
+        if (deferPrerenderHtml) {
+          // The caller owns this set now — either it carries it into a later
+          // pass of the same write, or it enqueues the job itself. Anything
+          // an earlier pass handed us rides along rather than being dropped
+          // on the floor by a pass that enqueues nothing.
+          deferredPrerenderHtml = {
+            changes: mergePrerenderHtmlChanges(
+              carriedPrerenderHtmlChanges,
+              changes,
+            ),
+            generation,
+            loaderEpoch,
+          };
+          return;
+        }
         enqueuePrerenderHtmlJob(queuePublisher, {
           realmURL,
           realmUsername,
-          changes: htmlChanges.map(({ url, operation }) => ({
-            url,
-            operation,
-          })),
+          changes: mergePrerenderHtmlChanges(
+            carriedPrerenderHtmlChanges,
+            changes,
+          ),
           generation,
           loaderEpoch,
           spawningJobId: jobInfo?.jobId ?? null,
@@ -658,6 +739,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       stats,
       ...(generation !== undefined ? { generation } : {}),
       ...(phaseTimings !== undefined ? { phaseTimings } : {}),
+      ...(deferredPrerenderHtml !== undefined ? { deferredPrerenderHtml } : {}),
     };
   };
 

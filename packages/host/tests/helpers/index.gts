@@ -384,6 +384,36 @@ export async function withSlowSave(
   }
 }
 
+// Holds every save the callback triggers until the callback returns, then
+// releases them and waits for them to land. The callback therefore runs inside a
+// window where a mutation has been applied locally and no save can have reached
+// the realm, and the caller has the persisted result the moment this helper
+// resolves — neither side times a realm write against a wall clock.
+export async function withHeldSave(cb: () => Promise<void>): Promise<void> {
+  let store = getService('store');
+  let originalPersist = (store as any).persistAndUpdate as (
+    instance: CardDef,
+    opts?: unknown,
+  ) => Promise<unknown>;
+  let release: (() => void) | undefined;
+  let released = new Promise<void>((resolve) => (release = resolve));
+  let heldSaves: Promise<unknown>[] = [];
+  (store as any).persistAndUpdate = (instance: CardDef, opts?: unknown) => {
+    let heldSave = released.then(() =>
+      originalPersist.call(store, instance, opts),
+    );
+    heldSaves.push(heldSave);
+    return heldSave;
+  };
+  try {
+    await cb();
+  } finally {
+    (store as any).persistAndUpdate = originalPersist;
+    release?.();
+    await Promise.allSettled(heldSaves);
+  }
+}
+
 export async function waitForSyntaxHighlighting(
   textContent: string,
   color: string,
@@ -1245,6 +1275,7 @@ export async function setupIntegrationTestRealm({
   permissions,
   mockMatrixUtils,
   skipBootIndex,
+  liveReadsResolveLinksOnly,
   startMatrix = true,
   fileSizeLimitBytes,
   audioSizeLimitBytes,
@@ -1263,6 +1294,10 @@ export async function setupIntegrationTestRealm({
   // Not the default: a test that queries, or that reads a card by id through
   // the store, needs the index populated and fails without it.
   skipBootIndex?: true;
+  // Serve card reads the way a realm configured for links-only live reads
+  // does: relationships carry their links, but the targets behind them are
+  // not side-loaded into `included`, so the reader resolves each one itself.
+  liveReadsResolveLinksOnly?: true;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
   audioSizeLimitBytes?: number;
@@ -1279,6 +1314,7 @@ export async function setupIntegrationTestRealm({
     permissions: permissions as RealmPermissions,
     mockMatrixUtils,
     skipBootIndex,
+    liveReadsResolveLinksOnly,
     startMatrix,
     fileSizeLimitBytes,
     audioSizeLimitBytes,
@@ -1362,6 +1398,7 @@ async function setupTestRealm({
   permissions = { '*': ['read', 'write'] },
   mockMatrixUtils,
   skipBootIndex,
+  liveReadsResolveLinksOnly,
   startMatrix = true,
   fileSizeLimitBytes,
   audioSizeLimitBytes,
@@ -1373,6 +1410,7 @@ async function setupTestRealm({
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
   skipBootIndex?: true;
+  liveReadsResolveLinksOnly?: true;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
   audioSizeLimitBytes?: number;
@@ -1478,7 +1516,10 @@ async function setupTestRealm({
     // one into the first argument type-checks — object spreads bypass
     // excess-property checking — and is then dropped by a destructuring that
     // never names it, so the option silently does nothing.
-    { ...(skipBootIndex ? { skipBootIndex } : {}) },
+    {
+      ...(skipBootIndex ? { skipBootIndex } : {}),
+      ...(liveReadsResolveLinksOnly ? { liveReadsResolveLinksOnly } : {}),
+    },
   );
 
   // Register the realm early so realm-server mock _info lookups can resolve

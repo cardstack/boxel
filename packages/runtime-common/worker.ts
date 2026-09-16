@@ -320,6 +320,8 @@ export class Worker {
         ),
       'media-cache-gc': () =>
         this.#queue.register(`media-cache-gc`, Tasks['mediaCacheGc'](taskArgs)),
+      'scoped-css-gc': () =>
+        this.#queue.register(`scoped-css-gc`, Tasks['scopedCssGc'](taskArgs)),
       'copy-index': () =>
         this.#queue.register(`copy-index`, Tasks['copy'](taskArgs)),
       'lint-source': () =>

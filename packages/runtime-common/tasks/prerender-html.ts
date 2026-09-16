@@ -12,6 +12,7 @@ import {
   type QueueCoalesceDecision,
 } from '../queue.ts';
 import { runPrerenderHtmlPass } from '../index-runner/prerender-html-visit.ts';
+import { mergePrerenderHtmlChanges } from '../jobs/prerender-html.ts';
 import {
   ensureRealmOwnerPermissions,
   incrementalChangesCover,
@@ -109,30 +110,6 @@ function parsePrerenderHtmlArgsForCoalesce(
       typeof coalescedPublishes === 'number' ? coalescedPublishes : null,
     preWarm: preWarm === true,
   };
-}
-
-// When two publishes carry the same URL, the merged job keeps 'update':
-// the render consults disk truth, so an update-tagged URL whose file is
-// gone still lands as a tombstone (the visit writes nothing over the
-// up-front tombstone), while a delete-tagged URL is never visited at all —
-// so a delete from one pass must not swallow a later pass's re-create, or
-// the re-created card's HTML would stay tombstoned at a generation the
-// index channel considers current.
-function mergePrerenderHtmlChanges(
-  existing: IncrementalChange[],
-  incoming: IncrementalChange[],
-): IncrementalChange[] {
-  let byUrl = new Map<string, IncrementalChange>();
-  for (let change of [...existing, ...incoming]) {
-    let previous = byUrl.get(change.url);
-    if (
-      !previous ||
-      (previous.operation === 'delete' && change.operation === 'update')
-    ) {
-      byUrl.set(change.url, change);
-    }
-  }
-  return [...byUrl.values()];
 }
 
 // Modeled on `chooseIncrementalCoalesceDecision`: a same-realm pending

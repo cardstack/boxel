@@ -1,5 +1,3 @@
-import { waitUntil } from '@ember/test-helpers';
-
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -12,7 +10,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
-  withSlowSave,
+  withHeldSave,
   type TestContextWithSave,
 } from '../../helpers';
 import {
@@ -158,8 +156,53 @@ module('Integration | Command | patch-fields', function (hooks) {
   });
 
   module('Optimistic persistence behavior', function () {
+    test<TestContextWithSave>('the patch hands the save to the background', async function (assert) {
+      assert.expect(1);
+
+      let patchFieldsCommand = new PatchFieldsTool(toolService.toolContext, {
+        cardType: AuthorDef,
+      });
+      let cardId = `${testRealmURL}Author/john`;
+      let store = getService('store');
+
+      let patchOptions: Parameters<StoreService['patch']>[2];
+      let originalPatch = store.patch;
+      store.patch = async function (
+        this: StoreService,
+        id,
+        patch,
+        opts: {
+          doNotPersist?: true;
+          doNotWaitForPersist?: true;
+          clientRequestId?: string;
+        },
+      ) {
+        patchOptions = opts;
+        return await originalPatch.call(this, id, patch, opts);
+      };
+
+      try {
+        await patchFieldsCommand.execute({
+          cardId,
+          fieldUpdates: { firstName: 'Jane Background' },
+        });
+      } finally {
+        store.patch = originalPatch;
+      }
+
+      // Asserted against a save that runs normally, so a patch that starts
+      // awaiting persistence again reports it here as this one failed
+      // assertion. The held-save test below shares the guarantee but cannot
+      // report on it: holding the save that such a patch awaits deadlocks it,
+      // and it surfaces as a stalled test naming nothing in particular.
+      assert.true(
+        patchOptions?.doNotWaitForPersist,
+        'store.patch receives doNotWaitForPersist option',
+      );
+    });
+
     test<TestContextWithSave>('patches do not await persistence', async function (assert) {
-      assert.expect(6);
+      assert.expect(7);
 
       let patchFieldsCommand = new PatchFieldsTool(toolService.toolContext, {
         cardType: AuthorDef,
@@ -191,7 +234,7 @@ module('Integration | Command | patch-fields', function (hooks) {
       };
 
       try {
-        await withSlowSave(100, async () => {
+        await withHeldSave(async () => {
           let result = await patchFieldsCommand.execute({
             cardId,
             fieldUpdates: {
@@ -224,7 +267,16 @@ module('Integration | Command | patch-fields', function (hooks) {
         'store.patch receives doNotWaitForPersist option',
       );
 
-      await waitUntil(() => saves > 0);
+      // `withHeldSave` releases the save it held and waits for it, so the
+      // background persist is already complete — there is nothing left to poll
+      // for. The store's save state rides along in the message so a save that
+      // failed rather than completed says so on the spot.
+      assert.true(
+        saves > 0,
+        `the background save completed (store save state: ${JSON.stringify(
+          store.getSaveState(cardId),
+        )})`,
+      );
 
       let persistedCard = await store.get(cardId);
       if (isCard(persistedCard)) {

@@ -190,11 +190,15 @@ export interface FileMetaResource {
   };
 }
 
-// A scoped stylesheet referenced by an `html` rendering. The scoped-CSS
-// URL base64-embeds the whole stylesheet, so it travels exactly once here in
-// `attributes.href` (the host loads it via `loader.import`); the `id` is a
-// stable content hash of that URL (see `cssResourceId`) so `styles.data[].id`
-// references stay short and `included` dedupes identical stylesheets for free.
+// A scoped stylesheet referenced by an `html` rendering. `attributes.href` is
+// the scoped-CSS module URL the host loads via `loader.import` — hashed form
+// (`…md5-<hash>.glimmer-scoped.css`, rooted under the answering realm's
+// `_scoped-css/` space and served from its `scoped_css` table) for indexed
+// deps, or inline form (the whole stylesheet base64-embedded in the URL,
+// loaded with no network hop) for rows indexed before interning. The `id` is
+// a stable content hash of that URL (see `cssResourceId`) so
+// `styles.data[].id` references stay short and `included` dedupes identical
+// stylesheets for free.
 export interface CssResource {
   id: string;
   type: typeof CssResourceType;

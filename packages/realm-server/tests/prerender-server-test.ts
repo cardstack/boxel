@@ -1416,6 +1416,177 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      // The gateway-failure verdict, on the same write-site contract as the
+      // stale-shell one but reached a different way: it keys on the
+      // `gatewayFailure` marker the fetch boundary stamps, not on the error
+      // status. A render fetched the card's document through the balancer, got
+      // a 502, and had that latched as the card's verdict; the marker is what
+      // tells that transient network event apart from a genuinely broken card.
+      test('a gateway-marked card error marks the failure unattributable', async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'b778fe76',
+          awaitHostShellRecycle: () => Promise.resolve(),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        (built.prerenderer as any).prerenderVisit = async () => ({
+          response: {
+            card: {
+              error: {
+                error: {
+                  message: 'Gateway or network failure',
+                  status: 502,
+                  gatewayFailure: true,
+                },
+              },
+            },
+          },
+          timings: timings(),
+          pool: poolMeta(),
+        });
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}gateway-502`,
+          authFor(),
+        );
+        assert.strictEqual(res.status, 201, 'the failure is still returned');
+        assert.deepEqual(
+          res.body.data.attributes.meta.diagnostics.gatewayFailure,
+          ['instance'],
+          'marked, and scoped to the row whose fetch hit the balancer',
+        );
+        await built.prerenderer.stop();
+      });
+
+      test('a gateway failure withholds only its row, not one that failed for its own reasons', async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'b778fe76',
+          awaitHostShellRecycle: () => Promise.resolve(),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        (built.prerenderer as any).prerenderVisit = async () => ({
+          response: {
+            card: {
+              error: {
+                error: {
+                  message: 'Gateway or network failure',
+                  status: 503,
+                  gatewayFailure: true,
+                },
+              },
+            },
+            fileExtract: {
+              error: {
+                error: { message: 'Unexpected end of JSON input', status: 500 },
+              },
+            },
+          },
+          timings: timings(),
+          pool: poolMeta(),
+        });
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}gateway-and-file`,
+          authFor(),
+        );
+        assert.deepEqual(
+          res.body.data.attributes.meta.diagnostics.gatewayFailure,
+          ['instance'],
+          "only the card's row is withheld; the file's own 500 stays visible",
+        );
+        await built.prerenderer.stop();
+      });
+
+      test('a genuine card error carrying no gateway marker is not marked', async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'b778fe76',
+          awaitHostShellRecycle: () => Promise.resolve(),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        (built.prerenderer as any).prerenderVisit = async () => ({
+          response: {
+            card: {
+              error: {
+                error: { message: 'the card is genuinely broken', status: 500 },
+              },
+            },
+          },
+          timings: timings(),
+          pool: poolMeta(),
+        });
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}genuine-500`,
+          authFor(),
+        );
+        assert.notOk(
+          res.body.data.attributes.meta.diagnostics.gatewayFailure,
+          'a 500 is the card, not the network — the break stays visible',
+        );
+        await built.prerenderer.stop();
+      });
+
+      // The status alone would misclassify this: a render timeout is a 504,
+      // carrying the same number a balancer idle-timeout does. It comes from the
+      // card render — a template or query fan-out too slow to finish — and never
+      // gets the `gatewayFailure` marker, so it must not be withheld. Withholding
+      // it would drop exactly the cards that most need to stay visible off every
+      // `has_error`-driven surface.
+      test('a render-timeout 504 is not marked as a gateway failure', async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'b778fe76',
+          awaitHostShellRecycle: () => Promise.resolve(),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        (built.prerenderer as any).prerenderVisit = async () => ({
+          response: {
+            card: {
+              error: {
+                error: {
+                  message: 'Render timeout',
+                  title: 'Render timeout',
+                  status: 504,
+                },
+              },
+            },
+            pageUnusableError: {
+              error: {
+                message: 'Render timeout',
+                title: 'Render timeout',
+                status: 504,
+              },
+            },
+          },
+          timings: timings(),
+          pool: poolMeta(),
+        });
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}render-timeout`,
+          authFor(),
+        );
+        assert.notOk(
+          res.body.data.attributes.meta.diagnostics.gatewayFailure,
+          'a 504 the card render produced stays visible — only a marked fetch failure is withheld',
+        );
+        await built.prerenderer.stop();
+      });
+
       test('a rejecting re-render answers 500 so the visit is retried elsewhere', async function (assert) {
         let built = buildPrerenderApp({
           serverURL: 'http://127.0.0.1:4222',

@@ -335,6 +335,14 @@
    PRIMARY KEY ( id )
 );
 
+ CREATE TABLE IF NOT EXISTS realm_type_generations (
+   realm_url TEXT NOT NULL,
+   type_key TEXT NOT NULL,
+   index_generation INTEGER DEFAULT 0 NOT NULL,
+   html_generation INTEGER DEFAULT 0 NOT NULL,
+   PRIMARY KEY ( realm_url, type_key )
+);
+
  CREATE TABLE IF NOT EXISTS realm_user_permissions (
    realm_url TEXT NOT NULL,
    username TEXT NOT NULL,
@@ -342,6 +350,14 @@
    write BOOLEAN NOT NULL,
    realm_owner BOOLEAN DEFAULT false NOT NULL,
    PRIMARY KEY ( realm_url, username )
+);
+
+ CREATE TABLE IF NOT EXISTS scoped_css (
+   realm_url TEXT NOT NULL,
+   hash TEXT NOT NULL,
+   css TEXT NOT NULL,
+   last_interned_at NOT NULL,
+   PRIMARY KEY ( realm_url, hash )
 );
 
  CREATE TABLE IF NOT EXISTS unlisted_realm_paths (

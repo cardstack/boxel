@@ -13,6 +13,7 @@ import {
   mergeErrorsByGeneration,
   ri,
   rri,
+  sweepUnreferencedScopedCSS,
   type FileEntry,
   type LooseCardResource,
   type IndexedInstance,
@@ -202,6 +203,92 @@ module('Unit | index-writer', function (hooks) {
     assert.true(rebuilt.currentGeneration > batch.currentGeneration);
     await rebuilt.done();
     assert.false(await indexWriter.isNewIndex(testRealmURLObject));
+  });
+
+  // The sweep's only call site (IndexRunner.fromScratch finalization)
+  // degrades any error to a log warning, so this direct test — the SQLite
+  // twin of the Postgres one in realm-server's indexing-test — is what turns
+  // a broken scan or delete red.
+  test('sweepUnreferencedScopedCSS drops rows no live row references, scoped to the given realm', async function (assert) {
+    let liveHash = '1'.repeat(32);
+    let tombstonedHash = '2'.repeat(32);
+    let orphanHash = '3'.repeat(32);
+    let foreignHash = '4'.repeat(32);
+    let prerenderedOnlyHash = '5'.repeat(32);
+    let freshHash = '6'.repeat(32);
+    let hashedDep = (hash: string) =>
+      `${testRealmURL}style-source.gts.md5-${hash}.glimmer-scoped.css`;
+    await setupIndex(
+      adapter,
+      [
+        { realm_url: testRealmURL, current_generation: 1 },
+        { realm_url: testRealmURL2, current_generation: 1 },
+      ],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          realm_url: testRealmURL,
+          deps: [hashedDep(liveHash)],
+        },
+        {
+          url: `${testRealmURL}2.json`,
+          realm_url: testRealmURL,
+          is_deleted: true,
+          deps: [hashedDep(tombstonedHash)],
+        },
+        {
+          url: `${testRealmURL2}A.json`,
+          realm_url: testRealmURL2,
+          deps: [hashedDep(foreignHash)],
+        },
+      ],
+    );
+    // A hash reachable only through `prerendered_html` — the shape an error
+    // row's last-known-good render leaves behind when the `boxel_index` row
+    // no longer carries the dep. It must count as referenced, or the sweep
+    // would reclaim CSS a served render still loads.
+    await adapter.execute(
+      `INSERT INTO prerendered_html (url, file_alias, realm_url, type, generation, last_known_good_deps)
+       VALUES ('${testRealmURL}3.json', '${testRealmURL}3.json', '${testRealmURL}', 'instance', 1,
+               '${JSON.stringify([hashedDep(prerenderedOnlyHash)])}')`,
+    );
+    let sweepable = Date.now() - 2 * 24 * 60 * 60 * 1000;
+    for (let [realmUrl, hash, lastInternedAt] of [
+      [testRealmURL, liveHash, sweepable],
+      [testRealmURL, tombstonedHash, sweepable],
+      [testRealmURL, orphanHash, sweepable],
+      [testRealmURL, prerenderedOnlyHash, sweepable],
+      // Unreferenced but interned within the grace window — the state of a
+      // hash an unpromoted index pass is still about to reference.
+      [testRealmURL, freshHash, Date.now()],
+      [testRealmURL2, foreignHash, sweepable],
+    ] as [string, string, number][]) {
+      await adapter.execute(
+        `INSERT INTO scoped_css (realm_url, hash, css, last_interned_at)
+         VALUES ('${realmUrl}', '${hash}', '.x {}', ${lastInternedAt})`,
+      );
+    }
+
+    let swept = await sweepUnreferencedScopedCSS(adapter, testRealmURL);
+
+    assert.strictEqual(
+      swept,
+      2,
+      'the orphan and the tombstone-only rows were swept',
+    );
+    let remaining = (await adapter.execute(
+      `SELECT realm_url, hash FROM scoped_css ORDER BY hash`,
+    )) as { realm_url: string; hash: string }[];
+    assert.deepEqual(
+      remaining,
+      [
+        { realm_url: testRealmURL, hash: liveHash },
+        { realm_url: testRealmURL2, hash: foreignHash },
+        { realm_url: testRealmURL, hash: prerenderedOnlyHash },
+        { realm_url: testRealmURL, hash: freshHash },
+      ],
+      "the live-referenced, prerendered-only-referenced, within-grace, and other realm's rows survived",
+    );
   });
 
   test('can perform invalidations for a instance entry', async function (assert) {
