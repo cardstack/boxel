@@ -639,6 +639,15 @@ export interface CardStore {
   realmForId(id: string): string | undefined;
   getCard(url: string): CardDef | undefined;
   getFileMeta(url: string): FileDef | undefined;
+  // Whether an instance this store is already holding for `url` is current
+  // enough to hand to a link edge in place of a fresh load. The property a
+  // store has to make good on is that what it holds still reflects the realm:
+  // either it drops what it holds when its view of the realm moves, or it
+  // reloads what it holds when the realm says a file changed. A store that
+  // offers neither — or one asked about a target whose changes it would never
+  // hear about — answers false, and the edge loads for itself. Absent means
+  // false, so a store with no opinion never serves a held instance to a link.
+  canReuseResidentInstance?(url: string): boolean;
   setCard(url: string, instance: CardDef): void;
   setFileMeta(url: string, instance: FileDef): void;
   setCardNonTracked(id: string, instance: CardDef): void;
@@ -4369,48 +4378,50 @@ function lazilyLoadLink(
   });
   void (async () => {
     let isFileLink = isFileDef(field.card);
+    // A field getter is what calls this, and the getter runs inside a render.
+    // Everything below writes the field and notifies card tracking, which a
+    // render that has already read that field treats as a backtracking
+    // re-render and rejects. Yielding here puts every one of those writes in a
+    // later microtask, whichever branch produced the value: a branch that
+    // loads yields on its own fetch, and a branch that hands over an instance
+    // the store already holds has nothing of its own to wait for.
+    await Promise.resolve();
     try {
       let fieldValue: CardDef | FileDef;
-      // Inside an indexing render the store is scoped to the realm view being
-      // rendered: it drops every instance it holds when the render scope moves
-      // (the host store's `observeIndexingJob`, called before a render
-      // hydrates its card and from the load path — not a member of the
-      // `CardStore` interface in this file), so every instance in it was
-      // deserialized
-      // against THIS view of the realm's files. Note it is that drop which
-      // carries the guarantee, not the `clearCache` reset — that one is
-      // scheduled only when a pass invalidates an executable, and reaches only
-      // the single tab its visit lands on, so a pass that changed only
-      // instances schedules none at all.
-      // So an instance already in the store is current — reuse it directly
-      // instead of re-fetching its card+source and re-running the full field
+      // Hand over an instance the store is already holding instead of
+      // re-fetching its card+source and re-running the full field
       // deserialization on every link edge that points at it. That per-edge
-      // redundancy is what makes a densely cross-linked render quadratic (the
-      // same target reached through many parents is rebuilt once per parent).
-      // The per-consumer dependency is still recorded so invalidation tracks
-      // this edge. Gated on BOTH the render flag AND `__boxelJobId` — the same
-      // gate the store scopes itself on: outside a render (the live app) a link
-      // may be stale after invalidation and must reload, and a render carrying
-      // no job id is one whose store never scoped itself, so it offers no
-      // guarantee to reuse on.
-      let inIndexingRender =
-        typeof globalThis !== 'undefined' &&
-        Boolean((globalThis as any).__boxelRenderContext) &&
-        Boolean((globalThis as any).__boxelJobId);
-      let reusable = inIndexingRender
+      // redundancy is what makes a densely cross-linked render quadratic — the
+      // same target reached through many parents is rebuilt once per parent —
+      // and it costs the most on a search, whose results routinely share
+      // targets. The per-consumer dependency is still recorded either way, so
+      // invalidation tracks this edge.
+      //
+      // Whether what the store holds is current enough to stand in for a load
+      // is the store's own question, so the store answers it rather than this
+      // module inferring it from render globals. What this adds is reuse
+      // across time — an edge asking after an earlier one has already settled.
+      // Edges asking at the same moment are collapsed by the loads still in
+      // flight, both the per-instance map above and the store's own per-URL
+      // one, and this leaves both of those doing their job.
+      let reusable = store.canReuseResidentInstance?.(reference)
         ? isFileLink
           ? store.getFileMeta(reference)
           : store.getCard(reference)
         : undefined;
-      // Only reuse an instance that finished deserializing. The job-scoped
-      // store also holds partially-built, non-tracked instances: a failed
-      // `_updateFromSerialized` leaves its half-built instance behind (the
-      // store keeps it so cyclic deserialization can resolve), with
-      // `isSavedInstance` still false — it flips true only at the end of a
-      // successful deserialize. Reusing such a partial would skip the
-      // load/error path that plants the broken-link sentinel and index an
-      // incomplete target; falling through re-attempts the load and re-plants
-      // the sentinel.
+      // Whether the held instance finished deserializing is part of what the
+      // store answers above, and it has to be: a deserialize plants its
+      // instance before it builds any field and leaves a failed one in place
+      // so cyclic deserialization can still resolve it, and nothing on the
+      // instance records which of those it is. `isSavedInstance` reads like
+      // that record and is not one — a `FileDef` carries it true from its
+      // class body and never has it cleared, and the link deserializers stamp
+      // it true on any resident instance they hand back without checking. It
+      // stays here as a narrowing on the card branch, not as the answer.
+      //
+      // Reusing a partial would skip the load/error path that plants the
+      // broken-link sentinel and hand the reader an incomplete target;
+      // falling through re-attempts the load and re-plants the sentinel.
       if (
         reusable &&
         reusable[isSavedInstance] === true &&

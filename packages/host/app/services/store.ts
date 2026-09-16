@@ -2182,6 +2182,7 @@ export default class StoreService extends Service implements StoreInterface {
       this.network.virtualNetwork,
       {
         resolvesQueryFieldsEagerly: () => this.resolvesQueryFieldsEagerly(),
+        receivesIndexEventsFor: (id) => this.receivesIndexEventsFor(id),
         getSearchResource: (parent, getQuery, getRealms, opts) =>
           this.getSearchResource(parent, getQuery, getRealms, opts),
       },
@@ -2208,6 +2209,45 @@ export default class StoreService extends Service implements StoreInterface {
       return false;
     }
     return !this.isRenderStore;
+  }
+
+  // Whether this store would hear that `id` was re-indexed — the signal
+  // `handleInvalidations` turns into a reload of what it is holding. It hears
+  // it only for the realms it subscribed to, and it subscribes per referenced
+  // instance (`addReference`), so the realms whatever is on screen was read
+  // from are covered while one reached only by following a link out of them is
+  // not. Host mode subscribes to nothing, so nothing there qualifies. A local
+  // id names an instance no realm has indexed, and a reference the realm
+  // mappings can't place names one this store could not be told about either
+  // way.
+  protected receivesIndexEventsFor(id: string): boolean {
+    // A render store is only ever asked this outside a render scope, where the
+    // scoping that makes its residency trustworthy is not in force. It renders
+    // as a pure function of the documents it was handed, so it claims nothing
+    // there.
+    if (this.isRenderStore) {
+      return false;
+    }
+    if (isLocalId(id)) {
+      return false;
+    }
+    // Folded to the same spelling `addReference` subscribed under, so a
+    // reference arriving as one of an id's other aliases still finds the
+    // subscription taken out for it.
+    //
+    // Deliberately this lookup and not `realmForId`: the question is not which
+    // realm holds the id, it is whether this store subscribed to that realm,
+    // and only the spelling `subscribeToRealm` resolved can answer it. A realm
+    // whose registry key is an alias — the base realm, keyed by its virtual
+    // url while ids fold to the serving one — resolves through neither, so it
+    // is absent from `subscriptions` and answers false here. That is the
+    // property being reported rather than a gap in it: naming such a realm by
+    // a spelling this lookup does resolve would claim coverage that no
+    // subscription backs, and the store would reuse instances nothing reloads.
+    let realmURL = this.realm.realmOf(
+      rri(asURL(id, this.network.virtualNetwork)),
+    );
+    return realmURL != null && this.subscriptions.has(realmURL);
   }
 
   private handleInvalidations = (event: RealmEventContent) => {
@@ -2489,21 +2529,64 @@ export default class StoreService extends Service implements StoreInterface {
   // normalized URL, which is the form an invalidation carries.
   private hasInflightCardLoad(id: string): boolean {
     let url = asURL(id, this.network.virtualNetwork);
-    return url ? this.inflightGetCards.has(url) : false;
+    if (url && this.inflightGetCards.has(url)) {
+      return true;
+    }
+    // A lazy link edge fetches through the card store rather than this read
+    // map, so an id whose first read is a link resolution appears nowhere
+    // above. Without this it reads as an id nothing ever tried to load, and
+    // the invalidation is dropped — leaving the document that fetch is about
+    // to return, read before the write this event announces, as what the store
+    // keeps.
+    return this.#cardDocLoadInFlight(id) !== undefined;
   }
 
-  // Wait out the in-flight read of `id`, then reload it if what it produced was
-  // an awaiting-index placeholder. That placeholder is the store's promise that
-  // the card will appear on its own, and the event that would have kept the
-  // promise is the one already being handled — it arrived too early to find
-  // anything to reload.
+  #cardDocLoadInFlight(id: string): Promise<unknown> | undefined {
+    return (
+      this.store as unknown as {
+        cardDocLoadInFlight?: (url: string) => Promise<unknown> | undefined;
+      }
+    ).cardDocLoadInFlight?.(id);
+  }
+
+  // Wait out whichever read of `id` was in flight, then decide what the store
+  // is left holding.
+  //
+  // An awaiting-index placeholder is the store's promise that the card will
+  // appear on its own, and the event that would have kept the promise is the
+  // one already being handled — it arrived too early to find anything to
+  // reload.
+  //
+  // A settled link resolution leaves something stronger and staler: an
+  // instance built from a document fetched before the write this event
+  // announces, which every later edge to that target is then entitled to
+  // reuse. No further event names that id, so this is the only occasion to
+  // re-read it.
   private reloadAfterInflightLoad = task(async (id: string) => {
     let url = asURL(id, this.network.virtualNetwork);
     let inflight = url ? this.inflightGetCards.get(url) : undefined;
     if (inflight) {
       await inflight;
     }
+    let docLoad = this.#cardDocLoadInFlight(id);
+    if (docLoad) {
+      // The deserialize that consumes this document is chained onto it, so
+      // settle the microtask queue before reading what it produced.
+      await docLoad.catch(() => {});
+      await Promise.resolve();
+    }
     if (this.peekError(id)?.awaitingIndex) {
+      this.loadInstanceTask.perform(id);
+      return;
+    }
+    // Only when the read actually produced something. A link resolution that
+    // 404s plants its sentinel and leaves the store empty for this id, and
+    // re-reading an id the store holds nothing for would fetch a row that is
+    // still absent.
+    if (docLoad && this.peek(id)) {
+      storeLogger.debug(
+        `reloading ${id} because its link resolution settled across an invalidation`,
+      );
       this.loadInstanceTask.perform(id);
     }
   });
