@@ -512,7 +512,16 @@ export type EnvelopeResult =
   | { data: Record<string, unknown> | null }
   | Record<string, unknown>;
 
-export function writeResult(result: BatchEntryResult): EnvelopeResult {
+export function writeResult(
+  result: BatchEntryResult,
+  // The card's id in the form the realm serves ids in. A realm reached through
+  // a registered prefix answers every other surface's ids in that form — a
+  // read's document, a created card's `POST` response — so a batch result
+  // spelling the same card differently would hand back an id the caller cannot
+  // send back as a target. Supplied by the realm, which owns identifier
+  // resolution; nothing here resolves one.
+  canonical: (url: string) => string,
+): EnvelopeResult {
   if (!result) {
     return { data: null };
   }
@@ -524,7 +533,7 @@ export function writeResult(result: BatchEntryResult): EnvelopeResult {
   return {
     data: {
       type: 'card',
-      id: result.id,
+      id: canonical(result.id),
       ...(result.lid === undefined ? {} : { lid: result.lid }),
       meta: {
         version: result.meta.version,

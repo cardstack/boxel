@@ -4225,7 +4225,9 @@ export class Realm {
         throw labelEntry(err, (index) => writes[index].entry.index);
       }
       for (let [index, { entry }] of writes.entries()) {
-        results[entry.index] = writeResult(committed[index]);
+        results[entry.index] = writeResult(committed[index], (url) =>
+          this.#virtualNetwork.unresolveURL(url),
+        );
       }
     }
 
