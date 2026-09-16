@@ -7743,12 +7743,15 @@ export class Realm {
         lastModified,
       );
     } else {
+      // The write response is read only for the primary card's assigned id
+      // and realm-info; the client discards its attributes, relationships and
+      // `included[]` (see `persistAndUpdate` in host store.ts). Skip the
+      // transitive `loadLinks` closure and query-backed expansion — assembling
+      // a link graph nothing reads is wasted work (the closure walk is the
+      // bulk of read-handler time), and side-loaded children round-trip their
+      // ids through their `lid`s, not this response.
       let entry = await this.#realmIndexQueryEngine.cardDocument(
         new URL(newURL),
-        {
-          loadLinks: true,
-          skipQueryBackedExpansion: false,
-        },
       );
       if (!entry || entry?.type === 'error') {
         let err = entry
@@ -7803,8 +7806,7 @@ export class Realm {
     let duringPrerender = isDuringPrerenderRequest(request);
     // A skip-index-wait caller (see SKIP_INDEX_WAIT_HEADER) takes the same
     // write-side path as a prerender write — index deferred, answer from the
-    // serialized echo — without the prerender-only serialization tweaks
-    // (skipQueryBackedExpansion) that stay gated on `duringPrerender` below.
+    // serialized echo rather than a readback.
     let answerFromEcho = duringPrerender || isSkipIndexWaitRequest(request);
 
     let { data: patch, included: maybeIncluded } = await request.json();
@@ -7945,12 +7947,12 @@ export class Realm {
       // If the patch makes no semantic changes and doesn't include side-loaded
       // resources, short-circuit to avoid touching the file (and changing mtime).
       if (included.length === 0 && isEqual(primaryResource, original)) {
+        // No links closure: the PATCH response is read only for the primary
+        // card's id and realm-info, and this readback runs inside the
+        // realm-wide write lock every other writer queues on (see the
+        // non-short-circuit readback below for the full rationale).
         let entry = await this.#realmIndexQueryEngine.cardDocument(
           new URL(instanceURL),
-          {
-            loadLinks: true,
-            skipQueryBackedExpansion: duringPrerender,
-          },
         );
         if (entry && entry.type !== 'error') {
           let existingDoc = merge({}, entry.doc, {
@@ -8101,12 +8103,15 @@ export class Realm {
           requestContext,
         });
       }
+      // The write response is read only for the primary card's assigned id
+      // and realm-info; the client discards its attributes, relationships and
+      // `included[]` (see `persistAndUpdate` in host store.ts). Skip the
+      // transitive `loadLinks` closure and query-backed expansion — assembling
+      // a link graph nothing reads is wasted work, and here it is wasted
+      // inside the realm-wide write lock every other writer on this realm is
+      // serialized behind.
       let entry = await this.#realmIndexQueryEngine.cardDocument(
         new URL(instanceURL),
-        {
-          loadLinks: true,
-          skipQueryBackedExpansion: false,
-        },
       );
       if (!entry || entry?.type === 'error') {
         if (

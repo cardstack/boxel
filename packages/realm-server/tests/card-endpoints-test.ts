@@ -1815,6 +1815,80 @@ module(basename(import.meta.filename), function () {
           );
         });
 
+        test('the write response omits the transitive link closure the client discards', async function (assert) {
+          // A create's response is read only for the primary card's id and
+          // realm-info; the host discards its attributes, relationships and
+          // `included[]`. So the write path skips the `loadLinks` closure —
+          // a linked card is NOT inlined into the create response — while a
+          // subsequent GET, on the read path, still assembles it.
+          let target = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Target' },
+                meta: {
+                  adoptsFrom: { module: rri('./friend.gts'), name: 'Friend' },
+                },
+              },
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(target.status, 201, `HTTP 201: ${target.text}`);
+          let targetId = (target.body as SingleCardDocument).data.id!;
+
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Consumer' },
+                relationships: {
+                  friend: { links: { self: targetId } },
+                },
+                meta: {
+                  adoptsFrom: { module: rri('./friend.gts'), name: 'Friend' },
+                },
+              },
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            response.status,
+            201,
+            `HTTP 201: ${response.text}`,
+          );
+
+          let json = response.body as SingleCardDocument;
+          // Everything the client keeps from a write response is present...
+          assert.ok(json.data.id, 'the create response carries the new id');
+          assert.ok(
+            json.data.meta.realmInfo,
+            'the create response carries realm-info',
+          );
+          assert.ok(
+            json.data.meta.lastModified,
+            'the create response carries lastModified',
+          );
+          // ...and the transitive closure it discards is absent.
+          assert.strictEqual(
+            json.included,
+            undefined,
+            'the create response does not inline the linked card into included[]',
+          );
+
+          // The read path is unchanged: a GET of the same card still assembles
+          // the closure, so the linked card comes off the wire in included[].
+          let read = await request
+            .get(`/${json.data.id!.slice(testRealmHref.length)}`)
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(read.status, 200, `HTTP 200: ${read.text}`);
+          assert.ok(
+            (read.body.included ?? []).some(
+              (r: { id?: string }) => r.id === targetId,
+            ),
+            'the GET response still inlines the linked card into included[]',
+          );
+        });
+
         test('an echoed serve-time meta.screenshots never persists into the source file', async function (assert) {
           // The shape a card+json GET stamps — a client that GETs a doc and
           // POSTs it back to duplicate the card echoes this, and persisting
