@@ -625,7 +625,11 @@ export class LatticeQueryRegistry
   // Use the selected obligation rather than adopting whatever is dirty now.
   // At publication the caller supplies the existing pinned transaction. Queue
   // ownership and the producer's exact input/code receipts remain separate.
-  async assertWorkCurrent(work: LatticeScheduledWork, tx?: Querier) {
+  async assertWorkCurrent(
+    work: LatticeScheduledWork,
+    tx?: Querier,
+    opts?: { lockGroup?: boolean },
+  ) {
     const execute =
       tx ?? ((expression: Expression) => query(this.db, expression));
     if (work.reservation) {
@@ -635,7 +639,12 @@ export class LatticeQueryRegistry
       // Same order as claim/coalescing: group lock before job/reservation rows.
       // At publication this shares the existing pinned transaction, keeping
       // replacement claims and finalization outside its validity/commit span.
-      if (tx) await acquireConcurrencyGroupLock(execute, group);
+      // The publication transaction takes that lock as late as possible
+      // (`assertReservationCurrent`, after the swap) so a source write's
+      // queue insert does not wait behind the whole promotion; its opening
+      // check passes `lockGroup: false`.
+      if (tx && opts?.lockGroup !== false)
+        await acquireConcurrencyGroupLock(execute, group);
       const [reservation] = await execute([
         `SELECT r.id FROM job_reservations r JOIN jobs j ON j.id=r.job_id
          WHERE r.id=`,
@@ -708,6 +717,36 @@ export class LatticeQueryRegistry
           ? { realmURL: work.realmURL, actor: work.actor }
           : undefined,
       );
+  }
+
+  // The commit-time half of `assertWorkCurrent` for a publication: take the
+  // queue group lock and re-read the reservation under it, right before the
+  // swap commits. The owner-state checks ran at the start of the transaction
+  // (before the swap changed the owner rows); this guarantees no replacement
+  // claim or finalization lands inside the commit span, while the group lock
+  // is held for milliseconds instead of the whole promotion.
+  async assertReservationCurrent(work: LatticeScheduledWork, tx: Querier) {
+    if (!work.reservation) return;
+    if (this.db.kind !== 'pg')
+      throw new Error('Lattice queue reservations require PostgreSQL');
+    const group = indexingConcurrencyGroup(work.realmURL);
+    await acquireConcurrencyGroupLock(tx, group);
+    const [reservation] = await tx([
+      `SELECT r.id FROM job_reservations r JOIN jobs j ON j.id=r.job_id
+       WHERE r.id=`,
+      param(work.reservation.reservationId),
+      'AND j.id=',
+      param(work.reservation.jobId),
+      `AND j.status='unfulfilled' AND j.job_type='lattice-materialize'
+       AND j.concurrency_group=`,
+      param(group),
+      `AND j.args->>'realmURL'=`,
+      param(work.realmURL),
+      `AND r.completed_at IS NULL AND r.locked_until > clock_timestamp()
+       FOR SHARE OF j,r`,
+    ]);
+    if (!reservation)
+      throw new LatticeWorkSuperseded('queue reservation no longer current');
   }
 
   // Scheduling evidence only. The per-realm queue lease, live input checks and

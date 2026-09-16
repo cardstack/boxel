@@ -496,6 +496,30 @@ export class Batch {
     this.#latticePublicationChecks.set(url, checks);
   }
 
+  // A check that runs at the tail of the publication transaction, after the
+  // swap and right before commit. This is where a check that must hold the
+  // queue concurrency-group lock through commit belongs: taken here the lock
+  // spans milliseconds; taken with the opening checks it spans the promotion,
+  // and every source write's queue insert for the realm waits behind it.
+  #latticeCommitChecks = new Map<
+    string,
+    Array<(tx: Querier) => Promise<void>>
+  >();
+  registerLatticeCommitCheck(
+    url: string,
+    check: (tx: Querier) => Promise<void>,
+  ) {
+    if (!this.latticeEnabled)
+      throw new Error('Lattice is disabled for this realm');
+    if (this.#dbAdapter.kind !== 'pg' || !this.#splitPrerenderHtml)
+      throw new Error(
+        'Lattice publication checks require the PostgreSQL split path',
+      );
+    const checks = this.#latticeCommitChecks.get(url) ?? [];
+    checks.push(check);
+    this.#latticeCommitChecks.set(url, checks);
+  }
+
   #latticeTransaction: Querier | undefined;
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
@@ -2384,6 +2408,7 @@ export class Batch {
       catalogueMs: 0,
       promoteMs: 0,
       pruneMs: 0,
+      wakeMs: 0,
       countMs: 0,
       catalogueReuseEligible: false,
     };
@@ -2526,13 +2551,20 @@ export class Batch {
           );
         }
         let phaseStartedAt = Date.now();
+        // Queue wake-ups take the realm's index concurrency-group lock, so
+        // they run last (see `registerLatticeCommitCheck`).
+        let wakeSource = false;
         if (opts?.lattice && opts.latticeRealmUsername) {
-          await opts.lattice.recordChange(tx ?? ((expr) => this.#query(expr)), {
-            realmURL: this.realmURL.href,
-            generation: this.generation,
-            definitionRevision: this.loaderEpoch,
-            realmUsername: opts.latticeRealmUsername,
-          });
+          wakeSource = await opts.lattice.recordSourceChange(
+            tx ?? ((expr) => this.#query(expr)),
+            {
+              realmURL: this.realmURL.href,
+              generation: this.generation,
+              definitionRevision: this.loaderEpoch,
+              realmUsername: opts.latticeRealmUsername,
+            },
+            { deferWake: true },
+          );
         } else if (opts?.lattice && latticePrepared) {
           this.#latticeRetainedOutputs = await opts.lattice.commit(
             tx ?? ((expr) => this.#query(expr)),
@@ -2544,14 +2576,6 @@ export class Batch {
               inputGeneration: opts.latticeInputGeneration,
               changedCode,
             },
-          );
-        }
-        if (opts?.lattice && opts.latticeFollowup) {
-          await opts.lattice.enqueuePending(
-            tx ?? ((expr) => this.#query(expr)),
-            this.realmURL.href,
-            opts.latticeFollowup.realmUsername,
-            opts.latticeFollowup.wave,
           );
         }
         publicationTimings.registryMs = Date.now() - phaseStartedAt;
@@ -2590,6 +2614,28 @@ export class Batch {
           bumpAllTypes: !this.typeSetIsComplete,
         });
         publicationTimings.pruneMs = Date.now() - phaseStartedAt;
+        phaseStartedAt = Date.now();
+        for (let checks of this.#latticeCommitChecks.values()) {
+          if (!tx)
+            throw new Error('Lattice publication requires a transaction');
+          for (let check of checks) await check(tx);
+        }
+        if (opts?.lattice && opts.latticeFollowup) {
+          await opts.lattice.enqueuePending(
+            tx ?? ((expr) => this.#query(expr)),
+            this.realmURL.href,
+            opts.latticeFollowup.realmUsername,
+            opts.latticeFollowup.wave,
+          );
+        }
+        if (wakeSource && opts?.lattice && opts.latticeRealmUsername) {
+          await opts.lattice.wakeSource(
+            tx ?? ((expr) => this.#query(expr)),
+            this.realmURL.href,
+            opts.latticeRealmUsername,
+          );
+        }
+        publicationTimings.wakeMs = Date.now() - phaseStartedAt;
         if (!tx) await this.#query(['COMMIT']);
       } catch (error) {
         if (!tx) await this.#query(['ROLLBACK']);

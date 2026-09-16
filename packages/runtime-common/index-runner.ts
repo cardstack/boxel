@@ -166,6 +166,18 @@ const LATTICE_WAVE_BATCH = Math.max(
   1,
   Number(process.env.LATTICE_WAVE_BATCH) || 32,
 );
+// Owners rendered concurrently inside one wave. Every owner `ready` returns
+// has settled inputs and reads no other pending owner, so a wave's members
+// are independent of each other; running several at once overlaps their
+// input reads and, with a BXL worker pool (LATTICE_BXL_WORKERS), their
+// evaluation. Publication is still one swap. Only the native path renders
+// concurrently; browser visits keep the prerenderer's own scheduling.
+const LATTICE_WAVE_CONCURRENCY = Math.max(
+  1,
+  Number(process.env.LATTICE_WAVE_CONCURRENCY) ||
+    Number(process.env.LATTICE_BXL_WORKERS) ||
+    1,
+);
 
 export class IndexRunner {
   #lattice?: LatticeIndexPublication;
@@ -914,12 +926,22 @@ export class IndexRunner {
         let recordedFailures = 0;
         const completedOwners: string[] = [];
         let failures: string[] = [];
-        for (let { ownerURL, generation, codeVersion } of pending) {
+        // Bookkeeping and row writes are serialized in completion order; only
+        // the render half of a visit overlaps.
+        let finishing: Promise<void> = Promise.resolve();
+        let superseded: LatticeWorkSuperseded | undefined;
+        const renderStartedAt = Date.now();
+        const queue = [...pending];
+        const materializeOwner = async ({
+          ownerURL,
+          generation,
+          codeVersion,
+        }: (typeof pending)[number]) => {
           const work: LatticeScheduledWork = {
             realmURL: this.realmURL.href,
             actor: this.#realmOwnerUserId,
             claim: { id: ownerURL, obligation: generation },
-            inputGeneration: this.#inputSnapshot.generation,
+            inputGeneration: this.#inputSnapshot!.generation,
             definitionRevision: this.batch.loaderEpoch,
             codeVersion,
             // Non-queued calls use the existing negative job-ID sentinel.
@@ -933,13 +955,20 @@ export class IndexRunner {
               : {}),
           };
           const check = followup
-            ? (tx?: Querier) => publication.registry.assertWorkCurrent(work, tx)
+            ? (tx?: Querier) =>
+                publication.registry.assertWorkCurrent(work, tx, {
+                  lockGroup: false,
+                })
             : undefined;
           if (check) {
             await check();
+            // Owner-state validation opens the publication transaction; the
+            // reservation is re-read under the queue group lock at its tail.
             this.batch.registerLatticePublicationCheck(ownerURL, check);
+            this.batch.registerLatticeCommitCheck(ownerURL, (tx) =>
+              publication.registry.assertReservationCurrent(work, tx),
+            );
           }
-          let renderStartedAt = Date.now();
           let warmMs = 0;
           let outcome = await this.#renderVisit(
             new URL(ownerURL),
@@ -959,8 +988,6 @@ export class IndexRunner {
               : undefined,
           );
           if (check) await check();
-          this.#latticeTimings.latticeRenderMs +=
-            Date.now() - renderStartedAt - warmMs;
           if (
             outcome.status === 'error' &&
             outcome.error instanceof LatticeWorkSuperseded
@@ -975,39 +1002,64 @@ export class IndexRunner {
               outcome.status === 'error'
                 ? outcome.error
                 : outcome.status === 'rendered'
-                  ? (outcome.result.card?.error?.error ??
+                  ? (outcome.result.card?.error ??
                     outcome.result.pageUnusableError)
                   : undefined;
-            failures.push(
-              `${ownerURL}: ${coerceErrorMessage(
-                error,
-                outcome.status === 'rendered'
-                  ? `incomplete Lattice materialization (card fields: ${Object.keys(outcome.result.card ?? {}).join(', ')}; metadata: ${Object.keys(outcome.result.card?.serialized?.data.meta ?? {}).join(', ')})`
-                  : `Lattice visit ${outcome.status}`,
-              )}`,
-            );
+            const failure = `${ownerURL}: ${coerceErrorMessage(
+              error,
+              outcome.status === 'rendered'
+                ? `incomplete Lattice materialization (card fields: ${Object.keys(outcome.result.card ?? {}).join(', ')}; metadata: ${Object.keys(outcome.result.card?.serialized?.data.meta ?? {}).join(', ')})`
+                : `Lattice visit ${outcome.status}`,
+            )}`;
+            failures.push(failure);
             if (followup) {
               // Record this owner's failure (which also re-enqueues the wave)
               // and let the rest of the batch publish; a wave with no success
               // still fails the job below.
               const recorded = await publication.failWork(
                 work,
-                `Lattice could not materialize pending owners: ${failures.at(-1)}`,
+                `Lattice could not materialize pending owners: ${failure}`,
                 followup.realmUsername,
                 followup.wave - 1,
               );
               if (recorded) recordedFailures++;
             }
-            continue;
+            return;
           }
-          let finishStartedAt = Date.now();
-          await this.#finishVisit(outcome.result);
-          this.#latticeTimings.latticeFinishVisitMs +=
-            Date.now() - finishStartedAt;
-          completedOwners.push(ownerURL);
-          succeeded++;
-          this.#latticeTimings.latticeOwnersRendered++;
-        }
+          const rendered = outcome.result;
+          finishing = finishing.then(async () => {
+            let finishStartedAt = Date.now();
+            await this.#finishVisit(rendered);
+            this.#latticeTimings.latticeFinishVisitMs +=
+              Date.now() - finishStartedAt;
+            completedOwners.push(ownerURL);
+            succeeded++;
+            this.#latticeTimings.latticeOwnersRendered++;
+          });
+          await finishing;
+        };
+        const lanes = this.#nativeCardIndexer ? LATTICE_WAVE_CONCURRENCY : 1;
+        await Promise.all(
+          Array.from({ length: Math.min(lanes, queue.length) }, async () => {
+            while (queue.length && !superseded) {
+              const next = queue.shift()!;
+              try {
+                await materializeOwner(next);
+              } catch (error) {
+                if (error instanceof LatticeWorkSuperseded) {
+                  superseded ??= error;
+                  return;
+                }
+                throw error;
+              }
+            }
+          }),
+        );
+        if (superseded) throw superseded;
+        this.#latticeTimings.latticeRenderMs +=
+          Date.now() -
+          renderStartedAt -
+          this.#latticeTimings.latticeQueryWarmMs;
         if (!succeeded) {
           const message = `Lattice could not materialize pending owners: ${failures.join(', ')}`;
           throw followup && recordedFailures

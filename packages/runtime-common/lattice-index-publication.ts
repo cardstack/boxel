@@ -59,7 +59,20 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
   // No definition loads, reverse matching, or owner renders on the source
   // commit path. These set-based copies and the queue wake-up share the swap's
   // transaction, so a crash cannot leave an apparently current orphaned view.
+  // Returns whether the realm has Lattice work to wake. With `deferWake` the
+  // caller enqueues that wake-up itself (`wakeSource`) at the end of the swap
+  // transaction: the queue insert takes the realm's index concurrency-group
+  // lock, and holding it from here to commit made every source write's own
+  // queue insert wait for the whole promotion.
   async recordChange(tx: Querier, change: LatticeSourceChange) {
+    await this.recordSourceChange(tx, change);
+  }
+
+  async recordSourceChange(
+    tx: Querier,
+    change: LatticeSourceChange,
+    opts?: { deferWake?: boolean },
+  ): Promise<boolean> {
     let { realmURL, generation, definitionRevision, realmUsername } = change;
     await assertLatticeGeneration(this.db, realmURL, generation - 1, tx);
     let [enabled] = await tx([
@@ -71,7 +84,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
       param(generation),
       "AND type = 'instance' AND pristine_doc->'meta'->'publication' IS NOT NULL)",
     ]);
-    if (!enabled) return;
+    if (!enabled) return false;
     // These are outstanding obligations, not history: never TTL/drop an
     // unmatched transition. The realm's source-swap lock serializes admission
     // with matching. Bound the count before copying any more JSON bodies;
@@ -147,6 +160,13 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
       'AND generation =',
       param(generation),
     ]);
+    if (!opts?.deferWake) await enqueueLattice(tx, realmURL, realmUsername);
+    return true;
+  }
+
+  // The deferred half of `recordChange`: the queue wake-up, placed by the
+  // caller at the tail of the same transaction.
+  async wakeSource(tx: Querier, realmURL: string, realmUsername: string) {
     await enqueueLattice(tx, realmURL, realmUsername);
   }
 
