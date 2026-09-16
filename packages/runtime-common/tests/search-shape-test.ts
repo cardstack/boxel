@@ -490,7 +490,7 @@ const tests = Object.freeze({
       jobId: null,
       consumingRealm: null,
       jobPriority: null,
-    } as const;
+    };
     let asked = describeSearchShape({
       ...base,
       linkMode: 'links-only',

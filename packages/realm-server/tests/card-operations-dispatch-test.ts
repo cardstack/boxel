@@ -15,6 +15,7 @@ import {
   type OperationTarget,
 } from '@cardstack/runtime-common/card-operations';
 import { fileContentToBytes } from '@cardstack/runtime-common/stream';
+import { urlNamesFile } from '@cardstack/runtime-common/file-def-code-ref';
 import type { CodeRef } from '@cardstack/runtime-common/code-ref';
 import type { Definition } from '@cardstack/runtime-common/definitions';
 
@@ -97,12 +98,18 @@ interface Stub {
 // fragment, a trailing slash, or the `.json` source spelling. The stub holds
 // itself to the same rule so a target that reaches the index uncanonicalized
 // misses, the way it would against Postgres.
+//
+// A path naming a file is held to the same rule for the same reason: a file's
+// bytes get a file row, never an instance row and never a card document. That
+// is what makes the index the thing that decides whether a path is a card,
+// rather than the extension on its URL.
 function isCanonicalKey(url: URL): boolean {
   return (
     url.search === '' &&
     url.hash === '' &&
     !url.pathname.endsWith('.json') &&
-    !url.pathname.endsWith('/')
+    !url.pathname.endsWith('/') &&
+    !urlNamesFile(url)
   );
 }
 
@@ -779,6 +786,7 @@ module(basename(import.meta.filename), function () {
         headersOnly: true,
       });
       assert.deepEqual(fromRow, {
+        type: 'file-meta',
         indexedAt: 1700,
         lastModified: 1699,
         generation: 4,
@@ -798,6 +806,7 @@ module(basename(import.meta.filename), function () {
         headersOnly: true,
       });
       assert.deepEqual(fromDisk, {
+        type: 'file-meta',
         indexedAt: null,
         lastModified: 42,
         generation: null,
