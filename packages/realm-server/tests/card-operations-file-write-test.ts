@@ -113,13 +113,13 @@ function stub(stored: Record<string, string> = {}): Stub {
           ...Object.entries(writes).map(([path, content]) => ({
             path,
             lastModified: 2000,
-            created: 500,
+            created: 1000,
             contentHash: `hash-${content.length}`,
           })),
           ...Object.entries(appends).map(([path, content]) => ({
             path,
             lastModified: 2000,
-            created: 500,
+            created: 1000,
             contentHash: `hash-${
               (writes[path] ?? stored[path] ?? '').length + content.length
             }`,
@@ -328,7 +328,9 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a verbatim replacement reaches the source an envelope cannot', async function (assert) {
-      let { core, commits } = stub({ 'person.gts': 'export class Person {}' });
+      let { core, commits, readPaths } = stub({
+        'person.gts': 'export class Person {}',
+      });
       await commitBatch(
         core,
         [
@@ -345,6 +347,52 @@ module(basename(import.meta.filename), function () {
         commits[0].writes,
         { 'person.gts': 'export class Person { name }' },
         "the module's bytes are replaced exactly as they were sent",
+      );
+      // It replaces a module, a card's stored source and a data file
+      // identically, so it never has to ask which one is there — and the file
+      // it would have read to find out can be a card's whole source, on the
+      // route an editor saves through.
+      assert.deepEqual(
+        readPaths(),
+        [],
+        'and nothing on the batch read surface was asked for the file it ' +
+          'replaced',
+      );
+    });
+
+    test('a verbatim replacement reads the file only to answer for a base version', async function (assert) {
+      let { core, commits, readPaths } = stub({
+        'notes.md': '# Notes\n',
+      });
+      let results = await commitBatch(
+        core,
+        [
+          {
+            op: 'update',
+            href: `${REALM}notes.md`,
+            content: '# Rewritten\n',
+            rawSource: true,
+            baseVersion: 'not-the-stored-hash',
+          },
+        ],
+        {},
+      );
+      assert.deepEqual(
+        commits[0].writes,
+        { 'notes.md': '# Rewritten\n' },
+        'the bytes are replaced either way',
+      );
+      // Naming a base is the one thing that makes the stored bytes the
+      // caller's business: the realm owes it an answer about whether the file
+      // still held what the caller last saw.
+      assert.deepEqual(
+        readPaths(),
+        ['notes.md'],
+        'a caller that named a base version is answered from the file',
+      );
+      assert.false(
+        results[0]?.meta.baseMatched,
+        'and is told its base had moved',
       );
     });
 

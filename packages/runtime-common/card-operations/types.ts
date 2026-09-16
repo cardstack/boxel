@@ -428,7 +428,7 @@ export interface OperationIdentityResult {
     lastModified: number | null;
     // When the file behind this entry was first written, as the realm
     // recorded it. Reported for the same reason as `lastModified` beside it:
-    // both are facts about the stored file the commit already holds, and
+    // both are facts about the stored file that the commit already holds, and
     // reading either back afterwards would be a second query against a row a
     // concurrent removal may have taken away. A file is created once, so this
     // does not move when the file is rewritten. Null where the realm has no
