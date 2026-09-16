@@ -1,4 +1,6 @@
-import { getOwner } from '@ember/owner';
+import { destroy } from '@ember/destroyable';
+import { getOwner, setOwner } from '@ember/owner';
+import { run } from '@ember/runloop';
 import type { RenderingTestContext } from '@ember/test-helpers';
 import { settled, waitUntil } from '@ember/test-helpers';
 
@@ -17,6 +19,7 @@ import {
   type Realm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
+import { buildQuerySearchURL } from '@cardstack/runtime-common/query-field-utils';
 
 import type { Args as SearchResourceArgs } from '@cardstack/host/resources/search';
 import { SearchResource } from '@cardstack/host/resources/search';
@@ -1588,12 +1591,14 @@ module(`Integration | search resource`, function (hooks) {
         // search doesn't count against the in-test fetch budget.
         releaseFetch.fulfill();
         let result = await storeService.search(bookQuery, [testRealmURL]);
-        let url = `${testRealmURL}_federated-search?${new URLSearchParams({
-          query: JSON.stringify(bookQuery),
-        }).toString()}`;
+        // Built by the same function the indexer writes `links.search` with,
+        // so the seed carries a URL the resource can actually parse back into
+        // the query it names. Spelling one by hand here would make the seed
+        // describe a query nothing matches, and the resource would re-run a
+        // search the seed was supposed to answer.
         return {
           cards: result as any[],
-          searchURL: url,
+          searchURL: buildQuerySearchURL([testRealmURL], bookQuery),
         };
       }
 
@@ -1849,7 +1854,7 @@ module(`Integration | search resource`, function (hooks) {
         );
       });
 
-      test(`live path with the same seed still fetches (live-SPA behavior is preserved)`, async function (assert) {
+      test(`a live resource seeded with its document's answer subscribes without searching`, async function (assert) {
         let { cards, searchURL } = await buildSeed();
         fetchCalls = 0;
 
@@ -1872,18 +1877,21 @@ module(`Integration | search resource`, function (hooks) {
         await search.loaded;
         await settled();
 
-        // Today the live path with a matching seed.searchURL happens
-        // to short-circuit via the previousQueryString equality check
-        // in SearchResource. The contract we care about for this
-        // ticket is the opposite case (non-live + seed must NOT
-        // fetch), so we only assert that live + seed produces the
-        // correct result set. Whether or not the equality-skip path
-        // saves a fetch here is an implementation detail of
-        // SearchResource that's orthogonal to this change.
+        // A seed's search URL and the query the client rebuilds compare equal
+        // under the resource's spelling-tolerant signature, so a live resource
+        // handed its document's answer has nothing left to ask for. This is
+        // what makes a query field the document resolved cost no request, and
+        // it is the half of eager resolution that is genuinely free — the
+        // subscription the same pass arms is not.
         assert.strictEqual(
           search.instances.length,
           cards.length,
-          'live path with seed still resolves to the correct set',
+          'the seed resolves the field to the set the document named',
+        );
+        assert.strictEqual(
+          fetchCalls,
+          0,
+          'and no search is issued to re-derive it',
         );
       });
 
@@ -1990,6 +1998,11 @@ module(`Integration | search resource`, function (hooks) {
     const bookRef = { module: testRRI('book'), name: 'Book' };
     let abdelRahmanQuery: Query = {
       filter: { on: bookRef, eq: { 'author.lastName': 'Abdel-Rahman' } },
+    };
+    // Matches one book where the query above matches two, so which of the two
+    // ran is readable from the result set alone.
+    let aguilarQuery: Query = {
+      filter: { on: bookRef, eq: { 'author.lastName': 'Aguilar' } },
     };
 
     // Hydrate a Book into the Store without persisting it — a candidate the
@@ -2651,6 +2664,272 @@ module(`Integration | search resource`, function (hooks) {
         count,
         'every queued search eventually ran (enqueue, not drop)',
       );
+    });
+
+    // The throttle is the tab's ceiling rather than the card `@context`'s. A
+    // caller whose result set must not be reshaped — query-field resolution,
+    // whose membership a clamped page or realm list would silently truncate —
+    // takes a slot without the other card caps, while the host's own searches
+    // stay outside it entirely.
+    test('a throttled search waits for a slot before it reaches the network; a host search does not', async function (assert) {
+      let gates: Deferred<void>[] = [];
+      let occupied = 0;
+      let occupying = Array.from({ length: SEARCH_CONCURRENCY_CAP }, () => {
+        let gate = new Deferred<void>();
+        gates.push(gate);
+        return storeService.performThrottledSearch(async () => {
+          occupied++;
+          await gate.promise;
+        });
+      });
+      await waitUntil(() => occupied >= SEARCH_CONCURRENCY_CAP, {
+        timeout: 5_000,
+      });
+      fetchCalls = 0;
+
+      let throttledDone = false;
+      let throttled = storeService
+        .search(abdelRahmanQuery, [testRealmURL], { throttled: true })
+        .then(() => {
+          throttledDone = true;
+        });
+      let hostDone = false;
+      let host = storeService
+        .search(abdelRahmanQuery, [testRealmURL])
+        .then(() => {
+          hostDone = true;
+        });
+
+      try {
+        await waitUntil(() => hostDone, { timeout: 5_000 });
+        assert.strictEqual(
+          fetchCalls,
+          1,
+          'the host search reached the network while every slot was taken',
+        );
+        assert.false(
+          throttledDone,
+          'the throttled search is still queued behind the full cap',
+        );
+      } finally {
+        for (let gate of gates) {
+          gate.fulfill();
+        }
+        await Promise.all(occupying);
+      }
+      await throttled;
+      await host;
+      assert.true(throttledDone, 'the throttled search ran once a slot freed');
+      assert.strictEqual(
+        fetchCalls,
+        2,
+        'it reached the network only after it had a slot',
+      );
+    });
+
+    // Queueing introduces a window the unqueued path never had: a search can
+    // sit in the queue until the consumer that wanted it is gone. Spending a
+    // slot on it then would delay the live searches behind it, so a run that
+    // reports itself obsolete when its turn comes never reaches the network.
+    test('a queued search whose consumer has gone away gives back its slot instead of fetching', async function (assert) {
+      let gates: Deferred<void>[] = [];
+      let occupied = 0;
+      let occupying = Array.from({ length: SEARCH_CONCURRENCY_CAP }, () => {
+        let gate = new Deferred<void>();
+        gates.push(gate);
+        return storeService.performThrottledSearch(async () => {
+          occupied++;
+          await gate.promise;
+        });
+      });
+      await waitUntil(() => occupied >= SEARCH_CONCURRENCY_CAP, {
+        timeout: 5_000,
+      });
+      fetchCalls = 0;
+
+      let obsolete = false;
+      let queued = storeService.search(abdelRahmanQuery, [testRealmURL], {
+        includeMeta: true,
+        throttled: true,
+        isObsolete: () => obsolete,
+      });
+      // The consumer goes away while the search is still waiting its turn.
+      obsolete = true;
+
+      for (let gate of gates) {
+        gate.fulfill();
+      }
+      await Promise.all(occupying);
+      let result = await queued;
+
+      assert.strictEqual(
+        fetchCalls,
+        0,
+        'the abandoned search never reached the network',
+      );
+      assert.deepEqual(
+        result.instances,
+        [],
+        'it resolves empty for the caller that is no longer listening',
+      );
+      assert.strictEqual(
+        result.meta.page?.total,
+        0,
+        'and reports no count rather than a stale one',
+      );
+    });
+
+    // The two tests above hand `isObsolete` in, so they pin the store's side of
+    // the contract and not what decides obsolescence in production: the search
+    // resource's own epoch and destruction checks. These drive that guard —
+    // through a restart, and through a teardown — against a real queue.
+    //
+    // The epoch half rests on ember-concurrency starting a restarted instance
+    // synchronously inside `perform()`, so the stamp moves before any slot can
+    // free for the superseded run. If that ever stops holding, the superseded
+    // query reaches the network and this test says so.
+    function fillTheCap() {
+      let gates: Deferred<void>[] = [];
+      let occupied = 0;
+      let occupying = Array.from({ length: SEARCH_CONCURRENCY_CAP }, () => {
+        let gate = new Deferred<void>();
+        gates.push(gate);
+        return storeService.performThrottledSearch(async () => {
+          occupied++;
+          await gate.promise;
+        });
+      });
+      return {
+        started: () => occupied >= SEARCH_CONCURRENCY_CAP,
+        release: async () => {
+          for (let gate of gates) {
+            try {
+              gate.fulfill();
+            } catch {
+              // already settled
+            }
+          }
+          await Promise.all(occupying);
+        },
+      };
+    }
+
+    // Count arrivals at the throttle separately from admissions through it, so
+    // a test can wait for "the search is queued" rather than guess at it.
+    function countThrottledRuns() {
+      let enqueued = 0;
+      let perform = storeService.performThrottledSearch.bind(storeService);
+      (storeService as any).performThrottledSearch = (
+        run: () => Promise<unknown>,
+      ) => {
+        enqueued++;
+        return perform(run);
+      };
+      return {
+        enqueued: () => enqueued,
+        restore: () => delete (storeService as any).performThrottledSearch,
+      };
+    }
+
+    test('a queued search superseded by a query change never sends the superseded query', async function (this: RenderingTestContext, assert) {
+      let cap = fillTheCap();
+      await waitUntil(cap.started, { timeout: 5_000 });
+      let counter = countThrottledRuns();
+      fetchCalls = 0;
+
+      let args = {
+        query: abdelRahmanQuery,
+        realms: [testRealmURL],
+        isLive: true,
+        isAutoSaved: false,
+        throttled: true,
+        storeService,
+        owner: this.owner,
+      } satisfies SearchResourceArgs['named'];
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: args,
+      }));
+
+      try {
+        // Reading a tracked getter runs the resource's lifecycle without
+        // awaiting its result — `loaded` would wait for a search the full cap
+        // is holding.
+        void search.isLoading;
+        await waitUntil(() => counter.enqueued() > 0, { timeout: 5_000 });
+
+        // Supersede it while it is still waiting for a slot.
+        search.modify([], { ...args, query: aguilarQuery });
+        await waitUntil(() => counter.enqueued() > 1, { timeout: 5_000 });
+
+        await cap.release();
+        await settled();
+
+        assert.strictEqual(
+          fetchCalls,
+          1,
+          'only the surviving query reached the network',
+        );
+        assert.strictEqual(
+          search.instances.length,
+          1,
+          "the resource holds the surviving query's one match, not the superseded query's two",
+        );
+      } finally {
+        counter.restore();
+        await cap.release();
+      }
+    });
+
+    test('a queued search whose resource is destroyed never reaches the network', async function (this: RenderingTestContext, assert) {
+      let cap = fillTheCap();
+      await waitUntil(cap.started, { timeout: 5_000 });
+      let counter = countThrottledRuns();
+      fetchCalls = 0;
+
+      // The resource's lifetime is its parent's. `Resource.from` hands back a
+      // lazy proxy, and the instance the guard asks about is a destroyable
+      // child of the helper cache rather than of that proxy — so destroying
+      // what `from` returned reaches nothing, and the guard would go on
+      // reporting a live resource. Destroying the parent is what reaches it,
+      // and is how the store's GC sweep reaches these: by dropping the card
+      // that owns them.
+      let parent = {};
+      setOwner(parent, this.owner);
+      let search = getSearchResourceForTest(parent, () => ({
+        named: {
+          query: abdelRahmanQuery,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          throttled: true,
+          storeService,
+          owner: this.owner,
+        } satisfies SearchResourceArgs['named'],
+      }));
+
+      try {
+        void search.isLoading;
+        await waitUntil(() => counter.enqueued() > 0, { timeout: 5_000 });
+
+        // Inside a runloop so the destroy queue flushes here: destruction
+        // cascades to the instance during that flush, and the guard is asked
+        // the moment the throttle admits the run. `settled()` would be the
+        // usual way to wait for it and cannot be used — the queued search
+        // holds a test waiter that the full cap is preventing from resolving.
+        run(() => destroy(parent));
+
+        await cap.release();
+        await settled();
+
+        assert.strictEqual(
+          fetchCalls,
+          0,
+          'the destroyed resource never sent the search it had queued',
+        );
+      } finally {
+        counter.restore();
+        await cap.release();
+      }
     });
 
     // A card-initiated search is capped; the same call from the host (no

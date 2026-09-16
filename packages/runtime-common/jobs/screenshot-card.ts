@@ -111,8 +111,11 @@ function parseScreenshotCardArgs(
 // never appears on one side only. Total over `ScreenshotCaptureSpec`, not
 // just the fields the ledger identity covers: joining hands the incoming
 // caller the twin's render verbatim, so any spec field two jobs disagree on
-// disqualifies the join. `envelope` and `captures` never reach here today (a
-// job carrying either is capture-only, persist: null, and only
+// disqualifies the join. The destructure below is exhaustive over the spec
+// and `rest` is asserted empty, so a field added to `ScreenshotCaptureSpec`
+// fails to compile here until this compare learns it rather than dropping
+// silently out of the twin check. `envelope` and `captures` never reach here
+// today (a job carrying either is capture-only, persist: null, and only
 // persist-carrying jobs coalesce), but they are compared anyway — envelope
 // by value, captures by refusing to call any batch a twin (inserting is
 // always safe; joining wrongly serves the wrong render).
@@ -123,21 +126,34 @@ function sameCaptureSpec(
   if (!a || !b) {
     return !a && !b;
   }
+  let {
+    viewport,
+    deviceScaleFactor,
+    fullPage,
+    clip,
+    target,
+    envelope,
+    type,
+    media,
+    captures,
+    ...rest
+  } = a;
+  rest satisfies Record<string, never>;
   return (
-    (a.viewport?.width ?? null) === (b.viewport?.width ?? null) &&
-    (a.viewport?.height ?? null) === (b.viewport?.height ?? null) &&
-    (a.deviceScaleFactor ?? null) === (b.deviceScaleFactor ?? null) &&
-    (a.fullPage ?? false) === (b.fullPage ?? false) &&
-    (a.clip?.x ?? null) === (b.clip?.x ?? null) &&
-    (a.clip?.y ?? null) === (b.clip?.y ?? null) &&
-    (a.clip?.width ?? null) === (b.clip?.width ?? null) &&
-    (a.clip?.height ?? null) === (b.clip?.height ?? null) &&
-    (a.envelope?.width ?? null) === (b.envelope?.width ?? null) &&
-    (a.envelope?.height ?? null) === (b.envelope?.height ?? null) &&
-    (a.type ?? null) === (b.type ?? null) &&
-    (a.media ?? null) === (b.media ?? null) &&
-    (a.target ?? null) === (b.target ?? null) &&
-    a.captures === undefined &&
+    (viewport?.width ?? null) === (b.viewport?.width ?? null) &&
+    (viewport?.height ?? null) === (b.viewport?.height ?? null) &&
+    (deviceScaleFactor ?? null) === (b.deviceScaleFactor ?? null) &&
+    (fullPage ?? false) === (b.fullPage ?? false) &&
+    (clip?.x ?? null) === (b.clip?.x ?? null) &&
+    (clip?.y ?? null) === (b.clip?.y ?? null) &&
+    (clip?.width ?? null) === (b.clip?.width ?? null) &&
+    (clip?.height ?? null) === (b.clip?.height ?? null) &&
+    (envelope?.width ?? null) === (b.envelope?.width ?? null) &&
+    (envelope?.height ?? null) === (b.envelope?.height ?? null) &&
+    (type ?? null) === (b.type ?? null) &&
+    (media ?? null) === (b.media ?? null) &&
+    (target ?? null) === (b.target ?? null) &&
+    captures === undefined &&
     b.captures === undefined
   );
 }

@@ -83,8 +83,9 @@ export function isCaptureFormat(value: unknown): value is CaptureFormat {
 
 // Output encodings. The image types are the roster declared screenshots
 // (`static screenshots` entries) choose from; the wire spec's roster adds
-// `pdf` — a paged document of the same settled render rather than a raster
-// of it.
+// `pdf` — a paged document of the settled render, laid out at the paper's
+// content width (the card's own `@page { size }` rule, or Chrome's default
+// paper) rather than at a capture viewport.
 export const SCREENSHOT_IMAGE_TYPES = ['png', 'jpeg', 'webp'] as const;
 export type ScreenshotImageType = (typeof SCREENSHOT_IMAGE_TYPES)[number];
 export const SCREENSHOT_DEFAULT_IMAGE_TYPE: ScreenshotImageType = 'png';
@@ -176,6 +177,29 @@ export function countPdfPages(bytes: Uint8Array): number {
     maxTreeCount = Math.max(maxTreeCount, Number(m[1]));
   }
   return Math.max(pageObjects, maxTreeCount);
+}
+
+// Post-render enforcement of the pdf caps: byte size first (the cheaper
+// read), then page count. Returns the capture-error message naming the
+// exceeded cap, or the page count when the document is within bounds.
+export function checkPdfCaptureBounds(
+  name: string,
+  bytes: Uint8Array,
+):
+  | { error: string; pageCount?: undefined }
+  | { error?: undefined; pageCount: number } {
+  if (bytes.byteLength > SCREENSHOT_PDF_MAX_BYTES) {
+    return {
+      error: `pdf capture "${name}" produced ${bytes.byteLength} bytes, over the ${SCREENSHOT_PDF_MAX_BYTES}-byte cap`,
+    };
+  }
+  let pageCount = countPdfPages(bytes);
+  if (pageCount > SCREENSHOT_PDF_MAX_PAGES) {
+    return {
+      error: `pdf capture "${name}" produced ${pageCount} pages, over the ${SCREENSHOT_PDF_MAX_PAGES}-page cap`,
+    };
+  }
+  return { pageCount };
 }
 
 // The engine's default capture geometry — Puppeteer's launch viewport (no
@@ -563,6 +587,20 @@ function checkMergedOverrides(
     }
     if (spec.target) {
       return `${path} cannot set both type "pdf" and target`;
+    }
+    // Pagination lays the document out at the paper's content width, so a
+    // viewport is inert for pdf output — refused rather than ignored, per the
+    // module contract (ignoring it would mint distinct ledger identities over
+    // byte-identical documents). A viewport spelling the engine default is
+    // admitted: it elides to the same canonical form as omitting it.
+    if (
+      spec.viewport &&
+      !(
+        spec.viewport.width === DEFAULT_CAPTURE_VIEWPORT.width &&
+        spec.viewport.height === DEFAULT_CAPTURE_VIEWPORT.height
+      )
+    ) {
+      return `${path} cannot set both type "pdf" and viewport`;
     }
   }
 

@@ -419,7 +419,7 @@ const tests = Object.freeze({
     assert.strictEqual(onFile.code, 'operation-not-allowed');
     assert.strictEqual(onFile.status, 405);
     assert.true(
-      onFile.detail.includes('read'),
+      onFile.detail.includes('read') && onFile.detail.includes('appendLine'),
       `the refusal names what a file does carry: ${onFile.detail}`,
     );
 
@@ -439,8 +439,8 @@ const tests = Object.freeze({
   'appending to a containsMany belongs to a card, not to a file or a field':
     async (assert) => {
       // A card's fields are what a containsMany is one of, so the behavior
-      // reaches a card and nothing else: a file's metadata is content-derived
-      // and read-only, and a field's instances have no URL to invoke against.
+      // reaches a card and nothing else: a file has no field schema, and a
+      // field's instances have no URL to invoke against.
       let card = stub();
       let onCard = await resolveOperation(
         card.core,
@@ -470,6 +470,32 @@ const tests = Object.freeze({
       );
       assert.strictEqual(onField.code, 'operation-not-allowed');
     },
+
+  'a file def carries the two writes that work on its bytes': async (
+    assert,
+  ) => {
+    // A file's metadata is content-derived and read-only, so what a write on
+    // one reaches is the bytes: an `update` replaces them wholesale, and an
+    // `appendLine` adds a line to the end of a text file. Appending a line is
+    // the one behavior that goes the other way — a line appended to a card's
+    // stored file leaves behind something that is no longer a card.
+    let file = stub();
+    for (let name of ['update', 'appendLine']) {
+      let resolved = await resolveOperation(file.core, FILE, name);
+      assert.strictEqual(
+        resolved.base,
+        name,
+        `a file carries "${name}", undeclared, as a base operation`,
+      );
+    }
+
+    let card = stub();
+    let onCard = await refusalFrom(() =>
+      resolveOperation(card.core, CARD, 'appendLine'),
+    );
+    assert.strictEqual(onCard.code, 'operation-not-allowed');
+    assert.strictEqual(onCard.status, 405);
+  },
 
   'a write is carried out by the coordinator rather than by this dispatch':
     async (assert) => {
@@ -867,13 +893,13 @@ const tests = Object.freeze({
   'a card source spelling names the source, not the card': async (assert) => {
     // `<card>.json` names the card's stored bytes. That is a different read
     // from the card, so the target routes as a file rather than resolving to
-    // the instance — and a file carries neither `update` nor anything else
-    // that writes.
+    // the instance — and what a file carries is what it is then held to, which
+    // is not what the card behind those bytes carries.
     let { core, calls } = stub();
     let error = await refusalFrom(() =>
       runOperation(
         core,
-        invoke({ kind: 'instance', url: `${REALM}person-1.json` }, 'update'),
+        invoke({ kind: 'instance', url: `${REALM}person-1.json` }, 'transform'),
       ),
     );
     assert.strictEqual(error.code, 'operation-not-allowed');
@@ -902,8 +928,9 @@ const tests = Object.freeze({
       'the file def type entry is consulted',
     );
 
-    // The allowance still holds: a file carries its two reads and nothing
-    // else, whatever it declares.
+    // The allowance still holds: what a file carries are reads of its bytes
+    // and writes of them, whatever it declares — there is no document to
+    // transform.
     let mutating = stub({
       operations: {
         touch: { base: 'transform' as const, deterministic: true },
