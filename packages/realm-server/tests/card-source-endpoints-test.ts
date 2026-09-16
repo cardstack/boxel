@@ -2,10 +2,11 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
+import { formatRFC7231 } from 'date-fns';
 import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
 import fsExtra from 'fs-extra';
-const { existsSync, readFileSync } = fsExtra;
+const { existsSync, readFileSync, statSync } = fsExtra;
 import {
   cardSrc,
   compiledCard,
@@ -74,6 +75,34 @@ module(basename(import.meta.filename), function () {
         dir,
         dbAdapter,
       };
+    }
+
+    // The incremental index jobs this realm has queued, newest last. A write
+    // route is judged on how many it adds, so the tests read the set before
+    // and after rather than a total: the fixture build queues its own, and a
+    // cached realm template carries whatever the previous test left behind.
+    async function incrementalIndexJobs(): Promise<
+      { id: number; status: string }[]
+    > {
+      return (await dbAdapter.execute(
+        `select id, status from jobs
+           where job_type = 'incremental-index' and concurrency_group = $1
+           order by id`,
+        { bind: [`indexing:${testRealm.url}`] },
+      )) as { id: number; status: string }[];
+    }
+
+    async function maxIncrementalIndexJobId(): Promise<number> {
+      return (await incrementalIndexJobs()).reduce(
+        (max, job) => Math.max(max, job.id),
+        0,
+      );
+    }
+
+    async function incrementalIndexJobsSince(
+      baseline: number,
+    ): Promise<{ id: number; status: string }[]> {
+      return (await incrementalIndexJobs()).filter((job) => job.id > baseline);
     }
 
     module('card source GET request', function (_hooks) {
@@ -1065,6 +1094,215 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(src, 'Hello World');
         });
 
+        test('answers with the written file’s modification time and no body', async function (assert) {
+          let response = await request
+            .post('/last-modified-probe.gts')
+            .set('Accept', 'application/vnd.card+source')
+            .send(`//TEST UPDATE\n${cardSrc}`);
+
+          assert.strictEqual(response.status, 204, 'HTTP 204 status');
+          assert.strictEqual(response.text, '', 'the response carries no body');
+
+          let lastModified = response.headers['last-modified'];
+          assert.ok(lastModified, 'last-modified is set');
+          // RFC 7231, which is how every other date header on this route is
+          // spelled, and what a client comparing it against a date it sends
+          // back needs it to be.
+          assert.strictEqual(
+            lastModified,
+            formatRFC7231(new Date(lastModified).getTime()),
+            'last-modified is an RFC 7231 date',
+          );
+
+          let stat = statSync(
+            join(dir.name, 'realm_server_1', 'test', 'last-modified-probe.gts'),
+          );
+          assert.strictEqual(
+            new Date(lastModified).getTime(),
+            Math.floor(stat.mtimeMs / 1000) * 1000,
+            'last-modified is the modification time of the file on disk',
+          );
+        });
+
+        test('keeps the original creation time when a file is overwritten', async function (assert) {
+          let first = await request
+            .post('/rewritten.txt')
+            .set('Accept', 'application/vnd.card+source')
+            .send('first');
+          assert.strictEqual(first.status, 204, 'first write returns 204');
+          assert.ok(
+            first.headers['x-created'],
+            'x-created is set on the write that creates it',
+          );
+
+          // Backdated so the second write has something to be wrong about.
+          // `created_at` has one-second resolution and two requests land in
+          // the same second, so without this the two headers compare equal
+          // whether the stored value is kept or restamped.
+          let backdated = 1600000000;
+          await query(dbAdapter, [
+            'UPDATE realm_file_meta SET created_at =',
+            param(backdated),
+            'WHERE realm_url =',
+            param(testRealmHref),
+            'AND file_path =',
+            param('rewritten.txt'),
+          ]);
+
+          let second = await request
+            .post('/rewritten.txt')
+            .set('Accept', 'application/vnd.card+source')
+            .send('second');
+          assert.strictEqual(second.status, 204, 'second write returns 204');
+          // A file is created once. Every later write to it reports that same
+          // moment, so `x-created` is the age of the file rather than the age
+          // of the bytes currently in it.
+          assert.strictEqual(
+            second.headers['x-created'],
+            formatRFC7231(backdated * 1000),
+            'x-created still reports when the file was first written',
+          );
+
+          let src = readFileSync(
+            join(dir.name, 'realm_server_1', 'test', 'rewritten.txt'),
+            { encoding: 'utf8' },
+          );
+          assert.strictEqual(src, 'second', 'the file holds the second write');
+        });
+
+        test('writes a card instance’s raw json verbatim and indexes it as a card', async function (assert) {
+          let since = Date.now();
+          // Spelled by hand rather than serialized, so what the realm stores
+          // can be compared against it character for character: this route
+          // writes a card's stored source without reformatting it.
+          let raw = `{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Mango"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./person.gts",
+        "name": "Person"
+      }
+    }
+  }
+}`;
+          let response = await request
+            .post('/raw-instance.json')
+            .set('Accept', 'application/vnd.card+source')
+            .send(raw);
+
+          assert.strictEqual(response.status, 204, 'HTTP 204 status');
+
+          let src = readFileSync(
+            join(dir.name, 'realm_server_1', 'test', 'raw-instance.json'),
+            { encoding: 'utf8' },
+          );
+          assert.strictEqual(
+            src,
+            raw,
+            'the stored bytes are the posted bytes, unreformatted',
+          );
+
+          // This route returns before indexing, and a reader is never held on
+          // a write it did not make, so the card becomes readable only once
+          // the index has caught up. The event is what says it has.
+          await expectIncrementalIndexEvent(
+            `${testRealmURL}raw-instance.json`,
+            since,
+            { assert, getMessagesSince, realm: testRealmHref },
+          );
+
+          let indexed = await request
+            .get('/raw-instance')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            indexed.status,
+            200,
+            `the written bytes index as a card: ${indexed.text}`,
+          );
+          let json = indexed.body as LooseSingleCardDocument;
+          assert.strictEqual(
+            json.data.attributes?.firstName,
+            'Mango',
+            'the indexed card carries the posted values',
+          );
+        });
+
+        test('enqueues one incremental index job per write', async function (assert) {
+          let baseline = await maxIncrementalIndexJobId();
+
+          await request
+            .post('/one-job.gts')
+            .set('Accept', 'application/vnd.card+source')
+            .send(`//TEST UPDATE\n${cardSrc}`);
+          await testRealm.incrementalIndexing();
+
+          let jobs = await incrementalIndexJobsSince(baseline);
+          assert.strictEqual(
+            jobs.length,
+            1,
+            `one incremental index job for one write (ids: ${jobs
+              .map((job) => job.id)
+              .join(', ')})`,
+          );
+        });
+
+        test('returns once the bytes are durable, with indexing still queued', async function (assert) {
+          let since = Date.now();
+          let baseline = await maxIncrementalIndexJobId();
+
+          let response = await request
+            .post('/durable-before-indexed.gts')
+            .set('Accept', 'application/vnd.card+source')
+            .send(`//TEST UPDATE\n${cardSrc}`);
+
+          assert.strictEqual(response.status, 204, 'HTTP 204 status');
+          // Durable at the moment the response lands: a caller holding the
+          // 204 can read the file back from disk.
+          assert.strictEqual(
+            readFileSync(
+              join(
+                dir.name,
+                'realm_server_1',
+                'test',
+                'durable-before-indexed.gts',
+              ),
+              { encoding: 'utf8' },
+            ),
+            `//TEST UPDATE\n${cardSrc}`,
+            'the posted bytes are on disk when the response lands',
+          );
+          // The write queued its indexing rather than performing it: the job
+          // exists and has not finished. Read from the queue rather than from
+          // the absence of a broadcast, because "no event yet" is a race
+          // against a live worker that would fail this test on the run where
+          // indexing happens to win, and would match any event in the realm
+          // rather than this file's.
+          let queued = await incrementalIndexJobsSince(baseline);
+          assert.strictEqual(
+            queued.length,
+            1,
+            `the write queued one index job (ids: ${queued
+              .map((job) => job.id)
+              .join(', ')})`,
+          );
+          assert.notStrictEqual(
+            queued[0].status,
+            'resolved',
+            `indexing had not finished when the response landed (status: ${queued[0].status})`,
+          );
+
+          // It still runs; the route defers the work rather than skipping it.
+          await expectIncrementalIndexEvent(
+            `${testRealmURL}durable-before-indexed.gts`,
+            since,
+            { assert, getMessagesSince, realm: testRealmHref },
+          );
+        });
+
         test('removes file meta on delete', async function (assert) {
           // ensure an existing file (write like hello-world first)
           let reqPath = '/hello-world.txt';
@@ -1780,6 +2018,88 @@ module(basename(import.meta.filename), function () {
             new Uint8Array(fileBytes),
             bytes2,
             'file contains second upload bytes',
+          );
+        });
+
+        test('answers a binary upload with the file’s modification time and no body', async function (assert) {
+          let response = await request
+            .post('/upload-headers.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(new Uint8Array([0xde, 0xad, 0xbe, 0xef])));
+
+          assert.strictEqual(response.status, 204, 'HTTP 204 status');
+          assert.strictEqual(response.text, '', 'the response carries no body');
+
+          let lastModified = response.headers['last-modified'];
+          assert.ok(lastModified, 'last-modified is set');
+          assert.strictEqual(
+            lastModified,
+            formatRFC7231(new Date(lastModified).getTime()),
+            'last-modified is an RFC 7231 date',
+          );
+
+          let stat = statSync(
+            join(dir.name, 'realm_server_1', 'test', 'upload-headers.bin'),
+          );
+          assert.strictEqual(
+            new Date(lastModified).getTime(),
+            Math.floor(stat.mtimeMs / 1000) * 1000,
+            'last-modified is the modification time of the file on disk',
+          );
+        });
+
+        test('keeps the original creation time when a binary file is overwritten', async function (assert) {
+          let first = await request
+            .post('/rewritten.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(new Uint8Array([0x01])));
+          assert.strictEqual(first.status, 204, 'first upload returns 204');
+          assert.ok(
+            first.headers['x-created'],
+            'x-created is set on the upload that creates it',
+          );
+
+          // Backdated for the same reason as the source-route twin: two
+          // uploads land in one second, so an unmoved header proves nothing
+          // until the stored value differs from now.
+          let backdated = 1600000000;
+          await query(dbAdapter, [
+            'UPDATE realm_file_meta SET created_at =',
+            param(backdated),
+            'WHERE realm_url =',
+            param(testRealmHref),
+            'AND file_path =',
+            param('rewritten.bin'),
+          ]);
+
+          let second = await request
+            .post('/rewritten.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(new Uint8Array([0x02])));
+          assert.strictEqual(second.status, 204, 'second upload returns 204');
+          assert.strictEqual(
+            second.headers['x-created'],
+            formatRFC7231(backdated * 1000),
+            'x-created still reports when the file was first written',
+          );
+        });
+
+        test('enqueues one incremental index job per binary upload', async function (assert) {
+          let baseline = await maxIncrementalIndexJobId();
+
+          await request
+            .post('/one-job.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(new Uint8Array([0x0f, 0x0e])));
+          await testRealm.incrementalIndexing();
+
+          let jobs = await incrementalIndexJobsSince(baseline);
+          assert.strictEqual(
+            jobs.length,
+            1,
+            `one incremental index job for one upload (ids: ${jobs
+              .map((job) => job.id)
+              .join(', ')})`,
           );
         });
 

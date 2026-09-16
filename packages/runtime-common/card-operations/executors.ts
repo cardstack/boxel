@@ -213,14 +213,17 @@ export interface UpdateEntry extends EntryCommon {
   // one member rather than a text one and a binary one.
   content?: string | Uint8Array;
   // Replace the bytes stored at the target verbatim, whatever they are — the
-  // one way an update reaches a module's source or a card's stored `.json`.
+  // one way an update reaches a module's source, a card's stored `.json`, or a
+  // path that holds nothing yet.
   //
-  // It exists for the `card+source` `POST`, which writes exactly those and has
-  // to keep doing so once it dispatches through this operation. Nothing on the
-  // envelope path sets it: through the envelope an update on a card is the
-  // JSON:API merge above, and one on a module is refused — a client that could
-  // ask for a verbatim replacement of a card's source could write bytes that
-  // are no longer a card and leave the realm to find out at index time.
+  // It exists for the realm's two file-write routes, the `card+source` `POST`
+  // and the binary upload, which put the bytes they are given at the path they
+  // are given and have to keep doing so once they dispatch through this
+  // operation. Nothing on the envelope path sets it: through the envelope an
+  // update on a card is the JSON:API merge above, and one on a module is
+  // refused — a client that could ask for a verbatim replacement of a card's
+  // source could write bytes that are no longer a card and leave the realm to
+  // find out at index time.
   rawSource?: true;
 }
 
@@ -796,9 +799,10 @@ export async function stageUpdate(
 // because a caller replacing either wholesale through the operations envelope
 // would be writing bytes the realm serves as code or as a card while saying it
 // was changing a file — a card's update is the JSON:API merge, and a module's
-// source has no update at all. `rawSource` is how the one caller that must
-// reach them says so: the `card+source` `POST`, which writes exactly those
-// today and keeps writing them once it dispatches through here.
+// source has no update at all. `rawSource` is how the callers that must reach
+// them say so: the realm's two file-write routes, the `card+source` `POST` and
+// the binary upload, which write exactly those today and keep writing them
+// once they dispatch through here.
 async function stageFileUpdate(
   entry: UpdateEntry,
   content: string | Uint8Array,
@@ -864,10 +868,10 @@ async function stageFileUpdate(
     }
   }
   if (!meta && !entry.rawSource) {
-    // Creating a file is not an operation — the realm's upload routes own
+    // Creating a file is not an operation — the realm's write routes own
     // that — so an update has a file to replace or it has nothing to do. A
-    // verbatim source replacement is the exception, since the endpoint it
-    // stands in for creates the file it writes.
+    // verbatim replacement is the exception, since the routes it stands in
+    // for create the files they write.
     throw new OperationFailure({
       id: url.href,
       status: 404,
