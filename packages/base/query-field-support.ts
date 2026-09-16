@@ -263,6 +263,15 @@ export function ensureQueryFieldSearchResource(
     },
     {
       isLive,
+      // One deserialized document can carry a query field per card it
+      // references, and each of those fields asks for its own membership. Put
+      // them behind the store's concurrency ceiling so the fan-out
+      // leaves as a queue rather than as one burst of concurrent
+      // `_federated-search` requests — the count is the same, the number in
+      // flight at any moment is not. A prerender is left alone: its searches
+      // are the rare ones the parent document could not seed, and the render
+      // waits on each of them.
+      throttled: !inPrerender,
       dependencyTracking: trackingContext,
       seed: queryFieldSeed(fieldState),
     },

@@ -26,6 +26,10 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });
 
+    test('a file def carries the two writes that work on its bytes', async function (assert) {
+      await runSharedTest(cardOperationsDispatchTests, assert, {});
+    });
+
     test('a write is carried out by the coordinator rather than by this dispatch', async function (assert) {
       await runSharedTest(cardOperationsDispatchTests, assert, {});
     });
