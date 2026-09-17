@@ -862,8 +862,8 @@ module(basename(import.meta.filename), function () {
           let etag = response.get('etag') ?? '';
           assert.ok(etag, 'response carries an ETag');
           assert.true(
-            /^"\d+(?:-[0-9a-f]+)?:card-rri"$/.test(etag),
-            `ETag matches "<indexed_at>(-<realmInfoHash>)?:card-rri" pattern (got ${etag})`,
+            /^"\d+(?:-[0-9a-f]+)?:card-rri-lb\d+"$/.test(etag),
+            `ETag matches "<indexed_at>(-<realmInfoHash>)?:card-rri-lb<budget>" pattern (got ${etag})`,
           );
           assert.strictEqual(
             response.get('cache-control'),
@@ -3733,7 +3733,7 @@ module(basename(import.meta.filename), function () {
             'old ETag no longer matches → fresh 200',
           );
           assert.true(
-            /^"\d+(?:-[0-9a-f]+)?:card-rri"$/.test(
+            /^"\d+(?:-[0-9a-f]+)?:card-rri-lb\d+"$/.test(
               staleResponse.get('etag') ?? '',
             ),
             `GET reports a validator for the read shape (got ${staleResponse.get('etag')})`,
@@ -3818,7 +3818,10 @@ module(basename(import.meta.filename), function () {
           // caller from treating the echo as the card's read representation.
           assert.strictEqual(
             patchResponse.get('etag'),
-            (initialEtag ?? '').replace(/:card-rri"$/, ':card-rri-write-echo"'),
+            (initialEtag ?? '').replace(
+              /:card-rri-lb\d+"$/,
+              ':card-rri-write-echo"',
+            ),
             'no-op PATCH validates the unchanged state under the write-echo shape',
           );
           assert.notStrictEqual(
