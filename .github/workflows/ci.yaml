@@ -568,7 +568,7 @@ jobs:
 
       - name: Upload blob report to GitHub Actions Artifacts
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: blob-report-${{ matrix.shardIndex }}
           path: packages/matrix/blob-report
@@ -626,7 +626,7 @@ jobs:
         run: pnpm exec playwright merge-reports --reporter html ./all-blob-reports
 
       - name: Upload HTML report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: html-report--attempt-${{ github.run_attempt }}
           path: playwright-report
@@ -820,7 +820,7 @@ jobs:
           TEST_MODULES: ${{ steps.shard_modules.outputs.modules }}
           JUNIT_OUTPUT_FILE: ${{ github.workspace }}/junit/realm-server-${{ matrix.shardIndex }}.xml
       - name: Upload junit report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         if: ${{ !cancelled() }}
         with:
           name: realm-server-test-report-${{ matrix.shardIndex }}
@@ -937,7 +937,7 @@ jobs:
       - name: Merge reports
         run: npx junit-report-merger realm-server.xml "./all-realm-server-reports/*.xml"
       - name: Upload merged report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         if: ${{ !cancelled() }}
         with:
           name: realm-server-test-report-merged
@@ -973,7 +973,7 @@ jobs:
 
       - name: Upload realm-tests slot
         if: ${{ !cancelled() && hashFiles('slot/slot.md') != '' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: pr-comment-slot-realm-tests
           path: slot/
@@ -1215,7 +1215,7 @@ jobs:
         run: pnpm vscode:package
         working-directory: packages/vscode-boxel-tools
       - name: Upload
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: vscode-boxel-tools
           path: packages/vscode-boxel-tools/boxel-tools*vsix
@@ -1413,7 +1413,7 @@ jobs:
       - name: Verify index cache is complete
         run: scripts/verify-index-cache.sh /tmp/boxel-index-cache.sql.gz
       - name: Upload index cache
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: boxel-index-cache
           path: /tmp/boxel-index-cache.sql.gz
@@ -1430,7 +1430,7 @@ jobs:
             /tmp/boxel-index-cache-host.sql.gz \
             /tmp/boxel-index-cache-host.tables
       - name: Upload host-scoped index cache
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: boxel-index-cache-host
           path: /tmp/boxel-index-cache-host.sql.gz
@@ -1444,7 +1444,7 @@ jobs:
             /tmp/boxel-index-cache-test.sql.gz \
             /tmp/boxel-index-cache-test.tables
       - name: Upload test-realm index cache
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: boxel-index-cache-test
           path: /tmp/boxel-index-cache-test.sql.gz

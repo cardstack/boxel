@@ -233,18 +233,32 @@ export default class CardService extends Service {
     return;
   }
 
+  // `includedScope` is this method's to decide — a caller states its intent
+  // with `withLocalResourcesIncluded` and the scope follows — so the parameter
+  // does not accept one rather than silently discarding it in the spread below.
   async serializeCard(
     card: CardDef,
-    opts?: SerializeOpts & { withIncluded?: true },
+    opts?: Omit<SerializeOpts, 'includedScope'> & {
+      withLocalResourcesIncluded?: true;
+    },
   ): Promise<LooseSingleCardDocument> {
     let api = await this.getAPI();
     if (opts?.includeComputeds) {
       await this.settleQueryBackedFields(api, card);
     }
+    // The scope pushes the realm's write-retention rule into the serializer
+    // itself: the realm keeps only the primary card plus the local (unsaved,
+    // `lid`-bearing) links it co-creates, and discards every already-saved
+    // link in `included` — so saved link targets are never serialized here at
+    // all, and a card linking into a large resident graph pays nothing for
+    // it on save.
     let serialized = api.serializeCard(card, {
       ...opts,
+      includedScope: opts?.withLocalResourcesIncluded ? 'local' : 'none',
     });
-    if (!opts?.withIncluded) {
+    if (!opts?.withLocalResourcesIncluded) {
+      // includedScope 'none' builds no included; the delete guards the
+      // contract against any custom serialize hook that pushes one anyway.
       delete serialized.included;
     }
     return serialized;

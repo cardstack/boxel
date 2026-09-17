@@ -2240,6 +2240,89 @@ module('Integration | Store', function (hooks) {
     }
   });
 
+  test('includedScope controls which link targets the serializer builds', async function (assert) {
+    // The write path's saving lives in the serializer itself: an excluded
+    // target contributes only its relationship entry, and neither it nor its
+    // own linked graph is serialized.
+    let cardService = getService('card-service') as any;
+    let api = await cardService.getAPI();
+
+    let saved = new PersonDef({ name: 'Saved' });
+    await (storeService as any).persistAndUpdate(saved);
+    let unsaved = new PersonDef({ name: 'Unsaved' });
+    let instance = new PersonDef({ name: 'Consumer' });
+    (instance as any).bestFriend = saved;
+    (instance as any).friends = [unsaved];
+
+    let all = api.serializeCard(instance, {
+      useAbsoluteURL: true,
+      includedScope: 'all',
+    });
+    assert.ok(
+      (all.included ?? []).find((r: any) => r.id === (saved as any).id),
+      "'all' serializes saved targets into included",
+    );
+    assert.ok(
+      (all.included ?? []).find(
+        (r: any) => r.lid === (unsaved as any)[localId],
+      ),
+      "'all' serializes local targets into included",
+    );
+
+    let local = api.serializeCard(instance, {
+      useAbsoluteURL: true,
+      includedScope: 'local',
+    });
+    assert.notOk(
+      (local.included ?? []).find((r: any) => r.id === (saved as any).id),
+      "'local' does not serialize saved targets",
+    );
+    assert.ok(
+      (local.included ?? []).find(
+        (r: any) => r.lid === (unsaved as any)[localId],
+      ),
+      "'local' serializes local targets — the write's co-creation manifest",
+    );
+
+    let none = api.serializeCard(instance, {
+      useAbsoluteURL: true,
+      includedScope: 'none',
+    });
+    assert.strictEqual(
+      none.included,
+      undefined,
+      "'none' builds no included at all",
+    );
+
+    // What makes the narrower scopes safe wherever they replace 'all': the
+    // primary resource is identical under every scope, because an excluded
+    // target emits the same reference relationship the full walk's tail does
+    // — `links.self` + `id` for a saved target, `lid` for a local one. Only
+    // `included` differs.
+    assert.deepEqual(
+      local.data,
+      all.data,
+      "'local' leaves the primary resource identical to 'all'",
+    );
+    assert.deepEqual(
+      none.data,
+      all.data,
+      "'none' leaves the primary resource identical to 'all'",
+    );
+
+    // The one write-path caller asks for the write shape by intent, and
+    // CardService maps that intent onto the 'local' scope.
+    let viaCardService = await cardService.serializeCard(instance, {
+      useAbsoluteURL: true,
+      withLocalResourcesIncluded: true,
+    });
+    assert.deepEqual(
+      viaCardService,
+      local,
+      "withLocalResourcesIncluded serializes at the 'local' scope",
+    );
+  });
+
   test('an oversized unsaved link created alongside a card still fails the size check', async function (assert) {
     // The counterpart that makes the per-resource filter load-bearing: a
     // `lid`-bearing side-load becomes its own file on the realm, so it must
