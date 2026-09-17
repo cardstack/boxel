@@ -22,6 +22,7 @@ import {
   assertLatticeOwnerCodes,
   latticeOwnerDefinitionCurrent,
 } from '@cardstack/runtime-common/lattice-code-reference';
+import { latticeCutoffFilter } from '@cardstack/runtime-common/lattice-query-cutoff';
 import { LatticeQueryRegistry } from '@cardstack/runtime-common/lattice-query-registry';
 import { latticeReadSetCurrent } from '@cardstack/runtime-common/lattice-kernel';
 
@@ -307,13 +308,32 @@ export class LatticeMaterializationInputs {
         input,
       );
       let cards = await this.#read(result.urls);
-      this.#watches.set(fieldPath, structuredClone(input));
+      // A truncated sorted page watches its key range, not the whole match:
+      // the owner reads the page, so a row that cannot reach the page cannot
+      // change what it read. The gate rides in the watch's own filter, so
+      // routing, matching and read-path detection all see it as one predicate.
+      this.#watches.set(
+        fieldPath,
+        structuredClone(
+          result.cutoff
+            ? {
+                ...input,
+                filter: latticeCutoffFilter(input.filter, result.cutoff),
+              }
+            : input,
+        ),
+      );
       if (retain)
         this.#retainedQueries.set(
           fieldPath,
           cards.map((card) => card.url),
         );
-      return { cards, meta: result.meta };
+      return {
+        cards,
+        meta: result.meta,
+        paged: result.paged,
+        cutoff: result.cutoff,
+      };
     });
   }
 

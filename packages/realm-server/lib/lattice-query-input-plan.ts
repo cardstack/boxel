@@ -184,7 +184,10 @@ export function createLatticeQueryInputResolver({
             cards: result.cards.length,
           });
           signal?.throwIfAborted();
-          if (result.meta.page?.total !== result.cards.length)
+          // A sorted page is deliberate membership: the owner reads the top
+          // N, and every change that could alter it still reaches the watch.
+          // Any other short result means rows the owner reads went unwatched.
+          if (!result.paged && result.meta.page?.total !== result.cards.length)
             throw new Error(`Incomplete Lattice query membership: ${name}`);
           const projectionStart = performance.now();
           const projected = await projector.project(

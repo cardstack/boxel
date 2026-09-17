@@ -84,6 +84,7 @@ import {
 } from './definition-lookup.ts';
 import type { FileMetaResource, LooseCardResource } from './resource-types.ts';
 import { LATTICE_INPUT_TOKEN_PREFIX } from './lattice-input-residency.ts';
+import type { LatticeQueryCutoff } from './lattice-query-cutoff.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RequestTimings } from './request-timings.ts';
 
@@ -1679,9 +1680,64 @@ export class IndexQueryEngine {
     return { cards, meta };
   }
 
+  // The sort key a cutoff gate can be expressed on. Only the first sort
+  // expression is used: the rest break ties, and ignoring them admits a tying
+  // row, which is the conservative direction. The key has to name an
+  // application field (a sort with `on`) reached by a singular path, because
+  // the gate is a `range` predicate on that same path and a plural path
+  // compares through a table-valued join instead.
+  private async latticeCutoffKey(sort: Sort | undefined): Promise<
+    | {
+        by: string;
+        on: CodeRef;
+        direction: 'asc' | 'desc';
+        numeric: boolean;
+        column: CardExpression;
+      }
+    | undefined
+  > {
+    let first = sort?.[0];
+    if (!first || !('on' in first) || !first.on || first.by.includes('.')) {
+      return undefined;
+    }
+    let field: FieldDefinition | undefined;
+    try {
+      field = await getField(
+        await this.getDefinition(first.on),
+        first.by,
+        this.#definitionLookup,
+      );
+    } catch {
+      return undefined;
+    }
+    if (!field || isFieldPlural(field)) return undefined;
+    return {
+      by: first.by,
+      on: first.on,
+      direction: first.direction === 'desc' ? 'desc' : 'asc',
+      numeric:
+        field.serializerName === 'number' ||
+        field.serializerName === 'big-integer',
+      column: [fieldQuery(first.by, first.on, false, 'sort')],
+    };
+  }
+
   // Membership for a data computation. Use the ordinary query compiler and
   // ordering, but do not bring card bodies, HTML or module payloads into Node.
   // The caller pins the index generation and separately bounds the data read.
+  //
+  // A page that holds every match is complete membership. A shorter page is
+  // admitted only when the query declares a `sort`: the owner then reads a
+  // top-N that is a function of its inputs, and any change that could alter
+  // the page reaches the watch. Without a declared order the rows are
+  // whatever the index happened to return, and the owner's value would not
+  // be a function of the data at all, so that stays refused.
+  //
+  // `cutoff` is the optimization on top: the sort value of the page's last
+  // row, which the caller folds into the watch as a range on the same field
+  // so a row that cannot reach the page stops invalidating the owner. When
+  // no cutoff can be derived the watch stays ungated, which costs
+  // recomputation but is still correct.
   async latticeQueryIdentities(realmURL: URL, input: Query) {
     let size = input.page?.size;
     let number = input.page?.number ?? 0;
@@ -1695,16 +1751,56 @@ export class IndexQueryEngine {
     ) {
       throw new Error('Lattice membership requires a bounded page');
     }
+    // Only the first page has a single boundary. A later page is bounded on
+    // both sides, and a row entering above it shifts every row down.
+    let key =
+      number === 0 ? await this.latticeCutoffKey(input.sort) : undefined;
     let { results, meta } = await this._search(
       realmURL,
       input,
       { latticeInput: true, includeErrors: true },
-      ['SELECT i.url AS url'],
+      key
+        ? [
+            'SELECT i.url AS url, ANY_VALUE(',
+            ...key.column,
+            ') AS lattice_cutoff',
+          ]
+        : ['SELECT i.url AS url'],
     );
     if (meta.incomplete || results.some((row) => !row.url)) {
       throw new Error('Incomplete Lattice query membership');
     }
-    return { urls: results.map((row) => row.url!), meta };
+    let paged = meta.page.total !== results.length;
+    let cutoff: LatticeQueryCutoff | undefined;
+    if (paged) {
+      if (!input.sort?.length) {
+        throw new Error('Incomplete Lattice query membership');
+      }
+      let raw = (results[results.length - 1] as Record<string, unknown>)
+        ?.lattice_cutoff;
+      // A null sort value orders last, so the page's last row being null
+      // means every other match ties or beats it and no range excludes
+      // anything. Leave the watch ungated rather than publishing a bound
+      // that would be wrong.
+      let value: string | number | undefined =
+        key && raw != null
+          ? key.numeric
+            ? Number(raw)
+            : String(raw)
+          : undefined;
+      if (
+        value !== undefined &&
+        !(typeof value === 'number' && !Number.isFinite(value))
+      ) {
+        cutoff = {
+          by: key!.by,
+          on: key!.on,
+          direction: key!.direction,
+          value,
+        };
+      }
+    }
+    return { urls: results.map((row) => row.url!), meta, paged, cutoff };
   }
 
   // A stale computed value can miss the full predicate. Readiness must consider

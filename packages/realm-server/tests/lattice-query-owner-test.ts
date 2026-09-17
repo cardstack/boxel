@@ -6,6 +6,7 @@ import QUnit from 'qunit';
 import { bxl, getBxlComputeDefinition } from '@cardstack/bxl';
 import { PgQueuePublisher, type PgAdapter } from '@cardstack/postgres';
 import {
+  IndexQueryEngine,
   IndexWriter,
   RealmPaths,
   CachingDefinitionLookup,
@@ -26,6 +27,10 @@ import { LatticeBxlWorker } from '../lib/lattice-bxl-derivation.ts';
 import { createLatticeNativeCardIndexer } from '../lib/lattice-native-card-indexer.ts';
 import { LatticeMaterializationInputs } from '../lib/lattice-materialization-inputs.ts';
 import { openLatticeNativeWork } from '../lib/lattice-native-work.ts';
+import {
+  LatticeQueryRegistry,
+  type LatticeDocument,
+} from '@cardstack/runtime-common/lattice-query-registry';
 import { setupDB } from './helpers/index.ts';
 
 const { module, test } = QUnit;
@@ -1019,8 +1024,9 @@ module(basename(import.meta.filename), function (hooks) {
       const changes = {
         failed: 'has_error=TRUE',
         future: 'generation=6',
+        // LatticeMaterializationInputs.MAX_CARD_BYTES
         oversized:
-          "pristine_doc=jsonb_set(pristine_doc,'{attributes,large}',to_jsonb(repeat('x',1048577)))",
+          "pristine_doc=jsonb_set(pristine_doc,'{attributes,large}',to_jsonb(repeat('x',4194305)))",
       };
       await db.execute(
         `UPDATE boxel_index SET ${changes[state as keyof typeof changes]} WHERE url=$1`,
@@ -1033,6 +1039,158 @@ module(basename(import.meta.filename), function (hooks) {
   test('a truncated query cannot publish a complete-looking total', async (assert) => {
     root.fieldDefs.members.query!.page = { size: 1 };
     await assert.rejects(candidate(), /Incomplete Lattice query membership/);
+  });
+
+  // A sorted page is Ziggrid's `limit top`: the owner reads the page, and the
+  // watch carries the page's key range so a row that cannot reach the page
+  // never invalidates it.
+  async function addRecord(name: string, amount: number, group = 'A') {
+    const url = new URL('Record/' + name + '.json', realm).href;
+    await db.execute(
+      "INSERT INTO boxel_index(url,file_alias,realm_url,type,generation,is_deleted,has_error,pristine_doc,search_doc,types) VALUES($1,$1,$2,'instance',5,FALSE,FALSE,$3,$4,$5)",
+      {
+        bind: [
+          url,
+          realm,
+          JSON.stringify({
+            id: url.replace(/\.json$/, ''),
+            type: 'card',
+            attributes: { amount, group },
+            meta: { adoptsFrom: recordRef },
+          }),
+          JSON.stringify({
+            id: url.replace(/\.json$/, ''),
+            amount,
+            group,
+          }),
+          JSON.stringify([internalKeyFor(recordRef, undefined, network)]),
+        ],
+      },
+    );
+    return url;
+  }
+  function recordDocument(url: string, amount: number, group = 'A') {
+    return {
+      url,
+      search_doc: { id: url.replace(/\.json$/, ''), amount, group },
+      types: [internalKeyFor(recordRef, undefined, network)],
+    } as LatticeDocument;
+  }
+  function sortedTopOne() {
+    root.fieldDefs.members.query = {
+      filter: { eq: { group: '$this.group' } },
+      sort: [{ by: 'amount', on: recordRef, direction: 'desc' }],
+      page: { size: 1 },
+    };
+  }
+
+  test('a sorted page publishes its key range as the watch', async (assert) => {
+    sortedTopOne();
+    await addRecord('three', 7);
+    const { result, publish } = await candidate();
+    assert.deepEqual(
+      result.card.searchDoc!.chosenIds,
+      [realm + 'Record/three'],
+      'the owner reads only the page',
+    );
+    await publish();
+    const [row] = await db.execute(
+      'SELECT query FROM lattice_query_watches WHERE owner_url=$1 AND field_path=$2',
+      { bind: [owner, 'members'] },
+    );
+    assert.deepEqual(
+      (row.query as any).filter,
+      {
+        every: [
+          { on: recordRef, eq: { group: 'A' } },
+          { on: recordRef, range: { amount: { gte: 7 } } },
+        ],
+      },
+      "the watch is the query's filter and the page's cutoff, inclusive of a tie",
+    );
+  });
+
+  test('a row below the cutoff does not dirty the owner; one that can reach the page does', async (assert) => {
+    sortedTopOne();
+    const top = await addRecord('three', 7);
+    await (await candidate()).publish();
+    const registry = new LatticeQueryRegistry(
+      db,
+      new IndexQueryEngine(db, lookup, network),
+    );
+    const below = realm + 'Record/one.json';
+    assert.deepEqual(
+      await registry.affected(
+        realm,
+        recordDocument(below, 1),
+        recordDocument(below, 2),
+      ),
+      [],
+      'a row that stays under the cutoff cannot change the page',
+    );
+    assert.deepEqual(
+      await registry.affected(
+        realm,
+        recordDocument(below, 1),
+        recordDocument(below, 9),
+      ),
+      [owner],
+      'a row that climbs past the cutoff can enter the page',
+    );
+    assert.deepEqual(
+      await registry.affected(
+        realm,
+        recordDocument(top, 7),
+        recordDocument(top, 3),
+      ),
+      [owner],
+      'the page member itself invalidates however it moves',
+    );
+    assert.deepEqual(
+      await registry.affected(realm, recordDocument(below, 1), undefined),
+      [],
+      'deleting a row under the cutoff leaves the page alone',
+    );
+  });
+
+  test('a sorted page whose key has no value publishes an ungated watch', async (assert) => {
+    // The sort key is null on the page's last row, so every other match ties
+    // or beats it and no range excludes anything. The page is still the
+    // owner's membership; the watch simply keeps invalidating on every match,
+    // which costs recomputation and cannot miss a change.
+    root.fieldDefs.members.query = {
+      filter: { eq: { group: '$this.group' } },
+      sort: [{ by: 'missing', on: recordRef, direction: 'desc' }],
+      page: { size: 1 },
+    };
+    recordDefinition.fields.missing = 'missing';
+    recordDefinition.fieldDefs.missing = number;
+    await (await candidate()).publish();
+    const [row] = await db.execute(
+      'SELECT query, read_paths FROM lattice_query_watches WHERE owner_url=$1 AND field_path=$2',
+      { bind: [owner, 'members'] },
+    );
+    assert.deepEqual((row.query as any).filter, {
+      on: recordRef,
+      eq: { group: 'A' },
+    });
+  });
+
+  test('the sort key of a paged input counts as read', async (assert) => {
+    // Read-path detection must not skip a page member whose sort key moved:
+    // the fields the program looked at can all be unchanged and the page
+    // still be a different set of rows.
+    sortedTopOne();
+    await addRecord('three', 7);
+    await (await candidate()).publish();
+    const [row] = await db.execute(
+      'SELECT read_paths FROM lattice_query_watches WHERE owner_url=$1 AND field_path=$2',
+      { bind: [owner, 'members'] },
+    );
+    assert.true(
+      (row.read_paths as string[]).includes('amount'),
+      `the sort key is in the watch's read paths: ${JSON.stringify(row.read_paths)}`,
+    );
   });
 
   test('a foreign query realm is not silently replaced by the owner realm', async (assert) => {

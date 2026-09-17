@@ -259,18 +259,37 @@ export function createLatticeNativeCardIndexer({
               )
               .map(([name]) => name)
           : []);
+      // A paged input's order is part of what the owner read: a member whose
+      // sort key moves can change which rows are on the page even when every
+      // field the program looked at is unchanged. Count the sort key as read
+      // so read-path detection cannot skip it. A sort on something the search
+      // document does not carry under that name records a key the comparison
+      // treats as missing, which stays conservative.
+      const readPaths = result.readPaths
+        ? Object.fromEntries(
+            Object.entries(result.readPaths).map(([fieldPath, paths]) => {
+              const query = dataReceipt?.watches.find(
+                (watch) => watch.fieldPath === fieldPath,
+              )?.query;
+              const keys = query?.page
+                ? (query.sort ?? []).map((entry) => entry.by)
+                : [];
+              return [fieldPath, [...new Set([...paths, ...keys])]];
+            }),
+          )
+        : undefined;
       if (dataReceipt || discovery) {
         const manifest: PublicationReceipt = {
           version: 1,
           state: 'pending',
           validatedThrough: request.inputSnapshot?.generation ?? 0,
           ...(result.freshUntil ? { freshUntil: result.freshUntil } : {}),
-          ...(result.readPaths && dataReceipt && !discovery
+          ...(readPaths && dataReceipt && !discovery
             ? {
                 readPaths: Object.fromEntries([
                   ...dataReceipt.watches.flatMap((watch) =>
-                    result.readPaths![watch.fieldPath]
-                      ? [[watch.fieldPath, result.readPaths![watch.fieldPath]]]
+                    readPaths![watch.fieldPath]
+                      ? [[watch.fieldPath, readPaths![watch.fieldPath]]]
                       : [],
                   ),
                   // The identity watch covers the cards read through queries
@@ -291,9 +310,7 @@ export function createLatticeNativeCardIndexer({
                                   admission.root.definition.nativeLinkInputs ??
                                     {},
                                 ),
-                              ].flatMap(
-                                (root) => result.readPaths![root] ?? ['*'],
-                              ),
+                              ].flatMap((root) => readPaths![root] ?? ['*']),
                             ),
                           ],
                         ],

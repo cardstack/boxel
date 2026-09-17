@@ -287,8 +287,11 @@ export class LatticeQueryRegistry
         throw new Error('Lattice watch paths must be nonempty and unique');
       }
       paths.add(watch.fieldPath);
-      // Page and sort affect the output, but never narrow invalidation. Even a
-      // non-returned match can change an aggregate or displace a page member.
+      // Sort and page are not read here. An ungated watch's terms come from
+      // its whole filter, because a non-returned match can still change an
+      // aggregate or displace a page member; a sorted page that the engine
+      // gated carries its cutoff inside the filter, so the narrowing is
+      // already part of what is routed and matched.
       let terms =
         latticeInputIdTerms(watch) ??
         (await compiler.reverseRoutingTerms(watch.query.filter));

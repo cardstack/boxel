@@ -174,11 +174,26 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(result.meta.page.total, 3);
     assert.true(lookups > 0, 'only indexed schema metadata is consulted');
     const check = input.seal();
-    assert.deepEqual(check.watches, [{ fieldPath: 'records', query }]);
+    // Three matches, a page of two: the watch is the filter plus the page's
+    // cutoff, so a record that cannot reach the page never dirties the owner.
+    assert.deepEqual(check.watches, [
+      {
+        fieldPath: 'records',
+        query: {
+          ...query,
+          filter: {
+            every: [
+              query.filter,
+              { on: codeRef, range: { amount: { gte: 2 } } },
+            ],
+          },
+        },
+      },
+    ]);
     await publish(check.assertCurrent);
     const selects = statements.filter((s) => s.startsWith('SELECT'));
     assert.true(
-      selects.some((s) => s.startsWith('SELECT i.url AS url FROM')),
+      selects.some((s) => /^SELECT i\.url AS url[ ,]/.test(s)),
       'membership projects identities',
     );
     assert.false(
@@ -887,7 +902,8 @@ module(basename(import.meta.filename), function (hooks) {
   test('oversized data is rejected before its body reaches Node', async (assert) => {
     const url = await card('large', 1);
     await db.execute(
-      "UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{attributes,large}',to_jsonb(repeat('x',1048577))) WHERE url=$1",
+      // over LatticeMaterializationInputs.MAX_CARD_BYTES
+      "UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{attributes,large}',to_jsonb(repeat('x',4194305))) WHERE url=$1",
       { bind: [url] },
     );
     statements.length = 0;
