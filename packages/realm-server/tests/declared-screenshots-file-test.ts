@@ -734,12 +734,7 @@ module(basename(import.meta.filename), function (hooks) {
         ),
       ),
     );
-    let baseline = await maxPrerenderHtmlJobId(testDbAdapter, realm.url);
-    await realm.write('clip.webm', webmBytes);
-    await settlePrerenderHtmlJobs(testDbAdapter, realm.url, {
-      afterJobId: baseline,
-      timeout: 60000,
-    });
+    await writeAndSettle('clip.webm', webmBytes);
 
     let fileRow = await prerenderedHtmlRowFor(
       testDbAdapter,
@@ -767,6 +762,36 @@ module(basename(import.meta.filename), function (hooks) {
     assert.ok(
       fitted.includes(`_screenshot/clip.webm?name=poster`),
       `the fitted rendering carries the poster URL (got: ${fitted.slice(0, 500)})`,
+    );
+  });
+
+  test('an undecodable video captures no poster', async function (assert) {
+    // A WebM/EBML header followed by garbage: the element fires `error`, and
+    // the capture component swaps its readiness signal for
+    // `data-screenshot-failed`, so the slot fails immediately. No manifest
+    // entry may land — resolving readiness instead would persist the empty
+    // capture box as a solid black poster and serve it as the thumbnail for
+    // the life of these bytes.
+    await writeAndSettle(
+      'broken.webm',
+      new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0xde, 0xad, 0xbe, 0xef]),
+    );
+
+    let fileRow = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}broken.webm`,
+      'file',
+    );
+    assert.ok(fileRow, 'the file row still indexes');
+    let manifest = fileRow!.screenshots as ScreenshotManifest | null;
+    assert.notOk(
+      manifest?.poster,
+      'no poster entry lands for an undecodable video',
+    );
+    assert.strictEqual(
+      (await declaredLedgerRows(`${testRealm}broken.webm`)).length,
+      0,
+      'no ledger row lands for an undecodable video',
     );
   });
 
