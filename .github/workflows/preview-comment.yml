@@ -24,6 +24,13 @@ jobs:
       group: publish-preview-comment-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
+      # The slot uploads below use a repo-local action, and this job otherwise
+      # needs no working tree. Sparse-checkout fetches just that action.
+      - name: Check out the artifact upload action
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout: .github/actions/upload-artifact-retry
+
       - name: Gather preview links and write per-link slot files
         id: gather
         env:
@@ -67,7 +74,7 @@ jobs:
 
       - name: Upload host staging preview slot
         if: contains(steps.gather.outputs.slots, 'preview-host-staging')
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: pr-comment-slot-preview-host-staging
           path: slot-host-staging/
@@ -75,7 +82,7 @@ jobs:
 
       - name: Upload host production preview slot
         if: contains(steps.gather.outputs.slots, 'preview-host-production')
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: pr-comment-slot-preview-host-production
           path: slot-host-production/
@@ -83,7 +90,7 @@ jobs:
 
       - name: Upload UI staging preview slot
         if: contains(steps.gather.outputs.slots, 'preview-ui-staging')
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: pr-comment-slot-preview-ui-staging
           path: slot-ui-staging/
