@@ -976,7 +976,7 @@ module('Integration | card-copy', function (hooks) {
   });
 
   test<TestContextWithSave>('can copy a card that has a relative link to card in source realm', async function (assert) {
-    assert.expect(15);
+    assert.expect(12);
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`${testRealm2URL}index`],
@@ -1030,21 +1030,11 @@ module('Integration | card-copy', function (hooks) {
           links: {
             self: `${testRealmURL}Pet/mango`,
           },
-          data: {
-            type: 'card',
-            id: `${testRealmURL}Pet/mango`,
-          },
         },
       });
-      assert.strictEqual(json.included?.length, 1);
-      // eslint-disable-next-line @typescript-eslint/no-non-null-asserted-optional-chain
-      let included = json.included?.[0]!;
-      assert.strictEqual(included.id, `${testRealmURL}Pet/mango`);
-      assert.deepEqual(included.meta.adoptsFrom, {
-        module: rri('../pet'),
-        name: 'Pet',
-      });
-      assert.deepEqual(included.meta.realmURL, testRealmURL);
+      // A write answers with the written card alone, so the linked pet is
+      // named by the relationship above and not carried as a resource.
+      assert.strictEqual(json.included, undefined);
     });
 
     await click(
@@ -1112,7 +1102,7 @@ module('Integration | card-copy', function (hooks) {
   });
 
   test<TestContextWithSave>('can copy a card that has a link to card in destination realm', async function (assert) {
-    assert.expect(15);
+    assert.expect(12);
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`${testRealm2URL}index`],
@@ -1164,21 +1154,11 @@ module('Integration | card-copy', function (hooks) {
           links: {
             self: `../Pet/paper`, // we should recognize that the link is now in the same realm and should be a relative path
           },
-          data: {
-            type: 'card',
-            id: `${testRealm2URL}Pet/paper`,
-          },
         },
       });
-      assert.strictEqual(json.included?.length, 1);
-      // eslint-disable-next-line @typescript-eslint/no-non-null-asserted-optional-chain
-      let included = json.included?.[0]!;
-      assert.strictEqual(included.id, `${testRealm2URL}Pet/paper`);
-      assert.deepEqual(included.meta.adoptsFrom, {
-        module: testRRI('pet'),
-        name: 'Pet',
-      });
-      assert.deepEqual(included.meta.realmURL, testRealm2URL);
+      // A write answers with the written card alone, so the linked pet is
+      // named by the relationship above and not carried as a resource.
+      assert.strictEqual(json.included, undefined);
     });
 
     let realmEventTimestampStart = Date.now();

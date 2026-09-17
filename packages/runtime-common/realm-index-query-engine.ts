@@ -855,9 +855,8 @@ export class RealmIndexQueryEngine {
     let queryBacked = false;
     if (opts?.loadLinks) {
       // Stamped here rather than by each caller, so every route that answers
-      // with an assembled card document — the card+json read and the write
-      // read-backs alike — reports a clipped closure without having to know the
-      // budget exists.
+      // with an assembled card document reports a clipped closure without
+      // having to know the budget exists.
       let truncated = false;
       let included = await this.loadLinks(
         {

@@ -21,6 +21,7 @@ import {
   rri,
   SKIP_INDEX_WAIT_HEADER,
   searchEntryWireQueryFromQuery,
+  setWriteTimingSinkForTests,
   type LooseSingleCardDocument,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -1733,6 +1734,59 @@ module(basename(import.meta.filename), function () {
 
         let { getMessagesSince } = setupMatrixRoom(hooks, getRealmSetup);
 
+        // The create path reads the new card back through its own call, so the
+        // shape it answers with is asserted separately from the patch path's.
+        // The read of the card the create just made is the control: it is what
+        // the create would have assembled had it asked.
+        test('a create side-loads none of the new card’s links', async function (assert) {
+          let write = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Mango' },
+                relationships: {
+                  friend: { links: { self: `${testRealmHref}hassan` } },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri(`${testRealmHref}friend.gts`),
+                    name: 'Friend',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(write.status, 201, `HTTP 201: ${write.text}`);
+          // The stored link survives; what a readback would have added on top
+          // of it — the resolved target, and the target's own resource — does
+          // not.
+          assert.ok(
+            write.body.data.relationships?.friend?.links?.self,
+            'the create still names the card its link points at',
+          );
+          assert.notOk(
+            write.body.included,
+            'but carries no side-loaded resources',
+          );
+
+          let localPath = new URL(write.body.data.id).pathname.replace(
+            new URL(testRealmHref).pathname,
+            '',
+          );
+          let read = await request
+            .get(`/${localPath}`)
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(read.status, 200, `HTTP 200: ${read.text}`);
+          assert.ok(
+            (read.body.included ?? []).some(
+              (resource: any) => resource.id === `${testRealmHref}hassan`,
+            ),
+            'the read of the created card does side-load that link',
+          );
+        });
+
         test('serves the request', async function (assert) {
           let realmEventTimestampStart = Date.now();
 
@@ -3185,6 +3239,113 @@ module(basename(import.meta.filename), function () {
 
         let { getMessagesSince } = setupMatrixRoom(hooks, getRealmSetup);
 
+        // `hassan` links to `jade`, which links back — so a closure walk over
+        // this card has something to find and does not terminate at one layer.
+        // The read is the control: it is what the write would have assembled.
+        test('a write side-loads none of the written card’s links', async function (assert) {
+          let write = await request
+            .patch('/hassan')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan Abdel-Rahman' },
+                meta: {
+                  adoptsFrom: { module: rri('./friend.gts'), name: 'Friend' },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(write.status, 200, `HTTP 200: ${write.text}`);
+          assert.strictEqual(
+            write.body.data.attributes.firstName,
+            'Hassan Abdel-Rahman',
+            'the write answers with the value it stored',
+          );
+          assert.strictEqual(
+            write.body.data.relationships?.friend?.links?.self,
+            './jade',
+            'and still names the card the stored link points at',
+          );
+          assert.notOk(
+            write.body.included,
+            'but carries no side-loaded resources',
+          );
+
+          let read = await request
+            .get('/hassan')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(read.status, 200, `HTTP 200: ${read.text}`);
+          assert.ok(
+            (read.body.included ?? []).some(
+              (resource: any) => resource.id === `${testRealmHref}jade`,
+            ),
+            'the read of the same card does side-load that link',
+          );
+        });
+
+        // Each of these stages can be the whole of a slow write, and none is
+        // distinguishable from outside the handler, so the line has to carry
+        // every one of them for a write's duration to be attributable.
+        test('a write reports where its time went', async function (assert) {
+          let lines: string[] = [];
+          setWriteTimingSinkForTests((line) => lines.push(line));
+          try {
+            let response = await request
+              .patch('/hassan')
+              .send({
+                data: {
+                  type: 'card',
+                  // A value the fixture does not already hold: an unchanged
+                  // patch short-circuits before the write, and the stages
+                  // asserted below are the ones that short circuit skips.
+                  attributes: { firstName: 'Hassan Timed' },
+                  meta: {
+                    adoptsFrom: { module: rri('./friend.gts'), name: 'Friend' },
+                  },
+                },
+              })
+              .set('Accept', 'application/vnd.card+json')
+              .set('X-Boxel-Logging-Correlation-Id', 'write-timing-probe');
+
+            assert.strictEqual(
+              response.status,
+              200,
+              `HTTP 200: ${response.text}`,
+            );
+          } finally {
+            setWriteTimingSinkForTests(undefined);
+          }
+
+          assert.strictEqual(lines.length, 1, 'the write emitted one line');
+          let line = lines[0];
+          assert.ok(
+            line.startsWith('PATCH '),
+            `line names the method: ${line}`,
+          );
+          assert.ok(
+            line.includes('corr=write-timing-probe'),
+            `line carries the caller's correlation id: ${line}`,
+          );
+          for (let stage of [
+            'lock',
+            'drain',
+            'stage',
+            'write',
+            'readback',
+            'stringify',
+          ]) {
+            assert.ok(
+              new RegExp(`\\b${stage}=\\d+`).test(line),
+              `line attributes the ${stage} stage: ${line}`,
+            );
+          }
+          assert.ok(
+            /\bhandler=\d+ms\b/.test(line),
+            `line reports the whole handler: ${line}`,
+          );
+        });
+
         // What is stored for a relationship depends on whether the link can be
         // relativized against the writing realm. A scoped reference cannot be,
         // and must not be resolved either: resolving one stores whatever URL
@@ -3516,9 +3677,15 @@ module(basename(import.meta.filename), function () {
 
         test('PATCH response carries an ETag and writes invalidate the previous one', async function (assert) {
           // Capture the pre-patch ETag, mutate the card, and verify the PATCH
-          // response advertises a *different* ETag for the new state — that's
-          // the contract that lets the caller cache the post-patch body
-          // without an extra round-trip GET.
+          // response advertises a different ETag for the new state.
+          //
+          // A write answers with the written card alone while a GET answers
+          // with its link closure, so the two are different representations of
+          // one card and take different validators. That is what the
+          // `write-echo` variant records, and it is why the ETag a PATCH
+          // returns does not short-circuit a later GET of the same URL: being
+          // 304'd on it would hand the caller a body with no `included[]` as
+          // though it were the GET representation.
           let initialResponse = await request
             .get('/person-1')
             .set('Accept', 'application/vnd.card+json');
@@ -3545,8 +3712,8 @@ module(basename(import.meta.filename), function () {
           let patchEtag = patchResponse.get('etag') ?? '';
           assert.ok(patchEtag, 'PATCH response carries an ETag');
           assert.true(
-            /^"\d+(?:-[0-9a-f]+)?:card-rri-lb\d+"$/.test(patchEtag),
-            `PATCH ETag matches "<indexed_at>(-<realmInfoHash>)?:card-rri-lb<budget>" pattern (got ${patchEtag})`,
+            /^"\d+(?:-[0-9a-f]+)?:card-rri-write-echo"$/.test(patchEtag),
+            `PATCH ETag names the write-echo shape (got ${patchEtag})`,
           );
           assert.notStrictEqual(
             patchEtag,
@@ -3565,25 +3732,46 @@ module(basename(import.meta.filename), function () {
             200,
             'old ETag no longer matches → fresh 200',
           );
-          assert.strictEqual(
+          assert.true(
+            /^"\d+(?:-[0-9a-f]+)?:card-rri-lb\d+"$/.test(
+              staleResponse.get('etag') ?? '',
+            ),
+            `GET reports a validator for the read shape (got ${staleResponse.get('etag')})`,
+          );
+          assert.notStrictEqual(
             staleResponse.get('etag'),
-            patchEtag,
-            'GET reports the new ETag',
+            originalEtag,
+            'and it advanced with the write',
           );
 
-          // And the new etag from the PATCH must short-circuit on next GET.
-          let cachedResponse = await request
+          // The PATCH's own validator describes the write echo, which carries
+          // no `included[]`, so it must not satisfy a GET — a 304 here would
+          // leave the caller holding the narrower body as the card's read
+          // representation.
+          let echoValidated = await request
             .get('/person-1')
             .set('Accept', 'application/vnd.card+json')
             .set('If-None-Match', patchEtag);
           assert.strictEqual(
+            echoValidated.status,
+            200,
+            'the write echo’s ETag does not short-circuit a GET',
+          );
+
+          // The GET's own validator still does.
+          let freshEtag = echoValidated.get('etag') ?? '';
+          let cachedResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-None-Match', freshEtag);
+          assert.strictEqual(
             cachedResponse.status,
             304,
-            'new ETag from PATCH lets a follow-up GET short-circuit',
+            'the ETag a GET returns lets a follow-up GET short-circuit',
           );
         });
 
-        test('no-op PATCH response carries an ETag matching the existing one', async function (assert) {
+        test('no-op PATCH response carries the write-echo validator over the unchanged state', async function (assert) {
           // Prime once so the stored file is in canonical serialized form;
           // the no-op assertions below measure the steady state (see the
           // no-op lastModified test).
@@ -3623,10 +3811,23 @@ module(basename(import.meta.filename), function () {
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(patchResponse.status, 200, 'no-op PATCH succeeds');
+          // Nothing was rewritten, so `indexed_at` has not moved and the
+          // validator is built over the same state the GET described. It is
+          // still a different validator, because a no-op PATCH answers with
+          // the write-echo shape like any other write — which is what keeps a
+          // caller from treating the echo as the card's read representation.
           assert.strictEqual(
             patchResponse.get('etag'),
+            (initialEtag ?? '').replace(
+              /:card-rri-lb\d+"$/,
+              ':card-rri-write-echo"',
+            ),
+            'no-op PATCH validates the unchanged state under the write-echo shape',
+          );
+          assert.notStrictEqual(
+            patchResponse.get('etag'),
             initialEtag,
-            'no-op PATCH returns the same ETag (no rewrite, indexed_at unchanged)',
+            'and so does not collide with the validator a GET returns',
           );
         });
 
@@ -6336,6 +6537,59 @@ boxel:
         ),
         'local person is present in included array',
       );
+    });
+
+    // A write is answered from the written card alone. The read of the same
+    // card in the same test is the control: it is what the card's query-backed
+    // fields resolve to, and what the write would have assembled had it asked.
+    test('a write does not resolve the written card’s query-backed fields', async function (assert) {
+      let read = await consumerRequest
+        .get('/favorite')
+        .set('Accept', 'application/vnd.card+json');
+      assert.strictEqual(read.status, 200, `HTTP 200: ${read.text}`);
+      assert.ok(
+        read.body.data.relationships?.favorite?.links?.search,
+        'the read resolves the query-backed field',
+      );
+      assert.ok(
+        (read.body.included ?? []).some(
+          (resource: any) => resource.id === `${consumerRealmURL}local-person`,
+        ),
+        'and side-loads the card that field found',
+      );
+
+      let write = await consumerRequest
+        .patch('/favorite')
+        .send({
+          data: {
+            type: 'card',
+            attributes: { cardInfo: { name: 'Renamed' } },
+            meta: {
+              adoptsFrom: {
+                module: rri('./favorite-finder'),
+                name: 'FavoriteLookup',
+              },
+            },
+          },
+        })
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(write.status, 200, `HTTP 200: ${write.text}`);
+      assert.strictEqual(
+        write.body.data.id,
+        `${consumerRealmURL}favorite`,
+        'the write answers about the card it wrote',
+      );
+      assert.strictEqual(
+        write.body.data.attributes.cardInfo.name,
+        'Renamed',
+        'and answers with the value it just stored',
+      );
+      assert.notOk(
+        write.body.data.relationships?.favorite?.links?.search,
+        'but runs no query for the query-backed field',
+      );
+      assert.notOk(write.body.included, 'and side-loads nothing');
     });
 
     test('linksToMany query returns remote results and records errors for failing realm', async function (assert) {

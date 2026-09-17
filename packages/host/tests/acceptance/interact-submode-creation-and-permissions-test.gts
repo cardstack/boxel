@@ -346,22 +346,33 @@ module(
             if (consumerSaveCount === 1) {
               // the first time we save the consumer we set the relationship to null
               // as we are still waiting for the other realm to assign an ID to the new linked card
-              assert.strictEqual(doc.included!.length, 1);
-              assert.strictEqual(
-                doc.included![0].id,
-                `${testRealmURL}Pet/mango`,
-                "the side loaded resources don't include the newly created card yet",
+              let newFriendLink = (
+                doc.data?.relationships?.['friends.1'] as
+                  | { links?: { self?: string | null } }
+                  | undefined
+              )?.links?.self;
+              assert.notOk(
+                newFriendLink,
+                'the "friends.1" relationship names nothing while the new card is unsaved',
+              );
+              assert.notOk(
+                doc.included,
+                'and the save answers with the consumer alone, side-loading none of its links',
               );
             }
             if (consumerSaveCount === 2) {
               // as soon as the other realm assigns an id to the linked card we then
               // save the consumer with a relationship to the linked card's id
-              assert.deepEqual(
-                doc.data?.relationships?.['friends.1'],
-                {
-                  links: { self: newLinkId! },
-                  data: { type: 'card', id: newLinkId! },
-                },
+              // A write echoes relationships as the card stores them, so the
+              // link is what it names — the resolved target a readback would
+              // have added is not part of this answer.
+              assert.strictEqual(
+                (
+                  doc.data?.relationships?.['friends.1'] as
+                    | { links?: { self?: string | null } }
+                    | undefined
+                )?.links?.self,
+                newLinkId!,
                 'the "friends.1" relationship was populated with the linked card\'s new id',
               );
               consumerSaved.fulfill();

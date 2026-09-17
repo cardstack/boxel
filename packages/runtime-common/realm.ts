@@ -78,6 +78,16 @@ import {
 } from './paths.ts';
 import type ms from 'ms';
 import {
+  CAPTURE_URL_TOKEN_PARAM,
+  CAPTURE_URL_TOKEN_SCOPE,
+  CAPTURE_URL_TOKEN_TTL,
+  CAPTURE_URL_TOKEN_TTL_MS,
+  MAX_CAPTURE_URLS_PER_SIGNING_REQUEST,
+  captureURLTokenBinding,
+  captureURLTokenSecret,
+  type CaptureURLTokenClaims,
+} from './capture-url-token.ts';
+import {
   DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
@@ -253,6 +263,8 @@ import {
   sanitizeLoggingCorrelationId,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
 } from './prerender-headers.ts';
+import { RequestTimings } from './request-timings.ts';
+import { emitWriteTiming } from './write-timing.ts';
 import {
   type MatrixClient,
   ensureFullMatrixUserId,
@@ -424,6 +436,24 @@ export type RealmIndexCounts = {
 export const DURING_PRERENDER_HEADER = 'x-boxel-during-prerender';
 function isDuringPrerenderRequest(request: Request): boolean {
   return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
+}
+
+// A request URL safe to write to a log line: the capture-URL token (a bearer
+// credential carried in `?token=`) is redacted, since these lines ship to
+// Loki. Mirrors the request-log middleware's `loggableRequestURL`, needed
+// again here because the realm's own logger (auth-failure and capture-token
+// warnings) bypasses that middleware. A no-op when no token param is present.
+function maskLoggedURL(urlString: string): string {
+  try {
+    let url = new URL(urlString);
+    if (!url.searchParams.has(CAPTURE_URL_TOKEN_PARAM)) {
+      return urlString;
+    }
+    url.searchParams.set(CAPTURE_URL_TOKEN_PARAM, 'REDACTED');
+    return url.href;
+  } catch {
+    return urlString;
+  }
 }
 
 // Opt-in signal a JSON-API card POST / PATCH caller sets to say "don't block my
@@ -849,11 +879,29 @@ function buildEtag(
 // any card); the screenshots fingerprint captures the joined
 // `meta.screenshots` (see `screenshotsEtagFingerprint`). A null
 // `indexedAt` suppresses ETag emission entirely.
+//
+// How much of a card's link graph a card+json body carries. `full` side-loads
+// the whole closure; `links-only` answers the relationships without
+// side-loading their targets; `write-echo` is what a POST / PATCH returns —
+// the written card alone, neither its links resolved nor its query-backed
+// fields expanded, because nothing reads either off a write response.
+//
+// These three take different validators because a client holding one must not
+// be 304'd to another's body. The `full` shape splits once more below, on
+// whether the assembled-resource budget bounded the closure it carries, since
+// a bounded body and an exempt one differ at one `indexed_at`. Query-backed
+// expansion gets no member here: a read from inside a prerender leaves those
+// fields unexpanded, but that body is never served to a client that caches,
+// and the response cache separates it by folding `skipQueryBackedExpansion`
+// into its own key rather than into the ETag. Adding a member here is the
+// wrong move for a variation the validator does not have to carry.
+type CardJsonShape = 'full' | 'links-only' | 'write-echo';
+
 function buildCardJsonEtag(
   indexedAt: number | null | undefined,
   realmInfoHash: string | undefined,
   screenshotsFingerprint?: string,
-  resolveLinksOnly = false,
+  shape: CardJsonShape = 'full',
   unboundedAssembly = false,
 ): string | undefined {
   if (indexedAt == null) {
@@ -862,28 +910,27 @@ function buildCardJsonEtag(
   let base = [`${indexedAt}`, realmInfoHash, screenshotsFingerprint]
     .filter(Boolean)
     .join('-');
-  // A read that answers relationships without side-loading their targets
+  // A response that carries less of the card's link graph than a full read
   // serves a different representation of the same card at the same
   // `indexed_at`, so it takes its own variant — the same job the constant
-  // does for a serialization change, on a value that varies per server
-  // rather than per revision. Without it, turning the setting on or off
-  // would leave every client that holds a validator being 304'd to the
-  // shape it cached, and the two shapes reachable under one key in the
-  // response cache.
-  // Three shapes, three variants, because all three are different bodies at the
-  // same `indexed_at`.
+  // does for a serialization change, on a value that varies per response
+  // rather than per revision. Without it, a client that cached a narrower
+  // shape would be 304'd to it when it later asks for the full one, and the
+  // shapes would be reachable under one key in the response cache.
   //
-  // A links-only read assembles no closure, so no budget can change its body.
-  // An assembly exempt from the budget carries its whole closure whatever the
-  // ceiling is — so it takes a variant of its own, and one that does NOT name
-  // the budget: a request that revalidates across a retune is entitled to its
-  // 304, and sharing a validator with the bounded shape would instead let a
+  // A full read is the only shape that assembles a link closure, so it is the
+  // only one the assembled-resource budget can move — and it splits again on
+  // whether that budget applied. An assembly exempt from the budget carries its
+  // whole closure at any ceiling, so it is named as such rather than by a
+  // number that does not bind it: naming the exemption leaves an exempt
+  // response's validator untouched by a retune, which cannot change its body,
+  // and keeps the two shapes from sharing a validator — which would let a
   // conditional request be answered with the other shape's body. That is the
   // hazard the exemption exists to prevent, since an exempt read is a render's,
-  // and a truncated closure reused by one is baked into cached HTML.
+  // and a clipped closure reused by one is baked into cached HTML.
   let variant: string;
-  if (resolveLinksOnly) {
-    variant = `${CARD_JSON_ETAG_VARIANT}-links-only`;
+  if (shape !== 'full') {
+    variant = `${CARD_JSON_ETAG_VARIANT}-${shape}`;
   } else if (unboundedAssembly) {
     variant = `${CARD_JSON_ETAG_VARIANT}-lb-off`;
   } else {
@@ -1824,6 +1871,11 @@ export class Realm {
         '/_session',
         SupportedMimeType.Session,
         this.createSession.bind(this),
+      )
+      .query(
+        '/_sign-capture-urls',
+        SupportedMimeType.JSON,
+        this.signCaptureURLs.bind(this),
       )
       .get(
         '/_permissions',
@@ -4624,7 +4676,29 @@ export class Realm {
 
     try {
       if (!isLocal) {
-        await this.checkPermission(request, requestContext, requiredPermission);
+        // A capture-URL token (`?token=` on a `_screenshot/` GET) authorizes
+        // exactly this request without an Authorization header — the door for
+        // fetches the host's auth service worker cannot reach (`<object>`/
+        // `<embed>` loads, top-level navigations). A missing or failing token
+        // falls through to the normal permission check, so a public realm
+        // still serves and a private realm still 401s the usual way.
+        let captureTokenUser =
+          request.method === 'GET' && isCaptureServingPath(localPath)
+            ? await this.verifyCaptureURLToken(
+                request,
+                localPath,
+                requestContext,
+              )
+            : undefined;
+        if (captureTokenUser !== undefined) {
+          requestContext.authenticatedUser = captureTokenUser;
+        } else {
+          await this.checkPermission(
+            request,
+            requestContext,
+            requiredPermission,
+          );
+        }
         // An archived realm is sealed for everyone, owner included: once a
         // caller is authorized, every external content request is
         // short-circuited with 403 (archived). The seal runs AFTER
@@ -5602,6 +5676,194 @@ export class Realm {
     });
   }
 
+  // Verifies a capture-URL token (`?token=` on a `_screenshot/` GET) and
+  // returns the user it authenticates, or undefined so the caller falls back
+  // to the normal permission check. Every rejection is a fall-through, never
+  // a thrown 401: an invalid token must not fail a request that public
+  // permissions would authorize. The checks mirror the invariants the other
+  // token families enforce: the family's own signing key (and, behind it, the
+  // scope claim) keeps session JWTs out of query strings, the realm claim
+  // keeps a token minted for realm A from replaying against realm B (that key
+  // is derived from the server-wide seed, so it is shared across realms), the
+  // URL binding keeps it from replaying against any other capture, the
+  // revocation check keeps an operator revocation authoritative over every
+  // family, and the realm-read check keeps the grant no more durable than the
+  // permission it was minted from — the handler-verifies-itself precedent
+  // from handle-download-realm.
+  private async verifyCaptureURLToken(
+    request: Request,
+    localPath: LocalPath,
+    requestContext: RequestContext,
+  ): Promise<string | undefined> {
+    let searchParams = new URL(request.url).searchParams;
+    let tokenString = searchParams.get(CAPTURE_URL_TOKEN_PARAM);
+    if (!tokenString) {
+      return undefined;
+    }
+    let claims: CaptureURLTokenClaims & { iat: number; exp: number };
+    try {
+      claims = this.#adapter.verifyJWT(
+        tokenString,
+        captureURLTokenSecret(this.#realmSecretSeed),
+      ) as unknown as CaptureURLTokenClaims & { iat: number; exp: number };
+    } catch (e) {
+      this.#log.warn(
+        `capture-url token failed verification for GET ${maskLoggedURL(request.url)}: ${e}`,
+      );
+      return undefined;
+    }
+    if (claims.scope !== CAPTURE_URL_TOKEN_SCOPE) {
+      this.#log.warn(
+        `capture-url token for GET ${maskLoggedURL(request.url)} carries scope ${JSON.stringify(
+          (claims as { scope?: unknown }).scope,
+        )}, not ${CAPTURE_URL_TOKEN_SCOPE}`,
+      );
+      return undefined;
+    }
+    if (ensureTrailingSlash(claims.realm) !== ensureTrailingSlash(this.url)) {
+      this.#log.warn(
+        `capture-url token for GET ${maskLoggedURL(request.url)} is scoped to realm ${claims.realm}, not ${this.url}`,
+      );
+      return undefined;
+    }
+    let binding = captureURLTokenBinding(localPath, searchParams);
+    if (claims.url !== binding) {
+      this.#log.warn(
+        `capture-url token for GET ${maskLoggedURL(request.url)} is bound to "${claims.url}", not "${binding}"`,
+      );
+      return undefined;
+    }
+    if (await isSessionRevoked(this.#dbAdapter, claims.user, claims.iat)) {
+      this.#log.warn(
+        `capture-url token for GET ${maskLoggedURL(request.url)} was issued at ${claims.iat}, which predates user ${claims.user}'s session revocation`,
+      );
+      return undefined;
+    }
+    // Realm read is re-derived from the live permission rows on every
+    // request for the other token families — a normal session's
+    // `permissions` claim is compared against the freshly computed union, a
+    // delegated session is `can(user, 'read')`-checked — so this one is too.
+    // Without it, revoking a user's read on the realm would leave every
+    // capture URL they already minted working until the token expired.
+    // Last, so an unauthorized token costs no permission lookup. The realm's
+    // own matrix user is exempt for the same reason `checkPermission` exempts
+    // it: it is permitted every action, and it is the gate the mint went
+    // through — a principal that can mint here must be able to serve here.
+    let permissionChecker = new RealmPermissionChecker(
+      requestContext.permissions,
+      this.#matrixClient,
+    );
+    if (
+      claims.user !== this.#matrixClientUserId &&
+      !(await permissionChecker.can(claims.user, 'read'))
+    ) {
+      this.#log.warn(
+        `capture-url token for GET ${maskLoggedURL(request.url)} names user ${claims.user}, who does not have read permission on ${this.url}`,
+      );
+      return undefined;
+    }
+    return claims.user;
+  }
+
+  // Mints capture-URL tokens: signed variants of this realm's `_screenshot/`
+  // URLs that authorize their own GET without a header, for the fetches the
+  // host's auth service worker cannot reach. Routed as QUERY (a pure
+  // computation with a body), so the realm-read gate the serving path
+  // enforces is exactly the gate on minting — the token grants nothing the
+  // caller doesn't already hold; it only makes that grant portable. An
+  // anonymous caller (a public realm's reader) gets the URLs echoed back
+  // unsigned: there is no user to bind a token to, and none is needed where
+  // anonymous read already serves.
+  private async signCaptureURLs(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let urls: unknown;
+    try {
+      let body = JSON.parse(await request.text()) as { urls?: unknown };
+      urls = body.urls;
+    } catch {
+      return badRequest({
+        message: 'Request body must be JSON with a "urls" array',
+        requestContext,
+      });
+    }
+    if (
+      !Array.isArray(urls) ||
+      urls.length === 0 ||
+      urls.length > MAX_CAPTURE_URLS_PER_SIGNING_REQUEST ||
+      !urls.every((u): u is string => typeof u === 'string')
+    ) {
+      return badRequest({
+        message: `"urls" must be an array of 1-${MAX_CAPTURE_URLS_PER_SIGNING_REQUEST} strings`,
+        requestContext,
+      });
+    }
+    let user = requestContext.authenticatedUser;
+    let signed: {
+      url: string;
+      signedUrl: string;
+      expiresAt: string | null;
+    }[] = [];
+    for (let urlString of urls) {
+      let url: URL;
+      try {
+        url = new URL(urlString);
+      } catch {
+        return badRequest({
+          message: `"${urlString}" is not a valid URL`,
+          requestContext,
+        });
+      }
+      if (!this.paths.inRealm(url)) {
+        return badRequest({
+          message: `"${urlString}" is not in realm ${this.url}`,
+          requestContext,
+        });
+      }
+      let localPath = this.paths.local(url);
+      if (!isCaptureServingPath(localPath)) {
+        return badRequest({
+          message: `"${urlString}" is not a ${CAPTURE_SERVING_PREFIX} URL`,
+          requestContext,
+        });
+      }
+      if (!user) {
+        signed.push({ url: urlString, signedUrl: urlString, expiresAt: null });
+        continue;
+      }
+      let claims: CaptureURLTokenClaims = {
+        user,
+        realm: this.url,
+        scope: CAPTURE_URL_TOKEN_SCOPE,
+        url: captureURLTokenBinding(localPath, url.searchParams),
+      };
+      // Signed under the capture family's own key, not the realm seed the
+      // session families share — see `captureURLTokenSecret`.
+      let token = this.#adapter.createJWT(
+        claims as unknown as TokenClaims,
+        CAPTURE_URL_TOKEN_TTL,
+        captureURLTokenSecret(this.#realmSecretSeed),
+      );
+      let signedUrl = new URL(url.href);
+      signedUrl.searchParams.set(CAPTURE_URL_TOKEN_PARAM, token);
+      signed.push({
+        url: urlString,
+        signedUrl: signedUrl.href,
+        expiresAt: new Date(
+          Date.now() + CAPTURE_URL_TOKEN_TTL_MS,
+        ).toISOString(),
+      });
+    }
+    return createResponse({
+      body: JSON.stringify({ signed }),
+      init: {
+        headers: { 'content-type': SupportedMimeType.JSON },
+      },
+      requestContext,
+    });
+  }
+
   // The realm's screenshot-serving surface: `_screenshot/{instanceLocalPath}`
   // resolves a capture of one instance and streams it from the MediaCache
   // with content-hash ETags and short-max-age revalidation (see
@@ -5633,6 +5895,11 @@ export class Realm {
       instanceLocalPath.replace(/\.json$/, ''),
     );
     let searchParams = new URL(request.url).searchParams;
+    // The capture-URL token is an authorization credential, not addressing —
+    // verified upstream in internalHandle. Dropped here so it reaches neither
+    // the `name=` exclusivity check nor the capture-spec parse (which refuses
+    // unknown params by name), and so it can never enter the ledger identity.
+    searchParams.delete(CAPTURE_URL_TOKEN_PARAM);
 
     // `name=` addresses a declared screenshot through the instance's
     // manifest — a different addressing form from the capture-spec params,
@@ -6593,7 +6860,7 @@ export class Realm {
     let authorizationString = request.headers.get('Authorization');
     if (!authorizationString) {
       warnRefusal(
-        `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) missing auth header`,
+        `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}) missing auth header`,
       );
       throw new AuthenticationError(
         AuthenticationErrorMessages.MissingAuthHeader,
@@ -6611,7 +6878,7 @@ export class Realm {
       // sessions delegated on their behalf.
       if (await isSessionRevoked(this.#dbAdapter, token.user, token.iat)) {
         warnRefusal(
-          `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), session for user ${token.user} was issued at ${token.iat} which predates that user's session revocation`,
+          `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), session for user ${token.user} was issued at ${token.iat} which predates that user's session revocation`,
         );
         throw new AuthenticationError(
           AuthenticationErrorMessages.SessionRevoked,
@@ -6643,7 +6910,7 @@ export class Realm {
           ensureTrailingSlash(token.realm) !== ensureTrailingSlash(this.url)
         ) {
           warnRefusal(
-            `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} is scoped to realm ${token.realm}, not ${this.url}`,
+            `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), delegated session for user ${user} is scoped to realm ${token.realm}, not ${this.url}`,
           );
           throw new AuthenticationError(
             AuthenticationErrorMessages.TokenInvalid,
@@ -6651,13 +6918,13 @@ export class Realm {
         }
         if (requiredPermission !== 'read') {
           warnRefusal(
-            `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} attempted ${requiredPermission}; delegated sessions are read-only`,
+            `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), delegated session for user ${user} attempted ${requiredPermission}; delegated sessions are read-only`,
           );
           throw new AuthorizationError('Delegated sessions are read-only');
         }
         if (!(await realmPermissionChecker.can(user, 'read'))) {
           warnRefusal(
-            `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} but user lacks read permission`,
+            `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), delegated session for user ${user} but user lacks read permission`,
           );
           throw new AuthenticationError(
             AuthenticationErrorMessages.PermissionMismatch,
@@ -6690,7 +6957,7 @@ export class Realm {
           JSON.stringify(userPermissions.sort())
       ) {
         warnRefusal(
-          `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), for user ${user} token permissions do not match realm permissions for user. token permissions: ${JSON.stringify(token.permissions?.sort())}, user's realm permissions: ${JSON.stringify(userPermissions.sort())}`,
+          `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), for user ${user} token permissions do not match realm permissions for user. token permissions: ${JSON.stringify(token.permissions?.sort())}, user's realm permissions: ${JSON.stringify(userPermissions.sort())}`,
         );
         throw new AuthenticationError(
           AuthenticationErrorMessages.PermissionMismatch,
@@ -6699,7 +6966,7 @@ export class Realm {
 
       if (!(await realmPermissionChecker.can(user, requiredPermission))) {
         warnRefusal(
-          `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
+          `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
         );
         throw new AuthorizationError(
           'Insufficient permissions to perform this action',
@@ -6709,13 +6976,13 @@ export class Realm {
     } catch (e: any) {
       if (e?.constructor?.name === 'TokenExpiredError') {
         warnRefusal(
-          `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
+          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
       if (e?.constructor?.name === 'JsonWebTokenError') {
         warnRefusal(
-          `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}`,
+          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
       }
@@ -7628,9 +7895,53 @@ export class Realm {
     return notFound(request, requestContext);
   }
 
+  // One `realm:write-timing` line per card write, emitted from a `finally` so
+  // a write that failed is attributed too — that is the write whose time
+  // someone is most likely trying to account for.
+  //
+  // A request that was refused before it reached the commit — an unsupported
+  // media type, a path the verb does not serve, a body that is not a card —
+  // stamped no stage, and a line for it would say only how long it took to
+  // say no. Those are skipped, so every line on this channel describes a
+  // request that tried to write.
+  #emitWriteTiming(
+    method: string,
+    request: Request,
+    startedAt: number,
+    timings: RequestTimings,
+  ): void {
+    let stages = timings.toLogFragment();
+    if (!stages) {
+      return;
+    }
+    let correlationId = sanitizeLoggingCorrelationId(
+      request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+    );
+    emitWriteTiming(
+      `${method} ${request.url}` +
+        (correlationId ? ` corr=${correlationId}` : '') +
+        ` handler=${Date.now() - startedAt}ms ` +
+        stages,
+    );
+  }
+
   private async createCard(
     request: Request,
     requestContext: RequestContext,
+  ): Promise<Response> {
+    let timings = new RequestTimings();
+    let startedAt = Date.now();
+    try {
+      return await this.#createCard(request, requestContext, timings);
+    } finally {
+      this.#emitWriteTiming('POST', request, startedAt, timings);
+    }
+  }
+
+  async #createCard(
+    request: Request,
+    requestContext: RequestContext,
+    timings: RequestTimings,
   ): Promise<Response> {
     let duringPrerender = isDuringPrerenderRequest(request);
     // A skip-index-wait caller (see SKIP_INDEX_WAIT_HEADER) gets the same
@@ -7721,6 +8032,7 @@ export class Realm {
             // create, and a `POST` carrying one has always stored the card
             // with that edge empty rather than refusing the write.
             foreignSideLoadLink: 'leave',
+            timings,
           },
         )
       )[0];
@@ -7758,17 +8070,25 @@ export class Realm {
       }
       doc = await this.serializedInstanceEcho(stored, newURL, lastModified);
     } else {
-      let entry = await this.#realmIndexQueryEngine.cardDocument(
-        new URL(newURL),
-        {
-          loadLinks: true,
-          skipQueryBackedExpansion: false,
-          // A write from inside a render answers from the serialized echo
-          // rather than from a read-back, so reaching here means this is a
-          // live write and the assembled-resource budget applies to its
-          // closure exactly as it does to a live read's.
-          skipLinkAssemblyBudget: false,
-        },
+      // The readback asks for the written card and nothing around it: no
+      // `loadLinks`, so neither the transitive closure of the card's links nor
+      // the query a query-backed field would run to name its targets.
+      //
+      // Nothing consumes either. Two surfaces in the host see a write
+      // response, and neither reads the link graph. The one that updates the
+      // instance drops `data.attributes` and `data.relationships` before
+      // merging, which leaves `included[]` unreachable; the save subscriber
+      // gets the body whole, and exists for tests. A card created by `lid`
+      // under this write is reconciled to its assigned id from the realm
+      // invalidation event, which correlates the last segment of the assigned
+      // URL with the local id (`tryFindingCardItem` in the host's card store
+      // names that as the reconciliation point, alongside `api.setId`); the
+      // response document is not part of that path, and could not be — the
+      // index answers in ids, never in the `lid` a caller would match on.
+      // Writes that answer from the serialized echo — prerender and
+      // skip-index-wait callers — return no `included` at all and always have.
+      let entry = await timings.time('readback', () =>
+        this.#realmIndexQueryEngine.cardDocument(new URL(newURL)),
       );
       if (!entry || entry?.type === 'error') {
         let err = entry
@@ -7789,8 +8109,14 @@ export class Realm {
       });
     }
     this.#serveInstanceIdsAsRRI(doc);
+    // The last sequential leg: turning the assembled document into the bytes
+    // that go on the wire. Stamped because it scales with the body, which is
+    // what the shape of this response decides.
+    let responseBody = await timings.time('stringify', async () =>
+      JSON.stringify(doc, null, 2),
+    );
     return createResponse({
-      body: JSON.stringify(doc, null, 2),
+      body: responseBody,
       init: {
         status: 201,
         headers: {
@@ -7806,6 +8132,20 @@ export class Realm {
   private async patchCardInstance(
     request: Request,
     requestContext: RequestContext,
+  ): Promise<Response> {
+    let timings = new RequestTimings();
+    let startedAt = Date.now();
+    try {
+      return await this.#patchCardInstance(request, requestContext, timings);
+    } finally {
+      this.#emitWriteTiming('PATCH', request, startedAt, timings);
+    }
+  }
+
+  async #patchCardInstance(
+    request: Request,
+    requestContext: RequestContext,
+    timings: RequestTimings,
   ): Promise<Response> {
     let localPath = this.paths.local(new URL(request.url));
     if (await this.nonJsonFileExists(localPath)) {
@@ -7893,6 +8233,7 @@ export class Realm {
             // The same reading a create takes of a side-load claiming another
             // realm: the edge is stored empty and the patch succeeds.
             foreignSideLoadLink: 'leave',
+            timings,
           },
         )
       )[0];
@@ -7916,33 +8257,35 @@ export class Realm {
       });
     }
     let created = result.meta.created;
-    let readEntry = async (skipQueryBackedExpansion: boolean) =>
-      await this.#realmIndexQueryEngine.cardDocument(new URL(instanceURL), {
-        loadLinks: true,
-        skipQueryBackedExpansion,
-        // A render's own read-back is exempt from the assembled-resource
-        // budget for the same reason its card+json GET is: what it assembles
-        // is rendered into HTML that outlives this request.
-        skipLinkAssemblyBudget: skipQueryBackedExpansion,
-      });
+    // The card and nothing around it: no `loadLinks`, so neither the
+    // transitive closure of its links nor the query a query-backed field
+    // would run to name its targets. Nothing consumes either off a write
+    // response — the create path's readback states the case. The commit has
+    // released the write lock by the time this runs, so what it costs is the
+    // writer's own latency rather than every other writer's.
+    let readEntry = async () =>
+      await timings.time('readback', () =>
+        this.#realmIndexQueryEngine.cardDocument(new URL(instanceURL)),
+      );
     let doc: SingleCardDocument;
     if (!result.meta.changed) {
       // The patch left the card exactly as it was, so the answer is the card
       // as the realm already holds it — read before anything else is decided,
       // because a request that changed nothing is answered from the index
-      // whether or not it asked for its own indexing to be deferred. Only a
-      // render's own read narrows what it resolves.
-      let unchanged = await readEntry(duringPrerender);
+      // whether or not it asked for its own indexing to be deferred. It is
+      // still answering a writer, so it takes the same narrow shape every
+      // other write does.
+      let unchanged = await readEntry();
       if (unchanged && unchanged.type !== 'error') {
         return await this.#patchedCardResponse(unchanged, {
           instanceURL,
           localPath,
+          timings,
           // The file was not rewritten, so the modification time it carries is
           // the one the index recorded for it.
           lastModified: unchanged.doc.data.meta.lastModified ?? lastModified,
           created,
           requestContext,
-          unboundedAssembly: duringPrerender,
         });
       }
       // The index holds no document for this card — it has never been indexed,
@@ -7993,7 +8336,7 @@ export class Realm {
         requestContext,
       });
     }
-    let entry = await readEntry(false);
+    let entry = await readEntry();
     if (entry && entry.type !== 'error') {
       return await this.#patchedCardResponse(entry, {
         instanceURL,
@@ -8001,8 +8344,7 @@ export class Realm {
         lastModified,
         created,
         requestContext,
-        // `readEntry(false)` above, so this read-back was bounded.
-        unboundedAssembly: false,
+        timings,
       });
     }
     let stored = storedCardDocument(result);
@@ -8064,19 +8406,14 @@ export class Realm {
       lastModified,
       created,
       requestContext,
-      unboundedAssembly,
+      timings,
     }: {
       instanceURL: string;
       localPath: LocalPath;
       lastModified: number | null;
       created: number | null;
       requestContext: RequestContext;
-      // Whether the read-back behind `entry` was exempt from the
-      // assembled-resource budget. It travels with the entry rather than being
-      // recomputed here, because the two callers differ: a render's read-back
-      // is exempt and an ordinary one is not, and the validator below has to
-      // describe the document it is sent with.
-      unboundedAssembly: boolean;
+      timings: RequestTimings;
     },
   ): Promise<Response> {
     let doc: SingleCardDocument = merge({}, entry.doc, {
@@ -8088,6 +8425,8 @@ export class Realm {
     // The PATCH echo carries the joined `meta.screenshots` like a GET does —
     // the store replaces an instance's meta wholesale from a save response, so
     // an echo without it would wipe the key client-side until the next GET.
+    // The two representations part company on the link graph only, which is
+    // what the `write-echo` validator variant below records.
     if (entry.screenshots) {
       doc.data.meta = {
         ...doc.data.meta,
@@ -8107,12 +8446,17 @@ export class Realm {
           entry.indexedAt,
           this.getCachedRealmInfoHash(),
           screenshotsEtagFingerprint(entry.screenshots),
-          false,
-          unboundedAssembly,
+          'write-echo',
         );
     this.#serveInstanceIdsAsRRI(doc);
+    // The last sequential leg: turning the assembled document into the bytes
+    // that go on the wire. Stamped because it scales with the body, which is
+    // what the shape of this response decides.
+    let body = await timings.time('stringify', async () =>
+      JSON.stringify(doc, null, 2),
+    );
     return createResponse({
-      body: JSON.stringify(doc, null, 2),
+      body,
       init: {
         headers: {
           'content-type': SupportedMimeType.CardJson,
@@ -8239,15 +8583,20 @@ export class Realm {
       skipQueryBackedExpansion,
       resolveLinksOnly:
         !skipQueryBackedExpansion && this.#liveReadsResolveLinksOnly,
-      // The assembled-resource budget bounds live reads and exempts a render's
-      // own, for the same reason the prerendered-HTML leg is exempt from the
-      // page and time bounds: what a render assembles is baked into cached
-      // HTML, so a ceiling that clipped it would be serving a short closure
-      // from cache long after the pressure that justified it passed. It needs
-      // no separate slot in the validator — the budget is one number for the
-      // process, folded into the card+json ETag variant, and this exemption
-      // travels with `skipQueryBackedExpansion`, which the response cache
-      // already keys on.
+      // The assembled-resource budget bounds live reads. This branch exempts a
+      // read carrying the during-prerender marker, for the same reason the
+      // prerendered-HTML leg is exempt from the page and time bounds: what a
+      // render assembles is baked into cached HTML, so a ceiling that clipped
+      // it would serve a short closure from cache long after the pressure that
+      // justified it had passed.
+      //
+      // It is defensive rather than load-bearing. No caller attaches that
+      // marker to a card+json request, so the exemption a render relies on is
+      // the one on the card+html entry leg, which does receive it and does run
+      // the assembly pass. The branch stays so it is correct if the marker ever
+      // arrives here. The validator names the exemption rather than the
+      // ceiling, so an exempt body and a bounded one never share one — see
+      // `buildCardJsonEtag`.
       skipLinkAssemblyBudget: skipQueryBackedExpansion,
     };
   }
@@ -8339,7 +8688,7 @@ export class Realm {
       fragment: string = '',
     ) =>
       this.#readGateLog[level](
-        `outcome=${outcome}${fragment} url=${request.url}`,
+        `outcome=${outcome}${fragment} url=${maskLoggedURL(request.url)}`,
       );
     if (isDuringPrerenderRequest(request)) {
       emit('info', 'skipped-prerender');
@@ -8486,7 +8835,7 @@ export class Realm {
             result.indexedAt,
             this.getCachedRealmInfoHash(),
             screenshotsEtagFingerprint(result.screenshots),
-            resolveLinksOnly,
+            resolveLinksOnly ? 'links-only' : 'full',
             skipLinkAssemblyBudget,
           );
       let cacheControl = this.cardJsonCacheControl(requestContext);
@@ -8667,7 +9016,7 @@ export class Realm {
             instanceEntry.indexedAt,
             realmInfoHash,
             screenshotsEtagFingerprint(instanceEntry.screenshots),
-            resolveLinksOnly,
+            resolveLinksOnly ? 'links-only' : 'full',
             skipLinkAssemblyBudget,
           );
         }
@@ -8861,7 +9210,7 @@ export class Realm {
           headers.indexedAt,
           this.getCachedRealmInfoHash(),
           screenshotsEtagFingerprint(headers.screenshots),
-          resolveLinksOnly,
+          resolveLinksOnly ? 'links-only' : 'full',
           skipLinkAssemblyBudget,
         );
     return {
@@ -8937,7 +9286,7 @@ export class Realm {
         error.status >= 400 && error.status <= 599 && error.status !== 404
           ? error.status
           : 500,
-      message: `cannot return card, ${request.url}, from index: ${error.title} - ${error.message}`,
+      message: `cannot return card, ${maskLoggedURL(request.url)}, from index: ${error.title} - ${error.message}`,
       id: request.url,
       additionalError: CardError.fromSerializableError({
         status: error.status,
@@ -9109,14 +9458,14 @@ export class Realm {
         return notAcceptable(
           request,
           requestContext,
-          `markdown representation unavailable: ${request.url} has an indexing error`,
+          `markdown representation unavailable: ${maskLoggedURL(request.url)} has an indexing error`,
         );
       }
       if (instanceEntry.markdown == null) {
         return notAcceptable(
           request,
           requestContext,
-          `markdown representation not available for ${request.url}`,
+          `markdown representation not available for ${maskLoggedURL(request.url)}`,
         );
       }
       return createResponse({
@@ -9140,7 +9489,7 @@ export class Realm {
         return notAcceptable(
           request,
           requestContext,
-          `markdown representation not available for ${request.url}`,
+          `markdown representation not available for ${maskLoggedURL(request.url)}`,
         );
       }
       return createResponse({
