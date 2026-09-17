@@ -474,17 +474,15 @@ module(basename(import.meta.filename), function () {
         new URL(`${realmHref}consumer-1`),
         { loadLinks: true },
       );
-      assert.ok(result && result.type === 'doc', 'the card assembled');
-      if (result?.type !== 'doc') {
-        return;
-      }
+      let doc = result?.type === 'doc' ? result.doc : undefined;
+      assert.ok(doc, 'the card assembled');
       assert.strictEqual(
-        linkResourceIds(result.doc.included).length,
+        linkResourceIds(doc?.included).length,
         5,
         'an opts object that says nothing about the budget is still bounded',
       );
       assert.true(
-        result.doc.meta?.linkClosureTruncated,
+        doc?.meta?.linkClosureTruncated,
         'and the assembly reports the clip',
       );
     });

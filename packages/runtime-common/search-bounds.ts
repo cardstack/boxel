@@ -199,14 +199,17 @@ export const SERVER_MAX_IN_FLIGHT_SEARCHES = parsePositiveInt(
 // in one hop, and dozens of those reach hundreds — so the quantity that tracks
 // cost is the count, and a graph that fans out wide is expensive at any depth.
 //
-// Sized as a safety ceiling rather than a tuning knob: it sits far above the
-// closures real content produces (the widest cards on a representative realm
-// assemble ~175 resources, and a page of results unions to ~210), and near the
-// point where a single assembly would hold the tens of MB of heap that
-// SERVER_MAX_IN_FLIGHT_SEARCHES assumes per in-flight search. So it is not
-// expected to engage on healthy traffic; it exists so that no single card graph
-// — authored by a person or by a model, and re-editable at any time — can make
-// one request assemble an unbounded document.
+// Sized as a safety ceiling rather than a tuning knob, against the closures
+// real content produces. On a link-heavy classroom realm the dashboard's own
+// root card assembles 127 resources for 291 KB; the widest card on that realm
+// reaches 175, and a hundred-row page of the most connected type unions to 210.
+// So the ceiling sits roughly five times above healthy traffic — and near the
+// point where one assembly would hold the tens of MB of heap that
+// SERVER_MAX_IN_FLIGHT_SEARCHES assumes per in-flight search, since those
+// figures put a resource at a little over 2 KB once serialized. It is not
+// expected to engage; it exists so that no single card graph — authored by a
+// person or by a model, and re-editable at any time — can make one request
+// assemble an unbounded document.
 //
 // Changing this value changes which responses are truncated and what a
 // truncated one contains, while none of the other validator inputs move, so it

@@ -869,8 +869,12 @@ function buildCardJsonEtag(
   // would leave every client that holds a validator being 304'd to the
   // shape it cached, and the two shapes reachable under one key in the
   // response cache.
+  // The budget rides only on the shape that carries a closure. A links-only
+  // read assembles none, so no budget can change its body and folding one in
+  // would make a retune revalidate responses it cannot have altered — and would
+  // move those validators on this deploy for no reason.
   let variant = resolveLinksOnly
-    ? `${cardJsonEtagVariant()}-links-only`
+    ? `${CARD_JSON_ETAG_VARIANT}-links-only`
     : cardJsonEtagVariant();
   return `"${base}:${variant}"`;
 }
@@ -943,9 +947,9 @@ function buildEntryHtmlEtag(
   // how much of one — so a response bearing an item is a different body at a
   // different budget while both generations stand still. This validator has no
   // constant component to hang that on the way the card+json one does, so the
-  // budget is folded in directly. A pure-html response assembles no closure and
-  // keeps the clean index:html composite.
-  if (doc.data.relationships.item) {
+  // budget is folded in directly. A pure-html response assembles no closure, and
+  // neither does a links-only item; both keep the validator they had.
+  if (doc.data.relationships.item && !resolveLinksOnly) {
     base = `${base}:lb${assembledLinkResourceBudget()}`;
   }
   return `"${base}"`;
