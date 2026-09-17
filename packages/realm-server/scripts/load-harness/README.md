@@ -429,9 +429,9 @@ that distinction available from the run itself — see below.
 user, one per CSV row, so a 20-row file caps a run at 19 readers. Against a
 deployed realm at `--derive-page-size 0`, 19 readers held a peak 120-second
 mean of **6.3** searches in flight. Read that against the rungs and the cap in
-`packages/runtime-common/search-bounds.ts`; at roughly a third of a reader per
-unit of mean, reaching a rung of 8 wants about 25 readers and one of 12 about
-38, **per replica**. Growing the pool is what makes a load number realistic,
+`packages/runtime-common/search-bounds.ts`; at roughly three readers per unit
+of mean, reaching a rung of 8 wants about 25 readers and one of 12 about 38,
+**per replica**. Growing the pool is what makes a load number realistic,
 and it is also what makes the `429` path reachable.
 
 **Exercising the mechanism is a different question, and much cheaper.** The
