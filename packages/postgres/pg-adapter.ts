@@ -585,9 +585,11 @@ export class PgAdapter implements DBAdapter {
   //
   // Deadlock: keys are sorted and taken in that order, so two batches whose
   // file sets overlap take the shared keys in the same sequence and one waits
-  // rather than each holding what the other needs. The sort is on the key
-  // rather than the path so it does not depend on locale or on how a path was
-  // spelled. Duplicates collapse — one file named twice in a batch is one lock.
+  // rather than each holding what the other needs. What matters is that every
+  // caller agrees on the order, not what the order means — these are hashes,
+  // so their sequence carries nothing about the files. The realm's own key is
+  // always taken first, ahead of any file key, for the same reason.
+  // Duplicates collapse — one file named twice in a batch is one lock.
   //
   // Pool footprint: a waiter blocks on `pg_advisory_xact_lock` with its client
   // already checked out and its transaction open, so N contending writers would
@@ -653,7 +655,11 @@ export class PgAdapter implements DBAdapter {
         // A prior caller's failure must not cascade — the next writer of
         // these files still gets its turn at the lock.
       }
-      return await this.#runWithAdvisoryXactLocks(lockPlan, realmUrl, fn);
+      return await this.#runWithAdvisoryXactLocks(
+        lockPlan,
+        { realmUrl, fileCount: fileKeys.length },
+        fn,
+      );
     })();
     // What the next caller for this same file set waits on: outcome-erased so
     // its own try/catch is not sensitive to ours, and tee'd off `myWork` to
@@ -764,7 +770,7 @@ export class PgAdapter implements DBAdapter {
   // card look identical from request latency alone; they differ here.
   async #runWithAdvisoryXactLocks<T>(
     lockPlan: readonly { key: string; mode: 'shared' | 'exclusive' }[],
-    contextLabel: string,
+    context: { realmUrl: string; fileCount: number },
     fn: () => Promise<T>,
   ): Promise<T> {
     return await this.withConnection(async (queryFn) => {
@@ -794,7 +800,7 @@ export class PgAdapter implements DBAdapter {
           // release), so there is no stale-lock problem. Logged for
           // visibility, and the original error is what propagates.
           log.warn(
-            `ROLLBACK after advisory-lock error for ${contextLabel} failed: ${String(rollbackErr)}`,
+            `ROLLBACK after advisory-lock error for ${context.realmUrl} failed: ${String(rollbackErr)}`,
           );
         }
         throw err;
@@ -805,8 +811,12 @@ export class PgAdapter implements DBAdapter {
         // acquisition should read as rather than as a zero-length wait.
         const waitMs = (holdStart ?? now) - waitStart;
         const holdMs = holdStart === undefined ? 0 : now - holdStart;
+        // `files` is what the write named, and `scope` says whether it got a
+        // key each or fell back to the realm — so a long `waitMs` at
+        // `scope=realm` reads as the ceiling having been reached rather than
+        // as contention over one card.
         lockLog.info(
-          `writeLock realm=${contextLabel} waitMs=${waitMs} holdMs=${holdMs} files=${lockPlan.filter(({ mode }) => mode === 'exclusive').length} scope=${lockPlan[0]?.mode === 'exclusive' ? 'realm' : 'files'}`,
+          `writeLock realm=${context.realmUrl} waitMs=${waitMs} holdMs=${holdMs} files=${context.fileCount} scope=${lockPlan[0]?.mode === 'exclusive' ? 'realm' : 'files'}`,
         );
       }
     });
