@@ -560,6 +560,7 @@ function lockPaths(
 ): LocalPath[] {
   let locked = new Set<LocalPath>();
   for (let entry of entries) {
+    assertOpReachesALock(entry);
     if (!entry.href) {
       continue;
     }
@@ -586,6 +587,42 @@ function lockPaths(
     locked.add(path);
   }
   return [...locked];
+}
+
+// Refuses at compile time to let an operation exist that nothing above locks
+// for. Every member is listed with the route its files are reached by, so
+// adding one to `BatchEntry` fails the build here until its route is stated.
+//
+// It is a guard rather than a formality because of how the failure would
+// present otherwise: an operation whose files reach neither route locks
+// nothing, and a write that takes no lock does not error, return differently,
+// or look unusual in any response — it races other writers of the same card
+// and loses one of them, occasionally, under concurrency. There is no test a
+// new operation would arrive with that fails on account of it.
+// The two routes, which between them have to cover every member:
+//
+//   `update`, `delete`, `transform`, `appendLine`, `appendContainsMany`
+//       reached by `href` — both spellings of the path it names are locked.
+//   `create`
+//       reached by `lids`, which resolves each client-named card to the path
+//       it will land at; one the client named nothing for is covered by the
+//       realm guard a write with no file still takes.
+function assertOpReachesALock(entry: BatchEntry): void {
+  switch (entry.op) {
+    case 'update':
+    case 'delete':
+    case 'transform':
+    case 'appendLine':
+    case 'appendContainsMany':
+    case 'create':
+      return;
+    default: {
+      let unreached: never = entry;
+      throw new Error(
+        `batch entry reaches no lock: ${JSON.stringify(unreached)}`,
+      );
+    }
+  }
 }
 
 function indexLids(
