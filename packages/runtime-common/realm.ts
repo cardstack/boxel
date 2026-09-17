@@ -4382,6 +4382,14 @@ export class Realm {
     // entry never observes what a write entry in the same batch stages, and
     // reading before the coordinator takes the write lock is what keeps a read
     // from waiting on one.
+    //
+    // In request order, whatever the tree says. A group is a staging
+    // schedule, and a read stages nothing: it reads the state the batch
+    // started from wherever in the tree it sits, so which group holds it
+    // cannot change its answer. What it would change is how many reads this
+    // realm has in flight for one request, which is a decision about the
+    // realm's own load rather than about what the caller asked for.
+    //
     // Keyed by position rather than by index, because a position is a path
     // through the tree for an entry inside a group and there is no array for
     // one to be an index into.
