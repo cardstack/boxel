@@ -1478,6 +1478,15 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a realm setting is not carried on a card response', async function (assert) {
+    // The premise, asserted here rather than left to the fixture: a leak test
+    // against a realm that turned out to carry no settings would pass for the
+    // wrong reason, and nothing in the response can tell the two apart.
+    assert.deepEqual(
+      await realm.getRealmConfig(),
+      { approver: '@mae:localhost', escalateAfterDays: 3 },
+      'the realm under test does configure settings',
+    );
+
     // A card no operation here writes a setting into, so the blanket check
     // below reads as a leak rather than as the value an operation deliberately
     // stored. The realm this suite runs against does configure settings, so a
@@ -1510,6 +1519,15 @@ module(basename(import.meta.filename), function (hooks) {
   // path than a card response does, and a split that held only for card+json
   // would leave both of these carrying the settings.
   test('a realm setting is not carried on a file document', async function (assert) {
+    // The premise, asserted here rather than left to the fixture: a leak test
+    // against a realm that turned out to carry no settings would pass for the
+    // wrong reason, and nothing in the response can tell the two apart.
+    assert.deepEqual(
+      await realm.getRealmConfig(),
+      { approver: '@mae:localhost', escalateAfterDays: 3 },
+      'the realm under test does configure settings',
+    );
+
     let response = await request
       .get('/release-notes.md')
       .set('Accept', 'application/vnd.card.file-meta+json');
@@ -1532,6 +1550,15 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a realm setting is not carried on the realm info endpoint', async function (assert) {
+    // The premise, asserted here rather than left to the fixture: a leak test
+    // against a realm that turned out to carry no settings would pass for the
+    // wrong reason, and nothing in the response can tell the two apart.
+    assert.deepEqual(
+      await realm.getRealmConfig(),
+      { approver: '@mae:localhost', escalateAfterDays: 3 },
+      'the realm under test does configure settings',
+    );
+
     // The route `/_catalog-realms` fans out to for every publicly readable
     // realm, with no session — so a setting served here is one anyone can
     // read.

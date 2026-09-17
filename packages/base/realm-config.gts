@@ -432,6 +432,13 @@ function settingTypeNote(text: string): string | undefined {
   return Array.isArray(value) ? 'list' : typeof value;
 }
 
+// A row that is not a setting yet: one the author added and has not named. A
+// row the realm already holds is never this, however it is named, so an
+// unrelated edit cannot drop it.
+function isUnnamed(row: SettingRow): boolean {
+  return row.key === '' && !row.stored;
+}
+
 // One row of the settings editor while the author is in it. The map is built
 // from the rows on every keystroke rather than edited in place: a key renamed
 // a character at a time would otherwise walk the value across a new map entry
@@ -440,6 +447,11 @@ interface SettingRow {
   id: number;
   key: string;
   text: string;
+  // Whether the realm already holds a setting under this row. It is what tells
+  // a row the author has not named yet from one whose name is genuinely the
+  // empty string — a key JSON can hold and `realmConfig("")` looks up — so the
+  // second survives an edit to some other row.
+  stored: boolean;
 }
 
 class RealmSettingsEdit extends Component<typeof RealmSettingsField> {
@@ -449,6 +461,7 @@ class RealmSettingsEdit extends Component<typeof RealmSettingsField> {
     id: index,
     key,
     text: settingText(value),
+    stored: true,
   }));
 
   private nextId = this.rows.length;
@@ -470,7 +483,7 @@ class RealmSettingsEdit extends Component<typeof RealmSettingsField> {
   // no name is not a setting yet — the ordinary state of one just added — so
   // it is reported as a count rather than as a fault.
   private get unnamedRowCount(): number {
-    return this.rows.filter((row) => row.key.trim() === '').length;
+    return this.rows.filter(isUnnamed).length;
   }
 
   private get duplicateKeyList(): string {
@@ -481,14 +494,13 @@ class RealmSettingsEdit extends Component<typeof RealmSettingsField> {
     let seen = new Set<string>();
     let duplicates = new Set<string>();
     for (let row of this.rows) {
-      let key = row.key.trim();
-      if (!key) {
+      if (isUnnamed(row)) {
         continue;
       }
-      if (seen.has(key)) {
-        duplicates.add(key);
+      if (seen.has(row.key)) {
+        duplicates.add(row.key);
       }
-      seen.add(key);
+      seen.add(row.key);
     }
     return [...duplicates];
   }
@@ -502,7 +514,10 @@ class RealmSettingsEdit extends Component<typeof RealmSettingsField> {
   }
 
   @action private add() {
-    this.rows = [...this.rows, { id: this.nextId++, key: '', text: '' }];
+    this.rows = [
+      ...this.rows,
+      { id: this.nextId++, key: '', text: '', stored: false },
+    ];
     this.commit();
   }
 
@@ -530,11 +545,15 @@ class RealmSettingsEdit extends Component<typeof RealmSettingsField> {
     // The read sides are careful about the same name, and this matches them.
     let settings: Record<string, unknown> = Object.create(null);
     for (let row of this.rows) {
-      let key = row.key.trim();
-      if (!key) {
+      if (isUnnamed(row)) {
         continue;
       }
-      settings[key] = settingValue(row.text);
+      // Written under the name as typed, never a tidied version of it. JSON
+      // holds `" approver "` and `""` as keys distinct from `"approver"`, and
+      // a program looks one up by the characters it was given — so trimming
+      // here would rename a realm's setting out from under a program that
+      // reads it, on an edit to some unrelated row.
+      settings[row.key] = settingValue(row.text);
     }
     this.args.set(settings);
   }

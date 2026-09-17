@@ -197,6 +197,28 @@ module('Integration | realm-config | settings', function (hooks) {
       .doesNotExist('it is text, and the row does not claim otherwise');
   });
 
+  test('a setting name is kept exactly as the realm stores it', async function (assert) {
+    // JSON holds these as keys distinct from `approver`, and a program looks
+    // one up by the characters it was given — so an edit to some other row
+    // must not tidy them.
+    await renderRealmConfig(
+      { ' approver ': '@mae:localhost', approver: '@ada:localhost' },
+      'edit',
+    );
+
+    await fillIn('[data-test-setting-value="1"]', '@bea:localhost');
+
+    assert
+      .dom('[data-test-setting-key="0"]')
+      .hasValue(' approver ', 'the padded name is untouched');
+    assert
+      .dom('[data-test-setting-value="0"]')
+      .hasValue('@mae:localhost', 'and still holds its own value');
+    assert
+      .dom('[data-test-duplicate-settings]')
+      .doesNotExist('a padded name is not the same name as the trimmed one');
+  });
+
   test('a setting can be removed', async function (assert) {
     await renderRealmConfig({ approver: '@mae:localhost' }, 'edit');
 
