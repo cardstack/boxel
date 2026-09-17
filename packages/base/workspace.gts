@@ -2310,7 +2310,7 @@ class Isolated extends Component<typeof Workspace> {
         /* The card's own light tier, like every other panel here: the markdown
            inherits this stylesheet's fixed --grid-ink, so a surface that moved
            with the theme would leave the two on different schemes. */
-        background: var(--grid-surface);
+        background-color: var(--grid-surface);
         overflow: hidden;
       }
       .readme-body {
