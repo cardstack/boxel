@@ -143,6 +143,23 @@ Both id spellings in circulation split correctly: the prefix form
 unbounded. The standard workload is unbounded, so **a derived run and a standard
 run are not comparable to each other**.
 
+**Leave the default page in place and the run loads almost nothing.** Measured
+against a deployed realm of roughly 2,650 instances at `--fieldset item`, the
+same derived workload:
+
+| page               | readers |      rate | concurrency |
+| ------------------ | ------: | --------: | ----------: |
+| `page: {size: 20}` |      10 |   602/min |         1.2 |
+| `page: {size: 20}` |      19 | 1,850/min |         1.2 |
+| unbounded          |      19 |   298/min |         5.3 |
+
+Six times the request rate produced a quarter of the load, because in-flight is
+rate multiplied by service time and service time is the term that moves.
+**Request rate on its own is not a load signal**, and a page-bounded derived
+workload is roughly ten times too cheap to stand in for the unpaginated queries
+a dashboard issues. Pass `--derive-page-size 0` whenever the question is about
+load rather than about a bounded screen.
+
 **A derived workload is the unmitigated shape by construction**, and that bounds
 what it can be used for. The type summary carries names and counts, so every
 derived query is type-only with no predicate — a whole-table read per type. That
@@ -373,10 +390,12 @@ one dashboard render   ≈ 5.4 MB across its query set
   remaining shapes       133–544 KB each
 ```
 
-Server side over the same window, from the realm-server health sampler:
+Server side over the same window, from the realm-server health sampler —
+`inFlightSearch` shown as the raw sample range it is, which is not the mean the
+link-shape policy reads:
 
 ```
-inFlightSearch   0–30
+inFlightSearch   0–30 (instantaneous samples)
 heapMB           peak 1180
 eventLoopLagMs   max ~500
 ```
@@ -411,15 +430,61 @@ per-render total:
 - **A 20-card page costs 300–566 KB.** Page size bounds the row count, not the
   payload: each row carries its `included[]` closure.
 
+## Getting a run to a threshold, and telling whether it did
+
+Two realm-server mechanisms engage at a level of concurrency: the admission gate
+answers `429` at its in-flight cap, and the link-shape policy degrades a live
+read's link closure one rung earlier, at a 120-second time-weighted mean of the
+same count. Both are **per replica**, so a fleet of N tasks needs N times the
+load one process would.
+
+A run that reaches neither has measured neither — and "the policy never
+degraded" is compatible with a policy that correctly declined and with one that
+could not have engaged. Two different questions, two different answers:
+
+- **Is the threshold where real traffic can reach it?** That needs load, and
+  the credential pool is the ceiling: one session per CSV row, so a 20-row file
+  caps a run at 19 readers. At `--derive-page-size 0` that held a peak
+  120-second mean of 6.3 searches in flight against a shipped `multi-row` rung
+  of 8 — 79% of it, never crossing. Extrapolating, the rungs want roughly 25 and
+  38 readers **per replica**. Growing the pool is the only fix, and it is what
+  makes the `429` path reachable too.
+- **Does the mechanism work?** That does not need the load. The thresholds are
+  environment-readable — `LINK_SHAPE_MULTI_ROW_ENGAGE`, `LINK_SHAPE_ALL_ENGAGE`
+  and the matching `_RELEASE` pair. Set them low on a non-production fleet for
+  the duration of a run and a real deployment goes through both transitions, the
+  dwell, the hysteresis band and the validator and cache-variant fragmentation
+  each transition causes, at a load the existing pool produces.
+
+**How to tell**, in order of authority:
+
+- `boxel:link-shape-policy` — one record per transition plus a 60-second
+  heartbeat. The heartbeat is the only line that separates a policy that
+  declined from one that is not running, so read it before drawing anything from
+  an absence of transitions.
+- `boxel:search-shape` — per request: `linkMode`, `linkModeDowngraded`,
+  `linkShapeLevel`, `linkShapeLoad`. Where a specific degraded response and the
+  reading that degraded it can be seen together.
+- The run's own `concurrency:` summary line and its `load=` progress line: the
+  peak of the same 120-second mean, measured from the driver. It bounds what one
+  replica saw of this traffic **from above** — the fleet divides the requests
+  across replicas, and a request counts as in flight here while its body crosses
+  the network, after the server released the slot. So under a threshold is
+  evidence the run did not reach it; over one is not evidence that it did.
+
 ## Reading the server side
 
 The harness's own numbers are the client's view. The ones that decide whether a
 change landed come from the realm server:
 
-- `inFlightSearch` — what admission control has to bound
 - `heapMB` — a single in-flight search costs tens of megabytes
 - `eventLoopLagMs` — saturation shows here long before any response stops being
   a 200
+
+Its `inFlightSearch` is an instantaneous sample on a cadence coarser than the
+bursts it would have to catch, so it reads mostly zero even under sustained
+load and does not agree with the mean the link-shape policy acts on. Take
+concurrency from the two log channels and the run's own summary line above.
 
 Every search the harness issues carries an `x-boxel-logging-correlation-id`,
 which the realm server logs as `corr=<id>`, so an individual slow request joins

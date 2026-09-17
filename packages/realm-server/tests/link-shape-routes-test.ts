@@ -6,6 +6,7 @@ import {
   DURING_PRERENDER_HEADER,
   LINK_SHAPE_ALL_ENGAGE,
   LINK_SHAPE_ALL_RELEASE,
+  LINK_SHAPE_HEARTBEAT_MS,
   LINK_SHAPE_LOAD_HALF_LIFE_MS,
   LINK_SHAPE_MIN_DWELL_MS,
   LINK_SHAPE_MULTI_ROW_ENGAGE,
@@ -546,6 +547,32 @@ module(basename(import.meta.filename), function () {
         });
     }
 
+    // The same read at the realm-server's own fan-out endpoint, which is where
+    // a deployment's live search traffic and this repo's load harness both
+    // land. It reports a query-shape record, which the realm's own `_search`
+    // route does not, so the tests that read one go through here.
+    //
+    // Every call asks a question no earlier call asked. This endpoint carries a
+    // live-search cache, and a request the cache answers hands its admission
+    // slot back before the handler reports — so a repeated query could not
+    // observe the slot it never held.
+    let federatedPage = 10;
+    function federatedSearch() {
+      return request
+        .post('/_federated-search')
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .send({
+          filter: {
+            'item.on': { module: `${realmHref}consumer`, name: 'Consumer' },
+          },
+          fields: { entry: ['item'] },
+          page: { size: federatedPage++ },
+          realms: [realmKey],
+        });
+    }
+
     // The policy is built once for the module, so each test inherits whatever
     // rung the last one left its realm on. The ladder moves only on a read and
     // only one rung at a time, so two reads over a reading at the floor cover
@@ -601,7 +628,7 @@ module(basename(import.meta.filename), function () {
         shapes.push(event);
       });
 
-      let response = await multiRowSearch();
+      let response = await federatedSearch();
       assert.strictEqual(response.status, 200, `HTTP 200: ${response.text}`);
       assert.strictEqual(shapes.length, 1, 'the search reported one shape');
       assert.ok(
@@ -675,6 +702,16 @@ module(basename(import.meta.filename), function () {
         transition?.threshold,
         LINK_SHAPE_MULTI_ROW_ENGAGE,
         'the record names the shipped threshold the real reading crossed',
+      );
+      assert.strictEqual(
+        transition?.load,
+        reading,
+        'and the reading on it is the one the gate reported, not a number reconstructed later',
+      );
+      assert.strictEqual(
+        transition?.limit,
+        SERVER_MAX_IN_FLIGHT_SEARCHES,
+        'reported beside the cap the threshold sits under',
       );
     });
 
@@ -767,6 +804,46 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    // The record that makes a quiet ladder legible. Without it a process whose
+    // policy never engages is indistinguishable from one running no policy at
+    // all, which is the ambiguity a load run cannot otherwise resolve.
+    test('the heartbeat reports the process reading while nothing is changing', async function (assert) {
+      hold(FIRST_RUNG_HOLD);
+      await multiRowSearch();
+      assert.strictEqual(policy.levelFor(realmKey), 'multi-row');
+      policyEvents = [];
+
+      clock += LINK_SHAPE_HEARTBEAT_MS;
+      let settled = getSearchSustainedInFlight();
+      await multiRowSearch();
+      assert.strictEqual(
+        policy.levelFor(realmKey),
+        'multi-row',
+        'a reading inside the band leaves the realm where it is',
+      );
+
+      let [beat] = policyEvents.filter((event) => !event.changed);
+      assert.ok(beat, 'and a decision that changed nothing still reports one');
+      assert.strictEqual(
+        beat?.load,
+        settled,
+        'carrying the reading it declined to act on',
+      );
+      assert.strictEqual(
+        beat?.level,
+        null,
+        'with no realm or level of its own, because it is per process',
+      );
+      assert.strictEqual(beat?.realm, null);
+      assert.strictEqual(
+        beat?.realmsAtMultiRow,
+        1,
+        'and a count of the realms this process is holding at each level',
+      );
+      assert.strictEqual(beat?.realmsAtFull, 0);
+      assert.strictEqual(beat?.realmsAtAll, 0);
+    });
+
     // What a deployment has to read to tell a policy that declined from one
     // that never ran. The record is only evidence if the reading on it is the
     // process's own.
@@ -775,7 +852,7 @@ module(basename(import.meta.filename), function () {
       let shapes: SearchShapeEvent[] = [];
       setSearchShapeSink((event) => shapes.push(event));
 
-      let response = await multiRowSearch();
+      let response = await federatedSearch();
       assert.strictEqual(response.status, 200, `HTTP 200: ${response.text}`);
       let [shape] = shapes;
       assert.strictEqual(shape?.linkMode, 'links-only', 'what was served');
