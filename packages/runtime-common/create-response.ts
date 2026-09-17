@@ -4,12 +4,27 @@ interface CreateResponseArgs {
   body?: BodyInit | null | undefined;
   init?: ResponseInit | undefined;
   requestContext: RequestContext;
+  // Whether this response's body depends on the request's `Accept`. Nearly
+  // every realm route content-negotiates, so this defaults to true and the
+  // response declares `Vary: Accept`.
+  //
+  // A route whose body is a pure function of its URL passes false, and the
+  // header is omitted — not as a micro-optimization but because declaring a
+  // `Vary` a response does not honor actively breaks its own caching. A
+  // browser cache keeps one stored variant per URL: a request whose `Accept`
+  // differs from the stored one both misses AND replaces that entry, so two
+  // consumers spelling `Accept` differently evict each other's copy on every
+  // request and neither ever reads from cache. For a long-lived `immutable`
+  // response that is the difference between zero round-trips and one per
+  // page load, per URL.
+  varyOnAccept?: boolean;
 }
 
 export function createResponse({
   body,
   init,
   requestContext,
+  varyOnAccept = true,
 }: CreateResponseArgs): Response {
   return new Response(body, {
     ...init,
@@ -19,7 +34,7 @@ export function createResponse({
       ...(requestContext.permissions['*']?.includes('read') && {
         'X-Boxel-Realm-Public-Readable': 'true',
       }),
-      vary: 'Accept',
+      ...(varyOnAccept && { vary: 'Accept' }),
       // This list is the one that reaches the wire. The realm-server also
       // configures `@koa/cors` with its own Expose-Headers, but the middleware
       // copies a handler's Response headers onto the Koa context wholesale, so

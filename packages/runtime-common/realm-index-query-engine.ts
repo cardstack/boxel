@@ -19,6 +19,8 @@ import {
   type DBAdapter,
   type QueryOptions,
   type InstanceOrError,
+  type LinkTargetInstance,
+  type LinkTargetFile,
   type IndexedFile,
   type DefinitionLookup,
   type ResolvedCodeRef,
@@ -2031,23 +2033,23 @@ export class RealmIndexQueryEngine {
       // per kind (instances + file-meta); cross-realm links fan out one
       // fetch per unique URL via Promise.all alongside the DB round-trips.
       let batchStart = Date.now();
-      let instanceMap: Map<string, InstanceOrError>;
-      let fileMap: Map<string, IndexedFile>;
+      let instanceMap: Map<string, LinkTargetInstance>;
+      let fileMap: Map<string, LinkTargetFile>;
       let crossRealmMap: Map<string, CardResource<Saved> | FileMetaResource>;
       try {
         [instanceMap, fileMap, crossRealmMap] = await Promise.all([
           inRealmCardURLs.size > 0
-            ? this.#indexQueryEngine.getInstances(
+            ? this.#indexQueryEngine.getLinkTargetInstances(
                 [...inRealmCardURLs].map((u) => new URL(u)),
                 opts,
               )
-            : Promise.resolve(new Map<string, InstanceOrError>()),
+            : Promise.resolve(new Map<string, LinkTargetInstance>()),
           inRealmFileURLs.size > 0
-            ? this.#indexQueryEngine.getFiles(
+            ? this.#indexQueryEngine.getLinkTargetFiles(
                 [...inRealmFileURLs].map((u) => new URL(u)),
                 opts,
               )
-            : Promise.resolve(new Map<string, IndexedFile>()),
+            : Promise.resolve(new Map<string, LinkTargetFile>()),
           crossRealmURLs.size > 0
             ? this.fetchCrossRealmLinks(
                 [...crossRealmURLs],
@@ -2113,9 +2115,11 @@ export class RealmIndexQueryEngine {
             entry.expectsCard ||
             (!entry.relationshipType && !entry.expectsFileMeta)
           ) {
+            // Absent means no live, unerrored row; the relationship is left
+            // in its fallback form below.
             let maybeResult = instanceMap.get(entry.linkURL.href);
-            if (maybeResult?.type === 'instance') {
-              linkResource = maybeResult.instance;
+            if (maybeResult) {
+              linkResource = maybeResult.resource;
               // Join the linked instance's declared-screenshot manifest into
               // its `meta`, mirroring what the serving realm's own card+json
               // GET stamps — a cross-realm link gets the same key from that
@@ -2502,9 +2506,12 @@ function enumerateFileRenderings(file: IndexedFile): RowRendering[] {
   return candidates;
 }
 
+// Takes the narrow shape rather than a full `IndexedFile`, which is a
+// structural superset of it — so the search and single-file paths, which do
+// hold a full one, still assemble through here unchanged.
 function fileResourceFromIndex(
   fileURL: URL,
-  fileEntry: IndexedFile,
+  fileEntry: LinkTargetFile,
 ): FileMetaResource {
   let name = fileURL.pathname.split('/').pop() ?? fileURL.pathname;
   let inferredContentType = inferContentType(name);
