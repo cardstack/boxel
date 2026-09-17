@@ -246,4 +246,26 @@ if [[ -z "$(find "$rendered/dashboards" -type f -name '*.json' 2>/dev/null)" ]];
   exit 0
 fi
 
+# Fail closed if any emitted manifest kept a canonical UID. The rewrites
+# above already guarantee the `pr<n>-` prefix on every dashboard, every
+# folder, and every dashboard's folder pointer; this check makes that
+# guarantee explicit so a future change to them cannot silently produce a
+# tree that overwrites a real dashboard. The tree is pushed to production as
+# well as staging, so losing the prefix would cost a live production
+# dashboard.
+while IFS= read -r -d '' f; do
+  uid="$(jq -r '.metadata.name // ""' "$f")"
+  if [[ "$uid" != "pr${pr_number}-"* ]]; then
+    echo "error: $f carries UID '$uid', which lacks the pr${pr_number}- prefix" >&2
+    rm -rf "$rendered"
+    exit 1
+  fi
+  folder="$(jq -r '(.metadata.annotations // {})["grafana.app/folder"] // ""' "$f")"
+  if [[ -n "$folder" && "$folder" != "pr${pr_number}-"* ]]; then
+    echo "error: $f points at folder '$folder', which lacks the pr${pr_number}- prefix" >&2
+    rm -rf "$rendered"
+    exit 1
+  fi
+done < <(find "$rendered" -type f -name '*.json' -print0)
+
 echo "$rendered"

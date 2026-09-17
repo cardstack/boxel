@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# ci-apply-preview.sh — one environment's half of observability-preview.yml's
-# apply job.
+# ci-apply-preview.sh — one environment's half of the PR preview.
+#
+# Called by observability-preview.yml for staging and by
+# observability-preview-production.yml for production. The production
+# caller runs the default branch's copy of this file, never the pull
+# request's — see that workflow's header for why.
 #
 # Fetches the apply-time secrets for $ENV_NAME from SSM, pushes the per-PR
 # preview with apply-preview.sh, and reports the result back to the workflow
@@ -10,9 +14,9 @@
 #                     apply-preview.sh); empty file when nothing was pushed
 #   empty=true|false  whether this PR's HEAD changes any dashboards
 #
-# Lives here rather than inline in the workflow so staging and production
+# Lives here rather than inline in either workflow so staging and production
 # run byte-identical logic — the environments differ only in $ENV_NAME and
-# in which AWS credentials the workflow configured before calling this.
+# in which AWS credentials the caller configured before invoking this.
 #
 # Environment (all set by the workflow step):
 #   ENV_NAME      staging | production

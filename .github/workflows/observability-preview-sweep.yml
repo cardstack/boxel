@@ -60,6 +60,23 @@ jobs:
             role_arn: arn:aws:iam::120317779495:role/boxel-observability-apply
 
     steps:
+      - name: Refuse to sweep production from a non-main ref
+        # `schedule` always runs the default branch, but
+        # `workflow_dispatch` lets an operator choose any ref — including
+        # one whose copy of this workflow was rewritten to do something
+        # else with the production role. Mirrors the guard in
+        # observability-apply-production.yml.
+        if: matrix.env == 'production'
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          set -eo pipefail
+          if [[ "$REF" != "refs/heads/main" ]]; then
+            echo "::error::The production sweep may only run from refs/heads/main. Got: $REF" >&2
+            exit 1
+          fi
+          echo "Confirmed run from main."
+
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
