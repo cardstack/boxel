@@ -93,5 +93,21 @@ module(basename(import.meta.filename), function () {
     test('the link mode is reported and separates otherwise identical queries', async function (assert) {
       await runSharedTest(searchShapeTests, assert, {});
     });
+
+    test('a caller that stated nothing reports no override', async function (assert) {
+      await runSharedTest(searchShapeTests, assert, {});
+    });
+
+    test('a downgraded response reports both modes and the inputs that decided it', async function (assert) {
+      await runSharedTest(searchShapeTests, assert, {});
+    });
+
+    test('a caller that asked for links-only and got it is not a downgrade', async function (assert) {
+      await runSharedTest(searchShapeTests, assert, {});
+    });
+
+    test('the shape hash folds the served mode and not the requested one', async function (assert) {
+      await runSharedTest(searchShapeTests, assert, {});
+    });
   });
 });

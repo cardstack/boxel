@@ -9,6 +9,7 @@ const { existsSync, readFileSync } = fsExtra;
 import type { Realm } from '@cardstack/runtime-common';
 import { rri } from '@cardstack/runtime-common';
 import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
+import { LinkShapePolicy } from '@cardstack/runtime-common/link-shape-policy';
 import {
   setupPermissionedRealmCached,
   setupMatrixRoom,
@@ -566,7 +567,7 @@ module(basename(import.meta.filename), function () {
           '*': ['read', 'write'],
           '@node-test_realm:localhost': ['read', 'realm-owner'],
         },
-        liveReadsResolveLinksOnly: true,
+        linkShapePolicy: LinkShapePolicy.pinned('links-only'),
         onRealmSetup,
       });
 
