@@ -122,10 +122,6 @@ export default async function serialize({
   // the doc was GET from) — persisting an echo would pin a copied card's
   // source file to the original's captures.
   delete result.data.meta.screenshots;
-  // The fingerprint of these very bytes, reported alongside them when the card
-  // is served. Writing it into the file it describes would make the file name
-  // a version it no longer holds the moment it lands.
-  delete result.data.meta.version;
   delete result.included;
   delete result.data.links;
   result.data.type = 'card';

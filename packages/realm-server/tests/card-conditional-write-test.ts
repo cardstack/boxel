@@ -7,7 +7,7 @@ import type { DirResult } from 'tmp';
 import fsExtra from 'fs-extra';
 const { existsSync, readFileSync } = fsExtra;
 import type { Realm } from '@cardstack/runtime-common';
-import { computeContentHash, rri } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
   setupMatrixRoom,
@@ -21,16 +21,15 @@ import type { MatrixEvent } from '@cardstack/base/matrix-event';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { waitForIncrementalIndexEvent } from './helpers/indexing.ts';
 
-// The two conditional-write behaviors of the card+json facade, kept together
-// because they are the two halves of one client story: `version` is what a
-// client holds while it edits, and `If-Match` is how it refuses to overwrite a
-// card that moved underneath it.
+// A conditional write: `If-Match` on a card+json `PATCH` or `DELETE`, which
+// lets a client say "only apply this if the card is still the one I saw" and
+// be refused rather than silently overwrite a card that moved underneath it.
 //
-// They name different validators on purpose. `version` is the fingerprint of
-// the `.json` the realm stores, so it moves only when that file is rewritten.
-// The `ETag` describes the served *document*, so it also moves when a card
-// this one links to is re-indexed — which is what makes it the HTTP cache
-// validator, and what `If-Match` compares against.
+// The validator it names is the card's `ETag` — the one a `GET` of the card
+// hands out, built from the index row. That is what an HTTP conditional
+// request names, and the realm's read-your-own-writes contract is what makes
+// it usable: a client is served its own writes, so the validator it holds
+// describes what it last read.
 module(basename(import.meta.filename), function () {
   module('conditional card writes', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/test/');
@@ -74,13 +73,6 @@ module(basename(import.meta.filename), function () {
       return join(dir.name, 'realm_server_1', 'test', name);
     }
 
-    // The realm writes a card as `JSON.stringify(doc, null, 2)` and records
-    // the hash of exactly those bytes, so the file on disk is the whole input
-    // to the fingerprint a response reports.
-    function storedVersion(name: string) {
-      return computeContentHash(readFileSync(cardFile(name), 'utf8'));
-    }
-
     function patchPersonBody(firstName: string) {
       return {
         data: {
@@ -105,12 +97,16 @@ module(basename(import.meta.filename), function () {
       };
     }
 
-    function incrementalIndexEvents(messages: MatrixEvent[]) {
+    // Both halves of an incremental index pass. The initiation event is
+    // broadcast per written file *before* indexing runs, so it is the earliest
+    // signal that something was staged — a test asserting a write was refused
+    // has to count it, or it only checks that the refusal failed to finish.
+    function indexEvents(messages: MatrixEvent[], indexType: string) {
       return messages.filter(
         (m) =>
           m.type === APP_BOXEL_REALM_EVENT_TYPE &&
           m.content.eventName === 'index' &&
-          m.content.indexType === 'incremental',
+          m.content.indexType === indexType,
       );
     }
 
@@ -283,30 +279,47 @@ module(basename(import.meta.filename), function () {
           'the conditional write is refused',
         );
 
-        // The control: a write the realm does accept, made after the refused
-        // one and in the same window. Its event is what proves the window is
-        // one an event can arrive in — without it, "no event" would also be
-        // satisfied by a listener that sees nothing at all. The refused write
-        // came first, so anything it broadcast is already visible by the time
-        // this one's event is.
+        // The control is a write to a DIFFERENT card. Its event proves the
+        // window is one an event can arrive in — without a control, "no
+        // event" is equally satisfied by a listener that sees nothing at all.
+        // Aiming it elsewhere is what makes the two outcomes distinguishable:
+        // a control over the same card with the same body would be a no-op if
+        // the refused write had landed, and the commit writes nothing and
+        // queues nothing for a no-op, so the counts would agree either way.
         let accepted = await request
-          .patch('/person-1')
+          .patch('/person-2')
           .send(patchPersonBody('Paper'))
           .set('Accept', 'application/vnd.card+json');
         assert.strictEqual(accepted.status, 200, 'the control write succeeds');
         await waitForIncrementalIndexEvent(getMessagesSince, since);
 
-        let events = incrementalIndexEvents(await getMessagesSince(since));
-        assert.strictEqual(
-          events.length,
-          1,
-          'exactly one write in the window reached the index',
-        );
-        assert.deepEqual(
-          (events[0].content as { invalidations?: string[] }).invalidations,
-          [`${realmURL.href}person-1`],
-          'and it is the one the realm accepted',
-        );
+        let messages = await getMessagesSince(since);
+        // Both halves are counted: the initiation event is broadcast before
+        // indexing runs, so a refusal that staged bytes shows up there first.
+        for (let indexType of ['incremental-index-initiation', 'incremental']) {
+          let events = indexEvents(messages, indexType);
+          assert.strictEqual(
+            events.length,
+            1,
+            `exactly one ${indexType} event in the window`,
+          );
+          let content = events[0].content as {
+            invalidations?: string[];
+            updatedFile?: string;
+          };
+          let named = [
+            ...(content.invalidations ?? []),
+            ...(content.updatedFile ? [content.updatedFile] : []),
+          ].join(' ');
+          assert.true(
+            named.includes('person-2'),
+            `the ${indexType} event is the control's`,
+          );
+          assert.false(
+            named.includes('person-1'),
+            `nothing in the ${indexType} event names the refused card`,
+          );
+        }
       });
 
       test('a DELETE naming a validator the card has moved past is refused, and removes nothing', async function (assert) {
@@ -425,211 +438,6 @@ module(basename(import.meta.filename), function () {
           .delete('/person-1')
           .set('Accept', 'application/vnd.card+json');
         assert.strictEqual(removal.status, 204, 'and so is the removal');
-      });
-
-      test('a PATCH reports the version of the file it wrote, and it moves with the bytes', async function (assert) {
-        let first = await request
-          .patch('/person-1')
-          .send(patchPersonBody('Van Gogh'))
-          .set('Accept', 'application/vnd.card+json');
-        assert.strictEqual(first.status, 200, `HTTP 200 status: ${first.text}`);
-        assert.strictEqual(
-          first.body?.data?.meta?.version,
-          storedVersion('person-1.json'),
-          'the version is the fingerprint of the stored file',
-        );
-
-        let second = await request
-          .patch('/person-1')
-          .send(patchPersonBody('Paper'))
-          .set('Accept', 'application/vnd.card+json');
-        assert.strictEqual(
-          second.status,
-          200,
-          `HTTP 200 status: ${second.text}`,
-        );
-        assert.strictEqual(
-          second.body?.data?.meta?.version,
-          storedVersion('person-1.json'),
-          'and again after the second write',
-        );
-        assert.notStrictEqual(
-          second.body?.data?.meta?.version,
-          first.body?.data?.meta?.version,
-          'a write that changes the card changes its version',
-        );
-      });
-
-      test('a PATCH that changes nothing reports the version the card already held', async function (assert) {
-        let write = await request
-          .patch('/person-1')
-          .send(patchPersonBody('Van Gogh'))
-          .set('Accept', 'application/vnd.card+json');
-        assert.strictEqual(write.status, 200, `HTTP 200 status: ${write.text}`);
-        let version = write.body?.data?.meta?.version;
-        assert.ok(version, 'the write reports a version');
-
-        let noop = await request
-          .patch('/person-1')
-          .send(patchPersonBody('Van Gogh'))
-          .set('Accept', 'application/vnd.card+json');
-
-        assert.strictEqual(noop.status, 200, `HTTP 200 status: ${noop.text}`);
-        assert.strictEqual(
-          noop.body?.data?.meta?.version,
-          version,
-          'a patch that leaves the file alone leaves the version alone',
-        );
-        assert.strictEqual(
-          noop.body?.data?.meta?.version,
-          storedVersion('person-1.json'),
-          'and it is still the fingerprint of what is stored',
-        );
-      });
-
-      test('a POST reports the version of the file it created', async function (assert) {
-        let response = await request
-          .post('/')
-          .send({
-            data: {
-              type: 'card',
-              attributes: { cardInfo: { name: 'Mango' } },
-              meta: {
-                adoptsFrom: {
-                  module: rri('@cardstack/base/card-api'),
-                  name: 'CardDef',
-                },
-              },
-            },
-          })
-          .set('Accept', 'application/vnd.card+json');
-
-        assert.strictEqual(
-          response.status,
-          201,
-          `HTTP 201 status: ${response.text}`,
-        );
-        let id: string = response.body?.data?.id;
-        assert.ok(id, 'the create reports the id it minted');
-        assert.strictEqual(
-          response.body?.data?.meta?.version,
-          storedVersion(`${id.slice(realmURL.href.length)}.json`),
-          'the version is the fingerprint of the file it wrote',
-        );
-      });
-
-      test('a GET reports the version the realm last wrote for the card', async function (assert) {
-        // Only the realm's own write path records a content hash, so a card
-        // that reached disk another way — as this realm's cards did — carries
-        // no version until it is next written.
-        let beforeAnyWrite = await request
-          .get('/person-1')
-          .set('Accept', 'application/vnd.card+json');
-        assert.strictEqual(beforeAnyWrite.status, 200, 'the card serves');
-        assert.strictEqual(
-          beforeAnyWrite.body?.data?.meta?.version,
-          undefined,
-          'and reports no version for a file the realm has never written',
-        );
-
-        let write = await request
-          .patch('/person-1')
-          .send(patchPersonBody('Van Gogh'))
-          .set('Accept', 'application/vnd.card+json');
-        assert.strictEqual(write.status, 200, `HTTP 200 status: ${write.text}`);
-
-        let response = await request
-          .get('/person-1')
-          .set('Accept', 'application/vnd.card+json');
-        assert.strictEqual(
-          response.body?.data?.meta?.version,
-          storedVersion('person-1.json'),
-          'the read reports the fingerprint of the stored file',
-        );
-        assert.strictEqual(
-          response.body?.data?.meta?.version,
-          write.body?.data?.meta?.version,
-          'which is the version the write that produced it reported',
-        );
-      });
-
-      test("a linked card's change moves the validator and leaves the version alone", async function (assert) {
-        // The whole reason there are two: `hassan` links to `jade`, so writing
-        // `jade` re-indexes `hassan` and changes what a GET of it serves — but
-        // `hassan.json` is not rewritten, so the base an optimistic client
-        // holds for it must not move.
-        let write = await request
-          .patch('/hassan')
-          .send(patchFriendBody('Hassan'))
-          .set('Accept', 'application/vnd.card+json');
-        assert.strictEqual(write.status, 200, `HTTP 200 status: ${write.text}`);
-
-        let before = await request
-          .get('/hassan')
-          .set('Accept', 'application/vnd.card+json');
-        let etagBefore = before.get('etag') ?? '';
-        let versionBefore = before.body?.data?.meta?.version;
-        assert.ok(etagBefore, 'the card carries a validator');
-        assert.ok(versionBefore, 'and a version');
-
-        let linked = await request
-          .patch('/jade')
-          .send(patchFriendBody('Jade Vincent'))
-          .set('Accept', 'application/vnd.card+json');
-        assert.strictEqual(
-          linked.status,
-          200,
-          `the linked card is written: ${linked.text}`,
-        );
-
-        let after = await request
-          .get('/hassan')
-          .set('Accept', 'application/vnd.card+json');
-        assert.notStrictEqual(
-          after.get('etag'),
-          etagBefore,
-          'the re-index moves the cache validator',
-        );
-        assert.strictEqual(
-          after.body?.data?.meta?.version,
-          versionBefore,
-          'and leaves the version, which describes only this card’s own file',
-        );
-      });
-
-      test('a client echoing a version back does not persist it', async function (assert) {
-        let response = await request
-          .patch('/person-1')
-          .send({
-            data: {
-              type: 'card',
-              attributes: { firstName: 'Van Gogh' },
-              meta: {
-                adoptsFrom: { module: rri('./person.gts'), name: 'Person' },
-                version: 'a-version-the-client-was-served',
-              },
-            },
-          })
-          .set('Accept', 'application/vnd.card+json');
-
-        assert.strictEqual(
-          response.status,
-          200,
-          `HTTP 200 status: ${response.text}`,
-        );
-        let stored = JSON.parse(
-          readFileSync(cardFile('person-1.json'), 'utf8'),
-        );
-        assert.strictEqual(
-          stored.data.meta.version,
-          undefined,
-          'the stored file names no version',
-        );
-        assert.strictEqual(
-          response.body?.data?.meta?.version,
-          storedVersion('person-1.json'),
-          'and the response reports the one the realm computed',
-        );
       });
     });
 

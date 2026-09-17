@@ -706,15 +706,13 @@ export async function stageUpdate(
   //
   // Realm-managed keys never come from a patch: `realmInfo` and `realmURL` are
   // stamped by the realm serving the card, `screenshots` is joined from the
-  // prerendered manifest at serve time, `version` is the fingerprint of the
-  // bytes the realm last stored, and `type` is fixed by the document shape. A
-  // client echoing back what it was served must not persist any of them into
-  // the source file.
+  // prerendered manifest at serve time, and `type` is fixed by the document
+  // shape. A client echoing back what it was served must not persist any of
+  // them into the source file.
   delete (patch as { type?: unknown }).type;
   delete patch.meta.realmInfo;
   delete patch.meta.realmURL;
   delete patch.meta.screenshots;
-  delete patch.meta.version;
 
   promoteStagedLinks(patch, ctx);
 

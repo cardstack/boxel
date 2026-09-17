@@ -954,7 +954,6 @@ module(basename(import.meta.filename), function () {
         delete json.data.meta.lastModified;
         delete json.data.meta.resourceCreatedAt;
         delete json.data.meta.generation;
-        delete json.data.meta.version;
         assert.strictEqual(
           response.get('X-boxel-realm-url'),
           testRealmHref,
