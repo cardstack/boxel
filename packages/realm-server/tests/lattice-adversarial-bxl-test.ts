@@ -288,10 +288,10 @@ module(basename(import.meta.filename), function () {
       await assert.rejects(
         worker.evaluate(
           manifest('.xs | length'),
-          Array.from({ length: 513 }, (_, i) => input(`c${i}`, [i])),
+          Array.from({ length: 4097 }, (_, i) => input(`c${i}`, [i])),
         ),
-        /exceeds 512 cards/,
-        'a batch over 512 cards is refused',
+        /exceeds 4096 cards/,
+        'a batch over 4096 cards is refused',
       );
       await assert.rejects(
         worker.evaluate(manifest('.xs | length'), [
@@ -299,11 +299,11 @@ module(basename(import.meta.filename), function () {
             ...input('big', [1]),
             // Trailing whitespace is valid JSON. Exercise the wire-byte cap
             // without allocating millions of array elements in the test runner.
-            json: JSON.stringify({ xs: [1] }) + ' '.repeat(16 * 1_048_576),
+            json: JSON.stringify({ xs: [1] }) + ' '.repeat(65 * 1_048_576),
           },
         ]),
-        /exceeds 16 MiB/,
-        'an input batch over 16 MiB is refused',
+        /exceeds 64 MiB/,
+        'an input batch over 64 MiB is refused',
       );
       await assert.rejects(
         worker.evaluate(manifest('.xs | length'), [

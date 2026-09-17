@@ -169,13 +169,19 @@ module(basename(import.meta.filename), function (hooks) {
     await assert.rejects(
       worker.evaluate(
         manifest,
-        Array.from({ length: 513 }, () => input({})),
+        Array.from({ length: 4097 }, () => input({})),
       ),
-      /512/,
+      /4096 cards/,
     );
+    // A batch large enough to trip the byte bound, which is checked before
+    // anything is copied into the worker (and so before the input shape).
+    const filler = 'x'.repeat(14 * 1_048_576);
     await assert.rejects(
-      worker.evaluate(manifest, [input({ rows: 'x'.repeat(16 * 1_048_576) })]),
-      /16 MiB/,
+      worker.evaluate(
+        manifest,
+        Array.from({ length: 5 }, () => input({ rows: filler })),
+      ),
+      /64 MiB/,
     );
   });
 

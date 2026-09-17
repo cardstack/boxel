@@ -220,7 +220,11 @@ module(basename(import.meta.filename), function (hooks) {
               bxl('(.score // 0) * 2', {
                 readableSyntax: false,
                 libraries: ['core'],
-                validUntil: '.__clock.today',
+                // A grain names the instant the value next changes, so a
+                // value that holds for the next hour names that instant --
+                // `.__clock.today` would name this morning's midnight.
+                validUntil:
+                  '(.__clock.now | fromdateiso8601) + 3600 | todateiso8601',
               }),
             )!,
           },
@@ -283,8 +287,8 @@ module(basename(import.meta.filename), function (hooks) {
     ]);
     assert.strictEqual(typeof result.validUntil, 'string');
     assert.true(
-      (result.validUntil ?? '') > new Date().toISOString().slice(0, 10),
-      `the row grain (end of today) becomes the card's valid_until: ${result.validUntil}`,
+      (result.validUntil ?? '') > new Date().toISOString(),
+      `the row grain becomes the card's valid_until: ${result.validUntil}`,
     );
     assert.deepEqual(
       result.definitionRevisions.map((item) => item.revision),
@@ -448,6 +452,230 @@ module(basename(import.meta.filename), function (hooks) {
         worker,
       }),
       /membership is not resolved/,
+    );
+  });
+
+  // A computed field whose value is a contained FieldDef: the program returns
+  // the record and the engine normalizes it back, so it serializes and indexes
+  // exactly like an authored one instead of being flattened into a JSON blob.
+  function compoundOutputFixtures(plural: boolean) {
+    const { root, lookup } = fixtures();
+    // `label` and `on` are dialect keywords, so a record a program builds
+    // cannot use them as field names.
+    const line = snapshot('Line', { who: text, points: number, day: date });
+    const program = plural
+      ? '[.rows[]? | {who: ("row-" + ((.score // 0) | tostring)), points: ((.score // 0) * 2), day: "2026-03-04"}]'
+      : '{who: (.note // ""), points: ((.rows | length) // 0), day: "2026-03-04"}';
+    const withOutput: LatticeDefinitionSnapshot = {
+      ...root,
+      definition: {
+        ...root.definition,
+        fields: { ...root.definition.fields, lines: 'lines' },
+        fieldDefs: {
+          ...root.definition.fieldDefs,
+          lines: {
+            ...compound('Line', plural),
+            isComputed: true,
+            bxl: expression(program),
+          },
+        },
+      },
+    };
+    return {
+      root: withOutput,
+      line,
+      lookup: async (target: unknown) =>
+        JSON.stringify(target) === JSON.stringify(ref('Line'))
+          ? line
+          : lookup(target),
+    };
+  }
+
+  test('a computed containsMany(FieldDef) serializes and indexes like an authored record', async function (assert) {
+    const { root, lookup } = compoundOutputFixtures(true);
+    const result = await assembleLatticeCardData({
+      id,
+      sourceRevision: 'source-v4',
+      sourceJSON: source({
+        rows: [
+          { score: '6', label: 'First' },
+          { score: '1', label: 'Second' },
+        ],
+        cardInfo: { name: 'Example', summary: 'Summary' },
+      }),
+      root,
+      lookup,
+      resolve,
+      worker,
+    });
+    assert.deepEqual(json(result.serialized).data.attributes.lines, [
+      { who: 'row-6', points: 12, day: '2026-03-04' },
+      { who: 'row-1', points: 2, day: '2026-03-04' },
+    ]);
+    assert.deepEqual(
+      json(result.searchDoc).lines,
+      [
+        { who: 'row-6', points: 12, day: '2026-03-04' },
+        { who: 'row-1', points: 2, day: '2026-03-04' },
+      ],
+      'the search document carries the queryable value of every leaf',
+    );
+    assert.deepEqual(
+      result.definitionRevisions.map((item) => item.revision),
+      ['Tally-v1', 'Row-v1', 'Info-v1', 'Line-v1'],
+      'the output definition is part of the revisioned schema the card commits to',
+    );
+  });
+
+  test('a computed contains(FieldDef) and an absent one', async function (assert) {
+    const { root, lookup } = compoundOutputFixtures(false);
+    const result = await assembleLatticeCardData({
+      id,
+      sourceRevision: 'source-v4',
+      sourceJSON: source({
+        note: 'Solo',
+        rows: [{ score: '3', label: 'First' }],
+        cardInfo: { name: 'Example', summary: 'Summary' },
+      }),
+      root,
+      lookup,
+      resolve,
+      worker,
+    });
+    assert.deepEqual(json(result.serialized).data.attributes.lines, {
+      who: 'Solo',
+      points: 1,
+      day: '2026-03-04',
+    });
+    assert.deepEqual(json(result.searchDoc).lines, {
+      who: 'Solo',
+      points: 1,
+      day: '2026-03-04',
+    });
+    const empty = {
+      ...root,
+      definition: {
+        ...root.definition,
+        fieldDefs: {
+          ...root.definition.fieldDefs,
+          lines: {
+            ...root.definition.fieldDefs.lines,
+            bxl: expression('null'),
+          },
+        },
+      },
+    };
+    const absent = await assembleLatticeCardData({
+      id,
+      sourceRevision: 'source-v4',
+      sourceJSON: source({ cardInfo: { name: 'Example' } }),
+      root: empty,
+      lookup,
+      resolve,
+      worker,
+    });
+    assert.strictEqual(
+      json(absent.serialized).data.attributes.lines,
+      undefined,
+    );
+    assert.strictEqual(json(absent.searchDoc).lines, null);
+  });
+
+  test("a computed record's own computeds run over the returned value", async function (assert) {
+    const { root, line, lookup } = compoundOutputFixtures(true);
+    const computedLine: LatticeDefinitionSnapshot = {
+      definition: {
+        ...line.definition,
+        fields: { ...line.definition.fields, shout: 'shout' },
+        fieldDefs: {
+          ...line.definition.fieldDefs,
+          shout: {
+            ...text,
+            isComputed: true,
+            bxl: expression('(.who // "") + "!"'),
+          },
+        },
+      },
+      revision: 'Line-v2',
+    };
+    const result = await assembleLatticeCardData({
+      id,
+      sourceRevision: 'source-v4',
+      sourceJSON: source({
+        rows: [{ score: '6', label: 'First' }],
+        cardInfo: { name: 'Example' },
+      }),
+      root,
+      lookup: async (target: unknown) =>
+        JSON.stringify(target) === JSON.stringify(ref('Line'))
+          ? computedLine
+          : lookup(target),
+      resolve,
+      worker,
+    });
+    assert.deepEqual(json(result.serialized).data.attributes.lines, [
+      { who: 'row-6', points: 12, day: '2026-03-04', shout: 'row-6!' },
+    ]);
+  });
+
+  test('a computed record may not be returned with links or undeclared fields', async function (assert) {
+    const { root, line, lookup } = compoundOutputFixtures(true);
+    const linkedLine: LatticeDefinitionSnapshot = {
+      definition: {
+        ...line.definition,
+        fields: { ...line.definition.fields, student: 'student' },
+        fieldDefs: {
+          ...line.definition.fieldDefs,
+          student: {
+            ...compound('Student'),
+            type: 'linksTo',
+            nativeCodec: { kind: 'compound', resourceType: 'card' },
+          },
+        },
+      },
+      revision: 'Line-v3',
+    };
+    await assert.rejects(
+      assembleLatticeCardData({
+        id,
+        sourceRevision: 's1',
+        sourceJSON: source({ cardInfo: { name: 'Example' } }),
+        root,
+        lookup: async (target: unknown) =>
+          JSON.stringify(target) === JSON.stringify(ref('Line'))
+            ? linkedLine
+            : lookup(target),
+        resolve,
+        worker,
+      }),
+      /Unadmitted computed output link: lines\.\*\.student/,
+    );
+    const extra = {
+      ...root,
+      definition: {
+        ...root.definition,
+        fieldDefs: {
+          ...root.definition.fieldDefs,
+          lines: {
+            ...root.definition.fieldDefs.lines,
+            bxl: expression(
+              '[{who: "x", points: 1, day: "2026-03-04", sneak: 2}]',
+            ),
+          },
+        },
+      },
+    };
+    await assert.rejects(
+      assembleLatticeCardData({
+        id,
+        sourceRevision: 's1',
+        sourceJSON: source({ cardInfo: { name: 'Example' } }),
+        root: extra,
+        lookup,
+        resolve,
+        worker,
+      }),
+      /Unadmitted BXL input field lines\[0\]\.sneak/,
     );
   });
 });

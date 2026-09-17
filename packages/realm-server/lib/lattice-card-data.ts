@@ -428,6 +428,64 @@ export async function assembleLatticeCardData({
     }
     return node;
   }
+  // The declared shape a program must return for a computed contained field.
+  // Derived from an empty node of the child definition, so it is exactly the
+  // shape an authored value of the same type presents to a program: dates as
+  // strings, nested records as objects. The child's own computeds are left
+  // out, because they are evaluated after the holder's program returns, and
+  // links are refused, because a returned record cannot name an identity the
+  // publication is allowed to retain.
+  async function compoundOutputShape(
+    definition: Definition,
+    prefix: string,
+  ): Promise<LatticeBxlShape> {
+    const sample = await normalize(definition, undefined, {}, prefix, 1);
+    const shapes: Record<string, LatticeBxlShape> = {};
+    for (const [name, key] of Object.entries(definition.fields)) {
+      const field = definition.fieldDefs[key];
+      if (field.isComputed) continue;
+      if (field.type === 'linksTo' || field.type === 'linksToMany')
+        throw new Error(`Unadmitted computed output link: ${prefix}${name}`);
+      shapes[name] = sample.shapes[name];
+    }
+    return { object: shapes };
+  }
+  // Turn each computed contained value the program returned back into data
+  // nodes, by the same normalization an authored value goes through: the
+  // record's leaves are deserialized with their own codecs and the child's
+  // own computeds run over the result, so `output` below serializes it and
+  // indexes it exactly as if it had been authored in the file.
+  async function materializeCompoundOutputs(current: DataNode) {
+    for (const [name, child] of compoundOutputs) {
+      const plural =
+        current.definition.fieldDefs[current.definition.fields[name]].type ===
+        'containsMany';
+      const value = current.values[name];
+      if (plural && value != null && !Array.isArray(value))
+        throw new Error(`Expected array: ${name}`);
+      const entries =
+        value == null ? null : plural ? (value as unknown[]) : [value];
+      const children =
+        entries == null
+          ? null
+          : await Promise.all(
+              entries.map((item, i) =>
+                normalize(
+                  child.definition,
+                  item as Record<string, any>,
+                  {},
+                  `${name}.${plural ? i + '.' : ''}`,
+                  1,
+                ),
+              ),
+            );
+      if (children?.length) await evaluateNested(child, children, name);
+      current.children.set(name, plural ? children : (children?.[0] ?? null));
+      current.values[name] = plural
+        ? (children?.map((node) => node.values) ?? null)
+        : (children?.[0]?.values ?? null);
+    }
+  }
   // Polymorphic overrides need their own revisioned schema selection. Never
   // silently serialize them using the holder's declared field type.
   if (source.data.meta.fields && Object.keys(source.data.meta.fields).length) {
@@ -483,18 +541,36 @@ export async function assembleLatticeCardData({
     }
   }
   const outputShapes: Record<string, LatticeBxlShape> = {};
+  // Computed fields whose value is a contained FieldDef: the program returns
+  // the record itself, so after evaluation it is normalized back into nodes
+  // like an authored value (see materializeCompoundOutputs).
+  const compoundOutputs = new Map<string, LatticeDefinitionSnapshot>();
   for (const [name, key] of Object.entries(root.definition.fields)) {
     const field = root.definition.fieldDefs[key];
     if (!field.isComputed) continue;
+    const plural = field.type === 'containsMany';
     if (field.type === 'linksTo') outputShapes[name] = linkShape;
     else if (
-      (field.type === 'contains' || field.type === 'containsMany') &&
+      (field.type === 'contains' || plural) &&
       (field.nativeCodec?.kind === 'primitive' ||
         field.nativeCodec?.kind === 'json')
     ) {
       const shape = primitiveShape(field.nativeCodec);
-      outputShapes[name] =
-        field.type === 'containsMany' ? { array: shape } : shape;
+      outputShapes[name] = plural ? { array: shape } : shape;
+    } else if (
+      (field.type === 'contains' || plural) &&
+      field.nativeCodec?.kind === 'compound' &&
+      !field.nativeCodec.resourceType
+    ) {
+      const child = await childSnapshot(field.fieldOrCard);
+      if (child.definition.nativeCodec?.kind !== 'compound')
+        throw new Error('Unadmitted contained definition');
+      compoundOutputs.set(name, child);
+      const item = await compoundOutputShape(
+        child.definition,
+        `${name}.${plural ? '*.' : ''}`,
+      );
+      outputShapes[name] = plural ? { array: item } : item;
     } else throw new Error(`Unadmitted computed output: ${name}`);
   }
   const normalizedAt = performance.now();
@@ -533,6 +609,7 @@ export async function assembleLatticeCardData({
   const evaluatedAt = performance.now();
   signal?.throwIfAborted();
   if (computed) Object.assign(node.values, computed.artifacts[0].values);
+  if (computed && compoundOutputs.size) await materializeCompoundOutputs(node);
   let validUntil: string | null = null;
   for (const raw of Object.values(computed?.artifacts[0].grains ?? {})) {
     const instant = latticeValidUntilInstant(raw);

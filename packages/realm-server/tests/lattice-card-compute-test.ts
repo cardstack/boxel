@@ -113,6 +113,26 @@ module(basename(import.meta.filename), function (hooks) {
       id: 'https://example.com/Tally/one',
       inputRevision: 'input-1',
       definitionRevision: 'module-1',
+      // Every path the programs touched, in evaluation order: what the
+      // publication compares to decide whether a matched input's change can
+      // leave this card alone.
+      reads: [
+        'total',
+        'rows',
+        'rows.*.score',
+        'doubled',
+        'cardTitle',
+        'cardInfo',
+        'cardInfo.name',
+        'cardDescription',
+        'cardInfo.summary',
+        'cardTheme',
+        'cardInfo.theme',
+        'cardInfo.theme.*',
+        'cardInfo.theme.id',
+        'cardThumbnailURL',
+        'cardInfo.cardThumbnailURL',
+      ],
       values: {
         total: 11,
         doubled: 22,
