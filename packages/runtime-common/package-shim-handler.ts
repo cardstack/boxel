@@ -4,7 +4,16 @@ import { logger, trimExecutableExtension } from './index.ts';
 export type ModuleLike = Record<string, any>;
 export type ModuleDescriptor =
   | { prefix: `${string}/`; resolve: (rest: string) => Promise<ModuleLike> }
-  | { id: string; resolve: () => Promise<ModuleLike> };
+  | {
+      id: string;
+      resolve: () => Promise<ModuleLike>;
+      // What this module would have reported as consumed had the loader
+      // fetched and evaluated it. A shim carries no dependency chain of its
+      // own, so anything that reads a module's dependencies — the indexer
+      // interning scoped CSS, most of all — sees nothing unless the registrar
+      // says otherwise.
+      deps?: string[];
+    };
 
 function trimModuleIdentifier(moduleIdentifier: string): string {
   return trimExecutableExtension(rri(moduleIdentifier));
@@ -412,6 +421,9 @@ export class PackageShimHandler {
   // lives on a *different* shim. Best-effort: an async shim that hasn't
   // been served yet won't be searchable until it has.
   private resolvedExports = new Map<string, ModuleLike>();
+  // Declared dependencies per shimmed module, keyed the same way as
+  // `moduleIds`.
+  private moduleDeps = new Map<string, string[]>();
   private log = logger('shim-handler');
 
   constructor(resolveImport: (moduleIdentifier: string) => string) {
@@ -512,10 +524,14 @@ export class PackageShimHandler {
     } else {
       let moduleIdentifier = this.resolveImport(descriptor.id);
       let label = `id:${descriptor.id}`;
+      let key = trimModuleIdentifier(moduleIdentifier);
       this.moduleIds.set(
-        trimModuleIdentifier(moduleIdentifier),
+        key,
         withResolveRetry(label, this.log, descriptor.resolve, retryDeps),
       );
+      if (descriptor.deps?.length) {
+        this.moduleDeps.set(key, [...descriptor.deps]);
+      }
     }
   }
 
@@ -532,6 +548,12 @@ export class PackageShimHandler {
     return module
       ? wrapWithStrictNamespace(url, module, this.findExportSources)
       : undefined;
+  }
+
+  // The dependencies declared for a shimmed module, in the same lookup terms
+  // as `lookupModule`. Empty for a shim registered without them.
+  lookupModuleDeps(url: string): string[] {
+    return this.moduleDeps.get(trimModuleIdentifier(url)) ?? [];
   }
 
   private async getModule(url: string): Promise<ModuleLike | undefined> {

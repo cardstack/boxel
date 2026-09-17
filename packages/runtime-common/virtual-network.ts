@@ -205,6 +205,12 @@ export class VirtualNetwork {
     return this.packageShimHandler.lookupModule(this.toRealURLHref(url));
   }
 
+  // The dependencies a shimmed module declares, for the loader to record as
+  // its consumed modules.
+  getShimmedModuleDeps(url: string): string[] {
+    return this.packageShimHandler.lookupModuleDeps(this.toRealURLHref(url));
+  }
+
   addURLMapping(from: URL, to: URL) {
     this.urlMappings.push([from.href, to.href]);
     // unresolveURL and toRealURLHref chase through urlMappings (the latter via

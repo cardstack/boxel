@@ -1166,6 +1166,8 @@ export class Loader {
       if (shimmedModule) {
         let response = new Response();
         (response as any)[Symbol.for('shimmed-module')] = shimmedModule;
+        (response as any)[Symbol.for('shimmed-module-deps')] =
+          this.virtualNetwork?.getShimmedModuleDeps(request.url) ?? [];
         return response;
       }
 
@@ -1343,7 +1345,12 @@ export class Loader {
 
     let loaded:
       | { type: 'source'; source: string; url: string }
-      | { type: 'shimmed'; module: Record<string, unknown>; url: string };
+      | {
+          type: 'shimmed';
+          module: Record<string, unknown>;
+          url: string;
+          deps: string[];
+        };
 
     try {
       loaded = await this.load(moduleURL);
@@ -1396,7 +1403,9 @@ export class Loader {
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
         moduleInstance: loaded.module,
-        consumedModules: new Set(),
+        // A shim has no dependency chain the loader can observe, so what it
+        // consumed is whatever its registrar declared.
+        consumedModules: new Set(loaded.deps),
       });
       module.deferred.fulfill();
       return;
@@ -1572,11 +1581,14 @@ export class Loader {
     }
   }
 
-  private async load(
-    moduleURL: URL,
-  ): Promise<
+  private async load(moduleURL: URL): Promise<
     | { type: 'source'; source: string; url: string }
-    | { type: 'shimmed'; module: Record<string, unknown>; url: string }
+    | {
+        type: 'shimmed';
+        module: Record<string, unknown>;
+        url: string;
+        deps: string[];
+      }
   > {
     let response: MaybeCachedResponse;
     try {
@@ -1640,6 +1652,7 @@ export class Loader {
         type: 'shimmed',
         module: (response as any)[Symbol.for('shimmed-module')],
         url: canonicalURL,
+        deps: (response as any)[Symbol.for('shimmed-module-deps')] ?? [],
       };
     }
     let source = await response.text();

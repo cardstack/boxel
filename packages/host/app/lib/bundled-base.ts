@@ -195,6 +195,10 @@ export const BUNDLED_BASE_MODULES: Record<
 // the same realm URL a loader import of the id resolves to.
 export function shimBundledBase(virtualNetwork: VirtualNetwork) {
   for (let [name, resolve] of Object.entries(BUNDLED_BASE_MODULES)) {
+    // `deps` on the descriptor is where each module's scoped-CSS specifiers
+    // belong, once there is a way to know them — see the note on
+    // ModuleDescriptor. Until then a bundled base module reports no
+    // stylesheet, and cards using its components are served unstyled.
     virtualNetwork.shimAsyncModule({ id: `@cardstack/base/${name}`, resolve });
   }
 }
