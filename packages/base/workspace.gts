@@ -80,7 +80,10 @@ import {
 import { MarkdownDef } from './markdown-file-def'; // realm README
 // Content-only markdown renderer: the README's prose with no file shell chrome
 // (no file bar, metadata, or fixed-height scroll box). The card owns the frame.
-import { MarkdownPreview } from './file-formats/index';
+// Imported from its own module rather than the `file-formats/index` barrel,
+// which would also pull the audio renderer and the metadata field shapes into
+// this card's graph for nothing.
+import { MarkdownPreview } from './file-formats/markdown-preview';
 import type { RealmEventContent } from './matrix-event';
 import type { Spec } from './spec';
 import { now as clockNow, nowDate } from './helpers/clock';
@@ -2304,7 +2307,10 @@ class Isolated extends Component<typeof Workspace> {
         border: 1px solid var(--grid-border);
         border-radius: 12px;
         box-shadow: var(--grid-shadow-rest);
-        background: var(--card);
+        /* The card's own light tier, like every other panel here: the markdown
+           inherits this stylesheet's fixed --grid-ink, so a surface that moved
+           with the theme would leave the two on different schemes. */
+        background: var(--grid-surface);
         overflow: hidden;
       }
       .readme-body {
