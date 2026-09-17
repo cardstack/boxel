@@ -1812,12 +1812,6 @@ export default class MatrixService extends Service {
   ) {
     let roomData = this.ensureRoomData(roomId);
     return roomData.mutex.dispatch(async () => {
-      // TEMPORARY (CS-12937): the attachment tests read the LAST room event
-      // and find one without `data`, so this reports what is sent and in what
-      // order.
-      console.warn(
-        `[send-stage] sendEvent type=${eventType} hasData=${'data' in content}`,
-      );
       if ('data' in content) {
         const encodedContent = {
           ...content,
@@ -2255,19 +2249,11 @@ export default class MatrixService extends Service {
     clientGeneratedId = uuidv4(),
     context?: BoxelContext,
   ): Promise<void> {
-    // TEMPORARY (CS-12937): a send carrying an attachment produces no
-    // m.room.message at all, with no error — these mark how far it gets.
-    console.warn(
-      `[send-stage] enter cards=${attachedCards.length} files=${attachedFiles.length}`,
-    );
     await this.updateSkillsAndToolsIfNeeded(roomId);
     let contentData = await this.withContextAndAttachments(
       context,
       attachedCards,
       attachedFiles,
-    );
-    console.warn(
-      `[send-stage] attachments-ready cards=${contentData.attachedCards.length} files=${contentData.attachedFiles.length}`,
     );
 
     let originatingDeviceId = this.client.getDeviceId() ?? undefined;
@@ -2299,7 +2285,6 @@ export default class MatrixService extends Service {
         },
       },
     } as CardMessageContent);
-    console.warn('[send-stage] dispatched');
   }
 
   private async withContextAndAttachments(

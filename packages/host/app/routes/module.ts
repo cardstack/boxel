@@ -290,13 +290,6 @@ export async function buildModuleModel(
 
   try {
     return await context.authGuard.race(async () => {
-      // TEMPORARY (CS-12937): module prerender hangs for a module that
-      // depends on bundled base, and the request produces no response at all,
-      // so the stage it stops at is the only way to locate it. Remove once the
-      // hang is understood.
-      let stage = (name: string) =>
-        console.warn(`[module-prerender-stage] ${name} id=${id}`);
-      stage('start');
       let module: Record<string, any> | undefined;
       try {
         module = await context.loaderService.loader.import(id);
@@ -323,7 +316,6 @@ export async function buildModuleModel(
         });
       }
 
-      stage('imported');
       let response: Response;
       try {
         response = await context.network.authedFetch(id, {
@@ -343,7 +335,6 @@ export async function buildModuleModel(
           err,
         });
       }
-      stage('head-done');
       let maybeShimmed = response.status === 404;
       if (!maybeShimmed && !response.ok) {
         return modelWithError({
@@ -414,7 +405,6 @@ export async function buildModuleModel(
         }
       }
 
-      stage('definitions-done');
       let searchablePathIssues = await validateModuleSearchablePaths(
         definitions,
         context,
