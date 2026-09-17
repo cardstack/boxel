@@ -261,11 +261,20 @@ module(basename(import.meta.filename), function () {
           .get('/person-1')
           .set('Accept', 'application/vnd.card+json');
         let staleEtag = read.get('etag') ?? '';
+        let setupSince = Date.now();
         let moved = await request
           .patch('/person-1')
           .send(patchPersonBody('Van Gogh'))
           .set('Accept', 'application/vnd.card+json');
         assert.strictEqual(moved.status, 200, 'the card is moved past it');
+
+        // Drain the setup write's own events before the window opens. A
+        // write's index events are broadcast without await ordering, so the
+        // `PATCH` above can return — having waited for its index job — while
+        // its incremental event is still on its way. Opening the window
+        // without flushing it first lets that event land inside the window and
+        // be read as the refusal's, which names the same card.
+        await waitForIncrementalIndexEvent(getMessagesSince, setupSince);
 
         let since = Date.now();
         let refused = await request
@@ -294,30 +303,31 @@ module(basename(import.meta.filename), function () {
         await waitForIncrementalIndexEvent(getMessagesSince, since);
 
         let messages = await getMessagesSince(since);
-        // Both halves are counted: the initiation event is broadcast before
-        // indexing runs, so a refusal that staged bytes shows up there first.
+        // Both halves are checked: the initiation event is broadcast per
+        // written file *before* indexing runs, so a refusal that staged
+        // anything shows up there first.
+        //
+        // The assertion is about which card the window's events name, not how
+        // many there are: the control's presence proves the window is one an
+        // event can arrive in, and the refused card's absence is the claim.
         for (let indexType of ['incremental-index-initiation', 'incremental']) {
-          let events = indexEvents(messages, indexType);
-          assert.strictEqual(
-            events.length,
-            1,
-            `exactly one ${indexType} event in the window`,
-          );
-          let content = events[0].content as {
-            invalidations?: string[];
-            updatedFile?: string;
-          };
-          let named = [
-            ...(content.invalidations ?? []),
-            ...(content.updatedFile ? [content.updatedFile] : []),
-          ].join(' ');
+          let named = indexEvents(messages, indexType).map((event) => {
+            let content = event.content as {
+              invalidations?: string[];
+              updatedFile?: string;
+            };
+            return [
+              ...(content.invalidations ?? []),
+              ...(content.updatedFile ? [content.updatedFile] : []),
+            ].join(' ');
+          });
           assert.true(
-            named.includes('person-2'),
-            `the ${indexType} event is the control's`,
+            named.some((urls) => urls.includes('person-2')),
+            `the control's ${indexType} event arrived in the window`,
           );
           assert.false(
-            named.includes('person-1'),
-            `nothing in the ${indexType} event names the refused card`,
+            named.some((urls) => urls.includes('person-1')),
+            `no ${indexType} event in the window names the refused card`,
           );
         }
       });
