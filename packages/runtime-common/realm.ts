@@ -8645,6 +8645,12 @@ export class Realm {
       // deduplicated by the set rather than reasoned about, so a further
       // *enumerable* argument is covered here by adding it to the product.
       //
+      // Nothing makes that automatic, and it is worth knowing why rather than
+      // assuming a guard is missing: a new argument here arrives optional with
+      // a default, which by construction does not break an existing call, so
+      // there is no signature change for a type check to catch. The product
+      // below is the only thing that knows this list has to grow.
+      //
       // It does not cover a *value* folded into a variant, and one is: the
       // bounded `full` spelling interpolates the assembled-resource budget, so
       // only the budget this process is running with is built. That is uniform
