@@ -174,6 +174,7 @@ export async function assembleLatticeCardData({
   // held until the earliest field needs re-deriving.
   const grainInstants: string[] = [];
   const freshInstants: string[] = [];
+  const staleInstants: string[] = [];
   let nestedEvaluations = 0;
   // Run a contained definition's own BXL computeds for each of its nodes in
   // one worker call. Their values join the node (and so the holder's inputs)
@@ -220,6 +221,10 @@ export async function assembleLatticeCardData({
       for (const raw of Object.values(artifact.fresh ?? {})) {
         const instant = latticeValidUntilInstant(raw);
         if (instant !== null) freshInstants.push(instant);
+      }
+      for (const raw of Object.values(artifact.stale ?? {})) {
+        const instant = latticeValidUntilInstant(raw);
+        if (instant !== null) staleInstants.push(instant);
       }
     });
   }
@@ -502,7 +507,8 @@ export async function assembleLatticeCardData({
   node.shapes.id = 'string';
   // The engine reads the clock; programs read `.__clock` as data. Not a
   // field, so it never reaches the serialized document or search doc.
-  node.values.__clock = latticeClock();
+  const rootClock = latticeClock();
+  node.values.__clock = rootClock;
   node.shapes.__clock = { object: { today: 'string', now: 'string' } };
   if (resolveLinkInputs && !deferComputation) {
     const declared = root.definition.nativeLinkInputs ?? {};
@@ -625,6 +631,22 @@ export async function assembleLatticeCardData({
   }
   for (const instant of freshInstants) {
     if (freshUntil === null || instant < freshUntil) freshUntil = instant;
+  }
+  // The deadline likewise, as a window: the earliest `staleAfter` instant
+  // measured from the clock the programs read, in whole seconds. The engine
+  // arms it when the owner becomes dirty, not at publication, so a burst
+  // shorter than the window coalesces the ordinary way.
+  let staleWithin: number | null = null;
+  for (const raw of Object.values(computed?.artifacts[0].stale ?? {})) {
+    const instant = latticeValidUntilInstant(raw);
+    if (instant !== null) staleInstants.push(instant);
+  }
+  for (const instant of staleInstants) {
+    const seconds = Math.max(
+      1,
+      Math.round((Date.parse(instant) - Date.parse(rootClock.now)) / 1000),
+    );
+    if (staleWithin === null || seconds < staleWithin) staleWithin = seconds;
   }
   // Per input root, the fields of an input card the root programs read:
   // `players.*.average` contributes `average` to `players`; enumerating a
@@ -790,6 +812,7 @@ export async function assembleLatticeCardData({
     searchDoc: result.search,
     validUntil,
     freshUntil,
+    staleWithin,
     readPaths,
     sourceRevision,
     definitionRevisions: [...snapshots.values()].map(

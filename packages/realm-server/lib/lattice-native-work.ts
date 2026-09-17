@@ -45,7 +45,8 @@ export async function openLatticeNativeWork(
          EXISTS(SELECT 1 FROM jobs j WHERE j.concurrency_group=$4
            AND j.status='unfulfilled'
            AND j.job_type IN ('incremental-index','from-scratch-index','copy-index')) AS source_pending,
-         EXISTS(SELECT 1 FROM lattice_pending_generations t WHERE t.realm_url=$1) AS matching_pending
+         EXISTS(SELECT 1 FROM lattice_pending_generations t WHERE t.realm_url=$1) AS matching_pending,
+         (o.stale_after IS NOT NULL AND o.stale_after <= now()) AS overdue
        FROM realm_generations g LEFT JOIN lattice_owners o ON o.realm_url=g.realm_url AND o.owner_url=$2
        LEFT JOIN realm_user_permissions p ON p.realm_url=g.realm_url AND p.username=$3
        LEFT JOIN realm_metadata r ON r.url=g.realm_url
@@ -80,6 +81,8 @@ export async function openLatticeNativeWork(
         codeCurrent:
           Boolean(row?.code_current) &&
           row?.loader_epoch === request.loaderEpoch,
+        // A stale visit was scheduled as one; the row must still agree.
+        overdue: Boolean(request.inputSnapshot?.stale) && row?.overdue === true,
       },
       claim,
     );

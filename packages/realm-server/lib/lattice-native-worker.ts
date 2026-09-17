@@ -120,6 +120,7 @@ export async function createLatticeNativeWorker({
           actor: admission.inputActor,
           generation: request.inputSnapshot.generation,
           loaderEpoch: request.loaderEpoch,
+          ...(request.inputSnapshot.stale ? { stale: true as const } : {}),
           signal,
           lookup: {
             lookupDefinition: async (ref) =>

@@ -84,11 +84,18 @@ export interface LatticeOwnerPublication {
   retainOutputGeneration?: number;
   // See PublicationReceipt.freshUntil. Only a ready publication starts a hold.
   freshUntil?: string;
+  // See PublicationReceipt.staleWithin. Only a ready publication sets it.
+  staleWithin?: number;
+  // See PublicationReceipt.stale: the owner keeps its obligation.
+  stale?: true;
 }
 
 // A dirty owner inside its settle window is not runnable (`pending` with
 // `runnableOnly`, the queue's claim eligibility). `o` is a lattice_owners row.
 export const latticeOwnerSettledSQL = `(o.settle_until IS NULL OR o.settle_until <= now())`;
+// A dirty owner past its staleness deadline runs ahead of dirty inputs and
+// pending source work (`LatticeWorkClaim.stale`). `o` is a lattice_owners row.
+export const latticeOwnerOverdueSQL = `(o.stale_after IS NOT NULL AND o.stale_after <= now())`;
 
 export type LatticeProducer = Pick<
   LatticeOwnerPublication,
@@ -334,6 +341,9 @@ export class LatticeQueryRegistry
         : owner.pending
           ? ('register' as const)
           : ('publish' as const),
+      ...(owner.stale && !owner.retired && !owner.pending
+        ? { stale: true as const }
+        : {}),
     };
     if (
       latticePublicationDecision({ ...window, retainOutputAt: undefined })
@@ -372,11 +382,30 @@ export class LatticeQueryRegistry
         throw new Error('Lattice publication has an invalid fresh bound');
       freshUntil = instant.toISOString();
     }
+    let staleWithin: number | undefined;
+    if (!owner.retired && !owner.pending && owner.staleWithin !== undefined) {
+      if (!Number.isSafeInteger(owner.staleWithin) || owner.staleWithin < 1)
+        throw new Error('Lattice publication has an invalid staleness window');
+      staleWithin = owner.staleWithin;
+    }
+    // A stale publication is true at its input generation but was derived
+    // while inputs were still moving, so the owner stays obliged at this very
+    // generation: the ordinary path re-derives it once the stream quiets.
+    const dirtyGeneration = owner.pending
+      ? generation
+      : owner.stale && !owner.retired
+        ? Math.max(
+            generation,
+            previous?.dirty_generation == null
+              ? 0
+              : Number(previous.dirty_generation),
+          )
+        : null;
     const pg = this.db.kind === 'pg';
     await tx([
       `INSERT INTO lattice_owners
        (realm_url, owner_url, published_generation, input_generation,
-        dirty_generation, definition_revision, retired, code_bound${pg ? ', settle_until' : ''}) VALUES (`,
+        dirty_generation, definition_revision, retired, code_bound${pg ? ', settle_until, stale_within, stale_after' : ''}) VALUES (`,
       param(realmURL),
       ',',
       param(ownerURL),
@@ -385,7 +414,7 @@ export class LatticeQueryRegistry
       ',',
       param(inputGeneration),
       ',',
-      param(owner.pending ? generation : null),
+      param(dirtyGeneration),
       ',',
       param(owner.definitionRevision),
       ',',
@@ -407,11 +436,30 @@ export class LatticeQueryRegistry
           ? [', ', param(freshUntil), '::timestamptz']
           : [', NULL']
         : []),
+      // The window is kept for the next time the owner turns dirty; the
+      // deadline itself is armed only while the owner is dirty, which after a
+      // stale publication it still is.
+      ...(pg
+        ? staleWithin !== undefined
+          ? [
+              ', ',
+              param(staleWithin),
+              '::integer, ',
+              ...(dirtyGeneration !== null
+                ? [
+                    'now() + ',
+                    param(staleWithin),
+                    "::integer * interval '1 second'",
+                  ]
+                : ['NULL']),
+            ]
+          : [', NULL, NULL']
+        : []),
       `) ON CONFLICT (realm_url, owner_url) DO UPDATE SET
        published_generation = EXCLUDED.published_generation,
        input_generation = EXCLUDED.input_generation, dirty_generation = EXCLUDED.dirty_generation,
        definition_revision = EXCLUDED.definition_revision,
-       retired = EXCLUDED.retired, code_bound = EXCLUDED.code_bound${pg ? ', settle_until = EXCLUDED.settle_until' : ''}`,
+       retired = EXCLUDED.retired, code_bound = EXCLUDED.code_bound${pg ? ', settle_until = EXCLUDED.settle_until, stale_within = EXCLUDED.stale_within, stale_after = EXCLUDED.stale_after' : ''}`,
     ]);
     if (this.db.kind === 'pg') {
       if (owner.retainOutputGeneration !== undefined) {
@@ -636,13 +684,24 @@ export class LatticeQueryRegistry
     generation: number,
   ) {
     for (let ownerURL of new Set(owners)) {
+      // Turning dirty arms the staleness deadline for an owner that declares
+      // a window; an owner already dirty keeps the deadline it has.
       await tx([
         `UPDATE lattice_owners SET dirty_generation = CASE
          WHEN dirty_generation IS NULL OR dirty_generation <`,
         param(generation),
         'THEN',
         param(generation),
-        'ELSE dirty_generation END WHERE',
+        'ELSE dirty_generation END',
+        ...(this.db.kind === 'pg'
+          ? [
+              `, stale_after = CASE
+         WHEN dirty_generation IS NULL AND stale_within IS NOT NULL
+         THEN now() + stale_within * interval '1 second'
+         ELSE stale_after END`,
+            ]
+          : []),
+        'WHERE',
         ...(every([
           this.ownerCondition(realmURL, ownerURL),
           ['retired = FALSE'],
@@ -665,10 +724,19 @@ export class LatticeQueryRegistry
     realmURL: string,
     opts?: { runnableOnly?: boolean },
   ): Promise<
-    Array<{ ownerURL: string; generation: number; codeVersion?: string }>
+    Array<{
+      ownerURL: string;
+      generation: number;
+      codeVersion?: string;
+      // Past its staleness deadline: schedule it as a stale attempt.
+      stale?: true;
+    }>
   > {
     let rows = await query(this.db, [
       'SELECT o.owner_url, o.dirty_generation',
+      ...(this.db.kind === 'pg'
+        ? [`, ${latticeOwnerOverdueSQL} AS overdue`]
+        : []),
       ...(opts?.runnableOnly && this.db.kind === 'pg'
         ? [`, ${latticeOwnerCodeVersionSQL} AS code_version`]
         : []),
@@ -692,6 +760,7 @@ export class LatticeQueryRegistry
       ...(row.code_version == null
         ? {}
         : { codeVersion: String(row.code_version) }),
+      ...(row.overdue === true ? { stale: true as const } : {}),
     }));
   }
 
@@ -792,6 +861,8 @@ export class LatticeQueryRegistry
       `AND j.status='unfulfilled' AND j.job_type IN
          ('incremental-index','from-scratch-index','copy-index')) AS source_pending,
          EXISTS(SELECT 1 FROM lattice_pending_generations t WHERE t.realm_url=g.realm_url) AS matching_pending,`,
+      dbExpression({ pg: [latticeOwnerOverdueSQL], sqlite: ['FALSE'] }),
+      'AS overdue,',
       dbExpression({
         pg: [
           `NOT EXISTS(SELECT 1 FROM lattice_owner_code b JOIN lattice_code_artifacts c
@@ -826,6 +897,7 @@ export class LatticeQueryRegistry
           Boolean(row?.code_ready) &&
           (row?.code_version ?? undefined) === work.codeVersion &&
           row?.loader_epoch === work.definitionRevision,
+        overdue: row?.overdue === true,
       },
       work.claim,
     );
@@ -868,13 +940,33 @@ export class LatticeQueryRegistry
       throw new LatticeWorkSuperseded('queue reservation no longer current');
   }
 
+  // Any dirty owner past its staleness deadline: a matching backlog must not
+  // keep it from a wave.
+  async hasOverdue(realmURL: string): Promise<boolean> {
+    if (this.db.kind !== 'pg') return false;
+    const [row] = await query(this.db, [
+      'SELECT 1 FROM lattice_owners o WHERE o.realm_url =',
+      param(realmURL),
+      `AND o.retired = FALSE AND o.dirty_generation IS NOT NULL AND ${latticeOwnerOverdueSQL} LIMIT 1`,
+    ]);
+    return Boolean(row);
+  }
+
   // Scheduling evidence only. The per-realm queue lease, live input checks and
   // guarded publication still own correctness if any of these rows change.
-  async ready(realmURL: string) {
+  // `overdueOnly` composes a wave of stale attempts alone: an ordinary
+  // attempt beside them would yield to the source backlog and take the wave
+  // down with it.
+  async ready(realmURL: string, opts?: { overdueOnly?: boolean }) {
     const pending = await this.pending(realmURL);
     if (!pending.length) return [];
     const runnableOwners = await this.pending(realmURL, { runnableOnly: true });
     const runnable = new Set(runnableOwners.map((owner) => owner.ownerURL));
+    // Past its deadline an owner reads its dirty inputs' last published
+    // bodies rather than waiting for them, so no pending input blocks it.
+    const overdue = new Set(
+      runnableOwners.filter((owner) => owner.stale).map((o) => o.ownerURL),
+    );
     const inputs = new Map(
       pending.map(({ ownerURL }) => [ownerURL, new Set<string>()]),
     );
@@ -966,7 +1058,7 @@ export class LatticeQueryRegistry
       pending.map(({ ownerURL }) => ({
         id: ownerURL,
         runnable: runnable.has(ownerURL),
-        pendingInputs: [...inputs.get(ownerURL)!],
+        pendingInputs: overdue.has(ownerURL) ? [] : [...inputs.get(ownerURL)!],
       })),
     );
     if (frontier.cycle.length)
@@ -974,7 +1066,20 @@ export class LatticeQueryRegistry
         `Lattice work dependency cycle: ${frontier.cycle.join(' -> ')}`,
       );
     const ready = new Set(frontier.ready);
-    return runnableOwners.filter(({ ownerURL }) => ready.has(ownerURL));
+    // An overdue owner is scheduled as a stale attempt only where the
+    // ordinary path cannot serve it: inside a preempting wave, or with an
+    // input still dirty. Otherwise it runs the ordinary way and publishes
+    // clean, so a stream that has just stopped costs one render, not two.
+    return runnableOwners
+      .filter(
+        ({ ownerURL, stale }) =>
+          ready.has(ownerURL) && (!opts?.overdueOnly || stale),
+      )
+      .map(({ stale, ...row }) =>
+        stale && (opts?.overdueOnly || inputs.get(row.ownerURL)!.size > 0)
+          ? { ...row, stale: true as const }
+          : row,
+      );
   }
 
   private ownerCondition(realmURL: string, ownerURL: string) {

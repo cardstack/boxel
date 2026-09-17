@@ -45,6 +45,10 @@ export function latticeReadSetCurrent(
 export interface LatticeWorkClaim {
   id: string;
   obligation: LatticeRevision;
+  // The owner is past its staleness deadline: this attempt runs over its
+  // feeders' last published bodies, is not superseded by pending source work
+  // or by a newer obligation, and publishes without clearing the obligation.
+  stale?: true;
 }
 
 export interface LatticeWorkState {
@@ -55,6 +59,8 @@ export interface LatticeWorkState {
   active: boolean;
   inputsCurrent: boolean;
   codeCurrent: boolean;
+  // `lattice_owners.stale_after` has passed while the owner is still obliged.
+  overdue?: boolean;
 }
 
 export type LatticeWorkReason =
@@ -75,15 +81,25 @@ export function latticeWorkDecision(
   claim?: LatticeWorkClaim,
 ): LatticeWorkDecision {
   let reason: LatticeWorkReason | undefined;
+  // Past its deadline an owner runs regardless of pending source work, moving
+  // inputs or a newer obligation: the value it publishes is true at its input
+  // generation, and the obligation it keeps covers whatever arrived since.
+  // Authority, retirement, an obligation at all and code currency still hold.
+  // An attempt claimed as ordinary is not promoted by the row turning overdue
+  // under it: it read its inputs the ordinary way and publishes clean.
+  const stale =
+    Boolean(state.overdue) &&
+    state.obligation !== null &&
+    (!claim || Boolean(claim.stale));
   if (!state.authorized) reason = 'authority-changed';
-  else if (state.sourcePending) reason = 'source-pending';
+  else if (state.sourcePending && !stale) reason = 'source-pending';
   else if (!state.active) reason = 'owner-retired';
   else if (state.obligation === null) reason = 'already-satisfied';
-  else if (!state.inputsCurrent) reason = 'inputs-changed';
+  else if (!state.inputsCurrent && !stale) reason = 'inputs-changed';
   else if (!state.codeCurrent) reason = 'code-changed';
   else if (
     claim &&
-    (claim.id !== state.id || claim.obligation !== state.obligation)
+    (claim.id !== state.id || (claim.obligation !== state.obligation && !stale))
   ) {
     reason = 'obligation-changed';
   }
@@ -91,7 +107,11 @@ export function latticeWorkDecision(
     ? { status: 'withheld', reason }
     : {
         status: 'ready',
-        claim: { id: state.id, obligation: state.obligation! },
+        claim: {
+          id: state.id,
+          obligation: state.obligation!,
+          ...(stale ? { stale: true as const } : {}),
+        },
       };
 }
 
@@ -185,6 +205,9 @@ export interface LatticePublicationWindow {
   kind: 'publish' | 'register' | 'retire';
   // The adapter proved complete output/code equality inside this publication.
   retainOutputAt?: number;
+  // A stale attempt's publication (LatticeWorkClaim.stale): valid at its
+  // input generation even though a newer obligation exists, which it keeps.
+  stale?: true;
 }
 
 export interface LatticePublicationState {
@@ -220,6 +243,7 @@ export function latticePublicationDecision(
     return { status: 'reject', reason: 'newer-publication' };
   if (
     window.kind === 'publish' &&
+    !window.stale &&
     previous?.dirtyAt != null &&
     previous.dirtyAt > window.validatedThrough
   ) {

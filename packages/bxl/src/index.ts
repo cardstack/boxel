@@ -28,10 +28,7 @@ export {
   calendarDate as bxlCalendarDate,
   type BxlClock,
 } from './bxl/bridge/clock.ts';
-import type {
-  NativeRuntimeClock,
-  NativeRuntimeLimits,
-} from './jqtools/evaluate/runtimeState.ts';
+import type { NativeRuntimeLimits } from './jqtools/evaluate/runtimeState.ts';
 import type {
   ReadableSchema,
   ReadableSyntaxCompileResult,
@@ -163,7 +160,7 @@ export type {
   PreparedBoxelRuntime,
 } from './boxel-runtime.ts';
 
-export const VERSION = '0.7.0-unstable.7';
+export const VERSION = '0.7.0-unstable.6';
 
 /**
  * Runtime identity: the version plus the set of behaviors this build of the
@@ -270,7 +267,6 @@ export type {
   BxlSqlPredicateModule,
   BuiltinLibraryName,
   JqToReadableBxlResult,
-  NativeRuntimeClock,
   NativeRuntimeLimits,
   ReadableSchema,
   ReadableSyntaxCompileResult,
@@ -461,6 +457,23 @@ export interface BxlOptions {
    */
   freshUntil?: string | BxlTaggedSource;
   /**
+   * Staleness bound, the deadline side of the same window: a derive-profile
+   * program over the same input that yields the `YYYY-MM-DD` date or ISO
+   * instant by which the value must be re-derived even while its inputs
+   * keep changing, or `null` for no deadline. `freshUntil` says "do not
+   * re-derive before T"; this says "re-derive by T regardless". The engine
+   * keeps it as a window (T minus the clock the program read) and arms the
+   * deadline when the value turns dirty, so a burst shorter than the window
+   * coalesces the ordinary way. Under a stream that never pauses, an owner
+   * whose feeders are always dirty would otherwise never publish: past its
+   * deadline it runs once from its feeders' last published bodies,
+   * publishes, and stays obliged (with the deadline re-armed) so the
+   * ordinary path re-derives it when the stream quiets. Read `.__clock`
+   * for a wall-clock window. An owner publishes whole, so the engine takes
+   * the earliest deadline over its fields.
+   */
+  staleAfter?: string | BxlTaggedSource;
+  /**
    * Materialize the raw output as an instance of `Class`. When the
    * expression yields:
    * - a plain object → `new Class(); Object.assign(instance, raw)`
@@ -503,6 +516,7 @@ export interface BxlComputeMetadata {
   memoize: BxlComputeMemoizationMode;
   validUntil?: string;
   freshUntil?: string;
+  staleAfter?: string;
 }
 
 export interface BxlComputeFunction {
@@ -524,6 +538,8 @@ export interface BxlComputeDefinition {
   validUntil?: string;
   // Compiled freshness-grain program; see BxlOptions.freshUntil.
   freshUntil?: string;
+  // Compiled staleness-bound program; see BxlOptions.staleAfter.
+  staleAfter?: string;
 }
 
 const computeDefinitions = new WeakMap<Function, BxlComputeDefinition>();
@@ -1117,6 +1133,7 @@ export function bxl(
       ...merged,
       validUntil: undefined,
       freshUntil: undefined,
+      staleAfter: undefined,
       readableSyntax:
         options.readableSyntax ??
         (grainTagged?.[BXL_MODE] === 'jq' ? false : defaultReadable),
@@ -1137,6 +1154,10 @@ export function bxl(
   const fresh =
     merged.freshUntil !== undefined
       ? compileGrain(merged.freshUntil)
+      : undefined;
+  const stale =
+    merged.staleAfter !== undefined
+      ? compileGrain(merged.staleAfter)
       : undefined;
   const ShapeClass = options.as;
   const memoize = normalizeMemoizationMode(merged.memoize);
@@ -1207,6 +1228,7 @@ export function bxl(
       ...prepared.deps,
       ...(grain?.deps ?? []),
       ...(fresh?.deps ?? []),
+      ...(stale?.deps ?? []),
     ]),
   ];
   Object.defineProperty(computeViaBxl, 'bxl', {
@@ -1218,6 +1240,7 @@ export function bxl(
       memoize,
       ...(grain ? { validUntil: grain.compiledSource } : {}),
       ...(fresh ? { freshUntil: fresh.compiledSource } : {}),
+      ...(stale ? { staleAfter: stale.compiledSource } : {}),
     } satisfies BxlComputeMetadata),
     enumerable: false,
   });
@@ -1231,6 +1254,7 @@ export function bxl(
     customRuntimeLimits: merged.runtimeLimits !== undefined,
     ...(grain ? { validUntil: grain.compiledSource } : {}),
     ...(fresh ? { freshUntil: fresh.compiledSource } : {}),
+    ...(stale ? { staleAfter: stale.compiledSource } : {}),
   });
 
   return computeViaBxl;

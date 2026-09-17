@@ -33,6 +33,10 @@ interface Frame {
   loaderEpoch: string;
   permissionVersion: string;
   metadataVersion: string;
+  // A stale attempt (LatticeInputSnapshot.stale): a dirty feeder is read at
+  // its last published body, and a feeder row moving before publication does
+  // not fence it, because the owner keeps its obligation anyway.
+  stale?: true;
 }
 
 interface InputReceipt {
@@ -85,14 +89,20 @@ async function checkFrame(tx: Querier, frame: Frame, lock = false) {
     `AND p.read=TRUE AND r.archived_at IS NULL`,
     ...(lock ? ['FOR SHARE OF g,p,r'] : []),
   ]);
+  // A stale frame reads at its snapshot while source keeps landing: the
+  // generation may move on and matching may lag behind it. Authority and code
+  // still fence it; the obligation its owner keeps covers the rest.
   if (
     !row ||
-    Number(row.current_generation) !== frame.generation ||
+    (frame.stale
+      ? Number(row.current_generation) < frame.generation
+      : Number(row.current_generation) !== frame.generation) ||
     row.loader_epoch !== frame.loaderEpoch ||
     row.permission_version !== frame.permissionVersion ||
     row.metadata_version !== frame.metadataVersion
   )
     throw new Error('Lattice input generation or read authority changed');
+  if (frame.stale) return;
   let pending = await tx([
     'SELECT 1 FROM lattice_pending_generations WHERE realm_url=',
     param(frame.realmURL),
@@ -109,6 +119,9 @@ async function checkQueryInputs(
   // Do not evaluate membership using stale computeds: an old value can be a
   // false negative, so checking freshness only on returned rows is insufficient.
   // Missing indexed identities have unknown types and conservatively block.
+  // A stale attempt is the exception by definition: it evaluates membership
+  // over what dirty feeders last published, and keeps its obligation so the
+  // ordinary path corrects any false negative once they settle.
   const pending = await tx([
     `SELECT 1 FROM lattice_owners o LEFT JOIN boxel_index i
      ON i.realm_url=o.realm_url AND i.url=o.owner_url AND i.type='instance'
@@ -118,7 +131,6 @@ async function checkQueryInputs(
     ...typeScope,
     `)) AND (
       i.url IS NULL OR i.has_error IS TRUE OR i.is_deleted IS TRUE
-      OR o.dirty_generation IS NOT NULL OR o.published_generation IS NULL
       OR NOT`,
     ...latticeOwnerDefinitionCurrent(
       ['o.realm_url'],
@@ -126,18 +138,23 @@ async function checkQueryInputs(
       [param(frame.loaderEpoch)],
       ['o.definition_revision'],
     ),
-    `OR i.generation IS DISTINCT FROM o.published_generation
-      OR (i.pristine_doc->'meta'->'publication'->>'version') IS DISTINCT FROM '1'
+    `OR (i.pristine_doc->'meta'->'publication'->>'version') IS DISTINCT FROM '1'
       OR (i.pristine_doc->'meta'->'publication'->>'state') IS DISTINCT FROM 'ready'
+      OR (i.pristine_doc->'meta'->'publication'->>'definitionRevision') IS DISTINCT FROM o.definition_revision
+      OR jsonb_typeof(i.pristine_doc->'meta'->'publication'->'computedFields') IS DISTINCT FROM 'array'
+      OR jsonb_typeof(i.pristine_doc->'meta'->'publication'->'queryFields') IS DISTINCT FROM 'array'`,
+    ...(frame.stale
+      ? []
+      : [
+          `OR o.dirty_generation IS NOT NULL OR o.published_generation IS NULL
+      OR i.generation IS DISTINCT FROM o.published_generation
       OR (i.pristine_doc->'meta'->'publication'->>'outputRevision') IS DISTINCT FROM o.published_generation::text
       OR (i.pristine_doc->'meta'->'publication'->>'validatedThrough') IS DISTINCT FROM o.input_generation::text
       OR o.input_generation IS NULL OR o.input_generation<0 OR o.input_generation>`,
-    param(frame.generation),
-    `OR o.published_generation<1
-      OR (i.pristine_doc->'meta'->'publication'->>'definitionRevision') IS DISTINCT FROM o.definition_revision
-      OR jsonb_typeof(i.pristine_doc->'meta'->'publication'->'computedFields') IS DISTINCT FROM 'array'
-      OR jsonb_typeof(i.pristine_doc->'meta'->'publication'->'queryFields') IS DISTINCT FROM 'array'
-    ) LIMIT 1`,
+          param(frame.generation),
+          `OR o.published_generation<1`,
+        ]),
+    ') LIMIT 1',
   ]);
   if (pending.length)
     throw new Error('Lattice query has unsettled materialized inputs');
@@ -200,6 +217,7 @@ export class LatticeMaterializationInputs {
     lookup,
     network,
     signal,
+    stale,
   }: {
     db: DBAdapter;
     realmURL: string;
@@ -209,6 +227,7 @@ export class LatticeMaterializationInputs {
     lookup: Pick<DefinitionLookup, 'lookupDefinition'>;
     network: VirtualNetwork;
     signal?: AbortSignal;
+    stale?: true;
   }) {
     signal?.throwIfAborted();
     if (
@@ -231,13 +250,14 @@ export class LatticeMaterializationInputs {
       'AND p.read=TRUE AND r.archived_at IS NULL',
     ]);
     if (!authority) throw new Error('Missing Lattice input read authority');
-    let frame = {
+    let frame: Frame = {
       realmURL,
       actor,
       generation,
       loaderEpoch,
       permissionVersion: String(authority.permission_version),
       metadataVersion: String(authority.metadata_version),
+      ...(stale ? { stale: true as const } : {}),
     };
     await checkFrame((expression) => query(db, expression), frame);
     signal?.throwIfAborted();
@@ -468,22 +488,27 @@ export class LatticeMaterializationInputs {
           throw new Error('Lattice card input is failed, future or oversized');
         if (row.owner_version && !row.materialized)
           throw new Error('Lattice materialized feeder has no provenance');
+        // A stale frame asks less of a feeder: that its index row is a ready
+        // publication of current code. Dirt, and the owner row moving past
+        // that row (a pending re-registration under a stream), are exactly
+        // what the stale attempt exists to read through.
         if (
           row.materialized &&
           (row.stamp_version !== '1' ||
             row.state !== 'ready' ||
             !row.owner_version ||
-            row.dirty_generation != null ||
             row.retired ||
-            Number(row.published) !== generation ||
-            Number(row.published_generation) !== generation ||
-            row.input == null ||
-            !Number.isSafeInteger(Number(row.input)) ||
-            Number(row.input) < 0 ||
-            Number(row.input) > this.#frame.generation ||
-            Number(row.input_generation) !== Number(row.input) ||
             row.code_current !== true ||
-            row.definition_revision !== row.revision)
+            row.definition_revision !== row.revision ||
+            (!this.#frame.stale &&
+              (row.dirty_generation != null ||
+                Number(row.published) !== generation ||
+                Number(row.published_generation) !== generation ||
+                row.input == null ||
+                !Number.isSafeInteger(Number(row.input)) ||
+                Number(row.input) < 0 ||
+                Number(row.input) > this.#frame.generation ||
+                Number(row.input_generation) !== Number(row.input))))
         )
           throw new Error('Lattice materialized feeder is not current');
         return {
@@ -711,10 +736,11 @@ export class LatticeMaterializationInputs {
         );
         if (
           current.length !== owners.length ||
-          owners.some(
-            (receipt) =>
-              ownerVersions.get(receipt.url) !== receipt.ownerVersion,
-          )
+          (!frame.stale &&
+            owners.some(
+              (receipt) =>
+                ownerVersions.get(receipt.url) !== receipt.ownerVersion,
+            ))
         )
           throw new Error(
             'Lattice feeder freshness changed before publication',

@@ -831,6 +831,21 @@ export class IndexRunner {
         invalidations = (
           await current.#drainLattice({ realmUsername, wave: wave + 1 })
         ).map((u) => u.href);
+      } else if (
+        await current.#lattice.registry.hasOverdue(current.realmURL.href)
+      ) {
+        // A matching turn consumed this job, and its successor is already
+        // queued. Under a feed that never pauses that is every job, so an
+        // owner past its staleness deadline gets one wave of stale attempts
+        // here, ahead of the backlog, rather than waiting for a quiet the
+        // feed never offers.
+        invalidations = (
+          await current.#drainLattice({
+            realmUsername,
+            wave: wave + 1,
+            overdueOnly: true,
+          })
+        ).map((u) => u.href);
       }
       return {
         invalidations,
@@ -875,13 +890,16 @@ export class IndexRunner {
   async #drainLattice(followup?: {
     realmUsername: string;
     wave: number;
+    overdueOnly?: boolean;
   }): Promise<URL[]> {
     let publication = this.#lattice;
     if (!publication) return [];
     let startedAt = Date.now();
     let published = new Set<string>();
     let pending = followup
-      ? await publication.registry.ready(this.realmURL.href)
+      ? await publication.registry.ready(this.realmURL.href, {
+          overdueOnly: followup.overdueOnly,
+        })
       : await publication.registry.pending(this.realmURL.href);
     // A queued wake-up is an obligation to inspect current work, not a frozen
     // owner list. Publication or retirement may already have satisfied it.
@@ -948,11 +966,16 @@ export class IndexRunner {
           ownerURL,
           generation,
           codeVersion,
+          stale,
         }: (typeof pending)[number]) => {
           const work: LatticeScheduledWork = {
             realmURL: this.realmURL.href,
             actor: this.#realmOwnerUserId,
-            claim: { id: ownerURL, obligation: generation },
+            claim: {
+              id: ownerURL,
+              obligation: generation,
+              ...(stale ? { stale: true as const } : {}),
+            },
             inputGeneration: this.#inputSnapshot!.generation,
             definitionRevision: this.batch.loaderEpoch,
             codeVersion,
@@ -998,6 +1021,7 @@ export class IndexRunner {
                   await check();
                 }
               : undefined,
+            { stale },
           );
           if (check) await check();
           if (
@@ -1153,13 +1177,19 @@ export class IndexRunner {
   async #renderVisit(
     url: URL,
     beforeIndex?: (runtime: 'native' | 'browser') => Promise<void>,
+    opts?: { stale?: true },
   ): Promise<VisitRenderOutcome> {
     try {
       let result = await renderFileForIndexing({
         nativeCardIndexer: this.#nativeCardIndexer,
         nativeFileIndexer: this.#nativeFileIndexer,
         beforeIndex,
-        inputSnapshot: this.#inputSnapshot,
+        // A stale attempt carries its own snapshot object: the input batch
+        // keyed on it must not be shared with ordinary visits of the wave.
+        inputSnapshot:
+          opts?.stale && this.#inputSnapshot
+            ? { ...this.#inputSnapshot, stale: true }
+            : this.#inputSnapshot,
         url,
         realmURL: this.#realmURL,
         ignoreMap: this.ignoreMap,

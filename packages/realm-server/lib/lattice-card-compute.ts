@@ -58,6 +58,9 @@ export interface LatticeCardComputeResult {
     // Raw freshness-grain results per field (BxlOptions.freshUntil), same
     // value shape; the caller keeps the earliest as the owner's fresh bound.
     fresh?: Record<string, string | null>;
+    // Raw staleness-bound results per field (BxlOptions.staleAfter), same
+    // value shape; the caller keeps the earliest as the owner's deadline.
+    stale?: Record<string, string | null>;
     // The input paths the programs read, normalized (`players.*.average`,
     // `season`; `x.*` when an object under `x` was enumerated). A derive
     // program is pure, so if none of the values it read changed its output
@@ -271,18 +274,6 @@ function protectedInputs(
     );
   }
   return new Proxy(target, {
-    getOwnPropertyDescriptor(object, key) {
-      const descriptor = Reflect.getOwnPropertyDescriptor(object, key);
-      // BXL checks own-property coverage before reading a path. Record the
-      // missing input even if an optional operator catches this refusal.
-      if (!descriptor && typeof key === 'string' && key !== 'toJSON') {
-        missing.add(`${path}.${key}`);
-        throw new Error(`Unadmitted computed input: ${path}.${key}`);
-      }
-      if (descriptor && typeof key === 'string' && reads)
-        reads.add(readPath(`${path}.${key}`));
-      return descriptor;
-    },
     get(object, key) {
       // JSON's own serializer probes this optional method. No user hook is
       // present: the target was parsed from bytes inside this worker.
@@ -486,6 +477,7 @@ export function prepareLatticeCardCompute(plan: LatticeCardComputePlan) {
   const programs = new Map<string, BxlComputeFunction>();
   const grains = new Map<string, BxlComputeFunction>();
   const freshGrains = new Map<string, BxlComputeFunction>();
+  const staleGrains = new Map<string, BxlComputeFunction>();
   const dependencies = new Map<string, string[]>();
   const compileGrain = (
     source: string,
@@ -541,6 +533,8 @@ export function prepareLatticeCardCompute(plan: LatticeCardComputePlan) {
         grains.set(name, compileGrain(field.bxl.validUntil, libraries));
       if (field.bxl.freshUntil)
         freshGrains.set(name, compileGrain(field.bxl.freshUntil, libraries));
+      if (field.bxl.staleAfter)
+        staleGrains.set(name, compileGrain(field.bxl.staleAfter, libraries));
     } else {
       assertRootInputs(['cardInfo'], plan.input, plan.fields);
       dependencies.set(name, ['cardInfo']);
@@ -692,7 +686,7 @@ export function prepareLatticeCardCompute(plan: LatticeCardComputePlan) {
     // Every declared computation completes once before the card can publish.
     for (const name of evaluationOrder) void card[name];
     const evaluateGrains = (
-      kind: 'time' | 'freshness',
+      kind: 'time' | 'freshness' | 'staleness',
       programs: Map<string, BxlComputeFunction>,
     ): Record<string, string | null> | undefined => {
       let results: Record<string, string | null> | undefined;
@@ -718,12 +712,14 @@ export function prepareLatticeCardCompute(plan: LatticeCardComputePlan) {
     };
     const grainResults = evaluateGrains('time', grains);
     const freshResults = evaluateGrains('freshness', freshGrains);
+    const staleResults = evaluateGrains('staleness', staleGrains);
     return {
       id: input.id,
       inputRevision: input.revision,
       definitionRevision: plan.definition.revision,
       ...(grainResults ? { grains: grainResults } : {}),
       ...(freshResults ? { fresh: freshResults } : {}),
+      ...(staleResults ? { stale: staleResults } : {}),
       reads: [...reads],
       // Trusted base functions can return a protected input reference. Leave
       // read guards inside this worker and send only plain data to publication.

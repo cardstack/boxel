@@ -27,6 +27,10 @@ export interface BxlComputeDefinition {
   // Compiled freshness-grain program (BxlOptions.freshUntil): yields the
   // date or instant before which the value need not be re-derived, or null.
   freshUntil?: string;
+  // Compiled staleness-bound program (BxlOptions.staleAfter): yields the date
+  // or instant by which the value must be re-derived even while its inputs
+  // are still changing, or null.
+  staleAfter?: string;
 }
 
 export type BaseCardComputeName =

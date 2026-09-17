@@ -23,6 +23,10 @@ import { IndexRunner } from '@cardstack/runtime-common/index-runner';
 import { latticeMaterialize } from '@cardstack/runtime-common/tasks/lattice';
 import { enqueueLattice } from '@cardstack/runtime-common/jobs/lattice';
 import { LatticeWorkSuperseded } from '@cardstack/runtime-common/lattice-work';
+import {
+  latticePublicationDecision,
+  latticeWorkDecision,
+} from '@cardstack/runtime-common/lattice-kernel';
 import { LatticeBxlWorker } from '../lib/lattice-bxl-derivation.ts';
 import { createLatticeNativeCardIndexer } from '../lib/lattice-native-card-indexer.ts';
 import { LatticeMaterializationInputs } from '../lib/lattice-materialization-inputs.ts';
@@ -250,6 +254,7 @@ module(basename(import.meta.filename), function (hooks) {
           actor,
           generation: request.inputSnapshot!.generation,
           loaderEpoch: request.loaderEpoch,
+          ...(request.inputSnapshot!.stale ? { stale: true as const } : {}),
           lookup,
         }),
     });
@@ -259,6 +264,7 @@ module(basename(import.meta.filename), function (hooks) {
     group = 'A',
     openWork?: Parameters<typeof createLatticeNativeCardIndexer>[0]['openWork'],
     discovery = false,
+    opts?: { stale?: true },
   ) {
     const batch = await writer.createBatch(new URL(realm), network);
     const indexer = createIndexer(openWork);
@@ -284,6 +290,7 @@ module(basename(import.meta.filename), function (hooks) {
         : {
             realmURL: realm,
             generation: batch.currentGeneration - 1,
+            ...(opts?.stale ? { stale: true as const } : {}),
           },
     });
     if (!result?.card.serialized || !result.card.searchDoc)
@@ -1044,6 +1051,296 @@ module(basename(import.meta.filename), function (hooks) {
   // A sorted page is Ziggrid's `limit top`: the owner reads the page, and the
   // watch carries the page's key range so a row that cannot reach the page
   // never invalidates it.
+  // --- staleAfter: the deadline side of a value's validity window ---------
+  const deadline = (seconds: number) =>
+    `(.__clock.now | fromdateiso8601) + ${seconds} | todateiso8601`;
+  function staleTotal(seconds = 90) {
+    root.fieldDefs.total.bxl = getBxlComputeDefinition(
+      bxl('[.chosen[] | .person.amount] | add // 0', {
+        readableSyntax: false,
+        libraries: ['core'],
+        staleAfter: deadline(seconds),
+      }),
+    )!;
+  }
+  const ownerRow = async () =>
+    (
+      await db.execute(
+        `SELECT published_generation, dirty_generation, settle_until,
+           stale_within, stale_after, stale_after > now() AS deferred,
+           EXTRACT(EPOCH FROM (stale_after - now())) AS seconds
+         FROM lattice_owners WHERE owner_url=$1`,
+        { bind: [owner] },
+      )
+    )[0];
+
+  test('a staleness bound is published as a window and armed when the owner turns dirty', async (assert) => {
+    staleTotal(90);
+    const { result, publish } = await candidate();
+    const stamp = result.card.serialized!.data.meta.publication!;
+    assert.strictEqual(
+      stamp.staleWithin,
+      90,
+      'the receipt carries the earliest window, measured from the clock the program read',
+    );
+    assert.strictEqual(stamp.stale, undefined, 'an ordinary attempt');
+    await publish();
+    let row = await ownerRow();
+    assert.strictEqual(row.dirty_generation, null, 'published clean');
+    assert.strictEqual(
+      row.settle_until,
+      null,
+      'no freshness hold was asked for',
+    );
+    assert.strictEqual(Number(row.stale_within), 90);
+    assert.strictEqual(row.stale_after, null, 'a clean owner has no deadline');
+    const registry = new LatticeQueryRegistry(
+      db,
+      new IndexQueryEngine(db, lookup, network),
+    );
+    await db.withWriteLock('lattice:index:' + realm, async (tx) => {
+      await registry.markDirty(tx!, realm, [owner], 7);
+    });
+    row = await ownerRow();
+    assert.ok(
+      Number(row.seconds) > 85,
+      `turning dirty arms the deadline ninety seconds out, got ${row.seconds}`,
+    );
+    assert.ok(Number(row.seconds) <= 90, 'and no further');
+    const armed = String(row.stale_after);
+    await db.withWriteLock('lattice:index:' + realm, async (tx) => {
+      await registry.markDirty(tx!, realm, [owner], 8);
+    });
+    assert.strictEqual(
+      String((await ownerRow()).stale_after),
+      armed,
+      'further dirt does not push the deadline out',
+    );
+  });
+
+  test('the kernel admits an overdue owner past the source, input and obligation fences', async (assert) => {
+    const blocked = {
+      id: owner,
+      obligation: 6,
+      authorized: true,
+      sourcePending: true,
+      active: true,
+      inputsCurrent: false,
+      codeCurrent: true,
+    };
+    assert.strictEqual(latticeWorkDecision(blocked).status, 'withheld');
+    assert.deepEqual(latticeWorkDecision({ ...blocked, overdue: true }), {
+      status: 'ready',
+      claim: { id: owner, obligation: 6, stale: true },
+    });
+    assert.strictEqual(
+      latticeWorkDecision({ ...blocked, overdue: true, obligation: null })
+        .status,
+      'withheld',
+      'nothing to do is still nothing to do',
+    );
+    assert.strictEqual(
+      latticeWorkDecision({ ...blocked, overdue: true, codeCurrent: false })
+        .status,
+      'withheld',
+      'stale code is never run',
+    );
+    assert.strictEqual(
+      latticeWorkDecision({ ...blocked, overdue: true, authorized: false })
+        .status,
+      'withheld',
+    );
+    assert.strictEqual(
+      latticeWorkDecision(
+        { ...blocked, overdue: true, obligation: 8 },
+        { id: owner, obligation: 6, stale: true },
+      ).status,
+      'ready',
+      'a newer obligation does not withdraw a stale claim',
+    );
+    assert.strictEqual(
+      latticeWorkDecision(
+        {
+          ...blocked,
+          overdue: true,
+          obligation: 8,
+          sourcePending: false,
+          inputsCurrent: true,
+        },
+        { id: owner, obligation: 6 },
+      ).status,
+      'withheld',
+      'an ordinary claim still yields to a newer obligation',
+    );
+    assert.deepEqual(
+      latticePublicationDecision(
+        { publishedAt: 7, validatedThrough: 6, kind: 'publish', stale: true },
+        { publishedAt: 6, dirtyAt: 7 },
+      ),
+      { status: 'publish' },
+      'a stale publication may trail the obligation',
+    );
+    assert.strictEqual(
+      latticePublicationDecision(
+        { publishedAt: 7, validatedThrough: 6, kind: 'publish' },
+        { publishedAt: 6, dirtyAt: 7 },
+      ).status,
+      'reject',
+    );
+  });
+
+  test('past its deadline a dirty owner is scheduled ahead of its dirty inputs', async (assert) => {
+    staleTotal();
+    await (await candidate()).publish();
+    const registry = new LatticeQueryRegistry(
+      db,
+      new IndexQueryEngine(db, lookup, network),
+    );
+    // A materialized feeder the owner reads, itself dirty: the readiness
+    // join holds the owner back until the feeder publishes.
+    const feeder = realm + 'Person/one.json';
+    await db.execute(
+      `INSERT INTO lattice_owners(realm_url,owner_url,published_generation,input_generation,dirty_generation,definition_revision,retired)
+       VALUES($1,$2,5,4,6,'epoch',FALSE)`,
+      { bind: [realm, feeder] },
+    );
+    await db.execute(
+      "UPDATE boxel_index SET deps = COALESCE(deps,'[]'::jsonb) || $2::jsonb WHERE url=$1",
+      { bind: [owner, JSON.stringify([feeder])] },
+    );
+    await db.execute(
+      'UPDATE lattice_owners SET dirty_generation=6 WHERE owner_url=$1',
+      { bind: [owner] },
+    );
+    const names = (rows: Array<{ ownerURL: string }>) =>
+      rows.map((row) => row.ownerURL).sort();
+    assert.deepEqual(
+      names(await registry.ready(realm)),
+      [feeder],
+      'before the deadline the owner waits for its feeder',
+    );
+    await db.execute(
+      "UPDATE lattice_owners SET stale_after = now() - interval '1 second' WHERE owner_url=$1",
+      { bind: [owner] },
+    );
+    assert.deepEqual(
+      names(await registry.ready(realm)),
+      [feeder, owner].sort(),
+      'past it the owner runs over what the feeder last published',
+    );
+    assert.deepEqual(
+      (await registry.pending(realm, { runnableOnly: true }))
+        .filter((row) => row.ownerURL === owner)
+        .map((row) => row.stale),
+      [true],
+      'and is scheduled as a stale attempt',
+    );
+    assert.deepEqual(
+      names(await registry.ready(realm, { overdueOnly: true })),
+      [owner],
+      'a wave of stale attempts alone leaves the ordinary feeder to the backlog',
+    );
+    assert.true(await registry.hasOverdue(realm));
+    assert.deepEqual(
+      (await registry.ready(realm))
+        .filter((row) => row.ownerURL === owner)
+        .map((row) => row.stale),
+      [true],
+      'blocked by its feeder, the overdue owner runs as a stale attempt',
+    );
+    await db.execute(
+      'UPDATE lattice_owners SET dirty_generation=NULL WHERE owner_url=$1',
+      { bind: [feeder] },
+    );
+    assert.deepEqual(
+      (await registry.ready(realm))
+        .filter((row) => row.ownerURL === owner)
+        .map((row) => row.stale),
+      [undefined],
+      'with its feeder settled it runs the ordinary way and publishes clean',
+    );
+  });
+
+  test('pending source work and a newer obligation do not supersede a stale attempt', async (assert) => {
+    staleTotal();
+    await (await candidate()).publish();
+    await db.execute(
+      "UPDATE lattice_owners SET dirty_generation=7, stale_after = now() - interval '1 second' WHERE owner_url=$1",
+      { bind: [owner] },
+    );
+    await db.execute(
+      `INSERT INTO jobs (job_type, concurrency_group, timeout, priority, args, status)
+       VALUES ('incremental-index', $1, 3600, 10, $2, 'unfulfilled')`,
+      { bind: ['indexing:' + realm, JSON.stringify({ realmURL: realm })] },
+    );
+    const registry = new LatticeQueryRegistry(
+      db,
+      new IndexQueryEngine(db, lookup, network),
+    );
+    const work = {
+      realmURL: realm,
+      actor,
+      claim: { id: owner, obligation: 6 },
+      inputGeneration: 5,
+      definitionRevision: 'epoch',
+    };
+    await assert.rejects(
+      registry.assertWorkCurrent(work),
+      /new source work has priority/,
+      'an ordinary attempt yields',
+    );
+    await registry.assertWorkCurrent({
+      ...work,
+      claim: { ...work.claim, stale: true },
+    });
+    assert.ok(true, 'the stale attempt keeps going');
+    await db.execute(
+      'UPDATE lattice_owners SET stale_after = NULL WHERE owner_url=$1',
+      { bind: [owner] },
+    );
+    await assert.rejects(
+      registry.assertWorkCurrent({
+        ...work,
+        claim: { ...work.claim, stale: true },
+      }),
+      /new source work has priority/,
+      'a stale claim the row no longer backs is an ordinary one',
+    );
+  });
+
+  test('a stale publication keeps the obligation it could not cover', async (assert) => {
+    staleTotal();
+    await (await candidate()).publish();
+    // Work newer than any snapshot this attempt reads has dirtied the owner.
+    await db.execute(
+      "UPDATE lattice_owners SET dirty_generation=7, stale_after = now() - interval '1 second' WHERE owner_url=$1",
+      { bind: [owner] },
+    );
+    await assert.rejects(
+      (await candidate()).publish(),
+      /obsolete owner publication/,
+      'an ordinary attempt cannot publish under a newer obligation',
+    );
+    const { result, publish } = await candidate('A', undefined, false, {
+      stale: true,
+    });
+    assert.true(
+      result.card.serialized!.data.meta.publication!.stale,
+      'the receipt says so',
+    );
+    await publish();
+    const row = await ownerRow();
+    assert.notStrictEqual(row.dirty_generation, null, 'still obliged');
+    assert.ok(
+      Number(row.dirty_generation) >= Number(row.published_generation),
+      'at no older a generation than the value it just published',
+    );
+    assert.true(
+      row.deferred,
+      'the next deadline is armed from this publication',
+    );
+  });
+
   async function addRecord(name: string, amount: number, group = 'A') {
     const url = new URL('Record/' + name + '.json', realm).href;
     await db.execute(

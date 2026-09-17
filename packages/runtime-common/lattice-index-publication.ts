@@ -265,7 +265,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
     let [held] = await query(this.db, [
       'SELECT 1 FROM lattice_owners o WHERE o.realm_url =',
       param(realmURL),
-      'AND NOT o.retired AND o.dirty_generation IS NOT NULL AND o.settle_until > now() LIMIT 1',
+      'AND NOT o.retired AND o.dirty_generation IS NOT NULL AND (o.settle_until > now() OR o.stale_after > now()) LIMIT 1',
     ]);
     if (!held) return false;
     await this.db.withWriteLock(`lattice:index:${realmURL}`, async (tx) => {
@@ -621,6 +621,10 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
             pending: !ready,
             ...(retain ? { retainOutputGeneration: outputGeneration } : {}),
             ...(manifest.freshUntil ? { freshUntil: manifest.freshUntil } : {}),
+            ...(manifest.staleWithin
+              ? { staleWithin: manifest.staleWithin }
+              : {}),
+            ...(manifest.stale ? { stale: true as const } : {}),
           });
         let retainsOutput = retainOutput;
         let accepted = await publishOwner(retainOutput);

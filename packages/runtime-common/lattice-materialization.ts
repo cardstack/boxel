@@ -24,6 +24,18 @@ export interface PublicationReceipt {
   // producer that evaluates grains (the native worker) supplies it; the
   // browser, which recomputes live, does not.
   freshUntil?: string;
+  // The earliest `staleAfter` bound over the owner's computed fields, as a
+  // window in seconds from the clock the programs read: once dirty, the owner
+  // must be re-derived within it even while its inputs keep changing.
+  // Registered as `lattice_owners.stale_within`; the registry arms
+  // `stale_after` when the owner becomes dirty (and again at a stale
+  // publication, which leaves it dirty). Native producer only.
+  staleWithin?: number;
+  // The publication came from a stale attempt: one that ran past its
+  // deadline, over feeders' last published bodies and ahead of pending source
+  // work. It is a valid value at its input generation, but the owner keeps
+  // its obligation so the ordinary path re-derives it when the stream quiets.
+  stale?: true;
   // Per watch field path, the fields of a matching input card the owner's
   // programs read (read-path change detection). A watch without an entry
   // invalidates on any change of a matching row; with one, only when a row
@@ -45,6 +57,9 @@ export interface LatticeInputSnapshot {
   // Explicitly installed by an enabled writer, not inferred from card metadata.
   retainLinks?: true;
   loaderEpoch?: string;
+  // The visit is a stale attempt (see PublicationReceipt.stale): dirty feeders
+  // are read at their last published body and source work does not supersede.
+  stale?: true;
 }
 
 export const LATTICE_INPUT_GENERATION_HEADER =

@@ -454,6 +454,118 @@ module(basename(import.meta.filename), function (hooks) {
     await assert.rejects((await open()).read([url]), /feeder is not current/);
   });
 
+  test('a stale frame reads a dirty feeder at its last published body', async (assert) => {
+    const url = await materializedCard('feeder', 2);
+    await db.execute(
+      'UPDATE lattice_owners SET dirty_generation=5 WHERE owner_url=$1',
+      { bind: [url] },
+    );
+    await assert.rejects(
+      (await open()).read([url]),
+      /feeder is not current/,
+      'an ordinary frame waits for the feeder',
+    );
+    const stale = await LatticeMaterializationInputs.open({
+      db,
+      network,
+      realmURL: realm,
+      actor,
+      generation: 5,
+      loaderEpoch: 'epoch-1',
+      stale: true,
+      lookup: {
+        async lookupDefinition() {
+          return definition;
+        },
+      },
+    });
+    const cards = await stale.read([url]);
+    assert.strictEqual(
+      cards[0].resource.attributes?.amount,
+      2,
+      'the value the feeder last published',
+    );
+    // A query over the feeder's type is answered the same way, where an
+    // ordinary frame refuses to evaluate membership over stale computeds.
+    await assert.rejects(
+      (await open()).query('feeders', {
+        filter: { type: codeRef },
+        page: { size: 10 },
+      }),
+      /unsettled materialized inputs/,
+    );
+    const result = await stale.query('feeders', {
+      filter: { type: codeRef },
+      page: { size: 10 },
+    });
+    assert.deepEqual(
+      result.cards.map((card) => card.resource.attributes?.amount),
+      [2],
+    );
+    const check = stale.seal();
+    await publish(check.assertCurrent);
+    // The feeder moving on before publication does not fence a stale
+    // attempt either: its owner keeps the obligation that covers it.
+    await db.execute(
+      'UPDATE lattice_owners SET dirty_generation=6 WHERE owner_url=$1',
+      { bind: [url] },
+    );
+    await publish(check.assertCurrent);
+    // Nor does a matching backlog or a generation that moved on: the stale
+    // attempt is the one that must land while source keeps arriving.
+    await db.execute(
+      "INSERT INTO lattice_pending_generations(realm_url, generation, definition_revision) VALUES ($1, 6, 'epoch-1')",
+      { bind: [realm] },
+    );
+    await assert.rejects(
+      open(),
+      /matching is pending/,
+      'an ordinary frame waits',
+    );
+    await publish(check.assertCurrent);
+    // Under a stream a dirty feeder's owner row is re-registered pending on
+    // every tick (its published generation moves past its index row, its
+    // input generation reads 0); the index row is still the last ready
+    // publication and a stale frame still reads it, by card and by query.
+    await db.execute(
+      'UPDATE lattice_owners SET published_generation=9, input_generation=0, dirty_generation=9 WHERE owner_url=$1',
+      { bind: [url] },
+    );
+    const again = await LatticeMaterializationInputs.open({
+      db,
+      network,
+      realmURL: realm,
+      actor,
+      generation: 5,
+      loaderEpoch: 'epoch-1',
+      stale: true,
+      lookup: {
+        async lookupDefinition() {
+          return definition;
+        },
+      },
+    });
+    assert.strictEqual(
+      (await again.read([url]))[0].resource.attributes?.amount,
+      2,
+    );
+    assert.deepEqual(
+      (
+        await again.query('feeders', {
+          filter: { type: codeRef },
+          page: { size: 10 },
+        })
+      ).cards.map((card) => card.resource.attributes?.amount),
+      [2],
+    );
+    await publish(again.seal().assertCurrent);
+    await db.execute(
+      'UPDATE realm_generations SET current_generation = current_generation + 1 WHERE realm_url=$1',
+      { bind: [realm] },
+    );
+    await publish(check.assertCurrent);
+  });
+
   test('BXL consumes fresh computed data from older publications without rebuilding the feeders', async (assert) => {
     await materializedCard('first', 20, 3, 5);
     await materializedCard('second', 30, 4);

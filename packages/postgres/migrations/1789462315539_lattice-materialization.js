@@ -18,6 +18,11 @@ exports.up = (pgm) => {
       -- The earliest freshUntil grain over the owner's fields at its last
       -- publication: a dirty owner is not runnable before it.
       settle_until timestamptz,
+      -- The earliest staleAfter window (seconds) at its last publication,
+      -- and the deadline armed from it when the owner turns dirty: past it
+      -- a dirty owner runs ahead of dirty inputs and pending source work.
+      stale_within integer,
+      stale_after timestamptz,
       PRIMARY KEY (realm_url, owner_url)
     );
     CREATE INDEX lattice_owners_realm_url_dirty_generation_index
