@@ -64,6 +64,7 @@ import {
 } from '@cardstack/runtime-common/package-shim-handler';
 
 import * as pdfjsLoader from '../lib/pdfjs-loader';
+import * as signedCapture from '../lib/signed-capture';
 import { shimHostTools } from '../tools';
 
 export function shimExternals(virtualNetwork: VirtualNetwork) {
@@ -234,6 +235,10 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/lib/pdfjs-loader',
     pdfjsLoader,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/lib/signed-capture',
+    signedCapture,
   );
   virtualNetwork.shimAsyncModule({
     id: 'uuid',

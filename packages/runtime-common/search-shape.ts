@@ -71,6 +71,7 @@
 
 import { logger } from './log.ts';
 import type { CodeRef } from './code-ref.ts';
+import type { LinkShapeLevel, LinkShapeRowClass } from './link-shape-policy.ts';
 import type { Filter, Query, RangeOperator, Sort } from './query.ts';
 import type { HtmlQuery } from './resource-types.ts';
 import type {
@@ -151,7 +152,26 @@ export interface SearchShapeDescriptor {
   // spell the same `html` / `item` selection while producing different rows,
   // so this separates them.
   itemAsFallback: boolean;
+  // The mode the response was built in. With the load-driven policy in play
+  // this is the *served* mode, which is not always the one asked for.
   linkMode: SearchShapeLinkMode;
+  // The mode the caller asked for. One field cannot distinguish "the caller
+  // asked for links-only" and got it from "the caller asked for the closure
+  // and was downgraded", and without both, a slow page cannot be attributed
+  // after the fact — the load that caused the decision is long gone by the
+  // time anyone asks. `downgraded` is derivable from the pair and carried
+  // anyway, so the common filter is a field match rather than a comparison.
+  requestedLinkMode: SearchShapeLinkMode;
+  linkModeDowngraded: boolean;
+  // The policy's inputs on the request it decided: the sustained in-flight
+  // reading consulted, the level in force for the realm, and the row class the
+  // request was classified as. Recording the inputs rather than only the
+  // outcome is what separates a policy that did the right thing on bad inputs
+  // from one that misjudged good inputs. Null during a prerender, which never
+  // reaches the policy.
+  linkShapeLoad: number | null;
+  linkShapeLevel: LinkShapeLevel | null;
+  linkShapeRowClass: LinkShapeRowClass | null;
   scope: SearchEntryScope;
   // How many card URLs the request narrowed results to. The URLs themselves
   // identify individual cards, so they are not logged.
@@ -225,12 +245,20 @@ export function describeSearchShape(args: {
   query: SearchEntryQuery;
   realms: string[];
   linkMode: SearchShapeLinkMode;
+  requestedLinkMode?: SearchShapeLinkMode;
+  linkShapeLoad?: number | null;
+  linkShapeLevel?: LinkShapeLevel | null;
+  linkShapeRowClass?: LinkShapeRowClass | null;
   correlationId: string | null;
   jobId: string | null;
   consumingRealm: string | null;
   jobPriority: number | null;
 }): SearchShapeDescriptor {
   let { query, realms, linkMode } = args;
+  // A caller that stated nothing asked for the shape it would have got, which
+  // is the served one — so an omitted requested mode reports no override
+  // rather than a null a reader would have to interpret.
+  let requestedLinkMode = args.requestedLinkMode ?? linkMode;
   let itemQuery: Query = query.itemQuery;
   let filter = describeFilterShape(itemQuery.filter);
   let sort = describeSortShape(itemQuery.sort);
@@ -248,6 +276,13 @@ export function describeSearchShape(args: {
   // list and the correlation/job identity are deliberately out: they vary
   // across requests that are the same query, and folding them in would leave
   // every request its own shape.
+  //
+  // The *served* link mode folds in; the requested one and the policy inputs
+  // beside it do not. A member belongs in the hash when it changes the
+  // response body, and only the served mode does — two requests that asked for
+  // different shapes and were served the same one are the same shape, and
+  // hashing the preference would split one shape's traffic in two under
+  // exactly the conditions the hash is used to aggregate.
   //
   // Hashed before the members are capped, so two requests of one shape agree
   // whether or not either line was cut.
@@ -280,6 +315,11 @@ export function describeSearchShape(args: {
     itemFields: capMember(itemFields),
     itemAsFallback,
     linkMode,
+    requestedLinkMode,
+    linkModeDowngraded: requestedLinkMode !== linkMode,
+    linkShapeLoad: args.linkShapeLoad ?? null,
+    linkShapeLevel: args.linkShapeLevel ?? null,
+    linkShapeRowClass: args.linkShapeRowClass ?? null,
     scope,
     cardUrlCount,
     shapeHash,
