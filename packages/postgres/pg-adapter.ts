@@ -854,11 +854,18 @@ export class PgAdapter implements DBAdapter {
         const waitMs = (holdStart ?? now) - context.enqueuedAt;
         const holdMs = holdStart === undefined ? 0 : now - holdStart;
         // `files` is what the write named, and `scope` says whether it got a
-        // key each or fell back to the realm — so a long `waitMs` at
-        // `scope=realm` reads as the ceiling having been reached rather than
-        // as contention over one card.
+        // key each (`files`), fell back to the realm past the ceiling
+        // (`realm`), or named no file and holds only the realm guard
+        // (`guard`) — so a long `waitMs` reads as the ceiling or a realm
+        // lifecycle operation rather than as contention over one card.
+        let scope =
+          lockPlan[0]?.mode === 'exclusive'
+            ? 'realm'
+            : context.fileCount === 0
+              ? 'guard'
+              : 'files';
         lockLog.info(
-          `writeLock realm=${context.realmUrl} waitMs=${waitMs} holdMs=${holdMs} files=${context.fileCount} scope=${lockPlan[0]?.mode === 'exclusive' ? 'realm' : 'files'}`,
+          `writeLock realm=${context.realmUrl} waitMs=${waitMs} holdMs=${holdMs} files=${context.fileCount} scope=${scope}`,
         );
       }
     });
