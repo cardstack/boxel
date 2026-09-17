@@ -1,3 +1,5 @@
+import { waitForPromise } from '@ember/test-waiters';
+
 import type { VirtualNetwork } from '@cardstack/runtime-common';
 
 // Written by the `bundled-base-scoped-css` vite plugin: each bundled base
@@ -276,7 +278,11 @@ export function shimBundledBase(virtualNetwork: VirtualNetwork) {
     // which is exactly when the loader asks what it consumed.
     virtualNetwork.shimAsyncModule({
       id: `@cardstack/base/${name}`,
-      resolve,
+      // A module served from the bundle resolves without touching the network,
+      // so nothing about it reaches the runloop and a test settles before the
+      // module has been evaluated. Naming the import to the test waiters keeps
+      // `settled()` waiting for it, as it waits for the fetch this replaces.
+      resolve: () => waitForPromise(resolve(), `bundled base: ${name}`),
       deps: () => scopedCSSDepsFor(name),
     });
   }
