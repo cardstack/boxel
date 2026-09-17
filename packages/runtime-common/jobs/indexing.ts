@@ -239,7 +239,7 @@ export async function awaitRealmIndexSettled(
       `SELECT 1 FROM jobs WHERE status = 'unfulfilled' AND concurrency_group =`,
       param(indexingConcurrencyGroup(realmURL)),
     ];
-    if (jobTypes) {
+    if (jobTypes?.length) {
       expression.push('AND job_type IN', '(');
       jobTypes.forEach((jobType, index) => {
         if (index > 0) {

@@ -293,15 +293,7 @@ export async function commitBatch(
     // because this wait happens with the realm's write lock held — a removal
     // issued while a bulk import drains would park here holding it, with
     // every other writer queued behind.
-    // A batch that stages nothing skips the drain on its own terms — a removal
-    // names a file and reads the bytes already there, resolving no definition
-    // — but a precondition reads *indexed* state, and a removal is exactly the
-    // verb whose precondition would otherwise be answered from an index that
-    // has not caught up with the bytes it is about to delete. So a caller that
-    // brought one forces the wait whatever the batch stages.
-    let readsIndexedState =
-      entries.some(stagesContent) || opts.precondition !== undefined;
-    if (opts.waitForIndex !== false && readsIndexedState) {
+    if (opts.waitForIndex !== false && entries.some(stagesContent)) {
       await core.drainIndexing();
     }
     // After the drain, so the state a precondition reads is the realm as this

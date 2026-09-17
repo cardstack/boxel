@@ -4305,30 +4305,7 @@ export class Realm {
             localPath,
           ),
         drainIndexing: async () => {
-          // Two halves, because neither sees what the other does. The
-          // in-memory deferreds cover the jobs this process enqueued and
-          // nothing else — they are a `Map` on this replica's index updater —
-          // so a write taken by a peer replica, or one deferred to a worker,
-          // is invisible here. The jobs table is shared, so a query against
-          // the realm's indexing lane sees every replica's pending work.
-          //
-          // Without the second half the gate is only as good as the realm
-          // having one replica: a `skip-index-wait` write on replica A leaves
-          // A's index job pending while replica B, seeing nothing local to
-          // drain, reads a row that still describes the pre-write card.
-          //
-          // Scoped to the job types the write path actually races. A
-          // from-scratch pass reads files independently of realm-server
-          // writes, so waiting on one would park every write behind a
-          // system-wide reindex for as long as it takes — the same exclusion
-          // `incrementalIndexing()` makes in memory, which is why the two are
-          // defined against one list.
           await this.incrementalIndexing();
-          if (this.#dbAdapter) {
-            await awaitRealmIndexSettled(this.#dbAdapter, this.url, {
-              jobTypes: WRITE_RACING_INDEX_JOB_TYPES,
-            });
-          }
         },
         isIgnored: (url) => this.isIgnored(url),
         // Narrowed to the two documents a program reads values from, each
@@ -7830,6 +7807,49 @@ export class Realm {
       });
     };
     return async () => {
+      // The validator is built from the index, and the index lags the bytes:
+      // a commit records a file's hash before it indexes, and a write that
+      // deferred its indexing releases the lock without having indexed at all.
+      // The lock this runs inside stops another writer landing bytes, but says
+      // nothing about indexing already in flight — and the realm's local view
+      // of that is an in-memory map of the jobs *this* process enqueued, so a
+      // peer replica's pending job is invisible to it. The realm's indexing
+      // lane in the shared jobs table is the view every replica writes to.
+      //
+      // Scoped to the job types a write races. A from-scratch pass reads files
+      // independently of realm-server writes, so waiting on one would hold
+      // this lock for as long as a system-wide reindex takes.
+      //
+      // Refusing when the lane will not settle is the point of checking at
+      // all: an unsettled lane is exactly the state in which the row still
+      // describes the pre-write card, so a validator the caller has been
+      // overtaken by would match. Answering from it would turn the congestion
+      // this guards against into a silent accept — and silently, since a lane
+      // that never drains looks from here like a realm with nothing to
+      // refuse. The refusal is a 5xx rather than a 412 because nothing about
+      // the caller's request is wrong and repeating it is the remedy.
+      if (this.#dbAdapter) {
+        let settled = await awaitRealmIndexSettled(this.#dbAdapter, this.url, {
+          jobTypes: WRITE_RACING_INDEX_JOB_TYPES,
+        });
+        if (!settled) {
+          this.#log.warn(
+            `conditional ${request.method} of ${url.href} refused: ` +
+              `${indexingConcurrencyGroup(this.url)} did not settle, so the ` +
+              `index cannot be compared against`,
+          );
+          throw new OperationFailure({
+            id: url.href,
+            status: 503,
+            code: 'precondition-unverifiable',
+            title: 'Service Unavailable',
+            detail:
+              `the realm could not establish that its index is current for ` +
+              `${url.href}, so it cannot decide whether the card still ` +
+              `matches If-Match: ${ifMatch}`,
+          });
+        }
+      }
       await this.getRealmInfo();
       let entry = await this.#realmIndexQueryEngine.instance(url, {
         includeErrors: true,
@@ -8208,7 +8228,16 @@ export class Realm {
         ...identity,
       });
     }
-    throw new CardError(detail, { status, title });
+    // Identity travels on every other branch, so it travels on this one too:
+    // a refusal that names no card is harder to act on than one that does, and
+    // the 412 a conditional write answers with is precisely a refusal about a
+    // particular card.
+    throw new CardError(detail, {
+      status,
+      title,
+      ...(identity.id ? { id: identity.id } : {}),
+      ...(identity.lid ? { lid: identity.lid } : {}),
+    });
   }
 
   // Card+JSON ETags are unsafe when the card has dependencies that live

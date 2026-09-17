@@ -523,6 +523,12 @@ export type OperationErrorCode =
   // The request named a `baseVersion` the target is no longer at, on an
   // operation that requires the base to match.
   | 'version-conflict'
+  // A conditional request could not be decided, as distinct from being
+  // decided against: the realm could not establish that the state it would
+  // compare is current, so it refused rather than answer from state it knows
+  // may be behind. Carries a 5xx rather than a 412 because nothing about the
+  // caller's request is wrong and repeating it unchanged is the remedy.
+  | 'precondition-unverifiable'
   // The bytes an operation would store are over the realm's ceiling for a
   // card or a file of that kind. Separate from `invalid-params` because the
   // payload is well formed and the remedy is to send less of it, and because

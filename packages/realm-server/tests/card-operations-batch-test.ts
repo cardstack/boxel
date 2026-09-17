@@ -61,6 +61,12 @@ interface Stub {
   lockDepth: () => number;
   drainCount: () => number;
   readsOutsideLock: () => number;
+  // Every read of a stored file, in or out of the lock. `readsOutsideLock`
+  // answers where a read happened; this answers whether one has happened at
+  // all, which is what distinguishes "before anything was staged" from
+  // "before the commit" — staging reads the pre-state, and a hook that had
+  // slipped past it would still see no commits.
+  sourceReads: () => number;
 }
 
 interface StubOptions {
@@ -117,6 +123,7 @@ function stub(opts: StubOptions = {}): Stub {
   let maxHeld = 0;
   let drains = 0;
   let readsOutsideLock = 0;
+  let sourceReads = 0;
 
   let core: BatchCore = {
     realmURL: REALM,
@@ -131,10 +138,12 @@ function stub(opts: StubOptions = {}): Stub {
     },
     async fileExists(localPath) {
       readsOutsideLock += held > 0 ? 0 : 1;
+      sourceReads++;
       return stored[localPath] !== undefined;
     },
     async readSourceFile(localPath) {
       readsOutsideLock += held > 0 ? 0 : 1;
+      sourceReads++;
       let content = stored[localPath];
       return content === undefined
         ? undefined
@@ -142,6 +151,7 @@ function stub(opts: StubOptions = {}): Stub {
     },
     async openSourceBytes(localPath) {
       readsOutsideLock += held > 0 ? 0 : 1;
+      sourceReads++;
       let content = stored[localPath];
       if (content === undefined) {
         return undefined;
@@ -244,6 +254,7 @@ function stub(opts: StubOptions = {}): Stub {
     lockDepth: () => maxHeld,
     drainCount: () => drains,
     readsOutsideLock: () => readsOutsideLock,
+    sourceReads: () => sourceReads,
   };
 }
 
@@ -3024,7 +3035,7 @@ module(basename(import.meta.filename), function () {
         },
       });
       let observed:
-        | { lockDepth: number; drains: number; commits: number }
+        | { lockDepth: number; drains: number; sourceReads: number }
         | undefined;
       await commitBatch(
         s.core,
@@ -3046,7 +3057,7 @@ module(basename(import.meta.filename), function () {
             observed = {
               lockDepth: s.lockDepth(),
               drains: s.drainCount(),
-              commits: s.commits.length,
+              sourceReads: s.sourceReads(),
             };
           },
         },
@@ -3063,36 +3074,38 @@ module(basename(import.meta.filename), function () {
         1,
         'after the drain, so the index it reads is current with the bytes',
       );
+      // Not `commits.length`: everything between the hook and the commit —
+      // the pre-state read, each entry's staging, the compose — leaves that at
+      // zero, so a hook that had slipped past staging would still satisfy it.
+      // A source read is the first thing staging does.
       assert.strictEqual(
-        observed?.commits,
+        observed?.sourceReads,
         0,
-        'and before anything was staged',
+        'and before anything had been read to stage from',
       );
       assert.strictEqual(s.commits.length, 1, 'the write then proceeds');
     });
 
-    test('a delete carrying a precondition drains first, though it stages nothing', async function (assert) {
-      // A removal stages no content, so the batch would otherwise skip the
-      // drain — and a removal is the one verb whose precondition is answered
-      // entirely from indexed state, with no staged bytes to read instead. An
-      // undrained index still spells the pre-write validator, so a stale
-      // `If-Match` would match and the newer file would be removed.
+    test('a removal runs its precondition inside the lock too', async function (assert) {
+      // A removal stages nothing, so it takes neither the drain nor a staging
+      // read — which leaves the lock as the only thing its precondition can
+      // rest on, and the only thing a test can check it against.
       let s = stub({
         stored: {
           'person-1.json': cardFile({ firstName: 'Original' }, PERSON),
         },
       });
-      let drainsWhenChecked: number | undefined;
+      let lockDepthWhenChecked: number | undefined;
       await commitBatch(s.core, [{ op: 'delete', href: `${REALM}person-1` }], {
         precondition: async () => {
-          drainsWhenChecked = s.drainCount();
+          lockDepthWhenChecked = s.lockDepth();
         },
       });
 
       assert.strictEqual(
-        drainsWhenChecked,
+        lockDepthWhenChecked,
         1,
-        'the drain ran before the precondition, though nothing staged',
+        'the removal held the write lock when its precondition ran',
       );
       assert.strictEqual(s.commits.length, 1, 'and the removal then proceeds');
     });
