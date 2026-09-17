@@ -238,6 +238,41 @@ module(basename(import.meta.filename), function () {
         }
       });
 
+      test('an If-Match naming no validator is refused, not ignored', async function (assert) {
+        // The dangerous shape is the empty one, because it is what a client
+        // produces by interpolating an ETag it never read. Read as an absent
+        // header it writes unconditionally, so the caller is told its
+        // conditional write succeeded while the overwrite it asked to be
+        // protected from is exactly what happened. The neighbouring test for a
+        // write carrying no If-Match at all is what makes this a distinction
+        // rather than a restatement: that one must still be 200.
+        //
+        // The whitespace and comma spellings are here because RFC 9110
+        // §5.6.1.2 has a recipient ignore empty list elements, which makes
+        // them well-formed lists of nothing rather than junk — so they have to
+        // land on this answer for the same reason, not be rejected as
+        // malformed.
+        let bytesBefore = readFileSync(cardFile('person-1.json'), 'utf8');
+        for (let ifMatch of ['', '   ', ',', ' , ']) {
+          let response = await request
+            .patch('/person-1')
+            .send(patchPersonBody('Van Gogh'))
+            .set('If-Match', ifMatch)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            412,
+            `If-Match: ${JSON.stringify(ifMatch)} is refused: ${response.text}`,
+          );
+          assert.strictEqual(
+            readFileSync(cardFile('person-1.json'), 'utf8'),
+            bytesBefore,
+            `and writes nothing for ${JSON.stringify(ifMatch)}`,
+          );
+        }
+      });
+
       test('a validator the realm issued matches when the client echoes it as weak', async function (assert) {
         let read = await request
           .get('/person-1')
@@ -477,16 +512,17 @@ module(basename(import.meta.filename), function () {
       // poisons the realm's next index job rather than leaving the lane stuck.
       // Holding a reservation with a far-future lock is the "a worker died
       // with a job claimed" case, and nothing runs it.
-      async function wedgeIndexingLane() {
+      // `jobType` is the point of the fixture rather than a detail of it: the
+      // gate is scoped to the job types that can leave a row describing bytes
+      // the realm no longer stores, so which kind of work occupies the lane is
+      // what decides whether a conditional write may proceed.
+      async function wedgeIndexingLane(jobType = 'incremental-index') {
         let job = (await dbAdapter.execute(
           `INSERT INTO jobs (job_type, concurrency_group, args, status, timeout)
            VALUES ($1, $2, '{}'::jsonb, 'unfulfilled', 7200)
            RETURNING id`,
           {
-            bind: [
-              'incremental-index',
-              indexingConcurrencyGroup(realmURL.href),
-            ],
+            bind: [jobType, indexingConcurrencyGroup(realmURL.href)],
           },
         )) as unknown as { id: string }[];
         let jobId = job[0].id;
@@ -570,6 +606,53 @@ module(basename(import.meta.filename), function () {
           200,
           `the same write succeeds once the lane clears: ${afterUnwedge.text}`,
         );
+      });
+
+      test('indexing that cannot invalidate a validator does not refuse the write', async function (assert) {
+        // The narrowing this gate applies has a cost if it is wrong in either
+        // direction, and only this test fails if it is deleted. A from-scratch
+        // pass re-derives rows from files nobody changed: it moves
+        // `indexed_at` without moving content, so it cannot leave a row
+        // describing bytes the realm no longer stores, and a validator built
+        // from that row cannot be stale in the way this gate exists to catch.
+        //
+        // Asking whether the lane is occupied at all would be fail-closed and
+        // wrong in practice rather than merely conservative. One from-scratch
+        // job lands in every realm's lane after any deploy that moves the UI
+        // checksum, so every conditional write on the fleet would 503 for the
+        // length of a reindex — a scheduled outage for the exact feature this
+        // adds.
+        //
+        // Its sibling above is the discriminator: the same wedge, the same
+        // request, differing only in which job holds the lane, and that one
+        // must still be 503. If the two ever agree, one of them is wrong.
+        let read = await request
+          .get('/person-1')
+          .set('Accept', 'application/vnd.card+json');
+        let etag = read.get('etag') ?? '';
+        assert.ok(etag, 'the read hands out a validator');
+
+        let unwedge = await wedgeIndexingLane('from-scratch-index');
+        try {
+          let response = await request
+            .patch('/person-1')
+            .send(patchPersonBody('Van Gogh'))
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-Match', etag);
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `a from-scratch job in the lane does not refuse the write: ${response.text}`,
+          );
+          assert.strictEqual(
+            response.body?.data?.attributes?.firstName,
+            'Van Gogh',
+            'and the patch lands',
+          );
+        } finally {
+          await unwedge();
+        }
       });
 
       test('a write carrying no If-Match is unaffected by any of this', async function (assert) {
