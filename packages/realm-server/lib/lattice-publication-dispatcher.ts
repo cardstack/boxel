@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { PgAdapter, NotificationSubscription } from '@cardstack/postgres';
 import {
   logger,
@@ -17,9 +17,12 @@ const log = logger('lattice-publication-delivery');
 const leaseMs = 30_000;
 const sendTimeoutMs = 10_000;
 const concurrency = 4;
+const batchSize = 64;
+const batchBytes = 48 * 1024;
 
 export interface PublicationDelivery {
   publication_id: string;
+  publication_ids?: string[];
   user_id: string;
   room_id: string;
   lease_token: string;
@@ -27,6 +30,48 @@ export interface PublicationDelivery {
   payload: LatticePublicationEvent;
   attempts: number;
   queue_age_ms: number | string;
+}
+
+type StoredDelivery = PublicationDelivery & { owner_url: string };
+
+// The wire has one generation per envelope. Repeated revisions of one owner
+// collapse to its latest notice; distinct owners combine only when their latest
+// generations agree. Never assign another owner's newer revision to an old one.
+function compatibleBatches(rows: StoredDelivery[]): StoredDelivery[][] {
+  let owners = new Map<string, StoredDelivery[]>();
+  for (let row of rows) {
+    let key = row.owner_url;
+    let previous = owners.get(key) ?? [];
+    previous.push(row);
+    owners.set(key, previous);
+  }
+  let generations = new Map<number, StoredDelivery[]>();
+  for (let changes of owners.values()) {
+    let generation = Math.max(...changes.map((r) => r.payload.generation));
+    generations.set(generation, [
+      ...(generations.get(generation) ?? []),
+      ...changes,
+    ]);
+  }
+  return [...generations.values()];
+}
+
+function envelope(rows: StoredDelivery[]): LatticePublicationEvent {
+  let ids = rows.map((r) => r.publication_id).sort();
+  return {
+    ...rows[0].payload,
+    generation: Math.max(...rows.map((r) => r.payload.generation)),
+    invalidations: [
+      ...new Set(rows.flatMap((r) => r.payload.invalidations)),
+    ].sort(),
+    // Membership is immutable for a given ID. A retry with new membership gets
+    // a different transaction ID, never different content under a prior ID.
+    publicationId:
+      ids.length === 1
+        ? ids[0]
+        : 'lattice-' +
+          createHash('sha256').update(JSON.stringify(ids)).digest('hex'),
+  };
 }
 
 export async function claimPublicationDeliveries(
@@ -39,33 +84,79 @@ export async function claimPublicationDeliveries(
   }
   const realms = lattice?.enabledRealms;
   if (!realms?.length) return [];
-  return (await query(db, [
-    `WITH due AS (
-       SELECT d.publication_id, d.user_id FROM lattice_publication_deliveries d
-       JOIN lattice_publication_events e ON e.id = d.publication_id
+  // This short claim-only lock serializes selection against other dispatchers.
+  // No network I/O, publication transaction or source worker holds it. Existing
+  // row leases then exclude an in-flight recipient/realm/kind across replicas.
+  return db.withWriteLock('lattice:publication-claims', async (tx) => {
+    if (!tx)
+      throw new Error('Publication claims require a PostgreSQL transaction');
+    let candidates = (await tx([
+      `SELECT d.publication_id,d.user_id,d.room_id,d.attempts,e.realm_url,e.owner_url,e.payload,
+        EXTRACT(EPOCH FROM (now()-e.created_at))*1000 AS queue_age_ms
+       FROM lattice_publication_deliveries d JOIN lattice_publication_events e ON e.id=d.publication_id
        WHERE e.realm_url = ANY(`,
-    textArrayParam([...realms]),
-    `) AND d.delivered_at IS NULL AND d.terminal_reason IS NULL
-         AND d.next_attempt_at <= now()
-         AND (d.lease_until IS NULL OR d.lease_until <= now())
-       ORDER BY d.next_attempt_at, d.publication_id, d.user_id
-       LIMIT`,
-    param(limit),
-    `FOR UPDATE OF d SKIP LOCKED
-     ), claimed AS (
-       UPDATE lattice_publication_deliveries d SET
-         lease_token =`,
-    param(randomUUID()),
-    `, lease_until = now() +`,
-    param(leaseMs),
-    `* interval '1 millisecond',
-         attempts = attempts + 1
-       FROM due WHERE d.publication_id = due.publication_id AND d.user_id = due.user_id
-       RETURNING d.publication_id, d.user_id, d.room_id, d.lease_token, d.attempts
-     ) SELECT c.publication_id, c.user_id, c.room_id, c.lease_token, c.attempts,
-         e.realm_url, e.payload, EXTRACT(EPOCH FROM (now() - e.created_at)) * 1000 AS queue_age_ms
-       FROM claimed c JOIN lattice_publication_events e ON e.id = c.publication_id`,
-  ])) as unknown as PublicationDelivery[];
+      textArrayParam([...realms]),
+      `) AND d.delivered_at IS NULL AND d.terminal_reason IS NULL
+        AND d.next_attempt_at <= now() AND (d.lease_until IS NULL OR d.lease_until <= now())
+        AND NOT EXISTS (
+          SELECT 1 FROM lattice_publication_deliveries busy
+          JOIN lattice_publication_events be ON be.id=busy.publication_id
+          WHERE busy.user_id=d.user_id AND be.realm_url=e.realm_url
+            AND be.payload->>'eventName' IS NOT DISTINCT FROM e.payload->>'eventName'
+            AND be.payload->>'indexType' IS NOT DISTINCT FROM e.payload->>'indexType'
+            AND busy.delivered_at IS NULL AND busy.terminal_reason IS NULL AND busy.lease_until>now())
+       ORDER BY d.next_attempt_at,d.publication_id,d.user_id LIMIT`,
+      param(concurrency * batchSize),
+      'FOR UPDATE OF d SKIP LOCKED',
+    ])) as unknown as StoredDelivery[];
+    let groups = new Map<string, StoredDelivery[]>();
+    for (let row of candidates) {
+      let key = JSON.stringify([
+        row.user_id,
+        row.realm_url,
+        row.payload.eventName,
+        row.payload.indexType,
+      ]);
+      let group = groups.get(key) ?? [];
+      if (group.length < batchSize) group.push(row);
+      groups.set(key, group);
+    }
+    let claims: PublicationDelivery[] = [];
+    for (let group of groups.values()) {
+      if (claims.length === limit) break;
+      let members = compatibleBatches(group)[0];
+      while (
+        members.length > 1 &&
+        Buffer.byteLength(JSON.stringify(envelope(members))) > batchBytes
+      ) {
+        members = compatibleBatches(members.slice(0, -1))[0];
+      }
+      let payload = envelope(members);
+      let ids = members.map((r) => r.publication_id).sort();
+      let lease = randomUUID();
+      await tx([
+        'UPDATE lattice_publication_deliveries SET lease_token=',
+        param(lease),
+        ', lease_until=now()+',
+        param(leaseMs),
+        `*interval '1 millisecond',attempts=attempts+1 WHERE user_id=`,
+        param(members[0].user_id),
+        'AND publication_id=ANY(',
+        textArrayParam(ids),
+        '::uuid[])',
+      ]);
+      claims.push({
+        ...members[0],
+        publication_id: payload.publicationId,
+        publication_ids: ids,
+        payload,
+        lease_token: lease,
+        attempts: Math.max(...members.map((r) => r.attempts)) + 1,
+        queue_age_ms: Math.max(...members.map((r) => Number(r.queue_age_ms))),
+      });
+    }
+    return claims;
+  });
 }
 
 type Send = LatticeDelivery<LatticePublicationEvent>['send'];
@@ -232,38 +323,56 @@ export class LatticePublicationDispatcher {
     try {
       // Re-read authorization and the current session immediately before I/O.
       // A rotated room is retargeted; a missing room remains retryable.
-      let [recipient] = await query(this.#db, [
-        `SELECT e.realm_url, e.payload, u.matrix_user_id, u.session_room_id,
-          (EXISTS (SELECT 1 FROM realm_user_permissions p WHERE p.realm_url = e.realm_url
-            AND p.username = u.matrix_user_id AND (p.read = TRUE OR p.write = TRUE))
-           OR EXISTS (SELECT 1 FROM realm_user_permissions p WHERE p.realm_url = e.realm_url
-            AND p.username = '*' AND p.read = TRUE)) AS allowed
-         FROM lattice_publication_deliveries d
-         JOIN lattice_publication_events e ON e.id = d.publication_id
-         LEFT JOIN users u ON u.matrix_user_id = d.user_id
-         WHERE d.publication_id =`,
-        param(claim.publication_id),
-        'AND d.user_id =',
+      let ids = claim.publication_ids ?? [claim.publication_id];
+      let recipients = await query(this.#db, [
+        `SELECT e.realm_url,e.owner_url,e.payload,d.publication_id,u.matrix_user_id,u.session_room_id,
+          (EXISTS (SELECT 1 FROM realm_user_permissions p WHERE p.realm_url=e.realm_url
+             AND p.username=u.matrix_user_id AND (p.read=TRUE OR p.write=TRUE))
+           OR EXISTS (SELECT 1 FROM realm_user_permissions p WHERE p.realm_url=e.realm_url
+             AND p.username='*' AND p.read=TRUE)) AS allowed
+         FROM lattice_publication_deliveries d JOIN lattice_publication_events e ON e.id=d.publication_id
+         LEFT JOIN users u ON u.matrix_user_id=d.user_id
+         WHERE d.publication_id=ANY(`,
+        textArrayParam(ids),
+        '::uuid[]) AND d.user_id=',
         param(claim.user_id),
-        'AND d.lease_token =',
+        'AND d.lease_token=',
         param(claim.lease_token),
-        // A supplied enabled root cannot authorize another stored realm.
-        'AND e.realm_url =',
+        'AND e.realm_url=',
         param(claim.realm_url),
-        'AND d.lease_until > now() AND d.delivered_at IS NULL AND d.terminal_reason IS NULL',
+        'AND d.lease_until>now() AND d.delivered_at IS NULL AND d.terminal_reason IS NULL ORDER BY d.publication_id',
       ]);
-      if (!recipient) return;
-      const realmURL = recipient.realm_url as string;
-      const event = recipient.payload as unknown as LatticePublicationEvent;
-      generation = event.generation;
-      if (
-        event.realmURL !== realmURL ||
-        event.publicationId !== claim.publication_id
-      ) {
-        throw new Error(
-          'Stored publication identity does not match its event row',
-        );
+      if (recipients.length !== ids.length) return;
+      let recipient = recipients[0];
+      let realmURL = recipient.realm_url as string;
+      let stored = recipients as unknown as StoredDelivery[];
+      for (let row of stored) {
+        if (
+          row.payload.realmURL !== realmURL ||
+          row.payload.publicationId !== row.publication_id ||
+          row.payload.eventName !== stored[0].payload.eventName ||
+          row.payload.indexType !== stored[0].payload.indexType ||
+          !Number.isSafeInteger(row.payload.generation) ||
+          row.payload.generation < 1 ||
+          !Array.isArray(row.payload.invalidations) ||
+          !row.payload.invalidations.length ||
+          row.payload.invalidations.some((id) => typeof id !== 'string')
+        ) {
+          throw new Error(
+            'Stored publication identity does not match its event row',
+          );
+        }
       }
+      if (compatibleBatches(stored).length !== 1)
+        throw new Error('Incompatible publication generations');
+      let event = envelope(stored);
+      if (
+        event.publicationId !== claim.publication_id ||
+        Buffer.byteLength(JSON.stringify(event)) > batchBytes
+      ) {
+        throw new Error('Invalid publication batch identity or size');
+      }
+      generation = event.generation;
       if (!recipient.matrix_user_id || !recipient.allowed) {
         await this.#finish(claim, null, 'recipient removed or access revoked');
         outcome = 'recipient no longer authorized';
@@ -290,13 +399,19 @@ export class LatticePublicationDispatcher {
       outcome = 'Matrix acknowledged';
     } catch (error) {
       outcome = 'retry pending';
+      let delayMs =
+        Math.min(30_000, 250 * 2 ** Math.min(claim.attempts - 1, 7)) +
+        Math.random() * 250;
       await query(this.#db, [
         `UPDATE lattice_publication_deliveries SET lease_token = NULL, lease_until = NULL,
           last_error =`,
         param(String(error).slice(0, 500)),
-        `, next_attempt_at = now() + (LEAST(30000, 250 * power(2, LEAST(attempts - 1, 7))) + random() * 250) * interval '1 millisecond'
-         WHERE publication_id =`,
-        param(claim.publication_id),
+        `, next_attempt_at = now() +`,
+        param(delayMs),
+        `* interval '1 millisecond'
+         WHERE publication_id = ANY(`,
+        textArrayParam(claim.publication_ids ?? [claim.publication_id]),
+        '::uuid[])',
         'AND user_id =',
         param(claim.user_id),
         'AND lease_token =',
@@ -316,6 +431,7 @@ export class LatticePublicationDispatcher {
       log.debug('Publication delivery attempt', {
         publicationId: claim.publication_id,
         generation,
+        coalescedPublications: claim.publication_ids?.length ?? 1,
         attempt: claim.attempts,
         queueAgeMs: Number(claim.queue_age_ms),
         deliveryMs: performance.now() - started,
@@ -342,8 +458,9 @@ export class LatticePublicationDispatcher {
       ', room_id =',
       param(roomId),
       `, lease_token = NULL, lease_until = NULL, last_error = NULL
-       WHERE publication_id =`,
-      param(claim.publication_id),
+       WHERE publication_id = ANY(`,
+      textArrayParam(claim.publication_ids ?? [claim.publication_id]),
+      '::uuid[])',
       'AND user_id =',
       param(claim.user_id),
       'AND lease_token =',

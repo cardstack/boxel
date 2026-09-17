@@ -85,3 +85,38 @@ Detailed operational evidence is in the private infrastructure repository at
 `docs/railway-record-count-latency.md`, with raw logs and samples in its ignored
 `.cache/evidence` directory. The engine's 64 focused tests pass; the retained
 package type-check failures above remain open.
+
+## C1 — coalesce publication notifications (active)
+
+Pass/fail command before implementation:
+`MATRIX_REGISTRATION_SHARED_SECRET=unused-lattice-db-tests TEST_FILES=lattice-publication-delivery-test,lattice-delivery-opt-in-test pnpm test`.
+
+Use existing event/delivery rows and expiring claims. No new registry, schema,
+client contract, or deliberate debounce. Collapse pending revisions of one owner;
+combine distinct owners only when their latest generation and event kind agree,
+so a batched notice never invents a revision for a card. Bound source rows and
+wire bytes. Claim a recipient/realm/kind exclusively while it is in flight;
+other recipients retain independent capacity. A deterministic ID derived from
+covered immutable events makes retries of the same batch idempotent. Changed
+membership gets a different ID (an ambiguous prior send may duplicate a harmless
+invalidation hint, never lose an obligation). Mark covered rows delivered only
+after Matrix acknowledgement. Recheck authorization and session before sending.
+
+Acceptance: overlapping identities/revisions, distinct owner union, generation and
+HTML/data separation, bounded spill, failure/restart, concurrent claim fencing,
+changes while sending, off-flag no-op and revoked/rotated sessions. Retain counts
+and failures. Then lint, checkpoint, deploy realm-only, exercise the real synthetic
+dashboard and compare notification counts as well as fresh DOM latency.
+
+C1 local evidence: old dispatcher 15 passed / 4 failed (new regressions), saved in
+`/tmp/lattice-coalesce-before.log`. Implemented dispatcher plus generation/size,
+retry/membership, in-flight accumulation, expiry and opt-in regressions and card
+publication suite: 43 passed / 0 failed (`/tmp/lattice-coalesce-final.log`). The
+original slow-recipient test expected seven individual sends; its assertion now
+expects the other recipient's four pending notices in one send. Independent
+recipient progress is still checked before releasing the held sender.
+
+`pnpm lint` ran in realm-server: JavaScript passed; type checks still report four
+errors in untouched Boxel UI drag/drop declarations and dropdown argument typing.
+No changed-file diagnostics. Full log: `/tmp/lattice-coalesce-lint.log`.
+Live deployment and notification-count measurements remain pending at this checkpoint.
