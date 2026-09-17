@@ -1,11 +1,22 @@
 import { click, fillIn } from '@ember/test-helpers';
+import { tracked } from '@glimmer/tracking';
 
+import Moon from '@cardstack/boxel-icons/moon';
+import Sun from '@cardstack/boxel-icons/sun';
 import { getService } from '@universal-ember/test-support';
 
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+import {
+  BoxelButton,
+  BoxelContainer,
+  BoxelInput,
+  FittedCardContainer,
+  Pill,
+  Switch,
+} from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { Deferred } from '@cardstack/runtime-common';
 
@@ -107,11 +118,44 @@ const OCEAN_BLUE_THEME_VARS = {
   spacing: '0.25rem',
 };
 
-// Root variables only: a nested card on this theme has no dark palette of its
-// own, so any dark value inside it can only have leaked from the outer theme
+// Outer theme of the scheme-island card: a plainly light root palette and a
+// plainly dark palette, so a wrong scheme is visible at a glance
+const SUNRISE_THEME_VARS = {
+  primary: '#c2410c',
+  primaryForeground: '#fff7ed',
+  background: '#fff7ed',
+  foreground: '#431407',
+  card: '#ffedd5',
+  cardForeground: '#7c2d12',
+};
+
+const SUNRISE_DARK_VARS = {
+  primary: '#fdba74',
+  primaryForeground: '#431407',
+  background: '#431407',
+  foreground: '#ffedd5',
+  card: '#7c2d12',
+  cardForeground: '#fed7aa',
+};
+
+// Applied to the nested card: both palettes are distinct from Sunrise's and
+// from the boxel-ui defaults, so a leak from either is told apart
 const MIDNIGHT_THEME_VARS = {
   primary: '#123456',
   primaryForeground: '#ffffff',
+  background: '#e6ecf5',
+  foreground: '#0b1a2e',
+  card: 'lavender',
+  cardForeground: '#6f1393',
+};
+
+const MIDNIGHT_DARK_VARS = {
+  primary: '#7fb2ff',
+  primaryForeground: '#04101f',
+  background: '#063772',
+  foreground: '#dbe7ff',
+  card: '#471b58',
+  cardForeground: '#d598ed',
 };
 
 const FOREST_GREEN_THEME_VARS = {
@@ -249,28 +293,228 @@ module('Acceptance | theme-card-test', function (hooks) {
     // Stamps scheme switches inside its own template, below the themed
     // container, and nests a linked card so a nested theme's islands can be
     // told apart from the outer theme's.
+    // Shows the variables each palette defines, painted with themselves, so the
+    // scheme in effect can be read off the rendered card.
+    const VarSwatches = <template>
+      <ul class='var-swatches' ...attributes>
+        <li class='swatch-background'>--background / --foreground</li>
+        <li class='swatch-card'>--card / --card-foreground</li>
+        <li class='swatch-primary'>--primary / --primary-foreground</li>
+      </ul>
+      <style scoped>
+        .var-swatches {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: grid;
+          gap: var(--boxel-sp-4xs);
+          font: var(--boxel-font-xs);
+        }
+        .var-swatches li {
+          padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+          border: 1px solid var(--border);
+        }
+        .swatch-background {
+          background-color: var(--background);
+          color: var(--foreground);
+        }
+        .swatch-card {
+          background-color: var(--card);
+          color: var(--card-foreground);
+        }
+        .swatch-primary {
+          background-color: var(--primary);
+          color: var(--primary-foreground);
+        }
+      </style>
+    </template>;
+
     class SchemeIslandCard extends CardDef {
       static displayName = 'Scheme Island Card';
       @field nested = linksTo(CardDef);
 
       static isolated = class Isolated extends Component<typeof this> {
+        // Stamps the chosen scheme on the card's own root
+        @tracked mode: 'light' | 'dark' = 'light';
+
+        setDarkMode = (isDark: boolean) => {
+          this.mode = isDark ? 'dark' : 'light';
+        };
+
         <template>
-          <h2>Scheme Island Card</h2>
-          <div data-theme='dark' data-test-dark-island>
-            <p>Dark island</p>
-            <@fields.nested />
-          </div>
-          <div data-theme='light' data-test-light-island>
-            <p>Light island</p>
-          </div>
+          <BoxelContainer
+            @display='grid'
+            data-theme={{this.mode}}
+            data-test-scheme-island-root
+          >
+            <header aria-label='Card'>
+              <Pill class='mode-pill' @variant='primary'>
+                {{this.mode}}
+                Mode
+              </Pill>
+              <h2>Scheme Island Card</h2>
+              <p>Expected: Sunrise theme,
+                {{this.mode}}
+                mode (switched below)</p>
+              <Switch
+                @isEnabled={{eq this.mode 'dark'}}
+                @onChange={{this.setDarkMode}}
+                @checkedIcon={{Moon}}
+                @uncheckedIcon={{Sun}}
+                data-test-mode-switch
+              >
+                Dark mode
+              </Switch>
+              <div
+                role='group'
+                aria-label='Sample buttons'
+                class='sample-buttons'
+              >
+                <BoxelButton @kind='default' @size='small'>Default</BoxelButton>
+                <BoxelButton @kind='primary' @size='small'>Primary</BoxelButton>
+                <BoxelButton
+                  @kind='secondary'
+                  @size='small'
+                >Secondary</BoxelButton>
+                <BoxelButton @kind='muted' @size='small'>Muted</BoxelButton>
+                <BoxelButton
+                  @kind='destructive'
+                  @size='small'
+                >Destructive</BoxelButton>
+                <BoxelButton @kind='text-only' @size='small'>Text only</BoxelButton>
+              </div>
+              <VarSwatches />
+            </header>
+            <BoxelContainer
+              class='dark-island'
+              @tag='section'
+              @display='grid'
+              data-theme='dark'
+              data-test-dark-island
+            >
+              <header aria-label='Section 1'>
+                <Pill @variant='primary'>Dark Island</Pill>
+                <p>Expected: Sunrise theme, dark mode</p>
+                <VarSwatches />
+              </header>
+              <@fields.nested @format='embedded' />
+              <FittedCardContainer @size='full-card'>
+                <@fields.nested @format='fitted' />
+              </FittedCardContainer>
+              <@fields.nested @format='atom' />
+            </BoxelContainer>
+            <BoxelContainer
+              class='light-island'
+              @tag='section'
+              @display='grid'
+              data-theme='light'
+              data-test-light-island
+            >
+              <header aria-label='Section 2'>
+                <Pill @variant='primary'>Light Island</Pill>
+                <p>Expected: Sunrise theme, light mode</p>
+                <VarSwatches />
+              </header>
+              <@fields.nested @format='embedded' />
+              <FittedCardContainer @size='full-card'>
+                <@fields.nested @format='fitted' />
+              </FittedCardContainer>
+              <@fields.nested @format='atom' />
+            </BoxelContainer>
+          </BoxelContainer>
+          <style scoped>
+            .dark-island,
+            .light-island {
+              background-color: var(--card);
+              color: var(--card-foreground);
+              border-radius: var(--radius);
+            }
+            .mode-pill {
+              text-transform: capitalize;
+            }
+            header {
+              display: grid;
+              justify-items: start;
+              gap: var(--boxel-sp-xs);
+            }
+            .sample-buttons {
+              display: flex;
+              flex-wrap: wrap;
+              gap: var(--boxel-sp-xs);
+            }
+            h2,
+            p {
+              margin: 0;
+            }
+          </style>
         </template>
       };
 
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <div data-theme='dark' data-test-nested-dark-island>
-            <p>Nested dark island</p>
-          </div>
+          <BoxelContainer
+            class='nested'
+            @display='grid'
+            data-theme='dark'
+            data-test-nested-dark-island
+          >
+            <Pill @variant='primary'>Embedded</Pill>
+            <p>Expected: Midnight theme, dark mode (stamped here)</p>
+            <VarSwatches />
+          </BoxelContainer>
+          <style scoped>
+            .nested {
+              --boxel-container-gap: var(--boxel-sp-xs);
+              justify-items: start;
+            }
+            p {
+              margin: 0;
+            }
+          </style>
+        </template>
+      };
+
+      static fitted = class Fitted extends Component<typeof this> {
+        <template>
+          <BoxelContainer
+            class='nested'
+            @display='grid'
+            data-test-nested-fitted
+          >
+            <Pill @variant='primary'>Fitted</Pill>
+            <p>Expected: Midnight theme, mode of the surrounding island</p>
+            <VarSwatches />
+          </BoxelContainer>
+          <style scoped>
+            .nested {
+              --boxel-container-gap: var(--boxel-sp-xs);
+              height: 100%;
+              align-content: start;
+              justify-items: start;
+              overflow: hidden;
+            }
+            p {
+              margin: 0;
+            }
+          </style>
+        </template>
+      };
+
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <span class='nested-atom' data-test-nested-atom>
+            <Pill @variant='primary'>Atom</Pill>
+            <span>Expected: Midnight theme, mode of the surrounding island</span>
+            <VarSwatches />
+          </span>
+          <style scoped>
+            .nested-atom {
+              display: inline-grid;
+              justify-items: start;
+              gap: var(--boxel-sp-xs);
+              padding: var(--boxel-sp-xs);
+            }
+          </style>
         </template>
       };
     }
@@ -294,6 +538,23 @@ module('Acceptance | theme-card-test', function (hooks) {
               attributes: {
                 cardInfo: { name: 'Midnight' },
                 rootVariables: MIDNIGHT_THEME_VARS,
+                darkModeVariables: MIDNIGHT_DARK_VARS,
+              },
+            },
+          },
+          'sunrise-theme.json': {
+            data: {
+              meta: {
+                adoptsFrom: {
+                  name: 'default',
+                  module: '@cardstack/base/structured-theme',
+                },
+              },
+              type: 'card',
+              attributes: {
+                cardInfo: { name: 'Sunrise' },
+                rootVariables: SUNRISE_THEME_VARS,
+                darkModeVariables: SUNRISE_DARK_VARS,
               },
             },
           },
@@ -311,7 +572,7 @@ module('Acceptance | theme-card-test', function (hooks) {
               },
               relationships: {
                 'cardInfo.theme': {
-                  links: { self: `${testRealmURL}starry-night` },
+                  links: { self: `${testRealmURL}sunrise-theme` },
                 },
                 nested: {
                   links: { self: `${testRealmURL}scheme-island-nested` },
@@ -806,22 +1067,28 @@ module('Acceptance | theme-card-test', function (hooks) {
       await visitOperatorMode({
         stacks: [[{ id: cardId, format: 'isolated' }]],
       });
+      await this.pauseTest();
       let cardSelector = `[data-test-card="${cardId}"]`;
       let islandSelector = `${cardSelector} [data-test-dark-island]`;
       assert.strictEqual(
         computedProperty(cardSelector, '--primary'),
-        ROOT_CSS_VARS.primary,
+        SUNRISE_THEME_VARS.primary,
         'the card root keeps the root variables under the light ambient scheme',
       );
       assert.strictEqual(
         computedProperty(islandSelector, '--primary'),
-        DARK_MODE_VARS.primary,
+        SUNRISE_DARK_VARS.primary,
         'the dark --primary applies inside the island',
       );
       assert.strictEqual(
         computedProperty(islandSelector, '--background'),
-        DARK_MODE_VARS.background,
+        SUNRISE_DARK_VARS.background,
         'the dark --background applies inside the island',
+      );
+      assert.strictEqual(
+        computedProperty(islandSelector, '--card'),
+        SUNRISE_DARK_VARS.card,
+        'the dark --card applies inside the island',
       );
       assert.strictEqual(
         computedProperty(islandSelector, '--canvas'),
@@ -835,6 +1102,7 @@ module('Acceptance | theme-card-test', function (hooks) {
       await visitOperatorMode({
         stacks: [[{ id: cardId, format: 'isolated' }]],
       });
+      await this.pauseTest();
       let cardSelector = `[data-test-card="${cardId}"]`;
       let islandSelector = `${cardSelector} [data-test-light-island]`;
 
@@ -842,13 +1110,18 @@ module('Acceptance | theme-card-test', function (hooks) {
       try {
         assert.strictEqual(
           computedProperty(cardSelector, '--primary'),
-          DARK_MODE_VARS.primary,
+          SUNRISE_DARK_VARS.primary,
           'the card root follows the dark ambient scheme',
         );
         assert.strictEqual(
           computedProperty(islandSelector, '--primary'),
-          ROOT_CSS_VARS.primary,
+          SUNRISE_THEME_VARS.primary,
           'the root --primary applies inside the light island',
+        );
+        assert.strictEqual(
+          computedProperty(islandSelector, '--card'),
+          SUNRISE_THEME_VARS.card,
+          'the root --card applies inside the light island',
         );
         assert.strictEqual(
           computedProperty(islandSelector, '--canvas'),
@@ -870,17 +1143,22 @@ module('Acceptance | theme-card-test', function (hooks) {
       let islandSelector = `${nestedSelector} [data-test-nested-dark-island]`;
       assert.strictEqual(
         computedProperty(nestedSelector, '--primary'),
-        MIDNIGHT_THEME_VARS.primary,
-        'the nested card resolves its own theme',
+        MIDNIGHT_DARK_VARS.primary,
+        'the nested card resolves its own dark palette under the outer dark island',
       );
       assert.strictEqual(
         computedProperty(islandSelector, '--primary'),
-        computedProperty(islandSelector, '--boxel-highlight'),
-        'the nested island falls back to the boxel dark default, not the outer theme',
+        MIDNIGHT_DARK_VARS.primary,
+        'the nested island uses the nested theme, not the outer theme',
+      );
+      assert.strictEqual(
+        computedProperty(islandSelector, '--background'),
+        MIDNIGHT_DARK_VARS.background,
+        'the nested island background comes from the nested theme',
       );
       assert.notStrictEqual(
         computedProperty(islandSelector, '--primary'),
-        DARK_MODE_VARS.primary,
+        SUNRISE_DARK_VARS.primary,
         'the outer theme does not leak into the nested island',
       );
     });
