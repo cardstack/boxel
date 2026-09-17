@@ -7,6 +7,12 @@
 // information derived from the source" provenance; it branches on the file's
 // `previewKind` for the domain-specific body.
 //
+// Its `<style scoped>` share runs above the usual budget because the file
+// draws four unrelated things — a text flow, a deck of slide faces, a sheet
+// grid, and the typed placeholder — rather than one design restated per
+// format. The two drawings that did repeat, the placeholder paper and the
+// format badge, are each one component rendered by every caller.
+//
 // The fitted first-page/first-slide poster is deliberately not drawn here:
 // the families' declared `poster` capture (see `office-captures`) renders the
 // extracted structure's first unit during the prerender pass, and the preview
@@ -79,6 +85,37 @@ function officeStructureLabel(
   return '';
 }
 
+interface BadgeSignature {
+  Args: { label: string };
+  Element: HTMLElement;
+}
+
+// The format tag — DOCX, PPTX, XLSX — as one inverted chip. Both drawings that
+// carry it (the placeholder's paper and the viewer's header) render this, so
+// the tag reads the same size and the same colors in a fitted cell, a capture,
+// and an open pane. The `--fd-*` pair it inverts onto is outside the theme
+// contract, so it degrades here to `--tooltip`, the one inverted pairing the
+// theme guarantees.
+export class OfficeBadge extends GlimmerComponent<BadgeSignature> {
+  <template>
+    <span class='office-badge' ...attributes>{{@label}}</span>
+    <style scoped>
+      .office-badge {
+        position: relative;
+        flex-shrink: 0;
+        font-family: var(--font-mono);
+        font-size: 0.6875rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        background-color: var(--fd-slate, var(--tooltip));
+        color: var(--fd-paper, var(--tooltip-foreground));
+        padding: 2px 8px;
+        border-radius: 3px;
+      }
+    </style>
+  </template>
+}
+
 interface PlaceholderSignature {
   Args: {
     kind: string;
@@ -94,9 +131,9 @@ interface PlaceholderSignature {
 // fitted branch below, for a file with no capture yet, and the poster capture's
 // no-first-unit branch (`office-captures`) — and both draw it through this one
 // component so the two renderings of "an Office file of this kind, this big"
-// cannot drift. Every color reads a theme token with a literal fallback; a
-// renderer that must not follow the host theme pins those tokens on an
-// ancestor rather than restating the drawing.
+// cannot drift. Every color reads a theme token; a renderer that must not
+// follow the host theme pins those tokens on an ancestor rather than
+// restating the drawing.
 export class OfficePlaceholder extends GlimmerComponent<PlaceholderSignature> {
   get badge(): string {
     return officeKindBadge(this.args.kind, this.args.extension);
@@ -109,10 +146,7 @@ export class OfficePlaceholder extends GlimmerComponent<PlaceholderSignature> {
   <template>
     <div class='off-fitted' data-kind={{@kind}} ...attributes>
       <div class='paper paper-{{@kind}}'>
-        <span
-          class='paper-badge'
-          data-test-office-placeholder-badge
-        >{{this.badge}}</span>
+        <OfficeBadge @label={{this.badge}} data-test-office-placeholder-badge />
         {{#if this.count}}
           <span
             class='count'
@@ -122,23 +156,35 @@ export class OfficePlaceholder extends GlimmerComponent<PlaceholderSignature> {
       </div>
     </div>
     <style scoped>
+      /* Two kinds of value resolve here on the root, once, and are read bare
+         below. The family's `--fd-*` tokens are outside the theme contract, so
+         each names the contract token it degrades to — the inverted badge
+         landing on `--tooltip`, the one inverted pairing the theme guarantees.
+         The drawing's metrics are fixed rather than themed on purpose: this is
+         a scale model of a page, the poster capture renders this very
+         component into a 170×250 box, and a capture keyed on file content has
+         to come out the same wherever it is drawn. */
       .off-fitted {
+        --office-stage: var(--fd-stage, var(--muted));
+        --office-paper-radius: 3px;
+        --office-count-size: 0.5625rem;
+
         width: 100%;
         height: 100%;
         display: grid;
         place-items: center;
         padding: 10px;
-        background: var(--fd-stage, var(--muted, #eceef1));
-        container-type: inline-size;
+        background-color: var(--office-stage);
       }
       .paper {
         position: relative;
         width: min(72%, 8rem);
         aspect-ratio: 3 / 4;
-        background: var(--card, #fff);
-        border: 1px solid var(--border, #d8d8d8);
-        border-radius: 3px;
-        box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
+        background-color: var(--card);
+        color: var(--card-foreground);
+        border: 1px solid var(--border);
+        border-radius: var(--office-paper-radius);
+        box-shadow: var(--shadow-sm);
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -156,7 +202,7 @@ export class OfficePlaceholder extends GlimmerComponent<PlaceholderSignature> {
         position: absolute;
         inset: 14% 16%;
         background-image: repeating-linear-gradient(
-          var(--border, #d8d8d8) 0 1px,
+          var(--border) 0 1px,
           transparent 1px 9px
         );
         opacity: 0.5;
@@ -166,35 +212,21 @@ export class OfficePlaceholder extends GlimmerComponent<PlaceholderSignature> {
         position: absolute;
         inset: 12% 12%;
         background-image:
-          repeating-linear-gradient(
-            var(--border, #d8d8d8) 0 1px,
-            transparent 1px 16px
-          ),
+          repeating-linear-gradient(var(--border) 0 1px, transparent 1px 16px),
           repeating-linear-gradient(
             90deg,
-            var(--border, #d8d8d8) 0 1px,
+            var(--border) 0 1px,
             transparent 1px 22px
           );
         opacity: 0.5;
       }
-      .paper-badge {
-        position: relative;
-        font-family: var(--font-mono, ui-monospace, Menlo, monospace);
-        font-size: 0.6875rem;
-        font-weight: 700;
-        letter-spacing: 0.06em;
-        color: var(--fd-paper, var(--card, #f7f7f5));
-        background: var(--fd-slate, var(--foreground, #262626));
-        padding: 2px 8px;
-        border-radius: 3px;
-      }
       .count {
         position: relative;
-        font-family: var(--font-mono, ui-monospace, Menlo, monospace);
-        font-size: 0.5625rem;
+        font-family: var(--font-mono);
+        font-size: var(--office-count-size);
         letter-spacing: 0.04em;
         text-transform: uppercase;
-        color: var(--muted-foreground, #555);
+        color: var(--muted-foreground);
       }
     </style>
   </template>
@@ -288,7 +320,7 @@ export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
         data-test-office-preview={{this.kind}}
       >
         <header class='off-head'>
-          <span class='badge'>{{this.badge}}</span>
+          <OfficeBadge @label={{this.badge}} />
           <span class='off-title' title={{this.heading}}>{{this.heading}}</span>
           {{#if this.structureLabel}}
             <span class='off-count'>{{this.structureLabel}}</span>
@@ -347,6 +379,7 @@ export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
                   <span
                     class='tab {{if (eq index 0) "active"}}'
                     role='tab'
+                    aria-selected={{if (eq index 0) 'true' 'false'}}
                   >{{tab}}</span>
                 {{/each}}
               </div>
@@ -371,7 +404,7 @@ export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
 
         {{else}}
           <div class='off-empty'>
-            <span class='badge'>{{this.badge}}</span>
+            <OfficeBadge @label={{this.badge}} />
             <span class='off-empty-label'>No preview extracted</span>
           </div>
         {{/if}}
@@ -379,131 +412,132 @@ export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
     {{/if}}
 
     <style scoped>
-      .badge {
-        position: relative;
-        font-family: var(--font-mono);
-        font-size: 0.6875rem;
-        font-weight: 700;
-        letter-spacing: 0.06em;
-        color: var(--fd-paper, var(--card, #f7f7f5));
-        background: var(--fd-slate, var(--foreground));
-        padding: 2px 8px;
-        border-radius: 3px;
-        flex-shrink: 0;
-      }
-
-      /* Embedded/isolated: the extracted structure, on the family's own surface,
-         scrolling within the space the shell hands it. */
+      /* Same resolve-once root as the placeholder: the family's out-of-contract
+         `--fd-*` tokens name the contract token each degrades to, and are read
+         bare below. Unlike the placeholder, nothing here is captured, so the
+         rest reads the theme's own ladders and type roles. */
       .off {
+        --office-stage: var(--fd-stage, var(--muted));
+        --office-stage-deep: var(--fd-stage-deep, var(--inset));
+
         width: 100%;
         height: 100%;
         min-height: 0;
         display: flex;
         flex-direction: column;
-        background: var(--card, #fff);
-        color: var(--card-foreground, var(--foreground));
-        font-family: var(--font-sans);
+        background-color: var(--card);
+        color: var(--card-foreground);
         overflow: hidden;
         container-type: inline-size;
       }
+
+      /* Embedded/isolated: the extracted structure, on the family's own surface,
+         scrolling within the space the shell hands it. */
       .off-head {
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 8px 12px;
+        gap: var(--boxel-sp-2xs);
+        padding: var(--boxel-sp-2xs) var(--boxel-sp-sm);
         border-bottom: 1px solid var(--border);
-        background: var(--card);
         flex-shrink: 0;
       }
       .off-title {
-        font-size: 0.8125rem;
+        font-size: var(--boxel-font-size-sm);
         font-weight: 600;
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      .off-count {
-        margin-left: auto;
+      /* The tracked-out mono kickers all take the eyebrow role as a group — its
+         size, line-height and tracking are part of the theme's voice — and keep
+         only the mono family, which the container does not apply outside
+         rendered Markdown. */
+      .off-count,
+      .more,
+      .slide-empty,
+      .slide-no,
+      .off-empty-label {
         font-family: var(--font-mono);
-        font-size: 0.5625rem;
-        letter-spacing: 0.04em;
+        font-size: var(--boxel-eyebrow-font-size);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
         color: var(--muted-foreground);
+      }
+      .off-count {
+        margin-left: auto;
         flex-shrink: 0;
       }
 
       /* Document flow */
       .doc {
         margin: 0;
-        padding: 20px clamp(16px, 8cqw, 56px);
+        padding: var(--boxel-sp-lg)
+          clamp(var(--boxel-sp), 8cqi, var(--boxel-sp-4xl));
         overflow: auto;
         min-height: 0;
         line-height: 1.55;
         max-width: 46rem;
       }
+      /* `.doc-title` and `.doc-heading` are an h1 and an h2: the container
+         already gives them the heading and section-heading roles, so only the
+         rhythm and the sub-level step are declared here. */
       .doc-title {
         margin: 0 0 0.6em;
-        font-size: 1.5rem;
-        font-weight: 700;
-        letter-spacing: -0.01em;
       }
       .doc-heading {
         margin: 1em 0 0.35em;
-        font-size: 1.05rem;
-        font-weight: 650;
       }
-      .doc-heading[data-level='2'] {
-        font-size: 0.95rem;
+      .doc-heading[data-level='2'],
+      .doc-heading[data-level='3'] {
+        font-size: var(--boxel-subheading-font-size);
+        line-height: var(--boxel-subheading-line-height);
       }
       .doc-heading[data-level='3'] {
-        font-size: 0.875rem;
         color: var(--muted-foreground);
       }
       .doc-body {
         margin: 0 0 0.7em;
-        font-size: 0.8125rem;
+        font-size: var(--boxel-font-size-sm);
       }
       .more {
         margin: 1em 0 0;
-        font-family: var(--font-mono);
-        font-size: 0.625rem;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: var(--muted-foreground);
       }
 
       /* Slide deck */
       .deck {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        gap: 12px;
-        padding: 14px;
+        gap: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-sm);
         overflow: auto;
         min-height: 0;
         align-content: start;
-        background: var(--fd-stage, var(--muted, #eceef1));
+        background-color: var(--office-stage);
+        color: var(--foreground);
       }
       .slide {
         margin: 0;
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: var(--boxel-sp-4xs);
       }
       .slide-face {
         aspect-ratio: 16 / 9;
-        background: var(--card, #fff);
+        background-color: var(--card);
+        color: var(--card-foreground);
         border: 1px solid var(--border);
-        border-radius: 4px;
-        box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
-        padding: 10px 12px;
+        border-radius: var(--boxel-border-radius-xs);
+        box-shadow: var(--shadow-xs);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         overflow: hidden;
         display: flex;
         flex-direction: column;
-        gap: 5px;
+        gap: var(--boxel-sp-3xs);
       }
       .slide-title {
-        font-size: 0.75rem;
+        font-size: var(--boxel-font-size-xs);
         font-weight: 700;
         line-height: 1.25;
         overflow: hidden;
@@ -515,23 +549,15 @@ export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
       .slide-bullets {
         margin: 0;
         padding-left: 1.1em;
-        font-size: 0.625rem;
+        font-size: var(--boxel-font-size-2xs);
         line-height: 1.4;
         color: var(--muted-foreground);
         overflow: hidden;
       }
       .slide-empty {
-        font-family: var(--font-mono);
-        font-size: 0.5625rem;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-        color: var(--muted-foreground);
         margin: auto;
       }
       .slide-no {
-        font-family: var(--font-mono);
-        font-size: 0.5625rem;
-        color: var(--muted-foreground);
         text-align: right;
       }
       .more-tile {
@@ -540,7 +566,7 @@ export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
         place-items: center;
         aspect-ratio: 16 / 9;
         border: 1px dashed var(--border);
-        border-radius: 4px;
+        border-radius: var(--boxel-border-radius-xs);
       }
 
       /* Sheet grid */
@@ -553,25 +579,30 @@ export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
       .tabs {
         display: flex;
         gap: 2px;
-        padding: 6px 10px 0;
+        padding: var(--boxel-sp-2xs) var(--boxel-sp-xs) 0;
         overflow-x: auto;
         flex-shrink: 0;
-        background: var(--fd-stage, var(--muted, #eceef1));
+        background-color: var(--office-stage);
+        color: var(--foreground);
       }
+      /* Tabs are control text: the label role, which the theme tunes for
+         exactly this. */
       .tab {
-        font-family: var(--font-sans);
-        font-size: 0.6875rem;
+        font-size: var(--boxel-ui-label-font-size);
+        line-height: var(--boxel-ui-label-line-height);
+        font-weight: var(--boxel-ui-label-font-weight);
         white-space: nowrap;
-        padding: 4px 10px;
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
         border: 1px solid var(--border);
         border-bottom: none;
-        border-radius: 4px 4px 0 0;
-        background: var(--fd-stage-deep, #e2e5ea);
+        border-radius: var(--boxel-border-radius-xs)
+          var(--boxel-border-radius-xs) 0 0;
+        background-color: var(--office-stage-deep);
         color: var(--muted-foreground);
       }
       .tab.active {
-        background: var(--card, #fff);
-        color: var(--foreground);
+        background-color: var(--card);
+        color: var(--card-foreground);
         font-weight: 600;
       }
       .grid-scroll {
@@ -580,12 +611,12 @@ export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
       }
       .grid {
         border-collapse: collapse;
-        font-size: 0.75rem;
+        font-size: var(--boxel-font-size-xs);
         font-variant-numeric: tabular-nums;
       }
       .grid td {
         border: 1px solid var(--border);
-        padding: 3px 8px;
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-2xs);
         max-width: 16rem;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -594,7 +625,7 @@ export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
       }
       .grid tr:first-child td {
         font-weight: 600;
-        background: var(--fd-stage, var(--muted, #eceef1));
+        background-color: var(--office-stage);
       }
 
       .off-empty {
@@ -602,15 +633,8 @@ export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 8px;
-        padding: 24px;
-      }
-      .off-empty-label {
-        font-family: var(--font-mono);
-        font-size: 0.53125rem;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: var(--muted-foreground);
+        gap: var(--boxel-sp-2xs);
+        padding: var(--boxel-sp-xl);
       }
     </style>
   </template>

@@ -190,38 +190,68 @@ export class OfficePosterCapture extends GlimmerComponent<CaptureSignature> {
       {{/if}}
     </div>
     <style scoped>
-      /* One white page filling the capture box; overflow past the box is the
-         crop, exactly as a physical first page would crop. */
+      /* A capture keyed on file content must come out the same for every
+         viewer, so the theme's tokens are pinned here, once, on the capture
+         root: the drawing below — and `OfficePlaceholder`, which renders into
+         the same root — reads them exactly as it does under a live theme, and
+         no viewer's theme can reach them. Each fallback partner is pinned
+         too, so no chain can escape to the viewer's theme if a token ahead of
+         it is ever dropped. The type scale is likewise held here rather than
+         scattered through the rules: these are the fixed proportions of a
+         170×250 page, not a themed ladder. */
       .office-poster {
+        --card: #fff;
+        --card-foreground: #1a1a1a;
+        --muted: #eceef1;
+        --muted-foreground: #555;
+        --border: #d8d8d8;
+        --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        --font-mono: ui-monospace, Menlo, monospace;
+        --tooltip: #262626;
+        --tooltip-foreground: #f7f7f5;
+        --fd-stage: #eceef1;
+        --fd-paper: #f7f7f5;
+        --fd-slate: #262626;
+        --shadow-sm: 0 1px 4px rgb(0 0 0 / 12%);
+
+        --poster-slide-title-size: 0.875rem;
+        --poster-title-size: 0.8125rem;
+        --poster-heading-size: 0.6875rem;
+        --poster-body-size: 0.5625rem;
+        --poster-cell-size: 0.5rem;
+        --poster-radius: 3px;
+
+        /* One page filling the capture box; overflow past the box is the crop,
+           exactly as a physical first page would crop. */
         position: absolute;
         inset: 0;
         overflow: hidden;
-        background: #fff;
-        color: #1a1a1a;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background-color: var(--card);
+        color: var(--card-foreground);
+        font-family: var(--font-sans);
       }
       .page {
         padding: 14px 12px;
       }
       .page-title {
-        font-size: 0.8125rem;
+        font-size: var(--poster-title-size);
         font-weight: 700;
         line-height: 1.25;
         margin-bottom: 8px;
       }
       .page-block {
-        font-size: 0.5625rem;
+        font-size: var(--poster-body-size);
         line-height: 1.45;
         margin: 0 0 5px;
       }
       .page-block[data-style='title'] {
-        font-size: 0.8125rem;
+        font-size: var(--poster-title-size);
         font-weight: 700;
         line-height: 1.25;
         margin-bottom: 8px;
       }
       .page-block[data-style='heading'] {
-        font-size: 0.6875rem;
+        font-size: var(--poster-heading-size);
         font-weight: 600;
         margin-top: 7px;
       }
@@ -232,15 +262,14 @@ export class OfficePosterCapture extends GlimmerComponent<CaptureSignature> {
         justify-content: center;
         gap: 6px;
         padding: 14px 12px;
-        background: #fff;
       }
       .slide-title {
-        font-size: 0.875rem;
+        font-size: var(--poster-slide-title-size);
         font-weight: 700;
         line-height: 1.2;
       }
       .slide-bullet {
-        font-size: 0.5625rem;
+        font-size: var(--poster-body-size);
         line-height: 1.4;
         padding-left: 10px;
         position: relative;
@@ -255,14 +284,14 @@ export class OfficePosterCapture extends GlimmerComponent<CaptureSignature> {
       }
       .sheet-tab {
         display: inline-block;
-        font-size: 0.5rem;
+        font-size: var(--poster-cell-size);
         font-weight: 600;
         letter-spacing: 0.04em;
         text-transform: uppercase;
-        color: #555;
-        border: 1px solid #d8d8d8;
+        color: var(--muted-foreground);
+        border: 1px solid var(--border);
         border-bottom: 0;
-        border-radius: 3px 3px 0 0;
+        border-radius: var(--poster-radius) var(--poster-radius) 0 0;
         padding: 2px 6px;
       }
       .sheet-grid {
@@ -270,8 +299,8 @@ export class OfficePosterCapture extends GlimmerComponent<CaptureSignature> {
         border-collapse: collapse;
       }
       .sheet-grid td {
-        border: 1px solid #e2e2e2;
-        font-size: 0.5rem;
+        border: 1px solid var(--border);
+        font-size: var(--poster-cell-size);
         line-height: 1.3;
         padding: 2px 4px;
         white-space: nowrap;
@@ -281,19 +310,10 @@ export class OfficePosterCapture extends GlimmerComponent<CaptureSignature> {
       }
 
       /* The typed-placeholder branch fills the capture box with the shared
-         placeholder, its theme tokens pinned here: a capture render must not
-         follow the host theme the live placeholder reads, or two captures of
-         the same bytes could differ by the viewer's theme. */
+         placeholder, which reads the tokens pinned on the root above. */
       .placeholder {
         position: absolute;
         inset: 0;
-        --fd-stage: #eceef1;
-        --card: #fff;
-        --border: #d8d8d8;
-        --fd-paper: #f7f7f5;
-        --fd-slate: #262626;
-        --muted-foreground: #555;
-        --font-mono: ui-monospace, Menlo, monospace;
       }
     </style>
   </template>
