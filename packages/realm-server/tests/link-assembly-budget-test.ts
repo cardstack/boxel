@@ -602,10 +602,14 @@ module(basename(import.meta.filename), function () {
         TARGET_COUNT,
         'and every member carries the identity the query answered, clipped or not',
       );
-      let carriedIds = new Set(carried);
+      assert.strictEqual(
+        new Set(carried).size,
+        carried.length,
+        'included[] carries no resource twice',
+      );
       assert.true(
-        carried.length < TARGET_COUNT && carriedIds.size === carried.length,
-        'while included[] holds only some of them — so some data names an absent resource',
+        carried.length < TARGET_COUNT,
+        'and holds only some of the members — so some data names an absent resource',
       );
     });
 
