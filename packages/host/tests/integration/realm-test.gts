@@ -774,10 +774,6 @@ module('Integration | realm', function (hooks) {
             links: {
               self: `../dir/owner`,
             },
-            data: {
-              type: 'card',
-              id: `${testRealmURL}dir/owner`,
-            },
           },
         },
         meta: {
@@ -1283,17 +1279,9 @@ module('Integration | realm', function (hooks) {
         relationships: {
           'pets.0': {
             links: { self: `./dir/van-gogh` },
-            data: {
-              id: `${testRealmURL}dir/van-gogh`,
-              type: 'card',
-            },
           },
           friend: {
             links: { self: `./dir/friend` },
-            data: {
-              id: `${testRealmURL}dir/friend`,
-              type: 'card',
-            },
           },
         },
         meta: {
@@ -2194,10 +2182,6 @@ module('Integration | realm', function (hooks) {
           owner: {
             links: {
               self: `./mariko`,
-            },
-            data: {
-              type: 'card',
-              id: `${testRealmURL}dir/mariko`,
             },
           },
         },

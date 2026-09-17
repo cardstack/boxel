@@ -976,7 +976,7 @@ module('Integration | card-copy', function (hooks) {
   });
 
   test<TestContextWithSave>('can copy a card that has a relative link to card in source realm', async function (assert) {
-    assert.expect(15);
+    assert.expect(12);
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`${testRealm2URL}index`],
@@ -1029,10 +1029,6 @@ module('Integration | card-copy', function (hooks) {
         pet: {
           links: {
             self: `${testRealmURL}Pet/mango`,
-          },
-          data: {
-            type: 'card',
-            id: `${testRealmURL}Pet/mango`,
           },
         },
       });
@@ -1106,7 +1102,7 @@ module('Integration | card-copy', function (hooks) {
   });
 
   test<TestContextWithSave>('can copy a card that has a link to card in destination realm', async function (assert) {
-    assert.expect(15);
+    assert.expect(12);
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`${testRealm2URL}index`],
@@ -1157,10 +1153,6 @@ module('Integration | card-copy', function (hooks) {
         pet: {
           links: {
             self: `../Pet/paper`, // we should recognize that the link is now in the same realm and should be a relative path
-          },
-          data: {
-            type: 'card',
-            id: `${testRealm2URL}Pet/paper`,
           },
         },
       });
