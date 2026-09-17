@@ -204,6 +204,18 @@ export interface CommitBatchOptions {
   // requirement rather than a preference: the job it would wait on needs the
   // render slot that caller is holding, so waiting deadlocks.
   waitForIndex?: boolean;
+  // A caller's own precondition, run inside the write lock and before
+  // anything is staged. It exists because a precondition evaluated before
+  // `commitBatch` is not binding: the lock is acquired here, so a request
+  // whose check passed can then queue behind another writer's whole write and
+  // proceed against state that moved. Throwing from here refuses the batch
+  // with nothing staged, nothing enqueued and no event broadcast, and the
+  // thrown failure's status is what the caller answers with.
+  //
+  // The realm keeps the *content* of the check — an `If-Match` compares a
+  // card's `ETag`, which is built from index and realm-info state the
+  // coordinator has no business assembling. This owns only when it runs.
+  precondition?: () => Promise<void>;
   // Report the bytes each entry's primary file now holds, on the entry's
   // `meta.storedContent`. Off by default: a batch's results say what a card
   // is and what version it holds, and a caller wanting its document reads it
@@ -284,6 +296,11 @@ export async function commitBatch(
     if (opts.waitForIndex !== false && entries.some(stagesContent)) {
       await core.drainIndexing();
     }
+    // After the drain, so the state a precondition reads is the realm as this
+    // batch is about to change it, and before staging, so a refusal costs
+    // nothing but the lock it already holds.
+    await opts.precondition?.();
+
     // Every `lid` in the batch resolves to a URL before any executor runs. A
     // created card's file is named after its `lid`, so its URL is path math
     // over the type it adopts — no read and no write — which is what lets an

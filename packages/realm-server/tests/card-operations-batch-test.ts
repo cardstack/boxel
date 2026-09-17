@@ -5,6 +5,7 @@ import { basename } from 'path';
 import {
   commitBatch,
   isOperationFailure,
+  OperationFailure,
   type BatchCore,
   type BatchEntry,
   type OperationDefinition,
@@ -3007,6 +3008,118 @@ module(basename(import.meta.filename), function () {
         entry: 0,
       });
       assert.strictEqual(commits.length, 0, 'nothing is committed');
+    });
+
+    // A caller's precondition is only binding where it runs. Evaluated before
+    // `commitBatch`, a check can pass and the request then queue behind
+    // another writer's whole write, so it holds only while the realm is
+    // uncontended — which inverts what a conditional write is for. These pin
+    // the placement rather than the outcome: a response asserts the same
+    // status and body whether the check ran inside the lock, outside it, or
+    // not at all, so no endpoint test can tell the three apart.
+    test('a precondition runs inside the lock, after the drain, before anything is staged', async function (assert) {
+      let s = stub({
+        stored: {
+          'person-1.json': cardFile({ firstName: 'Original' }, PERSON),
+        },
+      });
+      let observed:
+        | { lockDepth: number; drains: number; commits: number }
+        | undefined;
+      await commitBatch(
+        s.core,
+        [
+          {
+            op: 'update',
+            href: `${REALM}person-1`,
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Updated' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        {
+          precondition: async () => {
+            observed = {
+              lockDepth: s.lockDepth(),
+              drains: s.drainCount(),
+              commits: s.commits.length,
+            };
+          },
+        },
+      );
+
+      assert.ok(observed, 'the precondition was called');
+      assert.strictEqual(
+        observed?.lockDepth,
+        1,
+        'with the write lock held, so the state it reads cannot move under it',
+      );
+      assert.strictEqual(
+        observed?.drains,
+        1,
+        'after the drain, so the index it reads is current with the bytes',
+      );
+      assert.strictEqual(
+        observed?.commits,
+        0,
+        'and before anything was staged',
+      );
+      assert.strictEqual(s.commits.length, 1, 'the write then proceeds');
+    });
+
+    test('a precondition that refuses writes nothing and commits nothing', async function (assert) {
+      let { core, commits } = stub({
+        stored: {
+          'person-1.json': cardFile({ firstName: 'Original' }, PERSON),
+        },
+      });
+      let failure = await commitBatch(
+        core,
+        [
+          {
+            op: 'update',
+            href: `${REALM}person-1`,
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Updated' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        {
+          precondition: async () => {
+            throw new OperationFailure({
+              id: `${REALM}person-1`,
+              status: 412,
+              code: 'version-conflict',
+              title: 'Precondition Failed',
+              detail: 'the card is not the one the caller saw',
+            });
+          },
+        },
+      ).then(
+        () => undefined,
+        (err: unknown) => (isOperationFailure(err) ? err.error : err),
+      );
+
+      assert.deepEqual(
+        failure,
+        {
+          id: `${REALM}person-1`,
+          status: 412,
+          code: 'version-conflict',
+          title: 'Precondition Failed',
+          detail: 'the card is not the one the caller saw',
+        },
+        "the caller's own refusal is what the batch fails with, status included",
+      );
+      assert.strictEqual(commits.length, 0, 'and nothing is committed');
     });
   });
 });

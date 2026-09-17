@@ -96,7 +96,6 @@ import {
   notAcceptable,
   methodNotAllowed,
   badRequest,
-  preconditionFailed,
   CardError,
   responseWithError,
   formattedError,
@@ -173,7 +172,7 @@ import {
   isHeadResult,
   isOperationFailure,
   isSourceResult,
-  type OperationFailure,
+  OperationFailure,
   type OperationRequest,
   type OperationResult,
   type OperationSourceResult,
@@ -7753,22 +7752,28 @@ export class Realm {
     });
   }
 
-  // A conditional write: the 412 a `PATCH` or `DELETE` carrying `If-Match`
-  // answers when the card is no longer the one the caller saw, or `undefined`
-  // for a request that may proceed. Called before the commit, so a refused
-  // write stages nothing, enqueues no indexing and broadcasts no event.
+  // A conditional write's precondition: throws a 412 when the card is no
+  // longer the one the caller saw, and returns for a request that may
+  // proceed. Handed to `commitBatch` rather than called before it, because it
+  // is only binding inside the write lock — a check made before that lock can
+  // pass and then queue behind another writer's whole write, which is exactly
+  // the contended case the header exists for. The coordinator runs it after
+  // its drain and before anything is staged, so a refusal writes nothing,
+  // enqueues nothing and broadcasts nothing; the drain is the coordinator's,
+  // so a caller that must not wait on indexing still does not.
   //
   // The comparand is the card's `ETag` — the same validator a `GET` of it
-  // hands out and an `If-None-Match` is compared against. That is what an HTTP
+  // hands out and an `If-None-Match` is checked against. That is what an HTTP
   // conditional request names, and it is the validator a client actually
   // holds, since it is the only one a read gives out.
   //
   // It is the broader of the realm's two fingerprints and the later of them.
-  // Broader because it moves whenever the served document may differ, a linked
-  // card's re-index included, where the stored file's hash moves only when
-  // this card's own bytes do. Later because it is built from `indexed_at`,
-  // which moves after the bytes rather than with them — which is why the drain
-  // below is part of the precondition rather than an optimization.
+  // Broader because it moves whenever the served document may differ, a
+  // linked card's re-index included, where the stored file's hash moves only
+  // when this card's own bytes do. Later because it is built from
+  // `indexed_at`, which moves after the bytes rather than with them — which
+  // is why running inside the lock, after the drain, is what makes it mean
+  // anything.
   //
   // Comparison is `ifNoneMatchMatches`': `*`, comma lists, and the `W/` prefix
   // ignored on both sides. RFC 9110 §13.1.1 asks for strong comparison here
@@ -7781,71 +7786,53 @@ export class Realm {
   // can offer no validator for — never indexed, or an `ETag` suppressed
   // because the document depends on another realm — fails the precondition:
   // "this is the card you saw" is a claim the realm cannot make.
-  async #conditionalWriteRefusal(
+  #conditionalWrite(
     request: Request,
     url: URL,
-    requestContext: RequestContext,
-  ): Promise<Response | undefined> {
+  ): (() => Promise<void>) | undefined {
     let ifMatch = request.headers.get('if-match');
-    if (!ifMatch) {
+    if (!ifMatch || ifMatch.trim() === '*') {
       return undefined;
     }
-    if (ifMatch.trim() === '*') {
-      return undefined;
-    }
-    // Drain indexing already in flight before reading the row this rests on.
-    // Without it the precondition consults a source that lags the bytes by
-    // design: a commit writes the file and records its hash before it indexes,
-    // and a `skip-index-wait` write defers indexing to the worker entirely, so
-    // for that whole window the row still carries the pre-write `indexed_at`
-    // and a validator the caller has already been overtaken by still matches.
-    // A wrong accept there is the write this header exists to refuse, and it
-    // needs no concurrency in the request to happen.
-    //
-    // The cost lands on the requests that opt in by sending a concrete
-    // `If-Match`, and for most of them it is not new: a write that waits for
-    // its own indexing drains at the commit anyway, so this moves that wait
-    // earlier rather than adding one.
-    //
-    // Except for the callers that must never wait. A write made from inside a
-    // render, and one that asked for its indexing to be deferred, skip the
-    // drain here for the same reason they skip it at the commit: the job it
-    // would wait on needs the render slot the caller is holding, so waiting
-    // deadlocks rather than delays. Those are the realm's own machinery rather
-    // than a client reconciling an edit, and the precondition they get is the
-    // weaker one the unwaited row can support.
-    if (
-      !isDuringPrerenderRequest(request) &&
-      !isSkipIndexWaitRequest(request)
-    ) {
-      await this.incrementalIndexing();
-    }
-    await this.getRealmInfo();
-    let entry = await this.#realmIndexQueryEngine.instance(url, {
-      includeErrors: true,
-    });
-    if (entry?.type !== 'instance' || this.hasForeignRealmDeps(entry.deps)) {
-      return preconditionFailed({ request, requestContext, id: url.href });
-    }
-    // Every validator the realm would hand out for this card as it stands.
-    // A card+json read picks its link shape per request — the setting can
-    // differ between the read that gave the client its validator and this
-    // write — and the shapes take different variants of one validator so a
-    // client holding either is not 304'd to the other. That distinction is
-    // about representations; this question is about the card, and all of
-    // these describe the same card at the same `indexed_at`. Refusing a write
-    // because the read that preceded it answered in the narrower shape would
-    // refuse on a server setting rather than on anything the caller did.
-    let realmInfoHash = this.getCachedRealmInfoHash();
-    let screenshots = screenshotsEtagFingerprint(entry.screenshots);
-    let issued = [
-      buildCardJsonEtag(entry.indexedAt, realmInfoHash, screenshots, false),
-      buildCardJsonEtag(entry.indexedAt, realmInfoHash, screenshots, true),
-    ];
-    if (issued.some((etag) => etag && ifNoneMatchMatches(ifMatch, etag))) {
-      return undefined;
-    }
-    return preconditionFailed({ request, requestContext, id: url.href });
+    let refuse = (): never => {
+      throw new OperationFailure({
+        id: url.href,
+        status: 412,
+        code: 'version-conflict',
+        title: 'Precondition Failed',
+        detail:
+          `${request.method} of ${url.href} requires the card to match ` +
+          `If-Match: ${ifMatch}, and it does not`,
+      });
+    };
+    return async () => {
+      await this.getRealmInfo();
+      let entry = await this.#realmIndexQueryEngine.instance(url, {
+        includeErrors: true,
+      });
+      if (entry?.type !== 'instance' || this.hasForeignRealmDeps(entry.deps)) {
+        refuse();
+      }
+      // Every validator the realm would hand out for this card as it stands.
+      // A card+json read picks its link shape per request — the setting can
+      // differ between the read that gave the client its validator and this
+      // write — and the shapes take different variants of one validator so a
+      // client holding either is not 304'd to the other. That distinction is
+      // about representations; this question is about the card, and all of
+      // these describe the same card at the same `indexed_at`. Refusing a
+      // write because the read that preceded it answered in the narrower
+      // shape would refuse on a server setting rather than on anything the
+      // caller did.
+      let realmInfoHash = this.getCachedRealmInfoHash();
+      let screenshots = screenshotsEtagFingerprint(entry!.screenshots);
+      let issued = [
+        buildCardJsonEtag(entry!.indexedAt, realmInfoHash, screenshots, false),
+        buildCardJsonEtag(entry!.indexedAt, realmInfoHash, screenshots, true),
+      ];
+      if (!issued.some((etag) => etag && ifNoneMatchMatches(ifMatch, etag))) {
+        refuse();
+      }
+    };
   }
 
   private async patchCardInstance(
@@ -7895,17 +7882,10 @@ export class Realm {
       }
     }
 
-    // Read after the body, so a payload the realm would have refused anyway
-    // still gets the 400 that names what is wrong with it, and a 412 means
-    // only that the card moved.
-    let refusal = await this.#conditionalWriteRefusal(
-      request,
-      new URL(instanceURL),
-      requestContext,
-    );
-    if (refusal) {
-      return refusal;
-    }
+    // Built after the body is validated, so a payload the realm would have
+    // refused anyway still gets the 400 naming what is wrong with it and a
+    // 412 means only that the card moved. It runs inside the commit's lock.
+    let precondition = this.#conditionalWrite(request, new URL(instanceURL));
 
     // The merge belongs to the update this stages: arrays replacing rather
     // than merging into what is there, the realm-managed `meta` keys a client
@@ -7950,6 +7930,7 @@ export class Realm {
             // The same reading a create takes of a side-load claiming another
             // realm: the edge is stored empty and the patch succeeds.
             foreignSideLoadLink: 'leave',
+            ...(precondition ? { precondition } : {}),
           },
         )
       )[0];
@@ -9188,14 +9169,7 @@ export class Realm {
     if (await this.openFileForMetadata(localPath)) {
       return methodNotAllowed(request, requestContext);
     }
-    let refusal = await this.#conditionalWriteRefusal(
-      request,
-      url,
-      requestContext,
-    );
-    if (refusal) {
-      return refusal;
-    }
+    let precondition = this.#conditionalWrite(request, url);
     try {
       // Whether there is a card here is settled by the stored file, read
       // inside the same lock the removal happens under. That is what makes a
@@ -9206,6 +9180,7 @@ export class Realm {
         ...(requestContext.authenticatedUser
           ? { actor: requestContext.authenticatedUser }
           : {}),
+        ...(precondition ? { precondition } : {}),
       });
     } catch (err: unknown) {
       return this.#cardWriteRefusal(err, request, requestContext, {
