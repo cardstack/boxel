@@ -11,6 +11,7 @@ import {
   MAX_CAPTURE_URLS_PER_SIGNING_REQUEST,
   MEDIA_CACHE_MAX_AGE_SECONDS,
   captureURLTokenBinding,
+  captureURLTokenSecret,
   insertPermissions,
   revokeUserSessions,
 } from '@cardstack/runtime-common';
@@ -50,6 +51,9 @@ function mint(
 
 // Craft a capture-URL token directly, for the cases the mint endpoint will
 // never produce: wrong realm, wrong scope, expired, revoked-before-issued.
+// Signed with the capture family's key, not the bare seed — the serving path
+// verifies against that key, so a token signed with the seed would be refused
+// for its signature and never reach the claim under test.
 // `iat` is backdated a minute so near-expiry and revocation comparisons are
 // strict-inequality-proof (a token inspected the second it was signed has
 // exactly the full TTL remaining).
@@ -58,7 +62,10 @@ function craftToken(
   { iatOffsetSec = -60, ttlSec = 900 }: Partial<Record<string, number>> = {},
 ): string {
   let iat = Math.floor(Date.now() / 1000) + iatOffsetSec;
-  return jwt.sign({ ...claims, iat, exp: iat + ttlSec }, realmSecretSeed);
+  return jwt.sign(
+    { ...claims, iat, exp: iat + ttlSec },
+    captureURLTokenSecret(realmSecretSeed),
+  );
 }
 
 function tokenFrom(signedUrl: string): string {
@@ -267,6 +274,39 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         )
         .set('Accept', 'image/png');
       assert.strictEqual(response.status, 401);
+    });
+
+    test('a capture token is not a realm-server session token', async function (assert) {
+      // The realm seed is also the realm-server's session key, and
+      // `jwtMiddleware` authenticates a bearer on signature and revocation
+      // alone — it reads no scope. Signing this family under its own key is
+      // what keeps a credential that travels in a URL from opening the
+      // realm-server routes.
+      let signedUrl = await mintOne('some-card?type=pdf');
+      let captureToken = tokenFrom(signedUrl);
+      let asBearer = await request
+        .get('/_user')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Authorization', `Bearer ${captureToken}`);
+      assert.strictEqual(
+        asBearer.status,
+        401,
+        'the capture token is refused as a realm-server bearer',
+      );
+
+      // Control: the same route does accept a realm session JWT, so the 401
+      // above is the token being rejected rather than the route refusing
+      // everything.
+      let sessionToken = createJWT(testRealm, 'mary', ['read']);
+      let withSession = await request
+        .get('/_user')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Authorization', `Bearer ${sessionToken}`);
+      assert.notStrictEqual(
+        withSession.status,
+        401,
+        'a realm session JWT authenticates on the same route',
+      );
     });
 
     test('a token stops working once its user loses realm read', async function (assert) {

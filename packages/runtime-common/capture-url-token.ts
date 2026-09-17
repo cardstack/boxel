@@ -10,11 +10,12 @@
  * caller who already holds realm read, so it grants nothing the caller
  * doesn't have; it only makes that grant portable to browser-native fetches.
  * Its `url` claim binds it to one capture URL (path plus its non-token query
- * params, param-order-insensitively), so a leaked token is worth one capture
- * for minutes rather than realm-wide read. Signed URLs are ephemeral
- * view-layer values: they must never be persisted into card data, index
- * docs, or prerendered HTML — the durable (unsigned) URL is the only
- * storable reference.
+ * params, param-order-insensitively), and it is signed under its own key
+ * (`captureURLTokenSecret`) rather than the bare realm seed, so a leaked
+ * token is worth one capture for minutes rather than realm-wide read.
+ * Signed URLs are ephemeral view-layer values: they must never be persisted
+ * into card data, index docs, or prerendered HTML — the durable (unsigned)
+ * URL is the only storable reference.
  *
  * Deliberately a leaf module with no imports (the same discipline as
  * `session-token.ts`), so the host's URL-signer service can take these values
@@ -45,12 +46,34 @@ export const CAPTURE_URL_TOKEN_TTL = '15m';
 export const CAPTURE_URL_TOKEN_TTL_MS = 15 * 60 * 1000;
 
 /**
- * The `scope` claim value. Its presence is what admits a query-param token on
- * the serving path — a session JWT pasted into `?token=` carries no such
- * claim and is refused, so query strings never become an alternate door for
- * full session tokens.
+ * The `scope` claim value, and the suffix that distinguishes this family's
+ * signing key. A session JWT pasted into `?token=` fails the signature check
+ * before anything reads its claims, and would be refused for the missing
+ * scope even if it didn't — so query strings never become an alternate door
+ * for full session tokens.
  */
 export const CAPTURE_URL_TOKEN_SCOPE = 'read-capture';
+
+/**
+ * The signing key for this token family: the realm secret seed under a
+ * family-specific suffix, never the bare seed.
+ *
+ * The bare seed is the realm-server's session key. `jwtMiddleware` and
+ * `multiRealmAuthorization` authenticate a bearer by verifying its signature
+ * against that seed and checking session revocation — they read no `scope`
+ * and require no particular claims — so a capture token signed with it would
+ * be a full realm-server session (`/_user`, `/_create-realm`,
+ * `/_federated-search`, …) for the user it names. That matters here more than
+ * for the other families because this token travels in a URL: access logs,
+ * browser history, `Referer`, a pasted link.
+ *
+ * A separate key makes that confusion impossible rather than checked. The
+ * `scope` claim stays as defense in depth for anything that does reach this
+ * key.
+ */
+export function captureURLTokenSecret(realmSecretSeed: string): string {
+  return `${realmSecretSeed}:${CAPTURE_URL_TOKEN_SCOPE}`;
+}
 
 /**
  * Upper bound on how many URLs one `_sign-capture-urls` request may carry.

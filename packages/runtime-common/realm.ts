@@ -83,6 +83,7 @@ import {
   CAPTURE_URL_TOKEN_TTL_MS,
   MAX_CAPTURE_URLS_PER_SIGNING_REQUEST,
   captureURLTokenBinding,
+  captureURLTokenSecret,
   type CaptureURLTokenClaims,
 } from './capture-url-token.ts';
 import {
@@ -5615,14 +5616,15 @@ export class Realm {
   // to the normal permission check. Every rejection is a fall-through, never
   // a thrown 401: an invalid token must not fail a request that public
   // permissions would authorize. The checks mirror the invariants the other
-  // token families enforce: the scope claim keeps session JWTs out of query
-  // strings, the realm claim keeps a token minted for realm A from replaying
-  // against realm B (all realms share the signing seed), the URL binding
-  // keeps it from replaying against any other capture, the revocation check
-  // keeps an operator revocation authoritative over every family, and the
-  // realm-read check keeps the grant no more durable than the permission it
-  // was minted from — the handler-verifies-itself precedent from
-  // handle-download-realm.
+  // token families enforce: the family's own signing key (and, behind it, the
+  // scope claim) keeps session JWTs out of query strings, the realm claim
+  // keeps a token minted for realm A from replaying against realm B (that key
+  // is derived from the server-wide seed, so it is shared across realms), the
+  // URL binding keeps it from replaying against any other capture, the
+  // revocation check keeps an operator revocation authoritative over every
+  // family, and the realm-read check keeps the grant no more durable than the
+  // permission it was minted from — the handler-verifies-itself precedent
+  // from handle-download-realm.
   private async verifyCaptureURLToken(
     request: Request,
     localPath: LocalPath,
@@ -5637,7 +5639,7 @@ export class Realm {
     try {
       claims = this.#adapter.verifyJWT(
         tokenString,
-        this.#realmSecretSeed,
+        captureURLTokenSecret(this.#realmSecretSeed),
       ) as unknown as CaptureURLTokenClaims & { iat: number; exp: number };
     } catch (e) {
       this.#log.warn(
@@ -5771,10 +5773,12 @@ export class Realm {
         scope: CAPTURE_URL_TOKEN_SCOPE,
         url: captureURLTokenBinding(localPath, url.searchParams),
       };
+      // Signed under the capture family's own key, not the realm seed the
+      // session families share — see `captureURLTokenSecret`.
       let token = this.#adapter.createJWT(
         claims as unknown as TokenClaims,
         CAPTURE_URL_TOKEN_TTL,
-        this.#realmSecretSeed,
+        captureURLTokenSecret(this.#realmSecretSeed),
       );
       let signedUrl = new URL(url.href);
       signedUrl.searchParams.set(CAPTURE_URL_TOKEN_PARAM, token);
