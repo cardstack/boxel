@@ -11,6 +11,7 @@ import {
   MAX_CAPTURE_URLS_PER_SIGNING_REQUEST,
   MEDIA_CACHE_MAX_AGE_SECONDS,
   captureURLTokenBinding,
+  insertPermissions,
   revokeUserSessions,
 } from '@cardstack/runtime-common';
 import {
@@ -266,6 +267,43 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         )
         .set('Accept', 'image/png');
       assert.strictEqual(response.status, 401);
+    });
+
+    test('a token stops working once its user loses realm read', async function (assert) {
+      // Realm read is re-derived per request for every other token family, so
+      // it is here too: a capture URL minted before the owner removed the
+      // user's read must not outlive that permission.
+      let signedUrl = await mintOne('some-card?type=pdf');
+      let path = new URL(signedUrl).pathname + new URL(signedUrl).search;
+      let before = await request.get(path).set('Accept', 'image/png');
+      assert.strictEqual(
+        before.status,
+        404,
+        'the token authorizes while read holds',
+      );
+
+      try {
+        await insertPermissions(dbAdapter, new URL(testRealm.url), {
+          mary: [],
+        });
+        let after = await request.get(path).set('Accept', 'image/png');
+        assert.strictEqual(
+          after.status,
+          401,
+          'the same token is refused once the read row is gone',
+        );
+      } finally {
+        await insertPermissions(dbAdapter, new URL(testRealm.url), {
+          mary: ['read'],
+        });
+      }
+
+      let restored = await request.get(path).set('Accept', 'image/png');
+      assert.strictEqual(
+        restored.status,
+        404,
+        'and authorizes again once read is restored',
+      );
     });
 
     test('a declared-name URL signs and its token clears the name-exclusivity check', async function (assert) {

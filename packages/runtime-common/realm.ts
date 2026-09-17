@@ -4618,7 +4618,11 @@ export class Realm {
         // still serves and a private realm still 401s the usual way.
         let captureTokenUser =
           request.method === 'GET' && isCaptureServingPath(localPath)
-            ? await this.verifyCaptureURLToken(request, localPath)
+            ? await this.verifyCaptureURLToken(
+                request,
+                localPath,
+                requestContext,
+              )
             : undefined;
         if (captureTokenUser !== undefined) {
           requestContext.authenticatedUser = captureTokenUser;
@@ -5614,12 +5618,15 @@ export class Realm {
   // token families enforce: the scope claim keeps session JWTs out of query
   // strings, the realm claim keeps a token minted for realm A from replaying
   // against realm B (all realms share the signing seed), the URL binding
-  // keeps it from replaying against any other capture, and the revocation
-  // check keeps an operator revocation authoritative over every family —
-  // the handler-verifies-itself precedent from handle-download-realm.
+  // keeps it from replaying against any other capture, the revocation check
+  // keeps an operator revocation authoritative over every family, and the
+  // realm-read check keeps the grant no more durable than the permission it
+  // was minted from — the handler-verifies-itself precedent from
+  // handle-download-realm.
   private async verifyCaptureURLToken(
     request: Request,
     localPath: LocalPath,
+    requestContext: RequestContext,
   ): Promise<string | undefined> {
     let searchParams = new URL(request.url).searchParams;
     let tokenString = searchParams.get(CAPTURE_URL_TOKEN_PARAM);
@@ -5662,6 +5669,23 @@ export class Realm {
     if (await isSessionRevoked(this.#dbAdapter, claims.user, claims.iat)) {
       this.#log.warn(
         `capture-url token for GET ${maskLoggedURL(request.url)} was issued at ${claims.iat}, which predates user ${claims.user}'s session revocation`,
+      );
+      return undefined;
+    }
+    // Realm read is re-derived from the live permission rows on every
+    // request for the other token families — a normal session's
+    // `permissions` claim is compared against the freshly computed union, a
+    // delegated session is `can(user, 'read')`-checked — so this one is too.
+    // Without it, revoking a user's read on the realm would leave every
+    // capture URL they already minted working until the token expired.
+    // Last, so an unauthorized token costs no permission lookup.
+    let permissionChecker = new RealmPermissionChecker(
+      requestContext.permissions,
+      this.#matrixClient,
+    );
+    if (!(await permissionChecker.can(claims.user, 'read'))) {
+      this.#log.warn(
+        `capture-url token for GET ${maskLoggedURL(request.url)} names user ${claims.user}, who does not have read permission on ${this.url}`,
       );
       return undefined;
     }
