@@ -11,12 +11,17 @@ import {
 const testRealm = new URL('http://127.0.0.1:4463/test/');
 
 const WIDE_ROW_COUNT = 6;
+const QUERIED_ROW_COUNT = 4;
 
 // `Wide` composes five field definitions, each of which the query-field walk
 // must descend into to find out whether anything below it is query-backed —
-// and `nested` puts a second level under one of them. `Narrow` composes none,
+// and `branch` puts a second level under one of them. `Narrow` composes none,
 // so the two types differ only in the size of the tree a walk covers, not in
 // their instance count, payload or links.
+//
+// `Alpha` and `Beta` both carry a query-backed field, over disjoint result
+// sets, so which targets a row carries says which type's plan was applied to
+// it.
 function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
   let fs: Record<string, string | LooseSingleCardDocument> = {};
 
@@ -64,6 +69,70 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
     }
   `;
 
+  fs['target.gts'] = `
+    import { contains, field, CardDef } from "@cardstack/base/card-api";
+    import StringField from "@cardstack/base/string";
+
+    export class Target extends CardDef {
+      @field cardTitle = contains(StringField);
+    }
+  `;
+
+  fs['queried.gts'] = `
+    import { contains, field, linksToMany, CardDef } from "@cardstack/base/card-api";
+    import StringField from "@cardstack/base/string";
+    import { Branch } from "./fields";
+    import { Target } from "./target";
+
+    export class Alpha extends CardDef {
+      @field name = contains(StringField);
+      @field branch = contains(Branch);
+      @field matches = linksToMany(() => Target, {
+        query: {
+          filter: { eq: { cardTitle: 'alpha-match' } },
+          page: { size: 10, number: 0 },
+        },
+      });
+    }
+
+    export class Beta extends CardDef {
+      @field name = contains(StringField);
+      @field matches = linksToMany(() => Target, {
+        query: {
+          filter: { eq: { cardTitle: 'beta-match' } },
+          page: { size: 10, number: 0 },
+        },
+      });
+    }
+  `;
+
+  for (let title of ['alpha-match', 'beta-match']) {
+    fs[`${title}.json`] = {
+      data: {
+        attributes: { cardTitle: title },
+        meta: { adoptsFrom: { module: rri('./target'), name: 'Target' } },
+      },
+    } as LooseSingleCardDocument;
+  }
+
+  for (let i = 0; i < QUERIED_ROW_COUNT; i++) {
+    fs[`alpha-${i}.json`] = {
+      data: {
+        attributes: {
+          name: `A${i}`,
+          branch: { name: `AB${i}`, leaf: { label: `AL${i}`, amount: i } },
+        },
+        meta: { adoptsFrom: { module: rri('./queried'), name: 'Alpha' } },
+      },
+    } as LooseSingleCardDocument;
+    fs[`beta-${i}.json`] = {
+      data: {
+        attributes: { name: `B${i}` },
+        meta: { adoptsFrom: { module: rri('./queried'), name: 'Beta' } },
+      },
+    } as LooseSingleCardDocument;
+  }
+
   for (let i = 0; i < WIDE_ROW_COUNT; i++) {
     fs[`wide-${i}.json`] = {
       data: {
@@ -89,21 +158,62 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
   return fs;
 }
 
+type Relationships = Record<
+  string,
+  {
+    links?: { self?: string | null; search?: string | null };
+    data?: { id?: string }[];
+  }
+>;
+
+interface SearchProbe {
+  rows: number;
+  defLookups: number;
+  applied: number;
+  data: { id?: string; relationships?: unknown }[];
+  included: { id?: string }[];
+}
+
+async function search(
+  realm: Realm,
+  where: { module: string; name: string } | undefined,
+  pageSize: number,
+): Promise<SearchProbe> {
+  let timings = new RequestTimings();
+  let applied = 0;
+  let { data, included } = await searchCardsForTest(
+    realm.realmIndexQueryEngine,
+    {
+      ...(where
+        ? {
+            filter: {
+              type: { module: `${testRealm}${where.module}`, name: where.name },
+            },
+          }
+        : {}),
+      page: { size: pageSize, number: 0 },
+    },
+    { loadLinks: true, timings, onQueryFieldApplied: () => applied++ },
+  );
+  return {
+    rows: data.length,
+    defLookups: timings.counters().defLookups ?? 0,
+    applied,
+    data,
+    included,
+  };
+}
+
 async function searchType(
   realm: Realm,
   name: string,
   pageSize: number,
-): Promise<{ rows: number; defLookups: number }> {
-  let timings = new RequestTimings();
-  let { data } = await searchCardsForTest(
-    realm.realmIndexQueryEngine,
-    {
-      filter: { type: { module: `${testRealm}${name.toLowerCase()}`, name } },
-      page: { size: pageSize, number: 0 },
-    },
-    { loadLinks: true, timings },
-  );
-  return { rows: data.length, defLookups: timings.counters().defLookups ?? 0 };
+): Promise<SearchProbe> {
+  return await search(realm, { module: name.toLowerCase(), name }, pageSize);
+}
+
+function relationshipsOf(resource: { relationships?: unknown }): Relationships {
+  return (resource.relationships ?? {}) as Relationships;
 }
 
 // Serving a card's query-backed fields means finding them first, and finding
@@ -162,6 +272,70 @@ module(basename(import.meta.filename), function () {
       assert.ok(
         wide.defLookups > narrow.defLookups,
         `the composing type costs more lookups (${wide.defLookups}) than the flat one (${narrow.defLookups})`,
+      );
+    });
+
+    // Sharing one walk across a type's rows is only sound if every row still
+    // gets the fields that walk found. A count of lookups cannot see a plan
+    // that came back empty, and a document's shape cannot see how many times
+    // the walk ran — so the two assertions have to be made together.
+    test('every row of a shared plan still has its query field resolved', async function (assert) {
+      let alpha = await search(
+        realm,
+        { module: 'queried', name: 'Alpha' },
+        QUERIED_ROW_COUNT,
+      );
+
+      assert.strictEqual(
+        alpha.rows,
+        QUERIED_ROW_COUNT,
+        'every Alpha row came back',
+      );
+      assert.strictEqual(
+        alpha.applied,
+        QUERIED_ROW_COUNT,
+        `the query field was resolved once per row (${alpha.applied})`,
+      );
+      for (let resource of alpha.data) {
+        assert.ok(
+          relationshipsOf(resource).matches?.links?.search,
+          `${resource.id} carries its resolved query field`,
+        );
+      }
+      assert.ok(
+        alpha.included.some((r) => r.id?.endsWith('/alpha-match')),
+        "the query's target is side-loaded",
+      );
+    });
+
+    test('two types in one pass each get their own plan', async function (assert) {
+      let all = await search(realm, undefined, 100);
+
+      let alphas = all.data.filter((r) => r.id?.includes('/alpha-'));
+      let betas = all.data.filter((r) => r.id?.includes('/beta-'));
+      assert.strictEqual(alphas.length, QUERIED_ROW_COUNT, 'Alphas returned');
+      assert.strictEqual(betas.length, QUERIED_ROW_COUNT, 'Betas returned');
+
+      // Disjoint result sets, so a plan applied to the wrong type puts the
+      // other type's target on the row rather than merely miscounting.
+      for (let resource of [...alphas, ...betas]) {
+        let matches = relationshipsOf(resource).matches;
+        assert.ok(matches?.links?.search, `${resource.id} resolved its field`);
+        let expected = resource.id?.includes('/alpha-')
+          ? `${testRealm}alpha-match`
+          : `${testRealm}beta-match`;
+        assert.deepEqual(
+          (matches?.data ?? []).map((member) => member.id),
+          [expected],
+          `${resource.id} matched its own query's target`,
+        );
+      }
+      // Wide and Narrow are in this pass too and have no query field at all,
+      // so a plan leaking across types would show up as extra applications.
+      assert.strictEqual(
+        all.applied,
+        QUERIED_ROW_COUNT * 2,
+        `only the two query-backed types applied a field (${all.applied})`,
       );
     });
   });
