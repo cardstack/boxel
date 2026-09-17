@@ -258,6 +258,42 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('a validator a write handed back is accepted by the next write', async function (assert) {
+        // The validator a client doing consecutive conditional edits holds is
+        // the one its own last write returned, not one from a read — and a
+        // write response spells it in its own shape. Every other validator in
+        // this file comes from a `GET`, so without this the gate's coverage of
+        // that shape rests on reading the comparison rather than on a test.
+        let written = await request
+          .patch('/person-1')
+          .send(patchPersonBody('Van Gogh'))
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(
+          written.status,
+          200,
+          `HTTP 200 status: ${written.text}`,
+        );
+        let echoEtag = written.get('etag') ?? '';
+        assert.ok(echoEtag, 'the write hands back a validator');
+
+        let response = await request
+          .patch('/person-1')
+          .send(patchPersonBody('Paper'))
+          .set('Accept', 'application/vnd.card+json')
+          .set('If-Match', echoEtag);
+
+        assert.strictEqual(
+          response.status,
+          200,
+          `the echo's own validator is accepted: ${response.text}`,
+        );
+        assert.strictEqual(
+          response.body?.data?.attributes?.firstName,
+          'Paper',
+          'and the second edit lands',
+        );
+      });
+
       test('a refused write enqueues no indexing and broadcasts no event', async function (assert) {
         let read = await request
           .get('/person-1')

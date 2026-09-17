@@ -8326,11 +8326,21 @@ export class Realm {
         refuse();
       }
       // Every validator the realm would hand out for this card as it stands,
-      // built by enumerating what the validator builder takes rather than
-      // what it returns — the shape, and the assembly-budget split the `full`
-      // shape carries — so a dimension added there is covered here the day it
-      // ships. Combinations that collapse to one validator are deduplicated
-      // by the set rather than reasoned about. The shapes exist so a client holding one
+      // built by enumerating the builder's own arguments rather than the
+      // spellings they produce — the shape, and the assembly-budget split the
+      // `full` shape carries. Combinations that collapse to one validator are
+      // deduplicated by the set rather than reasoned about, so a further
+      // *enumerable* argument is covered here by adding it to the product.
+      //
+      // It does not cover a *value* folded into a variant, and one is: the
+      // bounded `full` spelling interpolates the assembled-resource budget, so
+      // only the budget this process is running with is built. That is uniform
+      // across a deployment today — the value is read at module load — so it
+      // bites only across a rolling deploy that retunes it, where a validator
+      // issued by an old replica is refused by a new one. If that budget ever
+      // varies per request, the number has to come out of the validator, or
+      // every conditional write starts deciding partly on a server setting,
+      // which is the failure enumerating the arguments is here to avoid. The shapes exist so a client holding one
       // representation is not 304'd to another, which makes them a fact about
       // representations — and this question is about the card. All of them
       // describe the same card at the same `indexed_at`, so refusing over
