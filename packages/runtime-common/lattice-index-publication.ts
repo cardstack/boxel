@@ -345,6 +345,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
       )) as unknown as BoxelIndexTable[]);
     let rowsAt = Date.now();
     let ownerWatches = new Map<string, LatticeWatch[]>();
+    let ownerReadPaths = new Map<string, Record<string, string[]>>();
     let activeOwners = new Set(active.map((row) => row.owner_url as string));
     let retiringOwners = new Set(
       rows
@@ -366,6 +367,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
         manifest
       ) {
         ownerWatches.set(row.url, manifest.watches);
+        if (manifest.readPaths) ownerReadPaths.set(row.url, manifest.readPaths);
       }
     }
     let previousRows = replayPrevious
@@ -405,6 +407,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
       retiringOwners,
       documents,
       nativeQueries,
+      ownerReadPaths,
     );
     if (opts?.envelope) {
       perfLog.debug(

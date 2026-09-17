@@ -58,6 +58,13 @@ export interface LatticeCardComputeResult {
     // Raw freshness-grain results per field (BxlOptions.freshUntil), same
     // value shape; the caller keeps the earliest as the owner's fresh bound.
     fresh?: Record<string, string | null>;
+    // The input paths the programs read, normalized (`players.*.average`,
+    // `season`; `x.*` when an object under `x` was enumerated). A derive
+    // program is pure, so if none of the values it read changed its output
+    // cannot change: the publication uses these to skip re-dirtying this
+    // owner for an input change outside its reads (read-path change
+    // detection). Absent when nothing recorded the reads.
+    reads?: string[];
   }>;
   measurements: LatticeNativeComputeMeasurements;
 }
@@ -180,16 +187,74 @@ export function makeLatticeCardPrerequisitePlan(
   };
 }
 
+// The recorded form of a read: `$.players[3].average` becomes
+// `players.*.average`, so one entry stands for every member of an array.
+function readPath(path: string): string {
+  return path.replace(/^\$\.?/, '').replace(/\[\d+\]/g, '.*');
+}
+
+// A JSON-shaped input (a query field presented whole, a JsonField) admits
+// any key, so it needs no coverage guard, but its reads still have to be
+// seen. Wrap lazily on access: an index read on an array records the
+// member (`x.*`), `length` and the array methods are not reads (a method
+// called on the proxy indexes back through it), enumerating an object
+// records the wildcard, and a property read returns the wrapped child.
+function recordingInputs(
+  value: unknown,
+  path: string,
+  reads: Set<string>,
+): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  const isArray = Array.isArray(value);
+  return new Proxy(value as object, {
+    get(target, key) {
+      if (typeof key !== 'string') return Reflect.get(target, key);
+      if (isArray) {
+        if (!/^\d+$/.test(key)) return Reflect.get(target, key);
+        const child = `${path}[${key}]`;
+        reads.add(readPath(child));
+        return recordingInputs(Reflect.get(target, key), child, reads);
+      }
+      if (key === 'toJSON' && !Object.hasOwn(target, key)) return undefined;
+      const child = `${path}.${key}`;
+      reads.add(readPath(child));
+      const value = Reflect.get(target, key);
+      // A compound value (an object or array) read whole: the search
+      // document does not carry it faithfully, so mark it as a compound
+      // read (`field.*`), which the publication treats as always changed.
+      if (value !== null && typeof value === 'object')
+        reads.add(readPath(`${child}.*`));
+      return recordingInputs(value, child, reads);
+    },
+    ownKeys(target) {
+      // Enumerating an array yields its indexes (membership, which always
+      // invalidates); enumerating an object reads all of it.
+      if (!isArray) reads.add(readPath(`${path}.*`));
+      return Reflect.ownKeys(target);
+    },
+    has(target, key) {
+      if (typeof key === 'string' && !(isArray && !/^\d+$/.test(key)))
+        reads.add(readPath(isArray ? `${path}[${key}]` : `${path}.${key}`));
+      return Reflect.has(target, key);
+    },
+  });
+}
+
 function protectedInputs(
   value: unknown,
   shape: LatticeBxlShape,
   path: string,
   missing: Set<string>,
+  reads?: Set<string>,
 ): unknown {
-  if (value == null || typeof shape === 'string') return value;
+  if (value == null) return value;
+  if (typeof shape === 'string')
+    return shape === 'json' && reads
+      ? recordingInputs(value, path, reads)
+      : value;
   if ('array' in shape) {
     return (value as unknown[]).map((item, i) =>
-      protectedInputs(item, shape.array, `${path}[${i}]`, missing),
+      protectedInputs(item, shape.array, `${path}[${i}]`, missing, reads),
     );
   }
   const target = value as Record<string, unknown>;
@@ -202,6 +267,7 @@ function protectedInputs(
       child,
       `${path}.${key}`,
       missing,
+      reads,
     );
   }
   return new Proxy(target, {
@@ -213,6 +279,8 @@ function protectedInputs(
         missing.add(`${path}.${key}`);
         throw new Error(`Unadmitted computed input: ${path}.${key}`);
       }
+      if (descriptor && typeof key === 'string' && reads)
+        reads.add(readPath(`${path}.${key}`));
       return descriptor;
     },
     get(object, key) {
@@ -223,7 +291,20 @@ function protectedInputs(
         missing.add(`${path}.${key}`);
         throw new Error(`Unadmitted computed input: ${path}.${key}`);
       }
+      if (typeof key === 'string' && reads)
+        reads.add(readPath(`${path}.${key}`));
       return Reflect.get(object, key);
+    },
+    // Enumerating an object (keys, to_entries, emitting it whole) reads all
+    // of it; record the wildcard so the owner stays conservative.
+    ownKeys(object) {
+      reads?.add(readPath(`${path}.*`));
+      return Reflect.ownKeys(object);
+    },
+    has(object, key) {
+      if (typeof key === 'string' && reads)
+        reads.add(readPath(`${path}.${key}`));
+      return Reflect.has(object, key);
     },
   });
 }
@@ -492,10 +573,14 @@ export function prepareLatticeCardCompute(plan: LatticeCardComputePlan) {
     }
     assertLatticeShape(source, plan.input, '$');
     const missing = new Set<string>();
-    const card = protectedInputs(source, plan.input, '$', missing) as Record<
-      string,
-      unknown
-    >;
+    const reads = new Set<string>();
+    const card = protectedInputs(
+      source,
+      plan.input,
+      '$',
+      missing,
+      reads,
+    ) as Record<string, unknown>;
     for (const name of plan.omittedInputs ?? []) {
       Object.defineProperty(card, name, {
         enumerable: true,
@@ -623,6 +708,7 @@ export function prepareLatticeCardCompute(plan: LatticeCardComputePlan) {
       definitionRevision: plan.definition.revision,
       ...(grainResults ? { grains: grainResults } : {}),
       ...(freshResults ? { fresh: freshResults } : {}),
+      reads: [...reads],
       // Trusted base functions can return a protected input reference. Leave
       // read guards inside this worker and send only plain data to publication.
       values: Object.fromEntries(

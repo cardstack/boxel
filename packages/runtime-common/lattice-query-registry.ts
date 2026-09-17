@@ -41,6 +41,35 @@ export interface LatticeWatch {
 
 export interface LatticePreparedWatch extends LatticeWatch {
   terms: Array<{ path: string; value: string }>;
+  // See PublicationReceipt.readPaths.
+  readPaths?: string[];
+}
+
+// Read-path change detection: does a row that stays matched by a watch
+// differ in any field the owner read? Unknown fields count as changed, so a
+// value the search document does not carry keeps the owner conservative.
+export function latticeReadPathsChanged(
+  readPaths: readonly string[],
+  previous: LatticeDocument,
+  next: LatticeDocument,
+): boolean {
+  if (readPaths.includes('*')) return true;
+  const before = previous.search_doc ?? {};
+  const after = next.search_doc ?? {};
+  for (const field of readPaths) {
+    // `field.*`: a compound value read whole; the search document does
+    // not carry it faithfully (a JSON field indexes as null), so it counts
+    // as changed.
+    if (field.endsWith('.*')) return true;
+    if (!Object.hasOwn(before, field) || !Object.hasOwn(after, field))
+      return true;
+    if (
+      JSON.stringify((before as Record<string, unknown>)[field]) !==
+      JSON.stringify((after as Record<string, unknown>)[field])
+    )
+      return true;
+  }
+  return false;
 }
 
 export interface LatticeOwnerPublication {
@@ -100,6 +129,7 @@ export class LatticeQueryRegistry
     retiringOwners: Set<string>,
     documents: LatticeDocument[],
     nativeQueries?: ReadonlyMap<string, LatticeQueryPreparation>,
+    ownerReadPaths?: ReadonlyMap<string, Record<string, string[]>>,
   ) {
     // Routing and exact matching read the same definitions. Share only this
     // pass's resolved definitions across owners and both phases. The next
@@ -107,6 +137,20 @@ export class LatticeQueryRegistry
     let compiler = this.engine.reverseCompilationScope();
     let watches = new Map<string, LatticePreparedWatch[]>();
     let nativeMatchers = new Map<string, Expression>();
+    const withReads = (
+      ownerURL: string,
+      prepared: LatticePreparedWatch[],
+    ): LatticePreparedWatch[] => {
+      const reads = ownerReadPaths?.get(ownerURL);
+      if (!reads) return prepared;
+      return prepared.map((watch) => {
+        const paths = reads[watch.fieldPath];
+        return Array.isArray(paths) &&
+          paths.every((path) => typeof path === 'string')
+          ? { ...watch, readPaths: [...new Set(paths)] }
+          : watch;
+      });
+    };
     for (let [ownerURL, inputs] of ownerWatches) {
       let native = nativeQueries?.get(ownerURL);
       if (native) {
@@ -143,10 +187,16 @@ export class LatticeQueryRegistry
           prepared.set(watch.fieldPath, watch);
         watches.set(
           ownerURL,
-          inputs.map((input) => prepared.get(input.fieldPath)!),
+          withReads(
+            ownerURL,
+            inputs.map((input) => prepared.get(input.fieldPath)!),
+          ),
         );
       } else {
-        watches.set(ownerURL, await this.prepare(inputs, compiler));
+        watches.set(
+          ownerURL,
+          withReads(ownerURL, await this.prepare(inputs, compiler)),
+        );
       }
     }
     let matchers = await this.prepareMatchers(
@@ -418,7 +468,7 @@ export class LatticeQueryRegistry
     for (let watch of owner.watches) {
       await tx([
         `INSERT INTO lattice_query_watches
-         (realm_url, owner_url, field_path, query, routing_tokens) VALUES (`,
+         (realm_url, owner_url, field_path, query, routing_tokens, read_paths) VALUES (`,
         param(realmURL),
         ',',
         param(ownerURL),
@@ -434,6 +484,8 @@ export class LatticeQueryRegistry
             ),
           ]),
         ),
+        ',',
+        param(watch.readPaths ? JSON.stringify(watch.readPaths) : null),
         ')',
       ]);
     }
@@ -467,7 +519,7 @@ export class LatticeQueryRegistry
       }
     }
     let expression: Expression = [
-      `SELECT w.owner_url, w.field_path, w.query
+      `SELECT w.owner_url, w.field_path, w.query, w.read_paths
        FROM lattice_query_watches w WHERE w.realm_url =`,
       param(realmURL),
       'AND',
@@ -484,13 +536,22 @@ export class LatticeQueryRegistry
     let rows = tx
       ? await tx(expression)
       : await query(this.db, expression, { query: 'JSON' });
-    return rows.map((row) => ({
-      ownerURL: row.owner_url as string,
-      fieldPath: row.field_path as string,
-      query: (typeof row.query === 'string'
-        ? JSON.parse(row.query)
-        : row.query) as Query,
-    }));
+    return rows.map((row) => {
+      const readPaths =
+        row.read_paths == null
+          ? undefined
+          : ((typeof row.read_paths === 'string'
+              ? JSON.parse(row.read_paths)
+              : row.read_paths) as string[]);
+      return {
+        ownerURL: row.owner_url as string,
+        fieldPath: row.field_path as string,
+        query: (typeof row.query === 'string'
+          ? JSON.parse(row.query)
+          : row.query) as Query,
+        ...(Array.isArray(readPaths) ? { readPaths } : {}),
+      };
+    });
   }
 
   async affected(
@@ -500,31 +561,67 @@ export class LatticeQueryRegistry
     tx?: Querier,
     matchers?: Map<string, Expression>,
   ): Promise<string[]> {
-    let owners = new Set<string>();
+    // Every watch either document routes to, keyed per watch rather than
+    // per owner: a row that stays matched by a watch dirties the owner only
+    // if the watch has no read paths or one of them changed.
+    type Candidate = {
+      ownerURL: string;
+      filter: Query['filter'];
+      compiled?: Expression;
+      readPaths?: string[];
+    };
+    let watches = new Map<string, Candidate>();
+    // The key travels through a SQL parameter (Postgres text admits no NUL),
+    // so it is a JSON pair rather than a control-separated string.
+    let keyOf = (ownerURL: string, fieldPath: string) =>
+      JSON.stringify([ownerURL, fieldPath]);
     for (let document of [oldDocument, newDocument]) {
       if (!document) continue;
-      let candidates: Parameters<
-        IndexQueryEngine['reverseMatchingCandidates']
-      >[0] = [];
       for (let watch of await this.candidates(realmURL, document, tx)) {
-        if (owners.has(watch.ownerURL)) continue;
+        let key = keyOf(watch.ownerURL, watch.fieldPath);
+        if (watches.has(key)) continue;
         let compiled = matchers?.get(stringify(watch.query.filter) ?? '');
         if (matchers && !compiled) {
           throw new Error(
             'Lattice watch changed after publication preparation',
           );
         }
-        candidates.push({
+        watches.set(key, {
           ownerURL: watch.ownerURL,
           filter: watch.query.filter,
           compiled,
+          readPaths: watch.readPaths,
         });
       }
-      for (let owner of await this.engine.reverseMatchingCandidates(
-        candidates,
-        document,
-      ))
-        owners.add(owner);
+    }
+    let matchedBy = async (document: LatticeDocument | undefined) =>
+      new Set(
+        document
+          ? await this.engine.reverseMatchingCandidates(
+              [...watches].map(([key, watch]) => ({
+                ownerURL: key,
+                filter: watch.filter,
+                compiled: watch.compiled,
+              })),
+              document,
+            )
+          : [],
+      );
+    let before = await matchedBy(oldDocument);
+    let after = await matchedBy(newDocument);
+    let owners = new Set<string>();
+    for (let [key, watch] of watches) {
+      let was = before.has(key);
+      let is = after.has(key);
+      if (!was && !is) continue;
+      if (
+        was &&
+        is &&
+        watch.readPaths &&
+        !latticeReadPathsChanged(watch.readPaths, oldDocument!, newDocument!)
+      )
+        continue;
+      owners.add(watch.ownerURL);
     }
     return [...owners].sort();
   }

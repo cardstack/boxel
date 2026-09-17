@@ -265,6 +265,43 @@ export function createLatticeNativeCardIndexer({
           state: 'pending',
           validatedThrough: request.inputSnapshot?.generation ?? 0,
           ...(result.freshUntil ? { freshUntil: result.freshUntil } : {}),
+          ...(result.readPaths && dataReceipt && !discovery
+            ? {
+                readPaths: Object.fromEntries([
+                  ...dataReceipt.watches.flatMap((watch) =>
+                    result.readPaths![watch.fieldPath]
+                      ? [[watch.fieldPath, result.readPaths![watch.fieldPath]]]
+                      : [],
+                  ),
+                  // The identity watch covers the cards read through queries
+                  // and declared links: the union of those roots' reads (a
+                  // `*` in any of them keeps it conservative). The owner's
+                  // own attribute roots (cardInfo, ...) are not input cards.
+                  ...(dataReceipt.identities.length
+                    ? [
+                        [
+                          '@lattice/inputs',
+                          [
+                            ...new Set(
+                              [
+                                ...dataReceipt.watches.map(
+                                  (watch) => watch.fieldPath,
+                                ),
+                                ...Object.keys(
+                                  admission.root.definition.nativeLinkInputs ??
+                                    {},
+                                ),
+                              ].flatMap(
+                                (root) => result.readPaths![root] ?? ['*'],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ]
+                    : []),
+                ]),
+              }
+            : {}),
           computedFields: Object.entries(admission.root.definition.fields)
             .filter(([name, key]) => {
               const field = admission.root.definition.fieldDefs[key];

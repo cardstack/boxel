@@ -28,6 +28,9 @@ exports.up = (pgm) => {
       field_path varchar NOT NULL,
       query jsonb NOT NULL,
       routing_tokens jsonb NOT NULL DEFAULT '${JSON.stringify([JSON.stringify(['', ''])])}'::jsonb,
+      -- Read-path change detection: the fields of a matching row the owner
+      -- read (PublicationReceipt.readPaths); NULL invalidates on any change.
+      read_paths jsonb,
       PRIMARY KEY (realm_url, owner_url, field_path)
     );
     -- jsonb_ops supports the any-token ?| lookup; jsonb_path_ops does not.

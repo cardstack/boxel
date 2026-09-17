@@ -549,6 +549,43 @@ export async function assembleLatticeCardData({
   for (const instant of freshInstants) {
     if (freshUntil === null || instant < freshUntil) freshUntil = instant;
   }
+  // Per input root, the fields of an input card the root programs read:
+  // `players.*.average` contributes `average` to `players`; enumerating a
+  // member (`players.*`) or reading past what the search document holds
+  // contributes `*`, which disables the filter for that root. A root read
+  // only as a whole (`.players | length`) contributes nothing: membership
+  // changes always invalidate, member field changes never need to.
+  let readPaths: Record<string, string[]> | undefined;
+  if (plan && computed?.artifacts[0].reads) {
+    readPaths = {};
+    const compound = new Map<string, Set<string>>();
+    for (const root of Object.keys(plan.input.object)) {
+      readPaths[root] = [];
+      compound.set(root, new Set());
+    }
+    for (const read of computed.artifacts[0].reads) {
+      const parts = read.split('.');
+      const [root, second] = parts;
+      if (!root || !Object.hasOwn(readPaths, root)) continue;
+      // A `*` second segment is an index read (a query field is presented
+      // as one JSON value, so its shape does not say it is an array):
+      // `games.*.winner` reads a member's field, `games.*` is the member
+      // itself, `games.*.*` enumerated it. Otherwise the root is an object:
+      // `cardInfo.theme` reads a field, `cardInfo.*` all of them. A read
+      // that goes deeper than the field (`games.*.lines.*.pa`, or the
+      // compound marker `games.*.lines.*`) is a compound read: the search
+      // document cannot compare it, so it is recorded as `lines.*`.
+      const depth = second === '*' ? 3 : 2;
+      const field = parts[depth - 1];
+      if (field === undefined) continue;
+      if (!readPaths[root].includes(field)) readPaths[root].push(field);
+      if (parts.length > depth) compound.get(root)!.add(field);
+    }
+    for (const [root, fields] of compound)
+      readPaths[root] = readPaths[root].map((field) =>
+        fields.has(field) && field !== '*' ? `${field}.*` : field,
+      );
+  }
 
   function output(current: DataNode, prefix = '') {
     const attributes: Record<string, any> = {};
@@ -676,6 +713,7 @@ export async function assembleLatticeCardData({
     searchDoc: result.search,
     validUntil,
     freshUntil,
+    readPaths,
     sourceRevision,
     definitionRevisions: [...snapshots.values()].map(
       ({ definition, revision }) => ({ codeRef: definition.codeRef, revision }),

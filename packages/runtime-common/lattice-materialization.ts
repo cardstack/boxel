@@ -24,6 +24,13 @@ export interface PublicationReceipt {
   // producer that evaluates grains (the native worker) supplies it; the
   // browser, which recomputes live, does not.
   freshUntil?: string;
+  // Per watch field path, the fields of a matching input card the owner's
+  // programs read (read-path change detection). A watch without an entry
+  // invalidates on any change of a matching row; with one, only when a row
+  // enters or leaves the match or one of these fields changes. Kept beside
+  // `watches`, not on them, so the prepared native queries still equal the
+  // manifest. Only a producer that records reads (the native worker) sets it.
+  readPaths?: Record<string, string[]>;
   // Inventory for a complete applied body, never authorization or freshness.
   have?: string;
   definitionRevision?: string;
