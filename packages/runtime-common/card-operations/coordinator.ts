@@ -389,8 +389,7 @@ export async function commitBatch(
       // for `commit` is the work around them: assembling one file list out of
       // what the entries staged, and reporting what landed. A core that stamps
       // nothing — a caller standing in for the realm — leaves the whole commit
-      // here, which is what `commit` meant before the stages inside it were
-      // separable.
+      // here.
       let cursor = timings?.cursor();
       try {
         return await commitStaged(
@@ -1325,6 +1324,12 @@ async function commitStaged(
     }
   }
   let deletes = [...deleted];
+  // The file list is assembled, so the window that closes here is that
+  // assembly and the refusals above it. Closed before the realm is reached
+  // rather than left to the cursor's next mark, which is the realm's own
+  // first stage — synchronous in-memory work reported as a wait for indexing
+  // would be the exact confusion these stages exist to remove.
+  stageCursor?.mark('commit');
   let committed = await core.commitUnlocked(
     { writes, appends, deletes },
     {

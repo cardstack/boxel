@@ -2185,9 +2185,13 @@ module(basename(import.meta.filename), function () {
 
       assert.ok(reported, 'the commit is handed somewhere to stamp its stages');
       let stages = timings.stages();
+      // `commit` is reached twice — once for the file list assembled before
+      // the realm is called, once for the residual after it answers — so it
+      // takes its place at the first of the two and the realm's own stages
+      // follow it.
       assert.deepEqual(
         Object.keys(stages),
-        ['lock', 'drain', 'stage', 'persist', 'commit'],
+        ['lock', 'drain', 'stage', 'commit', 'persist'],
         'and the timeline reads in the order the write passed through them',
       );
     });

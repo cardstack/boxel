@@ -2494,9 +2494,9 @@ export class Realm {
       onInvalidation: async (invalidatedURLs: URL[], meta) => {
         // Reached the moment the worker's job resolves, so the window that
         // closes here is the wait for it — queue time plus the pass itself.
-        // A pass that fails never reaches this, and leaves the wait folded
-        // into the stage the caller marks next; the line still carries the
-        // failure, which is what says the number means something else.
+        // A pass that fails never reaches this, so its wait stays in the
+        // residual rather than being reported as a wait that completed. The
+        // line's `status` is what tells those apart.
         stageCursor?.mark('awaitIndex');
         // Drop the searchCards in-flight map: the worker's batch.done()
         // swap landed in this realm's boxel_index, so any pending
@@ -3423,6 +3423,11 @@ export class Realm {
       // modules the instances depend on and only flush when an instance
       // depends on a module that is part of this operation.
       if (lastWriteType === 'module' && currentWriteType === 'instance') {
+        // The bytes written so far belong to this batch's durable write, not
+        // to the index pass about to run. Closed here so each pass's files
+        // are reported ahead of the queue insert that follows them, the same
+        // order the single-pass case reports them in.
+        stageCursor?.mark('persist');
         await performIndex(asUpdates(urls), { deferPrerenderHtml: true });
         urls = [];
       }
@@ -8367,11 +8372,20 @@ export class Realm {
   // stamped no stage, and a line for it would say only how long it took to
   // say no. Those are skipped, so every line on this channel describes a
   // request that tried to write.
+  //
+  // `status` is the answer the write gave: the response's own code, or
+  // `failed` where it threw instead of answering. A write that did not finish
+  // leaves the stage it was in unclosed, and its elapsed time lands in the
+  // residual rather than in the stage that was running — which is the honest
+  // reading, since a `persist` that threw partway is not a persist. That only
+  // works if the line says the write did not succeed, so this is what makes
+  // the residual legible rather than misleading.
   #emitWriteTiming(
     method: string,
     request: Request,
     startedAt: number,
     timings: RequestTimings,
+    status: string,
   ): void {
     let stages = timings.toLogFragment();
     if (!stages) {
@@ -8383,6 +8397,7 @@ export class Realm {
     emitWriteTiming(
       `${method} ${request.url}` +
         (correlationId ? ` corr=${correlationId}` : '') +
+        ` status=${status}` +
         ` handler=${Date.now() - startedAt}ms ` +
         stages,
     );
@@ -8394,10 +8409,15 @@ export class Realm {
   ): Promise<Response> {
     let timings = new RequestTimings();
     let startedAt = Date.now();
+    // Set from the response, so a refusal the handler answers with is reported
+    // as the code it sent; left as `failed` when it threw and sent nothing.
+    let status = 'failed';
     try {
-      return await this.#createCard(request, requestContext, timings);
+      let response = await this.#createCard(request, requestContext, timings);
+      status = String(response.status);
+      return response;
     } finally {
-      this.#emitWriteTiming('POST', request, startedAt, timings);
+      this.#emitWriteTiming('POST', request, startedAt, timings, status);
     }
   }
 
@@ -8598,10 +8618,19 @@ export class Realm {
   ): Promise<Response> {
     let timings = new RequestTimings();
     let startedAt = Date.now();
+    // Set from the response, so a refusal the handler answers with is reported
+    // as the code it sent; left as `failed` when it threw and sent nothing.
+    let status = 'failed';
     try {
-      return await this.#patchCardInstance(request, requestContext, timings);
+      let response = await this.#patchCardInstance(
+        request,
+        requestContext,
+        timings,
+      );
+      status = String(response.status);
+      return response;
     } finally {
-      this.#emitWriteTiming('PATCH', request, startedAt, timings);
+      this.#emitWriteTiming('PATCH', request, startedAt, timings, status);
     }
   }
 
@@ -8781,19 +8810,27 @@ export class Realm {
           id: instanceURL,
         });
       }
-      doc = await this.serializedInstanceEcho(
-        stored,
-        instanceURL,
-        lastModified,
-      );
-      this.#serveInstanceIdsAsRRI(doc);
+      // Timed as `stringify`, the stage the indexed answer reports for the
+      // same work — building the response document and serializing it. The
+      // echo reaches for the realm's info to build it, which on a cold cache
+      // parses the realm's own file, so leaving it outside the stages would
+      // put a read of unbounded cost after the last one this line reports.
+      let echo = await timings.time('stringify', async () => {
+        let built = await this.serializedInstanceEcho(
+          stored,
+          instanceURL,
+          lastModified,
+        );
+        this.#serveInstanceIdsAsRRI(built);
+        return { doc: built, body: JSON.stringify(built, null, 2) };
+      });
       return createResponse({
-        body: JSON.stringify(doc, null, 2),
+        body: echo.body,
         init: {
           headers: {
             'content-type': SupportedMimeType.CardJson,
             'cache-control': this.cardJsonCacheControl(requestContext),
-            ...lastModifiedHeader(doc),
+            ...lastModifiedHeader(echo.doc),
             ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
           },
         },

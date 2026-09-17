@@ -55,7 +55,9 @@ function parseSearchQuery(searchURL: URL) {
   return parse(searchURL.searchParams.toString()) as Record<string, any>;
 }
 
-// The `handler=` total a `realm:write-timing` line reports, in ms.
+// The `handler=` total a `realm:write-timing` line reports, in ms. The line
+// also carries `status`, which sits ahead of it and is read separately — it is
+// the answer the write gave, not a duration.
 function handlerMs(line: string): number | undefined {
   let match = /\bhandler=(\d+)ms\b/.exec(line);
   return match ? Number(match[1]) : undefined;
@@ -63,9 +65,14 @@ function handlerMs(line: string): number | undefined {
 
 // The stages a `realm:write-timing` line attributes the handler across, keyed
 // by stage name. Read from after the `handler=` total so the total itself is
-// not counted as one of them.
+// not counted as one of them, and only as far as the first ` | `: a timeline
+// can carry a busy-time section and a counter section after that, and both are
+// `name=<int>` pairs that are not wall-clock. Collecting those would make the
+// sum exceed the handler while nothing overlapped at all, which is the one
+// thing that guard is supposed to mean.
 function stageMs(line: string): Record<string, number> {
-  let tail = line.slice(line.search(/\bhandler=\d+ms\b/));
+  let wallClock = line.split(' | ')[0];
+  let tail = wallClock.slice(wallClock.search(/\bhandler=\d+ms\b/));
   let stages: Record<string, number> = {};
   for (let [, stage, ms] of tail.matchAll(/\b([a-zA-Z]+)=(\d+)(?!ms)\b/g)) {
     stages[stage] = Number(ms);
@@ -3362,6 +3369,10 @@ module(basename(import.meta.filename), function () {
               `line attributes the ${stage} stage: ${line}`,
             );
           }
+          assert.ok(
+            / status=200 /.test(line),
+            `line reports the answer the write gave: ${line}`,
+          );
           let handler = handlerMs(line);
           assert.notStrictEqual(
             handler,
@@ -3425,6 +3436,26 @@ module(basename(import.meta.filename), function () {
           assert.notOk(
             'awaitIndex' in stages,
             `but reports no wait for a worker to run it: ${line}`,
+          );
+          // This write's answer is built from the document the commit stored
+          // rather than read back out of the index, and building it reaches
+          // for the realm's info. Without a stage over that, the work would
+          // sit after the last stage the line reports, and the timeline would
+          // end before the handler did.
+          assert.ok(
+            'stringify' in stages,
+            `and still reports building its answer: ${line}`,
+          );
+          let handler = handlerMs(line);
+          assert.notStrictEqual(
+            handler,
+            undefined,
+            `line reports the whole handler: ${line}`,
+          );
+          let total = Object.values(stages).reduce((sum, ms) => sum + ms, 0);
+          assert.ok(
+            total <= handler!,
+            `the stages sum to no more than the handler (${total} <= ${handler}): ${line}`,
           );
         });
 
