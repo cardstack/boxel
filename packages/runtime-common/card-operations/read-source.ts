@@ -29,8 +29,8 @@ import type { OperationCore, RunOperationOptions } from './dispatch.ts';
 //     and this executor asks for none.
 //
 //   * It touches the index not at all. There is no row to peek and no
-//     generation to join on, so it costs one file open and one file-meta row
-//     — never a search read. That is also why it can answer for a path the
+//     generation to join on, so it costs one file open and — unless the
+//     caller declines it — one file-meta row, never a search read. That is also why it can answer for a path the
 //     index has no row for, and for one it never will. Where the realm has no
 //     recorded hash it reads the file to fingerprint it, in ranges bounded by
 //     the fingerprint's own shape: min(size, `CONTENT_HASH_WHOLE_LIMIT_BYTES`)
@@ -132,12 +132,20 @@ export async function readSourceOperation(
   // The handle goes with the request, not just its path: the realm checks its
   // recorded hash against this handle's size, and reads bounded ranges of this
   // handle where it has to fingerprint the file itself.
-  let meta = await core.storedFileMeta(servedPath, file);
+  //
+  // A caller that reads neither of the two values this produces declines it,
+  // and then the read touches no database connection at all — which is a
+  // requirement rather than a saving for a caller holding one pinned.
+  let meta = opts.skipStoredFileMeta
+    ? undefined
+    : await core.storedFileMeta(servedPath, file, {
+        skipContentFingerprint: opts.skipContentFingerprint,
+      });
   let result: OperationSourceResult = {
     contentType: inferContentType(servedPath),
     lastModified: file.lastModified,
-    created: meta.createdAt ?? null,
-    version: meta.version ?? null,
+    created: meta?.createdAt ?? null,
+    version: meta?.version ?? null,
     size: file.size ?? null,
   };
   if (opts.headersOnly) {
@@ -145,5 +153,19 @@ export async function readSourceOperation(
   }
   // The first and only touch of `content`, which is where a streaming adapter
   // opens its stream.
-  return { ...result, body: file.content };
+  // `body` carries the adapter's laziness out with it rather than resolving
+  // `content` here. The adapter opens a real stream on first touch, and a
+  // facade that asked for the bytes does not always end up sending them: a
+  // conditional request whose validator still matches answers 304, and a
+  // ranged one reads its slice from the handle instead. Resolving `content`
+  // for those would open a stream nothing goes on to consume — the same
+  // stranding the headers-only mode exists to avoid, reintroduced on the mode
+  // that does read bytes. A caller that sends the body touches this once and
+  // gets exactly what the other mode never opened.
+  return {
+    ...result,
+    get body() {
+      return file.content;
+    },
+  };
 }

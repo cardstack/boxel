@@ -213,15 +213,30 @@ export interface UpdateEntry extends EntryCommon {
   // one member rather than a text one and a binary one.
   content?: string | Uint8Array;
   // Replace the bytes stored at the target verbatim, whatever they are — the
-  // one way an update reaches a module's source or a card's stored `.json`.
+  // one way an update reaches a module's source, a card's stored `.json`, or a
+  // path that holds nothing yet.
   //
-  // It exists for the `card+source` `POST`, which writes exactly those and has
-  // to keep doing so once it dispatches through this operation. Nothing on the
-  // envelope path sets it: through the envelope an update on a card is the
-  // JSON:API merge above, and one on a module is refused — a client that could
-  // ask for a verbatim replacement of a card's source could write bytes that
-  // are no longer a card and leave the realm to find out at index time.
+  // It exists for the realm's two file-write routes, the `card+source` `POST`
+  // and the binary upload, which put the bytes they are given at the path they
+  // are given and have to keep doing so once they dispatch through this
+  // operation. Nothing on the envelope path sets it: through the envelope an
+  // update on a card is the JSON:API merge above, and one on a module is
+  // refused — a client that could ask for a verbatim replacement of a card's
+  // source could write bytes that are no longer a card and leave the realm to
+  // find out at index time.
   rawSource?: true;
+  // Stage the serialized merge even when the patch changes nothing, instead
+  // of leaving the file exactly as it is. What that buys is a rewrite in
+  // canonical serialized form for a card stored in any other form, and a
+  // rewrite is what puts the card in front of the indexer again.
+  //
+  // It is how a caller that has looked for the card in the index and not
+  // found it asks for that: the card+json `PATCH` sets it when the row it
+  // reads back is missing or an error, which is why patching a card the index
+  // has never seen stores it and indexes it rather than reporting that it
+  // cannot be read. Nothing on the envelope path sets it — a batch reports
+  // the version a card holds and never reads the row that would justify it.
+  reserialize?: true;
 }
 
 // Add one line to the end of a text file, without reading what is already
@@ -349,9 +364,12 @@ export interface StagingContext {
   paths: RealmPaths;
   lids: LidIndex;
   // The local ids a side-load claimed for another realm. They name no card
-  // this batch writes, so a link to one is refused — this is what tells that
-  // refusal apart from a link to an id nobody sent.
+  // this batch writes, so a link to one resolves to nothing — this is what
+  // tells that from a link to an id nobody sent.
   foreignLids: ReadonlySet<string>;
+  // What such a link means, which is the caller's to say: see
+  // `CommitBatchOptions.foreignSideLoadLink`. Absent reads as `refuse`.
+  foreignSideLoadLink?: 'refuse' | 'leave';
   // Every target's stored file, keyed by local path, read inside the write
   // lock before any executor runs.
   stored: ReadonlyMap<LocalPath, StoredFile>;
@@ -681,11 +699,10 @@ export async function stageUpdate(
     });
   }
   let included = includedResources(entry.document);
-  // What follows — down to the bytes this stages — is the merge
-  // `patchCardInstance` applies, stated here so an entry merges the way the
-  // endpoint does, and pinned byte for byte by a test that patches one
-  // document through both. The two move together until the endpoint
-  // dispatches through this.
+  // What follows — down to the bytes this stages — is the merge a card's
+  // `PATCH` applies. It is the only copy of it: the endpoint dispatches
+  // through here, so a patch sent over HTTP and one sent as a batch entry
+  // land the same bytes because they are the same code.
   //
   // Realm-managed keys never come from a patch: `realmInfo` and `realmURL` are
   // stamped by the realm serving the card, `screenshots` is joined from the
@@ -725,24 +742,26 @@ export async function stageUpdate(
   }
 
   let writes: StagedWrite[] = [];
-  if (included.length === 0 && isEqual(primary, original)) {
+  if (
+    included.length === 0 &&
+    !entry.reserialize &&
+    isEqual(primary, original)
+  ) {
     // The patch makes no semantic change and side-loads nothing, so the file
     // is left exactly as it is — staging the bytes it already holds is what
     // says so. The commit finds them unchanged, writes nothing, leaves the
     // modification time alone, and queues nothing for indexing, while the
     // entry's result still reports the version the file holds.
     //
-    // Unconditional, which means a batch does not repair a card sitting on an
-    // error row the way an empty `PATCH` does: that handler takes its short
-    // circuit only when the index holds a healthy entry, and otherwise
-    // rewrites the card to get it re-indexed. Reproducing that here would mean
-    // deciding what to stage from the index row of the very card being
-    // changed, which no executor reads — the index is downstream of the file
-    // and can lag it, which is the whole reason the merge base is the bytes.
-    // (A type's definition is a different read: it describes the type rather
-    // than the card, and is what serialization needs to resolve fields at
-    // all.) Repairing an error row stays with the path that has the card's
-    // row in hand.
+    // Taken unless the caller asked for the merge to be staged regardless. A
+    // batch cannot decide on its own that an unchanged card wants indexing
+    // again, because that would mean reading the index row of the very card
+    // being changed, which no executor reads — the index is downstream of the
+    // file and can lag it, which is the whole reason the merge base is the
+    // bytes. (A type's definition is a different read: it describes the type
+    // rather than the card, and is what serialization needs to resolve fields
+    // at all.) So that judgment stays with the caller holding the row, and
+    // `reserialize` is what it asks with.
     writes.push({ path: sourcePath, content: stored.content });
   } else {
     // The id lives in the file's name, not in its contents.
@@ -796,9 +815,10 @@ export async function stageUpdate(
 // because a caller replacing either wholesale through the operations envelope
 // would be writing bytes the realm serves as code or as a card while saying it
 // was changing a file — a card's update is the JSON:API merge, and a module's
-// source has no update at all. `rawSource` is how the one caller that must
-// reach them says so: the `card+source` `POST`, which writes exactly those
-// today and keeps writing them once it dispatches through here.
+// source has no update at all. `rawSource` is how the callers that must reach
+// them say so: the realm's two file-write routes, the `card+source` `POST` and
+// the binary upload, which write exactly those today and keep writing them
+// once they dispatch through here.
 async function stageFileUpdate(
   entry: UpdateEntry,
   content: string | Uint8Array,
@@ -864,10 +884,10 @@ async function stageFileUpdate(
     }
   }
   if (!meta && !entry.rawSource) {
-    // Creating a file is not an operation — the realm's upload routes own
+    // Creating a file is not an operation — the realm's write routes own
     // that — so an update has a file to replace or it has nothing to do. A
-    // verbatim source replacement is the exception, since the endpoint it
-    // stands in for creates the file it writes.
+    // verbatim replacement is the exception, since the routes it stands in
+    // for create the files they write.
     throw new OperationFailure({
       id: url.href,
       status: 404,
@@ -1996,6 +2016,15 @@ function promoteStagedLinks(resource: CardResource, ctx: StagingContext): void {
   // resource's own, so setting a link here sets it on the document.
   let normalized = normalizeRelationships(resource.relationships);
   let setSelfLink = (relationship: Relationship, lid: string) => {
+    if (ctx.foreignSideLoadLink === 'leave' && ctx.foreignLids.has(lid)) {
+      // This caller asked for the link to be left as it was authored. There
+      // is no card for the edge to point at — the side-load claims another
+      // realm, so the batch does not write it — and serialization records a
+      // link it cannot resolve as an explicit null. The card is stored saying
+      // the edge is empty, rather than saying it points at a URL nothing is
+      // stored under.
+      return;
+    }
     relationship.links = { self: stagedLid(lid, ctx).id };
   };
   for (let [fieldName, relationship] of Object.entries(normalized)) {
@@ -2010,13 +2039,10 @@ function promoteStagedLinks(resource: CardResource, ctx: StagingContext): void {
         // serialization. A local id written inside a single `data` array has
         // no key of its own to carry a link, so it is refused: staging it
         // would store the collection with the edge missing and say nothing,
-        // which is the one outcome worse than a refusal for the mechanism
-        // the whole batch exists to provide. `promoteLocalIdsToRemoteIds`,
-        // which the `POST` and `PATCH` handlers link through, takes the
-        // second course for the same payload — it finds no per-member key,
-        // records nothing, and reports success — so a document written this
-        // way is answered differently depending on which surface it arrives
-        // at until those handlers dispatch through here.
+        // which is the one outcome worse than a refusal for the mechanism the
+        // whole batch exists to provide. The card endpoints answer this
+        // payload the same way, since they dispatch through here — where they
+        // once recorded nothing and reported success.
         let indexed = normalized[`${fieldName}.${index}`];
         if (!indexed) {
           throw new OperationFailure({
