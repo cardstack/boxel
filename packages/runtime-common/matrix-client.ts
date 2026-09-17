@@ -526,12 +526,25 @@ export async function waitForMatrixMessage(
 }
 
 export function userIdFromUsername(username: string, matrixURL: string) {
-  let hostname = new URL(matrixURL).hostname;
+  let matrix = new URL(matrixURL);
+  let hostname = matrix.hostname;
+  let env = typeof process !== 'undefined' ? (process.env ?? {}) : {};
+  // A homeserver's identity can differ from its transport hostname. Scope the
+  // configured identity to its own endpoint; never apply it to federated peers.
+  let configuredServerName =
+    env.MATRIX_SERVER_NAME &&
+    env.MATRIX_URL &&
+    URL.canParse(env.MATRIX_URL) &&
+    new URL(env.MATRIX_URL).origin === matrix.origin
+      ? env.MATRIX_SERVER_NAME
+      : undefined;
   // For *.localhost subdomains (environment mode), the Matrix server_name is
   // always "localhost" — the subdomains are just Traefik routing labels.
-  let host = hostname.endsWith('.localhost')
-    ? 'localhost'
-    : hostname.split('.').slice(-2).join('.');
+  let host =
+    configuredServerName ??
+    (hostname.endsWith('.localhost')
+      ? 'localhost'
+      : hostname.split('.').slice(-2).join('.'));
   return `@${username}:${host}`;
 }
 
