@@ -53,12 +53,12 @@ export class WorkLoop {
     this.waker.fulfill();
   }
 
-  async sleep() {
+  async sleep(delayMs = this.pollInterval) {
     if (this.shuttingDown) {
       return;
     }
     let timerPromise = new Promise((resolve) => {
-      this.timeout = setTimeout(resolve, this.pollInterval).unref();
+      this.timeout = setTimeout(resolve, delayMs).unref();
     });
     log.debug(`[workloop %s] entering promise race`, this.label);
     await Promise.race([this.waker.promise, timerPromise]);

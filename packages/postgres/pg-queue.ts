@@ -1,3 +1,4 @@
+import { latticeDemandFor } from '@cardstack/runtime-common/lattice-demand';
 import './instrument.ts';
 import {
   type QueuePublisher,
@@ -463,6 +464,7 @@ export class PgQueueRunner implements QueueRunner {
   #pollInterval = 10000;
   #handlers: Map<string, Function> = new Map();
   #jobRunner: WorkLoop | undefined;
+  #nextWakeMs = 10000;
   #priority: number;
   readonly #latticeRealms: readonly string[];
 
@@ -504,6 +506,8 @@ export class PgQueueRunner implements QueueRunner {
 
   async start() {
     if (!this.#jobRunner && !this.#isDestroyed) {
+      if (this.#latticeRealms.length)
+        await latticeDemandFor(this.#pgClient).listen();
       this.#jobRunner = new WorkLoop('jobRunner', this.#pollInterval);
       this.#jobRunner.run(async (loop) => {
         // Permission PATCHes already broadcast on realm_index_updated.
@@ -523,8 +527,9 @@ export class PgQueueRunner implements QueueRunner {
             loop.wake.bind(loop),
             async () => {
               while (!loop.shuttingDown) {
+                this.#nextWakeMs = this.#pollInterval;
                 await this.processJobs(loop);
-                await loop.sleep();
+                await loop.sleep(this.#nextWakeMs);
               }
             },
           );
@@ -634,6 +639,29 @@ export class PgQueueRunner implements QueueRunner {
           if (jobs.length === 0) {
             log.debug(`%s: found no work`, this.#workerId);
             await query(['ROLLBACK']);
+            if (
+              this.#latticeRealms.length &&
+              this.#handlers.has('incremental-index')
+            ) {
+              const [next] = await query([
+                `SELECT extract(epoch FROM (min(created_at + interval '5 seconds') - clock_timestamp())) * 1000 AS delay
+                 FROM jobs WHERE status='unfulfilled' AND job_type='incremental-index'
+                   AND priority >=`,
+                param(this.#priority),
+                `AND args->>'realmURL' IN (`,
+                ...this.#latticeRealms.flatMap((realm, i) =>
+                  i === 0 ? [param(realm)] : [',', param(realm)],
+                ),
+                `) AND args->'latticeBatch'->>'atomic'='false'
+                   AND args->'latticeBatch'->>'immediate' IS DISTINCT FROM 'true'
+                   AND created_at + interval '5 seconds' > clock_timestamp()`,
+              ]);
+              if (next?.delay != null)
+                this.#nextWakeMs = Math.max(
+                  1,
+                  Math.min(this.#pollInterval, Math.ceil(Number(next.delay))),
+                );
+            }
             return;
           }
           let jobToRun = jobs[0];
@@ -959,7 +987,11 @@ export class PgQueueRunner implements QueueRunner {
         i === 0 ? [param(realm)] : [',', param(realm)],
       ),
       `) THEN (
-        (j.job_type <> 'lattice-materialize' OR NOT EXISTS (
+        (j.job_type <> 'incremental-index'
+          OR j.args->'latticeBatch'->>'atomic' IS DISTINCT FROM 'false'
+          OR j.args->'latticeBatch'->>'immediate' = 'true'
+          OR j.created_at + interval '5 seconds' <= clock_timestamp())
+        AND (j.job_type <> 'lattice-materialize' OR NOT EXISTS (
           SELECT 1 FROM jobs source
           WHERE source.concurrency_group = j.concurrency_group
             AND source.status = 'unfulfilled'
@@ -975,7 +1007,8 @@ export class PgQueueRunner implements QueueRunner {
   // Under a source backlog a wave the eligibility hint lets through (overdue
   // owners) takes its turn ahead of the queued index jobs when the group's
   // last finished job was not a wave; otherwise the claim stays FIFO, which
-  // lets the older index jobs go first. See `latticeWaveTurnSQL`.
+  // lets immediate writers go first, then FIFO. An immediate stream must not
+  // consume an overdue wave's reserved turn. See `latticeWaveTurnSQL`.
   private latticeClaimOrder(): Expression {
     if (this.#latticeRealms.length === 0) return [];
     return [
@@ -983,7 +1016,11 @@ export class PgQueueRunner implements QueueRunner {
       ...this.#latticeRealms.flatMap((realm, i) =>
         i === 0 ? [param(realm)] : [',', param(realm)],
       ),
-      `) AND ${latticeOverdueWorkSQL} AND ${latticeWaveTurnSQL} THEN 0 ELSE 1 END,`,
+      `) AND ${latticeOverdueWorkSQL} AND ${latticeWaveTurnSQL} THEN 0 WHEN j.args->'latticeBatch'->>'immediate' = 'true' AND j.args->>'realmURL' IN (`,
+      ...this.#latticeRealms.flatMap((realm, i) =>
+        i === 0 ? [param(realm)] : [',', param(realm)],
+      ),
+      `) THEN 1 ELSE 2 END,`,
     ];
   }
 

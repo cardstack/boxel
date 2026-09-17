@@ -1,3 +1,4 @@
+import { latticeDemandFor } from '@cardstack/runtime-common/lattice-demand';
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import { captureLatticeInputArtifacts } from '@cardstack/runtime-common/lattice-input-artifacts';
 import QUnit from 'qunit';
@@ -334,13 +335,14 @@ module('lattice-input-batch-test.ts | inputs', function (hooks) {
       .set('Access-Control-Request-Method', 'GET')
       .set(
         'Access-Control-Request-Headers',
-        'x-boxel-lattice-have, authorization',
+        'x-boxel-lattice-have, x-boxel-lattice-priority, authorization',
       );
     assert.strictEqual(response.status, 204);
     let allowed = (response.headers['access-control-allow-headers'] ?? '')
       .toLowerCase()
       .split(/,\s*/);
     assert.true(allowed.includes('x-boxel-lattice-have'));
+    assert.true(allowed.includes('x-boxel-lattice-priority'));
     assert.true(allowed.includes('authorization'));
   });
 
@@ -501,6 +503,44 @@ module('lattice-input-batch-test.ts | inputs', function (hooks) {
       'missing artifact falls back to a body',
     );
     assert.strictEqual(missingArtifact.data.meta.publication!.have, undefined);
+  });
+
+  test('only successful foreground display reads register demand', async (assert) => {
+    const { url } = await seedDisplayPublication();
+    const demand = latticeDemandFor(db).cache;
+    const body = JSON.stringify({
+      version: 1,
+      session: 'demand',
+      epoch: 1,
+      required: [url, realm.url + 'missing'],
+      have: [],
+    });
+    await fetch(realm.url + '_lattice-read', {
+      method: 'QUERY',
+      headers: {
+        Accept: SupportedMimeType.CardJson,
+        'x-boxel-during-prerender': 'true',
+      },
+      body,
+    });
+    assert.strictEqual(
+      demand.priorities(realm.url).size,
+      0,
+      'internal reads create no viewer interest',
+    );
+    await fetch(realm.url + '_lattice-read', {
+      method: 'QUERY',
+      headers: {
+        Accept: SupportedMimeType.CardJson,
+        'x-boxel-lattice-priority': 'immediate',
+      },
+      body,
+    });
+    assert.deepEqual(
+      [...demand.priorities(realm.url)],
+      [[url + '.json', 2]],
+      'only the existing authorized owner is promoted',
+    );
   });
 
   test('Lattice display batches return exact required coverage and preserve stored bodies', async (assert) => {

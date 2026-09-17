@@ -26,6 +26,11 @@ export interface DBAdapter {
   // the caller must treat it as fire-and-forget cache-coherency, never as
   // delivery-guaranteed messaging.
   notify: (channel: string, payload: string) => Promise<void>;
+  // Optional advisory notifications. A missed hint cannot carry correctness.
+  subscribe?: (
+    channel: string,
+    handler: (notification: { payload?: string }) => void,
+  ) => Promise<{ unsubscribe(): Promise<void> }>;
   // Per-realm write-lock primitive. PgAdapter implements with
   // `pg_advisory_xact_lock(hash64(realmUrl))` on a pinned-connection
   // transaction so concurrent same-URL callers across replicas serialize;

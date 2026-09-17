@@ -1,3 +1,4 @@
+import { recordLatticeReadDemand } from '@cardstack/runtime-common/lattice-demand';
 import { renderFileForIndexing } from '@cardstack/runtime-common/index-runner/visit-file';
 import { basename } from 'node:path';
 import { LatticeRetainedSnapshots } from '@cardstack/runtime-common/lattice-retained-snapshots';
@@ -270,12 +271,13 @@ module(basename(import.meta.filename), function (hooks) {
     group = 'A',
     openWork?: Parameters<typeof createLatticeNativeCardIndexer>[0]['openWork'],
     discovery = false,
-    opts?: { stale?: true },
+    opts?: { stale?: true; ownerURL?: string },
   ) {
+    const candidateOwner = opts?.ownerURL ?? owner;
     const batch = await writer.createBatch(new URL(realm), network);
     const indexer = createIndexer(openWork);
     const result = await indexer({
-      url: owner,
+      url: candidateOwner,
       realmURL: realm,
       sourceJSON: JSON.stringify({
         data: {
@@ -302,13 +304,13 @@ module(basename(import.meta.filename), function (hooks) {
     if (!result?.card.serialized || !result.card.searchDoc)
       throw new Error('Missing native owner');
     batch.registerLatticeNativeCard(
-      owner,
+      candidateOwner,
       result.assertCurrent,
       result.codeReference,
       result.queryPreparation,
       result.retainedInputs,
     );
-    await batch.updateEntry(new URL(owner), {
+    await batch.updateEntry(new URL(candidateOwner), {
       type: 'instance',
       resource: result.card.serialized.data,
       searchData: result.card.searchDoc,
@@ -1286,6 +1288,15 @@ module(basename(import.meta.filename), function (hooks) {
       [feeder],
       'before the deadline the owner waits for its feeder',
     );
+    await recordLatticeReadDemand(db, realm, actor, [owner], 2);
+    assert.deepEqual(
+      (await registry.ready(realm)).map(({ ownerURL, demand }) => ({
+        ownerURL,
+        demand,
+      })),
+      [{ ownerURL: feeder, demand: 2 }],
+      'an authorized wait promotes the feeder, never the blocked consumer',
+    );
     await db.execute(
       "UPDATE lattice_owners SET stale_after = now() - interval '1 second' WHERE owner_url=$1",
       { bind: [owner] },
@@ -1891,6 +1902,120 @@ module(basename(import.meta.filename), function (hooks) {
       }
     });
   }
+
+  test('bounded native waves publish completed owners and leave a durable successor for the remainder', async (assert) => {
+    assert.timeout(30_000);
+    const owners = Array.from(
+      { length: 9 },
+      (_, i) => realm + `Dashboard/budget-${i}.json`,
+    );
+    for (const ownerURL of owners) {
+      await (await candidate('A', undefined, false, { ownerURL })).publish();
+    }
+    while (await publication.matchPending(realm, 'reader')) {
+      /* settle fixture routing */
+    }
+    await db.execute(
+      "UPDATE jobs SET status='resolved',finished_at=now() WHERE status='unfulfilled'",
+    );
+    await db.execute(
+      `UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{attributes,amount}','6'),search_doc=jsonb_set(search_doc,'{amount}','6') WHERE url=$1`,
+      { bind: [realm + 'Person/one.json'] },
+    );
+    await db.execute(
+      'UPDATE lattice_owners SET dirty_generation=(SELECT current_generation FROM realm_generations WHERE realm_url=$1) WHERE realm_url=$1',
+      { bind: [realm] },
+    );
+    const unexpected = async (): Promise<never> => {
+      throw new Error('Unexpected Chrome/module execution');
+    };
+    const prerenderer: Prerenderer = {
+      prerenderModule: unexpected,
+      prerenderVisit: unexpected,
+      runCommand: unexpected,
+    };
+    const definitionLookup = {
+      forRealm() {
+        return this;
+      },
+      lookupDefinition: lookup.lookupDefinition.bind(lookup),
+    } as unknown as DefinitionLookup;
+    const content = JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: { group: 'A' },
+        meta: { adoptsFrom: rootRef },
+      },
+    });
+    const run = (wave: number) =>
+      IndexRunner.materialize(
+        new IndexRunner({
+          realmURL: new URL(realm),
+          indexWriter: writer,
+          definitionLookup,
+          virtualNetwork: network,
+          nativeCardIndexer: createIndexer(),
+          prerenderer,
+          auth: '',
+          fetch: unexpected,
+          realmOwnerUserId: actor,
+          reader: {
+            readFile: async (url) => ({
+              content,
+              path: url.pathname,
+              lastModified: 1,
+              created: 1,
+            }),
+            readStream: unexpected,
+            mtimes: unexpected,
+          },
+        }),
+        'reader',
+        wave,
+      );
+    const first = await run(0);
+    const completed = first.phaseTimings.latticeOwnersRendered;
+    assert.true(completed > 0, 'the first wave made progress');
+    assert.true(
+      completed <= 8,
+      `published ${completed} owners within the wave cap`,
+    );
+    const remaining = async () =>
+      (await publication.registry.pending(realm)).length;
+    assert.strictEqual(
+      await remaining(),
+      owners.length - completed,
+      'unstarted owners retain their obligations',
+    );
+    assert.true(
+      (
+        await db.execute(
+          "SELECT id FROM jobs WHERE status='unfulfilled' AND job_type='lattice-materialize'",
+        )
+      ).length > 0,
+      'publication committed a durable successor',
+    );
+    for (let wave = 1; wave <= 20 && (await remaining()); wave++)
+      await run(wave);
+    assert.strictEqual(
+      await remaining(),
+      0,
+      'successor waves settle every owner',
+    );
+    const rows = await db.execute(
+      "SELECT pristine_doc->'attributes'->>'total' AS total FROM boxel_index WHERE url = ANY($1::text[])",
+      { bind: ['{' + owners.join(',') + '}'] },
+    );
+    assert.deepEqual(
+      rows.map((row) => Number(row.total)),
+      owners.map(() => 6),
+      'all outputs use the changed input; no partial value was published',
+    );
+    assert.strictEqual(
+      (await db.execute('SELECT owner_url FROM lattice_work_failures')).length,
+      0,
+    );
+  });
 
   for (const retired of [false, true])
     test(`an obsolete wake-up does no work after an owner is ${retired ? 'retired' : 'already fresh'}`, async (assert) => {

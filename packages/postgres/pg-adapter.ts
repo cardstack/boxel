@@ -1,3 +1,4 @@
+import { closeLatticeDemand } from '@cardstack/runtime-common/lattice-demand';
 import {
   type DBAdapter,
   type PgPrimitive,
@@ -221,6 +222,7 @@ export class PgAdapter implements DBAdapter {
 
   async close() {
     log.debug(`closing ${this.url}`);
+    await closeLatticeDemand(this);
     this.#isClosed = true;
     await this.started;
     // Resolve any in-flight notification-client startup so we can end the

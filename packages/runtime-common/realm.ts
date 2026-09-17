@@ -1,3 +1,4 @@
+import { recordLatticeReadDemand } from './lattice-demand.ts';
 import { Deferred } from './deferred.ts';
 import { latticeInputHave } from './lattice-input-residency.ts';
 import type { LatticeRealmConfig } from './lattice-config.ts';
@@ -1230,6 +1231,7 @@ export interface CommitBatchResult {
 export interface WriteOptions {
   // Preserve this request as one primary indexing unit in Lattice realms.
   atomicBatch?: boolean;
+  immediate?: boolean;
   clientRequestId?: string | null;
   serializeFile?: boolean | null;
   // When false, the write returns as soon as the source bytes are durable;
@@ -2281,6 +2283,7 @@ export class Realm {
       initiatedBy?: string | null;
       revisions?: Map<string, string>;
       atomicBatch?: boolean;
+      immediate?: boolean;
       // Ask the pass not to enqueue its own prerender_html job; the returned
       // `deferredPrerenderHtml` then carries the set it would have rendered.
       deferPrerenderHtml?: boolean;
@@ -2306,6 +2309,7 @@ export class Realm {
       initiatedBy: opts?.initiatedBy ?? null,
       ...(opts?.revisions ? { revisions: opts.revisions } : {}),
       ...(opts?.atomicBatch ? { atomicBatch: true } : {}),
+      ...(opts?.immediate ? { immediate: true } : {}),
       ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
       ...(opts?.carriedPrerenderHtmlChanges?.length
         ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
@@ -2360,6 +2364,7 @@ export class Realm {
       initiatedBy?: string | null;
       revisions?: Map<string, string>;
       atomicBatch?: boolean;
+      immediate?: boolean;
       // Invalidation sets earlier passes of this same write deferred, folded
       // into the prerender_html job this pass spawns.
       carriedPrerenderHtmlChanges?: IncrementalChange[];
@@ -2384,6 +2389,7 @@ export class Realm {
       initiatedBy: opts?.initiatedBy ?? null,
       ...(opts?.revisions ? { revisions: opts.revisions } : {}),
       ...(opts?.atomicBatch ? { atomicBatch: true } : {}),
+      ...(opts?.immediate ? { immediate: true } : {}),
       ...(opts?.carriedPrerenderHtmlChanges?.length
         ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
         : {}),
@@ -3564,6 +3570,7 @@ export class Realm {
             revisions,
             atomicBatch:
               options?.atomicBatch ?? files.size + deletes.length > 1,
+            immediate: options?.immediate,
             ...(carried.length ? { carriedPrerenderHtmlChanges: carried } : {}),
             // Route the post-worker broadcast through onSettled so it runs
             // INSIDE the indexing deferred lifecycle. Without this, the
@@ -7671,7 +7678,9 @@ export class Realm {
     let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
       initiatingUser: requestContext.authenticatedUser ?? null,
-      ...(answerFromEcho ? { waitForIndex: false } : {}),
+      ...(answerFromEcho
+        ? { waitForIndex: false, immediate: !duringPrerender }
+        : {}),
     });
 
     let newURL = primaryResourceURL.href.replace(/\.json$/, '');
@@ -8042,7 +8051,9 @@ export class Realm {
       let [{ lastModified, created }] = await this._batchWriteUnlocked(files, {
         clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
         initiatingUser: requestContext.authenticatedUser ?? null,
-        ...(answerFromEcho ? { waitForIndex: false } : {}),
+        ...(answerFromEcho
+          ? { waitForIndex: false, immediate: !duringPrerender }
+          : {}),
       });
       let doc: SingleCardDocument;
       if (answerFromEcho) {
@@ -8364,6 +8375,30 @@ export class Realm {
     }
   }
 
+  private async recordLatticeDemand(
+    request: Request,
+    context: RequestContext,
+    owner: string,
+  ) {
+    if (
+      isDuringPrerenderRequest(request) ||
+      request.headers.has(LATTICE_INPUT_GENERATION_HEADER)
+    )
+      return;
+    // Advisory only. This header neither waits nor promises read-your-write.
+    const priority =
+      request.headers.get('x-boxel-lattice-priority') === 'immediate' ? 2 : 1;
+    await recordLatticeReadDemand(
+      this.#dbAdapter,
+      this.url,
+      context.authenticatedUser ?? '*',
+      [owner],
+      priority,
+    ).catch((error) =>
+      this.#log.warn('Could not record Lattice read demand', error),
+    );
+  }
+
   private async latticeDisplayResponse(
     request: Request,
     requestContext: RequestContext,
@@ -8415,6 +8450,7 @@ export class Realm {
             },
           });
         }
+        await this.recordLatticeDemand(request, requestContext, url.href);
         let card = this.prepareCardRead(entry, url);
         let publication: string;
         if (entry.reuse) {
@@ -8665,6 +8701,8 @@ export class Realm {
         url,
       );
     }
+    if (!latticeInput)
+      await this.recordLatticeDemand(request, requestContext, url.href);
     let card = this.prepareCardRead(entry, url);
     let body: string;
     if (stored?.reuse) {

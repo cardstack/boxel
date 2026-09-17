@@ -320,6 +320,7 @@ export function inFlightIncrementalArgsCover(
 export interface LatticeIndexBatch extends JSONTypes.Object {
   atomic: boolean;
   admittedAtMs: number;
+  immediate: boolean;
 }
 
 function canMergeIncrementalBatch(existing: unknown, incoming: unknown) {
@@ -367,6 +368,17 @@ function chooseIncrementalCoalesceDecision(
         ...maxPriorityAndTimeout(sameTypeCandidate, incoming),
         args: {
           ...existingArgs,
+          ...(isObjectLike(existingArgs.latticeBatch) &&
+          isObjectLike(incomingArgs.latticeBatch)
+            ? {
+                latticeBatch: {
+                  ...existingArgs.latticeBatch,
+                  immediate:
+                    existingArgs.latticeBatch.immediate === true ||
+                    incomingArgs.latticeBatch.immediate === true,
+                },
+              }
+            : {}),
           changes: mergeIncrementalChanges(
             existingArgs.changes,
             incomingArgs.changes,

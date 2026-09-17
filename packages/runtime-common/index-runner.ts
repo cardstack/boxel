@@ -51,10 +51,7 @@ import {
   type LatticeReadScope,
   type LatticeScheduledWork,
 } from './lattice-work.ts';
-import {
-  latticeInterleaveStale,
-  latticeReserveAcrossTypes,
-} from './lattice-kernel.ts';
+import { latticeOrderWave, LatticeWaveBudget } from './lattice-scheduling.ts';
 import type { Querier } from './expression.ts';
 import { resolveModuleCacheContext } from './index-runner/prewarm-modules.ts';
 import {
@@ -169,7 +166,12 @@ export function isIdleRenderTimeout(result: IndexVisitRenderResult): boolean {
 // overrides it; 1 restores one owner per wave.
 const LATTICE_WAVE_BATCH = Math.max(
   1,
-  Number(process.env.LATTICE_WAVE_BATCH) || 32,
+  Number(process.env.LATTICE_WAVE_BATCH) || 8,
+);
+// Stop starting more owners after this budget; finish in-flight work and swap.
+const LATTICE_WAVE_BUDGET_MS = Math.max(
+  1,
+  Number(process.env.LATTICE_WAVE_BUDGET_MS) || 1000,
 );
 // Owners rendered concurrently inside one wave. Every owner `ready` returns
 // has settled inputs and reads no other pending owner, so a wave's members
@@ -199,6 +201,7 @@ export class IndexRunner {
     latticeSwapMs: 0,
     latticeWaves: 0,
     latticeOwnersRendered: 0,
+    latticeOwnersDeferred: 0,
   };
   #latticeSourceWriteMs: number | undefined;
   #indexingInstances = new Map<string, Promise<void>>();
@@ -933,9 +936,11 @@ export class IndexRunner {
     // reads its own members. The cap keeps one job's duration and input
     // residency bounded.
     if (followup)
-      pending = latticeReserveAcrossTypes(
-        latticeInterleaveStale(pending),
+      pending = latticeOrderWave(
+        pending,
         Math.floor(LATTICE_WAVE_BATCH / 2),
+        // With one slow owner per wave, alternate which class gets first use.
+        followup.wave % 2 === 0,
       ).slice(0, LATTICE_WAVE_BATCH);
     if (followup && !pending.length) {
       if (
@@ -982,6 +987,9 @@ export class IndexRunner {
         let superseded: LatticeWorkSuperseded | undefined;
         const renderStartedAt = Date.now();
         const queue = [...pending];
+        const budget = followup
+          ? new LatticeWaveBudget(LATTICE_WAVE_BATCH, LATTICE_WAVE_BUDGET_MS)
+          : undefined;
         const materializeOwner = async ({
           ownerURL,
           generation,
@@ -1097,7 +1105,7 @@ export class IndexRunner {
         const lanes = this.#nativeCardIndexer ? LATTICE_WAVE_CONCURRENCY : 1;
         await Promise.all(
           Array.from({ length: Math.min(lanes, queue.length) }, async () => {
-            while (queue.length && !superseded) {
+            while (queue.length && !superseded && (!budget || budget.take())) {
               const next = queue.shift()!;
               try {
                 await materializeOwner(next);
@@ -1115,6 +1123,7 @@ export class IndexRunner {
             }
           }),
         );
+        this.#latticeTimings.latticeOwnersDeferred += queue.length;
         if (superseded) throw superseded;
         this.#latticeTimings.latticeRenderMs +=
           Date.now() -

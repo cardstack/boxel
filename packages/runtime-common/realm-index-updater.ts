@@ -50,6 +50,7 @@ export interface IncrementalIndexMeta {
 
 export interface IncrementalIndexOptions {
   atomicBatch?: boolean;
+  immediate?: boolean;
   onInvalidation?: (
     invalidatedURLs: URL[],
     meta: IncrementalIndexMeta,
@@ -135,7 +136,7 @@ export class RealmIndexUpdater {
   // watcher, realm copy) carry no tag.
   #incrementalIndexingDeferreds = new Map<
     Deferred<void>,
-    { initiatedBy?: string }
+    { initiatedBy?: string; jobId?: number }
   >();
   #fullIndexingDeferreds = new Set<Deferred<void>>();
 
@@ -227,7 +228,30 @@ export class RealmIndexUpdater {
     if (pending.length === 0) {
       return undefined;
     }
-    return Promise.all(pending).then(() => undefined);
+    const ids = [...this.#incrementalIndexingDeferreds.values()]
+      .filter(
+        (entry) => entry.initiatedBy === user && entry.jobId !== undefined,
+      )
+      .map((entry) => entry.jobId!);
+    return Promise.all([this.promoteWaitingJobs(ids), ...pending]).then(
+      () => undefined,
+    );
+  }
+
+  private async promoteWaitingJobs(ids: number[]) {
+    if (
+      !this.#realm.latticeEnabled ||
+      this.#dbAdapter.kind !== 'pg' ||
+      !ids.length
+    )
+      return;
+    await this.#dbAdapter.execute(
+      `UPDATE jobs SET args=jsonb_set(args, '{latticeBatch,immediate}', 'true')
+       WHERE id = ANY($1::bigint[]) AND status='unfulfilled'
+         AND args->'latticeBatch' IS NOT NULL`,
+      { bind: [`{${ids.join(',')}}`] },
+    );
+    await this.#dbAdapter.execute('NOTIFY jobs');
   }
 
   publishFullIndex(
@@ -331,9 +355,10 @@ export class RealmIndexUpdater {
     opts?: IncrementalIndexOptions,
   ): Promise<{ settled: Promise<void> }> {
     let indexingDeferred = new Deferred<void>();
-    this.#incrementalIndexingDeferreds.set(indexingDeferred, {
+    let tracking: { initiatedBy?: string; jobId?: number } = {
       initiatedBy: opts?.initiatedBy ?? undefined,
-    });
+    };
+    this.#incrementalIndexingDeferreds.set(indexingDeferred, tracking);
     let snapshotVersion = this.#ignoreDataVersion;
     let job: Job<IncrementalDoneResult>;
     try {
@@ -343,6 +368,7 @@ export class RealmIndexUpdater {
               latticeBatch: {
                 atomic: opts?.atomicBatch ?? false,
                 admittedAtMs: Date.now(),
+                immediate: opts?.immediate ?? false,
               },
             }
           : {}),
@@ -376,6 +402,7 @@ export class RealmIndexUpdater {
         args: makeIncrementalArgsWithCallerMetadata(args, clientRequestId),
         mapResult: mapIncrementalDoneResult(clientRequestId),
       });
+      tracking.jobId = job.id;
     } catch (e: any) {
       indexingDeferred.fulfill();
       this.#incrementalIndexingDeferreds.delete(indexingDeferred);
@@ -449,7 +476,10 @@ export class RealmIndexUpdater {
       | 'revisions'
     > & { delete?: true },
   ): Promise<void> {
-    let { settled } = await this.enqueueUpdate(urls, opts);
+    let { settled } = await this.enqueueUpdate(urls, {
+      ...opts,
+      immediate: true,
+    });
     await settled;
   }
 
@@ -468,7 +498,10 @@ export class RealmIndexUpdater {
       | 'revisions'
     >,
   ): Promise<void> {
-    let { settled } = await this.enqueueChanges(changes, opts);
+    let { settled } = await this.enqueueChanges(changes, {
+      ...opts,
+      immediate: true,
+    });
     await settled;
   }
 

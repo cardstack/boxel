@@ -734,7 +734,7 @@ module(basename(import.meta.filename), function () {
             realmUsername: 'owner',
             ignoreData: {},
             changes: [{ url: `${realmURL}${name}`, operation: 'update' }],
-            latticeBatch: { atomic: false, admittedAtMs },
+            latticeBatch: { atomic: false, admittedAtMs, immediate: false },
           },
         });
       const first = await enqueue(10_000, 'a');
@@ -780,7 +780,7 @@ module(basename(import.meta.filename), function () {
             realmUsername: 'owner',
             ignoreData: {},
             changes: [{ url: `${realmURL}${name}`, operation: 'update' }],
-            latticeBatch: { atomic, admittedAtMs: 10_000 },
+            latticeBatch: { atomic, admittedAtMs: 10_000, immediate: false },
           },
         });
       const jobs = [
@@ -810,7 +810,11 @@ module(basename(import.meta.filename), function () {
         clientRequestId: 'new',
         args: {
           ...args,
-          latticeBatch: { atomic: false, admittedAtMs: 10_000 },
+          latticeBatch: {
+            atomic: false,
+            admittedAtMs: 10_000,
+            immediate: false,
+          },
         },
       });
       assert.notStrictEqual(old.id, current.id);

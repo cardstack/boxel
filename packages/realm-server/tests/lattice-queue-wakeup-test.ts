@@ -53,6 +53,210 @@ module(basename(import.meta.filename), function (hooks) {
     },
   });
 
+  test('a background collection window wakes at its deadline without another write', async function (assert) {
+    assert.timeout(15_000);
+    const realm = 'https://lattice-window.example/';
+    const adapter = new ClaimObservingAdapter();
+    const publisher = new PgQueuePublisher(db);
+    const runner = new PgQueueRunner({
+      adapter,
+      workerId: 'window',
+      lattice: new LatticeRealmConfig([realm]),
+    });
+    runner.register('incremental-index', async () => ({}));
+    try {
+      const job = await publisher.publish({
+        jobType: 'incremental-index',
+        concurrencyGroup: `indexing:${realm}`,
+        priority: 10,
+        timeout: 10,
+        args: {
+          realmURL: realm,
+          latticeBatch: {
+            atomic: false,
+            admittedAtMs: Date.now(),
+            immediate: false,
+          },
+        },
+      });
+      await runner.start();
+      await adapter.blockedClaim.promise;
+      const reservations = await db.execute(
+        'SELECT id FROM job_reservations WHERE job_id=$1',
+        { bind: [job.id] },
+      );
+      assert.strictEqual(
+        reservations.length,
+        0,
+        'collection does not reserve a worker',
+      );
+      await db.execute(
+        "UPDATE jobs SET created_at=clock_timestamp()-interval '4.5 seconds' WHERE id=$1",
+        { bind: [job.id] },
+      );
+      await db.execute('NOTIFY jobs');
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          job.done,
+          new Promise((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error('deadline did not wake the worker')),
+              3000,
+            );
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+      assert.ok(
+        true,
+        'deadline runs the batch without waiting for the normal ten-second poll',
+      );
+    } finally {
+      await runner.destroy();
+      await publisher.destroy();
+      await adapter.close();
+    }
+  });
+
+  test('an immediate waiter releases its existing collection window', async function (assert) {
+    assert.timeout(15_000);
+    const realm = 'https://lattice-immediate.example/';
+    const adapter = new ClaimObservingAdapter();
+    const publisher = new PgQueuePublisher(db);
+    const runner = new PgQueueRunner({
+      adapter,
+      workerId: 'immediate',
+      lattice: new LatticeRealmConfig([realm]),
+    });
+    runner.register('incremental-index', async () => ({}));
+    const enqueue = (immediate: boolean) =>
+      publisher.publish({
+        jobType: 'incremental-index',
+        concurrencyGroup: `indexing:${realm}`,
+        priority: 10,
+        timeout: 10,
+        args: {
+          realmURL: realm,
+          realmUsername: 'owner',
+          changes: [{ url: `${realm}one.json`, operation: 'update' }],
+          revisions: {},
+          ignoreData: {},
+          coalescedCallers: [],
+          latticeBatch: { atomic: false, admittedAtMs: 1000, immediate },
+        },
+      });
+    try {
+      const first = await enqueue(false);
+      await db.execute(
+        "UPDATE jobs SET created_at=clock_timestamp()+interval '1 hour' WHERE id=$1",
+        { bind: [first.id] },
+      );
+      await runner.start();
+      await adapter.blockedClaim.promise;
+      const urgent = await enqueue(true);
+      assert.strictEqual(
+        urgent.id,
+        first.id,
+        'urgency promotes the existing job',
+      );
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          urgent.done,
+          new Promise((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error('immediate waiter remained deferred')),
+              3000,
+            );
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+      assert.ok(true, 'urgency bypasses the remaining collection delay');
+    } finally {
+      await runner.destroy();
+      await publisher.destroy();
+      await adapter.close();
+    }
+  });
+
+  test('immediate writes cannot take an overdue wave reserved turn', async (assert) => {
+    const realm = 'https://lattice-fairness.example/';
+    const group = `indexing:${realm}`;
+    const adapter = new PgAdapter();
+    const publisher = new PgQueuePublisher(db);
+    const runner = new PgQueueRunner({
+      adapter,
+      workerId: 'fairness',
+      lattice: new LatticeRealmConfig([realm]),
+    });
+    const order: string[] = [];
+    runner.register('incremental-index', async () => {
+      order.push('source');
+      return {};
+    });
+    runner.register('lattice-materialize', async () => {
+      order.push('wave');
+      return {};
+    });
+    try {
+      await db.execute(
+        `INSERT INTO lattice_owners (realm_url,owner_url,published_generation,input_generation,dirty_generation,definition_revision,retired,stale_after)
+        VALUES($1,$2,1,1,2,'epoch',FALSE,now()-interval '1 second')`,
+        { bind: [realm, realm + 'Board/one.json'] },
+      );
+      await db.execute(
+        `INSERT INTO jobs(job_type,concurrency_group,priority,timeout,args,status,finished_at)
+        VALUES('incremental-index',$1,10,10,'{}','resolved',now())`,
+        { bind: [group] },
+      );
+      const sources = [];
+      for (let i = 0; i < 2; i++)
+        sources.push(
+          await publisher.publish({
+            jobType: 'incremental-index',
+            concurrencyGroup: group,
+            priority: 10,
+            timeout: 10,
+            args: {
+              realmURL: realm,
+              realmUsername: 'owner',
+              changes: [{ url: realm + i + '.json', operation: 'update' }],
+              revisions: {},
+              ignoreData: {},
+              coalescedCallers: [],
+              latticeBatch: {
+                atomic: true,
+                admittedAtMs: Date.now(),
+                immediate: true,
+              },
+            },
+          }),
+        );
+      const wave = await publisher.publish({
+        jobType: 'lattice-materialize',
+        concurrencyGroup: group,
+        priority: 8,
+        timeout: 10,
+        args: { realmURL: realm },
+      });
+      await runner.start();
+      await Promise.all([wave.done, ...sources.map((source) => source.done)]);
+      assert.deepEqual(
+        order,
+        ['wave', 'source', 'source'],
+        'a source completed, so the due wave runs before the immediate backlog',
+      );
+    } finally {
+      await runner.destroy();
+      await publisher.destroy();
+      await adapter.close();
+    }
+  });
+
   test('releasing a Lattice owner promptly wakes a blocked source runner', async function (assert) {
     assert.timeout(20_000);
     let sourceAdapter = new ClaimObservingAdapter();

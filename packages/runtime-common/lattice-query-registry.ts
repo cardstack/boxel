@@ -1,3 +1,8 @@
+import { latticeDemandFor } from './lattice-demand.ts';
+import {
+  latticePropagateDemand,
+  type LatticeDemandPriority,
+} from './lattice-scheduling.ts';
 import type { LatticeProjectionWhere } from './definitions.ts';
 import { latticeOwnerDefinitionCurrent } from './lattice-code-reference.ts';
 import type { DBAdapter } from './db.ts';
@@ -826,6 +831,7 @@ export class LatticeQueryRegistry
       codeVersion?: string;
       // Past its staleness deadline: schedule it as a stale attempt.
       stale?: true;
+      demand?: LatticeDemandPriority;
     }>
   > {
     let rows = await query(this.db, [
@@ -1213,6 +1219,10 @@ export class LatticeQueryRegistry
       }
       for (const candidate of candidates) inputs.get(ownerURL)?.add(candidate);
     }
+    const priorities = latticePropagateDemand(
+      latticeDemandFor(this.db).cache.priorities(realmURL),
+      inputs,
+    );
     const frontier = latticeWorkFrontier(
       pending.map(({ ownerURL }) => ({
         id: ownerURL,
@@ -1234,6 +1244,12 @@ export class LatticeQueryRegistry
     // input still dirty. Otherwise it runs the ordinary way and publishes
     // clean, so a stream that has just stopped costs one render, not two.
     return runnableOwners
+      .map((row) => ({
+        ...row,
+        ...(priorities.has(row.ownerURL)
+          ? { demand: priorities.get(row.ownerURL)! }
+          : {}),
+      }))
       .filter(
         ({ ownerURL, stale }) =>
           ready.has(ownerURL) && (!opts?.overdueOnly || stale),
