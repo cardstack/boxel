@@ -262,6 +262,8 @@ import {
   sanitizeLoggingCorrelationId,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
 } from './prerender-headers.ts';
+import { RequestTimings } from './request-timings.ts';
+import { emitWriteTiming } from './write-timing.ts';
 import {
   type MatrixClient,
   ensureFullMatrixUserId,
@@ -863,11 +865,29 @@ function buildEtag(
 // any card); the screenshots fingerprint captures the joined
 // `meta.screenshots` (see `screenshotsEtagFingerprint`). A null
 // `indexedAt` suppresses ETag emission entirely.
+//
+// How much of a card's link graph a card+json body carries. `full` side-loads
+// the whole closure; `links-only` answers the relationships without
+// side-loading their targets; `write-echo` is what a POST / PATCH returns —
+// the written card alone, neither its links resolved nor its query-backed
+// fields expanded, because nothing reads either off a write response.
+//
+// These three take different validators because a client holding one must not
+// be 304'd to another's body. They are not the only way a body can vary at
+// one `indexed_at`: a read from inside a prerender leaves query-backed fields
+// unexpanded while still side-loading static links, and that body shares
+// `full`'s validator deliberately — it is never served to a client that
+// caches, and the response cache separates it by folding
+// `skipQueryBackedExpansion` into its own key rather than into the ETag.
+// Adding a member here is the wrong move for a variation the validator does
+// not have to carry.
+type CardJsonShape = 'full' | 'links-only' | 'write-echo';
+
 function buildCardJsonEtag(
   indexedAt: number | null | undefined,
   realmInfoHash: string | undefined,
   screenshotsFingerprint?: string,
-  resolveLinksOnly = false,
+  shape: CardJsonShape = 'full',
 ): string | undefined {
   if (indexedAt == null) {
     return undefined;
@@ -875,17 +895,17 @@ function buildCardJsonEtag(
   let base = [`${indexedAt}`, realmInfoHash, screenshotsFingerprint]
     .filter(Boolean)
     .join('-');
-  // A read that answers relationships without side-loading their targets
+  // A response that carries less of the card's link graph than a full read
   // serves a different representation of the same card at the same
   // `indexed_at`, so it takes its own variant — the same job the constant
-  // does for a serialization change, on a value that varies per server
-  // rather than per revision. Without it, turning the setting on or off
-  // would leave every client that holds a validator being 304'd to the
-  // shape it cached, and the two shapes reachable under one key in the
-  // response cache.
-  let variant = resolveLinksOnly
-    ? `${CARD_JSON_ETAG_VARIANT}-links-only`
-    : CARD_JSON_ETAG_VARIANT;
+  // does for a serialization change, on a value that varies per response
+  // rather than per revision. Without it, a client that cached a narrower
+  // shape would be 304'd to it when it later asks for the full one, and the
+  // shapes would be reachable under one key in the response cache.
+  let variant =
+    shape === 'full'
+      ? CARD_JSON_ETAG_VARIANT
+      : `${CARD_JSON_ETAG_VARIANT}-${shape}`;
   return `"${base}:${variant}"`;
 }
 
@@ -7830,9 +7850,53 @@ export class Realm {
     return notFound(request, requestContext);
   }
 
+  // One `realm:write-timing` line per card write, emitted from a `finally` so
+  // a write that failed is attributed too — that is the write whose time
+  // someone is most likely trying to account for.
+  //
+  // A request that was refused before it reached the commit — an unsupported
+  // media type, a path the verb does not serve, a body that is not a card —
+  // stamped no stage, and a line for it would say only how long it took to
+  // say no. Those are skipped, so every line on this channel describes a
+  // request that tried to write.
+  #emitWriteTiming(
+    method: string,
+    request: Request,
+    startedAt: number,
+    timings: RequestTimings,
+  ): void {
+    let stages = timings.toLogFragment();
+    if (!stages) {
+      return;
+    }
+    let correlationId = sanitizeLoggingCorrelationId(
+      request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+    );
+    emitWriteTiming(
+      `${method} ${request.url}` +
+        (correlationId ? ` corr=${correlationId}` : '') +
+        ` handler=${Date.now() - startedAt}ms ` +
+        stages,
+    );
+  }
+
   private async createCard(
     request: Request,
     requestContext: RequestContext,
+  ): Promise<Response> {
+    let timings = new RequestTimings();
+    let startedAt = Date.now();
+    try {
+      return await this.#createCard(request, requestContext, timings);
+    } finally {
+      this.#emitWriteTiming('POST', request, startedAt, timings);
+    }
+  }
+
+  async #createCard(
+    request: Request,
+    requestContext: RequestContext,
+    timings: RequestTimings,
   ): Promise<Response> {
     let duringPrerender = isDuringPrerenderRequest(request);
     // A skip-index-wait caller (see SKIP_INDEX_WAIT_HEADER) gets the same
@@ -7923,6 +7987,7 @@ export class Realm {
             // create, and a `POST` carrying one has always stored the card
             // with that edge empty rather than refusing the write.
             foreignSideLoadLink: 'leave',
+            timings,
           },
         )
       )[0];
@@ -7960,12 +8025,25 @@ export class Realm {
       }
       doc = await this.serializedInstanceEcho(stored, newURL, lastModified);
     } else {
-      let entry = await this.#realmIndexQueryEngine.cardDocument(
-        new URL(newURL),
-        {
-          loadLinks: true,
-          skipQueryBackedExpansion: false,
-        },
+      // The readback asks for the written card and nothing around it: no
+      // `loadLinks`, so neither the transitive closure of the card's links nor
+      // the query a query-backed field would run to name its targets.
+      //
+      // Nothing consumes either. Two surfaces in the host see a write
+      // response, and neither reads the link graph. The one that updates the
+      // instance drops `data.attributes` and `data.relationships` before
+      // merging, which leaves `included[]` unreachable; the save subscriber
+      // gets the body whole, and exists for tests. A card created by `lid`
+      // under this write is reconciled to its assigned id from the realm
+      // invalidation event, which correlates the last segment of the assigned
+      // URL with the local id (`tryFindingCardItem` in the host's card store
+      // names that as the reconciliation point, alongside `api.setId`); the
+      // response document is not part of that path, and could not be — the
+      // index answers in ids, never in the `lid` a caller would match on.
+      // Writes that answer from the serialized echo — prerender and
+      // skip-index-wait callers — return no `included` at all and always have.
+      let entry = await timings.time('readback', () =>
+        this.#realmIndexQueryEngine.cardDocument(new URL(newURL)),
       );
       if (!entry || entry?.type === 'error') {
         let err = entry
@@ -7986,8 +8064,14 @@ export class Realm {
       });
     }
     this.#serveInstanceIdsAsRRI(doc);
+    // The last sequential leg: turning the assembled document into the bytes
+    // that go on the wire. Stamped because it scales with the body, which is
+    // what the shape of this response decides.
+    let responseBody = await timings.time('stringify', async () =>
+      JSON.stringify(doc, null, 2),
+    );
     return createResponse({
-      body: JSON.stringify(doc, null, 2),
+      body: responseBody,
       init: {
         status: 201,
         headers: {
@@ -8003,6 +8087,20 @@ export class Realm {
   private async patchCardInstance(
     request: Request,
     requestContext: RequestContext,
+  ): Promise<Response> {
+    let timings = new RequestTimings();
+    let startedAt = Date.now();
+    try {
+      return await this.#patchCardInstance(request, requestContext, timings);
+    } finally {
+      this.#emitWriteTiming('PATCH', request, startedAt, timings);
+    }
+  }
+
+  async #patchCardInstance(
+    request: Request,
+    requestContext: RequestContext,
+    timings: RequestTimings,
   ): Promise<Response> {
     let localPath = this.paths.local(new URL(request.url));
     if (await this.nonJsonFileExists(localPath)) {
@@ -8090,6 +8188,7 @@ export class Realm {
             // The same reading a create takes of a side-load claiming another
             // realm: the edge is stored empty and the patch succeeds.
             foreignSideLoadLink: 'leave',
+            timings,
           },
         )
       )[0];
@@ -8113,23 +8212,30 @@ export class Realm {
       });
     }
     let created = result.meta.created;
-    let readEntry = async (skipQueryBackedExpansion: boolean) =>
-      await this.#realmIndexQueryEngine.cardDocument(new URL(instanceURL), {
-        loadLinks: true,
-        skipQueryBackedExpansion,
-      });
+    // The card and nothing around it: no `loadLinks`, so neither the
+    // transitive closure of its links nor the query a query-backed field
+    // would run to name its targets. Nothing consumes either off a write
+    // response — the create path's readback states the case. The commit has
+    // released the write lock by the time this runs, so what it costs is the
+    // writer's own latency rather than every other writer's.
+    let readEntry = async () =>
+      await timings.time('readback', () =>
+        this.#realmIndexQueryEngine.cardDocument(new URL(instanceURL)),
+      );
     let doc: SingleCardDocument;
     if (!result.meta.changed) {
       // The patch left the card exactly as it was, so the answer is the card
       // as the realm already holds it — read before anything else is decided,
       // because a request that changed nothing is answered from the index
-      // whether or not it asked for its own indexing to be deferred. Only a
-      // render's own read narrows what it resolves.
-      let unchanged = await readEntry(duringPrerender);
+      // whether or not it asked for its own indexing to be deferred. It is
+      // still answering a writer, so it takes the same narrow shape every
+      // other write does.
+      let unchanged = await readEntry();
       if (unchanged && unchanged.type !== 'error') {
         return await this.#patchedCardResponse(unchanged, {
           instanceURL,
           localPath,
+          timings,
           // The file was not rewritten, so the modification time it carries is
           // the one the index recorded for it.
           lastModified: unchanged.doc.data.meta.lastModified ?? lastModified,
@@ -8185,7 +8291,7 @@ export class Realm {
         requestContext,
       });
     }
-    let entry = await readEntry(false);
+    let entry = await readEntry();
     if (entry && entry.type !== 'error') {
       return await this.#patchedCardResponse(entry, {
         instanceURL,
@@ -8193,6 +8299,7 @@ export class Realm {
         lastModified,
         created,
         requestContext,
+        timings,
       });
     }
     let stored = storedCardDocument(result);
@@ -8254,12 +8361,14 @@ export class Realm {
       lastModified,
       created,
       requestContext,
+      timings,
     }: {
       instanceURL: string;
       localPath: LocalPath;
       lastModified: number | null;
       created: number | null;
       requestContext: RequestContext;
+      timings: RequestTimings;
     },
   ): Promise<Response> {
     let doc: SingleCardDocument = merge({}, entry.doc, {
@@ -8271,6 +8380,8 @@ export class Realm {
     // The PATCH echo carries the joined `meta.screenshots` like a GET does —
     // the store replaces an instance's meta wholesale from a save response, so
     // an echo without it would wipe the key client-side until the next GET.
+    // The two representations part company on the link graph only, which is
+    // what the `write-echo` validator variant below records.
     if (entry.screenshots) {
       doc.data.meta = {
         ...doc.data.meta,
@@ -8290,10 +8401,17 @@ export class Realm {
           entry.indexedAt,
           this.getCachedRealmInfoHash(),
           screenshotsEtagFingerprint(entry.screenshots),
+          'write-echo',
         );
     this.#serveInstanceIdsAsRRI(doc);
+    // The last sequential leg: turning the assembled document into the bytes
+    // that go on the wire. Stamped because it scales with the body, which is
+    // what the shape of this response decides.
+    let body = await timings.time('stringify', async () =>
+      JSON.stringify(doc, null, 2),
+    );
     return createResponse({
-      body: JSON.stringify(doc, null, 2),
+      body,
       init: {
         headers: {
           'content-type': SupportedMimeType.CardJson,
@@ -8651,7 +8769,7 @@ export class Realm {
             result.indexedAt,
             this.getCachedRealmInfoHash(),
             screenshotsEtagFingerprint(result.screenshots),
-            resolveLinksOnly,
+            resolveLinksOnly ? 'links-only' : 'full',
           );
       let cacheControl = this.cardJsonCacheControl(requestContext);
       let lastModified: Record<string, string> =
@@ -8828,7 +8946,7 @@ export class Realm {
             instanceEntry.indexedAt,
             realmInfoHash,
             screenshotsEtagFingerprint(instanceEntry.screenshots),
-            resolveLinksOnly,
+            resolveLinksOnly ? 'links-only' : 'full',
           );
         }
         if (
@@ -9019,7 +9137,7 @@ export class Realm {
           headers.indexedAt,
           this.getCachedRealmInfoHash(),
           screenshotsEtagFingerprint(headers.screenshots),
-          resolveLinksOnly,
+          resolveLinksOnly ? 'links-only' : 'full',
         );
     return {
       kind: 'document',
