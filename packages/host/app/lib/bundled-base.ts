@@ -1,14 +1,80 @@
 import type { VirtualNetwork } from '@cardstack/runtime-common';
 
 // Written by the `bundled-base-scoped-css` vite plugin: each bundled base
-// module registers the scoped-CSS specifiers its compiled source imports, as
-// it is evaluated. See packages/host/lib/bundled-base-scoped-css.mjs.
+// module registers the scoped-CSS specifiers its compiled source imports and
+// the sibling base modules it pulls in, as it is evaluated.
+// See packages/host/lib/bundled-base-scoped-css.mjs.
+interface BundledBaseModuleImports {
+  css: string[];
+  imports: string[];
+}
+
 const scopedCSSRegistry = () =>
   (
     globalThis as {
-      __boxelBundledBaseScopedCSS?: Record<string, string[]>;
+      __boxelBundledBaseScopedCSS?: Record<string, BundledBaseModuleImports>;
     }
   ).__boxelBundledBaseScopedCSS;
+
+// The stylesheet specifiers of `name` together with those of every base module
+// reachable from it. A module the loader is never asked for — one only ever
+// reached from inside another module's chunk — gets no chance to declare its
+// own stylesheet, so whatever pulls it in declares it on its behalf.
+function scopedCSSDepsFor(name: string): string[] {
+  let registry = scopedCSSRegistry();
+  if (!registry) {
+    return [];
+  }
+  let deps: string[] = [];
+  let seen = new Set<string>();
+  let queue = [name];
+  while (queue.length) {
+    let current = queue.shift()!;
+    if (seen.has(current)) {
+      continue;
+    }
+    seen.add(current);
+    let entry = registry[current];
+    if (!entry) {
+      continue;
+    }
+    for (let specifier of entry.css) {
+      deps.push(rebaseSpecifier(name, current, specifier));
+    }
+    queue.push(...entry.imports);
+  }
+  return deps;
+}
+
+// A declared dep is resolved against the URL of the module that declared it,
+// so a specifier borrowed from elsewhere in the bundle has to be rewritten to
+// point at the same file from the borrower's directory. `./embedded.gts…css`,
+// as `default-templates/embedded` spells it, becomes `./default-templates/
+// embedded.gts…css` when `card-api` declares it.
+function rebaseSpecifier(
+  fromName: string,
+  declaringName: string,
+  specifier: string,
+): string {
+  if (fromName === declaringName) {
+    return specifier;
+  }
+  let target = declaringName.split('/').slice(0, -1);
+  for (let part of specifier.split('/')) {
+    if (part === '.' || part === '') {
+      continue;
+    } else if (part === '..') {
+      target.pop();
+    } else {
+      target.push(part);
+    }
+  }
+  let up = fromName
+    .split('/')
+    .slice(0, -1)
+    .map(() => '..');
+  return [...(up.length ? up : ['.']), ...target].join('/');
+}
 
 // Base modules compiled into the host bundle, keyed by their path under
 // `@cardstack/base/`. Each is served to the loader in place of a fetch of the
@@ -211,7 +277,7 @@ export function shimBundledBase(virtualNetwork: VirtualNetwork) {
     virtualNetwork.shimAsyncModule({
       id: `@cardstack/base/${name}`,
       resolve,
-      deps: () => scopedCSSRegistry()?.[name] ?? [],
+      deps: () => scopedCSSDepsFor(name),
     });
   }
 }
