@@ -41,6 +41,10 @@ export class LatticeWorkSuperseded extends Error {
   }
 }
 
+// An input has no usable publication yet. Defer only its consumer; other
+// independent owners in the wave can publish, without spending a retry.
+export class LatticeInputsPending extends LatticeWorkSuperseded {}
+
 export interface LatticeWorkScope {
   signal: AbortSignal;
   close(): Promise<void>;

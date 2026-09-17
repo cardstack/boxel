@@ -723,6 +723,99 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('Lattice ordinary arrivals stop coalescing after five seconds without sliding the window', async function (assert) {
+      await runner.destroy();
+      const realmURL = 'http://example.com/lattice-window/';
+      const enqueue = (admittedAtMs: number, name: string) =>
+        publishIncrementalIndexJob({
+          clientRequestId: name,
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}${name}`, operation: 'update' }],
+            latticeBatch: { atomic: false, admittedAtMs },
+          },
+        });
+      const first = await enqueue(10_000, 'a');
+      const sameWindow = await enqueue(14_999, 'b');
+      const next = await enqueue(15_000, 'c');
+      const sameNext = await enqueue(19_999, 'd');
+      assert.strictEqual(sameWindow.id, first.id);
+      assert.notStrictEqual(
+        next.id,
+        first.id,
+        'a backlog cannot extend the first window',
+      );
+      assert.strictEqual(
+        sameNext.id,
+        next.id,
+        'finds a compatible later pending job',
+      );
+      const rows = await adapter.execute(
+        'SELECT args FROM jobs WHERE concurrency_group=$1 ORDER BY id',
+        {
+          bind: [`indexing:${realmURL}`],
+        },
+      );
+      assert.deepEqual(
+        rows.map((row: any) =>
+          row.args.changes.map((change: any) => change.url),
+        ),
+        [
+          [`${realmURL}a`, `${realmURL}b`],
+          [`${realmURL}c`, `${realmURL}d`],
+        ],
+      );
+    });
+
+    test('Lattice atomic requests never absorb another atomic request or ordinary arrivals', async function (assert) {
+      await runner.destroy();
+      const realmURL = 'http://example.com/lattice-atomic/';
+      const enqueue = (name: string, atomic: boolean) =>
+        publishIncrementalIndexJob({
+          clientRequestId: name,
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}${name}`, operation: 'update' }],
+            latticeBatch: { atomic, admittedAtMs: 10_000 },
+          },
+        });
+      const jobs = [
+        await enqueue('a', true),
+        await enqueue('b', true),
+        await enqueue('c', false),
+      ];
+      assert.strictEqual(new Set(jobs.map((job) => job.id)).size, 3);
+      const ordinary = await enqueue('d', false);
+      assert.strictEqual(ordinary.id, jobs[2].id);
+    });
+
+    test('Lattice admission does not attach a new window to a legacy unbounded job', async function (assert) {
+      await runner.destroy();
+      const realmURL = 'http://example.com/lattice-upgrade/';
+      const args = {
+        realmURL,
+        realmUsername: 'owner',
+        ignoreData: {},
+        changes: [{ url: `${realmURL}a`, operation: 'update' as const }],
+      };
+      const old = await publishIncrementalIndexJob({
+        clientRequestId: 'old',
+        args,
+      });
+      const current = await publishIncrementalIndexJob({
+        clientRequestId: 'new',
+        args: {
+          ...args,
+          latticeBatch: { atomic: false, admittedAtMs: 10_000 },
+        },
+      });
+      assert.notStrictEqual(old.id, current.id);
+    });
+
     test('from-scratch dedup: a duplicate publish for an in-flight from-scratch attaches as a late waiter', async function (assert) {
       // From-scratch reindex is the maximal indexing operation for a
       // realm: any same-realm from-scratch already running subsumes a

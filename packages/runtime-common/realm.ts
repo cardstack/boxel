@@ -1228,6 +1228,8 @@ export interface CommitBatchResult {
 }
 
 export interface WriteOptions {
+  // Preserve this request as one primary indexing unit in Lattice realms.
+  atomicBatch?: boolean;
   clientRequestId?: string | null;
   serializeFile?: boolean | null;
   // When false, the write returns as soon as the source bytes are durable;
@@ -2278,6 +2280,7 @@ export class Realm {
       clientRequestId?: string | null;
       initiatedBy?: string | null;
       revisions?: Map<string, string>;
+      atomicBatch?: boolean;
       // Ask the pass not to enqueue its own prerender_html job; the returned
       // `deferredPrerenderHtml` then carries the set it would have rendered.
       deferPrerenderHtml?: boolean;
@@ -2302,6 +2305,7 @@ export class Realm {
       clientRequestId: opts?.clientRequestId ?? null,
       initiatedBy: opts?.initiatedBy ?? null,
       ...(opts?.revisions ? { revisions: opts.revisions } : {}),
+      ...(opts?.atomicBatch ? { atomicBatch: true } : {}),
       ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
       ...(opts?.carriedPrerenderHtmlChanges?.length
         ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
@@ -2355,6 +2359,7 @@ export class Realm {
       clientRequestId?: string | null;
       initiatedBy?: string | null;
       revisions?: Map<string, string>;
+      atomicBatch?: boolean;
       // Invalidation sets earlier passes of this same write deferred, folded
       // into the prerender_html job this pass spawns.
       carriedPrerenderHtmlChanges?: IncrementalChange[];
@@ -2378,6 +2383,7 @@ export class Realm {
       clientRequestId: opts?.clientRequestId ?? null,
       initiatedBy: opts?.initiatedBy ?? null,
       ...(opts?.revisions ? { revisions: opts.revisions } : {}),
+      ...(opts?.atomicBatch ? { atomicBatch: true } : {}),
       ...(opts?.carriedPrerenderHtmlChanges?.length
         ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
         : {}),
@@ -3153,6 +3159,7 @@ export class Realm {
         clientRequestId,
         initiatedBy: initiatingUser,
         revisions,
+        atomicBatch: options?.atomicBatch ?? files.size + deletes.length > 1,
         ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
         // Handed over either way: a pass that renders folds this into the job
         // it spawns, and a pass that defers folds it into the set it returns.
@@ -3555,6 +3562,8 @@ export class Realm {
             clientRequestId,
             initiatedBy: initiatingUser,
             revisions,
+            atomicBatch:
+              options?.atomicBatch ?? files.size + deletes.length > 1,
             ...(carried.length ? { carriedPrerenderHtmlChanges: carried } : {}),
             // Route the post-worker broadcast through onSettled so it runs
             // INSIDE the indexing deferred lifecycle. Without this, the
@@ -3964,6 +3973,7 @@ export class Realm {
           writeResults = await this._batchWriteUnlocked(files, {
             clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
             serializeFile: true,
+            atomicBatch: true,
             waitForIndex,
             initiatingUser: requestContext.authenticatedUser ?? null,
           });

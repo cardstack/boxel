@@ -254,6 +254,9 @@ function parseIncrementalArgsForCoalesce(
     revisions: isObjectLike(revisions)
       ? (revisions as Record<string, string>)
       : {},
+    ...(isObjectLike(args.latticeBatch)
+      ? { latticeBatch: args.latticeBatch }
+      : {}),
     // Read loosely: a job enqueued by a worker predating these fields has
     // neither, and dropping them here would silently un-defer that job.
     deferPrerenderHtml: deferPrerenderHtml === true,
@@ -311,12 +314,38 @@ export function inFlightIncrementalArgsCover(
   return true;
 }
 
+// A Lattice primary unit is one atomic request or at most five seconds of
+// ordinary arrivals. An expired pending job must not grow for the duration of
+// the backlog. Keep legacy publishers' coalescing exactly as before.
+export interface LatticeIndexBatch extends JSONTypes.Object {
+  atomic: boolean;
+  admittedAtMs: number;
+}
+
+function canMergeIncrementalBatch(existing: unknown, incoming: unknown) {
+  const a = isObjectLike(existing) ? existing.latticeBatch : undefined;
+  const b = isObjectLike(incoming) ? incoming.latticeBatch : undefined;
+  if (a === undefined && b === undefined) return true;
+  if (!isObjectLike(a) || !isObjectLike(b)) return false;
+  if (a.atomic !== false || b.atomic !== false) return false;
+  return (
+    typeof a.admittedAtMs === 'number' &&
+    typeof b.admittedAtMs === 'number' &&
+    Number.isFinite(a.admittedAtMs) &&
+    Number.isFinite(b.admittedAtMs) &&
+    b.admittedAtMs >= a.admittedAtMs &&
+    b.admittedAtMs - a.admittedAtMs < 5_000
+  );
+}
+
 function chooseIncrementalCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
   let { incoming, candidates, inFlightCandidates } = context;
   let sameTypeCandidate = candidates.find(
-    (candidate) => candidate.jobType === incoming.jobType,
+    (candidate) =>
+      candidate.jobType === incoming.jobType &&
+      canMergeIncrementalBatch(candidate.args, incoming.args),
   );
   if (sameTypeCandidate) {
     let existingArgs = parseIncrementalArgsForCoalesce(sameTypeCandidate.args);

@@ -24,6 +24,7 @@ import {
 } from '@cardstack/runtime-common/lattice-code-reference';
 import { latticeCutoffFilter } from '@cardstack/runtime-common/lattice-query-cutoff';
 import type { LatticeProjectionWhere } from '@cardstack/runtime-common/definitions';
+import { LatticeInputsPending } from '@cardstack/runtime-common/lattice-work';
 import { LatticeQueryRegistry } from '@cardstack/runtime-common/lattice-query-registry';
 import { latticeReadSetCurrent } from '@cardstack/runtime-common/lattice-kernel';
 import {
@@ -163,10 +164,19 @@ async function checkQueryInputs(
           param(frame.generation),
           `OR o.published_generation<1`,
         ]),
+    `) UNION ALL SELECT 1 FROM boxel_index i WHERE i.realm_url=`,
+    param(frame.realmURL),
+    `AND i.type='instance' AND i.is_deleted IS NOT TRUE
+     AND i.pristine_doc->'meta'->'publication' IS NOT NULL
+     AND (i.pristine_doc->'meta'->'publication'->>'outputRevision') IS NULL
+     AND (`,
+    ...typeScope,
     ') LIMIT 1',
   ]);
   if (pending.length)
-    throw new Error('Lattice query has unsettled materialized inputs');
+    throw new LatticeInputsPending(
+      'Lattice query has unsettled materialized inputs',
+    );
 }
 
 // A computation reads published card DATA. This object never imports CardDef,
@@ -187,8 +197,9 @@ export class LatticeMaterializationInputs {
   // the realm's owner rows (the columns the guard reads) plus the generation
   // and code epoch; the fingerprint is one aggregate over lattice_owners
   // (milliseconds) where the guard is a join with JSON extraction per row.
-  static #guardPassed = new Map<string, string>();
+  static #guardPassed = new WeakMap<DBAdapter, Map<string, string>>();
   static async guardOnce(
+    db: DBAdapter,
     run: (expression: Expression) => Promise<Record<string, unknown>[]>,
     frame: Frame,
     scopeKey: string,
@@ -201,13 +212,15 @@ export class LatticeMaterializationInputs {
     ]);
     const key = `${frame.realmURL}|${frame.loaderEpoch}|${frame.stale ? 1 : 0}|${scopeKey}`;
     const version = `${frame.generation}|${String(row?.fingerprint)}`;
-    if (LatticeMaterializationInputs.#guardPassed.get(key) === version) return;
+    let passed = LatticeMaterializationInputs.#guardPassed.get(db);
+    if (!passed) {
+      passed = new Map();
+      LatticeMaterializationInputs.#guardPassed.set(db, passed);
+    }
+    if (passed.get(key) === version) return;
     await check();
-    if (LatticeMaterializationInputs.#guardPassed.size >= 256)
-      LatticeMaterializationInputs.#guardPassed.delete(
-        LatticeMaterializationInputs.#guardPassed.keys().next().value!,
-      );
-    LatticeMaterializationInputs.#guardPassed.set(key, version);
+    if (passed.size >= 256) passed.delete(passed.keys().next().value!);
+    passed.set(key, version);
   }
   #db: DBAdapter;
   #frame: Frame;
@@ -360,6 +373,7 @@ export class LatticeMaterializationInputs {
       const scopeKey = JSON.stringify(typeScope);
       if (!this.#queryScopes.has(scopeKey)) {
         await LatticeMaterializationInputs.guardOnce(
+          this.#db,
           (expression) => query(this.#db, expression),
           this.#frame,
           scopeKey,
@@ -808,6 +822,7 @@ export class LatticeMaterializationInputs {
     this.#retainedQueries.clear();
     this.#retainedLinks.clear();
     this.#retainedLinkCount = 0;
+    const db = this.#db;
     return {
       watches,
       ...(projections ? { projections } : {}),
@@ -817,6 +832,7 @@ export class LatticeMaterializationInputs {
         await checkFrame(tx, frame, true);
         for (const scope of queryScopes)
           await LatticeMaterializationInputs.guardOnce(
+            db,
             tx,
             frame,
             'commit|' + JSON.stringify(scope),

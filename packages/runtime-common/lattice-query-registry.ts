@@ -1082,30 +1082,39 @@ export class LatticeQueryRegistry
     const overdue = new Set(
       runnableOwners.filter((owner) => owner.stale).map((o) => o.ownerURL),
     );
-    const neverPublished = new Set<string>(
-      overdue.size && this.db.kind === 'pg'
-        ? (
-            await query(this.db, [
-              `SELECT o.owner_url FROM lattice_owners o
-               JOIN realm_generations g ON g.realm_url=o.realm_url
-               LEFT JOIN boxel_index i
-               ON i.realm_url=o.realm_url AND i.url=o.owner_url AND i.type='instance'
-               WHERE o.realm_url=`,
-              param(realmURL),
-              `AND o.retired=FALSE AND o.dirty_generation IS NOT NULL
-               AND (i.url IS NULL OR (i.pristine_doc->'meta'->'publication'->>'outputRevision') IS NULL
-                    OR NOT`,
-              ...latticeOwnerDefinitionCurrent(
-                ['o.realm_url'],
-                ['o.owner_url'],
-                ['g.loader_epoch'],
-                ['o.definition_revision'],
-              ),
-              ')',
-            ])
-          ).map((row) => String(row.owner_url))
-        : [],
+    const unpublishedRows =
+      this.db.kind === 'pg'
+        ? await query(this.db, [
+            `SELECT i.url AS owner_url FROM boxel_index i
+           WHERE i.realm_url=`,
+            param(realmURL),
+            `AND i.type='instance' AND i.is_deleted IS NOT TRUE
+           AND i.pristine_doc->'meta'->'publication' IS NOT NULL
+           AND (i.pristine_doc->'meta'->'publication'->>'outputRevision') IS NULL
+           UNION SELECT o.owner_url FROM lattice_owners o
+           JOIN realm_generations g ON g.realm_url=o.realm_url
+           LEFT JOIN boxel_index i ON i.realm_url=o.realm_url
+             AND i.url=o.owner_url AND i.type='instance'
+           WHERE o.realm_url=`,
+            param(realmURL),
+            `AND o.retired=FALSE AND o.dirty_generation IS NOT NULL
+           AND (i.url IS NULL OR NOT`,
+            ...latticeOwnerDefinitionCurrent(
+              ['o.realm_url'],
+              ['o.owner_url'],
+              ['g.loader_epoch'],
+              ['o.definition_revision'],
+            ),
+            ')',
+          ])
+        : [];
+    const neverPublished = new Set(
+      unpublishedRows.map((row) => String(row.owner_url)),
     );
+    const pendingInputs = new Set([
+      ...pending.map((o) => o.ownerURL),
+      ...neverPublished,
+    ]);
     const inputs = new Map(
       pending.map(({ ownerURL }) => [ownerURL, new Set<string>()]),
     );
@@ -1165,9 +1174,9 @@ export class LatticeQueryRegistry
         filter.in.id.every((id) => typeof id === 'string')
       ) {
         const ids = new Set(filter.in.id);
-        for (const input of pending)
-          if (ids.has(input.ownerURL.replace(/\.json$/, '')))
-            inputs.get(ownerURL)?.add(input.ownerURL);
+        for (const input of pendingInputs)
+          if (ids.has(input.replace(/\.json$/, '')))
+            inputs.get(ownerURL)?.add(input);
         continue;
       }
       // Different rooms/dates can share one readiness scope. Their exact
@@ -1187,6 +1196,17 @@ export class LatticeQueryRegistry
            AND (i.url IS NULL OR (`,
           ...scope,
           '))',
+          ...(this.db.kind === 'pg'
+            ? [
+                'UNION SELECT i.url AS owner_url FROM boxel_index i WHERE i.realm_url=',
+                param(realmURL),
+                "AND i.type='instance' AND i.is_deleted IS NOT TRUE AND i.url = ANY(",
+                textArrayParam([...neverPublished]),
+                ') AND (',
+                ...scope,
+                ')',
+              ]
+            : []),
         ]);
         candidates = rows.map((row) => String(row.owner_url));
         scopes.set(key, candidates);

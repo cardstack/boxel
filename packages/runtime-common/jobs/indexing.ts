@@ -5,6 +5,7 @@ import type {
   IncrementalChange,
   IncrementalDoneResult,
   IncrementalResult,
+  LatticeIndexBatch,
 } from '../tasks/indexer.ts';
 import { param, query, type PgPrimitive } from '../expression.ts';
 import type { DBAdapter } from '../db.ts';
@@ -376,6 +377,7 @@ export interface IncrementalIndexEnqueueArgs {
   ignoreData: Record<string, string>;
   // See IncrementalArgs.revisions.
   revisions?: Record<string, string>;
+  latticeBatch?: LatticeIndexBatch;
   // See IncrementalArgs for both of these.
   deferPrerenderHtml?: boolean;
   carriedPrerenderHtmlChanges?: IncrementalChange[];
@@ -394,6 +396,7 @@ export function makeIncrementalArgsWithCallerMetadata(
     ignoreData: args.ignoreData,
     coalescedCallers,
     revisions: args.revisions ?? {},
+    ...(args.latticeBatch ? { latticeBatch: args.latticeBatch } : {}),
     deferPrerenderHtml: args.deferPrerenderHtml === true,
     carriedPrerenderHtmlChanges: args.carriedPrerenderHtmlChanges ?? [],
   };

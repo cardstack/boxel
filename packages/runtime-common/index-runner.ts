@@ -45,6 +45,7 @@ import {
 import type { IndexingProgressEvent } from './worker.ts';
 import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver.ts';
 import {
+  LatticeInputsPending,
   LatticeWorkSuperseded,
   LatticeWorkFailed,
   type LatticeReadScope,
@@ -972,6 +973,7 @@ export class IndexRunner {
         this.#indexingInstances.clear();
         let succeeded = 0;
         let recordedFailures = 0;
+        let withheld = 0;
         const completedOwners: string[] = [];
         let failures: string[] = [];
         // Bookkeeping and row writes are serialized in completion order; only
@@ -1013,15 +1015,7 @@ export class IndexRunner {
                   lockGroup: false,
                 })
             : undefined;
-          if (check) {
-            await check();
-            // Owner-state validation opens the publication transaction; the
-            // reservation is re-read under the queue group lock at its tail.
-            this.batch.registerLatticePublicationCheck(ownerURL, check);
-            this.batch.registerLatticeCommitCheck(ownerURL, (tx) =>
-              publication.registry.assertReservationCurrent(work, tx),
-            );
-          }
+          if (check) await check();
           let warmMs = 0;
           let outcome = await this.#renderVisit(
             new URL(ownerURL),
@@ -1080,6 +1074,14 @@ export class IndexRunner {
             }
             return;
           }
+          if (check) {
+            // Owner-state validation opens the publication transaction; the
+            // reservation is re-read under the queue group lock at its tail.
+            this.batch.registerLatticePublicationCheck(ownerURL, check);
+            this.batch.registerLatticeCommitCheck(ownerURL, (tx) =>
+              publication.registry.assertReservationCurrent(work, tx),
+            );
+          }
           const rendered = outcome.result;
           finishing = finishing.then(async () => {
             let finishStartedAt = Date.now();
@@ -1100,6 +1102,10 @@ export class IndexRunner {
               try {
                 await materializeOwner(next);
               } catch (error) {
+                if (error instanceof LatticeInputsPending) {
+                  withheld++;
+                  continue;
+                }
                 if (error instanceof LatticeWorkSuperseded) {
                   superseded ??= error;
                   return;
@@ -1115,6 +1121,8 @@ export class IndexRunner {
           renderStartedAt -
           this.#latticeTimings.latticeQueryWarmMs;
         if (!succeeded) {
+          if (withheld && !failures.length)
+            throw new LatticeInputsPending('waiting for input publications');
           const message = `Lattice could not materialize pending owners: ${failures.join(', ')}`;
           throw followup && recordedFailures
             ? new LatticeWorkFailed(message)

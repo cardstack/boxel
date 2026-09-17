@@ -49,6 +49,7 @@ export interface IncrementalIndexMeta {
 }
 
 export interface IncrementalIndexOptions {
+  atomicBatch?: boolean;
   onInvalidation?: (
     invalidatedURLs: URL[],
     meta: IncrementalIndexMeta,
@@ -337,6 +338,14 @@ export class RealmIndexUpdater {
     let job: Job<IncrementalDoneResult>;
     try {
       let args: IncrementalIndexEnqueueArgs = {
+        ...(this.#realm.latticeEnabled
+          ? {
+              latticeBatch: {
+                atomic: opts?.atomicBatch ?? false,
+                admittedAtMs: Date.now(),
+              },
+            }
+          : {}),
         changes: changes.map(({ url, operation }) => ({
           url: url.href,
           operation,

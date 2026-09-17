@@ -1295,6 +1295,28 @@ module(basename(import.meta.filename), function (hooks) {
       [feeder],
       'past it too, while the feeder has never published',
     );
+    await db.execute(
+      'UPDATE lattice_owners SET dirty_generation=NULL WHERE owner_url=$1',
+      { bind: [feeder] },
+    );
+    assert.deepEqual(
+      names(await registry.ready(realm)),
+      [],
+      'a stub blocks even before routing marks it dirty',
+    );
+    await db.execute('DELETE FROM lattice_owners WHERE owner_url=$1', {
+      bind: [feeder],
+    });
+    assert.deepEqual(
+      names(await registry.ready(realm)),
+      [],
+      'a stub blocks even before its owner is registered',
+    );
+    await db.execute(
+      `INSERT INTO lattice_owners(realm_url,owner_url,published_generation,input_generation,dirty_generation,definition_revision,retired)
+       VALUES($1,$2,5,4,6,'epoch',FALSE)`,
+      { bind: [realm, feeder] },
+    );
     // The feeder has published once: its row carries an output revision. Its
     // state may well be pending again (its card re-indexed as a source); the
     // body is what a stale attempt reads, and the body is there.
@@ -1395,10 +1417,18 @@ module(basename(import.meta.filename), function (hooks) {
       "UPDATE lattice_owners SET dirty_generation=7, stale_after = now() - interval '1 second' WHERE owner_url=$1",
       { bind: [owner] },
     );
-    await assert.rejects(
-      (await candidate()).publish(),
-      /obsolete owner publication/,
-      'an ordinary attempt cannot publish under a newer obligation',
+    const before = await ownerRow();
+    await (await candidate()).publish();
+    const after = await ownerRow();
+    assert.strictEqual(
+      after.published_generation,
+      before.published_generation,
+      'an obsolete ordinary output is withheld',
+    );
+    assert.strictEqual(
+      Number(after.dirty_generation),
+      7,
+      'its newer obligation is preserved',
     );
     const { result, publish } = await candidate('A', undefined, false, {
       stale: true,

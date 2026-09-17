@@ -13,7 +13,10 @@ import {
   LatticeMaterializationInputs,
   LatticeUnknownLinkInput,
 } from '../lib/lattice-materialization-inputs.ts';
-import { LatticeWorkSuperseded } from '@cardstack/runtime-common/lattice-work';
+import {
+  LatticeInputsPending,
+  LatticeWorkSuperseded,
+} from '@cardstack/runtime-common/lattice-work';
 import type { Filter } from '@cardstack/runtime-common/query';
 import { LatticeBxlWorker } from '../lib/lattice-bxl-derivation.ts';
 import { setupDB } from './helpers/index.ts';
@@ -581,6 +584,31 @@ module(basename(import.meta.filename), function (hooks) {
       'a stub with no output revision blocks a stale attempt',
     );
   });
+
+  for (const registered of [true, false]) {
+    test(`a never-published query input yields without a failure (registered=${registered})`, async (assert) => {
+      const url = await materializedCard('stub', 2);
+      await db.execute(
+        `UPDATE boxel_index SET pristine_doc=(pristine_doc #- '{meta,publication,outputRevision}') WHERE url=$1`,
+        { bind: [url] },
+      );
+      if (!registered)
+        await db.execute('DELETE FROM lattice_owners WHERE owner_url=$1', {
+          bind: [url],
+        });
+      try {
+        await (
+          await open()
+        ).query('feeders', { filter: { type: codeRef }, page: { size: 10 } });
+        assert.ok(false, 'a stub cannot be consumed');
+      } catch (error) {
+        assert.true(
+          error instanceof LatticeInputsPending,
+          'deferred scheduling outcome, not a computation failure',
+        );
+      }
+    });
+  }
 
   test('a stale frame reads a dirty feeder at its last published body', async (assert) => {
     const url = await materializedCard('feeder', 2);
