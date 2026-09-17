@@ -53,8 +53,8 @@ export interface LatticeOwnerPublication {
   retired?: boolean;
   pending?: boolean;
   retainOutputGeneration?: number;
-  // See PublicationReceipt.settleMs. Only a ready publication starts a hold.
-  settleMs?: number;
+  // See PublicationReceipt.freshUntil. Only a ready publication starts a hold.
+  freshUntil?: string;
 }
 
 // A dirty owner inside its settle window is not runnable (`pending` with
@@ -312,13 +312,13 @@ export class LatticeQueryRegistry
       return false;
     }
     const outputGeneration = owner.retainOutputGeneration ?? generation;
-    const settleMs =
-      !owner.retired &&
-      !owner.pending &&
-      Number.isFinite(owner.settleMs) &&
-      owner.settleMs! > 0
-        ? Math.floor(owner.settleMs!)
-        : undefined;
+    let freshUntil: string | undefined;
+    if (!owner.retired && !owner.pending && owner.freshUntil) {
+      const instant = new Date(owner.freshUntil);
+      if (Number.isNaN(instant.getTime()))
+        throw new Error('Lattice publication has an invalid fresh bound');
+      freshUntil = instant.toISOString();
+    }
     const pg = this.db.kind === 'pg';
     await tx([
       `INSERT INTO lattice_owners
@@ -350,12 +350,8 @@ export class LatticeQueryRegistry
           ]
         : ['FALSE']),
       ...(pg
-        ? settleMs !== undefined
-          ? [
-              ', now() + (',
-              param(settleMs),
-              "::bigint * interval '1 millisecond')",
-            ]
+        ? freshUntil !== undefined
+          ? [', ', param(freshUntil), '::timestamptz']
           : [', NULL']
         : []),
       `) ON CONFLICT (realm_url, owner_url) DO UPDATE SET

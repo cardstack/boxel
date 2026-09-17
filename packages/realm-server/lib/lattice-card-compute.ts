@@ -55,6 +55,9 @@ export interface LatticeCardComputeResult {
     // Raw time-grain results per grained field (a date, an instant or
     // null); the caller converts and stores the earliest.
     grains?: Record<string, string | null>;
+    // Raw freshness-grain results per field (BxlOptions.freshUntil), same
+    // value shape; the caller keeps the earliest as the owner's fresh bound.
+    fresh?: Record<string, string | null>;
   }>;
   measurements: LatticeNativeComputeMeasurements;
 }
@@ -385,7 +388,30 @@ export function prepareLatticeCardCompute(plan: LatticeCardComputePlan) {
   }
   const programs = new Map<string, BxlComputeFunction>();
   const grains = new Map<string, BxlComputeFunction>();
+  const freshGrains = new Map<string, BxlComputeFunction>();
   const dependencies = new Map<string, string[]>();
+  const compileGrain = (
+    source: string,
+    libraries: BuiltinLibraryName[],
+  ): BxlComputeFunction => {
+    const grain = bxl(source, {
+      readableSyntax: false,
+      libraries,
+      memoize: false,
+      runtimeLimits: {
+        maxSteps: 1_000_000,
+        maxMillis: 1_000,
+        maxOutputs: 1,
+        maxOutputBytes: 256,
+      },
+    });
+    assertRootInputs(
+      getBxlComputeDefinition(grain)!.deps,
+      plan.input,
+      plan.fields,
+    );
+    return grain;
+  };
   for (const [name, field] of Object.entries(plan.fields)) {
     if (['__proto__', 'constructor', 'prototype'].includes(name)) {
       throw new Error(`Invalid computed field name: ${name}`);
@@ -412,27 +438,12 @@ export function prepareLatticeCardCompute(plan: LatticeCardComputePlan) {
       assertRootInputs(deps, plan.input, plan.fields);
       dependencies.set(name, deps);
       programs.set(name, compute);
-      if (field.bxl.validUntil) {
-        // The grain runs over the same facade after the value; its roots
-        // were folded into the field's dependencies by the factory.
-        const grain = bxl(field.bxl.validUntil, {
-          readableSyntax: false,
-          libraries,
-          memoize: false,
-          runtimeLimits: {
-            maxSteps: 1_000_000,
-            maxMillis: 1_000,
-            maxOutputs: 1,
-            maxOutputBytes: 256,
-          },
-        });
-        assertRootInputs(
-          getBxlComputeDefinition(grain)!.deps,
-          plan.input,
-          plan.fields,
-        );
-        grains.set(name, grain);
-      }
+      // A grain runs over the same facade after the value; its roots were
+      // folded into the field's dependencies by the factory.
+      if (field.bxl.validUntil)
+        grains.set(name, compileGrain(field.bxl.validUntil, libraries));
+      if (field.bxl.freshUntil)
+        freshGrains.set(name, compileGrain(field.bxl.freshUntil, libraries));
     } else {
       assertRootInputs(['cardInfo'], plan.input, plan.fields);
       dependencies.set(name, ['cardInfo']);
@@ -579,30 +590,39 @@ export function prepareLatticeCardCompute(plan: LatticeCardComputePlan) {
     // Lazy reads still handle conditional dependencies and reject real cycles.
     // Every declared computation completes once before the card can publish.
     for (const name of evaluationOrder) void card[name];
-    let grainResults: Record<string, string | null> | undefined;
-    for (const [name, grain] of grains) {
-      let result: unknown;
-      try {
-        result = grain.call(card);
-      } catch (error) {
-        throw new Error(
-          `Lattice time grain ${plan.definition.name}.${name}: ` +
-            (error instanceof Error ? error.message : String(error)),
-          { cause: error },
-        );
+    const evaluateGrains = (
+      kind: 'time' | 'freshness',
+      programs: Map<string, BxlComputeFunction>,
+    ): Record<string, string | null> | undefined => {
+      let results: Record<string, string | null> | undefined;
+      for (const [name, grain] of programs) {
+        let result: unknown;
+        try {
+          result = grain.call(card);
+        } catch (error) {
+          throw new Error(
+            `Lattice ${kind} grain ${plan.definition.name}.${name}: ` +
+              (error instanceof Error ? error.message : String(error)),
+            { cause: error },
+          );
+        }
+        if (result !== null && typeof result !== 'string') {
+          throw new Error(
+            `Lattice ${kind} grain ${plan.definition.name}.${name} must yield a date, an instant or null`,
+          );
+        }
+        (results ??= {})[name] = result;
       }
-      if (result !== null && typeof result !== 'string') {
-        throw new Error(
-          `Lattice time grain ${plan.definition.name}.${name} must yield a date, an instant or null`,
-        );
-      }
-      (grainResults ??= {})[name] = result;
-    }
+      return results;
+    };
+    const grainResults = evaluateGrains('time', grains);
+    const freshResults = evaluateGrains('freshness', freshGrains);
     return {
       id: input.id,
       inputRevision: input.revision,
       definitionRevision: plan.definition.revision,
       ...(grainResults ? { grains: grainResults } : {}),
+      ...(freshResults ? { fresh: freshResults } : {}),
       // Trusted base functions can return a protected input reference. Leave
       // read guards inside this worker and send only plain data to publication.
       values: Object.fromEntries(

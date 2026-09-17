@@ -170,8 +170,10 @@ export async function assembleLatticeCardData({
     return snapshot;
   }
   // Grain instants from every evaluated node (root and contained); the card's
-  // valid_until is the earliest.
+  // valid_until is the earliest. Freshness bounds likewise: the owner is
+  // held until the earliest field needs re-deriving.
   const grainInstants: string[] = [];
+  const freshInstants: string[] = [];
   let nestedEvaluations = 0;
   // Run a contained definition's own BXL computeds for each of its nodes in
   // one worker call. Their values join the node (and so the holder's inputs)
@@ -214,6 +216,10 @@ export async function assembleLatticeCardData({
       for (const raw of Object.values(artifact.grains ?? {})) {
         const instant = latticeValidUntilInstant(raw);
         if (instant !== null) grainInstants.push(instant);
+      }
+      for (const raw of Object.values(artifact.fresh ?? {})) {
+        const instant = latticeValidUntilInstant(raw);
+        if (instant !== null) freshInstants.push(instant);
       }
     });
   }
@@ -535,6 +541,14 @@ export async function assembleLatticeCardData({
   for (const instant of grainInstants) {
     if (validUntil === null || instant < validUntil) validUntil = instant;
   }
+  let freshUntil: string | null = null;
+  for (const raw of Object.values(computed?.artifacts[0].fresh ?? {})) {
+    const instant = latticeValidUntilInstant(raw);
+    if (instant !== null) freshInstants.push(instant);
+  }
+  for (const instant of freshInstants) {
+    if (freshUntil === null || instant < freshUntil) freshUntil = instant;
+  }
 
   function output(current: DataNode, prefix = '') {
     const attributes: Record<string, any> = {};
@@ -661,6 +675,7 @@ export async function assembleLatticeCardData({
     },
     searchDoc: result.search,
     validUntil,
+    freshUntil,
     sourceRevision,
     definitionRevisions: [...snapshots.values()].map(
       ({ definition, revision }) => ({ codeRef: definition.codeRef, revision }),

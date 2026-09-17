@@ -260,12 +260,11 @@ export function createLatticeNativeCardIndexer({
               .map(([name]) => name)
           : []);
       if (dataReceipt || discovery) {
-        const settleMs = admission.root.definition.nativeIndex?.settleMs;
         const manifest: PublicationReceipt = {
           version: 1,
           state: 'pending',
           validatedThrough: request.inputSnapshot?.generation ?? 0,
-          ...(settleMs ? { settleMs } : {}),
+          ...(result.freshUntil ? { freshUntil: result.freshUntil } : {}),
           computedFields: Object.entries(admission.root.definition.fields)
             .filter(([name, key]) => {
               const field = admission.root.definition.fieldDefs[key];

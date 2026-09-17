@@ -617,7 +617,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
             watches: prepared.watches.get(row.url)!,
             pending: !ready,
             ...(retain ? { retainOutputGeneration: outputGeneration } : {}),
-            ...(manifest.settleMs ? { settleMs: manifest.settleMs } : {}),
+            ...(manifest.freshUntil ? { freshUntil: manifest.freshUntil } : {}),
           });
         let retainsOutput = retainOutput;
         let accepted = await publishOwner(retainOutput);

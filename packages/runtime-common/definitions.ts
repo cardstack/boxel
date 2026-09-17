@@ -24,6 +24,9 @@ export interface BxlComputeDefinition {
   // Compiled time-grain program (BxlOptions.validUntil): yields the date or
   // instant at which the value next changes, or null.
   validUntil?: string;
+  // Compiled freshness-grain program (BxlOptions.freshUntil): yields the
+  // date or instant before which the value need not be re-derived, or null.
+  freshUntil?: string;
 }
 
 export type BaseCardComputeName =
@@ -146,8 +149,6 @@ export interface Definition {
     displayNames: string[];
     cardType: string;
     materialized?: true;
-    // CardDef.latticeSettleMs, when positive.
-    settleMs?: number;
   };
 }
 

@@ -86,11 +86,6 @@ function getLatticeIndexMetadata(
         ...((cardDef as typeof CardAPI.CardDef).materialized
           ? { materialized: true as const }
           : {}),
-        ...(Number.isFinite(
-          (cardDef as typeof CardAPI.CardDef).latticeSettleMs,
-        ) && (cardDef as typeof CardAPI.CardDef).latticeSettleMs > 0
-          ? { settleMs: (cardDef as typeof CardAPI.CardDef).latticeSettleMs }
-          : {}),
       };
     }
     const name = current.displayName;

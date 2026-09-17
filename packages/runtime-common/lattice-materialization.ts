@@ -18,10 +18,12 @@ export interface PublicationReceipt {
   watches: Array<{ fieldPath: string; query: Query }>;
   validatedThrough: number;
   outputRevision?: number;
-  // The owner type's `latticeSettleMs`: after a ready publication the owner
-  // is held for this long before it can publish again. Registered on the
-  // owner row at publication (`lattice_owners.settle_until`).
-  settleMs?: number;
+  // The earliest `freshUntil` grain over the owner's computed fields (an ISO
+  // instant): the owner need not be re-derived before it. Registered on the
+  // owner row at a ready publication (`lattice_owners.settle_until`). Only a
+  // producer that evaluates grains (the native worker) supplies it; the
+  // browser, which recomputes live, does not.
+  freshUntil?: string;
   // Inventory for a complete applied body, never authorization or freshness.
   have?: string;
   definitionRevision?: string;

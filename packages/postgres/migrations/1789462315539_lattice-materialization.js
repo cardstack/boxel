@@ -15,7 +15,8 @@ exports.up = (pgm) => {
       attributes_json text,
       attributes_generation bigint,
       code_bound boolean NOT NULL DEFAULT FALSE,
-      -- CardDef.latticeSettleMs: a dirty owner is not runnable before this.
+      -- The earliest freshUntil grain over the owner's fields at its last
+      -- publication: a dirty owner is not runnable before it.
       settle_until timestamptz,
       PRIMARY KEY (realm_url, owner_url)
     );

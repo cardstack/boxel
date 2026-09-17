@@ -4069,14 +4069,6 @@ export class CardDef extends BaseDef {
         import('@cardstack/runtime-common/definitions').LatticeDataProjection
       >
     | undefined;
-  // Lattice POC: the least time between two publications of an owner of this
-  // type, in milliseconds. A change that arrives inside that window after the
-  // last publication is held until the window closes and then published with
-  // everything that arrived meanwhile; reads keep serving the last published
-  // value. For top-tier summaries (leaderboards, standings) that do not need
-  // to move on every event. 0 publishes as soon as the owner is ready; the
-  // granularity is the worker's queue poll (about ten seconds).
-  static latticeSettleMs = 0;
   get publicationState() {
     return latticeSnapshotState(this);
   }
@@ -6499,7 +6491,6 @@ export function publicationManifest(
     }
   };
   collect(instance);
-  let settleMs = (instance.constructor as typeof CardDef).latticeSettleMs;
   return {
     version: 1,
     state: 'pending',
@@ -6510,7 +6501,6 @@ export function publicationManifest(
     // result. Only the writer, after checking the pinned input revision, may
     // change this marker to ready.
     validatedThrough: inputGeneration ?? 0,
-    ...(Number.isFinite(settleMs) && settleMs > 0 ? { settleMs } : {}),
   };
 }
 

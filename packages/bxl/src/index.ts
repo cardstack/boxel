@@ -447,6 +447,20 @@ export interface BxlOptions {
    */
   validUntil?: string | BxlTaggedSource;
   /**
+   * Freshness grain, the other bound of the value's validity window: a
+   * derive-profile program over the same input that yields the `YYYY-MM-DD`
+   * date or ISO instant before which the value need not be re-derived, or
+   * `null` for no such bound. Where `validUntil` says "re-derive at T",
+   * this says "do not re-derive before T": a change to an input inside the
+   * window is held and applied once, when the window closes. For a summary
+   * at the top of a feeder graph (a leaderboard) that need not move on
+   * every event. Read `.__clock` for a wall-clock window (the clock is
+   * minute-truncated, so the finest useful window is a minute). An owner
+   * publishes whole, so the engine holds it until the earliest fresh bound
+   * over its fields; a field without one keeps the owner unheld.
+   */
+  freshUntil?: string | BxlTaggedSource;
+  /**
    * Materialize the raw output as an instance of `Class`. When the
    * expression yields:
    * - a plain object → `new Class(); Object.assign(instance, raw)`
@@ -488,6 +502,7 @@ export interface BxlComputeMetadata {
   deps: string[];
   memoize: BxlComputeMemoizationMode;
   validUntil?: string;
+  freshUntil?: string;
 }
 
 export interface BxlComputeFunction {
@@ -507,6 +522,8 @@ export interface BxlComputeDefinition {
   customRuntimeLimits: boolean;
   // Compiled time-grain program; see BxlOptions.validUntil.
   validUntil?: string;
+  // Compiled freshness-grain program; see BxlOptions.freshUntil.
+  freshUntil?: string;
 }
 
 const computeDefinitions = new WeakMap<Function, BxlComputeDefinition>();
@@ -1091,29 +1108,36 @@ export function bxl(
   const prepared = preparedBxlFromNative(preparedNative, merged);
   // The grain is compiled and profile-checked like the value program; its
   // roots join the definition's dependencies so a native plan admits them.
-  let grain: PreparedNativeJq | undefined;
-  if (merged.validUntil !== undefined) {
-    const grainTagged = isTaggedSource(merged.validUntil)
-      ? merged.validUntil
-      : null;
-    const grainSource = grainTagged
-      ? grainTagged.source
-      : (merged.validUntil as string);
+  const compileGrain = (
+    program: string | BxlTaggedSource,
+  ): PreparedNativeJq => {
+    const grainTagged = isTaggedSource(program) ? program : null;
+    const grainSource = grainTagged ? grainTagged.source : (program as string);
     const grainOptions: BxlOptions = {
       ...merged,
       validUntil: undefined,
+      freshUntil: undefined,
       readableSyntax:
         options.readableSyntax ??
         (grainTagged?.[BXL_MODE] === 'jq' ? false : defaultReadable),
     };
-    grain = prepareNativeJqForRuntime(grainSource, {
+    const compiled = prepareNativeJqForRuntime(grainSource, {
       schema: grainOptions.schema,
       readableSyntax: grainOptions.readableSyntax,
       libraries: grainOptions.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
       runtimeLimits: grainOptions.runtimeLimits,
     });
-    assertComputeViaDeriveProfile(grainSource, grainOptions, grain);
-  }
+    assertComputeViaDeriveProfile(grainSource, grainOptions, compiled);
+    return compiled;
+  };
+  const grain =
+    merged.validUntil !== undefined
+      ? compileGrain(merged.validUntil)
+      : undefined;
+  const fresh =
+    merged.freshUntil !== undefined
+      ? compileGrain(merged.freshUntil)
+      : undefined;
   const ShapeClass = options.as;
   const memoize = normalizeMemoizationMode(merged.memoize);
   const memoCache =
@@ -1178,7 +1202,13 @@ export function bxl(
     return value;
   } as BxlComputeFunction;
 
-  const deps = [...new Set([...prepared.deps, ...(grain?.deps ?? [])])];
+  const deps = [
+    ...new Set([
+      ...prepared.deps,
+      ...(grain?.deps ?? []),
+      ...(fresh?.deps ?? []),
+    ]),
+  ];
   Object.defineProperty(computeViaBxl, 'bxl', {
     value: Object.freeze({
       source: prepared.source,
@@ -1187,6 +1217,7 @@ export function bxl(
       deps,
       memoize,
       ...(grain ? { validUntil: grain.compiledSource } : {}),
+      ...(fresh ? { freshUntil: fresh.compiledSource } : {}),
     } satisfies BxlComputeMetadata),
     enumerable: false,
   });
@@ -1199,6 +1230,7 @@ export function bxl(
     materializesClass: Boolean(ShapeClass),
     customRuntimeLimits: merged.runtimeLimits !== undefined,
     ...(grain ? { validUntil: grain.compiledSource } : {}),
+    ...(fresh ? { freshUntil: fresh.compiledSource } : {}),
   });
 
   return computeViaBxl;
