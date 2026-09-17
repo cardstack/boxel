@@ -343,7 +343,6 @@ export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 // says so in the log, rather than reaching `realmConfig("x")` as a value that
 // cannot be indexed by name. An absent or explicitly null map is the ordinary
 // case of a realm that declares no settings, and is not remarked on.
-
 function assignRealmConfig(
   realmInfo: RealmInfo,
   config: unknown,
