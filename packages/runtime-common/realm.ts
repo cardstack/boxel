@@ -360,7 +360,13 @@ function assignRealmConfig(
     );
     return;
   }
-  realmInfo.config = { ...(config as Record<string, JsonValue>) };
+  // Copied whole rather than shallowly, because the object this is given
+  // belongs to whoever produced it — the index row the overlay read, which the
+  // query engine is free to hold onto — while the map made here is memoized
+  // until the next index swap. Sharing a structured value between the two ties
+  // their lifetimes together for no gain; a settings map is small enough that
+  // copying it costs nothing.
+  realmInfo.config = structuredClone(config) as Record<string, JsonValue>;
 }
 
 export interface RealmSession {

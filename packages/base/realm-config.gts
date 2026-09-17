@@ -603,7 +603,7 @@ class RealmSettingsEdit extends Component<typeof RealmSettingsField> {
       {{/if}}
       {{#if @canEdit}}
         <Button
-          @kind='secondary-light'
+          @kind='secondary'
           @size='small'
           {{on 'click' this.add}}
           data-test-add-setting
