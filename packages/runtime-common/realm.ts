@@ -5678,12 +5678,18 @@ export class Realm {
     // delegated session is `can(user, 'read')`-checked — so this one is too.
     // Without it, revoking a user's read on the realm would leave every
     // capture URL they already minted working until the token expired.
-    // Last, so an unauthorized token costs no permission lookup.
+    // Last, so an unauthorized token costs no permission lookup. The realm's
+    // own matrix user is exempt for the same reason `checkPermission` exempts
+    // it: it is permitted every action, and it is the gate the mint went
+    // through — a principal that can mint here must be able to serve here.
     let permissionChecker = new RealmPermissionChecker(
       requestContext.permissions,
       this.#matrixClient,
     );
-    if (!(await permissionChecker.can(claims.user, 'read'))) {
+    if (
+      claims.user !== this.#matrixClientUserId &&
+      !(await permissionChecker.can(claims.user, 'read'))
+    ) {
       this.#log.warn(
         `capture-url token for GET ${maskLoggedURL(request.url)} names user ${claims.user}, who does not have read permission on ${this.url}`,
       );
