@@ -428,11 +428,11 @@ that distinction available from the run itself — see below.
 **The credential pool is the ceiling.** Each session authenticates as its own
 user, one per CSV row, so a 20-row file caps a run at 19 readers. Against a
 deployed realm at `--derive-page-size 0`, 19 readers held a peak 120-second
-mean of 6.3 searches in flight — 79% of the shipped `multi-row` rung at 8,
-never crossing it, and roughly a quarter of the way to the admission cap.
-Extrapolating linearly, the rungs want something like 25 and 38 readers **per
-replica**. Growing the pool is what makes a load number realistic, and it is
-also what makes the `429` path reachable.
+mean of **6.3** searches in flight. Read that against the rungs and the cap in
+`packages/runtime-common/search-bounds.ts`; at roughly a third of a reader per
+unit of mean, reaching a rung of 8 wants about 25 readers and one of 12 about
+38, **per replica**. Growing the pool is what makes a load number realistic,
+and it is also what makes the `429` path reachable.
 
 **Exercising the mechanism is a different question, and much cheaper.** The
 policy's thresholds are environment-readable — `LINK_SHAPE_MULTI_ROW_ENGAGE`

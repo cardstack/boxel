@@ -445,9 +445,10 @@ could not have engaged. Two different questions, two different answers:
 - **Is the threshold where real traffic can reach it?** That needs load, and
   the credential pool is the ceiling: one session per CSV row, so a 20-row file
   caps a run at 19 readers. At `--derive-page-size 0` that held a peak
-  120-second mean of 6.3 searches in flight against a shipped `multi-row` rung
-  of 8 — 79% of it, never crossing. Extrapolating, the rungs want roughly 25 and
-  38 readers **per replica**. Growing the pool is the only fix, and it is what
+  120-second mean of **6.3** searches in flight. Read it against the rungs and
+  the cap in `packages/runtime-common/search-bounds.ts` — at roughly a third of
+  a reader per unit of mean, a rung of 8 wants about 25 readers and one of 12
+  about 38, **per replica**. Growing the pool is the only fix, and it is what
   makes the `429` path reachable too.
 - **Does the mechanism work?** That does not need the load. The thresholds are
   environment-readable — `LINK_SHAPE_MULTI_ROW_ENGAGE`, `LINK_SHAPE_ALL_ENGAGE`
