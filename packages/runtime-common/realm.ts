@@ -922,7 +922,13 @@ function buildEtag(
 // `skipQueryBackedExpansion` into its own key rather than into the ETag.
 // Adding a member here is the wrong move for a variation the validator does
 // not have to carry.
-type CardJsonShape = 'full' | 'links-only' | 'write-echo';
+// Listed as values as well as a union, so a reader that must cover every
+// shape can enumerate them rather than restate the list. A conditional write
+// is such a reader: it compares a caller's validator against every one the
+// realm could have issued for the card, and a shape it does not know about is
+// a validator it would refuse for no reason the caller can see.
+const CARD_JSON_SHAPES = ['full', 'links-only', 'write-echo'] as const;
+type CardJsonShape = (typeof CARD_JSON_SHAPES)[number];
 
 function buildCardJsonEtag(
   indexedAt: number | null | undefined,
@@ -8270,27 +8276,20 @@ export class Realm {
       if (entry?.type !== 'instance' || this.hasForeignRealmDeps(entry.deps)) {
         refuse();
       }
-      // Every validator the realm would hand out for this card as it stands.
-      // A card+json read picks its link shape per request — the setting can
-      // differ between the read that gave the client its validator and this
-      // write — and the shapes take different variants of one validator so a
-      // client holding either is not 304'd to the other. That distinction is
-      // about representations; this question is about the card, and all of
-      // these describe the same card at the same `indexed_at`. Refusing a
-      // write because the read that preceded it answered in the narrower
-      // shape would refuse on a server setting rather than on anything the
-      // caller did.
+      // Every validator the realm would hand out for this card as it stands,
+      // enumerated rather than listed, so a shape added later is covered here
+      // the day it ships. The shapes exist so a client holding one
+      // representation is not 304'd to another, which makes them a fact about
+      // representations — and this question is about the card. All of them
+      // describe the same card at the same `indexed_at`, so refusing over
+      // which shape a preceding read happened to answer in would refuse on a
+      // server setting, or on whether the caller's last read was a write
+      // echo, rather than on anything the caller did.
       let realmInfoHash = this.getCachedRealmInfoHash();
       let screenshots = screenshotsEtagFingerprint(entry!.screenshots);
-      let issued = [
-        buildCardJsonEtag(entry!.indexedAt, realmInfoHash, screenshots, 'full'),
-        buildCardJsonEtag(
-          entry!.indexedAt,
-          realmInfoHash,
-          screenshots,
-          'links-only',
-        ),
-      ];
+      let issued = CARD_JSON_SHAPES.map((shape) =>
+        buildCardJsonEtag(entry!.indexedAt, realmInfoHash, screenshots, shape),
+      );
       if (!issued.some((etag) => etag && ifNoneMatchMatches(ifMatch, etag))) {
         refuse();
       }
