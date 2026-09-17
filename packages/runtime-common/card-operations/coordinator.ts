@@ -39,6 +39,7 @@ import { emitOperationPerf } from './telemetry.ts';
 import {
   OperationFailure,
   isOperationFailure,
+  type EntryPosition,
   type OperationIdentityResult,
 } from './types.ts';
 import type { CodeRef } from '../code-ref.ts';
@@ -75,6 +76,11 @@ import type { RealmResourceIdentifier } from '../realm-identifiers.ts';
 // The locks are taken once, here, and never re-entered. Everything below them
 // works from the state read inside them, and the commit they hand the staged
 // changes to is the realm's unlocked primitive.
+//
+// A batch is a tree rather than only a list — see `BatchGroup` — but only the
+// staging phase reads it as one. The lock set, the pre-state read, the commit
+// and the results are all in the batch's flat request order, and a flat list
+// is the tree with no groups in it.
 // ============================================================================
 
 // The realm's collaborators, narrowed to what committing a batch uses. Handed
@@ -244,17 +250,51 @@ export interface CommitBatchOptions {
   timings?: RequestTimings;
 }
 
-// One entry's answer, in the order the entries were sent. A write reports the
-// card's identity and the version it now holds; a delete reports `null`, since
-// there is no state left to describe.
+// One entry's answer, in the flat order the entries were sent — a group's
+// members answer where they sit in that order, so a caller that composed a
+// tree reassembles the shape it sent. A write reports the card's identity and
+// the version it now holds; a delete reports `null`, since there is no state
+// left to describe.
 export type BatchEntryResult = OperationIdentityResult | null;
+
+// A run of entries, evaluated one way or the other.
+//
+// `serial` is the top level's own rule applied further down: members evaluate
+// in order, and where two of them change one file the later composes over what
+// the earlier staged. `parallel` says the members are independent — they
+// evaluate concurrently, each against the state the group started from, and
+// two of them changing one file is refused rather than ordered. The two nest
+// to any depth, so "create a card and link it, while an unrelated log is
+// appended to" is one shape.
+//
+// Grouping schedules staging and nothing else. Every entry still evaluates
+// against pre-batch state, every `lid` in the tree is resolved once before any
+// of it runs, and the whole tree commits under one lock through one
+// `commitUnlocked` with one index job and one event — so a failure anywhere
+// abandons everything, the members of a parallel group that had already staged
+// included.
+export interface BatchGroup {
+  op: 'parallel' | 'serial';
+  members: BatchNode[];
+}
+
+// An entry, or a run of them. A flat `BatchEntry[]` is a `BatchNode[]` holding
+// no groups, which is the serial batch every caller but the envelope composes.
+export type BatchNode = BatchEntry | BatchGroup;
+
+function isGroup(node: BatchNode): node is BatchGroup {
+  return node.op === 'parallel' || node.op === 'serial';
+}
 
 export async function commitBatch(
   core: BatchCore,
-  entries: BatchEntry[],
+  batch: BatchNode[],
   opts: CommitBatchOptions = {},
 ): Promise<BatchEntryResult[]> {
   let paths = new RealmPaths(new URL(core.realmURL));
+  // The tree resolved into the flat request order everything but staging works
+  // from, once, before anything runs.
+  let { tree, entries } = schedule(batch);
   if (entries.length === 0) {
     // Nothing to serialize the realm's writers behind, and nothing to
     // announce. Taking the lock and broadcasting an empty index event would
@@ -322,52 +362,59 @@ export async function commitBatch(
       if (opts.waitForIndex !== false && entries.some(stagesContent)) {
         await timed('drain', () => core.drainIndexing());
       }
-      let staged: StagedChange[] = [];
+      // Filled by position rather than appended to: a parallel group's members
+      // finish in whatever order their work takes, and everything downstream
+      // reads these in the order the caller sent them.
+      let staged: StagedChange[] = new Array(entries.length);
       // The version each entry's merge was computed over, captured as it stages
       // rather than read back at the end: `stored` moves underneath the batch
       // as entries compose, so by the commit it no longer holds what the first
       // entry to touch a file merged over.
-      let baseHashes: (string | undefined)[] = [];
+      let baseHashes: (string | undefined)[] = new Array(entries.length);
       // Stamped from a `finally`: an entry that cannot be carried out throws
       // from the staging work, and a write that failed is exactly the one whose
       // time someone is trying to account for.
       let stageStart = Date.now();
       try {
         let { stored, storedMeta } = await readPreState(core, entries, paths);
-        // What an append stages for a file it never read whole. Kept beside
-        // `stored` rather than in it: the two describe the same file in different
-        // terms, and an executor that needs one cannot work from the other.
-        let splices = new Map<LocalPath, SplicedSource>();
-        for (let [index, entry] of entries.entries()) {
-          let change = await stageEntry(entry, positions[index], {
-            realmURL: core.realmURL,
-            paths,
-            lids,
-            foreignLids,
-            foreignSideLoadLink: opts.foreignSideLoadLink,
-            stored,
-            storedMeta,
-            splices,
-            openSourceBytes: core.openSourceBytes,
-            fileExists: core.fileExists,
-            indexedCardValues: core.indexedCardValues,
-            actor: opts.actor ?? '',
-            serializeCard: core.serializeCard,
-            codeRefKey: core.codeRefKey,
-            resolveModuleId: core.resolveModuleId,
-            storedLink: core.storedLink,
-            resolvedLink: core.resolvedLink,
-            lookupDefinition: core.lookupDefinition,
-          });
-          baseHashes.push(
-            change.primaryPath
-              ? (stored.get(change.primaryPath)?.contentHash ??
-                  storedMeta.get(change.primaryPath)?.contentHash)
-              : undefined,
-          );
-          compose(stored, storedMeta, splices, entry, change);
-          staged.push(change);
-        }
+        let state: StagingState = {
+          stored,
+          storedMeta,
+          // What an append stages for a file it never read whole. Kept beside
+          // `stored` rather than in it: the two describe the same file in
+          // different terms, and an executor that needs one cannot work from
+          // the other.
+          splices: new Map<LocalPath, SplicedSource>(),
+        };
+        // The top level is a serial group, which is what makes a flat list
+        // behave as it always has.
+        await stageRun(tree, 'serial', state, {
+          entries,
+          positions,
+          staged,
+          baseHashes,
+          stage: (entry, position, against) =>
+            stageEntry(entry, position, {
+              realmURL: core.realmURL,
+              paths,
+              lids,
+              foreignLids,
+              foreignSideLoadLink: opts.foreignSideLoadLink,
+              stored: against.stored,
+              storedMeta: against.storedMeta,
+              splices: against.splices,
+              openSourceBytes: core.openSourceBytes,
+              fileExists: core.fileExists,
+              indexedCardValues: core.indexedCardValues,
+              actor: opts.actor ?? '',
+              serializeCard: core.serializeCard,
+              codeRefKey: core.codeRefKey,
+              resolveModuleId: core.resolveModuleId,
+              storedLink: core.storedLink,
+              resolvedLink: core.resolvedLink,
+              lookupDefinition: core.lookupDefinition,
+            }),
+        });
         assertWritesAllowed(staged, positions);
         assertLinkedCardsSurvive(staged, paths, positions);
         assertWritesFit(core, staged, positions);
@@ -392,7 +439,7 @@ export async function commitBatch(
 // collides with, and the prose — so the three cannot disagree with each other.
 // An entry that names none is reported under its position in this batch, which
 // is what a caller that sent exactly this list means by it.
-function positionsOf(entries: readonly BatchEntry[]): number[] {
+function positionsOf(entries: readonly BatchEntry[]): EntryPosition[] {
   return entries.map((entry, index) => entry.label ?? index);
 }
 
@@ -412,12 +459,11 @@ function positionsOf(entries: readonly BatchEntry[]): number[] {
 // letting a later entry address it by URL would tie the batch's meaning to
 // path math the caller has to reproduce to predict it.
 function compose(
-  stored: Map<LocalPath, StoredFile>,
-  storedMeta: Map<LocalPath, StoredMeta>,
-  splices: Map<LocalPath, SplicedSource>,
+  state: StagingState,
   entry: BatchEntry,
   change: StagedChange,
 ): void {
+  let { stored, storedMeta, splices } = state;
   for (let path of change.deletes) {
     stored.delete(path);
     storedMeta.delete(path);
@@ -464,12 +510,255 @@ function compose(
   // the target is there finds.
 }
 
+// ---------------------------------------------------------------------------
+// Scheduling the staging phase
+// ---------------------------------------------------------------------------
+
+// What an entry stages against: the realm as the batch found it, kept in step
+// with what the entries before it in its own serial run have staged.
+interface StagingState {
+  stored: Map<LocalPath, StoredFile>;
+  storedMeta: Map<LocalPath, StoredMeta>;
+  splices: Map<LocalPath, SplicedSource>;
+}
+
+// A copy for one member of a parallel group.
+//
+// The members of a parallel group are entries that do not compose, so none of
+// them may read what another staged. Giving each its own view is what makes
+// that structural rather than a property of which files today's executors
+// happen to read: an executor that started reading a second file would still
+// see the state the group started from. The maps hold one key per file the
+// batch names, and `compose` replaces their values rather than editing them,
+// so the copy is shallow and costs the batch's own size.
+function fork(state: StagingState): StagingState {
+  return {
+    stored: new Map(state.stored),
+    storedMeta: new Map(state.storedMeta),
+    splices: new Map(state.splices),
+  };
+}
+
+// One entry with its place in the batch's flat request order.
+interface ScheduledEntry {
+  kind: 'entry';
+  entry: BatchEntry;
+  at: number;
+}
+
+// One group, with the half-open range of flat positions its subtree covers.
+// The range is contiguous because the order is the depth-first request order,
+// which is what lets a parallel group fold its members' changes back into the
+// state around it in request order without collecting them as it goes.
+interface ScheduledGroup {
+  kind: 'group';
+  mode: 'parallel' | 'serial';
+  members: Scheduled[];
+  from: number;
+  to: number;
+}
+
+type Scheduled = ScheduledEntry | ScheduledGroup;
+
+// The tree with every entry's flat position attached, and those entries in
+// that order.
+//
+// Resolved before anything runs rather than as entries complete: in a parallel
+// group they complete in whatever order their work takes, and that is the one
+// order a batch must not be described by. Everything outside staging — the
+// pre-state read, the lock set, the commit's one-write-per-file fold, the
+// results — reads the flat order this produces.
+function schedule(nodes: readonly BatchNode[]): {
+  tree: Scheduled[];
+  entries: BatchEntry[];
+} {
+  let entries: BatchEntry[] = [];
+  let walk = (nodes: readonly BatchNode[]): Scheduled[] =>
+    nodes.map((node) => {
+      if (!isGroup(node)) {
+        entries.push(node);
+        return { kind: 'entry', entry: node, at: entries.length - 1 };
+      }
+      let from = entries.length;
+      let members = walk(node.members);
+      return {
+        kind: 'group',
+        mode: node.op,
+        members,
+        from,
+        to: entries.length,
+      };
+    });
+  return { tree: walk(nodes), entries };
+}
+
+// Every file a subtree stages a change to, and which of its entries claimed
+// each one first. What a parallel group checks its members against.
+type Claims = Map<LocalPath, number>;
+
+// What staging one run needs: where each entry's answer goes, and how to run
+// one against a given state.
+interface StagingRun {
+  entries: readonly BatchEntry[];
+  positions: readonly EntryPosition[];
+  staged: StagedChange[];
+  baseHashes: (string | undefined)[];
+  stage(
+    entry: BatchEntry,
+    position: EntryPosition,
+    against: StagingState,
+  ): Promise<StagedChange>;
+}
+
+async function stageRun(
+  nodes: readonly Scheduled[],
+  mode: 'parallel' | 'serial',
+  state: StagingState,
+  run: StagingRun,
+): Promise<Claims> {
+  return mode === 'serial'
+    ? await stageInOrder(nodes, state, run)
+    : await stageConcurrently(nodes, state, run);
+}
+
+// Members one after another, each composing into the state the next one
+// stages against — the batch's original rule, and the one a flat list gets.
+async function stageInOrder(
+  nodes: readonly Scheduled[],
+  state: StagingState,
+  run: StagingRun,
+): Promise<Claims> {
+  let claims: Claims = new Map();
+  for (let node of nodes) {
+    let claimed =
+      node.kind === 'entry'
+        ? await stageOne(node, state, run)
+        : await stageRun(node.members, node.mode, state, run);
+    for (let [path, at] of claimed) {
+      if (!claims.has(path)) {
+        claims.set(path, at);
+      }
+    }
+  }
+  return claims;
+}
+
+// Members at the same time, against the state the group started from.
+//
+// Safe because nothing here is shared: each member has its own view of the
+// stored state, an executor resolves and reads nothing beyond what it is
+// handed, and a BXL program's own request context is scoped to one synchronous
+// evaluation — `withRequestContext` refuses a callback that defers, so an
+// evaluation cannot be suspended with another's context underneath it.
+async function stageConcurrently(
+  nodes: readonly Scheduled[],
+  state: StagingState,
+  run: StagingRun,
+): Promise<Claims> {
+  let forks = nodes.map(() => fork(state));
+  let outcomes = await Promise.allSettled(
+    nodes.map((node, index) =>
+      node.kind === 'entry'
+        ? stageOne(node, forks[index], run)
+        : stageRun(node.members, node.mode, forks[index], run),
+    ),
+  );
+  // Settled rather than raced, and the earliest refusal in request order is
+  // the one reported. Raced, a group with two entries the caller got wrong
+  // would name a different one run to run — decided by which member's work
+  // finished first, which is not something the caller can see or reproduce.
+  let refused = outcomes.find((outcome) => outcome.status === 'rejected');
+  if (refused) {
+    throw refused.reason;
+  }
+  let claims: Claims = new Map();
+  for (let outcome of outcomes) {
+    let claimed = (outcome as PromiseFulfilledResult<Claims>).value;
+    for (let [path, at] of claimed) {
+      let owner = claims.get(path);
+      if (owner !== undefined) {
+        throw conflictingTargets(run.positions, owner, at, path);
+      }
+      claims.set(path, at);
+    }
+  }
+  // Folded into the state around the group once every member has staged, in
+  // request order, so an entry after the group composes over what the group
+  // staged and does so in the order the caller wrote rather than the order the
+  // work finished in.
+  for (let node of nodes) {
+    if (node.kind === 'entry') {
+      compose(state, node.entry, run.staged[node.at]);
+      continue;
+    }
+    for (let at = node.from; at < node.to; at++) {
+      compose(state, run.entries[at], run.staged[at]);
+    }
+  }
+  return claims;
+}
+
+async function stageOne(
+  node: ScheduledEntry,
+  state: StagingState,
+  run: StagingRun,
+): Promise<Claims> {
+  let { entry, at } = node;
+  let change = await run.stage(entry, run.positions[at], state);
+  run.staged[at] = change;
+  run.baseHashes[at] = change.primaryPath
+    ? (state.stored.get(change.primaryPath)?.contentHash ??
+      state.storedMeta.get(change.primaryPath)?.contentHash)
+    : undefined;
+  compose(state, entry, change);
+  return claimsOf(change, at);
+}
+
+// The files one entry stages a change to: the ones it rewrites, the ones it
+// adds to, and the ones it removes. All three count, because what makes two
+// members of a parallel group independent is that the commit does not have to
+// order them — and an append that lands after a rewrite rather than before it
+// is an order.
+function claimsOf(change: StagedChange, at: number): Claims {
+  let claims: Claims = new Map();
+  for (let path of [
+    ...change.writes.map((write) => write.path),
+    ...change.appends.map((append) => append.path),
+    ...change.deletes,
+  ]) {
+    if (!claims.has(path)) {
+      claims.set(path, at);
+    }
+  }
+  return claims;
+}
+
+function conflictingTargets(
+  positions: readonly EntryPosition[],
+  owner: number,
+  other: number,
+  path: LocalPath,
+): OperationFailure {
+  return new OperationFailure({
+    status: 400,
+    code: 'conflicting-targets',
+    title: 'Conflicting entries',
+    detail:
+      `entries ${positions[owner]} and ${positions[other]} are members of ` +
+      `one parallel group and both change ${path}; a parallel group's ` +
+      `members stage against the state the group started from, so neither ` +
+      `composes over the other and only one of them could land — put them ` +
+      `in serial order if both are meant to change it`,
+    meta: { entry: positions[other], conflictsWith: positions[owner] },
+  });
+}
+
 // Run one executor, and label whatever it refuses with the entry's position.
 // A batch is rejected as a whole, so a caller reading one error needs to know
 // which of the entries it sent produced it.
 async function stageEntry(
   entry: BatchEntry,
-  position: number,
+  position: EntryPosition,
   ctx: StagingContext,
 ): Promise<StagedChange> {
   try {
@@ -506,7 +795,7 @@ async function stageEntry(
 // transform plans a program against it. A create has no prior state to name, a
 // delete's result carries no state to report a match on, and an append never
 // reads the state it edits, so it has nothing to compare one against.
-function assertVersionable(entry: BatchEntry, position: number): void {
+function assertVersionable(entry: BatchEntry, position: EntryPosition): void {
   if (
     entry.baseVersion === undefined ||
     entry.op === 'update' ||
@@ -522,7 +811,7 @@ function assertVersionable(entry: BatchEntry, position: number): void {
   });
 }
 
-function atEntry(err: unknown, position: number): OperationFailure {
+function atEntry(err: unknown, position: EntryPosition): OperationFailure {
   if (isOperationFailure(err)) {
     return new OperationFailure({
       ...err.error,
@@ -651,7 +940,7 @@ function assertOpReachesALock(entry: BatchEntry): void {
 
 function indexLids(
   entries: BatchEntry[],
-  positions: readonly number[],
+  positions: readonly EntryPosition[],
   paths: RealmPaths,
 ): { lids: LidIndex; foreignLids: ReadonlySet<string> } {
   let lids = new Map<string, StagedIdentity>();
@@ -956,7 +1245,7 @@ function cardSourcePathOf(
 // why the other two admit them as well.
 function assertWritesAllowed(
   staged: StagedChange[],
-  positions: readonly number[],
+  positions: readonly EntryPosition[],
 ): void {
   for (let [index, change] of staged.entries()) {
     for (let write of [...change.writes, ...change.appends]) {
@@ -995,7 +1284,7 @@ function assertWritesAllowed(
 function assertLinkedCardsSurvive(
   staged: StagedChange[],
   paths: RealmPaths,
-  positions: readonly number[],
+  positions: readonly EntryPosition[],
 ): void {
   let removed = new Set<LocalPath>();
   for (let change of staged) {
@@ -1043,7 +1332,7 @@ async function assertRemovalsAllowed(
   core: BatchCore,
   paths: RealmPaths,
   staged: StagedChange[],
-  positions: readonly number[],
+  positions: readonly EntryPosition[],
 ): Promise<void> {
   for (let [index, change] of staged.entries()) {
     for (let path of change.deletes) {
@@ -1073,7 +1362,7 @@ async function assertRemovalsAllowed(
 function assertWritesFit(
   core: BatchCore,
   staged: StagedChange[],
-  positions: readonly number[],
+  positions: readonly EntryPosition[],
 ): void {
   for (let [index, change] of staged.entries()) {
     // An append is held to the ceiling by what it adds rather than by what the
@@ -1125,7 +1414,7 @@ function assertWritesFit(
 async function assertDestinationsFree(
   core: BatchCore,
   staged: StagedChange[],
-  positions: readonly number[],
+  positions: readonly EntryPosition[],
 ): Promise<void> {
   let removedBefore: Set<LocalPath>[] = [];
   let removed = new Set<LocalPath>();
@@ -1167,7 +1456,7 @@ async function commitStaged(
   entries: BatchEntry[],
   staged: StagedChange[],
   baseHashes: (string | undefined)[],
-  positions: readonly number[],
+  positions: readonly EntryPosition[],
   opts: CommitBatchOptions,
 ): Promise<BatchEntryResult[]> {
   // One entry per file, in batch order. Two entries may name one card, and

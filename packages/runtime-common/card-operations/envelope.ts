@@ -5,12 +5,13 @@ import {
   isDocumentResult,
   isOperationFailure,
   type BaseOperation,
+  type EntryPosition,
   type OperationDefinition,
   type OperationError,
   type OperationResult,
   type OperationTarget,
 } from './types.ts';
-import type { BatchEntryResult } from './coordinator.ts';
+import type { BatchEntryResult, BatchNode } from './coordinator.ts';
 import type { BatchEntry } from './executors.ts';
 import { isCodeRef } from '../card-document-shape.ts';
 import type { CardResource } from '../resource-types.ts';
@@ -26,11 +27,12 @@ import type { CardResource } from '../resource-types.ts';
 // whoever calls it: which behavior each entry's name resolves to (the target's
 // definition decides that) and whether the batch commits.
 //
-// The entry vocabulary is deliberately a discriminated union on `op` with one
-// member. `invoke` names an operation to run; the extension also defines group
-// verbs whose members are batches in their own right, and they are read here
-// as verbs this endpoint does not carry rather than as malformed entries, so
-// adding one is a new arm rather than a reshaping of this parse.
+// The entry vocabulary is a discriminated union on `op`. `invoke` names an
+// operation to run; `parallel` and `serial` are groups, whose members are
+// entries in their own right — so a batch is a tree, and a flat list is the
+// tree with no groups in it. Everything a group means to the realm is in how
+// the coordinator schedules staging; what is here is the grammar and the
+// shape of the answer, both of which mirror the tree the caller sent.
 // ============================================================================
 
 // A JSON:API media type carries its extensions in the `ext` parameter, as a
@@ -72,9 +74,10 @@ export function carriesOperationsExt(contentType: string | null): boolean {
 // the core takes: an `href` that has been resolved against this realm and
 // found to be inside it, and the local id read out of the payload.
 export interface EnvelopeEntry {
+  op: 'invoke';
   // Where the entry sat in the batch. Every refusal is labelled with it, so a
   // caller reading one error knows which of the entries it sent produced it.
-  index: number;
+  position: EntryPosition;
   name: string;
   // Absolute, and inside this realm. Absent on an entry that names no existing
   // resource, which is a create of a card that does not exist yet.
@@ -84,6 +87,46 @@ export interface EnvelopeEntry {
   // the resource-level member JSON:API already reserves for exactly this, and
   // the key later entries link to the new card by.
   lid?: string;
+}
+
+// A run of entries, which is itself an entry of whatever holds it.
+//
+// `serial` members are carried out one after another and may build on each
+// other; `parallel` members are independent and are staged at the same time.
+// A group carries no operation of its own — no name, no href, no payload —
+// because it names no target: it says how its members are scheduled and
+// nothing else.
+export interface EnvelopeGroup {
+  op: 'parallel' | 'serial';
+  position: EntryPosition;
+  members: EnvelopeNode[];
+}
+
+export type EnvelopeNode = EnvelopeEntry | EnvelopeGroup;
+
+export function isGroup(node: EnvelopeNode): node is EnvelopeGroup {
+  return node.op !== 'invoke';
+}
+
+// Every invocation in the tree, in the order the caller wrote them.
+//
+// Depth-first and left to right, which is the order a serial batch is carried
+// out in and the order every refusal is chosen by — the entry a caller is told
+// about is the earliest one it got wrong, whatever the schedule did with the
+// rest.
+export function invocationsIn(nodes: readonly EnvelopeNode[]): EnvelopeEntry[] {
+  let entries: EnvelopeEntry[] = [];
+  let walk = (nodes: readonly EnvelopeNode[]) => {
+    for (let node of nodes) {
+      if (isGroup(node)) {
+        walk(node.members);
+      } else {
+        entries.push(node);
+      }
+    }
+  };
+  walk(nodes);
+  return entries;
 }
 
 // The request body, read as a batch.
@@ -106,7 +149,7 @@ export function parseOperationsEnvelope(
   body: unknown,
   realmURL: string,
   opts: ParseEnvelopeOptions = {},
-): EnvelopeEntry[] {
+): EnvelopeNode[] {
   if (!isPlainRecord(body)) {
     throw refuse(`the request body is not a JSON:API document`);
   }
@@ -117,60 +160,151 @@ export function parseOperationsEnvelope(
     );
   }
   let paths = new RealmPaths(new URL(realmURL));
+  return parseMembers(operations, undefined, 0, paths, opts);
+}
+
+// How deep the groups in one batch may nest.
+//
+// The grammar itself is unbounded, and so is anything a caller would compose:
+// a handful of levels describes the most elaborate real batch. The limit is
+// about the two recursive walks a body drives — this parse and the
+// coordinator's staging schedule — which a body nested tens of thousands deep
+// would overflow the stack of. That reads as a fault in the realm, so the
+// depth is answered here as what it is: a payload nobody meant to send.
+const MAX_GROUP_DEPTH = 32;
+
+function parseMembers(
+  operations: readonly unknown[],
+  // Absent at the top level, whose members are named by their index alone.
+  parent: EntryPosition | undefined,
+  depth: number,
+  paths: RealmPaths,
+  opts: ParseEnvelopeOptions,
+): EnvelopeNode[] {
   return operations.map((operation, index) =>
-    parseEntry(operation, index, paths, opts),
+    parseNode(operation, positionIn(parent, index), depth, paths, opts),
   );
 }
 
-function parseEntry(
-  operation: unknown,
+// Where an entry sits, in the terms a caller can point at it with.
+//
+// A top-level entry is its index, which is what a caller that sent a flat list
+// means by "the third one". A member of a group is reached by no single
+// number, so it is named by the path down to it — `[2].boxel:operations[0]` —
+// which is the path through the request body itself.
+function positionIn(
+  parent: EntryPosition | undefined,
   index: number,
+): EntryPosition {
+  if (parent === undefined) {
+    return index;
+  }
+  let prefix = typeof parent === 'number' ? `[${parent}]` : parent;
+  return `${prefix}.boxel:operations[${index}]`;
+}
+
+function parseNode(
+  operation: unknown,
+  position: EntryPosition,
+  depth: number,
   paths: RealmPaths,
   opts: ParseEnvelopeOptions,
-): EnvelopeEntry {
+): EnvelopeNode {
   if (!isPlainRecord(operation)) {
-    throw refuse(`entry ${index} is not an operation`, index);
+    throw refuse(`entry ${position} is not an operation`, position);
   }
   let op = operation.op;
   switch (op) {
     case 'invoke':
-      return parseInvocation(operation, index, paths, opts);
+      return parseInvocation(operation, position, paths, opts);
     case 'parallel':
     case 'serial':
-      throw refuse(
-        `entry ${index} is a "${op}" group, and this endpoint carries ` +
-          `"invoke" entries`,
-        index,
-      );
+      return parseGroup(operation, op, position, depth, paths, opts);
     default:
       throw refuse(
-        `entry ${index} names ${
+        `entry ${position} names ${
           typeof op === 'string' ? `operation "${op}"` : 'no operation'
-        }, and an entry in this envelope is an "invoke"`,
-        index,
+        }, and an entry is an "invoke", a "parallel" or a "serial"`,
+        position,
       );
   }
 }
 
+// The members an invocation carries, which a group carries none of. Read as a
+// refusal rather than ignored: a group with an `href` on it is a caller that
+// believes the group targets something, and carrying it out would run its
+// members against targets they never named.
+const INVOCATION_MEMBERS = ['boxel:name', 'href', 'data'] as const;
+
+function parseGroup(
+  operation: Record<string, unknown>,
+  op: 'parallel' | 'serial',
+  position: EntryPosition,
+  depth: number,
+  paths: RealmPaths,
+  opts: ParseEnvelopeOptions,
+): EnvelopeGroup {
+  for (let member of INVOCATION_MEMBERS) {
+    if (operation[member] !== undefined) {
+      throw refuse(
+        `entry ${position} is a "${op}" group and carries "${member}"; a ` +
+          `group schedules the entries it holds and invokes nothing itself`,
+        position,
+      );
+    }
+  }
+  let members = operation['boxel:operations'];
+  if (!Array.isArray(members)) {
+    throw refuse(
+      `entry ${position} is a "${op}" group and carries no ` +
+        `"boxel:operations" list of members`,
+      position,
+    );
+  }
+  if (members.length === 0) {
+    // A group is how a batch says how its members run, so one holding none
+    // says nothing. Refused rather than carried out as a no-op: the batch the
+    // caller composed has a hole in it, and the position of every entry after
+    // it is a position the caller did not intend either.
+    throw refuse(
+      `entry ${position} is a "${op}" group holding no members; a group ` +
+        `carries the entries it schedules`,
+      position,
+    );
+  }
+  if (depth >= MAX_GROUP_DEPTH) {
+    throw refuse(
+      `entry ${position} nests groups more than ${MAX_GROUP_DEPTH} deep`,
+      position,
+    );
+  }
+  return {
+    op,
+    position,
+    members: parseMembers(members, position, depth + 1, paths, opts),
+  };
+}
+
 function parseInvocation(
   operation: Record<string, unknown>,
-  index: number,
+  position: EntryPosition,
   paths: RealmPaths,
   opts: ParseEnvelopeOptions,
 ): EnvelopeEntry {
   let name = operation['boxel:name'];
   if (typeof name !== 'string' || name.length === 0) {
     throw refuse(
-      `entry ${index} carries no "boxel:name" naming the operation to invoke`,
-      index,
+      `entry ${position} carries no "boxel:name" naming the operation to ` +
+        `invoke`,
+      position,
     );
   }
   let data: Record<string, unknown> | undefined;
   if (operation.data !== undefined) {
     if (!isPlainRecord(operation.data)) {
       throw refuse(
-        `entry ${index} carries a "data" that is not an object`,
-        index,
+        `entry ${position} carries a "data" that is not an object`,
+        position,
       );
     }
     data = operation.data;
@@ -178,16 +312,17 @@ function parseInvocation(
   let lid = data?.lid;
   if (lid !== undefined && typeof lid !== 'string') {
     throw refuse(
-      `entry ${index} carries a local id that is not a string`,
-      index,
+      `entry ${position} carries a local id that is not a string`,
+      position,
     );
   }
   return {
-    index,
+    op: 'invoke',
+    position,
     name,
     ...(operation.href === undefined
       ? {}
-      : { href: hrefIn(operation.href, index, paths, opts) }),
+      : { href: hrefIn(operation.href, position, paths, opts) }),
     ...(data ? { data } : {}),
     ...(lid === undefined ? {} : { lid }),
   };
@@ -207,12 +342,15 @@ function parseInvocation(
 // atomic with the rest of the batch.
 function hrefIn(
   href: unknown,
-  index: number,
+  position: EntryPosition,
   paths: RealmPaths,
   opts: ParseEnvelopeOptions,
 ): string {
   if (typeof href !== 'string' || href.length === 0) {
-    throw refuse(`entry ${index} carries an "href" that is not a URL`, index);
+    throw refuse(
+      `entry ${position} carries an "href" that is not a URL`,
+      position,
+    );
   }
   // A realm reached through a registered prefix is addressed by that prefix
   // everywhere else — it is the form a result's id comes back in — so an href
@@ -230,16 +368,19 @@ function hrefIn(
     try {
       absolute = paths.fileURL(resolved.replace(/^\/+/, '') as LocalPath);
     } catch {
-      throw refuse(`entry ${index} carries an "href" that is not a URL`, index);
+      throw refuse(
+        `entry ${position} carries an "href" that is not a URL`,
+        position,
+      );
     }
   }
   try {
     paths.local(absolute);
   } catch {
     throw refuse(
-      `entry ${index} targets ${absolute.href}, which realm ${paths.url} does ` +
-        `not contain; a batch commits to one realm`,
-      index,
+      `entry ${position} targets ${absolute.href}, which realm ${paths.url} ` +
+        `does not contain; a batch commits to one realm`,
+      position,
       absolute.href,
     );
   }
@@ -271,16 +412,16 @@ export function targetFor(
   let adoptsFrom = asRecord(asRecord(entry.data?.meta)?.adoptsFrom);
   if (!adoptsFrom) {
     throw refuse(
-      `entry ${entry.index} names no "href" and no type in ` +
+      `entry ${entry.position} names no "href" and no type in ` +
         `"data.meta.adoptsFrom", so there is nothing for it to run against`,
-      entry.index,
+      entry.position,
     );
   }
   if (!isCodeRef(adoptsFrom)) {
     throw refuse(
-      `entry ${entry.index} names a type in "data.meta.adoptsFrom" that is ` +
-        `not a code reference`,
-      entry.index,
+      `entry ${entry.position} names a type in "data.meta.adoptsFrom" that ` +
+        `is not a code reference`,
+      entry.position,
     );
   }
   return { kind: 'type', codeRef: adoptsFrom, realm: realmURL };
@@ -343,7 +484,7 @@ export function assertTravelsInEnvelope(
           `engine rather than in a batch`
         : `operation "${entry.name}" reads stored bytes, which the card ` +
           `source and byte routes serve rather than a JSON batch`,
-    meta: { entry: entry.index },
+    meta: { entry: entry.position },
   });
 }
 
@@ -376,12 +517,13 @@ export function batchEntryFor(
   entry: EnvelopeEntry,
   definition: OperationDefinition,
 ): BatchEntry {
-  let { index, name } = entry;
+  let { position, name } = entry;
   assertStagesAreServed(entry, definition);
   // Every entry the coordinator stages carries the position the caller sent it
-  // under, so a batch holding only some of an envelope's entries still reports
-  // refusals against the envelope's numbering.
-  let common = { definition, label: index };
+  // under, so a batch holding only some of an envelope's entries — and one
+  // whose entries sat inside groups — still reports refusals against the
+  // envelope's own numbering.
+  let common = { definition, label: position };
   switch (definition.base) {
     case 'create': {
       if (definition.of) {
@@ -402,9 +544,9 @@ export function batchEntryFor(
       // card is the executor's to judge, against the type it resolves.
       if (entry.href !== undefined) {
         throw refuse(
-          `entry ${index} invokes "${name}", which mints a card, and names an ` +
-            `href; a create has no existing resource to target`,
-          index,
+          `entry ${position} invokes "${name}", which mints a card, and ` +
+            `names an href; a create has no existing resource to target`,
+          position,
           entry.href,
         );
       }
@@ -425,9 +567,9 @@ export function batchEntryFor(
         // nothing here asks for that.
         if (typeof content !== 'string') {
           throw refuse(
-            `entry ${index} replaces the content of ${href} with something ` +
-              `that is not text`,
-            index,
+            `entry ${position} replaces the content of ${href} with ` +
+              `something that is not text`,
+            position,
             href,
           );
         }
@@ -491,7 +633,7 @@ export function batchEntryFor(
         detail:
           `operation "${name}" is a "${definition.base}", which is not a ` +
           `behavior a batch stages`,
-        meta: { entry: index },
+        meta: { entry: position },
       });
   }
 }
@@ -557,16 +699,16 @@ function assertStagesAreServed(
     detail:
       `operation "${entry.name}" specializes its behavior with ` +
       `${stages.join(' and ')}, which a batch does not run`,
-    meta: { entry: entry.index },
+    meta: { entry: entry.position },
   });
 }
 
 function hrefRequired(entry: EnvelopeEntry, base: BaseOperation): string {
   if (entry.href === undefined) {
     throw refuse(
-      `entry ${entry.index} invokes "${entry.name}", which is a "${base}" and ` +
-        `runs against an existing resource, and names no href`,
-      entry.index,
+      `entry ${entry.position} invokes "${entry.name}", which is a "${base}" ` +
+        `and runs against an existing resource, and names no href`,
+      entry.position,
     );
   }
   return entry.href;
@@ -586,6 +728,12 @@ function hrefRequired(entry: EnvelopeEntry, base: BaseOperation): string {
 export type EnvelopeResult =
   | { data: Record<string, unknown> | null }
   | Record<string, unknown>;
+
+// `atomic:results`, which mirrors the shape of the batch it answers: a group's
+// position holds the array of its members' results, in request order, all the
+// way down. A caller that composed a tree reads its answers back where it put
+// the entries.
+export type EnvelopeResults = (EnvelopeResult | EnvelopeResults)[];
 
 export function writeResult(
   result: BatchEntryResult,
@@ -632,8 +780,8 @@ export function readResult(
       status: 500,
       code: 'internal-error',
       title: 'Unreadable result',
-      detail: `the read in entry ${entry.index} answered with no document`,
-      meta: { entry: entry.index },
+      detail: `the read in entry ${entry.position} answered with no document`,
+      meta: { entry: entry.position },
     });
   }
   return result.document as unknown as Record<string, unknown>;
@@ -644,20 +792,62 @@ export function readResult(
 // An unfilled position would serialize as `null`, which is what a delete
 // reports — so a batch that ran fewer entries than it read would answer with a
 // removal nobody asked for rather than saying that something did not run.
-export function answered(
+export function resultsTree(
+  nodes: readonly EnvelopeNode[],
+  results: ReadonlyMap<EntryPosition, EnvelopeResult>,
+): EnvelopeResults {
+  return nodes.map((node) =>
+    isGroup(node)
+      ? resultsTree(node.members, results)
+      : answered(results.get(node.position), node.position),
+  );
+}
+
+function answered(
   result: EnvelopeResult | undefined,
-  index: number,
+  position: EntryPosition,
 ): EnvelopeResult {
   if (result === undefined) {
     throw new OperationFailure({
       status: 500,
       code: 'internal-error',
       title: 'Missing result',
-      detail: `entry ${index} was read from the batch and produced no result`,
-      meta: { entry: index },
+      detail: `entry ${position} was read from the batch and produced no result`,
+      meta: { entry: position },
     });
   }
   return result;
+}
+
+// The batch the coordinator stages: the request tree with the entries that
+// only read taken out of it, and each remaining entry as the coordinator takes
+// one.
+//
+// The tree is kept rather than flattened because it is the schedule — which
+// entries may stage at the same time and which must follow one another — and
+// pruning cannot change that: a read entry stages nothing, so removing one
+// leaves the remaining members exactly as independent, or as dependent, as the
+// caller wrote them. A group all of whose members only read is dropped whole;
+// keeping it would hand the coordinator a group with nothing in it.
+export function stagedTree(
+  nodes: readonly EnvelopeNode[],
+  staged: ReadonlyMap<EntryPosition, BatchEntry>,
+): BatchNode[] {
+  let batch: BatchNode[] = [];
+  for (let node of nodes) {
+    if (!isGroup(node)) {
+      let entry = staged.get(node.position);
+      if (entry) {
+        batch.push(entry);
+      }
+      continue;
+    }
+    let members = stagedTree(node.members, staged);
+    if (members.length > 0) {
+      batch.push({ op: node.op, members });
+    }
+  }
+  return batch;
 }
 
 // A refusal as a JSON:API error document. The batch is all-or-nothing, so one
@@ -676,27 +866,31 @@ export function errorsDocument(error: OperationError): {
 // or resolved one at a time. A staged entry carries its position into the
 // coordinator instead, which writes it everywhere a position appears rather
 // than leaving one key to be corrected afterwards.
-export function atEntry(err: unknown, index: number): unknown {
+export function atEntry(err: unknown, position: EntryPosition): unknown {
   if (!isOperationFailure(err)) {
     return err;
   }
-  if (typeof err.error.meta?.entry === 'number') {
+  if (err.error.meta?.entry !== undefined) {
     return err;
   }
   return new OperationFailure({
     ...err.error,
-    meta: { ...err.error.meta, entry: index },
+    meta: { ...err.error.meta, entry: position },
   });
 }
 
-function refuse(detail: string, index?: number, id?: string): OperationFailure {
+function refuse(
+  detail: string,
+  position?: EntryPosition,
+  id?: string,
+): OperationFailure {
   return new OperationFailure({
     ...(id ? { id } : {}),
     status: 400,
     code: 'invalid-params',
     title: 'Invalid operations envelope',
     detail,
-    ...(index === undefined ? {} : { meta: { entry: index } }),
+    ...(position === undefined ? {} : { meta: { entry: position } }),
   });
 }
 

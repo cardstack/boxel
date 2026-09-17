@@ -47,6 +47,7 @@ import {
   OperationFailure,
   isOperationFailure,
   type OperationDefinition,
+  type EntryPosition,
   type OperationErrorCode,
   type OperationProgram,
 } from './types.ts';
@@ -173,7 +174,7 @@ interface EntryCommon {
   // would name an entry the caller did not send. Every position the batch
   // reports comes from here when it is set: the key on the error, the one
   // beside it naming a conflicting entry, and the prose.
-  label?: number;
+  label?: EntryPosition;
   // The lowered operation, when the entry invokes a named operation rather
   // than a plain base one. A named `create` stages its card from the
   // definition's `of` and `fill` instead of from a document.

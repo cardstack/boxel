@@ -207,17 +207,19 @@ import type {
   OperationStoredFileMeta,
 } from './card-operations/dispatch.ts';
 import {
-  answered,
   assertTravelsInEnvelope,
   atEntry,
   batchEntryFor,
   carriesOperationsExt,
   errorsDocument,
+  invocationsIn,
   isWrite,
   needsActor,
   paramsFor,
   parseOperationsEnvelope,
   readResult,
+  resultsTree,
+  stagedTree,
   targetFor,
   writeResult,
   type EnvelopeEntry,
@@ -230,6 +232,7 @@ import {
   isHeadResult,
   isOperationFailure,
   isSourceResult,
+  type EntryPosition,
   type OperationRequest,
   type OperationResult,
   type OperationSourceResult,
@@ -240,6 +243,7 @@ import type {
   BatchCore,
   BatchEntryResult,
 } from './card-operations/coordinator.ts';
+import type { BatchEntry } from './card-operations/executors.ts';
 import type {
   DeferredPrerenderHtml,
   FromScratchResult,
@@ -4300,9 +4304,14 @@ export class Realm {
         detail: `the request body is not valid JSON`,
       });
     }
-    let entries = parseOperationsEnvelope(body, this.url, {
+    // A batch is a tree: the top level is a serial run, and an entry in it may
+    // be a group whose members are entries in their own right. The tree is
+    // what the answer mirrors and what the coordinator schedules staging by;
+    // everything between reads the entries in it, in the order they were sent.
+    let tree = parseOperationsEnvelope(body, this.url, {
       resolveIdentifier: (href) => this.#resolveAtomicHref(href),
     });
+    let entries = invocationsIn(tree);
     let caller = this.#callerOf(request, requestContext);
     // One row peek per target for the whole resolution pass: entries often
     // name the same card, and which behavior a name resolves to is read off
@@ -4340,7 +4349,7 @@ export class Realm {
           detail:
             `operation "${write.entry.name}" writes, and a QUERY batch is ` +
             `authorized to read; send a batch that writes as a POST`,
-          meta: { entry: write.entry.index },
+          meta: { entry: write.entry.position },
         });
       }
     }
@@ -4363,7 +4372,7 @@ export class Realm {
           detail:
             `operation "${needing.entry.name}" reads the invoking actor, and ` +
             `this request authenticated nobody`,
-          meta: { entry: needing.entry.index },
+          meta: { entry: needing.entry.position },
         });
       }
     }
@@ -4373,7 +4382,10 @@ export class Realm {
     // entry never observes what a write entry in the same batch stages, and
     // reading before the coordinator takes the write lock is what keeps a read
     // from waiting on one.
-    let results: (EnvelopeResult | undefined)[] = new Array(entries.length);
+    // Keyed by position rather than by index, because a position is a path
+    // through the tree for an entry inside a group and there is no array for
+    // one to be an index into.
+    let results = new Map<EntryPosition, EnvelopeResult>();
     for (let { entry, target, definition } of resolved) {
       if (isWrite(definition.base)) {
         continue;
@@ -4387,44 +4399,51 @@ export class Realm {
           ...caller,
         });
       } catch (err: unknown) {
-        throw atEntry(err, entry.index);
+        throw atEntry(err, entry.position);
       }
-      results[entry.index] = readResult(entry, result);
+      results.set(entry.position, readResult(entry, result));
     }
 
     let writes = resolved.filter(({ definition }) => isWrite(definition.base));
     if (writes.length > 0) {
-      let staged = writes.map(({ entry, definition }) => {
+      let staged = new Map<EntryPosition, BatchEntry>();
+      for (let { entry, definition } of writes) {
         try {
-          return batchEntryFor(entry, definition);
+          staged.set(entry.position, batchEntryFor(entry, definition));
         } catch (err: unknown) {
-          throw atEntry(err, entry.index);
+          throw atEntry(err, entry.position);
         }
-      });
-      // Every staged entry carries the position the caller sent it under, so
-      // a refusal from the coordinator names that one rather than the position
+      }
+      // The tree the caller sent, with the entries that only read taken out of
+      // it: the groups are the batch's staging schedule, so the coordinator is
+      // handed the shape rather than a flat list of what writes.
+      //
+      // Every staged entry carries the position the caller sent it under, so a
+      // refusal from the coordinator names that one rather than the position
       // it took among the entries that write — in the key, in the key beside
       // it naming a conflicting entry, and in the prose.
-      let committed = await commitBatch(this.batchCore, staged, {
-        clientRequestId: caller.clientRequestId || null,
-        actor: caller.actor || undefined,
-      });
+      let committed = await commitBatch(
+        this.batchCore,
+        stagedTree(tree, staged),
+        {
+          clientRequestId: caller.clientRequestId || null,
+          actor: caller.actor || undefined,
+        },
+      );
+      // The coordinator answers in the flat order of the entries it staged,
+      // which is the order they were sent in.
       for (let [index, { entry }] of writes.entries()) {
-        results[entry.index] = writeResult(committed[index], (url) =>
-          this.#virtualNetwork.unresolveURL(url),
+        results.set(
+          entry.position,
+          writeResult(committed[index], (url) =>
+            this.#virtualNetwork.unresolveURL(url),
+          ),
         );
       }
     }
 
     return this.#operationsResponse(
-      {
-        // Built by index rather than by mapping the array: an unassigned
-        // position is a hole, `map` skips one, and the hole then serializes
-        // as `null` — which is what a delete reports.
-        'atomic:results': Array.from({ length: entries.length }, (_, index) =>
-          answered(results[index], index),
-        ),
-      },
+      { 'atomic:results': resultsTree(tree, results) },
       200,
       requestContext,
     );
@@ -4465,7 +4484,7 @@ export class Realm {
       assertTravelsInEnvelope(canonical, definition);
       return { entry: canonical, target, definition };
     } catch (err: unknown) {
-      throw atEntry(err, entry.index);
+      throw atEntry(err, entry.position);
     }
   }
 
