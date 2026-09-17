@@ -33,7 +33,11 @@ import {
 } from '@cardstack/runtime-common';
 import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/indexer';
 import { latticeRenderRetryReadySQL } from '@cardstack/runtime-common/jobs/lattice-render';
-import { latticeMaterializationReadySQL } from '@cardstack/runtime-common/jobs/lattice';
+import {
+  latticeMaterializationReadySQL,
+  latticeOverdueWorkSQL,
+  latticeWaveTurnSQL,
+} from '@cardstack/runtime-common/jobs/lattice';
 import { latticeCodeReadySQL } from '@cardstack/runtime-common/jobs/lattice-code';
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 // Side-effect imports: these modules call registerQueueJobDefinition() at
@@ -622,7 +626,9 @@ export class PgQueueRunner implements QueueRunner {
                 SELECT concurrency_group FROM active_concurrency_groups
               )`,
             ...this.latticeEligibility(),
-            `ORDER BY j.created_at, j.id
+            'ORDER BY',
+            ...this.latticeClaimOrder(),
+            `j.created_at, j.id
               LIMIT 1`,
           ])) as unknown as JobsTable[];
           if (jobs.length === 0) {
@@ -958,11 +964,26 @@ export class PgQueueRunner implements QueueRunner {
           WHERE source.concurrency_group = j.concurrency_group
             AND source.status = 'unfulfilled'
             AND source.job_type IN ('incremental-index', 'from-scratch-index', 'copy-index')
-        ))
+        ) OR ${latticeOverdueWorkSQL})
         AND ${latticeRenderRetryReadySQL}
         AND ${latticeMaterializationReadySQL}
         AND ${latticeCodeReadySQL}
       ) ELSE j.job_type NOT IN ('lattice-materialize', 'lattice-link-code') END`,
+    ];
+  }
+
+  // Under a source backlog a wave the eligibility hint lets through (overdue
+  // owners) takes its turn ahead of the queued index jobs when the group's
+  // last finished job was not a wave; otherwise the claim stays FIFO, which
+  // lets the older index jobs go first. See `latticeWaveTurnSQL`.
+  private latticeClaimOrder(): Expression {
+    if (this.#latticeRealms.length === 0) return [];
+    return [
+      `CASE WHEN j.job_type = 'lattice-materialize' AND j.args->>'realmURL' IN (`,
+      ...this.#latticeRealms.flatMap((realm, i) =>
+        i === 0 ? [param(realm)] : [',', param(realm)],
+      ),
+      `) AND ${latticeOverdueWorkSQL} AND ${latticeWaveTurnSQL} THEN 0 ELSE 1 END,`,
     ];
   }
 

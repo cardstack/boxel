@@ -828,7 +828,17 @@ export class IndexRunner {
     current.#latticeTimings.latticeMatchingMs += Date.now() - start;
     let invalidations: string[] = [];
     try {
-      if (!matched) {
+      // Under a source backlog the queue claims this job only for owners
+      // past their staleness deadline (`latticeOverdueWorkSQL`, taking its
+      // turn between index jobs); an ordinary attempt beside them would
+      // yield to that backlog and take the wave down with it, so the wave
+      // is composed of stale attempts alone.
+      const backlog =
+        matched ||
+        (await current.#lattice.registry.hasSourceBacklog(
+          current.realmURL.href,
+        ));
+      if (!backlog) {
         invalidations = (
           await current.#drainLattice({ realmUsername, wave: wave + 1 })
         ).map((u) => u.href);
@@ -836,10 +846,10 @@ export class IndexRunner {
         await current.#lattice.registry.hasOverdue(current.realmURL.href)
       ) {
         // A matching turn consumed this job, and its successor is already
-        // queued. Under a feed that never pauses that is every job, so an
-        // owner past its staleness deadline gets one wave of stale attempts
-        // here, ahead of the backlog, rather than waiting for a quiet the
-        // feed never offers.
+        // queued; under a feed that never pauses that is every job. Either
+        // way an owner past its staleness deadline gets one wave of stale
+        // attempts here, ahead of the backlog, rather than waiting for a
+        // quiet the feed never offers.
         invalidations = (
           await current.#drainLattice({
             realmUsername,

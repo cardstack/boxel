@@ -90,6 +90,24 @@ export const latticeOwnerAttemptsSQL = `COALESCE((
 ),0)`;
 export const latticeOwnerRetryReadySQL = `(${latticeOwnerAttemptsSQL} < ${latticeWorkAttemptLimit})`;
 
+// A wave under a source backlog: an owner past its staleness deadline may
+// run a stale attempt ahead of the index jobs still queued for its realm
+// (the kernel's `overdue`), so a feed that never pauses still refreshes
+// every tier on its window. `j` is the jobs row being claimed.
+export const latticeOverdueWorkSQL = `EXISTS (
+  SELECT 1 FROM lattice_owners o WHERE o.realm_url=j.args->>'realmURL'
+    AND NOT o.retired AND o.dirty_generation IS NOT NULL
+    AND o.stale_after IS NOT NULL AND o.stale_after <= now())`;
+// Service-lead fairness between the two lanes sharing a realm's group: a
+// wave is claimed ahead of the queued index jobs only when the job that
+// last finished in the group was not a wave, so under a backlog the group
+// alternates index job, wave, index job, wave. Neither lane can starve the
+// other: an index job always follows a wave, and a wave with overdue work
+// always follows an index job.
+export const latticeWaveTurnSQL = `COALESCE((SELECT f.job_type FROM jobs f
+  WHERE f.concurrency_group=j.concurrency_group AND f.status<>'unfulfilled'
+  ORDER BY f.finished_at DESC NULLS LAST, f.id DESC LIMIT 1),'') <> 'lattice-materialize'`;
+
 // A cancelled attempt can leave a durable authority wait condition. Do not
 // reserve a worker just to discover the same denial again. The native input
 // reader and publication transaction still recheck authority after admission.

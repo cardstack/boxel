@@ -1038,6 +1038,18 @@ export class LatticeQueryRegistry
 
   // Any dirty owner past its staleness deadline: a matching backlog must not
   // keep it from a wave.
+  // An index job still queued for the realm: a wave runs under a backlog.
+  async hasSourceBacklog(realmURL: string): Promise<boolean> {
+    if (this.db.kind !== 'pg') return false;
+    const [row] = await query(this.db, [
+      'SELECT 1 FROM jobs j WHERE j.concurrency_group =',
+      param('indexing:' + realmURL),
+      `AND j.status='unfulfilled'
+       AND j.job_type IN ('incremental-index','from-scratch-index','copy-index') LIMIT 1`,
+    ]);
+    return Boolean(row);
+  }
+
   async hasOverdue(realmURL: string): Promise<boolean> {
     if (this.db.kind !== 'pg') return false;
     const [row] = await query(this.db, [
