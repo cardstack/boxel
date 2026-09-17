@@ -211,8 +211,9 @@ module('Unit | operation lowering', function (hooks) {
           syntax: 'solidified',
         },
         deterministic: true,
+        readsActor: true,
       },
-      'a link-typed member becomes a card identity while a scalar one stays the bare builtin',
+      'a link-typed member becomes a card identity while a scalar one stays the bare builtin, and a program naming the actor says so',
     );
   });
 
@@ -424,8 +425,9 @@ module('Unit | operation lowering', function (hooks) {
           postedBy: { $ref: 'actor' },
         },
         deterministic: true,
+        readsActor: true,
       },
-      'a linkTo param is a link entry and fill stays data for the coordinator to substitute',
+      'a linkTo param is a link entry, fill stays data for the coordinator to substitute, and an actor marker inside it is reported the same as one in a program',
     );
   });
 
@@ -528,8 +530,9 @@ module('Unit | operation lowering', function (hooks) {
         base: 'read',
         output: { source: '{label:actor()}', syntax: 'solidified' },
         deterministic: true,
+        readsActor: true,
       },
-      'a declarative projection and a raw program reach the realm in one form',
+      'a declarative projection and a raw program reach the realm in one form, and a projection reading the actor is reported like any other stage',
     );
   });
 
