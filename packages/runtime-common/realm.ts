@@ -24,6 +24,28 @@ import {
   SearchBoundError,
 } from './search-bounds.ts';
 import {
+  LinkShapePolicy,
+  requestedLinkShape,
+  rowClassForPageSize,
+  X_BOXEL_LINK_SHAPE_HEADER,
+  type LinkShapeDecision,
+  type LinkShapeRowClass,
+} from './link-shape-policy.ts';
+
+// The routes whose representation the link-shape preference selects declare it
+// alongside `Accept`, so a shared cache keys on it rather than treating the
+// two shapes as one resource and answering either caller with whichever it
+// stored.
+//
+// What decides membership is whether an HTTP cache can key the response, not
+// whether the response carries a shape. Source, modules and media carry no
+// shape and leave the header off, since listing a header a route ignores only
+// fragments its cache. The search routes do carry a shape and leave it off as
+// well: they answer the QUERY verb with the query in the body — `_search`
+// refuses every other method outright — so no HTTP cache reaches either body,
+// and the in-process caches that do hold one key on the served mode directly.
+const LINK_SHAPE_VARY = [X_BOXEL_LINK_SHAPE_HEADER];
+import {
   CARD_DOCUMENT_CACHE_HEADER,
   type CardDocumentCache,
   type CardDocumentCacheOutcome,
@@ -1388,13 +1410,13 @@ export interface RealmAdapter {
 }
 
 interface Options {
-  // When set, a live card read or search answers each returned card's
-  // relationships without side-loading their targets: `included[]` comes back
-  // empty and the consumer fetches the linked cards it displays. Unset, a
-  // live read assembles the card's whole transitive link closure into the
-  // response. Either way a prerender keeps the shape it asks for, which is
-  // already narrower than both.
-  liveReadsResolveLinksOnly?: true;
+  // Decides how much of a card's link graph each live read carries — the whole
+  // transitive closure side-loaded into `included[]`, or the relationships
+  // alone with the consumer fetching what it displays. Unset, every live read
+  // carries its closure, which is what a realm outside a realm-server process
+  // has no load reading to decide otherwise from. Either way a prerender keeps
+  // the shape it asks for, which is already narrower than both.
+  linkShapePolicy?: LinkShapePolicy;
   disableModuleCaching?: true;
   copiedFromRealm?: URL;
   fullIndexOnStartup?: true;
@@ -1480,7 +1502,7 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
   #disableModuleCaching = false;
-  #liveReadsResolveLinksOnly = false;
+  #linkShapePolicy: LinkShapePolicy;
   #fullIndexOnStartup = false;
   #skipBootIndex = false;
   #fromScratchIndexPriority = systemInitiatedPriority;
@@ -1634,6 +1656,38 @@ export class Realm {
     return this.paths.url;
   }
 
+  // The one place a live read's link shape is decided, so every route that can
+  // serve the same card agrees on it within one request. They have to: the
+  // mode is folded into the response validator, so two routes reaching
+  // different answers would hand out different validators for the same bytes,
+  // and nothing about either response would look wrong on its own — which is
+  // why this is a method rather than an expression repeated per route.
+  //
+  // Across requests the agreement is the dwell floor's, not this method's: a
+  // `HEAD` and the conditional `GET` it is asked in aid of are two consults,
+  // and a consult can itself move a rung, so the probe is not neutral. The
+  // move pins the new level for the dwell interval, which covers the pair;
+  // two reads further apart than that can straddle a rung.
+  //
+  // Null during a prerender: that path already skips the link-assembly pass
+  // outright, so it never reaches the policy and its output stays
+  // byte-identical whatever the policy decides.
+  #decideLinkShape(
+    request: Request,
+    rowClass: LinkShapeRowClass,
+  ): LinkShapeDecision | null {
+    if (isDuringPrerenderRequest(request)) {
+      return null;
+    }
+    return this.#linkShapePolicy.decide({
+      realm: this.url,
+      rowClass,
+      requested: requestedLinkShape(
+        request.headers.get(X_BOXEL_LINK_SHAPE_HEADER),
+      ),
+    });
+  }
+
   get dir(): string | undefined {
     return this.#adapter.dir;
   }
@@ -1722,7 +1776,8 @@ export class Realm {
     this.#videoSizeLimitBytes =
       videoSizeLimitBytes ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
-    this.#liveReadsResolveLinksOnly = Boolean(opts?.liveReadsResolveLinksOnly);
+    this.#linkShapePolicy =
+      opts?.linkShapePolicy ?? LinkShapePolicy.pinned('full');
     this.#copiedFromRealm = opts?.copiedFromRealm;
     this.#mediaCacheAdapter = mediaCacheAdapter;
     this.#cardDocumentCache = cardDocumentCache;
@@ -8520,23 +8575,26 @@ export class Realm {
 
   // How a card+json read shapes its links. A prerender must not recurse into
   // the search that resolves a query-backed field, and a read serving one is
-  // already asking for less than a live read, so the live-read link setting
-  // does not reach it.
+  // already asking for less than a live read, so the link-shape policy does
+  // not reach it.
   //
   // One decision for every verb that reads a card, rather than one apiece.
   // Both values are folded into the validator, so two verbs deciding
-  // differently would hand out different validators for the same card — and a
-  // `HEAD`'s would then never match the conditional `GET` it was asked in aid
-  // of. Nothing here varies by verb, so there is nothing to keep in step.
+  // differently would hand out different validators for the same card. Nothing
+  // here varies by verb, so within one request there is nothing to keep in
+  // step; across the `HEAD` / `GET` pair it is the policy's dwell floor that
+  // holds them together, not this method (see `#decideLinkShape`).
+  //
+  // A card read returns one card, so it is the row class a closure is cheapest
+  // for and the last one the policy degrades.
   #cardJsonLinkShape(request: Request): {
     skipQueryBackedExpansion: boolean;
     resolveLinksOnly: boolean;
   } {
-    let skipQueryBackedExpansion = isDuringPrerenderRequest(request);
     return {
-      skipQueryBackedExpansion,
+      skipQueryBackedExpansion: isDuringPrerenderRequest(request),
       resolveLinksOnly:
-        !skipQueryBackedExpansion && this.#liveReadsResolveLinksOnly,
+        this.#decideLinkShape(request, 'single-row')?.mode === 'links-only',
     };
   }
 
@@ -8782,6 +8840,7 @@ export class Realm {
         // it: the validator matched, so there is nothing to send.
         return createResponse({
           requestContext,
+          varyOn: LINK_SHAPE_VARY,
           body: null,
           init: {
             status: 304,
@@ -8794,6 +8853,7 @@ export class Realm {
       );
       return createResponse({
         requestContext,
+        varyOn: LINK_SHAPE_VARY,
         body: null,
         init: {
           headers: {
@@ -8956,6 +9016,7 @@ export class Realm {
         ) {
           return createResponse({
             requestContext,
+            varyOn: LINK_SHAPE_VARY,
             body: null,
             init: {
               status: 304,
@@ -9022,6 +9083,7 @@ export class Realm {
       }
       return createResponse({
         body: assembly.body,
+        varyOn: LINK_SHAPE_VARY,
         init: {
           headers: {
             'content-type': SupportedMimeType.CardJson,
@@ -9319,8 +9381,12 @@ export class Realm {
     // for `item` directly, so this route serializes cards with their links as
     // often as the other two — and a refresh here would put back exactly the
     // closure a search left out.
+    // One entry's worth of card, so it classifies with the card read rather
+    // than with a search — the same row class, and therefore the same answer
+    // from the policy at every level.
     let duringPrerender = isDuringPrerenderRequest(request);
-    let resolveLinksOnly = !duringPrerender && this.#liveReadsResolveLinksOnly;
+    let resolveLinksOnly =
+      this.#decideLinkShape(request, 'single-row')?.mode === 'links-only';
     let doc = await this.#realmIndexQueryEngine.searchEntry(
       dbUrl,
       { htmlQuery, fieldset, kind },
@@ -9346,6 +9412,7 @@ export class Realm {
     if (ifNoneMatch && ifNoneMatchMatches(ifNoneMatch, etag)) {
       return createResponse({
         requestContext,
+        varyOn: LINK_SHAPE_VARY,
         body: null,
         init: {
           status: 304,
@@ -9358,6 +9425,7 @@ export class Realm {
       init: {
         headers: { 'content-type': mimeType, etag },
       },
+      varyOn: LINK_SHAPE_VARY,
       requestContext,
     });
   }
@@ -9658,6 +9726,15 @@ export class Realm {
           searchEntryQuery.itemQuery,
         );
       }
+      // Classified from the page the query will actually run with — the clamp
+      // above has already been applied — because that is the only bound on
+      // this read's result count available before it runs, and the link mode
+      // has to be settled before the response is built.
+      let rowClass = rowClassForPageSize(
+        searchEntryQuery.itemQuery.page?.size as number | undefined,
+      );
+      let resolveLinksOnly =
+        this.#decideLinkShape(request, rowClass)?.mode === 'links-only';
       let runSearch = (signal?: AbortSignal) =>
         this.searchEntries(searchEntryQuery, {
           cacheOnlyDefinitions: duringPrerender,
@@ -9667,10 +9744,10 @@ export class Realm {
           // `included[]` expansion is throwaway work in this path.
           omitIncluded: duringPrerender,
           // Live traffic's side of the same question: a prerender takes the
-          // line above and skips the pass, while a live search configured to
-          // stop side-loading keeps the pass and drops only the closure it
-          // would have assembled.
-          resolveLinksOnly: !duringPrerender && this.#liveReadsResolveLinksOnly,
+          // line above and skips the pass, while a live search the policy has
+          // degraded keeps the pass and drops only the closure it would have
+          // assembled.
+          resolveLinksOnly,
           ...(signal ? { signal } : {}),
         });
       // Cut an over-budget item-leg search off (408) rather than run it to
