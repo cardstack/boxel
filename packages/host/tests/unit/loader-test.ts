@@ -2,7 +2,7 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
-import { module, test } from 'qunit';
+import { module, test, todo } from 'qunit';
 
 import { baseRealm, Loader, VirtualNetwork } from '@cardstack/runtime-common';
 
@@ -436,6 +436,50 @@ module('Unit | loader', function (hooks) {
       );
     }
   });
+
+  // `todo`: this is the bundled-base identity bug, pinned. It fails today and
+  // QUnit reports it as expected-to-fail, so it flags the moment it starts
+  // passing rather than sitting green and unnoticed.
+  todo(
+    'a module that re-exports a class does not take its identity',
+    async function (assert) {
+      // A loader credits a class to the first module it serves that exposes it.
+      // A module the loader fetches cannot get this wrong, because evaluating it
+      // loads what it re-exports from first. A module served from a bundle can:
+      // the bundler resolves that import inside the chunk, so the loader is never
+      // asked for the declarer and credits the borrower instead. Every code ref
+      // for the class then names a module that does not declare it, and an
+      // adoption-chain walk that stops at the declarer walks past it.
+      let virtualNetwork = new VirtualNetwork();
+      let realmURL = 'https://reexport-realm.example/';
+      virtualNetwork.addRealmMapping('@test-reexport/', realmURL);
+      class FileDef {}
+      virtualNetwork.shimAsyncModule({
+        id: '@test-reexport/card-api',
+        resolve: async () => ({ FileDef }),
+      });
+      virtualNetwork.shimAsyncModule({
+        id: '@test-reexport/file-api',
+        resolve: async () => ({ FileDef, default: FileDef }),
+      });
+      let throwIfFetch = new Loader(
+        async () => {
+          throw new Error('fetch should not be invoked for a shimmed module');
+        },
+        virtualNetwork.resolveImport,
+        { virtualNetwork },
+      );
+
+      // Only the re-exporter is asked for, which is what a card importing just
+      // `file-api` does.
+      await throwIfFetch.import('@test-reexport/file-api');
+
+      assert.deepEqual(Loader.identify(FileDef), {
+        module: '@test-reexport/card-api',
+        name: 'FileDef',
+      });
+    },
+  );
 
   test('identify preserves original module for reexports', function (assert) {
     let throwIfFetch = new Loader(async () => {
