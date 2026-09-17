@@ -446,18 +446,18 @@ export class LatticeQueryRegistry
         throw new Error('Lattice publication has an invalid staleness window');
       staleWithin = owner.staleWithin;
     }
-    // A stale publication is true at its input generation but was derived
-    // while inputs were still moving, so the owner stays obliged at this very
-    // generation: the ordinary path re-derives it once the stream quiets.
+    // A stale publication retains its actual input-change obligation. Giving
+    // it the output generation would turn every publication into new input
+    // work and rerun unchanged aggregates whenever their deadline expires.
+    // A change routed during computation remains newer than inputGeneration;
+    // it is not swallowed by this publication's later generation. The ordinary
+    // path still validates the retained obligation after dependencies settle.
     const dirtyGeneration = owner.pending
       ? generation
       : owner.stale && !owner.retired
-        ? Math.max(
-            generation,
-            previous?.dirty_generation == null
-              ? 0
-              : Number(previous.dirty_generation),
-          )
+        ? previous?.dirty_generation == null
+          ? generation
+          : Number(previous.dirty_generation)
         : null;
     const pg = this.db.kind === 'pg';
     await tx([

@@ -996,7 +996,8 @@ export class PgQueueRunner implements QueueRunner {
           WHERE source.concurrency_group = 'indexing:' || (j.args->>'realmURL')
             AND source.status = 'unfulfilled'
             AND source.job_type IN ('incremental-index', 'from-scratch-index', 'copy-index')
-        ) OR ${latticeOverdueWorkSQL})
+        ) OR EXISTS (SELECT 1 FROM lattice_pending_generations p
+          WHERE p.realm_url=j.args->>'realmURL') OR ${latticeOverdueWorkSQL})
         AND ${latticeRenderRetryReadySQL}
         AND ${latticeMaterializationReadySQL}
         AND ${latticeCodeReadySQL}

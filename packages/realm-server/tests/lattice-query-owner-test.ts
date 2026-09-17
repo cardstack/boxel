@@ -1565,6 +1565,191 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('an intermediate aggregate waits for relevant input progress, then validates when inputs settle', async (assert) => {
+    staleTotal();
+    await (await candidate()).publish();
+    const registry = publication.registry;
+    const feeder = realm + 'Person/one.json';
+    await db.execute(
+      `INSERT INTO lattice_owners(realm_url,owner_url,published_generation,input_generation,dirty_generation,definition_revision,retired)
+       VALUES($1,$2,5,4,6,'epoch',FALSE)`,
+      { bind: [realm, feeder] },
+    );
+    await db.execute(
+      `UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{meta,publication}',
+       '{"version":1,"state":"ready","definitionRevision":"epoch","outputRevision":5,"validatedThrough":4,"computedFields":[],"queryFields":[]}') WHERE url=$1`,
+      { bind: [feeder] },
+    );
+    await db.execute(
+      "UPDATE lattice_owners SET dirty_generation=6,stale_after=now()-interval '1 second' WHERE owner_url=$1",
+      { bind: [owner] },
+    );
+    const readyOwner = async (overdueOnly = false) =>
+      (await registry.ready(realm, { overdueOnly })).find(
+        (row) => row.ownerURL === owner,
+      );
+    assert.true(
+      (await readyOwner(true))?.stale,
+      'a relevant input change enables the intermediate attempt',
+    );
+    await (
+      await candidate('A', undefined, false, { stale: true, isolated: true })
+    ).publish();
+    assert.strictEqual(
+      Number((await ownerRow()).dirty_generation),
+      6,
+      'waiting remains durable without becoming new work',
+    );
+    await db.execute(
+      "UPDATE lattice_owners SET stale_after=now()-interval '1 second' WHERE owner_url=$1",
+      { bind: [owner] },
+    );
+    assert.strictEqual(
+      await readyOwner(),
+      undefined,
+      'the same unfinished inputs do not trigger another render',
+    );
+    assert.strictEqual(
+      await readyOwner(true),
+      undefined,
+      'an expired deadline alone does not trigger a stale render',
+    );
+    assert.false(
+      await registry.hasOverdue(realm),
+      'queue admission agrees with the frontier',
+    );
+
+    // A new relevant change arrives after the captured input snapshot. Routing
+    // multiple changes still leaves just one owner obligation.
+    await db.execute(
+      'UPDATE realm_generations SET current_generation=current_generation+1 WHERE realm_url=$1',
+      { bind: [realm] },
+    );
+    const [{ current_generation: changedAt }] = await db.execute(
+      'SELECT current_generation FROM realm_generations WHERE realm_url=$1',
+      { bind: [realm] },
+    );
+    await db.withWriteLock('lattice:index:' + realm, async (tx) => {
+      await registry.markDirty(tx!, realm, [owner, owner], Number(changedAt));
+    });
+    assert.true(
+      (await readyOwner(true))?.stale,
+      'new relevant input progress makes the same card runnable again',
+    );
+    const next = await candidate('A', undefined, false, {
+      stale: true,
+      isolated: true,
+    });
+    // Simulate another routed change during computation, with a publication
+    // generation later still. Compare against the captured input generation,
+    // never the eventual output generation, or this obligation would be lost.
+    await db.execute(
+      'UPDATE realm_generations SET current_generation=current_generation+1 WHERE realm_url=$1',
+      { bind: [realm] },
+    );
+    await db.withWriteLock('lattice:index:' + realm, async (tx) => {
+      await registry.markDirty(tx!, realm, [owner], Number(changedAt) + 1);
+    });
+    await next.publish();
+    assert.strictEqual(
+      Number((await ownerRow()).dirty_generation),
+      Number(changedAt) + 1,
+      'a change during execution survives the later publication',
+    );
+    await db.execute(
+      "UPDATE lattice_owners SET stale_after=now()-interval '1 second' WHERE owner_url=$1",
+      { bind: [owner] },
+    );
+    assert.true(
+      (await readyOwner(true))?.stale,
+      'the unseen change retains one follow-up',
+    );
+    await (
+      await candidate('A', undefined, false, { stale: true, isolated: true })
+    ).publish();
+    await db.execute(
+      "UPDATE lattice_owners SET stale_after=now()-interval '1 second' WHERE owner_url=$1",
+      { bind: [owner] },
+    );
+    assert.strictEqual(
+      await readyOwner(),
+      undefined,
+      'the completed follow-up waits again without looping',
+    );
+    await db.execute(
+      'UPDATE lattice_owners SET dirty_generation=NULL WHERE owner_url=$1',
+      { bind: [feeder] },
+    );
+    assert.strictEqual(
+      (await readyOwner())?.ownerURL,
+      owner,
+      'settling unchanged dependencies releases final validation',
+    );
+    assert.strictEqual(
+      (await readyOwner())?.stale,
+      undefined,
+      'final validation uses the ordinary freshness fence',
+    );
+    await (
+      await candidate('A', undefined, false, { isolated: true })
+    ).publish();
+    assert.strictEqual(
+      (await ownerRow()).dirty_generation,
+      null,
+      'the card becomes clean without inventing another change',
+    );
+  });
+
+  test('a first native publication progresses during a source backlog and settles afterward', async (assert) => {
+    await (await candidate('A', undefined, true)).publish();
+    while (await publication.matchPending(realm, 'reader')) {
+      // Register the discovery's first obligation before running its producer.
+    }
+    await db.execute(
+      `INSERT INTO jobs(job_type,concurrency_group,priority,timeout,args)
+       VALUES('incremental-index',$1,10,10,$2)`,
+      { bind: ['indexing:' + realm, JSON.stringify({ realmURL: realm })] },
+    );
+    const openWork = (
+      request: Parameters<typeof openLatticeNativeWork>[1],
+      admission: Parameters<typeof openLatticeNativeWork>[2],
+    ) => openLatticeNativeWork(db, request, admission);
+    await assert.rejects(
+      candidate('A', openWork),
+      /new source work has priority/,
+      'an ordinary attempt cannot silently promote itself',
+    );
+    const initial = await candidate('A', openWork, false, {
+      stale: true,
+      isolated: true,
+    });
+    await initial.publish();
+    const [row] = await db.execute(
+      `SELECT i.pristine_doc,o.dirty_generation FROM boxel_index i
+       JOIN lattice_owners o ON o.realm_url=i.realm_url AND o.owner_url=i.url
+       WHERE i.url=$1 AND i.type='instance'`,
+      { bind: [owner] },
+    );
+    assert.strictEqual((row.pristine_doc as any).attributes.total, 5);
+    assert.true((row.pristine_doc as any).meta.publication.stale);
+    assert.notStrictEqual(
+      row.dirty_generation,
+      null,
+      'the initial snapshot retains its obligation',
+    );
+    await db.execute(
+      "UPDATE jobs SET status='resolved' WHERE concurrency_group=$1",
+      {
+        bind: ['indexing:' + realm],
+      },
+    );
+    while (await publication.matchPending(realm, 'reader')) {
+      // Route the first output before its final ordinary validation.
+    }
+    await (await candidate('A', openWork, false, { isolated: true })).publish();
+    assert.deepEqual(await publication.registry.pending(realm), []);
+  });
+
   test('pending source work and a newer obligation do not supersede a stale attempt', async (assert) => {
     staleTotal();
     await (await candidate()).publish();
@@ -1643,9 +1828,10 @@ module(basename(import.meta.filename), function (hooks) {
     await publish();
     const row = await ownerRow();
     assert.notStrictEqual(row.dirty_generation, null, 'still obliged');
-    assert.ok(
-      Number(row.dirty_generation) >= Number(row.published_generation),
-      'at no older a generation than the value it just published',
+    assert.strictEqual(
+      Number(row.dirty_generation),
+      7,
+      'retains the actual input change instead of manufacturing one at publication',
     );
     assert.true(
       row.deferred,

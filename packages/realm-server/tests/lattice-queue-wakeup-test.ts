@@ -160,6 +160,94 @@ module(basename(import.meta.filename), function (hooks) {
     }
   });
 
+  test('unmatched input changes route during a source backlog without rerunning unchanged aggregates', async (assert) => {
+    assert.timeout(20_000);
+    const realm = 'https://lattice-input-progress.example/';
+    const adapter = new ClaimObservingAdapter();
+    const publisher = new PgQueuePublisher(db);
+    const runner = new PgQueueRunner({
+      adapter,
+      workerId: 'input-progress',
+      lattice: new LatticeRealmConfig([realm]),
+    });
+    let runs = 0;
+    runner.register('lattice-materialize', async () => {
+      runs++;
+      await db.execute(
+        'DELETE FROM lattice_pending_generations WHERE realm_url=$1',
+        { bind: [realm] },
+      );
+      return {};
+    });
+    try {
+      // This owner already read the relevant change. It still owes a clean
+      // validation when source settles, but an expired deadline is not work.
+      await db.execute(
+        `INSERT INTO lattice_owners(realm_url,owner_url,published_generation,input_generation,dirty_generation,definition_revision,retired,stale_after)
+        VALUES($1,$2,3,2,2,'epoch',FALSE,now()-interval '1 second')`,
+        { bind: [realm, realm + 'Board/one.json'] },
+      );
+      await db.execute(
+        `INSERT INTO jobs(job_type,concurrency_group,priority,timeout,args)
+        VALUES('incremental-index',$1,10,30,$2)`,
+        { bind: ['indexing:' + realm, JSON.stringify({ realmURL: realm })] },
+      );
+      await db.execute(
+        `INSERT INTO lattice_pending_generations(realm_url,generation,definition_revision)
+        VALUES($1,4,'epoch')`,
+        { bind: [realm] },
+      );
+      const wake = () =>
+        publisher.publish({
+          jobType: 'lattice-materialize',
+          concurrencyGroup: latticeConcurrencyGroup(realm),
+          priority: 8,
+          timeout: 10,
+          args: { realmURL: realm },
+        });
+      const routing = await wake();
+      await runner.start();
+      await routing.done;
+      assert.strictEqual(
+        runs,
+        1,
+        'new input changes can route without waiting for primary indexing to stop',
+      );
+      adapter.blockedClaim = new Deferred<void>();
+      const duplicate = await wake();
+      await adapter.blockedClaim.promise;
+      assert.strictEqual(
+        runs,
+        1,
+        'after routing drains the same stale inputs cannot consume another worker',
+      );
+      const reservations = await db.execute(
+        'SELECT id FROM job_reservations WHERE job_id=$1',
+        { bind: [duplicate.id] },
+      );
+      assert.strictEqual(
+        reservations.length,
+        0,
+        'the duplicate wake remains unclaimed',
+      );
+      await db.execute(
+        "UPDATE jobs SET status='resolved' WHERE concurrency_group=$1",
+        { bind: ['indexing:' + realm] },
+      );
+      await db.execute('NOTIFY jobs');
+      await duplicate.done;
+      assert.strictEqual(
+        runs,
+        2,
+        'the ordinary final validation can run after the source backlog ends',
+      );
+    } finally {
+      await runner.destroy();
+      await publisher.destroy();
+      await adapter.close();
+    }
+  });
+
   test('a background collection window wakes at its deadline without another write', async function (assert) {
     assert.timeout(15_000);
     const realm = 'https://lattice-window.example/';

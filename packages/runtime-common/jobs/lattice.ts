@@ -97,9 +97,15 @@ export const latticeOwnerRetryReadySQL = `(${latticeOwnerAttemptsSQL} < ${lattic
 // produce. Admit an indexed registration stub through the guarded stale path,
 // retaining its obligation, just like an overdue owner. Readiness still blocks
 // missing input bodies; this is scheduling advice, not an input-validity proof.
+// A deadline releases accumulated changes; it does not invent new input work.
+// After an intermediate publication, the retained dirty obligation may already
+// be covered by its input snapshot. Wait for a newer relevant change before
+// another stale attempt. The ordinary frontier still performs final validation
+// when inputs settle, even if their values did not change.
 // Share this predicate between queue admission, frontier and publication guard.
 export const latticeOwnerStaleAttemptSQL = `(
-  (o.stale_after IS NOT NULL AND o.stale_after <= now()) OR EXISTS (
+  (o.stale_after IS NOT NULL AND o.stale_after <= now()
+    AND o.dirty_generation > o.input_generation) OR EXISTS (
     SELECT 1 FROM boxel_index initial WHERE initial.realm_url=o.realm_url
       AND initial.url=o.owner_url AND initial.type='instance'
       AND initial.is_deleted IS NOT TRUE
