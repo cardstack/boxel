@@ -15,6 +15,72 @@ export class Counter extends CardDef {
 }`;
 
 module(basename(import.meta.filename), function () {
+  test('template, style and comment edits keep the data revision but change the source revision', function (assert) {
+    const before = analyzeLatticeGtsSource(fileId, source);
+    assert.ok(before.dataRevision, 'persist a separate data program revision');
+    for (const edited of [
+      source.replace(
+        '<div>{{@model.doubled}}</div>',
+        '<section><h1>Total</h1>{{@model.doubled}}<style scoped>h1 { color: purple; }</style></section>',
+      ),
+      '// A presentation comment\n' +
+        source.replace('export class', '\n\nexport class'),
+      source.replace("'.amount * 2'", '".amount * 2"'),
+    ]) {
+      const after = analyzeLatticeGtsSource(fileId, edited);
+      assert.notStrictEqual(
+        after.sourceRevision.digest,
+        before.sourceRevision.digest,
+      );
+      assert.deepEqual(after.dataRevision, before.dataRevision);
+    }
+  });
+
+  test('data revisions retain formulas, queries, imports, helpers and constructors', function (assert) {
+    const before = analyzeLatticeGtsSource(fileId, source);
+    for (const edited of [
+      source.replace('.amount * 2', '.amount * 3'),
+      source.replace('@cardstack/base/card-api', './different-api'),
+      source.replace(
+        'export class',
+        'function helper() { return 1; }\nexport class',
+      ),
+      source.replace(
+        '@field amount',
+        'constructor() { super(); this.amount = 3; }\n@field amount',
+      ),
+      source.replace(
+        '@field amount = contains(NumberField);',
+        '@field amount = contains(NumberField, { computeVia: () => 1 });',
+      ),
+    ]) {
+      const after = analyzeLatticeGtsSource(fileId, edited);
+      assert.ok(
+        after.dataRevision,
+        'syntax proof does not authorize execution',
+      );
+      assert.notDeepEqual(after.dataRevision, before.dataRevision);
+    }
+    const query = source.replace(
+      "computeVia: formula('.amount * 2', { readableSyntax: false, libraries: ['core'] })",
+      'query: { filter: { eq: { season: 2024 } } }',
+    );
+    assert.notDeepEqual(
+      analyzeLatticeGtsSource(fileId, query).dataRevision,
+      analyzeLatticeGtsSource(fileId, query.replace('2024', '2025'))
+        .dataRevision,
+    );
+    assert.notOk(
+      analyzeLatticeGtsSource(fileId, 'this is not valid GTS').dataRevision,
+    );
+    assert.notOk(
+      analyzeLatticeGtsSource(
+        fileId,
+        source + '\nconst forged = templatePlaceholder("data");',
+      ).dataRevision,
+    );
+  });
+
   test('captures official BXL data without treating templates or unresolved imports as Node authority', function (assert) {
     const result = analyzeLatticeGtsSource(fileId, source);
     assert.strictEqual(result.state, 'analyzed');

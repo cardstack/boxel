@@ -185,6 +185,117 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('template publication preserves bound data and obligations; computation edits dirty its owner', async function (assert) {
+    const text = code.replace(
+      ' }',
+      ' static isolated = <template>{{@model.amount}}</template>; }',
+    );
+    await publish('counter.gts', text);
+    await run();
+    const admitted = await readLatticeCodeAdmission(
+      db,
+      policy,
+      realm + 'counter.gts',
+      'Counter',
+    );
+    assert.ok(admitted, 'the original code is admitted');
+    const owner = realm + 'Counter/one.json';
+    await db.execute(
+      `INSERT INTO lattice_owners
+      (realm_url,owner_url,published_generation,input_generation,definition_revision,code_bound,attributes_json,attributes_generation,stale_within)
+      VALUES ($1,$2,1,1,'original-definition',TRUE,'{"amount":7}',1,2)`,
+      { bind: [realm, owner] },
+    );
+    await db.execute(
+      'INSERT INTO lattice_owner_code (realm_url,owner_url,generation,reference) VALUES ($1,$2,1,$3)',
+      {
+        bind: [realm, owner, JSON.stringify(admitted!.reference)],
+      },
+    );
+    const owners = () =>
+      query(db, ['SELECT * FROM lattice_owners ORDER BY owner_url']);
+    const before = await owners();
+    const current = async () =>
+      (
+        await db.execute(
+          "SELECT lattice_owner_code_current($1,$2,'new-loader') AS current",
+          { bind: [realm, owner] },
+        )
+      )[0].current;
+    assert.true(await current());
+    await publish(
+      'counter.gts',
+      text.replace(
+        '{{@model.amount}}',
+        '<h1>{{@model.amount}}</h1><style scoped>h1 { color: red; }</style>',
+      ),
+    );
+    assert.deepEqual(
+      await owners(),
+      before,
+      'pending classification preserves the data and its freshness windows',
+    );
+    assert.false(
+      await current(),
+      'source freshness remains fenced until new analysis is linked',
+    );
+    await run();
+    assert.true(
+      await current(),
+      'same data program restores the existing binding with the new source fence',
+    );
+    assert.deepEqual(
+      await owners(),
+      before,
+      'no value, output revision, obligation or deadline changed',
+    );
+    assert.strictEqual(
+      (
+        await query(db, [
+          "SELECT id FROM jobs WHERE job_type='lattice-materialize'",
+        ])
+      ).length,
+      0,
+      'template change schedules no data materialization',
+    );
+    await db.execute(
+      'UPDATE lattice_owners SET dirty_generation=1 WHERE realm_url=$1 AND owner_url=$2',
+      { bind: [realm, owner] },
+    );
+    await publish('counter.gts', text + '\n// presentation comment');
+    await run();
+    assert.strictEqual(
+      Number((await owners())[0].dirty_generation),
+      1,
+      'an unrelated pending data obligation is never cleared',
+    );
+    await db.execute(
+      'UPDATE lattice_owners SET dirty_generation=NULL WHERE realm_url=$1 AND owner_url=$2',
+      { bind: [realm, owner] },
+    );
+    await publish(
+      'counter.gts',
+      text.replace(
+        '@field amount',
+        '@field another = contains(NumberField); @field amount',
+      ),
+    );
+    await run();
+    assert.false(
+      await current(),
+      'changed data code cannot reuse the old binding',
+    );
+    assert.ok(
+      (await owners())[0].dirty_generation,
+      'changed computation schedules the affected owner',
+    );
+    assert.strictEqual(
+      (await owners())[0].attributes_json,
+      before[0].attributes_json,
+      'last published data survives while replacement is pending',
+    );
+  });
+
   test('ordinary metadata writes have no Lattice trigger or invalidation side effects', async function (assert) {
     await publish('counter.gts', code);
     await run();

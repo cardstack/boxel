@@ -72,6 +72,77 @@ function fixture(entries: Record<string, string>) {
 }
 
 module(basename(import.meta.filename), function () {
+  test('data identity survives a current template edit while source fences still reject stale analysis', async function (assert) {
+    const text = `${imports}
+import { bxl } from '@cardstack/bxl';
+export class Counter extends CardDef {
+  @field amount = contains(NumberField);
+  @field doubled = contains(NumberField, {computeVia: bxl('.amount * 2', {readableSyntax: false})});
+  static isolated = <template><div>{{@model.doubled}}</div></template>;
+}`;
+    const lab = fixture({ 'counter.gts': text });
+    const before = await lab.link();
+    const edited = source(
+      'counter.gts',
+      text.replace(
+        '<div>{{@model.doubled}}</div>',
+        '<h1>{{@model.doubled}}</h1><style scoped>h1 { color: red; }</style>',
+      ),
+    );
+    lab.files.set(`${origin}counter.gts`, edited);
+    const after = await lab.link();
+    assert.strictEqual(after.state, 'requires-admission');
+    assert.strictEqual(
+      after.fingerprint,
+      before.fingerprint,
+      'materialized data identity is retained',
+    );
+    assert.notDeepEqual(
+      after.files,
+      before.files,
+      'rendering and byte provenance see the new source',
+    );
+    if (edited.kind !== 'source') throw new Error('expected analyzed source');
+    edited.currentSourceRevision = {
+      ...edited.currentSourceRevision,
+      digest: 'newer-bytes',
+    };
+    assert.strictEqual(
+      (await lab.link()).state,
+      'blocked',
+      'semantic equality never bypasses source freshness',
+    );
+    lab.files.set(
+      `${origin}counter.gts`,
+      source('counter.gts', text.replace('.amount * 2', '.amount * 3')),
+    );
+    assert.notStrictEqual(
+      (await lab.link()).fingerprint,
+      before.fingerprint,
+      'changed computation invalidates data',
+    );
+  });
+
+  test('unknown JavaScript retains byte invalidation even for a template edit', async function (assert) {
+    const text = `${imports}
+export class Counter extends CardDef {
+  @field amount = contains(NumberField, {computeVia: function () { return this.constructor.isolated.toString().length; }});
+  static isolated = <template>old</template>;
+}`;
+    const lab = fixture({ 'counter.gts': text });
+    const before = await lab.link();
+    assert.strictEqual(before.state, 'chrome-data');
+    lab.files.set(
+      `${origin}counter.gts`,
+      source('counter.gts', text.replace('>old<', '>changed<')),
+    );
+    assert.notStrictEqual(
+      (await lab.link()).fingerprint,
+      before.fingerprint,
+      'unknown code can inspect its template',
+    );
+  });
+
   test('one source receipt is reusable by instances and unaffected by unrelated files', async function (assert) {
     const lab = fixture({
       'counter.gts': `${imports}

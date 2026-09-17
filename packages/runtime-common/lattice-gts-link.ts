@@ -1,12 +1,13 @@
 import { computeContentHash } from './content-hash.ts';
 import {
   LATTICE_GTS_ANALYZER_REVISION,
+  LATTICE_GTS_DATA_REVISION_ALGORITHM,
   type LatticeGtsAnalysis,
   type LatticeGtsExportAnalysis,
 } from './lattice-gts-analysis-contract.ts';
 import type { ClassReference } from './schema-analysis-plugin.ts';
 
-export const LATTICE_GTS_LINKER_REVISION = 'lattice-gts-link-v1';
+export const LATTICE_GTS_LINKER_REVISION = 'lattice-gts-link-v2';
 
 export type LatticeGtsLinkInput =
   | {
@@ -36,6 +37,7 @@ export interface LatticeGtsCodeReceipt {
     fileId: string;
     kind: 'source' | 'trusted';
     revision: string;
+    dataRevision?: LatticeGtsAnalysis['dataRevision'];
     analyzerRevision?: string;
   }>;
   definitions: Array<{ fileId: string; name: string }>;
@@ -122,7 +124,10 @@ export async function linkLatticeGtsDefinition({
       kind: input.kind,
       revision,
       ...(input.kind === 'source'
-        ? { analyzerRevision: input.analysis.analyzerRevision }
+        ? {
+            analyzerRevision: input.analysis.analyzerRevision,
+            dataRevision: input.analysis.dataRevision,
+          }
         : {}),
     });
     if (!id || !revision) {
@@ -322,7 +327,31 @@ export async function linkLatticeGtsDefinition({
   );
   // Small bounded receipt, not the source, AST, or BXL programs. It can be
   // shared by every card adopting this export. Never use it as a bearer token.
-  return { ...result, fingerprint: computeContentHash(JSON.stringify(result)) };
+  // Source revisions remain in the receipt and publication scope for exact
+  // byte/permission fences. Only a complete declarative plan may identify its
+  // data separately from its templates. Unknown code keeps byte invalidation.
+  const canReuseData =
+    result.state === 'requires-admission' &&
+    result.files.every(
+      (file) =>
+        file.kind === 'trusted' ||
+        (file.dataRevision?.algorithm === LATTICE_GTS_DATA_REVISION_ALGORITHM &&
+          Boolean(file.dataRevision.digest)),
+    );
+  const dataIdentity = canReuseData
+    ? {
+        ...result,
+        files: result.files.map(({ revision, dataRevision, ...file }) => ({
+          ...file,
+          revision: file.kind === 'trusted' ? revision : dataRevision!.digest,
+          ...(dataRevision ? { algorithm: dataRevision.algorithm } : {}),
+        })),
+      }
+    : result;
+  return {
+    ...result,
+    fingerprint: computeContentHash(JSON.stringify(dataIdentity)),
+  };
 }
 
 function identity(input: LatticeGtsLinkInput): string {

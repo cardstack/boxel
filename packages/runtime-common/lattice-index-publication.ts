@@ -530,12 +530,15 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
       });
     }
     if (inputGeneration === undefined) {
-      // Code-backed values follow their file-owned receipt. Legacy values
-      // still use the conservative loader epoch until they acquire a binding.
+      // The code worker reconciles bound values after linking current source.
+      // A source write temporarily makes its old receipt unavailable; that is
+      // not proof that its data program changed. Dirtying here would schedule
+      // every template edit before the linker can establish equal data identity.
+      // Legacy values still use the conservative loader epoch until bound.
       let outdated = await tx([
         'SELECT o.owner_url FROM lattice_owners o WHERE o.realm_url =',
         param(realmURL),
-        'AND o.retired = FALSE AND NOT',
+        'AND o.retired = FALSE AND o.code_bound = FALSE AND NOT',
         ...latticeOwnerDefinitionCurrent(
           ['o.realm_url'],
           ['o.owner_url'],

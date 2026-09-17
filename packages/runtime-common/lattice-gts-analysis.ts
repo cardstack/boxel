@@ -11,6 +11,7 @@ import { VirtualNetwork } from './virtual-network.ts';
 import type { BxlComputeDefinition } from '@cardstack/bxl';
 import {
   LATTICE_GTS_ANALYZER_REVISION,
+  LATTICE_GTS_DATA_REVISION_ALGORITHM,
   type LatticeGtsAnalysis,
   type LatticeGtsDiagnostic,
   type LatticeGtsExportAnalysis,
@@ -147,6 +148,15 @@ export function analyzeLatticeGtsSource(
       }
     }
     captureExportTargets(result, syntax);
+    if (
+      result.state === 'analyzed' &&
+      !source.includes('templatePlaceholder')
+    ) {
+      result.dataRevision = {
+        algorithm: LATTICE_GTS_DATA_REVISION_ALGORITHM,
+        digest: dataProgramDigest(program),
+      };
+    }
   } catch (error) {
     result.state = 'blocked';
     result.exports = [];
@@ -157,6 +167,39 @@ export function analyzeLatticeGtsSource(
     });
   }
   return result;
+}
+
+// Preserve every authored import, initializer, constructor, helper and query.
+// Only preprocessor-owned template contents and nonsemantic parser metadata
+// are excluded. This intentionally over-invalidates on presentation JS edits;
+// proving a smaller dependency closure belongs to linking/admission.
+function dataProgramDigest(program: t.Program): string {
+  const dataProgram = t.cloneNode(program, true, true);
+  t.traverseFast(dataProgram, (node) => {
+    if (
+      t.isCallExpression(node) &&
+      t.isIdentifier(node.callee, { name: 'templatePlaceholder' })
+    ) {
+      node.arguments = [];
+    }
+  });
+  const metadata = new Set([
+    'start',
+    'end',
+    'loc',
+    'extra',
+    'leadingComments',
+    'innerComments',
+    'trailingComments',
+    'comments',
+    'tokens',
+    'errors',
+  ]);
+  return computeContentHash(
+    JSON.stringify(dataProgram, (key, value) =>
+      metadata.has(key) ? undefined : value,
+    ),
+  );
 }
 
 function captureExportTargets(
