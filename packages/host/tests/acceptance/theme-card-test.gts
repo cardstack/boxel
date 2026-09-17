@@ -107,6 +107,13 @@ const OCEAN_BLUE_THEME_VARS = {
   spacing: '0.25rem',
 };
 
+// Root variables only: a nested card on this theme has no dark palette of its
+// own, so any dark value inside it can only have leaked from the outer theme
+const MIDNIGHT_THEME_VARS = {
+  primary: '#123456',
+  primaryForeground: '#ffffff',
+};
+
 const FOREST_GREEN_THEME_VARS = {
   primary: '#2e7d32',
   primaryForeground: '#FFFFFF',
@@ -215,7 +222,7 @@ module('Acceptance | theme-card-test', function (hooks) {
     cardApi = await loader.import('@cardstack/base/card-api');
     booleanMod = await loader.import('@cardstack/base/boolean');
 
-    let { field, contains, CardDef, Component } = cardApi;
+    let { field, contains, linksTo, CardDef, Component } = cardApi;
     let { default: BooleanField } = booleanMod;
 
     class CheckboxCard extends CardDef {
@@ -239,12 +246,98 @@ module('Acceptance | theme-card-test', function (hooks) {
       };
     }
 
+    // Stamps scheme switches inside its own template, below the themed
+    // container, and nests a linked card so a nested theme's islands can be
+    // told apart from the outer theme's.
+    class SchemeIslandCard extends CardDef {
+      static displayName = 'Scheme Island Card';
+      @field nested = linksTo(CardDef);
+
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h2>Scheme Island Card</h2>
+          <div data-theme='dark' data-test-dark-island>
+            <p>Dark island</p>
+            <@fields.nested />
+          </div>
+          <div data-theme='light' data-test-light-island>
+            <p>Light island</p>
+          </div>
+        </template>
+      };
+
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-theme='dark' data-test-nested-dark-island>
+            <p>Nested dark island</p>
+          </div>
+        </template>
+      };
+    }
+
     await withCachedRealmSetup(async () => {
       await setupAcceptanceTestRealm({
         mockMatrixUtils,
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'checkbox-card.gts': { CheckboxCard },
+          'scheme-island-card.gts': { SchemeIslandCard },
+          'midnight-theme.json': {
+            data: {
+              meta: {
+                adoptsFrom: {
+                  name: 'default',
+                  module: '@cardstack/base/structured-theme',
+                },
+              },
+              type: 'card',
+              attributes: {
+                cardInfo: { name: 'Midnight' },
+                rootVariables: MIDNIGHT_THEME_VARS,
+              },
+            },
+          },
+          'scheme-island.json': {
+            data: {
+              meta: {
+                adoptsFrom: {
+                  name: 'SchemeIslandCard',
+                  module: `${testRealmURL}scheme-island-card`,
+                },
+              },
+              type: 'card',
+              attributes: {
+                cardInfo: { name: 'Scheme Island' },
+              },
+              relationships: {
+                'cardInfo.theme': {
+                  links: { self: `${testRealmURL}starry-night` },
+                },
+                nested: {
+                  links: { self: `${testRealmURL}scheme-island-nested` },
+                },
+              },
+            },
+          },
+          'scheme-island-nested.json': {
+            data: {
+              meta: {
+                adoptsFrom: {
+                  name: 'SchemeIslandCard',
+                  module: `${testRealmURL}scheme-island-card`,
+                },
+              },
+              type: 'card',
+              attributes: {
+                cardInfo: { name: 'Nested Scheme Island' },
+              },
+              relationships: {
+                'cardInfo.theme': {
+                  links: { self: `${testRealmURL}midnight-theme` },
+                },
+              },
+            },
+          },
           'realm.json': realmConfigCardJSON({ name: 'Theme Playground' }),
           'starry-night.json': {
             data: {
@@ -705,6 +798,90 @@ module('Acceptance | theme-card-test', function (hooks) {
         computedProperty(cardSelector, '--background'),
         ROOT_CSS_VARS.background,
         'root variables apply again when the ambient scheme returns to light',
+      );
+    });
+
+    test('dark mode variables apply inside a dark island the card template stamps', async function (assert) {
+      let cardId = `${testRealmURL}scheme-island`;
+      await visitOperatorMode({
+        stacks: [[{ id: cardId, format: 'isolated' }]],
+      });
+      let cardSelector = `[data-test-card="${cardId}"]`;
+      let islandSelector = `${cardSelector} [data-test-dark-island]`;
+      assert.strictEqual(
+        computedProperty(cardSelector, '--primary'),
+        ROOT_CSS_VARS.primary,
+        'the card root keeps the root variables under the light ambient scheme',
+      );
+      assert.strictEqual(
+        computedProperty(islandSelector, '--primary'),
+        DARK_MODE_VARS.primary,
+        'the dark --primary applies inside the island',
+      );
+      assert.strictEqual(
+        computedProperty(islandSelector, '--background'),
+        DARK_MODE_VARS.background,
+        'the dark --background applies inside the island',
+      );
+      assert.strictEqual(
+        computedProperty(islandSelector, '--canvas'),
+        '#1e1b26',
+        'a token the theme omits resolves to the boxel dark default inside the island',
+      );
+    });
+
+    test('root variables apply inside a light island when the ambient scheme is dark', async function (assert) {
+      let cardId = `${testRealmURL}scheme-island`;
+      await visitOperatorMode({
+        stacks: [[{ id: cardId, format: 'isolated' }]],
+      });
+      let cardSelector = `[data-test-card="${cardId}"]`;
+      let islandSelector = `${cardSelector} [data-test-light-island]`;
+
+      document.documentElement.setAttribute('data-theme', 'dark');
+      try {
+        assert.strictEqual(
+          computedProperty(cardSelector, '--primary'),
+          DARK_MODE_VARS.primary,
+          'the card root follows the dark ambient scheme',
+        );
+        assert.strictEqual(
+          computedProperty(islandSelector, '--primary'),
+          ROOT_CSS_VARS.primary,
+          'the root --primary applies inside the light island',
+        );
+        assert.strictEqual(
+          computedProperty(islandSelector, '--canvas'),
+          '#f8f7fa',
+          'a token the theme omits resolves to the boxel light default inside the island',
+        );
+      } finally {
+        document.documentElement.removeAttribute('data-theme');
+      }
+    });
+
+    test('an island stamped by a nested themed card does not pick up the outer theme', async function (assert) {
+      let cardId = `${testRealmURL}scheme-island`;
+      let nestedId = `${testRealmURL}scheme-island-nested`;
+      await visitOperatorMode({
+        stacks: [[{ id: cardId, format: 'isolated' }]],
+      });
+      let nestedSelector = `[data-test-card="${nestedId}"]`;
+      let islandSelector = `${nestedSelector} [data-test-nested-dark-island]`;
+      assert.strictEqual(
+        computedProperty(nestedSelector, '--primary'),
+        MIDNIGHT_THEME_VARS.primary,
+        'the nested card resolves its own theme',
+      );
+      assert.strictEqual(
+        computedProperty(islandSelector, '--primary'),
+        computedProperty(islandSelector, '--boxel-highlight'),
+        'the nested island falls back to the boxel dark default, not the outer theme',
+      );
+      assert.notStrictEqual(
+        computedProperty(islandSelector, '--primary'),
+        DARK_MODE_VARS.primary,
+        'the outer theme does not leak into the nested island',
       );
     });
 
