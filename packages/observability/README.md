@@ -452,6 +452,15 @@ CI runs `apply.sh --env staging` on merge to main (workflow:
 `apply.sh --env production` on the production workflow
 (CS-10936).
 
+A PR that changes anything under `grafanactl/resources/dashboards/` also gets
+a live preview of just the dashboards it touches, pushed to **both** the
+staging and the production Grafana under `pr<n>-`-prefixed UIDs in a per-PR
+folder, so it coexists with the canonical copies rather than overwriting them
+(`.github/workflows/observability-preview.yml`). One sticky PR comment links
+each changed dashboard in both environments. Previews are deleted when the PR
+closes; `.github/workflows/observability-preview-sweep.yml` sweeps both
+environments daily for any the close hook missed.
+
 ## Operator actions
 
 Some dashboards carry buttons that POST to a realm-server operator endpoint —
