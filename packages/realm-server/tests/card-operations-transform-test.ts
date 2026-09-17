@@ -67,7 +67,7 @@ function stub(opts: StubOptions = {}): { core: BatchCore; commits: Commit[] } {
 
   let core: BatchCore = {
     realmURL: REALM,
-    async withWriteLock(fn) {
+    async withWriteLocks(_localPaths, fn) {
       return await fn();
     },
     async fileExists(localPath) {

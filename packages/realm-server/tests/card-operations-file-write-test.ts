@@ -55,7 +55,7 @@ function stub(stored: Record<string, string> = {}): Stub {
 
   let core: BatchCore = {
     realmURL: REALM,
-    async withWriteLock(fn) {
+    async withWriteLocks(_localPaths, fn) {
       return await fn();
     },
     async fileExists(localPath) {
