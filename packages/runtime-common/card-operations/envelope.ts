@@ -465,7 +465,7 @@ export function batchEntryFor(
       return {
         op: 'appendContainsMany',
         ...common,
-        params: paramsFor(entry),
+        params: paramsFor(entry, ['field', 'items', 'fields']),
         href: hrefRequired(entry, 'appendContainsMany'),
         // Named the way the append executor names them, so the fields and
         // their items are handed through rather than restated.
@@ -500,29 +500,32 @@ export function batchEntryFor(
 //
 // `data` carries two kinds of thing at once: the values an operation declares
 // as params, and the members the envelope itself reads to work out what the
-// entry is — the local id a later entry links by, the type a class-scoped
-// entry is scoped to, and the field and items an append names. The second kind
-// is never a param, so an operation declaring one under the same name would
-// otherwise be handed the envelope's value instead of the caller's.
+// entry is. The second kind is never a param, so an operation declaring one
+// under the same name would be handed the envelope's value instead of the
+// caller's.
 //
-// The rule is the members this module reads, not a list of names to remember
-// to grow: anything added to that set belongs here in the same commit.
-const ENVELOPE_MEMBERS = [
-  'lid',
-  'meta',
-  'field',
-  'items',
-  'fields',
-  'content',
-] as const;
+// Subtracted per entry rather than as one flat set, because which members the
+// envelope reads depends on the behavior in hand. Two are read for every
+// entry: the local id a later entry links by, and the type a class-scoped
+// entry is scoped to. The rest belong to one arm, and taking them out
+// everywhere would make an operation declaring a param under one of those
+// names uninvokable — its executor would refuse a value the caller did send,
+// which is the failure the unserved-stage refusal exists to avoid.
+const ENVELOPE_MEMBERS = ['lid', 'meta'] as const;
 
-export function paramsFor(entry: EnvelopeEntry): Record<string, unknown> {
+export function paramsFor(
+  entry: EnvelopeEntry,
+  // The members this entry's own arm reads out of `data`, on top of the two
+  // every entry carries.
+  alsoRead: readonly string[] = [],
+): Record<string, unknown> {
   if (!entry.data) {
     return {};
   }
+  let envelopeMembers = [...ENVELOPE_MEMBERS, ...alsoRead];
   let params: Record<string, unknown> = {};
   for (let [key, value] of Object.entries(entry.data)) {
-    if ((ENVELOPE_MEMBERS as readonly string[]).includes(key)) {
+    if (envelopeMembers.includes(key)) {
       continue;
     }
     params[key] = value;

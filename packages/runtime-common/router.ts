@@ -174,35 +174,9 @@ export function lookupRouteTable<T>(
   paths: RealmPaths,
   request: Request,
 ) {
-  let acceptMimeType = extractSupportedMimeType(
-    request.headers.get('Accept') as unknown as null | string | [string],
-  );
   if (!isHTTPMethod(request.method)) {
     return;
   }
-  let routes = acceptMimeType
-    ? routeTable.get(acceptMimeType)?.get(request.method)
-    : undefined;
-  // Fall back to Content-Type when Accept doesn't match a route. This
-  // supports POST/PATCH routes where the request body type (e.g.
-  // application/octet-stream) is the meaningful discriminator rather than the
-  // desired response type.
-  if (!routes) {
-    let contentType = extractSupportedMimeType(
-      request.headers.get('Content-Type') as unknown as
-        | null
-        | string
-        | [string],
-    );
-    if (!contentType) {
-      return;
-    }
-    routes = routeTable.get(contentType)?.get(request.method);
-    if (!routes) {
-      return;
-    }
-  }
-
   // we construct a new URL within RealmPath.local() param that strips off the query string
   let requestPath = `/${paths.local(new URL(request.url))}`;
   // add a leading and trailing slashes back so we can match on routing rules for directories.
@@ -210,6 +184,48 @@ export function lookupRouteTable<T>(
     request.url.endsWith('/') && requestPath !== '/'
       ? `${requestPath}/`
       : requestPath;
+
+  let acceptMimeType = extractSupportedMimeType(
+    request.headers.get('Accept') as unknown as null | string | [string],
+  );
+  let matched = acceptMimeType
+    ? matchRoute(
+        routeTable.get(acceptMimeType)?.get(request.method),
+        requestPath,
+      )
+    : undefined;
+  if (matched !== undefined) {
+    return matched;
+  }
+  // Fall back to Content-Type when `Accept` doesn't match a route. This
+  // supports POST/PATCH routes where the request body type (e.g.
+  // application/octet-stream) is the meaningful discriminator rather than the
+  // desired response type.
+  //
+  // The fall-through is on failing to match a *route*, not on the family
+  // holding no routes for the method. A family can hold routes for this
+  // method and none for this path — `application/json` has three `POST`
+  // routes, all of them other paths — and stopping there would answer "no
+  // such route" to a request whose `Content-Type` named one.
+  let contentType = extractSupportedMimeType(
+    request.headers.get('Content-Type') as unknown as null | string | [string],
+  );
+  if (!contentType || contentType === acceptMimeType) {
+    return;
+  }
+  return matchRoute(
+    routeTable.get(contentType)?.get(request.method),
+    requestPath,
+  );
+}
+
+function matchRoute<T>(
+  routes: Map<string, T> | undefined,
+  requestPath: string,
+): T | undefined {
+  if (!routes) {
+    return undefined;
+  }
   for (let [route, value] of routes) {
     // let's take care of auto escaping '/' and anchoring in our route regex's
     // to make it more readable in our config
@@ -218,7 +234,7 @@ export function lookupRouteTable<T>(
       return value;
     }
   }
-  return;
+  return undefined;
 }
 
 export class Router {

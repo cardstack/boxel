@@ -1,8 +1,8 @@
 // The JSON:API extension the operations envelope is defined by. It names the
 // `invoke` verb and the `boxel:`-prefixed members the envelope carries, which
 // is what a plain `application/vnd.api+json` body does not have — so the media
-// type below carries it as the `ext` parameter and the router matches on the
-// whole string.
+// type below carries it as the `ext` parameter, and the router matches a media
+// type by its type and the extensions its `ext` names.
 export const BOXEL_OPERATIONS_EXT = 'https://boxel.ai/ext/operations';
 
 // A `const` object (rather than a TS `enum`) so the declaration is

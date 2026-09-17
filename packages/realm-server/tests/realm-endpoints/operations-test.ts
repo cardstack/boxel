@@ -396,6 +396,25 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         }
       });
 
+      test('an Accept naming another family does not hide the content type that named this endpoint', async function (assert) {
+        // The lookup prefers `Accept` and falls back to `Content-Type`, and the
+        // fall-through is on failing to match a route rather than on the family
+        // holding none for the method. `application/json` holds POST routes —
+        // for other paths — so stopping at the family would answer "no such
+        // route" to a request whose content type named this one.
+        let response = await request
+          .post('/_operations')
+          .set('Accept', 'application/json; charset=utf-8')
+          .set('Content-Type', OPERATIONS)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(realm, TESTER, ['read', 'write'])}`,
+          )
+          .send(envelope(invoke('read', { href: '/report-kept' })));
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      });
+
       test('a body sent without the operations extension is told what it is missing', async function (assert) {
         let response = await request
           .post('/_operations')
