@@ -24,7 +24,7 @@ import { cached } from '@glimmer/tracking';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { ensureFileViewModel, type FileViewModel } from './file-view-model';
-import { officeKindBadge, officeStructureLabel } from './office-preview';
+import { OfficePlaceholder } from './office-preview';
 
 import type { ScreenshotSpec } from '../card-api';
 
@@ -102,12 +102,11 @@ export class OfficePosterCapture extends GlimmerComponent<CaptureSignature> {
     );
   }
 
-  get badge(): string {
-    return officeKindBadge(this.kind, this.model.extension);
-  }
-
-  get structureLabel(): string {
-    return officeStructureLabel(this.meta, this.kind);
+  // A document that opens with its own title block leads with it, as its
+  // first page does; the heading (core title, else the filename) stands in
+  // only when the text flow carries no title of its own.
+  get leadsWithTitle(): boolean {
+    return this.blocks[0]?.style === 'title';
   }
 
   // Selects between the extracted first unit and the typed-placeholder branch
@@ -125,10 +124,14 @@ export class OfficePosterCapture extends GlimmerComponent<CaptureSignature> {
   }
 
   <template>
-    <div class='office-poster' data-kind={{this.kind}}>
+    <div
+      class='office-poster'
+      data-kind={{this.kind}}
+      data-test-office-poster={{this.kind}}
+    >
       {{#if this.hasPosterContent}}
         {{#if (eq this.kind 'presentation')}}
-          <div class='slide'>
+          <div class='slide' data-test-office-poster-slide>
             <div class='slide-title'>{{if
                 this.titleSlide.title
                 this.titleSlide.title
@@ -139,7 +142,7 @@ export class OfficePosterCapture extends GlimmerComponent<CaptureSignature> {
             {{/each}}
           </div>
         {{else if (eq this.kind 'spreadsheet')}}
-          <div class='sheet'>
+          <div class='sheet' data-test-office-poster-sheet>
             {{#if this.sheet.name}}<div
                 class='sheet-tab'
               >{{this.sheet.name}}</div>{{/if}}
@@ -156,8 +159,13 @@ export class OfficePosterCapture extends GlimmerComponent<CaptureSignature> {
             </table>
           </div>
         {{else}}
-          <div class='page'>
-            <div class='page-title'>{{this.heading}}</div>
+          <div class='page' data-test-office-poster-page>
+            {{#unless this.leadsWithTitle}}
+              <div
+                class='page-title'
+                data-test-office-poster-heading
+              >{{this.heading}}</div>
+            {{/unless}}
             {{#each this.blocks as |block|}}
               <p
                 class='page-block'
@@ -167,17 +175,17 @@ export class OfficePosterCapture extends GlimmerComponent<CaptureSignature> {
           </div>
         {{/if}}
       {{else}}
-        {{! The typed-placeholder branch: the same paper + badge + count the
-            fitted cell draws for an uncaptured file, rendered as the capture
-            itself so the always-served poster URL resolves to an informative
-            tile (see the file header). }}
+        {{! The typed-placeholder branch: the very component the fitted cell
+            draws for an uncaptured file, rendered as the capture itself so
+            the always-served poster URL resolves to an informative tile (see
+            the file header). }}
         <div class='placeholder'>
-          <div class='ph-paper ph-{{this.kind}}'>
-            <span class='ph-badge'>{{this.badge}}</span>
-            {{#if this.structureLabel}}
-              <span class='ph-count'>{{this.structureLabel}}</span>
-            {{/if}}
-          </div>
+          <OfficePlaceholder
+            @kind={{this.kind}}
+            @meta={{this.meta}}
+            @extension={{this.model.extension}}
+            data-test-office-poster-placeholder
+          />
         </div>
       {{/if}}
     </div>
@@ -205,6 +213,12 @@ export class OfficePosterCapture extends GlimmerComponent<CaptureSignature> {
         font-size: 0.5625rem;
         line-height: 1.45;
         margin: 0 0 5px;
+      }
+      .page-block[data-style='title'] {
+        font-size: 0.8125rem;
+        font-weight: 700;
+        line-height: 1.25;
+        margin-bottom: 8px;
       }
       .page-block[data-style='heading'] {
         font-size: 0.6875rem;
@@ -266,73 +280,20 @@ export class OfficePosterCapture extends GlimmerComponent<CaptureSignature> {
         max-width: 48px;
       }
 
-      /* The typed-placeholder branch, mirroring the fitted cell's uncaptured
-         placeholder (office-preview's .off-fitted/.paper) with the capture
-         palette pinned: a capture render must not depend on the host theme
-         tokens the live placeholder reads. */
+      /* The typed-placeholder branch fills the capture box with the shared
+         placeholder, its theme tokens pinned here: a capture render must not
+         follow the host theme the live placeholder reads, or two captures of
+         the same bytes could differ by the viewer's theme. */
       .placeholder {
         position: absolute;
         inset: 0;
-        display: grid;
-        place-items: center;
-        padding: 10px;
-        background: #eceef1;
-      }
-      .ph-paper {
-        position: relative;
-        width: 72%;
-        aspect-ratio: 3 / 4;
-        background: #fff;
-        border: 1px solid #d8d8d8;
-        border-radius: 3px;
-        box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        overflow: hidden;
-      }
-      .ph-presentation {
-        aspect-ratio: 4 / 3;
-      }
-      .ph-word::before {
-        content: '';
-        position: absolute;
-        inset: 14% 16%;
-        background-image: repeating-linear-gradient(
-          #d8d8d8 0 1px,
-          transparent 1px 9px
-        );
-        opacity: 0.5;
-      }
-      .ph-spreadsheet::before {
-        content: '';
-        position: absolute;
-        inset: 12% 12%;
-        background-image:
-          repeating-linear-gradient(#d8d8d8 0 1px, transparent 1px 16px),
-          repeating-linear-gradient(90deg, #d8d8d8 0 1px, transparent 1px 22px);
-        opacity: 0.5;
-      }
-      .ph-badge {
-        position: relative;
-        font-family: ui-monospace, Menlo, monospace;
-        font-size: 0.6875rem;
-        font-weight: 700;
-        letter-spacing: 0.06em;
-        color: #f7f7f5;
-        background: #262626;
-        padding: 2px 8px;
-        border-radius: 3px;
-      }
-      .ph-count {
-        position: relative;
-        font-family: ui-monospace, Menlo, monospace;
-        font-size: 0.5625rem;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: #555;
+        --fd-stage: #eceef1;
+        --card: #fff;
+        --border: #d8d8d8;
+        --fd-paper: #f7f7f5;
+        --fd-slate: #262626;
+        --muted-foreground: #555;
+        --font-mono: ui-monospace, Menlo, monospace;
       }
     </style>
   </template>

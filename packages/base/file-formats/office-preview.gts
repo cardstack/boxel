@@ -54,14 +54,11 @@ const KIND_LABEL: Record<string, { badge: string; noun: string }> = {
   spreadsheet: { badge: 'XLSX', noun: 'workbook' },
 };
 
-// Shared with the poster capture (`office-captures`): its no-first-unit branch
-// draws the same badge and structural count as the fitted placeholder here, so
-// the two renderings of "an Office file of this kind, this big" cannot drift.
-export function officeKindBadge(kind: string, extension?: string): string {
+function officeKindBadge(kind: string, extension?: string): string {
   return KIND_LABEL[kind]?.badge ?? (extension || 'OOXML').toUpperCase();
 }
 
-export function officeStructureLabel(
+function officeStructureLabel(
   meta:
     | { pageCount?: number; slideCount?: number; sheetCount?: number }
     | undefined,
@@ -80,6 +77,127 @@ export function officeStructureLabel(
     return `${meta.pageCount} ${meta.pageCount === 1 ? 'page' : 'pages'}`;
   }
   return '';
+}
+
+interface PlaceholderSignature {
+  Args: {
+    kind: string;
+    meta?: { pageCount?: number; slideCount?: number; sheetCount?: number };
+    extension?: string;
+  };
+  Element: HTMLElement;
+}
+
+// The typed placeholder: a sheet of paper shaped for the format (portrait for a
+// document, landscape for a deck, ruled as a grid for a workbook) carrying the
+// format badge and the structural count. It has exactly two renderers — the
+// fitted branch below, for a file with no capture yet, and the poster capture's
+// no-first-unit branch (`office-captures`) — and both draw it through this one
+// component so the two renderings of "an Office file of this kind, this big"
+// cannot drift. Every color reads a theme token with a literal fallback; a
+// renderer that must not follow the host theme pins those tokens on an
+// ancestor rather than restating the drawing.
+export class OfficePlaceholder extends GlimmerComponent<PlaceholderSignature> {
+  get badge(): string {
+    return officeKindBadge(this.args.kind, this.args.extension);
+  }
+
+  get count(): string {
+    return officeStructureLabel(this.args.meta, this.args.kind);
+  }
+
+  <template>
+    <div class='off-fitted' data-kind={{@kind}} ...attributes>
+      <div class='paper paper-{{@kind}}'>
+        <span
+          class='paper-badge'
+          data-test-office-placeholder-badge
+        >{{this.badge}}</span>
+        {{#if this.count}}
+          <span
+            class='count'
+            data-test-office-placeholder-count
+          >{{this.count}}</span>
+        {{/if}}
+      </div>
+    </div>
+    <style scoped>
+      .off-fitted {
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+        padding: 10px;
+        background: var(--fd-stage, var(--muted, #eceef1));
+        container-type: inline-size;
+      }
+      .paper {
+        position: relative;
+        width: min(72%, 8rem);
+        aspect-ratio: 3 / 4;
+        background: var(--card, #fff);
+        border: 1px solid var(--border, #d8d8d8);
+        border-radius: 3px;
+        box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        overflow: hidden;
+      }
+      /* A deck reads landscape; a workbook as a ruled grid; a document as ruled
+         lines of text. */
+      .paper-presentation {
+        aspect-ratio: 4 / 3;
+      }
+      .paper-word::before {
+        content: '';
+        position: absolute;
+        inset: 14% 16%;
+        background-image: repeating-linear-gradient(
+          var(--border, #d8d8d8) 0 1px,
+          transparent 1px 9px
+        );
+        opacity: 0.5;
+      }
+      .paper-spreadsheet::before {
+        content: '';
+        position: absolute;
+        inset: 12% 12%;
+        background-image:
+          repeating-linear-gradient(
+            var(--border, #d8d8d8) 0 1px,
+            transparent 1px 16px
+          ),
+          repeating-linear-gradient(
+            90deg,
+            var(--border, #d8d8d8) 0 1px,
+            transparent 1px 22px
+          );
+        opacity: 0.5;
+      }
+      .paper-badge {
+        position: relative;
+        font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+        font-size: 0.6875rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        color: var(--fd-paper, var(--card, #f7f7f5));
+        background: var(--fd-slate, var(--foreground, #262626));
+        padding: 2px 8px;
+        border-radius: 3px;
+      }
+      .count {
+        position: relative;
+        font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+        font-size: 0.5625rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted-foreground, #555);
+      }
+    </style>
+  </template>
 }
 
 export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
@@ -156,14 +274,12 @@ export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
 
   <template>
     {{#if (eq @format 'fitted')}}
-      <div class='off-fitted' data-kind={{this.kind}} data-test-office-fitted>
-        <div class='paper paper-{{this.kind}}'>
-          <span class='badge'>{{this.badge}}</span>
-          {{#if this.structureLabel}}
-            <span class='count'>{{this.structureLabel}}</span>
-          {{/if}}
-        </div>
-      </div>
+      <OfficePlaceholder
+        @kind={{this.kind}}
+        @meta={{this.meta}}
+        @extension={{@model.extension}}
+        data-test-office-fitted
+      />
     {{else}}
       <div
         class='off'
@@ -263,61 +379,6 @@ export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
     {{/if}}
 
     <style scoped>
-      /* Fitted: a typed placeholder, not a rendering engine. It reads as "an
-         Office document of this kind, this many pages/slides/sheets" until the
-         poster contract renders a real first page. */
-      .off-fitted {
-        width: 100%;
-        height: 100%;
-        display: grid;
-        place-items: center;
-        padding: 10px;
-        background: var(--fd-stage, var(--muted, #eceef1));
-        container-type: inline-size;
-      }
-      .paper {
-        position: relative;
-        width: min(72%, 8rem);
-        aspect-ratio: 3 / 4;
-        background: var(--card, #fff);
-        border: 1px solid var(--border);
-        border-radius: 3px;
-        box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        overflow: hidden;
-      }
-      /* A deck reads landscape; a workbook as a ruled grid; a document as ruled
-         lines of text. */
-      .paper-presentation {
-        aspect-ratio: 4 / 3;
-      }
-      .paper-word::before {
-        content: '';
-        position: absolute;
-        inset: 14% 16%;
-        background-image: repeating-linear-gradient(
-          var(--border) 0 1px,
-          transparent 1px 9px
-        );
-        opacity: 0.5;
-      }
-      .paper-spreadsheet::before {
-        content: '';
-        position: absolute;
-        inset: 12% 12%;
-        background-image:
-          repeating-linear-gradient(var(--border) 0 1px, transparent 1px 16px),
-          repeating-linear-gradient(
-            90deg,
-            var(--border) 0 1px,
-            transparent 1px 22px
-          );
-        opacity: 0.5;
-      }
       .badge {
         position: relative;
         font-family: var(--font-mono);
@@ -329,14 +390,6 @@ export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
         padding: 2px 8px;
         border-radius: 3px;
         flex-shrink: 0;
-      }
-      .count {
-        position: relative;
-        font-family: var(--font-mono);
-        font-size: 0.5625rem;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: var(--muted-foreground);
       }
 
       /* Embedded/isolated: the extracted structure, on the family's own surface,
