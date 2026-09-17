@@ -15,6 +15,7 @@ import {
   latticeOwnerAttemptsSQL,
   latticeOwnerCodeVersionSQL,
   latticeOwnerRetryReadySQL,
+  latticeOwnerStaleAttemptSQL,
 } from './jobs/lattice.ts';
 import {
   latticePublicationDecision,
@@ -136,7 +137,7 @@ export interface LatticeOwnerPublication {
 export const latticeOwnerSettledSQL = `(o.settle_until IS NULL OR o.settle_until <= now())`;
 // A dirty owner past its staleness deadline runs ahead of dirty inputs and
 // pending source work (`LatticeWorkClaim.stale`). `o` is a lattice_owners row.
-export const latticeOwnerOverdueSQL = `(o.stale_after IS NOT NULL AND o.stale_after <= now())`;
+export const latticeOwnerOverdueSQL = latticeOwnerStaleAttemptSQL;
 
 export type LatticeProducer = Pick<
   LatticeOwnerPublication,
@@ -832,6 +833,8 @@ export class LatticeQueryRegistry
       // Past its staleness deadline: schedule it as a stale attempt.
       stale?: true;
       demand?: LatticeDemandPriority;
+      // Scheduling only: the uncut graph, including inputs with a last body.
+      pendingInputCount?: number;
     }>
   > {
     let rows = await query(this.db, [
@@ -853,7 +856,9 @@ export class LatticeQueryRegistry
           ]
         : []),
       ...(opts?.runnableOnly && this.db.kind === 'pg'
-        ? [`ORDER BY ${latticeOwnerAttemptsSQL}, o.owner_url`]
+        ? [
+            `ORDER BY ${latticeOwnerAttemptsSQL}, o.stale_after NULLS LAST, o.owner_url`,
+          ]
         : ['ORDER BY o.owner_url']),
     ]);
     return rows.map((row) => ({
@@ -1246,6 +1251,7 @@ export class LatticeQueryRegistry
     return runnableOwners
       .map((row) => ({
         ...row,
+        pendingInputCount: inputs.get(row.ownerURL)!.size,
         ...(priorities.has(row.ownerURL)
           ? { demand: priorities.get(row.ownerURL)! }
           : {}),

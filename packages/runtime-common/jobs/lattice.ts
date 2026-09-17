@@ -93,6 +93,20 @@ export const latticeOwnerAttemptsSQL = `COALESCE((
 ),0)`;
 export const latticeOwnerRetryReadySQL = `(${latticeOwnerAttemptsSQL} < ${latticeWorkAttemptLimit})`;
 
+// Initial computation cannot wait for a window that only computation can
+// produce. Admit an indexed registration stub through the guarded stale path,
+// retaining its obligation, just like an overdue owner. Readiness still blocks
+// missing input bodies; this is scheduling advice, not an input-validity proof.
+// Share this predicate between queue admission, frontier and publication guard.
+export const latticeOwnerStaleAttemptSQL = `(
+  (o.stale_after IS NOT NULL AND o.stale_after <= now()) OR EXISTS (
+    SELECT 1 FROM boxel_index initial WHERE initial.realm_url=o.realm_url
+      AND initial.url=o.owner_url AND initial.type='instance'
+      AND initial.is_deleted IS NOT TRUE
+      AND initial.pristine_doc->'meta'->'publication' IS NOT NULL
+      AND initial.pristine_doc->'meta'->'publication'->>'outputRevision' IS NULL
+  ))`;
+
 // A wave under a source backlog: an owner past its staleness deadline may
 // run a stale attempt ahead of the index jobs still queued for its realm
 // (the kernel's `overdue`), so a feed that never pauses still refreshes
@@ -100,7 +114,7 @@ export const latticeOwnerRetryReadySQL = `(${latticeOwnerAttemptsSQL} < ${lattic
 export const latticeOverdueWorkSQL = `EXISTS (
   SELECT 1 FROM lattice_owners o WHERE o.realm_url=j.args->>'realmURL'
     AND NOT o.retired AND o.dirty_generation IS NOT NULL
-    AND o.stale_after IS NOT NULL AND o.stale_after <= now())`;
+    AND ${latticeOwnerStaleAttemptSQL})`;
 // Dedicated lanes reserve independent capacity. A general-purpose worker may
 // still help either lane; when it does, alternate overdue waves with source
 // jobs using the realm's last completed data job across both groups.

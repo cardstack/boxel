@@ -45,7 +45,8 @@ export function latticeReadSetCurrent(
 export interface LatticeWorkClaim {
   id: string;
   obligation: LatticeRevision;
-  // The owner is past its staleness deadline: this attempt runs over its
+  // The owner is past its staleness deadline or needs its first output.
+  // This attempt runs over its
   // feeders' last published bodies, is not superseded by pending source work
   // or by a newer obligation, and publishes without clearing the obligation.
   stale?: true;
@@ -59,7 +60,7 @@ export interface LatticeWorkState {
   active: boolean;
   inputsCurrent: boolean;
   codeCurrent: boolean;
-  // `lattice_owners.stale_after` has passed while the owner is still obliged.
+  // The storage adapter admits a stale attempt: overdue or first output.
   overdue?: boolean;
 }
 

@@ -36,8 +36,44 @@ export function latticePropagateDemand(
 // short time slice must still serve both classes. Each class retains the
 // existing stale/type fairness. Without demand, keep the ordinary ordering.
 export function latticeOrderWave<
-  T extends { ownerURL: string; stale?: true; demand?: LatticeDemandPriority },
+  T extends {
+    ownerURL: string;
+    stale?: true;
+    demand?: LatticeDemandPriority;
+    pendingInputCount?: number;
+  },
 >(ready: readonly T[], reserve: number, backgroundFirst = false): T[] {
+  // A partial aggregate does not settle its unfinished inputs. Reserving one
+  // slot per card type made several board types crowd out hundreds of leaves.
+  // Infer this distinction from the dependency frontier, never URL/type names.
+  // With both classes present, spend 3/4 of admissions on input progress and
+  // 1/4 on intermediate refreshes. Rotate the leading class for one-owner
+  // slices; within each class demand/background fairness remains unchanged.
+  const refresh = ready.filter(
+    (row) => row.stale && (row.pendingInputCount ?? 0) > 0,
+  );
+  if (refresh.length && refresh.length < ready.length) {
+    const refreshSet = new Set(refresh);
+    const progress = ready.filter((row) => !refreshSet.has(row));
+    const advancing = orderDemand(progress, reserve, backgroundFirst);
+    const updating = orderDemand(refresh, reserve, backgroundFirst);
+    const result: T[] = [];
+    let p = 0;
+    let r = 0;
+    while (p < advancing.length || r < updating.length) {
+      if (backgroundFirst && r < updating.length) result.push(updating[r++]);
+      for (let i = 0; i < 3 && p < advancing.length; i++)
+        result.push(advancing[p++]);
+      if (!backgroundFirst && r < updating.length) result.push(updating[r++]);
+    }
+    return result;
+  }
+  return orderDemand(ready, reserve, backgroundFirst);
+}
+
+function orderDemand<
+  T extends { ownerURL: string; stale?: true; demand?: LatticeDemandPriority },
+>(ready: readonly T[], reserve: number, backgroundFirst: boolean): T[] {
   const fair = (rows: readonly T[]) =>
     latticeReserveAcrossTypes(latticeInterleaveStale(rows), reserve);
   const urgent = fair(ready.filter((row) => row.demand === 2));

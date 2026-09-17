@@ -171,6 +171,56 @@ module(basename(import.meta.filename), (hooks) => {
     assert.false(fast.take(), 'fast work also respects the owner cap');
   });
 
+  test('unfinished aggregates cannot crowd out the inputs needed to settle them', (assert) => {
+    const refresh = Array.from({ length: 7 }, (_, i) => ({
+      ownerURL: realm + `Board${i}/one.json`,
+      stale: true as const,
+      pendingInputCount: 500,
+      demand: 1 as const,
+    }));
+    const progress = Array.from({ length: 40 }, (_, i) => ({
+      ownerURL: realm + `PlayerSeason/${i}.json`,
+      pendingInputCount: 0,
+      demand: i === 0 ? (2 as const) : undefined,
+    }));
+    const rows = [...refresh, ...progress];
+    for (const backgroundFirst of [false, true]) {
+      const ordered = latticeOrderWave(rows, 4, backgroundFirst);
+      const first = ordered.slice(0, 4);
+      assert.strictEqual(
+        first.filter((row) => row.pendingInputCount === 0).length,
+        3,
+      );
+      assert.strictEqual(
+        first.filter((row) => row.pendingInputCount > 0).length,
+        1,
+      );
+      assert.true(
+        first.includes(progress[0]),
+        'a waiting reader gets prerequisite service',
+      );
+      assert.strictEqual(
+        new Set(ordered).size,
+        rows.length,
+        'nothing lost or repeated',
+      );
+      assert.deepEqual(
+        ordered.filter((row) => row.pendingInputCount > 0),
+        refresh,
+        'oldest refreshes keep their relative order',
+      );
+    }
+    assert.strictEqual(latticeOrderWave(progress, 4).length, progress.length);
+    assert.strictEqual(latticeOrderWave(refresh, 4).length, refresh.length);
+    const bootstrap = { ...progress[0], stale: true as const };
+    assert.true(
+      latticeOrderWave([...refresh, bootstrap, ...progress.slice(1)], 4)
+        .slice(0, 4)
+        .includes(bootstrap),
+      'first publications with settled inputs count as progress even in a stale wave',
+    );
+  });
+
   test('Postgres fans out bounded read hints without database rows or rebroadcast loops', async (assert) => {
     const peer = new PgAdapter();
     const receiver = latticeDemandFor(peer);

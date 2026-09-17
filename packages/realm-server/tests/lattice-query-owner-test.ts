@@ -22,7 +22,10 @@ import {
 } from '@cardstack/runtime-common';
 import { IndexRunner } from '@cardstack/runtime-common/index-runner';
 import { latticeMaterialize } from '@cardstack/runtime-common/tasks/lattice';
-import { enqueueLattice } from '@cardstack/runtime-common/jobs/lattice';
+import {
+  enqueueLattice,
+  latticeOverdueWorkSQL,
+} from '@cardstack/runtime-common/jobs/lattice';
 import { LatticeWorkSuperseded } from '@cardstack/runtime-common/lattice-work';
 import {
   latticeInterleaveStale,
@@ -847,7 +850,7 @@ module(basename(import.meta.filename), function (hooks) {
       /* capture and matching establish the durable first obligation */
     }
     assert.deepEqual(await publication.registry.pending(realm), [
-      { ownerURL: owner, generation: 6 },
+      { ownerURL: owner, generation: 6, stale: true },
     ]);
     const current = await candidate('A', (request, admission) =>
       openLatticeNativeWork(db, request, admission),
@@ -1434,6 +1437,43 @@ module(basename(import.meta.filename), function (hooks) {
       [feeder],
       'before the deadline the owner waits for its feeder',
     );
+    assert.deepEqual(
+      names(await registry.ready(realm, { overdueOnly: true })),
+      [feeder],
+      'first output gets a progress turn without a computed deadline; its consumer still waits',
+    );
+    await db.execute(
+      `INSERT INTO jobs (job_type, concurrency_group, timeout, priority, args, status)
+       VALUES ('incremental-index', $1, 3600, 10, $2, 'unfulfilled')`,
+      { bind: ['indexing:' + realm, JSON.stringify({ realmURL: realm })] },
+    );
+    const [admission] = await db.execute(
+      `SELECT ${latticeOverdueWorkSQL} AS allowed FROM jobs j WHERE j.concurrency_group=$1`,
+      { bind: ['indexing:' + realm] },
+    );
+    assert.true(
+      Boolean(admission.allowed),
+      'the queue uses the same initial-admission rule',
+    );
+    const initialWork = {
+      realmURL: realm,
+      actor,
+      claim: { id: feeder, obligation: 6, stale: true as const },
+      inputGeneration: 5,
+      definitionRevision: 'epoch',
+    };
+    await registry.assertWorkCurrent(initialWork);
+    await assert.rejects(
+      registry.assertWorkCurrent({
+        ...initialWork,
+        definitionRevision: 'obsolete',
+      }),
+      /module revision/,
+      'initial admission never bypasses the code fence',
+    );
+    await db.execute('DELETE FROM jobs WHERE concurrency_group=$1', {
+      bind: ['indexing:' + realm],
+    });
     await recordLatticeReadDemand(db, realm, actor, [owner], 2);
     assert.deepEqual(
       (await registry.ready(realm)).map(({ ownerURL, demand }) => ({
@@ -1505,6 +1545,12 @@ module(basename(import.meta.filename), function (hooks) {
         .map((row) => row.stale),
       [true],
       'blocked by its feeder, the overdue owner runs as a stale attempt',
+    );
+    assert.strictEqual(
+      (await registry.ready(realm)).find((row) => row.ownerURL === owner)
+        ?.pendingInputCount,
+      1,
+      'ordering retains the unfinished dependency count even when readiness permits a stale read',
     );
     await db.execute(
       'UPDATE lattice_owners SET dirty_generation=NULL WHERE owner_url=$1',
