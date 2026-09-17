@@ -820,9 +820,14 @@ class RealmSettingsAtom extends Component<typeof RealmSettingsField> {
 //
 // Values are JSON, so a setting can be a string, a number, a flag or a
 // structure. Nothing indexes them: JsonField stays out of the search index,
-// and the realm keeps the map out of the realmInfo it stamps on every card
-// response, so a setting is read by the operation runtime and by whoever opens
-// this card.
+// and the realm keeps the map out of the realmInfo it stamps on card,
+// file-meta and realm-info responses — which is about not carrying settings
+// on every response, not about who may see them.
+//
+// They are not secret. This is an ordinary card at the realm's `realm.json`,
+// and that file is ordinary source, so anyone with read permission on the
+// realm can read every setting here. A credential belongs somewhere the realm
+// does not serve.
 export class RealmSettingsField extends JsonField {
   static displayName = 'Realm Settings';
   static icon = SettingsIcon;

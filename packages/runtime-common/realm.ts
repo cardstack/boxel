@@ -11144,7 +11144,7 @@ export class Realm {
       return { info: this.#cachedRealmInfo, config: this.#cachedRealmConfig };
     }
     if (!this.#realmInfoPromise) {
-      this.#realmInfoPromise = (async () => {
+      let parse = (async () => {
         // Captured before the read begins, so an invalidation that lands while
         // it is in flight is visible when it finishes.
         let generation = this.#realmInfoGeneration;
@@ -11164,9 +11164,19 @@ export class Realm {
         // the check above prevents is that reading outliving the request, by
         // becoming the answer given to everyone after it.
         return { info, config: settings };
-      })().finally(() => {
-        this.#realmInfoPromise = undefined;
-      });
+      })();
+      this.#realmInfoPromise = parse;
+      // Clears the slot only while this parse still owns it. An invalidation
+      // replaces the slot with nothing and a later caller puts its own parse
+      // there; a bare clear here would drop that one instead, costing a
+      // redundant read of the config document.
+      void parse
+        .catch(() => {})
+        .finally(() => {
+          if (this.#realmInfoPromise === parse) {
+            this.#realmInfoPromise = undefined;
+          }
+        });
     }
     return await this.#realmInfoPromise;
   }
@@ -11197,6 +11207,12 @@ export class Realm {
     // Drop any in-flight aggregate too, so a request that overlapped the swap
     // doesn't repopulate the cache with pre-swap counts.
     this.#indexCountsPromise = null;
+    // And the in-flight parse, for the same reason and one more: a caller
+    // arriving after this point would otherwise be handed the reading that
+    // parse is already holding, from before the swap. A stale realm name
+    // corrects itself on the next read; a stale setting is staged into a card
+    // file by whichever operation read it, and does not.
+    this.#realmInfoPromise = undefined;
   }
 
   // The realm's config document, read as the two things it holds: the info

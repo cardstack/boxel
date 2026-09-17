@@ -507,6 +507,11 @@ keeps those settings on its RealmConfig card at `realm.json`, under `config`,
 and a setting is whatever JSON was written there: a string, a number, a flag
 or a structure.
 
+Settings are configuration, not secrets. The card that holds them is an
+ordinary card and its file is ordinary source, so anyone who can read the
+realm can read every setting in it. A credential belongs somewhere the realm
+does not serve.
+
 ```bxl
 assert(Status = "review", "must still be in review");
 append(Comment, params("note"));

@@ -555,7 +555,9 @@ approver's id, a threshold, a default assignee — is supplied by the host from
 the target realm rather than written into the program. In Boxel the realm
 keeps those settings on its RealmConfig card at `realm.json`, under `config`,
 and does not include them in the realm info carried on a card response; a
-setting is whatever JSON the realm owner wrote there.
+setting is whatever JSON the realm owner wrote there. They are configuration
+rather than secrets — that card is an ordinary card and its file is ordinary
+source, so anyone who can read the realm can read every setting in it.
 
 ```ts
 type BxlMutationJsonObject = { [key: string]: BxlMutationJson };
