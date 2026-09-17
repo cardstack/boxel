@@ -233,9 +233,14 @@ export default class CardService extends Service {
     return;
   }
 
+  // `includedScope` is this method's to decide — a caller states its intent
+  // with `withLocalResourcesIncluded` and the scope follows — so the parameter
+  // does not accept one rather than silently discarding it in the spread below.
   async serializeCard(
     card: CardDef,
-    opts?: SerializeOpts & { withLocalResourcesIncluded?: true },
+    opts?: Omit<SerializeOpts, 'includedScope'> & {
+      withLocalResourcesIncluded?: true;
+    },
   ): Promise<LooseSingleCardDocument> {
     let api = await this.getAPI();
     if (opts?.includeComputeds) {
