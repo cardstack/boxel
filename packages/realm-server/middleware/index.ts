@@ -183,6 +183,22 @@ export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
   return next();
 }
 
+// The request URL as the log lines print it: any `token` query param is
+// masked, because two token-bearing families travel there — capture-URL
+// tokens on `_screenshot/` GETs and full session JWTs on `_download-realm`
+// links — and these lines ship to Loki. (ALB access logs still record the
+// raw request line; the capture token's single-URL scope and short TTL are
+// the mitigation there.)
+function loggableRequestURL(ctxt: Koa.Context): string {
+  let url = fullRequestURL(ctxt);
+  if (!url.searchParams.has('token')) {
+    return url.href;
+  }
+  let masked = new URL(url.href);
+  masked.searchParams.set('token', 'REDACTED');
+  return masked.href;
+}
+
 export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
   let logger = getLogger('realm:requests');
   // Stamp `[job: J.R]` onto the request log lines when the upstream
@@ -206,16 +222,16 @@ export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
   let startedAt = Date.now();
 
   logger.info(
-    `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${
-      fullRequestURL(ctxt).href
-    }${jobTag}${corrTag}`,
+    `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${loggableRequestURL(
+      ctxt,
+    )}${jobTag}${corrTag}`,
   );
 
   ctxt.res.on('finish', () => {
     logger.info(
-      `--> ${ctxt.method} ${ctxt.req.headers.accept} ${
-        fullRequestURL(ctxt).href
-      }: ${ctxt.status}${jobTag}${corrTag} dur=${Date.now() - startedAt}ms`,
+      `--> ${ctxt.method} ${ctxt.req.headers.accept} ${loggableRequestURL(
+        ctxt,
+      )}: ${ctxt.status}${jobTag}${corrTag} dur=${Date.now() - startedAt}ms`,
     );
     logger.debug(JSON.stringify(ctxt.req.headers));
   });

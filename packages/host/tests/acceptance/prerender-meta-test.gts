@@ -346,6 +346,54 @@ module('Acceptance | prerender | meta', function (hooks) {
     );
   });
 
+  test('a serialized instance stops at its own resource, however deep the resident graph', async function (assert) {
+    // Jade links to Hassan, who links to three pets. The searchable settle
+    // leaves that whole graph resident, so this is the case where walking it
+    // would cost the most and contribute the least: a link target is a
+    // reference here, and its own links are not the card's to carry.
+    let url = `${testRealmURL}Person/jade.json`;
+    await visit(renderPath(url, '/meta'));
+    let { value } = await capturePrerenderResult('textContent');
+    let meta: PrerenderMeta = JSON.parse(value);
+    assert.deepEqual(
+      meta.serialized,
+      {
+        data: {
+          type: 'card',
+          id: testRRI('Person/jade'),
+          attributes: {
+            name: 'Jade',
+            cardTitle: 'Jade',
+            cardInfo: {
+              name: null,
+              summary: null,
+              cardThumbnailURL: null,
+              notes: null,
+            },
+            cardDescription: null,
+            cardThumbnailURL: null,
+            numOfPets: '0',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: './hassan',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: rri('../person'),
+              name: 'Person',
+            },
+            realmURL: testRealmURL,
+          },
+        },
+      },
+      'the link target is a reference, and neither it nor its own links ride along',
+    );
+  });
+
   test('can generate display name', async function (assert) {
     let url = `${testRealmURL}Pet/paper.json`;
     await visit(renderPath(url, '/meta'));

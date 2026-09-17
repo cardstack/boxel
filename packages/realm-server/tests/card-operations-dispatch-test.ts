@@ -15,6 +15,7 @@ import {
   type OperationTarget,
 } from '@cardstack/runtime-common/card-operations';
 import { fileContentToBytes } from '@cardstack/runtime-common/stream';
+import { urlNamesFile } from '@cardstack/runtime-common/file-def-code-ref';
 import type { CodeRef } from '@cardstack/runtime-common/code-ref';
 import type { Definition } from '@cardstack/runtime-common/definitions';
 
@@ -97,12 +98,18 @@ interface Stub {
 // fragment, a trailing slash, or the `.json` source spelling. The stub holds
 // itself to the same rule so a target that reaches the index uncanonicalized
 // misses, the way it would against Postgres.
+//
+// A path naming a file is held to the same rule for the same reason: a file's
+// bytes get a file row, never an instance row and never a card document. That
+// is what makes the index the thing that decides whether a path is a card,
+// rather than the extension on its URL.
 function isCanonicalKey(url: URL): boolean {
   return (
     url.search === '' &&
     url.hash === '' &&
     !url.pathname.endsWith('.json') &&
-    !url.pathname.endsWith('/')
+    !url.pathname.endsWith('/') &&
+    !urlNamesFile(url)
   );
 }
 
@@ -473,9 +480,7 @@ module(basename(import.meta.filename), function () {
     test('a file def carries the two writes that work on its bytes', async function (assert) {
       // A file's metadata is content-derived and read-only, so what a write on
       // one reaches is the bytes: an `update` replaces them wholesale, and an
-      // `appendLine` adds a line to the end of a text file. Appending a line is
-      // the one behavior that goes the other way — a line appended to a card's
-      // stored file leaves behind something that is no longer a card.
+      // `appendLine` adds a line to the end of a text file.
       let file = stub();
       for (let name of ['update', 'appendLine']) {
         let resolved = await resolveOperation(file.core, FILE, name);
@@ -485,13 +490,25 @@ module(basename(import.meta.filename), function () {
           `a file carries "${name}", undeclared, as a base operation`,
         );
       }
-
+    });
+    test('appending a line is admitted for any instance, whatever its URL says', async function (assert) {
+      // A line appended to a card's stored file leaves behind something that is
+      // no longer a card, so this is the one write a card must not carry — and
+      // it is refused by `stageAppendLine`, not here. Dispatch classifies an
+      // instance target by its extension, and the registered-extension table
+      // does not name every stored file: a `.log`, a `.css`, a `.yml` holds
+      // bytes and serves them, and each classifies as a card. Refusing here
+      // would turn those away before the only code that can tell them from a
+      // card — the executor, which reads whether the path holds a card's
+      // `.json` and what content type its bytes are.
       let card = stub();
-      let onCard = await refusalFrom(() =>
-        resolveOperation(card.core, CARD, 'appendLine'),
+      let resolved = await resolveOperation(card.core, CARD, 'appendLine');
+      assert.strictEqual(
+        resolved.base,
+        'appendLine',
+        'the behavior resolves, and what it may be applied to is the ' +
+          "executor's to decide",
       );
-      assert.strictEqual(onCard.code, 'operation-not-allowed');
-      assert.strictEqual(onCard.status, 405);
     });
     test('a write is carried out by the coordinator rather than by this dispatch', async function (assert) {
       // Every write takes the realm's write lock once for the whole batch it
@@ -779,6 +796,7 @@ module(basename(import.meta.filename), function () {
         headersOnly: true,
       });
       assert.deepEqual(fromRow, {
+        type: 'file-meta',
         indexedAt: 1700,
         lastModified: 1699,
         generation: 4,
@@ -798,6 +816,7 @@ module(basename(import.meta.filename), function () {
         headersOnly: true,
       });
       assert.deepEqual(fromDisk, {
+        type: 'file-meta',
         indexedAt: null,
         lastModified: 42,
         generation: null,
@@ -1090,15 +1109,32 @@ module(basename(import.meta.filename), function () {
       let { core, calls } = stub({
         stored: { 'person.gts': 'export class Person {}' },
       });
-      await runOperation(
+      let result = await runOperation(
         core,
         invoke({ kind: 'instance', url: `${REALM}person.gts` }, 'readSource'),
       );
       assert.deepEqual(
         calls,
+        ['openStoredFile', 'storedFileMeta'],
+        'one file open and one file-meta row — and no definition lookup and ' +
+          'no index read at all',
+      );
+      // Resolving the bytes is the caller's, and what it costs is the other
+      // half of the same claim: a read that is going to send the body pays for
+      // it exactly once, and one that is not — a 304, a range served from the
+      // handle — pays nothing, which is what the assertion above records.
+      assert.true(isSourceResult(result), 'the bytes mode answers with a body');
+      if (isSourceResult(result)) {
+        assert.strictEqual(
+          result.body,
+          'export class Person {}',
+          'and the body is the stored text',
+        );
+      }
+      assert.deepEqual(
+        calls,
         ['openStoredFile', 'storedFileMeta', 'storedContent'],
-        'one file open, one file-meta row, one touch of the bytes — and no ' +
-          'definition lookup and no index read at all',
+        'sending the bytes touches them exactly once',
       );
     });
     test('the headers-only mode reports the metadata without touching the bytes', async function (assert) {

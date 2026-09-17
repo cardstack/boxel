@@ -4,13 +4,39 @@ interface CreateResponseArgs {
   body?: BodyInit | null | undefined;
   init?: ResponseInit | undefined;
   requestContext: RequestContext;
+  // Whether this response's body depends on the request's `Accept`. Nearly
+  // every realm route content-negotiates, so this defaults to true and the
+  // response declares `Vary: Accept`.
+  //
+  // A route whose body is a pure function of its URL passes false, and the
+  // header is omitted — not as a micro-optimization but because declaring a
+  // `Vary` a response does not honor actively breaks its own caching. A
+  // browser cache keeps one stored variant per URL: a request whose `Accept`
+  // differs from the stored one both misses AND replaces that entry, so two
+  // consumers spelling `Accept` differently evict each other's copy on every
+  // request and neither ever reads from cache. For a long-lived `immutable`
+  // response that is the difference between zero round-trips and one per
+  // page load, per URL.
+  varyOnAccept?: boolean;
+  // Further request headers this response's body depends on, beyond `Accept`.
+  // The same rule decides membership in both directions: a header a route
+  // honors has to be listed or a shared cache will treat two representations
+  // as one, and a header it ignores must not be, or the list fragments the
+  // route's own cache for nothing.
+  //
+  // A handler cannot set `vary` through `init` — the value is written after
+  // the `init` headers are spread, so it would be discarded silently.
+  varyOn?: string[];
 }
 
 export function createResponse({
   body,
   init,
   requestContext,
+  varyOnAccept = true,
+  varyOn,
 }: CreateResponseArgs): Response {
+  let varyMembers = [...(varyOnAccept ? ['Accept'] : []), ...(varyOn ?? [])];
   return new Response(body, {
     ...init,
     headers: {
@@ -19,7 +45,14 @@ export function createResponse({
       ...(requestContext.permissions['*']?.includes('read') && {
         'X-Boxel-Realm-Public-Readable': 'true',
       }),
-      vary: 'Accept',
+      // A cache keys on exactly this list, so everything the body turns on
+      // belongs in it. A validator that encodes a difference is not a
+      // substitute: it keeps a client from *being told* its stale copy is
+      // fresh, but it does not stop a cache collapsing two requests that
+      // differ only on an unlisted header and answering one with the other's
+      // representation. An empty list omits the header entirely rather than
+      // sending an empty one.
+      ...(varyMembers.length > 0 && { vary: varyMembers.join(', ') }),
       // This list is the one that reaches the wire. The realm-server also
       // configures `@koa/cors` with its own Expose-Headers, but the middleware
       // copies a handler's Response headers onto the Koa context wholesale, so

@@ -15,9 +15,27 @@ import {
   isEntryResource,
 } from './resource-types.ts';
 
+// What a response says about its own `included[]` when the assembled-resource
+// budget stopped the link walk short. It is the document's answer to a question
+// `included[]` cannot answer for itself: a short one is what a small graph and a
+// clipped large one both look like. The ceiling that applied is deliberately
+// absent — it is an operator's number, recorded in the realm-server log, while
+// the fact is what a consumer could act on. `meta.incomplete` does the same job
+// for a result set whose row count came up short.
+//
+// No consumer branches on this yet. A clipped link is already self-describing
+// to the client, which deserializes it to a not-loaded value and fetches the
+// card when something reads the field, so nothing has to consult the document
+// to behave correctly. It is here so that a caller assembling a total, or a
+// person reading a response, can tell a short `included[]` from a small graph.
+export interface DocumentClosureMeta {
+  linkClosureTruncated?: boolean;
+}
+
 export interface SingleCardDocument<Identity extends Unsaved = Saved> {
   data: CardResource<Identity>;
   included?: (FileMetaResource | CardResource<Saved>)[];
+  meta?: DocumentClosureMeta;
 }
 export interface CardCollectionDocument<Identity extends Unsaved = Saved> {
   data: CardResource<Identity>[];
@@ -40,12 +58,13 @@ export type EntryIncludedResource =
 export interface EntryCollectionDocument {
   data: EntryResource[];
   included?: EntryIncludedResource[];
-  meta: QueryResultsMeta & {
-    // The applied (bound or defaulted) htmlQuery, echoed once at the document
-    // level — it cannot vary across entries, so it is never repeated per
-    // entry. Present whenever the fieldset puts the html branch in play.
-    htmlQuery?: HtmlQuery;
-  };
+  meta: QueryResultsMeta &
+    DocumentClosureMeta & {
+      // The applied (bound or defaulted) htmlQuery, echoed once at the document
+      // level — it cannot vary across entries, so it is never repeated per
+      // entry. Present whenever the fieldset puts the html branch in play.
+      htmlQuery?: HtmlQuery;
+    };
 }
 
 // The single-instance entry response (the card+html / file-meta+html GET): one
@@ -56,6 +75,7 @@ export interface EntryCollectionDocument {
 export interface EntrySingleDocument {
   data: EntryResource;
   included?: EntryIncludedResource[];
+  meta?: DocumentClosureMeta;
 }
 
 // The public-API name for the raw entry wire format a programmatic

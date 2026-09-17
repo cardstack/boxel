@@ -85,6 +85,7 @@ export interface OperationCore {
   storedFileMeta(
     localPath: LocalPath,
     file: OperationStoredFile,
+    opts?: { skipContentFingerprint?: boolean },
   ): Promise<OperationStoredFileMeta>;
   // Whether the realm's ignore rules exclude this URL. An ignored path is
   // never visited, so no amount of waiting produces an index row for it.
@@ -161,7 +162,12 @@ export interface OperationDefinitionLookup {
 export interface OperationIndexQueryEngine {
   cardDocument(
     url: URL,
-    opts?: { loadLinks?: boolean; skipQueryBackedExpansion?: boolean },
+    opts?: {
+      loadLinks?: boolean;
+      skipQueryBackedExpansion?: boolean;
+      resolveLinksOnly?: boolean;
+      skipLinkAssemblyBudget?: boolean;
+    },
   ): Promise<SearchResult | undefined>;
   instance(
     url: URL,
@@ -181,6 +187,41 @@ export interface RunOperationOptions {
   // serving that request says so here — the same control the card+json GET
   // applies from `isDuringPrerenderRequest`.
   skipQueryBackedExpansion?: boolean;
+  // Answer a card's links rather than side-loading them: the document names
+  // what it points at and `included` stays empty. A read serving a request
+  // that only needs the card's own fields says so here, and the validator the
+  // caller emits has to fold it in, since it distinguishes two documents
+  // assembled from the same index row.
+  resolveLinksOnly?: boolean;
+  // Exempt this read's link assembly from the assembled-resource budget. Set
+  // for a read serving a prerender request, whose closure is rendered into HTML
+  // that outlives the request: a clipped one would be cached, and the cached
+  // copy carries no way to say it was clipped. Derived from the same signal as
+  // `skipQueryBackedExpansion`, which is already part of the response cache's
+  // key — so the two shapes never share a cache entry.
+  skipLinkAssemblyBudget?: boolean;
+  // Report a stored-bytes read's `version` only where the realm already
+  // recorded one, rather than reading the file to fingerprint it.
+  //
+  // A recorded hash is free: it arrives on the same row the creation time does.
+  // Computing one is not — it reads up to the whole-content limit and hashes it
+  // synchronously — and the realm records a hash only for a path written
+  // through its own write API, so every file that reached disk another way
+  // (a deploy, a seeded realm) would pay that read on every request. A caller
+  // that does not validate on `version` says so here and gets null for the
+  // paths a hash would have had to be read for.
+  skipContentFingerprint?: boolean;
+  // Answer without the realm's record of the path at all: `created` and
+  // `version` both null, and the row they come from left unread. That row is
+  // the only database work a stored-bytes read does, so a caller that reads
+  // neither value pays for neither.
+  //
+  // It is not only a saving. A caller may be holding a pinned pool connection
+  // for the whole of the work the read sits inside — the coordinated module
+  // compile does — and there a second checkout is what the coordination is
+  // built to avoid, not merely a cost. Such a caller has to be able to say
+  // that this read touches no connection.
+  skipStoredFileMeta?: boolean;
 }
 
 // One request's memo of the index-row peek. Dispatch reads a card's row to
@@ -289,22 +330,45 @@ const ALLOWED_BASE_OPERATIONS: Readonly<
   // for, though, and both writes here work on them: an `update` replaces the
   // content wholesale and an `appendLine` adds one line to the end of a text
   // file without reading what is already there.
-  //
-  // Reaching either of those writes depends on a target being classified a
-  // file, and `defKindFor` classifies an instance target by its extension —
-  // which does not name every stored file. A `.log`, a `.css`, a `.yml` holds
-  // bytes and serves them, and each is classified `card-def` here, so a
-  // file-only behavior on one is refused before its executor runs. `read`
-  // survives that because a card carries a read too, and its executor falls
-  // back to the file-metadata document for exactly these paths. A write has no
-  // such overlap to fall back through, so the discrimination has to move to
-  // where it can be made: the executor, which knows whether the path holds a
-  // card's `.json` or plain bytes and already has to judge the content type.
   'file-def': carriedBy('file-def'),
   // A field's instances have no URL, so nothing is invocable on one. Field
   // data is reached through the operations of the card that contains it.
   'field-def': carriedBy('field-def'),
 };
+
+// The file-only behaviors an instance target carries whatever its URL is
+// classified as.
+//
+// `defKindFor` classifies an instance target by its extension, and the
+// registered-extension table does not name every stored file: a `.log`, a
+// `.css`, a `.yml` holds bytes and serves them, and each classifies `card-def`.
+// A `read` survives that because a card carries a read too and its executor
+// falls back to the file-metadata document for exactly those paths. A
+// file-only write has no such overlap, so it is admitted here and the
+// discrimination is made where the answer is available: the executor, which
+// reads whether the path holds a card's `.json` or plain bytes and already has
+// to judge the content type to decide whether a line may be appended at all.
+//
+// Only an instance target, and only for what a URL can under-report. A type
+// target's kind comes from its definition rather than from an extension, so
+// nothing about it is uncertain, and there is no instance behind it for a
+// stored-bytes write to reach.
+const FILE_WRITES_ON_ANY_INSTANCE: Readonly<
+  Partial<Record<BaseOperation, true>>
+> = { appendLine: true };
+
+function carries(
+  target: OperationTarget,
+  kind: DefKind,
+  base: BaseOperation,
+): boolean {
+  if (own(ALLOWED_BASE_OPERATIONS[kind], base)) {
+    return true;
+  }
+  return (
+    target.kind === 'instance' && own(FILE_WRITES_ON_ANY_INSTANCE, base) != null
+  );
+}
 
 // The base operations that resolve without consulting a definition.
 //
@@ -437,7 +501,7 @@ export async function resolveOperation(
           `serves the bytes stored at the target's URL`,
       });
     }
-    if (!own(ALLOWED_BASE_OPERATIONS[kind], declared.base)) {
+    if (!carries(target, kind, declared.base)) {
       throw notAllowed(target, name, kind, declared.base);
     }
     return declared;
@@ -451,7 +515,7 @@ export async function resolveOperation(
       detail: `there is no operation named "${name}" on ${describeTarget(target)}`,
     });
   }
-  if (!own(ALLOWED_BASE_OPERATIONS[kind], name)) {
+  if (!carries(target, kind, name)) {
     throw notAllowed(target, name, kind, name);
   }
   // The built-in behavior, undeclared. It has no program and no params, and
@@ -803,7 +867,7 @@ function notAllowed(
   // target's own terms are accurate either way.
   let because =
     target.kind === 'instance' && kind
-      ? `a ${kind} allows ${describeAllowed(kind)}`
+      ? `a ${kind} allows ${describeAllowed(kind, target)}`
       : `a "${base}" runs against an instance, and a type is not one`;
   return new OperationFailure({
     id: targetId(target),
@@ -816,8 +880,13 @@ function notAllowed(
   });
 }
 
-function describeAllowed(kind: DefKind): string {
-  let allowed = Object.keys(ALLOWED_BASE_OPERATIONS[kind] ?? {});
+function describeAllowed(kind: DefKind, target: OperationTarget): string {
+  // Asked through `carries` rather than read off the table, so a refusal lists
+  // what this target actually carries — which for an instance target includes
+  // the file writes the table admits on top of its kind.
+  let allowed = (Object.keys(ALL_BASE_OPERATIONS) as BaseOperation[]).filter(
+    (base) => carries(target, kind, base),
+  );
   return allowed.length > 0 ? allowed.join(', ') : 'no operations';
 }
 

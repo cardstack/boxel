@@ -129,6 +129,18 @@ export interface OperationDefinition {
   // holds — a non-deterministic one would land a different value locally than
   // the server computes, and reconciliation would report a phantom conflict.
   deterministic: boolean;
+  // Whether carrying this operation out needs to know who the caller is:
+  // whether any program it runs calls `actor()`, or any template it fills
+  // carries an actor marker. Recorded here rather than asked at invocation
+  // because it is a property of the declaration, fixed from the moment the
+  // module is indexed — so a transport can refuse a request that authenticated
+  // nobody before any of the batch runs, instead of part-way through by
+  // whichever entry reached the actor first.
+  //
+  // Absent means no, which is also what an entry built before this was
+  // recorded reports. A definition-cache entry is rebuilt on demand, so such
+  // an entry is replaced rather than corrected.
+  readsActor?: true;
   // Set when lowering found problems. The operation is stored either way, so
   // invoking it reports what is wrong with it rather than "unknown
   // operation".
@@ -302,6 +314,19 @@ export interface OperationRequest {
 // GET serves it.
 export interface OperationDocumentResult {
   document: SingleCardDocument | SingleFileMetaDocument;
+  // What the index row this document was assembled from says about itself, in
+  // the shape a headers-only read answers with. A caller computing HTTP
+  // response headers needs both halves out of one read: a validator has to
+  // describe the bytes it is sent with, and peeking again to obtain one lets a
+  // write land in between and pairs a body with a validator for a different
+  // one.
+  headers: OperationHeadResult;
+  // Whether assembling this document applied a query-backed field. Such a
+  // document is not a function of its own index row — a write to some other
+  // card that enters or leaves the query changes it without moving this card's
+  // `deps` or `indexed_at` — so nothing a caller keys on its validator would
+  // ever become unreachable, and it cannot be retained.
+  queryBacked: boolean;
 }
 
 // A headers-only read's answer. These are the values the card+json response
@@ -309,6 +334,12 @@ export interface OperationDocumentResult {
 // index-data generation and screenshot manifest that go into it. No body is
 // assembled to produce them.
 export interface OperationHeadResult {
+  // Which representation these headers describe, the same discrimination
+  // `data.type` makes on the document a full read answers with. A caller
+  // sending them has to know: a file's metadata document is derived from the
+  // bytes on disk and has no index row behind it, so it carries no validator
+  // and no cache directive, while a card's does.
+  type: 'card' | 'file-meta';
   indexedAt: number | null;
   lastModified: number | null;
   generation: number | null;
@@ -370,6 +401,13 @@ export interface OperationSourceResult {
   // array, or an unread stream — so a caller hands it to a response body
   // rather than materializing it.
   //
+  // Reading this property is what opens a streaming adapter's stream, so it is
+  // the caller's decision when — and whether — that happens. The bytes mode
+  // reports the same metadata as the headers-only mode whether or not anything
+  // reads this, which is what lets a caller ask for the bytes and then answer
+  // 304, or serve a range from the handle, without stranding a stream it never
+  // sends.
+  //
   // The metadata above describes the handle as it opened; the bytes are read
   // from it afterwards. A write landing in between pairs one with the other,
   // the same way it does for a byte route reading the same handle.
@@ -400,6 +438,23 @@ export interface OperationIdentityResult {
     version: string;
     generation: number | null;
     lastModified: number | null;
+    // When the file behind this entry was first written, as the realm
+    // recorded it. Reported for the same reason as `lastModified` beside it:
+    // both are facts about the stored file that the commit already holds, and
+    // reading either back afterwards would be a second query against a row a
+    // concurrent removal may have taken away. A file is created once, so this
+    // does not move when the file is rewritten. Null where the realm has no
+    // record of one.
+    created: number | null;
+    // Whether this entry left the file holding something other than what it
+    // held when the entry staged. False where the work came out identical to
+    // what was already stored — a patch that changes nothing — which the
+    // commit leaves alone, modification time and all.
+    changed: boolean;
+    // The bytes the file now holds, for a caller that asked for them with
+    // `reportStoredContent`. Absent otherwise, and absent for an entry whose
+    // content is not a document the caller could read.
+    storedContent?: string;
     // Present only on a conditional write: whether the target was still at
     // the `baseVersion` the request named. A false here is not an error — the
     // write happened, and the caller decides what a moved base means.
@@ -480,6 +535,10 @@ export type OperationErrorCode =
   // The request named a `baseVersion` the target is no longer at, on an
   // operation that requires the base to match.
   | 'version-conflict'
+  // The operation reads the invoking actor and the request authenticated
+  // nobody. Distinct from `invalid-params` because nothing the caller sent is
+  // wrong: the remedy is credentials, which is what its 401 says.
+  | 'actor-required'
   // The bytes an operation would store are over the realm's ceiling for a
   // card or a file of that kind. Separate from `invalid-params` because the
   // payload is well formed and the remedy is to send less of it, and because

@@ -19,10 +19,33 @@ import type { SearchOpts } from './search-utils.ts';
 import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
 import {
   applyServerSearchPageBound,
+  assembledLinkResourceBudget,
   isItemLegSearch,
   runWithSearchTimeBudget,
   SearchBoundError,
 } from './search-bounds.ts';
+import {
+  LinkShapePolicy,
+  requestedLinkShape,
+  rowClassForPageSize,
+  X_BOXEL_LINK_SHAPE_HEADER,
+  type LinkShapeDecision,
+  type LinkShapeRowClass,
+} from './link-shape-policy.ts';
+
+// The routes whose representation the link-shape preference selects declare it
+// alongside `Accept`, so a shared cache keys on it rather than treating the
+// two shapes as one resource and answering either caller with whichever it
+// stored.
+//
+// What decides membership is whether an HTTP cache can key the response, not
+// whether the response carries a shape. Source, modules and media carry no
+// shape and leave the header off, since listing a header a route ignores only
+// fragments its cache. The search routes do carry a shape and leave it off as
+// well: they answer the QUERY verb with the query in the body — `_search`
+// refuses every other method outright — so no HTTP cache reaches either body,
+// and the in-process caches that do hold one key on the served mode directly.
+const LINK_SHAPE_VARY = [X_BOXEL_LINK_SHAPE_HEADER];
 import {
   CARD_DOCUMENT_CACHE_HEADER,
   type CardDocumentCache,
@@ -53,17 +76,8 @@ import {
   type EntryCollectionDocument,
   type EntrySingleDocument,
 } from './document-types.ts';
-import type {
-  CardResource,
-  HtmlQuery,
-  HtmlResource,
-  Relationship,
-} from './resource-types.ts';
-import {
-  clearReplacedArrayFieldMeta,
-  HtmlResourceType,
-} from './resource-types.ts';
-import { normalizeRelationships } from './relationship-utils.ts';
+import type { HtmlQuery, HtmlResource } from './resource-types.ts';
+import { HtmlResourceType } from './resource-types.ts';
 import {
   DEFAULT_REDIRECT_STATUS,
   findRedirectCycles,
@@ -85,6 +99,16 @@ import {
   partialWritePath,
 } from './paths.ts';
 import type ms from 'ms';
+import {
+  CAPTURE_URL_TOKEN_PARAM,
+  CAPTURE_URL_TOKEN_SCOPE,
+  CAPTURE_URL_TOKEN_TTL,
+  CAPTURE_URL_TOKEN_TTL_MS,
+  MAX_CAPTURE_URLS_PER_SIGNING_REQUEST,
+  captureURLTokenBinding,
+  captureURLTokenSecret,
+  type CaptureURLTokenClaims,
+} from './capture-url-token.ts';
 import {
   DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
@@ -112,7 +136,6 @@ import {
   unsupportedMediaType,
   type SerializedError,
 } from './error.ts';
-import { v4 as uuidV4 } from 'uuid';
 import { formatRFC7231 } from 'date-fns';
 import {
   isCardResource,
@@ -171,22 +194,59 @@ import {
   type LooseCardResource,
   type FileMetaResource,
 } from './index.ts';
+import {
+  canonicalizeTarget,
+  newOperationScope,
+  resolveOperation,
+  runOperation,
+} from './card-operations/dispatch.ts';
 import type {
   OperationCore,
+  OperationScope,
   OperationStoredFile,
   OperationStoredFileMeta,
 } from './card-operations/dispatch.ts';
-import type { BatchCore } from './card-operations/coordinator.ts';
+import {
+  answered,
+  assertTravelsInEnvelope,
+  atEntry,
+  batchEntryFor,
+  carriesOperationsExt,
+  errorsDocument,
+  isWrite,
+  needsActor,
+  paramsFor,
+  parseOperationsEnvelope,
+  readResult,
+  targetFor,
+  writeResult,
+  type EnvelopeEntry,
+  type EnvelopeResult,
+  type ResolvedEnvelopeEntry,
+} from './card-operations/envelope.ts';
+import {
+  OperationFailure,
+  isDocumentResult,
+  isHeadResult,
+  isOperationFailure,
+  isSourceResult,
+  type OperationRequest,
+  type OperationResult,
+  type OperationSourceResult,
+} from './card-operations/types.ts';
+import { erroredTargetRow } from './card-operations/read.ts';
+import { commitBatch } from './card-operations/coordinator.ts';
+import type {
+  BatchCore,
+  BatchEntryResult,
+} from './card-operations/coordinator.ts';
 import type {
   DeferredPrerenderHtml,
   FromScratchResult,
   IncrementalChange,
 } from './tasks/indexer.ts';
-import { isCodeRef, visitModuleDeps } from './code-ref.ts';
+import { isCodeRef } from './code-ref.ts';
 import { merge } from 'lodash-es';
-import { mergeWith } from 'lodash-es';
-import { cloneDeep } from 'lodash-es';
-import { isEqual } from 'lodash-es';
 import { inferContentType } from './infer-content-type.ts';
 import {
   fileContentToText,
@@ -249,8 +309,8 @@ import {
   sanitizeLoggingCorrelationId,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
 } from './prerender-headers.ts';
-import { mergeRelationships } from './merge-relationships.ts';
-import { getCardDirectoryName } from './helpers/card-directory-name.ts';
+import { RequestTimings } from './request-timings.ts';
+import { emitWriteTiming } from './write-timing.ts';
 import {
   type MatrixClient,
   ensureFullMatrixUserId,
@@ -269,6 +329,7 @@ import { AliasCache } from './cache/alias-cache.ts';
 import { DirectoryViewRefresher } from './directory-view-refresher.ts';
 import { fetcher } from './fetcher.ts';
 import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
+import type { SearchResultDoc } from './realm-index-query-engine.ts';
 import {
   RealmIndexUpdater,
   type IncrementalIndexMeta,
@@ -423,6 +484,24 @@ function isDuringPrerenderRequest(request: Request): boolean {
   return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
 }
 
+// A request URL safe to write to a log line: the capture-URL token (a bearer
+// credential carried in `?token=`) is redacted, since these lines ship to
+// Loki. Mirrors the request-log middleware's `loggableRequestURL`, needed
+// again here because the realm's own logger (auth-failure and capture-token
+// warnings) bypasses that middleware. A no-op when no token param is present.
+function maskLoggedURL(urlString: string): string {
+  try {
+    let url = new URL(urlString);
+    if (!url.searchParams.has(CAPTURE_URL_TOKEN_PARAM)) {
+      return urlString;
+    }
+    url.searchParams.set(CAPTURE_URL_TOKEN_PARAM, 'REDACTED');
+    return url.href;
+  } catch {
+    return urlString;
+  }
+}
+
 // Opt-in signal a JSON-API card POST / PATCH caller sets to say "don't block my
 // write on the realm's in-flight incremental indexing — index deferred and
 // answer me from the document I sent". This is the write-side half of what
@@ -563,6 +642,19 @@ const SOURCE_ETAG_VARIANT = 'source';
 // `card-rri` when the server began serving instance ids (`id`/`links.self`/
 // relationship ids) in canonical prefix (RRI) form for mapped realms.
 const CARD_JSON_ETAG_VARIANT = 'card-rri';
+
+// The variant the card+json validator carries, with the assembled-resource
+// budget folded in. The budget decides which cards come back with a clipped
+// closure and what a clipped one contains, and it is settable per server, so
+// changing it changes bodies while `indexed_at`, the realm-info hash and the
+// screenshots fingerprint all stand still. That is the case the constant above
+// exists for, except that the change arrives by configuration rather than by
+// revision — so the value belongs in the validator rather than in the memory of
+// whoever edits it. One number for the process, so it fragments no cache: every
+// response at a given build and setting shares it.
+function cardJsonEtagVariant(): string {
+  return `${CARD_JSON_ETAG_VARIANT}-lb${assembledLinkResourceBudget()}`;
+}
 
 // Postgres NOTIFY channel for cross-instance invalidation of #sourceCache /
 // #transpiledModuleCache entries on file writes. Two payload shapes:
@@ -750,6 +842,11 @@ type TranspiledModuleEntry = {
   dependencyKeys: Set<string>;
 };
 
+// Who a dispatched operation runs for, as `#callerOf` derives it from a
+// request. It travels on its own wherever an operation is reached from work
+// that outlives the request that started it.
+type OperationCaller = Pick<OperationRequest, 'actor' | 'clientRequestId'>;
+
 type ModuleLoadResult =
   | { kind: 'not-found'; response: ResponseWithNodeStream }
   | { kind: 'non-module'; response: ResponseWithNodeStream }
@@ -828,11 +925,30 @@ function buildEtag(
 // any card); the screenshots fingerprint captures the joined
 // `meta.screenshots` (see `screenshotsEtagFingerprint`). A null
 // `indexedAt` suppresses ETag emission entirely.
+//
+// How much of a card's link graph a card+json body carries. `full` side-loads
+// the whole closure; `links-only` answers the relationships without
+// side-loading their targets; `write-echo` is what a POST / PATCH returns —
+// the written card alone, neither its links resolved nor its query-backed
+// fields expanded, because nothing reads either off a write response.
+//
+// These three take different validators because a client holding one must not
+// be 304'd to another's body. The `full` shape splits once more below, on
+// whether the assembled-resource budget bounded the closure it carries, since
+// a bounded body and an exempt one differ at one `indexed_at`. Query-backed
+// expansion gets no member here: a read from inside a prerender leaves those
+// fields unexpanded, but that body is never served to a client that caches,
+// and the response cache separates it by folding `skipQueryBackedExpansion`
+// into its own key rather than into the ETag. Adding a member here is the
+// wrong move for a variation the validator does not have to carry.
+type CardJsonShape = 'full' | 'links-only' | 'write-echo';
+
 function buildCardJsonEtag(
   indexedAt: number | null | undefined,
   realmInfoHash: string | undefined,
   screenshotsFingerprint?: string,
-  resolveLinksOnly = false,
+  shape: CardJsonShape = 'full',
+  unboundedAssembly = false,
 ): string | undefined {
   if (indexedAt == null) {
     return undefined;
@@ -840,17 +956,32 @@ function buildCardJsonEtag(
   let base = [`${indexedAt}`, realmInfoHash, screenshotsFingerprint]
     .filter(Boolean)
     .join('-');
-  // A read that answers relationships without side-loading their targets
+  // A response that carries less of the card's link graph than a full read
   // serves a different representation of the same card at the same
   // `indexed_at`, so it takes its own variant — the same job the constant
-  // does for a serialization change, on a value that varies per server
-  // rather than per revision. Without it, turning the setting on or off
-  // would leave every client that holds a validator being 304'd to the
-  // shape it cached, and the two shapes reachable under one key in the
-  // response cache.
-  let variant = resolveLinksOnly
-    ? `${CARD_JSON_ETAG_VARIANT}-links-only`
-    : CARD_JSON_ETAG_VARIANT;
+  // does for a serialization change, on a value that varies per response
+  // rather than per revision. Without it, a client that cached a narrower
+  // shape would be 304'd to it when it later asks for the full one, and the
+  // shapes would be reachable under one key in the response cache.
+  //
+  // A full read is the only shape that assembles a link closure, so it is the
+  // only one the assembled-resource budget can move — and it splits again on
+  // whether that budget applied. An assembly exempt from the budget carries its
+  // whole closure at any ceiling, so it is named as such rather than by a
+  // number that does not bind it: naming the exemption leaves an exempt
+  // response's validator untouched by a retune, which cannot change its body,
+  // and keeps the two shapes from sharing a validator — which would let a
+  // conditional request be answered with the other shape's body. That is the
+  // hazard the exemption exists to prevent, since an exempt read is a render's,
+  // and a clipped closure reused by one is baked into cached HTML.
+  let variant: string;
+  if (shape !== 'full') {
+    variant = `${CARD_JSON_ETAG_VARIANT}-${shape}`;
+  } else if (unboundedAssembly) {
+    variant = `${CARD_JSON_ETAG_VARIANT}-lb-off`;
+  } else {
+    variant = cardJsonEtagVariant();
+  }
   return `"${base}:${variant}"`;
 }
 
@@ -899,6 +1030,7 @@ function buildEntryHtmlEtag(
   doc: EntrySingleDocument,
   realmInfoHash: string | undefined,
   resolveLinksOnly = false,
+  unboundedAssembly = false,
 ): string {
   let indexGeneration = doc.data.meta?.generation ?? 0;
   let htmlIds = doc.data.relationships.html?.data ?? [];
@@ -917,6 +1049,20 @@ function buildEntryHtmlEtag(
   }
   if (doc.data.relationships.item && resolveLinksOnly) {
     base = `${base}:links-only`;
+  }
+  // An item carries a link closure, and the assembled-resource budget decides
+  // how much of one — so a response bearing an item is a different body at a
+  // different budget while both generations stand still. This validator has no
+  // constant component to hang that on the way the card+json one does, so the
+  // budget is folded in directly. A pure-html response assembles no closure, and
+  // neither does a links-only item, so neither carries the component. An item
+  // assembled exempt from the budget carries its whole closure at any ceiling,
+  // so it is named as such rather than by a number that does not bind it —
+  // which is also what keeps it from sharing a validator with the bounded shape.
+  if (doc.data.relationships.item && !resolveLinksOnly) {
+    base = unboundedAssembly
+      ? `${base}:lb-off`
+      : `${base}:lb${assembledLinkResourceBudget()}`;
   }
   return `"${base}"`;
 }
@@ -1333,13 +1479,13 @@ export interface RealmAdapter {
 }
 
 interface Options {
-  // When set, a live card read or search answers each returned card's
-  // relationships without side-loading their targets: `included[]` comes back
-  // empty and the consumer fetches the linked cards it displays. Unset, a
-  // live read assembles the card's whole transitive link closure into the
-  // response. Either way a prerender keeps the shape it asks for, which is
-  // already narrower than both.
-  liveReadsResolveLinksOnly?: true;
+  // Decides how much of a card's link graph each live read carries — the whole
+  // transitive closure side-loaded into `included[]`, or the relationships
+  // alone with the consumer fetching what it displays. Unset, every live read
+  // carries its closure, which is what a realm outside a realm-server process
+  // has no load reading to decide otherwise from. Either way a prerender keeps
+  // the shape it asks for, which is already narrower than both.
+  linkShapePolicy?: LinkShapePolicy;
   disableModuleCaching?: true;
   copiedFromRealm?: URL;
   fullIndexOnStartup?: true;
@@ -1425,7 +1571,7 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
   #disableModuleCaching = false;
-  #liveReadsResolveLinksOnly = false;
+  #linkShapePolicy: LinkShapePolicy;
   #fullIndexOnStartup = false;
   #skipBootIndex = false;
   #fromScratchIndexPriority = systemInitiatedPriority;
@@ -1579,6 +1725,38 @@ export class Realm {
     return this.paths.url;
   }
 
+  // The one place a live read's link shape is decided, so every route that can
+  // serve the same card agrees on it within one request. They have to: the
+  // mode is folded into the response validator, so two routes reaching
+  // different answers would hand out different validators for the same bytes,
+  // and nothing about either response would look wrong on its own — which is
+  // why this is a method rather than an expression repeated per route.
+  //
+  // Across requests the agreement is the dwell floor's, not this method's: a
+  // `HEAD` and the conditional `GET` it is asked in aid of are two consults,
+  // and a consult can itself move a rung, so the probe is not neutral. The
+  // move pins the new level for the dwell interval, which covers the pair;
+  // two reads further apart than that can straddle a rung.
+  //
+  // Null during a prerender: that path already skips the link-assembly pass
+  // outright, so it never reaches the policy and its output stays
+  // byte-identical whatever the policy decides.
+  #decideLinkShape(
+    request: Request,
+    rowClass: LinkShapeRowClass,
+  ): LinkShapeDecision | null {
+    if (isDuringPrerenderRequest(request)) {
+      return null;
+    }
+    return this.#linkShapePolicy.decide({
+      realm: this.url,
+      rowClass,
+      requested: requestedLinkShape(
+        request.headers.get(X_BOXEL_LINK_SHAPE_HEADER),
+      ),
+    });
+  }
+
   get dir(): string | undefined {
     return this.#adapter.dir;
   }
@@ -1667,7 +1845,8 @@ export class Realm {
     this.#videoSizeLimitBytes =
       videoSizeLimitBytes ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
-    this.#liveReadsResolveLinksOnly = Boolean(opts?.liveReadsResolveLinksOnly);
+    this.#linkShapePolicy =
+      opts?.linkShapePolicy ?? LinkShapePolicy.pinned('full');
     this.#copiedFromRealm = opts?.copiedFromRealm;
     this.#mediaCacheAdapter = mediaCacheAdapter;
     this.#cardDocumentCache = cardDocumentCache;
@@ -1772,6 +1951,11 @@ export class Realm {
         SupportedMimeType.Session,
         this.createSession.bind(this),
       )
+      .query(
+        '/_sign-capture-urls',
+        SupportedMimeType.JSON,
+        this.signCaptureURLs.bind(this),
+      )
       .get(
         '/_permissions',
         SupportedMimeType.Permissions,
@@ -1791,6 +1975,38 @@ export class Realm {
         '/_atomic',
         SupportedMimeType.JSONAPI,
         this.handleAtomicOperations.bind(this),
+      )
+      // The operations envelope, under the media type that carries its
+      // extension and under the plain JSON:API one it extends. Both reach the
+      // same handler, which reads the `ext` parameter itself: matching only the
+      // extended spelling would leave a body sent as plain
+      // `application/vnd.api+json` — the near miss a client makes — falling
+      // through to a path nothing serves, and answering "no such route" to a
+      // request that named this one.
+      //
+      // The method chooses the permission the realm checks, so the two verbs
+      // are what separates a batch that may write from one that may not:
+      // `POST` needs realm write, `QUERY` needs realm read, and a `QUERY`
+      // carrying a write is refused by the handler.
+      .post(
+        '/_operations',
+        SupportedMimeType.BoxelOperations,
+        this.handleOperations.bind(this),
+      )
+      .query(
+        '/_operations',
+        SupportedMimeType.BoxelOperations,
+        this.handleOperations.bind(this),
+      )
+      .post(
+        '/_operations',
+        SupportedMimeType.JSONAPI,
+        this.handleOperations.bind(this),
+      )
+      .query(
+        '/_operations',
+        SupportedMimeType.JSONAPI,
+        this.handleOperations.bind(this),
       )
       .post(
         '/_cancel-indexing-job',
@@ -1859,14 +2075,41 @@ export class Realm {
         this.getDirectoryListing.bind(this),
       );
 
+    // Realm discovery: a `HEAD` on any path, in any `Accept` bucket without a
+    // `HEAD` route of its own, answers with the realm-identity headers alone.
+    // It says nothing about whether the path names anything and asks nothing
+    // of the caller, which is what lets a client work out which realm serves a
+    // URL — and whether that realm is public — before it has credentials for
+    // it.
     Object.values(SupportedMimeType).forEach((mimeType) => {
-      if (mimeType !== SupportedMimeType.CardSource) {
+      if (
+        mimeType !== SupportedMimeType.CardSource &&
+        mimeType !== SupportedMimeType.CardJson
+      ) {
         this.#router.head('/.*', mimeType as SupportedMimeType, async () => {
           let requestContext = await this.createRequestContext('read');
-          return createResponse({ init: { status: 200 }, requestContext });
+          return this.realmIdentityResponse(requestContext);
         });
       }
     });
+    // card+json is the one bucket where a `HEAD` is a read: a caller permitted
+    // to read gets the headers its `GET` would carry, and everyone else the
+    // discovery answer above.
+    //
+    // A `HEAD` is a read exactly where the `GET` is the card read, which is
+    // every card+json path but this one: `_search` answers a query rather than
+    // a card, so a `HEAD` of it keeps the discovery answer instead of
+    // reporting that the realm has no card there. Registered first, since the
+    // catch-all below would otherwise claim it.
+    this.#router.head('/_search', SupportedMimeType.CardJson, async () => {
+      let requestContext = await this.createRequestContext('read');
+      return this.realmIdentityResponse(requestContext);
+    });
+    this.#router.head(
+      '/.*',
+      SupportedMimeType.CardJson,
+      this.headCard.bind(this),
+    );
   }
 
   async logInToMatrix() {
@@ -2817,13 +3060,13 @@ export class Realm {
   // advisory lock. The lock spans the FS write + index update so two
   // replicas can't both commit on top of the same pre-state.
   //
-  // HTTP route handlers in this file that need their READ to be inside the
-  // same critical section as the write (the `/_atomic` precheck and
-  // `patchCardInstance`'s existing-file read) take the lock themselves at the
-  // handler boundary and invoke `_batchWriteUnlocked` directly — re-entering
-  // through the public methods would deadlock (a second
-  // `pg_advisory_xact_lock` on the same key would block on its own pinned
-  // pool connection).
+  // A caller that needs its READ inside the same critical section as the write
+  // — the `/_atomic` precheck — takes the lock at its own boundary and invokes
+  // `_batchWriteUnlocked` directly, because re-entering through the public
+  // methods would deadlock: a second `pg_advisory_xact_lock` on the same key
+  // blocks on its own pinned pool connection. A batch does the same thing one
+  // level up, holding the lock across every read it stages from and the commit
+  // it hands them to.
   async write(
     path: LocalPath,
     contents: string | Uint8Array,
@@ -3946,6 +4189,263 @@ export class Realm {
     });
   }
 
+  // The operations envelope: a batch of named operations, committed all or
+  // nothing.
+  //
+  // This is the second front door onto the operation core and it adds no
+  // behavior of its own. It reads the batch off the wire, asks the core which
+  // behavior each entry's name resolves to for its target, runs the reads and
+  // hands the writes to the coordinator — the same `runOperation` and
+  // `commitBatch` the card verbs dispatch into, so the two transports cannot
+  // drift into meaning different things by the same operation.
+  //
+  // **Access posture.** Operations are identity-aware but not access-enforced.
+  // The realm's own read/write permission is the whole of what is checked: any
+  // caller who may write the realm may invoke any operation that writes it,
+  // and any caller who may read it may invoke any read. An operation's program
+  // can read `actor()` and an `assert` can refuse on what it finds, but the
+  // realm verifies no claim beyond the one its permission check already made,
+  // and refuses nothing on the strength of who is asking. Treat every
+  // operation's result as reachable by any permitted caller of this realm.
+  private async handleOperations(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    try {
+      return await this.#runOperationsBatch(request, requestContext);
+    } catch (err: unknown) {
+      if (!isOperationFailure(err)) {
+        throw err;
+      }
+      // A batch is all-or-nothing, so the first refusal is the whole answer:
+      // nothing was written, no index job was enqueued and no event was
+      // broadcast, whichever stage produced it.
+      return this.#operationsResponse(
+        errorsDocument(err.error),
+        err.error.status,
+        requestContext,
+      );
+    }
+  }
+
+  async #runOperationsBatch(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    if (!carriesOperationsExt(request.headers.get('Content-Type'))) {
+      throw new OperationFailure({
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid content type',
+        detail:
+          `a batch of operations is sent as ` +
+          `"${SupportedMimeType.BoxelOperations}"; this request's ` +
+          `content type does not name that extension`,
+      });
+    }
+    let body: unknown;
+    try {
+      body = JSON.parse(await request.text());
+    } catch {
+      throw new OperationFailure({
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid operations envelope',
+        detail: `the request body is not valid JSON`,
+      });
+    }
+    let entries = parseOperationsEnvelope(body, this.url, {
+      resolveIdentifier: (href) => this.#resolveAtomicHref(href),
+    });
+    let caller = this.#callerOf(request, requestContext);
+    // One row peek per target for the whole resolution pass: entries often
+    // name the same card, and which behavior a name resolves to is read off
+    // the target's stored type.
+    let scope = newOperationScope(this.operationCore);
+    // Settled rather than raced, so the entry a refusal names is the earliest
+    // one the caller got wrong rather than whichever index read came back
+    // first. A batch with two bad entries would otherwise report a different
+    // one run to run.
+    let outcomes = await Promise.allSettled(
+      entries.map((entry) => this.#resolveEnvelopeEntry(entry, scope)),
+    );
+    let refused = outcomes.find((outcome) => outcome.status === 'rejected');
+    if (refused) {
+      throw refused.reason;
+    }
+    let resolved = outcomes.map(
+      (outcome) =>
+        (outcome as PromiseFulfilledResult<ResolvedEnvelopeEntry>).value,
+    );
+
+    // `QUERY` is the read-only spelling, and the realm derives the permission
+    // it checks from the method — so a write reaching here arrived on a
+    // request that was only authorized to read. Refused before anything is
+    // staged rather than let through to a permission check that already
+    // passed for the wrong question.
+    if (request.method === 'QUERY') {
+      let write = resolved.find(({ definition }) => isWrite(definition.base));
+      if (write) {
+        throw new OperationFailure({
+          ...(write.entry.href ? { id: write.entry.href } : {}),
+          status: 400,
+          code: 'wrong-entry-point',
+          title: 'Write in a read-only batch',
+          detail:
+            `operation "${write.entry.name}" writes, and a QUERY batch is ` +
+            `authorized to read; send a batch that writes as a POST`,
+          meta: { entry: write.entry.index },
+        });
+      }
+    }
+
+    // An anonymous caller on a realm anyone may read or write has no identity
+    // for an operation to read, and whether an operation reads one is settled
+    // by its stored definition — so the batch is refused here, before any of
+    // it runs, rather than part-way through by whichever entry reached the
+    // actor first. No identity is invented to stand in: a fabricated id would
+    // be written into cards and compared in filters as though someone had
+    // acted.
+    if (!caller.actor) {
+      let needing = resolved.find(({ definition }) => needsActor(definition));
+      if (needing) {
+        throw new OperationFailure({
+          ...(needing.entry.href ? { id: needing.entry.href } : {}),
+          status: 401,
+          code: 'actor-required',
+          title: 'Operation needs an identity',
+          detail:
+            `operation "${needing.entry.name}" reads the invoking actor, and ` +
+            `this request authenticated nobody`,
+          meta: { entry: needing.entry.index },
+        });
+      }
+    }
+
+    // Reads run first and against the state the batch started from, which is
+    // what "an entry sees pre-batch state" means for a mixed batch: a read
+    // entry never observes what a write entry in the same batch stages, and
+    // reading before the coordinator takes the write lock is what keeps a read
+    // from waiting on one.
+    let results: (EnvelopeResult | undefined)[] = new Array(entries.length);
+    for (let { entry, target, definition } of resolved) {
+      if (isWrite(definition.base)) {
+        continue;
+      }
+      let result: OperationResult;
+      try {
+        result = await runOperation(this.operationCore, {
+          target,
+          name: entry.name,
+          ...(entry.data ? { params: paramsFor(entry) } : {}),
+          ...caller,
+        });
+      } catch (err: unknown) {
+        throw atEntry(err, entry.index);
+      }
+      results[entry.index] = readResult(entry, result);
+    }
+
+    let writes = resolved.filter(({ definition }) => isWrite(definition.base));
+    if (writes.length > 0) {
+      let staged = writes.map(({ entry, definition }) => {
+        try {
+          return batchEntryFor(entry, definition);
+        } catch (err: unknown) {
+          throw atEntry(err, entry.index);
+        }
+      });
+      // Every staged entry carries the position the caller sent it under, so
+      // a refusal from the coordinator names that one rather than the position
+      // it took among the entries that write — in the key, in the key beside
+      // it naming a conflicting entry, and in the prose.
+      let committed = await commitBatch(this.batchCore, staged, {
+        clientRequestId: caller.clientRequestId || null,
+        actor: caller.actor || undefined,
+      });
+      for (let [index, { entry }] of writes.entries()) {
+        results[entry.index] = writeResult(committed[index], (url) =>
+          this.#virtualNetwork.unresolveURL(url),
+        );
+      }
+    }
+
+    return this.#operationsResponse(
+      {
+        // Built by index rather than by mapping the array: an unassigned
+        // position is a hole, `map` skips one, and the hole then serializes
+        // as `null` — which is what a delete reports.
+        'atomic:results': Array.from({ length: entries.length }, (_, index) =>
+          answered(results[index], index),
+        ),
+      },
+      200,
+      requestContext,
+    );
+  }
+
+  // Which behavior one entry's name means for its target, labelled with the
+  // entry's position.
+  //
+  // The name is resolved against the target's own definition, never read off
+  // the wire — the envelope carries the operation's name, and what a `delete`
+  // does is whatever the card's type says it does.
+  async #resolveEnvelopeEntry(
+    entry: EnvelopeEntry,
+    scope: OperationScope,
+  ): Promise<ResolvedEnvelopeEntry> {
+    try {
+      // Canonicalized once, here, and everything downstream sees the result:
+      // the definition is resolved from it, the read runs against it, and the
+      // staged entry writes it. A trailing slash, a query string and a
+      // fragment all name the card they hang off, and the index is read by
+      // exact URL — so resolving the raw spelling would report a declared
+      // operation as unknown on a card whose type declares it, and would leave
+      // the entry's result carrying an id no other surface spells that way.
+      let target = canonicalizeTarget(
+        this.operationCore,
+        targetFor(entry, this.url),
+      );
+      let canonical =
+        target.kind === 'instance' && target.url !== entry.href
+          ? { ...entry, href: target.url }
+          : entry;
+      let definition = await resolveOperation(
+        this.operationCore,
+        target,
+        canonical.name,
+        scope,
+      );
+      assertTravelsInEnvelope(canonical, definition);
+      return { entry: canonical, target, definition };
+    } catch (err: unknown) {
+      throw atEntry(err, entry.index);
+    }
+  }
+
+  // A batch's answer is never HTTP-cached. It is not a resource with a
+  // validator: the same request run twice writes twice, and a read entry's
+  // document is served without the index-time validator the card+json `GET`
+  // builds — so there is nothing here a conditional request could be answered
+  // against, and no ETag is emitted for one to be compared with.
+  #operationsResponse(
+    body: unknown,
+    status: number,
+    requestContext: RequestContext,
+  ): Response {
+    return createResponse({
+      body: JSON.stringify(body, null, 2),
+      init: {
+        status,
+        headers: {
+          'content-type': SupportedMimeType.BoxelOperations,
+          'cache-control': 'no-store',
+        },
+      },
+      requestContext,
+    });
+  }
+
   // we track our own writes so that we can eliminate echoes in the file watcher
 
   // Write a file whose content is described as an edit of its own bytes.
@@ -4184,8 +4684,8 @@ export class Realm {
         readFileAsText: async (localPath) =>
           (await this.readFileAsText(localPath))?.content,
         openStoredFile: (localPath) => this.#operationStoredFile(localPath),
-        storedFileMeta: (localPath, file) =>
-          this.#operationStoredFileMeta(localPath, file),
+        storedFileMeta: (localPath, file, opts) =>
+          this.#operationStoredFileMeta(localPath, file, opts),
         isIgnored: (url) => this.isIgnored(url),
         fileMetaDocument: (localPath) =>
           this.#operationFileMetaDocument(localPath),
@@ -4204,6 +4704,22 @@ export class Realm {
       };
     }
     return this.#operationCore;
+  }
+
+  // Who an operation dispatched from an HTTP request is running for. The actor
+  // is the identity the realm authenticated, which is empty for an anonymous
+  // caller — an operation that reads it has to treat "nobody" as a value
+  // rather than assume one is always there. The client request id is the
+  // caller's own handle on this request, echoed on the index event a write
+  // produces so the client can tell its own event from anyone else's.
+  #callerOf(
+    request: Request,
+    requestContext: RequestContext,
+  ): { actor: string; clientRequestId: string } {
+    return {
+      actor: requestContext.authenticatedUser ?? '',
+      clientRequestId: request.headers.get('X-Boxel-Client-Request-Id') ?? '',
+    };
   }
 
   // The batch coordinator's collaborators, built the same way and for the same
@@ -4528,7 +5044,29 @@ export class Realm {
 
     try {
       if (!isLocal) {
-        await this.checkPermission(request, requestContext, requiredPermission);
+        // A capture-URL token (`?token=` on a `_screenshot/` GET) authorizes
+        // exactly this request without an Authorization header — the door for
+        // fetches the host's auth service worker cannot reach (`<object>`/
+        // `<embed>` loads, top-level navigations). A missing or failing token
+        // falls through to the normal permission check, so a public realm
+        // still serves and a private realm still 401s the usual way.
+        let captureTokenUser =
+          request.method === 'GET' && isCaptureServingPath(localPath)
+            ? await this.verifyCaptureURLToken(
+                request,
+                localPath,
+                requestContext,
+              )
+            : undefined;
+        if (captureTokenUser !== undefined) {
+          requestContext.authenticatedUser = captureTokenUser;
+        } else {
+          await this.checkPermission(
+            request,
+            requestContext,
+            requiredPermission,
+          );
+        }
         // An archived realm is sealed for everyone, owner included: once a
         // caller is authorized, every external content request is
         // short-circuited with 403 (archived). The seal runs AFTER
@@ -4705,6 +5243,11 @@ export class Realm {
       Boolean(request.headers.get('X-Boxel-Disable-Module-Cache'));
 
     if (!moduleCachingDisabled) {
+      // Answered from memory: these bytes were compiled from a read that
+      // already happened, so nothing here reaches a file and no `readSource`
+      // is dispatched for this request. Worth knowing wherever something is
+      // hung on that dispatch — this return point sits in front of it, not
+      // behind it.
       let cached = this.#transpiledModuleCache.get(localPath);
       if (cached) {
         try {
@@ -4855,13 +5398,46 @@ export class Realm {
     let fileRef = maybeFileRef;
     let canonicalPath = this.paths.fileURL(fileRef.path).href;
     if (!hasExecutableExtension(fileRef.path)) {
+      // A path that holds bytes rather than a module: an image, a PDF, a
+      // markdown document. Its bytes are the `readSource` operation's, the
+      // same read the `card+source` route makes of the same file — which is
+      // what makes "every read of this path" one thing however a client asked
+      // for it.
+      //
+      // The module serve below reads its source the same way and compiles
+      // what comes back. What the two paths do not share is the caches around
+      // that compile: a module answered from one of them is answered without
+      // any read at all.
+      let source = await this.#readStoredSource(
+        this.#callerOf(request, requestContext),
+        fileRef.path,
+        // Nothing here holds on to the bytes, so a `HEAD` asks only for what
+        // its headers are computed from.
+        { headersOnly: request.method === 'HEAD' ? true : undefined },
+      );
+      if (!source) {
+        return {
+          kind: 'not-found',
+          response: notFound(
+            request,
+            requestContext,
+            `${this.#virtualNetwork.unresolveURL(request.url)} not found`,
+          ),
+        };
+      }
       return {
         kind: 'non-module',
-        response: await this.serveLocalFile(request, fileRef, requestContext, {
-          defaultHeaders: {
-            'content-type': inferContentType(fileRef.path),
+        response: await this.serveLocalFile(
+          request,
+          this.#servableSource(fileRef, source),
+          requestContext,
+          {
+            defaultHeaders: {
+              'content-type': source.contentType,
+            },
+            createdAt: source.created,
           },
-        }),
+        ),
       };
     }
 
@@ -4896,7 +5472,12 @@ export class Realm {
       };
     }
 
-    return this.#transpileModuleDeduped(localPath, fileRef, etag);
+    return this.#transpileModuleDeduped(
+      localPath,
+      fileRef,
+      etag,
+      this.#callerOf(request, requestContext),
+    );
   }
 
   // Dedups the materialize + transpile pipeline across concurrent
@@ -4907,10 +5488,22 @@ export class Realm {
   // CachingDefinitionLookup.#inFlight — a newer pending entry installed
   // after invalidateCache drops the slot is preserved when the older
   // promise eventually settles.
+  //
+  // The source read those bytes are compiled from is dispatched for the
+  // caller that started the work, so a joiner is served bytes read on someone
+  // else's behalf. That is what one compile per path means once the read
+  // inside it is an operation with a caller attached.
+  //
+  // The cross-process coalesce below shares work the same way where it can —
+  // the winner reads, the losers take its row — but a loser that wakes to no
+  // row compiles for itself, under its own caller. So a path's read is one
+  // read per compile, not one per path: whichever callers end up compiling
+  // each read as themselves.
   async #transpileModuleDeduped(
     localPath: LocalPath,
     fileRef: FileRef,
     etag: string | undefined,
+    caller: OperationCaller,
   ): Promise<ModuleTranspileResult> {
     let existing = this.#inFlightTranspiles.get(localPath);
     if (existing) {
@@ -4925,7 +5518,7 @@ export class Realm {
     // unhandled rejection in Node's host hook. Same shape as
     // CachingDefinitionLookup.#inFlight.
     let pending: Promise<ModuleTranspileResult>;
-    let core = this.#transpileWithLayers(fileRef, etag);
+    let core = this.#transpileWithLayers(fileRef, etag, caller);
     pending = core.finally(() => {
       if (this.#inFlightTranspiles.get(localPath) === pending) {
         this.#inFlightTranspiles.delete(localPath);
@@ -4959,11 +5552,16 @@ export class Realm {
   async #transpileWithLayers(
     fileRef: FileRef,
     etag: string | undefined,
+    caller: OperationCaller,
   ): Promise<ModuleTranspileResult> {
     let canonicalPath = this.paths.fileURL(fileRef.path).href;
     let coordinator = this.#transpileCoordinator;
 
     // L2 read first — cheap query (UNLOGGED, indexed PK), saves babel.
+    // Answered from the shared cache: like the in-memory one, this return
+    // point serves bytes some earlier compile read, so no `readSource` is
+    // dispatched for the request that reaches it. The same holds for the two
+    // other returns of a cached row below.
     let cached = await this.#readTranspileCacheRow(canonicalPath);
     if (cached?.result) {
       return cached.result;
@@ -4977,7 +5575,7 @@ export class Realm {
     let capturedGeneration = cached?.generation ?? 0;
 
     if (!coordinator) {
-      let result = await this.#materializeAndTranspile(fileRef, etag);
+      let result = await this.#materializeAndTranspile(fileRef, etag, caller);
       await this.#writeTranspileCacheRow(
         canonicalPath,
         result,
@@ -5001,7 +5599,7 @@ export class Realm {
         if (recheck?.result) {
           return recheck.result;
         }
-        let result = await this.#materializeAndTranspile(fileRef, etag);
+        let result = await this.#materializeAndTranspile(fileRef, etag, caller);
         await this.#writeTranspileCacheRow(
           canonicalPath,
           result,
@@ -5028,7 +5626,7 @@ export class Realm {
     // a generation discard upstream). Fall through to a local transpile;
     // we still persist so the NEXT reader sees a cached row. Use the
     // freshest generation we've observed for the OCC token.
-    let result = await this.#materializeAndTranspile(fileRef, etag);
+    let result = await this.#materializeAndTranspile(fileRef, etag, caller);
     await this.#writeTranspileCacheRow(
       canonicalPath,
       result,
@@ -5324,10 +5922,47 @@ export class Realm {
   async #materializeAndTranspile(
     fileRef: FileRef,
     etag: string | undefined,
+    caller: OperationCaller,
   ): Promise<ModuleTranspileResult> {
     let canonicalPath = this.paths.fileURL(fileRef.path).href;
-    let fileWithContent = await this.materializeFileRef(fileRef);
-    let source = await fileContentToText(fileWithContent);
+    // The module's stored text, read as the `readSource` operation — the same
+    // read the `card+source` route makes of the same path. What is compiled
+    // below is what that read returned, so a module's bytes reach a client
+    // through one read of them however they were asked for.
+    //
+    // The path handed to the read is the resolved one, extension fallback
+    // included; the handle the caller resolved with is not read from. Its stat
+    // is what the `ETag` was built from and what the `Last-Modified` below
+    // reports, and the bytes are this read's — the same pairing of a stat with
+    // bytes read after it that a byte route reading one handle has.
+    //
+    // Nothing below reads the realm's own record of the path — the validator
+    // is the modification time's — so the read is told to leave that row
+    // alone. Here that is a requirement and not a saving: a coordinated
+    // compile runs this inside a window where it holds one pool connection
+    // pinned, and a second checkout from inside that window is what the
+    // coordination exists to prevent.
+    let stored = await this.#readStoredSource(caller, fileRef.path, {
+      skipStoredFileMeta: true,
+    });
+    if (!stored) {
+      // The path resolved to a file and that file is gone: a delete landing
+      // between the two. This route answers every failure to produce a module
+      // as a 406 whose body repeats that status, so the refusal is reported
+      // the way one raised deeper in the compile is, rather than under a
+      // status of its own that would leave the body and the response
+      // disagreeing.
+      throw new CardError(
+        `${canonicalPath} was deleted before it could be compiled`,
+        { status: 406, title: 'Module transpilation failed' },
+      );
+    }
+    // The one touch of `body`, which is where a streaming adapter opens its
+    // stream. It is present because this read asked for the bytes — the mode
+    // is chosen by the call above, which passes no headers-only option.
+    let source = await fileContentToText({
+      content: stored.body as FileRef['content'],
+    });
     let transpiled: string;
     try {
       // Force an absolute path so babel's internal path.resolve doesn't depend
@@ -5335,9 +5970,9 @@ export class Realm {
       // observed to drop the leading slash on vite builds — producing a
       // moduleName of "dir/person.gts" instead of "/dir/person.gts" in
       // compiled templates.
-      let debugFilename = fileWithContent.path.startsWith('/')
-        ? fileWithContent.path
-        : `/${fileWithContent.path}`;
+      let debugFilename = fileRef.path.startsWith('/')
+        ? fileRef.path
+        : `/${fileRef.path}`;
       if (this.#testOnlyTranspileDelay) {
         await this.#testOnlyTranspileDelay();
       }
@@ -5409,6 +6044,194 @@ export class Realm {
     });
   }
 
+  // Verifies a capture-URL token (`?token=` on a `_screenshot/` GET) and
+  // returns the user it authenticates, or undefined so the caller falls back
+  // to the normal permission check. Every rejection is a fall-through, never
+  // a thrown 401: an invalid token must not fail a request that public
+  // permissions would authorize. The checks mirror the invariants the other
+  // token families enforce: the family's own signing key (and, behind it, the
+  // scope claim) keeps session JWTs out of query strings, the realm claim
+  // keeps a token minted for realm A from replaying against realm B (that key
+  // is derived from the server-wide seed, so it is shared across realms), the
+  // URL binding keeps it from replaying against any other capture, the
+  // revocation check keeps an operator revocation authoritative over every
+  // family, and the realm-read check keeps the grant no more durable than the
+  // permission it was minted from — the handler-verifies-itself precedent
+  // from handle-download-realm.
+  private async verifyCaptureURLToken(
+    request: Request,
+    localPath: LocalPath,
+    requestContext: RequestContext,
+  ): Promise<string | undefined> {
+    let searchParams = new URL(request.url).searchParams;
+    let tokenString = searchParams.get(CAPTURE_URL_TOKEN_PARAM);
+    if (!tokenString) {
+      return undefined;
+    }
+    let claims: CaptureURLTokenClaims & { iat: number; exp: number };
+    try {
+      claims = this.#adapter.verifyJWT(
+        tokenString,
+        captureURLTokenSecret(this.#realmSecretSeed),
+      ) as unknown as CaptureURLTokenClaims & { iat: number; exp: number };
+    } catch (e) {
+      this.#log.warn(
+        `capture-url token failed verification for GET ${maskLoggedURL(request.url)}: ${e}`,
+      );
+      return undefined;
+    }
+    if (claims.scope !== CAPTURE_URL_TOKEN_SCOPE) {
+      this.#log.warn(
+        `capture-url token for GET ${maskLoggedURL(request.url)} carries scope ${JSON.stringify(
+          (claims as { scope?: unknown }).scope,
+        )}, not ${CAPTURE_URL_TOKEN_SCOPE}`,
+      );
+      return undefined;
+    }
+    if (ensureTrailingSlash(claims.realm) !== ensureTrailingSlash(this.url)) {
+      this.#log.warn(
+        `capture-url token for GET ${maskLoggedURL(request.url)} is scoped to realm ${claims.realm}, not ${this.url}`,
+      );
+      return undefined;
+    }
+    let binding = captureURLTokenBinding(localPath, searchParams);
+    if (claims.url !== binding) {
+      this.#log.warn(
+        `capture-url token for GET ${maskLoggedURL(request.url)} is bound to "${claims.url}", not "${binding}"`,
+      );
+      return undefined;
+    }
+    if (await isSessionRevoked(this.#dbAdapter, claims.user, claims.iat)) {
+      this.#log.warn(
+        `capture-url token for GET ${maskLoggedURL(request.url)} was issued at ${claims.iat}, which predates user ${claims.user}'s session revocation`,
+      );
+      return undefined;
+    }
+    // Realm read is re-derived from the live permission rows on every
+    // request for the other token families — a normal session's
+    // `permissions` claim is compared against the freshly computed union, a
+    // delegated session is `can(user, 'read')`-checked — so this one is too.
+    // Without it, revoking a user's read on the realm would leave every
+    // capture URL they already minted working until the token expired.
+    // Last, so an unauthorized token costs no permission lookup. The realm's
+    // own matrix user is exempt for the same reason `checkPermission` exempts
+    // it: it is permitted every action, and it is the gate the mint went
+    // through — a principal that can mint here must be able to serve here.
+    let permissionChecker = new RealmPermissionChecker(
+      requestContext.permissions,
+      this.#matrixClient,
+    );
+    if (
+      claims.user !== this.#matrixClientUserId &&
+      !(await permissionChecker.can(claims.user, 'read'))
+    ) {
+      this.#log.warn(
+        `capture-url token for GET ${maskLoggedURL(request.url)} names user ${claims.user}, who does not have read permission on ${this.url}`,
+      );
+      return undefined;
+    }
+    return claims.user;
+  }
+
+  // Mints capture-URL tokens: signed variants of this realm's `_screenshot/`
+  // URLs that authorize their own GET without a header, for the fetches the
+  // host's auth service worker cannot reach. Routed as QUERY (a pure
+  // computation with a body), so the realm-read gate the serving path
+  // enforces is exactly the gate on minting — the token grants nothing the
+  // caller doesn't already hold; it only makes that grant portable. An
+  // anonymous caller (a public realm's reader) gets the URLs echoed back
+  // unsigned: there is no user to bind a token to, and none is needed where
+  // anonymous read already serves.
+  private async signCaptureURLs(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let urls: unknown;
+    try {
+      let body = JSON.parse(await request.text()) as { urls?: unknown };
+      urls = body.urls;
+    } catch {
+      return badRequest({
+        message: 'Request body must be JSON with a "urls" array',
+        requestContext,
+      });
+    }
+    if (
+      !Array.isArray(urls) ||
+      urls.length === 0 ||
+      urls.length > MAX_CAPTURE_URLS_PER_SIGNING_REQUEST ||
+      !urls.every((u): u is string => typeof u === 'string')
+    ) {
+      return badRequest({
+        message: `"urls" must be an array of 1-${MAX_CAPTURE_URLS_PER_SIGNING_REQUEST} strings`,
+        requestContext,
+      });
+    }
+    let user = requestContext.authenticatedUser;
+    let signed: {
+      url: string;
+      signedUrl: string;
+      expiresAt: string | null;
+    }[] = [];
+    for (let urlString of urls) {
+      let url: URL;
+      try {
+        url = new URL(urlString);
+      } catch {
+        return badRequest({
+          message: `"${urlString}" is not a valid URL`,
+          requestContext,
+        });
+      }
+      if (!this.paths.inRealm(url)) {
+        return badRequest({
+          message: `"${urlString}" is not in realm ${this.url}`,
+          requestContext,
+        });
+      }
+      let localPath = this.paths.local(url);
+      if (!isCaptureServingPath(localPath)) {
+        return badRequest({
+          message: `"${urlString}" is not a ${CAPTURE_SERVING_PREFIX} URL`,
+          requestContext,
+        });
+      }
+      if (!user) {
+        signed.push({ url: urlString, signedUrl: urlString, expiresAt: null });
+        continue;
+      }
+      let claims: CaptureURLTokenClaims = {
+        user,
+        realm: this.url,
+        scope: CAPTURE_URL_TOKEN_SCOPE,
+        url: captureURLTokenBinding(localPath, url.searchParams),
+      };
+      // Signed under the capture family's own key, not the realm seed the
+      // session families share — see `captureURLTokenSecret`.
+      let token = this.#adapter.createJWT(
+        claims as unknown as TokenClaims,
+        CAPTURE_URL_TOKEN_TTL,
+        captureURLTokenSecret(this.#realmSecretSeed),
+      );
+      let signedUrl = new URL(url.href);
+      signedUrl.searchParams.set(CAPTURE_URL_TOKEN_PARAM, token);
+      signed.push({
+        url: urlString,
+        signedUrl: signedUrl.href,
+        expiresAt: new Date(
+          Date.now() + CAPTURE_URL_TOKEN_TTL_MS,
+        ).toISOString(),
+      });
+    }
+    return createResponse({
+      body: JSON.stringify({ signed }),
+      init: {
+        headers: { 'content-type': SupportedMimeType.JSON },
+      },
+      requestContext,
+    });
+  }
+
   // The realm's screenshot-serving surface: `_screenshot/{instanceLocalPath}`
   // resolves a capture of one instance and streams it from the MediaCache
   // with content-hash ETags and short-max-age revalidation (see
@@ -5440,6 +6263,11 @@ export class Realm {
       instanceLocalPath.replace(/\.json$/, ''),
     );
     let searchParams = new URL(request.url).searchParams;
+    // The capture-URL token is an authorization credential, not addressing —
+    // verified upstream in internalHandle. Dropped here so it reaches neither
+    // the `name=` exclusivity check nor the capture-spec parse (which refuses
+    // unknown params by name), and so it can never enter the ledger identity.
+    searchParams.delete(CAPTURE_URL_TOKEN_PARAM);
 
     // `name=` addresses a declared screenshot through the instance's
     // manifest — a different addressing form from the capture-spec params,
@@ -5656,6 +6484,32 @@ export class Realm {
   // that every scoped-CSS choke point keys on — in particular the Node-side
   // loader answers such URLs with an empty module instead of fetching, so an
   // injector that touches `document` never evaluates where none exists.
+  //
+  // Two caching decisions are load-bearing here, because a card's module graph
+  // pulls hundreds of these URLs on one page load and each is its own request.
+  //
+  // `varyOnAccept: false` — the body is keyed entirely by the URL's content
+  // hash, so the route never content-negotiates and must not claim it does
+  // (see `createResponse`: a declared-but-unhonored `Vary` makes differing
+  // `Accept` spellings evict each other's stored entry). This holds only
+  // because the realm-server's index handler exempts these paths from the
+  // `text/html` branch that answers realm URLs with the host app shell —
+  // without that exemption the same URL would have two bodies, and the
+  // year-long entry a browser stores could be either.
+  //
+  // No `ETag` — deliberately, and it is not an oversight to correct. The
+  // consumer is the loader, whose `cachedFetch` layer conditionalizes any
+  // request it holds a validator for by sending `If-None-Match`, and a
+  // caller-supplied conditional header makes the browser skip its own cache
+  // and revalidate against the server. `cachedFetch`'s store is a
+  // module-scoped Map that starts empty in a fresh JS context, so the cost is
+  // not the first fetch of a URL but every later one: a loader reset re-imports
+  // the module graph in the same context, and each of those hundreds of URLs
+  // then carries a validator and reaches the server instead of the browser
+  // cache. An `immutable` year-long response with no validator stays silent
+  // across all of them; the content hash in the URL is what makes that safe,
+  // since changed bytes arrive under a different URL rather than needing this
+  // one re-checked.
   private async serveHashedScopedCSS(
     request: Request,
     requestContext: RequestContext,
@@ -5685,6 +6539,7 @@ export class Realm {
         },
       },
       requestContext,
+      varyOnAccept: false,
     });
   }
 
@@ -5978,6 +6833,137 @@ export class Realm {
     return entry.instance.attributes?.allowArbitraryScreenshots === true;
   }
 
+  // The stored bytes at `localPath`, read as the `readSource` operation. Every
+  // route that serves a path's stored bytes gets what it sends from here — the
+  // `card+source` `GET`/`HEAD`, the raw file serve, and the module serve,
+  // which compiles what comes back rather than sending it — so there is one
+  // place that read happens however a client asked for those bytes.
+  //
+  // Reads that produce something other than the bytes are their own: the
+  // file-meta route opens the file to hash and measure it, and the
+  // not-indexed-yet check reads a `.json` to decide whether the index will
+  // ever have a row for it. Neither serves what it read.
+  //
+  // The caller has already resolved which file it means, including any
+  // extension fallback, and has a handle on it. The dispatch is given the
+  // resolved path rather than the requested one: a read answers for the bytes
+  // it returns, and a fallback would otherwise leave the content type
+  // describing one file and everything else another.
+  //
+  // A refusal here is a file that stopped existing between the caller's
+  // resolution and this read — a delete landing in that window — so it becomes
+  // the 404 the same request a moment later would have produced. Nothing else
+  // this operation can refuse is reachable: the path is resolved, so it is
+  // neither a directory nor a name the realm declines to serve.
+  // The caller is passed rather than the request it came from: the module
+  // serve's read happens inside work shared between concurrent requests, where
+  // there is no one request to take it from.
+  async #readStoredSource(
+    caller: OperationCaller,
+    localPath: LocalPath,
+    opts: { headersOnly?: true; skipStoredFileMeta?: true } = {},
+  ): Promise<OperationSourceResult | undefined> {
+    let result: OperationResult;
+    try {
+      result = await runOperation(
+        this.operationCore,
+        {
+          target: {
+            kind: 'instance',
+            url: this.paths.fileURL(localPath).href,
+          },
+          name: 'readSource',
+          ...caller,
+        },
+        // No route reaching here validates on the read's `version` — each
+        // builds its own validator, from the bytes it caches or from the
+        // modification time — so none should pay to have one read off disk
+        // for it.
+        { ...opts, skipContentFingerprint: true },
+      );
+    } catch (e) {
+      if (!isOperationFailure(e)) {
+        throw e;
+      }
+      if (e.error.code === 'target-not-found') {
+        return undefined;
+      }
+      // Any other refusal carries a status the operation chose, and what
+      // carries that status the rest of the way is a `CardError` — a bare
+      // refusal reaching the source route's router would answer 500 for
+      // something that named its own answer. Nothing a stored-bytes read can
+      // refuse reaches here today, the resolved path having ruled out the rest,
+      // so this is about the next refusal added to that executor rather than a
+      // live fault.
+      //
+      // It carries the status only as far as the source route. The byte serve
+      // is reached through the module fallback, whose own error handling
+      // answers every throw alike, so a refusal there arrives under that
+      // handler's status rather than this one — as every error on that path
+      // already does.
+      throw new CardError(e.error.detail, {
+        status: e.error.status,
+        title: e.error.title,
+        id: e.error.id,
+      });
+    }
+    if (!isSourceResult(result)) {
+      throw new Error(
+        `bug: readSource of ${localPath} in realm ${this.url} did not answer with stored bytes`,
+      );
+    }
+    return result;
+  }
+
+  // What a byte route hands `serveLocalFile`: the operation's answer, in the
+  // shape the response assembly reads.
+  //
+  // Two members come from the handle rather than from the result, and for the
+  // same reason. A `Range` is served by reading bounded slices of the file,
+  // which is a capability of the adapter's handle and not a value a result can
+  // carry; `size` decides whether a range can be offered at all, and the
+  // handle is what the caller measured when it resolved the path. Everything a
+  // client can see about the content — the bytes, when they changed, what type
+  // they are — is the operation's.
+  //
+  // `content` stays a getter so that resolving it remains the response
+  // assembly's decision. A 304 and a 206 both send bytes this never opens, and
+  // a headers-only read has none to open — which is sound for the same reason:
+  // the assembly reaches `content` only where it is about to send it, and a
+  // read is asked for headers only where the route will not.
+  #servableSource(handle: FileRef, source: OperationSourceResult): FileRef {
+    // `this` inside the getter below is the ref, not the realm.
+    let realmURL = this.url;
+    let ref: FileRef = {
+      path: handle.path,
+      get content() {
+        if (source.body === undefined) {
+          // A headers-only read has no bytes, and every route that asks for
+          // one is a route that will not send any. Nothing binds those two
+          // decisions together — they are separate tests of the request's
+          // method, in separate methods — so this says what went wrong at the
+          // point it went wrong rather than letting `undefined` travel on as a
+          // body and surface as an empty response.
+          throw new Error(
+            `bug: response for ${handle.path} in realm ${realmURL} reached for bytes a headers-only read did not fetch`,
+          );
+        }
+        return source.body as FileRef['content'];
+      },
+      lastModified: source.lastModified,
+      ...(source.size != null ? { size: source.size } : {}),
+      ...(handle.createRangeStream
+        ? { createRangeStream: handle.createRangeStream }
+        : {}),
+    };
+    // A shimmed module is not stored content at all, and the response says so
+    // in a header of its own; the marker rides on the handle.
+    for (let symbol of Object.getOwnPropertySymbols(handle)) {
+      (ref as any)[symbol] = (handle as any)[symbol];
+    }
+    return ref;
+  }
+
   private async serveLocalFile(
     request: Request,
     ref: FileRef,
@@ -5990,6 +6976,13 @@ export class Realm {
       // `buildEtag`. Callers that have the materialized body already
       // (the source endpoint cache-miss path) compute this for free.
       etagBase?: string;
+      // When the realm first saw this path, for a caller that already read the
+      // file's stored metadata and so already has it. Supplying it is what
+      // keeps such a caller from reading the same row twice per request.
+      // Present and null means the realm holds no record of the path, which is
+      // an answer — so the key being there at all, rather than its value, is
+      // what decides whether this looks the value up itself.
+      createdAt?: number | null;
     },
   ): Promise<ResponseWithNodeStream> {
     let contentType = options?.defaultHeaders?.['content-type'];
@@ -6025,7 +7018,10 @@ export class Realm {
         requestContext,
       });
     }
-    let createdFromDb = await this.getCreatedTime(ref.path);
+    let createdFromDb =
+      options && 'createdAt' in options
+        ? options.createdAt
+        : await this.getCreatedTime(ref.path);
     let headers: Record<string, string> = {
       ...(options?.defaultHeaders || {}),
       'last-modified': lastModified,
@@ -6118,6 +7114,29 @@ export class Realm {
       }
     }
 
+    // A `HEAD` is answered by the headers above and nothing else, so the bytes
+    // are never reached for one. The protocol forbids a body here and the
+    // server drops one anyway, so this changes no response — what it changes is
+    // that `content` is not touched, and on a streaming adapter that property
+    // is what opens the stream. A caller that has the metadata without the
+    // bytes can therefore answer a `HEAD` with them.
+    //
+    // Only where the length is already known, though. `Content-Length` on a
+    // `HEAD` has to describe the body the `GET` would send, and where the size
+    // was not knowable without the bytes it is the body itself that is
+    // measured — by the HTTP layer, for a `HEAD` as much as for a `GET`. So a
+    // ref that could not report its size is served the way it always was, and
+    // the header keeps coming from the one thing that can produce it. Such a
+    // ref is materialized rather than streamed, so no stream is stranded by
+    // passing it along.
+    if (request.method === 'HEAD' && totalSize != null) {
+      return createResponse({
+        body: null,
+        init: { headers },
+        requestContext,
+      });
+    }
+
     if (
       ref.content instanceof ReadableStream ||
       ref.content instanceof Uint8Array ||
@@ -6145,16 +7164,31 @@ export class Realm {
     return response;
   }
 
+  // `probe` asks whether a caller is permitted rather than enforcing it, which
+  // changes two things. The realm-wide `HEAD` exemption does not apply — it
+  // exists so a discovery probe reaches an answer without credentials, and a
+  // caller taking it has not shown it may read anything. And a refusal is an
+  // ordinary answer the caller has a fallback for, so it is not logged as a
+  // failed request.
   private async checkPermission(
     request: Request,
     requestContext: RequestContext,
     requiredPermission: 'read' | 'write' | 'realm-owner',
+    { probe = false }: { probe?: boolean } = {},
   ) {
     let realmPermissions = requestContext.permissions;
+    // A refusal the caller asked for rather than ran into is not a failed
+    // request, and logging every unauthenticated discovery probe as one buries
+    // the refusals that are.
+    let warnRefusal = (message: string) => {
+      if (!probe) {
+        this.#log.warn(message);
+      }
+    };
     if (
       requiredPermission !== 'realm-owner' &&
       (lookupRouteTable(this.#publicEndpoints, this.paths, request) ||
-        request.method === 'HEAD' ||
+        (request.method === 'HEAD' && !probe) ||
         // If the realm is public readable or writable, do not require a JWT
         (requiredPermission === 'read' &&
           realmPermissions['*']?.includes('read')) ||
@@ -6193,8 +7227,8 @@ export class Realm {
 
     let authorizationString = request.headers.get('Authorization');
     if (!authorizationString) {
-      this.#log.warn(
-        `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) missing auth header`,
+      warnRefusal(
+        `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}) missing auth header`,
       );
       throw new AuthenticationError(
         AuthenticationErrorMessages.MissingAuthHeader,
@@ -6211,8 +7245,8 @@ export class Realm {
       // and ahead of the delegated branch below, so revoking a user also kills
       // sessions delegated on their behalf.
       if (await isSessionRevoked(this.#dbAdapter, token.user, token.iat)) {
-        this.#log.warn(
-          `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), session for user ${token.user} was issued at ${token.iat} which predates that user's session revocation`,
+        warnRefusal(
+          `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), session for user ${token.user} was issued at ${token.iat} which predates that user's session revocation`,
         );
         throw new AuthenticationError(
           AuthenticationErrorMessages.SessionRevoked,
@@ -6243,22 +7277,22 @@ export class Realm {
         if (
           ensureTrailingSlash(token.realm) !== ensureTrailingSlash(this.url)
         ) {
-          this.#log.warn(
-            `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} is scoped to realm ${token.realm}, not ${this.url}`,
+          warnRefusal(
+            `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), delegated session for user ${user} is scoped to realm ${token.realm}, not ${this.url}`,
           );
           throw new AuthenticationError(
             AuthenticationErrorMessages.TokenInvalid,
           );
         }
         if (requiredPermission !== 'read') {
-          this.#log.warn(
-            `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} attempted ${requiredPermission}; delegated sessions are read-only`,
+          warnRefusal(
+            `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), delegated session for user ${user} attempted ${requiredPermission}; delegated sessions are read-only`,
           );
           throw new AuthorizationError('Delegated sessions are read-only');
         }
         if (!(await realmPermissionChecker.can(user, 'read'))) {
-          this.#log.warn(
-            `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), delegated session for user ${user} but user lacks read permission`,
+          warnRefusal(
+            `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), delegated session for user ${user} but user lacks read permission`,
           );
           throw new AuthenticationError(
             AuthenticationErrorMessages.PermissionMismatch,
@@ -6290,8 +7324,8 @@ export class Realm {
         JSON.stringify(token.permissions?.sort()) !==
           JSON.stringify(userPermissions.sort())
       ) {
-        this.#log.warn(
-          `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), for user ${user} token permissions do not match realm permissions for user. token permissions: ${JSON.stringify(token.permissions?.sort())}, user's realm permissions: ${JSON.stringify(userPermissions.sort())}`,
+        warnRefusal(
+          `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), for user ${user} token permissions do not match realm permissions for user. token permissions: ${JSON.stringify(token.permissions?.sort())}, user's realm permissions: ${JSON.stringify(userPermissions.sort())}`,
         );
         throw new AuthenticationError(
           AuthenticationErrorMessages.PermissionMismatch,
@@ -6299,8 +7333,8 @@ export class Realm {
       }
 
       if (!(await realmPermissionChecker.can(user, requiredPermission))) {
-        this.#log.warn(
-          `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
+        warnRefusal(
+          `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
         );
         throw new AuthorizationError(
           'Insufficient permissions to perform this action',
@@ -6309,14 +7343,14 @@ export class Realm {
       requestContext.authenticatedUser = user;
     } catch (e: any) {
       if (e?.constructor?.name === 'TokenExpiredError') {
-        this.#log.warn(
-          `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
+        warnRefusal(
+          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
       if (e?.constructor?.name === 'JsonWebTokenError') {
-        this.#log.warn(
-          `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}`,
+        warnRefusal(
+          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
       }
@@ -6328,52 +7362,99 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    // Source-content-type callers, by definition, don't depend on indexed
-    // state — if they did they would use application/vnd.card+json. Return
-    // as soon as the source bytes are durable; indexing happens async and
-    // surfaces errors via error_doc as before. Subscribers to indexing
-    // events still see the broadcast once the worker settles.
-    let { lastModified, created } = await this.write(
-      this.paths.local(new URL(request.url)),
-      await request.text(),
-      {
-        clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-        serializeFile: false,
-        waitForIndex: false,
-        initiatingUser: requestContext.authenticatedUser ?? null,
-      },
-    );
-    return createResponse({
-      body: null,
-      init: {
-        status: 204,
-        headers: {
-          'last-modified': formatRFC7231(lastModified * 1000),
-          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
-        },
-      },
+    return await this.replaceFileContent(
+      request,
       requestContext,
-    });
+      await request.text(),
+    );
   }
 
   private async upsertBinaryFile(
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    // Binary files have no indexable card representation, so awaiting the
-    // index update would be even more wasteful than for card source. Return
-    // as soon as the bytes are durable.
-    let bytes = new Uint8Array(await request.arrayBuffer());
-    let { lastModified, created } = await this.write(
-      this.paths.local(new URL(request.url)),
-      bytes,
-      {
-        clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-        serializeFile: false,
-        waitForIndex: false,
-        initiatingUser: requestContext.authenticatedUser ?? null,
-      },
+    return await this.replaceFileContent(
+      request,
+      requestContext,
+      new Uint8Array(await request.arrayBuffer()),
     );
+  }
+
+  // The write behind both file-content routes: one `update` entry naming the
+  // request's own path, committed as a batch of one.
+  //
+  // Both routes put whatever bytes they are given at whatever path they are
+  // given, which is what `rawSource` means — so both set it, and only they
+  // do. It is what lets them keep reaching the three things an update on a
+  // file otherwise refuses: a module's source, a card instance's stored
+  // `.json`, and a path with nothing at it yet, since these are the routes
+  // that create the files they write. Through the operations envelope an
+  // update on a card is instead the JSON:API merge its document describes and
+  // one on a module is refused, because a caller able to ask for a verbatim
+  // replacement of a card's source could write bytes that are no longer a
+  // card and leave the realm to discover it at index time.
+  //
+  // Neither caller depends on indexed state — a caller that did would be
+  // asking for `application/vnd.card+json` — so both return as soon as the
+  // bytes are durable. Indexing follows on the queue, reports its errors
+  // through `error_doc` as it does for any write, and broadcasts to
+  // subscribers once the worker settles. The operations envelope has no such
+  // opt-out: it reports a generation per entry, which only exists once the
+  // index job has landed.
+  private async replaceFileContent(
+    request: Request,
+    requestContext: RequestContext,
+    content: string | Uint8Array,
+  ): Promise<Response> {
+    let url = new URL(request.url);
+    let result: Awaited<ReturnType<typeof commitBatch>>[number];
+    try {
+      [result] = await commitBatch(
+        this.batchCore,
+        [{ op: 'update', href: url.href, content, rawSource: true }],
+        {
+          clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+          actor: requestContext.authenticatedUser ?? undefined,
+          waitForIndex: false,
+        },
+      );
+    } catch (err: unknown) {
+      if (isOperationFailure(err)) {
+        // A batch reports a refusal as an operations error, which is the
+        // envelope's currency. This route answers in statuses, and the status
+        // is what a caller acts on — an oversized payload has to keep reading
+        // as "send less" rather than as "the realm is broken, try again". So
+        // the refusal is carried back across as the error this route has
+        // always thrown, keeping the status the batch chose.
+        throw new CardError(err.error.detail ?? err.message, {
+          status: err.error.status,
+          title: err.error.title,
+        });
+      }
+      throw err;
+    }
+    let lastModified = result?.meta.lastModified;
+    if (result == null || lastModified == null) {
+      // The commit reports a modification time for every file it writes, so
+      // reaching here means the write did not land as one. Said out loud
+      // rather than defaulted, since a default would answer 204 with a date
+      // that describes no file.
+      throw new CardError(
+        `write of ${url.href} reported no modification time`,
+        {
+          status: 500,
+          title: 'Internal Server Error',
+        },
+      );
+    }
+    // A file is created once and every later write reports that same moment,
+    // so this is the file's age rather than the age of the bytes now in it.
+    // Taken from the commit, which read it inside the write lock: asking the
+    // realm again afterwards would be a second query for a value the lock
+    // holder already had, against a row a concurrent removal of the same path
+    // may by then have taken away — answering 204 with no `x-created` where
+    // this route has always carried one.
+    let created = result.meta.created;
     return createResponse({
       body: null,
       init: {
@@ -6561,21 +7642,44 @@ export class Realm {
         return response;
       }
 
-      let createdAt = await this.getCreatedTime(handle.path);
+      // The bytes and everything describing them are the `readSource`
+      // operation's from here down. What stays here is the response around
+      // them: which validator this route builds, the 304, the source cache,
+      // and the cache-status header — all of which are this route's own
+      // choices rather than facts about the file.
+      //
+      // A `HEAD` asks for the metadata alone, but only where this route has no
+      // use of its own for the bytes. Below, a cached read materializes them to
+      // fill the source cache, and it fills it for a `HEAD` exactly as for a
+      // `GET` — so the next `GET` of that path is served from cache either way,
+      // which is what a client observes. Asking for a body there and dropping
+      // it is the cost of leaving that alone.
+      let headersOnly =
+        request.method === 'HEAD' && bypassCache ? (true as const) : undefined;
+      let source = await this.#readStoredSource(
+        this.#callerOf(request, requestContext),
+        handle.path,
+        { headersOnly },
+      );
+      if (!source) {
+        return notFound(request, requestContext, `${localName} not found`);
+      }
+      let served = this.#servableSource(handle, source);
       let defaultHeaders: Record<string, string> = {
-        'content-type': inferContentType(handle.path),
-        ...(createdAt != null
-          ? { 'x-created': formatRFC7231(createdAt * 1000) }
+        'content-type': source.contentType,
+        ...(source.created != null
+          ? { 'x-created': formatRFC7231(source.created * 1000) }
           : {}),
         [CACHE_HEADER]: CACHE_MISS_VALUE,
       };
       if (bypassCache) {
-        return await this.serveLocalFile(request, handle, requestContext, {
+        return await this.serveLocalFile(request, served, requestContext, {
           defaultHeaders,
           etagVariant: SOURCE_ETAG_VARIANT,
+          createdAt: source.created,
         });
       } else {
-        let cachedRef = await this.materializeFileRef(handle);
+        let cachedRef = await this.materializeFileRef(served);
         // Test-only gate: park here (bytes read, cache not yet written) so the
         // source-cache race test can fire invalidateCache before the set.
         if (this.#testOnlySourceCacheDelay) {
@@ -6584,6 +7688,17 @@ export class Realm {
         // Compute the content fingerprint while we have the body in
         // memory — `cachedRef.content` is already a string/Uint8Array
         // post-materialization, so this is a single hash with no extra I/O.
+        //
+        // The read reports a `version` for the same bytes, and this does not
+        // use it. The two are the same fingerprint of the same content, but
+        // they are reached differently: `version` prefers the hash the realm
+        // recorded at write time, which describes the file only while nothing
+        // has overwritten it out of band at its exact length. This value is
+        // hashed from the bytes about to be cached and sent, so the validator
+        // always describes what it is attached to. Which identity this route
+        // validates on is the route's to choose, and choosing the recorded one
+        // is a change to what a conditional request compares rather than a
+        // consequence of where the bytes now come from.
         let contentHash = contentHashFromMaterializedRef(cachedRef);
         if (
           sourceCacheGenSnapshot &&
@@ -6608,6 +7723,7 @@ export class Realm {
           defaultHeaders,
           etagVariant: SOURCE_ETAG_VARIANT,
           etagBase: contentHash,
+          createdAt: source.created,
         });
       }
     } finally {
@@ -7091,6 +8207,7 @@ export class Realm {
   async #operationStoredFileMeta(
     localPath: LocalPath,
     file: OperationStoredFile,
+    opts?: { skipContentFingerprint?: boolean },
   ): Promise<OperationStoredFileMeta> {
     let persisted = this.#dbAdapter
       ? (await getFileMetaForPaths(this.#dbAdapter, this.url, [localPath])).get(
@@ -7104,6 +8221,15 @@ export class Realm {
       persisted.contentSize === file.size
     ) {
       return { version: persisted.contentHash, createdAt };
+    }
+    if (opts?.skipContentFingerprint) {
+      // The row holds no hash this handle's size vouches for, and the caller
+      // validates on something other than `version` — so the read that would
+      // produce one buys nothing. It is the expensive half of this method:
+      // `persistFileMeta` records a hash only for a path written through the
+      // realm's own write API, so a deployed or seeded file reaches here every
+      // time, and the read is bounded per request rather than amortized.
+      return { createdAt };
     }
     return { version: await contentHashFromRanges(file), createdAt };
   }
@@ -7137,44 +8263,62 @@ export class Realm {
     return notFound(request, requestContext);
   }
 
+  // One `realm:write-timing` line per card write, emitted from a `finally` so
+  // a write that failed is attributed too — that is the write whose time
+  // someone is most likely trying to account for.
+  //
+  // A request that was refused before it reached the commit — an unsupported
+  // media type, a path the verb does not serve, a body that is not a card —
+  // stamped no stage, and a line for it would say only how long it took to
+  // say no. Those are skipped, so every line on this channel describes a
+  // request that tried to write.
+  #emitWriteTiming(
+    method: string,
+    request: Request,
+    startedAt: number,
+    timings: RequestTimings,
+  ): void {
+    let stages = timings.toLogFragment();
+    if (!stages) {
+      return;
+    }
+    let correlationId = sanitizeLoggingCorrelationId(
+      request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+    );
+    emitWriteTiming(
+      `${method} ${request.url}` +
+        (correlationId ? ` corr=${correlationId}` : '') +
+        ` handler=${Date.now() - startedAt}ms ` +
+        stages,
+    );
+  }
+
   private async createCard(
     request: Request,
     requestContext: RequestContext,
+  ): Promise<Response> {
+    let timings = new RequestTimings();
+    let startedAt = Date.now();
+    try {
+      return await this.#createCard(request, requestContext, timings);
+    } finally {
+      this.#emitWriteTiming('POST', request, startedAt, timings);
+    }
+  }
+
+  async #createCard(
+    request: Request,
+    requestContext: RequestContext,
+    timings: RequestTimings,
   ): Promise<Response> {
     let duringPrerender = isDuringPrerenderRequest(request);
     // A skip-index-wait caller (see SKIP_INDEX_WAIT_HEADER) gets the same
     // write-side treatment as a prerender write: index deferred, answer from
     // the serialized echo. `answerFromEcho` gates exactly those two decisions
-    // (the pre-write drain, and reading the card back out of the index vs.
-    // echoing it) and nothing prerender-specific beyond them.
+    // (whether the batch waits for indexing, and whether the new card is read
+    // back out of the index or echoed) and nothing prerender-specific beyond
+    // them.
     let answerFromEcho = duringPrerender || isSkipIndexWaitRequest(request);
-    // Drain any in-flight incremental indexing before serializing the new
-    // card, so the JSON-API path tolerates an immediately-preceding deferred
-    // +source POST without disturbing the +json POST's own
-    // synchronous-indexing contract.
-    //
-    // Why any caller may skip it: serialization's only cross-file dependency
-    // is `fileSerialization` → `lookupDefinition`, and that lookup is
-    // caller-agnostic — the definition service never sees this request, and a
-    // cache miss reads the module through `prerenderModule`, off disk rather
-    // than out of the index. A module the caller just rewrote reads through
-    // the same way: `_batchWriteUnlocked` drops the module's cached
-    // definition and mints a loader epoch as it writes the bytes. So no
-    // indexing-dependent step stands between a module write and the
-    // serialization that follows it, for prerender and skip-index-wait
-    // callers alike — which likely makes this drain vestigial for the default
-    // path too; removing it is a separate change that must re-prove the
-    // module-POST-then-card-POST race it guards.
-    //
-    // A prerender-originated write additionally MUST skip it: the job it
-    // would wait on needs the render slot (and, on the queued-command path,
-    // the worker) the caller is holding, so waiting deadlocks.
-    if (!answerFromEcho) {
-      let pending = this.incrementalIndexing();
-      if (pending) {
-        await pending;
-      }
-    }
     let body = await request.text();
     let json;
     try {
@@ -7208,91 +8352,111 @@ export class Realm {
         }
       }
     }
-    let files = new Map<LocalPath, string>();
-    let included = (maybeIncluded ?? []) as CardResource[];
-    let resources = [primaryResource, ...included];
-    let primaryResourceURL: URL | undefined;
-    let primarySerialization: LooseSingleCardDocument | undefined;
-    for (let [i, resource] of resources.entries()) {
-      if (
-        (i > 0 && typeof resource.lid !== 'string') ||
-        (resource.meta.realmURL &&
-          ensureTrailingSlash(resource.meta.realmURL) !== this.url)
-      ) {
-        continue;
-      }
-      let name = getCardDirectoryName(resource.meta?.adoptsFrom, this.paths);
-
-      let fileURL = this.paths.fileURL(
-        `/${join(new URL(request.url).pathname, name, (resource.lid ?? uuidV4()) + '.json')}`,
-      );
-      if (i === 0) {
-        primaryResourceURL = fileURL;
-      }
-
-      promoteLocalIdsToRemoteIds({
-        resource,
-        included,
-        realmURL: new URL(this.url),
-      });
-      let fileSerialization: LooseSingleCardDocument | undefined;
-      try {
-        fileSerialization = await this.fileSerialization(
-          { data: merge(resource, { meta: { realmURL: request.url } }) },
-          fileURL,
-        );
-      } catch (err: any) {
-        if (err.message.startsWith('field validation error')) {
-          return badRequest({
-            message: err.message,
-            requestContext,
-            lid: resource.lid,
-          });
-        } else {
-          return systemError({
-            requestContext,
-            message: err.message,
-            additionalError: err,
-            lid: resource.lid,
-          });
-        }
-      }
-      let localPath = this.paths.local(fileURL);
-      files.set(localPath, JSON.stringify(fileSerialization, null, 2));
-      if (i === 0) {
-        primarySerialization = fileSerialization;
-      }
+    let lid =
+      typeof primaryResource.lid === 'string' ? primaryResource.lid : undefined;
+    let result: BatchEntryResult;
+    try {
+      result = (
+        await commitBatch(
+          this.batchCore,
+          [
+            {
+              // One entry, carrying its side-loads. A `POST` with `included`
+              // is already a multi-card write, and a create stages the primary
+              // together with every side-load that named itself with a `lid`,
+              // under the one index job and the one index event this request
+              // has always produced.
+              op: 'create',
+              document: {
+                data: primaryResource,
+                ...(maybeIncluded ? { included: maybeIncluded } : {}),
+              },
+              // Where the `POST` was aimed — the realm root, or a directory
+              // under it. The card's type directory is named beneath that, and
+              // the file beneath that.
+              directory: this.paths.local(new URL(request.url)),
+            },
+          ],
+          {
+            clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+            ...(requestContext.authenticatedUser
+              ? { actor: requestContext.authenticatedUser }
+              : {}),
+            // Waiting decides two things and an echoing caller wants neither:
+            // the batch drains indexing already in flight before it stages,
+            // and it returns only once its own index job has landed. A
+            // prerender-originated write MUST NOT wait — the job it would wait
+            // on needs the render slot, and on the queued-command path the
+            // worker, that this caller is holding, so waiting deadlocks — and
+            // it has nothing to read back either, since it answers from what
+            // it wrote. Skipping the drain costs the write nothing: serializing
+            // a card resolves its type through `lookupDefinition`, which reads
+            // the module off disk rather than out of the index, and the commit
+            // drops a rewritten module's cached definition as it writes the
+            // bytes.
+            ...(answerFromEcho ? { waitForIndex: false } : {}),
+            reportStoredContent: answerFromEcho,
+            // A side-load claiming another realm is not this realm's to
+            // create, and a `POST` carrying one has always stored the card
+            // with that edge empty rather than refusing the write.
+            foreignSideLoadLink: 'leave',
+            timings,
+          },
+        )
+      )[0];
+    } catch (err: unknown) {
+      return this.#cardWriteRefusal(err, request, requestContext, { lid });
     }
-    if (!primaryResourceURL) {
+    let lastModified = result?.meta.lastModified;
+    if (result == null || lastModified == null) {
+      // The commit reports a modification time for every file it writes, so
+      // reaching here means the card did not land as one. Said out loud rather
+      // than defaulted, since a default would answer 201 for a card the realm
+      // may not be holding.
       return systemError({
         requestContext,
-        message: `unable to determine URL of the primary resource from request payload`,
-        lid: primaryResource.lid,
+        message: `unable to determine the card created from the request payload`,
+        lid,
       });
     }
-    let [{ lastModified, created }] = await this.writeMany(files, {
-      clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-      initiatingUser: requestContext.authenticatedUser ?? null,
-      ...(answerFromEcho ? { waitForIndex: false } : {}),
-    });
-
-    let newURL = primaryResourceURL.href.replace(/\.json$/, '');
+    let created = result.meta.created;
+    let newURL = result.id;
     let doc: SingleCardDocument;
     if (answerFromEcho) {
       // See serializedInstanceEcho: the write indexed deferred, so there is
-      // nothing to read back yet.
-      doc = await this.serializedInstanceEcho(
-        primarySerialization!,
-        newURL,
-        lastModified,
-      );
+      // nothing to read back yet. The document is the one the commit stored,
+      // reported by the batch rather than read back off the file — which has
+      // been open to every other writer since the commit released the lock.
+      let stored = storedCardDocument(result);
+      if (!stored) {
+        return systemError({
+          requestContext,
+          message: `Unable to report newly created card: ${newURL}, the commit reported no stored document`,
+          id: newURL,
+          lid,
+        });
+      }
+      doc = await this.serializedInstanceEcho(stored, newURL, lastModified);
     } else {
-      let entry = await this.#realmIndexQueryEngine.cardDocument(
-        new URL(newURL),
-        {
-          loadLinks: true,
-          skipQueryBackedExpansion: false,
-        },
+      // The readback asks for the written card and nothing around it: no
+      // `loadLinks`, so neither the transitive closure of the card's links nor
+      // the query a query-backed field would run to name its targets.
+      //
+      // Nothing consumes either. Two surfaces in the host see a write
+      // response, and neither reads the link graph. The one that updates the
+      // instance drops `data.attributes` and `data.relationships` before
+      // merging, which leaves `included[]` unreachable; the save subscriber
+      // gets the body whole, and exists for tests. A card created by `lid`
+      // under this write is reconciled to its assigned id from the realm
+      // invalidation event, which correlates the last segment of the assigned
+      // URL with the local id (`tryFindingCardItem` in the host's card store
+      // names that as the reconciliation point, alongside `api.setId`); the
+      // response document is not part of that path, and could not be — the
+      // index answers in ids, never in the `lid` a caller would match on.
+      // Writes that answer from the serialized echo — prerender and
+      // skip-index-wait callers — return no `included` at all and always have.
+      let entry = await timings.time('readback', () =>
+        this.#realmIndexQueryEngine.cardDocument(new URL(newURL)),
       );
       if (!entry || entry?.type === 'error') {
         let err = entry
@@ -7313,8 +8477,14 @@ export class Realm {
       });
     }
     this.#serveInstanceIdsAsRRI(doc);
+    // The last sequential leg: turning the assembled document into the bytes
+    // that go on the wire. Stamped because it scales with the body, which is
+    // what the shape of this response decides.
+    let responseBody = await timings.time('stringify', async () =>
+      JSON.stringify(doc, null, 2),
+    );
     return createResponse({
-      body: JSON.stringify(doc, null, 2),
+      body: responseBody,
       init: {
         status: 201,
         headers: {
@@ -7331,6 +8501,20 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    let timings = new RequestTimings();
+    let startedAt = Date.now();
+    try {
+      return await this.#patchCardInstance(request, requestContext, timings);
+    } finally {
+      this.#emitWriteTiming('PATCH', request, startedAt, timings);
+    }
+  }
+
+  async #patchCardInstance(
+    request: Request,
+    requestContext: RequestContext,
+    timings: RequestTimings,
+  ): Promise<Response> {
     let localPath = this.paths.local(new URL(request.url));
     if (await this.nonJsonFileExists(localPath)) {
       return unsupportedMediaType(request, requestContext);
@@ -7346,9 +8530,8 @@ export class Realm {
     let instanceURL = url.href.replace(/\.json$/, '');
     let duringPrerender = isDuringPrerenderRequest(request);
     // A skip-index-wait caller (see SKIP_INDEX_WAIT_HEADER) takes the same
-    // write-side path as a prerender write — index deferred, answer from the
-    // serialized echo — without the prerender-only serialization tweaks
-    // (skipQueryBackedExpansion) that stay gated on `duringPrerender` below.
+    // write-side path as a prerender write: index deferred, answer from the
+    // serialized echo.
     let answerFromEcho = duringPrerender || isSkipIndexWaitRequest(request);
 
     let { data: patch, included: maybeIncluded } = await request.json();
@@ -7375,347 +8558,138 @@ export class Realm {
       }
     }
 
-    // Serialize concurrent PATCHes against the same realm so the
-    // existing-file read, merge, and write are all inside one critical
-    // section. Without the lock, two replicas could both read the same
-    // `original`, compute independent merges, and the second writer's
-    // merge would silently lose the first's changes.
+    // The merge belongs to the update this stages: arrays replacing rather
+    // than merging into what is there, the realm-managed `meta` keys a client
+    // echo must never persist, a type that cannot change, the relationship
+    // merge, and leaving an unchanged card's file exactly as it is. It runs
+    // under the realm's write lock, which spans the read of the stored file
+    // and the write of the merged one, so two patches of one card cannot both
+    // compute a merge over the same pre-state and have the second silently
+    // lose the first. The merge base is that stored file rather than the
+    // index, which is downstream of it and can lag.
     //
-    // Inside the lock we invoke `_batchWriteUnlocked` rather than the
-    // public `writeMany` — re-entering the lock through the public method
-    // would block on a different pinned pool connection.
-    return await this.#dbAdapter.withWriteLock(this.url, async () => {
-      let primarySerialization: LooseSingleCardDocument | undefined;
-      // The merge base is the stored source file, not the index. The
-      // index is downstream of the file and can lag it — a backlogged or
-      // in-flight index job would hand us a stale `pristine_doc`, and
-      // merging the patch over stale state silently reverts every field
-      // the index hasn't caught up on. The file is written inside this
-      // same write lock, so it is always current.
-      let existingFile = await this.readFileAsText(`${localPath}.json`);
-      if (!existingFile) {
-        return notFound(request, requestContext);
+    // Side-loaded resources ride along as the document's `included`, each
+    // created under the `lid` the caller named it with, in the same batch as
+    // the patch that links to them.
+    let commit = async (reserialize?: true) =>
+      (
+        await commitBatch(
+          this.batchCore,
+          [
+            {
+              op: 'update',
+              href: instanceURL,
+              document: {
+                data: patch,
+                ...(maybeIncluded ? { included: maybeIncluded } : {}),
+              },
+              ...(reserialize ? { reserialize } : {}),
+            },
+          ],
+          {
+            clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+            ...(requestContext.authenticatedUser
+              ? { actor: requestContext.authenticatedUser }
+              : {}),
+            // The same trade a create makes, for the same two reasons — see
+            // `createCard`, where the deadlock this avoids is spelled out.
+            ...(answerFromEcho ? { waitForIndex: false } : {}),
+            // Read by both answers a patch can give that do not come from the
+            // index: the deferred write's echo, and the browser-test fallback
+            // below.
+            reportStoredContent: true,
+            // The same reading a create takes of a side-load claiming another
+            // realm: the edge is stored empty and the patch succeeds.
+            foreignSideLoadLink: 'leave',
+            timings,
+          },
+        )
+      )[0];
+    let result: BatchEntryResult;
+    try {
+      result = await commit();
+    } catch (err: unknown) {
+      return this.#cardWriteRefusal(err, request, requestContext, {
+        id: instanceURL,
+      });
+    }
+    let lastModified = result?.meta.lastModified;
+    if (result == null || lastModified == null) {
+      // The commit reports a modification time for every file it leaves
+      // behind, whether it rewrote it or found it already holding these bytes,
+      // so reaching here means the patch did not land as a write at all.
+      return systemError({
+        requestContext,
+        message: `the patch of ${instanceURL} reported no modification time`,
+        id: instanceURL,
+      });
+    }
+    let created = result.meta.created;
+    // The card and nothing around it: no `loadLinks`, so neither the
+    // transitive closure of its links nor the query a query-backed field
+    // would run to name its targets. Nothing consumes either off a write
+    // response — the create path's readback states the case. The commit has
+    // released the write lock by the time this runs, so what it costs is the
+    // writer's own latency rather than every other writer's.
+    let readEntry = async () =>
+      await timings.time('readback', () =>
+        this.#realmIndexQueryEngine.cardDocument(new URL(instanceURL)),
+      );
+    let doc: SingleCardDocument;
+    if (!result.meta.changed) {
+      // The patch left the card exactly as it was, so the answer is the card
+      // as the realm already holds it — read before anything else is decided,
+      // because a request that changed nothing is answered from the index
+      // whether or not it asked for its own indexing to be deferred. It is
+      // still answering a writer, so it takes the same narrow shape every
+      // other write does.
+      let unchanged = await readEntry();
+      if (unchanged && unchanged.type !== 'error') {
+        return await this.#patchedCardResponse(unchanged, {
+          instanceURL,
+          localPath,
+          timings,
+          // The file was not rewritten, so the modification time it carries is
+          // the one the index recorded for it.
+          lastModified: unchanged.doc.data.meta.lastModified ?? lastModified,
+          created,
+          requestContext,
+        });
       }
-      let original: CardResource;
+      // The index holds no document for this card — it has never been indexed,
+      // or its row records why it could not be. Nothing was written, so
+      // nothing has been put in front of the indexer; rewriting the card in
+      // canonical serialized form is what does that, and it is how an empty
+      // patch stores and indexes a card the realm was holding but had not
+      // read.
       try {
-        let existingDoc = JSON.parse(existingFile.content);
-        if (!isCardResource(existingDoc?.data)) {
-          throw new Error('stored file is not a card document');
-        }
-        original = cloneDeep(existingDoc.data) as CardResource;
-      } catch (err: any) {
+        result = await commit(true);
+      } catch (err: unknown) {
+        return this.#cardWriteRefusal(err, request, requestContext, {
+          id: instanceURL,
+        });
+      }
+      lastModified = result?.meta.lastModified ?? lastModified;
+      created = result?.meta.created ?? created;
+    }
+    if (answerFromEcho) {
+      // See serializedInstanceEcho: the write indexed deferred, so there is
+      // nothing to read back yet. The document is the one the commit stored,
+      // reported by the batch rather than read back off the file — which has
+      // been open to every other writer since the commit released the lock.
+      let stored = storedCardDocument(result);
+      if (!stored) {
         return systemError({
           requestContext,
-          message: `cannot apply patch, the existing file for ${instanceURL} is not a valid card document: ${err.message}`,
-          additionalError: err,
+          message: `Unable to report patched card: ${instanceURL}, the commit reported no stored document`,
           id: instanceURL,
         });
       }
-      delete original.meta.lastModified;
-      let originalClone = cloneDeep(original);
-
-      // The merge from here to the write is stated twice: `stageUpdate` in
-      // card-operations/executors.ts carries the same guard, the same
-      // realm-managed-key deletes, the same array-replacing customizer, the
-      // same relationship merge and the same no-op short circuit, so a batch
-      // update and a `PATCH` of one document land the same bytes. Anything
-      // learned here — a fifth server-stamped key that must not persist from
-      // a client echo, say — has to be learned there in the same change,
-      // until the two are one path.
-      if (
-        originalClone.meta?.adoptsFrom &&
-        internalKeyFor(patch.meta.adoptsFrom, url, this.#virtualNetwork) !==
-          internalKeyFor(
-            originalClone.meta.adoptsFrom,
-            url,
-            this.#virtualNetwork,
-          )
-      ) {
-        return badRequest({
-          message: `Cannot change card instance type to ${JSON.stringify(
-            patch.meta.adoptsFrom,
-          )}`,
-          requestContext,
-          id: instanceURL,
-        });
-      }
-      let included = (maybeIncluded ?? []) as CardResource[];
-
-      delete (patch as any).type;
-      delete (patch as any).meta.realmInfo;
-      delete (patch as any).meta.realmURL;
-      // Server-stamped at serve time (the `meta.screenshots` join); an echo
-      // from a client must never persist into the source file.
-      delete (patch as any).meta.screenshots;
-
-      promoteLocalIdsToRemoteIds({
-        resource: patch,
-        included,
-        realmURL: new URL(this.url),
-      });
-
-      // When a patch fully replaces an array attribute, its per-index field
-      // metadata (e.g. the polymorphic type recorded at `meta.fields['items.1']`,
-      // or the array-valued `meta.fields['items']` for a composite containsMany)
-      // is stale. `mergeWith` overwrites arrays in attributes but deep-merges the
-      // `meta.fields` object, so without clearing these first the removed
-      // element's metadata survives and can be re-applied to a new entry when the
-      // array grows again. Drop the matching entries from the original before the
-      // merge so the patch's own metadata (if any) wins cleanly.
-      clearReplacedArrayFieldMeta(originalClone.meta, patch.attributes);
-
-      let primaryResource = mergeWith(
-        originalClone,
-        patch,
-        (_objectValue: any, sourceValue: any) => {
-          // a patched array should overwrite the original array instead of merging
-          // into an original array, otherwise we won't be able to remove items in
-          // the original array
-          return Array.isArray(sourceValue) ? sourceValue : undefined;
-        },
+      doc = await this.serializedInstanceEcho(
+        stored,
+        instanceURL,
+        lastModified,
       );
-
-      if (primaryResource.relationships || patch.relationships) {
-        let merged = mergeRelationships(
-          primaryResource.relationships,
-          patch.relationships,
-        );
-
-        if (merged && Object.keys(merged).length !== 0) {
-          primaryResource.relationships = merged;
-        }
-      }
-
-      // If the patch makes no semantic changes and doesn't include side-loaded
-      // resources, short-circuit to avoid touching the file (and changing mtime).
-      if (included.length === 0 && isEqual(primaryResource, original)) {
-        let entry = await this.#realmIndexQueryEngine.cardDocument(
-          new URL(instanceURL),
-          {
-            loadLinks: true,
-            skipQueryBackedExpansion: duringPrerender,
-          },
-        );
-        if (entry && entry.type !== 'error') {
-          let existingDoc = merge({}, entry.doc, {
-            data: {
-              links: { self: instanceURL },
-              meta: { lastModified: entry.doc.data.meta.lastModified },
-            },
-          });
-          let createdAt = await this.getCreatedTime(
-            this.paths.local(url) + '.json',
-          );
-          // The PATCH echo is the same served representation as a GET —
-          // including the joined `meta.screenshots` (the store replaces an
-          // instance's meta wholesale from a save response, so an echo
-          // without it would wipe the key client-side until the next GET)
-          // and the same validator components.
-          if (entry.screenshots) {
-            existingDoc.data.meta = {
-              ...existingDoc.data.meta,
-              screenshots: screenshotsMetaFromManifest(entry.screenshots, {
-                realmURL: this.url,
-                instanceLocalPath: this.paths.local(url),
-              }),
-            };
-          }
-          // entry.doc came from cardDocument(), which already called
-          // attachRealmInfo() and (re)populated the realm-info cache —
-          // so the cached hash is current as of this response.
-          await this.getRealmInfo();
-          let foreignDeps = this.hasForeignRealmDeps(entry.deps);
-          let etag = foreignDeps
-            ? undefined
-            : buildCardJsonEtag(
-                entry.indexedAt,
-                this.getCachedRealmInfoHash(),
-                screenshotsEtagFingerprint(entry.screenshots),
-              );
-          this.#serveInstanceIdsAsRRI(existingDoc);
-          return createResponse({
-            body: JSON.stringify(existingDoc, null, 2),
-            init: {
-              headers: {
-                'content-type': SupportedMimeType.CardJson,
-                'cache-control': this.cardJsonCacheControl(requestContext),
-                ...(etag ? { etag } : {}),
-                ...etagSuppressedHeader(foreignDeps),
-                ...lastModifiedHeader(existingDoc),
-                ...(createdAt != null
-                  ? { 'x-created': formatRFC7231(createdAt * 1000) }
-                  : {}),
-              },
-            },
-            requestContext,
-          });
-        }
-      }
-
-      delete (primaryResource as any).id; // don't write the ID to the file
-      let files = new Map<LocalPath, string>();
-      let resources = [primaryResource, ...included];
-      for (let [i, resource] of resources.entries()) {
-        if (
-          (i > 0 && typeof resource.lid !== 'string') ||
-          (resource.meta.realmURL && resource.meta.realmURL !== this.url)
-        ) {
-          continue;
-        }
-        let name = getCardDirectoryName(resource.meta?.adoptsFrom, this.paths);
-        let fileURL =
-          i === 0
-            ? new URL(`${url}.json`)
-            : this.paths.fileURL(
-                `/${join(new URL(this.url).pathname, name, (resource.lid ?? uuidV4()) + '.json')}`,
-              );
-        // we already did this one
-        if (i !== 0) {
-          promoteLocalIdsToRemoteIds({
-            resource,
-            included,
-            realmURL: new URL(this.url),
-          });
-          visitModuleDeps(resource, (moduleURL, setModuleURL) => {
-            setModuleURL(
-              this.#virtualNetwork.resolveRRI(moduleURL, rri(instanceURL)),
-            );
-          });
-        }
-        let fileSerialization: LooseSingleCardDocument | undefined;
-        try {
-          fileSerialization = await this.fileSerialization(
-            {
-              data: merge(resource, { meta: { realmURL: this.url } }),
-            },
-            fileURL,
-          );
-        } catch (err: any) {
-          if (err.message.startsWith('field validation error')) {
-            return badRequest({
-              message: err.message,
-              requestContext,
-              id: instanceURL,
-            });
-          } else {
-            return systemError({
-              requestContext,
-              message: err.message,
-              additionalError: err,
-              id: instanceURL,
-            });
-          }
-        }
-        let path = this.paths.local(fileURL);
-        files.set(path, JSON.stringify(fileSerialization, null, 2));
-        if (i === 0) {
-          primarySerialization = fileSerialization;
-        }
-      }
-      // Use the unlocked inner write so we don't re-enter
-      // withWriteLock (which would block on a different pinned pool
-      // connection).
-      let [{ lastModified, created }] = await this._batchWriteUnlocked(files, {
-        clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-        initiatingUser: requestContext.authenticatedUser ?? null,
-        ...(answerFromEcho ? { waitForIndex: false } : {}),
-      });
-      let doc: SingleCardDocument;
-      if (answerFromEcho) {
-        // See serializedInstanceEcho: the write indexed deferred, so there is
-        // nothing to read back yet.
-        doc = await this.serializedInstanceEcho(
-          primarySerialization!,
-          instanceURL,
-          lastModified,
-        );
-        this.#serveInstanceIdsAsRRI(doc);
-        return createResponse({
-          body: JSON.stringify(doc, null, 2),
-          init: {
-            headers: {
-              'content-type': SupportedMimeType.CardJson,
-              'cache-control': this.cardJsonCacheControl(requestContext),
-              ...lastModifiedHeader(doc),
-              ...(created
-                ? { 'x-created': formatRFC7231(created * 1000) }
-                : {}),
-            },
-          },
-          requestContext,
-        });
-      }
-      let entry = await this.#realmIndexQueryEngine.cardDocument(
-        new URL(instanceURL),
-        {
-          loadLinks: true,
-          skipQueryBackedExpansion: false,
-        },
-      );
-      if (!entry || entry?.type === 'error') {
-        if (
-          primarySerialization &&
-          isBrowserTestEnv() &&
-          !(globalThis as any).__emulateServerPatchFailure
-        ) {
-          doc = merge({}, primarySerialization, {
-            data: {
-              id: instanceURL,
-              links: { self: instanceURL },
-              meta: {
-                ...(primarySerialization.data.meta ?? {}),
-                lastModified,
-              },
-            },
-          }) as SingleCardDocument;
-        } else {
-          return systemError({
-            requestContext,
-            message: `Unable to index card: can't find patched instance, ${instanceURL} in index`,
-            id: instanceURL,
-            additionalError: entry
-              ? CardError.fromSerializableError(entry.error)
-              : undefined,
-          });
-        }
-      } else {
-        doc = merge({}, entry.doc, {
-          data: {
-            links: { self: instanceURL },
-            meta: { lastModified },
-          },
-        });
-        // The PATCH echo carries the joined `meta.screenshots` like a GET
-        // does — the store replaces an instance's meta wholesale from a
-        // save response, so an echo without it would wipe the key
-        // client-side until the next GET.
-        if (entry.screenshots) {
-          doc.data.meta = {
-            ...doc.data.meta,
-            screenshots: screenshotsMetaFromManifest(entry.screenshots, {
-              realmURL: this.url,
-              instanceLocalPath: this.paths.local(url),
-            }),
-          };
-        }
-      }
-      // Same rationale as the no-op short-circuit branch above:
-      // cardDocument() above primed the realm-info cache via
-      // attachRealmInfo(), but only when entry was a non-error doc.
-      // On the error fallback we may still need to populate it.
-      await this.getRealmInfo();
-      let foreignDeps =
-        entry && entry.type !== 'error'
-          ? this.hasForeignRealmDeps(entry.deps)
-          : false;
-      let etag =
-        entry && entry.type !== 'error' && !foreignDeps
-          ? buildCardJsonEtag(
-              entry.indexedAt,
-              this.getCachedRealmInfoHash(),
-              screenshotsEtagFingerprint(entry.screenshots),
-            )
-          : undefined;
       this.#serveInstanceIdsAsRRI(doc);
       return createResponse({
         body: JSON.stringify(doc, null, 2),
@@ -7723,15 +8697,184 @@ export class Realm {
           headers: {
             'content-type': SupportedMimeType.CardJson,
             'cache-control': this.cardJsonCacheControl(requestContext),
-            ...(etag ? { etag } : {}),
-            ...etagSuppressedHeader(foreignDeps),
             ...lastModifiedHeader(doc),
             ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
           },
         },
         requestContext,
       });
+    }
+    let entry = await readEntry();
+    if (entry && entry.type !== 'error') {
+      return await this.#patchedCardResponse(entry, {
+        instanceURL,
+        localPath,
+        lastModified,
+        created,
+        requestContext,
+        timings,
+      });
+    }
+    let stored = storedCardDocument(result);
+    if (
+      !stored ||
+      !isBrowserTestEnv() ||
+      (globalThis as any).__emulateServerPatchFailure
+    ) {
+      return systemError({
+        requestContext,
+        message: `Unable to index card: can't find patched instance, ${instanceURL} in index`,
+        id: instanceURL,
+        additionalError: entry
+          ? CardError.fromSerializableError(entry.error)
+          : undefined,
+      });
+    }
+    doc = merge({}, stored, {
+      data: {
+        id: instanceURL,
+        links: { self: instanceURL },
+        meta: {
+          ...(stored.data.meta ?? {}),
+          lastModified,
+        },
+      },
+    }) as SingleCardDocument;
+    // The index could not answer, so nothing primed the realm-info cache the
+    // way a read does.
+    await this.getRealmInfo();
+    this.#serveInstanceIdsAsRRI(doc);
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: {
+          'content-type': SupportedMimeType.CardJson,
+          'cache-control': this.cardJsonCacheControl(requestContext),
+          ...lastModifiedHeader(doc),
+          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
+        },
+      },
+      requestContext,
     });
+  }
+
+  // The 200 a `PATCH` answers with when the index can speak for the card: the
+  // card as it is indexed, validated by the same ETag a `GET` of it would
+  // carry, and stamped with the stored file's own timestamps rather than the
+  // index's reading of them.
+  //
+  // One builder for both answers a patch can give from the index — the card it
+  // just wrote, and the card it left alone — because the two are the same
+  // response and only differ in whether a write preceded them.
+  async #patchedCardResponse(
+    entry: SearchResultDoc,
+    {
+      instanceURL,
+      localPath,
+      lastModified,
+      created,
+      requestContext,
+      timings,
+    }: {
+      instanceURL: string;
+      localPath: LocalPath;
+      lastModified: number | null;
+      created: number | null;
+      requestContext: RequestContext;
+      timings: RequestTimings;
+    },
+  ): Promise<Response> {
+    let doc: SingleCardDocument = merge({}, entry.doc, {
+      data: {
+        links: { self: instanceURL },
+        meta: { lastModified },
+      },
+    });
+    // The PATCH echo carries the joined `meta.screenshots` like a GET does —
+    // the store replaces an instance's meta wholesale from a save response, so
+    // an echo without it would wipe the key client-side until the next GET.
+    // The two representations part company on the link graph only, which is
+    // what the `write-echo` validator variant below records.
+    if (entry.screenshots) {
+      doc.data.meta = {
+        ...doc.data.meta,
+        screenshots: screenshotsMetaFromManifest(entry.screenshots, {
+          realmURL: this.url,
+          instanceLocalPath: localPath,
+        }),
+      };
+    }
+    // The read above primed the realm-info cache via attachRealmInfo(), so the
+    // hash the ETag is built from is current as of this response.
+    await this.getRealmInfo();
+    let foreignDeps = this.hasForeignRealmDeps(entry.deps);
+    let etag = foreignDeps
+      ? undefined
+      : buildCardJsonEtag(
+          entry.indexedAt,
+          this.getCachedRealmInfoHash(),
+          screenshotsEtagFingerprint(entry.screenshots),
+          'write-echo',
+        );
+    this.#serveInstanceIdsAsRRI(doc);
+    // The last sequential leg: turning the assembled document into the bytes
+    // that go on the wire. Stamped because it scales with the body, which is
+    // what the shape of this response decides.
+    let body = await timings.time('stringify', async () =>
+      JSON.stringify(doc, null, 2),
+    );
+    return createResponse({
+      body,
+      init: {
+        headers: {
+          'content-type': SupportedMimeType.CardJson,
+          'cache-control': this.cardJsonCacheControl(requestContext),
+          ...(etag ? { etag } : {}),
+          ...etagSuppressedHeader(foreignDeps),
+          ...lastModifiedHeader(doc),
+          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
+        },
+      },
+      requestContext,
+    });
+  }
+
+  // A batch reports a refusal as an operations error, which is the envelope's
+  // currency. The card verbs answer in statuses and bodies clients have always
+  // read, so a refusal is carried back across into the response the handler
+  // would have produced itself, keeping the status the batch chose.
+  //
+  // A 404 is spelled here rather than by the batch: the batch names the card
+  // it resolved, where these routes name the URL the caller asked for.
+  // Anything above 4xx that is not one of these two is a refusal the endpoint
+  // has always thrown — a payload over the realm's ceiling, say — and it
+  // travels the same way, so the status and sentence a client acts on do not
+  // move.
+  #cardWriteRefusal(
+    err: unknown,
+    request: Request,
+    requestContext: RequestContext,
+    identity: { id?: string; lid?: string } = {},
+  ): Response {
+    if (!isOperationFailure(err)) {
+      throw err;
+    }
+    let { status, title, detail } = err.error;
+    if (status === 404) {
+      return notFound(request, requestContext);
+    }
+    if (status === 400) {
+      return badRequest({ message: detail, requestContext, ...identity });
+    }
+    if (status >= 500) {
+      return systemError({
+        requestContext,
+        message: detail,
+        status,
+        ...identity,
+      });
+    }
+    throw new CardError(detail, { status, title });
   }
 
   // Card+JSON ETags are unsafe when the card has dependencies that live
@@ -7786,6 +8929,48 @@ export class Realm {
       return false;
     }
     return !resolved.startsWith(this.url);
+  }
+
+  // How a card+json read shapes its links. A prerender must not recurse into
+  // the search that resolves a query-backed field, and a read serving one is
+  // already asking for less than a live read, so the link-shape policy does
+  // not reach it.
+  //
+  // One decision for every verb that reads a card, rather than one apiece.
+  // Both values are folded into the validator, so two verbs deciding
+  // differently would hand out different validators for the same card. Nothing
+  // here varies by verb, so within one request there is nothing to keep in
+  // step; across the `HEAD` / `GET` pair it is the policy's dwell floor that
+  // holds them together, not this method (see `#decideLinkShape`).
+  //
+  // A card read returns one card, so it is the row class a closure is cheapest
+  // for and the last one the policy degrades.
+  #cardJsonLinkShape(request: Request): {
+    skipQueryBackedExpansion: boolean;
+    resolveLinksOnly: boolean;
+    skipLinkAssemblyBudget: boolean;
+  } {
+    let duringPrerender = isDuringPrerenderRequest(request);
+    return {
+      skipQueryBackedExpansion: duringPrerender,
+      resolveLinksOnly:
+        this.#decideLinkShape(request, 'single-row')?.mode === 'links-only',
+      // The assembled-resource budget bounds live reads. This branch exempts a
+      // read carrying the during-prerender marker, for the same reason the
+      // prerendered-HTML leg is exempt from the page and time bounds: what a
+      // render assembles is baked into cached HTML, so a ceiling that clipped
+      // it would serve a short closure from cache long after the pressure that
+      // justified it had passed.
+      //
+      // It is defensive rather than load-bearing. No caller attaches that
+      // marker to a card+json request, so the exemption a render relies on is
+      // the one on the card+html entry leg, which does receive it and does run
+      // the assembly pass. The branch stays so it is correct if the marker ever
+      // arrives here. The validator names the exemption rather than the
+      // ceiling, so an exempt body and a bounded one never share one — see
+      // `buildCardJsonEtag`.
+      skipLinkAssemblyBudget: duringPrerender,
+    };
   }
 
   private cardJsonCacheControl(requestContext: RequestContext): string {
@@ -7875,7 +9060,7 @@ export class Realm {
       fragment: string = '',
     ) =>
       this.#readGateLog[level](
-        `outcome=${outcome}${fragment} url=${request.url}`,
+        `outcome=${outcome}${fragment} url=${maskLoggedURL(request.url)}`,
       );
     if (isDuringPrerenderRequest(request)) {
       emit('info', 'skipped-prerender');
@@ -7918,6 +9103,185 @@ export class Realm {
     }
   }
 
+  // The card+json `HEAD`: the headers a `GET` of the same URL would send, and
+  // no body work to produce them. The read runs in its headers-only mode, so
+  // no card document is assembled and no link is expanded — which is the whole
+  // point of asking, since a caller that wanted the body would have sent a
+  // `GET`. `Content-Length` is left off for the same reason: knowing it means
+  // serializing the document.
+  //
+  // Realm discovery also arrives as a `HEAD`, on any path and without
+  // credentials, and reads only the realm-identity headers every response
+  // carries. So the read here is offered to a caller that may have it and the
+  // discovery answer to everyone else: permission is asked rather than
+  // enforced, and a caller who cannot read gets the realm-identity answer
+  // instead of a 401 that would tell them the realm exists and refuse them.
+  // Every other `Accept` bucket keeps that answer outright — this route is
+  // registered for card+json alone.
+  private async headCard(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    if (!(await this.permittedToRead(request, requestContext))) {
+      return this.realmIdentityResponse(requestContext);
+    }
+    // Read-your-writes, as on the `GET`: a validator computed off an index the
+    // requester's own write has not reached yet would 304 their next `GET`
+    // against state they just superseded.
+    await this.drainRequestersOwnIndexing(request, requestContext);
+    let requestedLocalPath = this.paths.local(new URL(request.url));
+    if (requestedLocalPath.endsWith('.json')) {
+      // The canonical extension-less URL is the only one that ever carries a
+      // validator, so the `.json` spelling is redirected here as it is on the
+      // `GET` rather than answered with headers a client would file under the
+      // wrong cache key.
+      let canonicalPath = this.paths.local(
+        this.paths.fileURL(
+          requestedLocalPath.replace(/\.json$/, '') || 'index',
+        ),
+      );
+      return createResponse({
+        requestContext,
+        body: null,
+        init: {
+          status: 302,
+          headers: { Location: this.redirectTarget(canonicalPath) },
+        },
+      });
+    }
+    let localPath = requestedLocalPath === '' ? 'index' : requestedLocalPath;
+    let url = this.paths.fileURL(localPath);
+    let start = Date.now();
+    try {
+      let {
+        skipQueryBackedExpansion,
+        resolveLinksOnly,
+        skipLinkAssemblyBudget,
+      } = this.#cardJsonLinkShape(request);
+      let result: OperationResult;
+      try {
+        result = await runOperation(
+          this.operationCore,
+          {
+            target: { kind: 'instance', url: url.href },
+            name: 'read',
+            ...this.#callerOf(request, requestContext),
+          },
+          // No budget flag: a headers-only read assembles no closure, so there
+          // is nothing for it to bound.
+          { headersOnly: true, skipQueryBackedExpansion, resolveLinksOnly },
+        );
+      } catch (e) {
+        if (!isOperationFailure(e)) {
+          throw e;
+        }
+        return await this.#respondToCardJsonOutcome(
+          cardJsonAssemblyFromFailure(e),
+          request,
+          requestContext,
+          url,
+        );
+      }
+      if (!isHeadResult(result)) {
+        throw new Error(
+          `the headers-only read of ${url.href} answered with something other than headers`,
+        );
+      }
+      if (result.type === 'file-meta') {
+        // A `GET` of a path that holds bytes answers with the file's metadata
+        // document, which is derived from those bytes and has no index row
+        // behind it — so there is no validator and no cache directive to
+        // report, and a `HEAD` that invented one would describe a response the
+        // `GET` never sends.
+        return createResponse({
+          requestContext,
+          body: null,
+          init: { headers: { 'content-type': SupportedMimeType.CardJson } },
+        });
+      }
+      await this.getRealmInfo();
+      let foreignDeps = this.hasForeignRealmDeps(result.deps);
+      let etag = foreignDeps
+        ? undefined
+        : buildCardJsonEtag(
+            result.indexedAt,
+            this.getCachedRealmInfoHash(),
+            screenshotsEtagFingerprint(result.screenshots),
+            resolveLinksOnly ? 'links-only' : 'full',
+            skipLinkAssemblyBudget,
+          );
+      let cacheControl = this.cardJsonCacheControl(requestContext);
+      let lastModified: Record<string, string> =
+        result.lastModified != null
+          ? { 'last-modified': formatRFC7231(result.lastModified * 1000) }
+          : {};
+      let ifNoneMatch = request.headers.get('if-none-match');
+      if (ifNoneMatch && etag && ifNoneMatchMatches(ifNoneMatch, etag)) {
+        // A conditional request is answered the same way whichever verb asked
+        // it: the validator matched, so there is nothing to send.
+        return createResponse({
+          requestContext,
+          varyOn: LINK_SHAPE_VARY,
+          body: null,
+          init: {
+            status: 304,
+            headers: { etag, 'cache-control': cacheControl, ...lastModified },
+          },
+        });
+      }
+      let created = await this.getCreatedTime(
+        (this.paths.local(url) + '.json') as LocalPath,
+      );
+      return createResponse({
+        requestContext,
+        varyOn: LINK_SHAPE_VARY,
+        body: null,
+        init: {
+          headers: {
+            'content-type': SupportedMimeType.CardJson,
+            'cache-control': cacheControl,
+            ...(etag ? { etag } : {}),
+            ...etagSuppressedHeader(foreignDeps),
+            ...lastModified,
+            ...(created != null
+              ? { 'x-created': formatRFC7231(created * 1000) }
+              : {}),
+          },
+        },
+      });
+    } finally {
+      this.#logRequestPerformance(request, start);
+    }
+  }
+
+  // The realm-identity answer: the headers `createResponse` stamps on every
+  // response and nothing else. It is what a discovery probe reads, and what a
+  // `HEAD` falls back to whenever it is not answering a read.
+  private realmIdentityResponse(requestContext: RequestContext): Response {
+    return createResponse({ init: { status: 200 }, requestContext });
+  }
+
+  // Whether this caller may read the realm — asked, not enforced. The
+  // realm-wide `HEAD` exemption is deliberately not taken: it exists so a
+  // discovery probe can be answered without credentials, and a caller riding
+  // it has shown nothing about what it may read. A `HEAD` that answers a card's
+  // real headers is a read, so it asks the question a `GET` would.
+  private async permittedToRead(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<boolean> {
+    try {
+      await this.checkPermission(request, requestContext, 'read', {
+        probe: true,
+      });
+      return true;
+    } catch (e) {
+      if (e instanceof AuthenticationError || e instanceof AuthorizationError) {
+        return false;
+      }
+      throw e;
+    }
+  }
   private async getCard(
     request: Request,
     requestContext: RequestContext,
@@ -7964,15 +9328,15 @@ export class Realm {
       let cacheControl = this.cardJsonCacheControl(requestContext);
       let ifNoneMatch = request.headers.get('if-none-match');
       let documentCache = this.#cardDocumentCache;
-      let skipQueryBackedExpansion = isDuringPrerenderRequest(request);
-      // A prerender is already asking for less than a live read, and asks for
-      // it by the flag above, so the live-read setting reaches only the
-      // requests it is about. Computed here rather than at the assembly
-      // because the validator below has to describe the shape the assembly
-      // will produce, and the validator is what the conditional request and
-      // the response cache are both keyed on.
-      let resolveLinksOnly =
-        !skipQueryBackedExpansion && this.#liveReadsResolveLinksOnly;
+      // Decided here rather than at the assembly because the validator below
+      // has to describe the shape the assembly will produce, and that
+      // validator is what the conditional request and the response cache are
+      // both keyed on.
+      let {
+        skipQueryBackedExpansion,
+        resolveLinksOnly,
+        skipLinkAssemblyBudget,
+      } = this.#cardJsonLinkShape(request);
 
       // The `instance()` peek, which yields this card's validator. It runs
       // for a client that sent a validator of its own to compare against,
@@ -8026,7 +9390,8 @@ export class Realm {
             instanceEntry.indexedAt,
             realmInfoHash,
             screenshotsEtagFingerprint(instanceEntry.screenshots),
-            resolveLinksOnly,
+            resolveLinksOnly ? 'links-only' : 'full',
+            skipLinkAssemblyBudget,
           );
         }
         if (
@@ -8036,6 +9401,7 @@ export class Realm {
         ) {
           return createResponse({
             requestContext,
+            varyOn: LINK_SHAPE_VARY,
             body: null,
             init: {
               status: 304,
@@ -8066,7 +9432,9 @@ export class Realm {
           localPath,
           skipQueryBackedExpansion,
           resolveLinksOnly,
+          skipLinkAssemblyBudget,
           peekEtag,
+          this.#callerOf(request, requestContext),
         );
       let assembly: CardJsonAssembly;
       let cacheOutcome: CardDocumentCacheOutcome | undefined;
@@ -8093,7 +9461,6 @@ export class Realm {
           request,
           requestContext,
           url,
-          localPath,
         );
         for (let [name, value] of Object.entries(cacheOutcomeHeader)) {
           response.headers.set(name, value);
@@ -8102,6 +9469,7 @@ export class Realm {
       }
       return createResponse({
         body: assembly.body,
+        varyOn: LINK_SHAPE_VARY,
         init: {
           headers: {
             'content-type': SupportedMimeType.CardJson,
@@ -8138,62 +9506,61 @@ export class Realm {
     localPath: LocalPath,
     skipQueryBackedExpansion: boolean,
     resolveLinksOnly: boolean,
+    skipLinkAssemblyBudget: boolean,
     keyEtag: string | undefined,
+    caller: { actor: string; clientRequestId: string },
   ): Promise<CardJsonAssembly> {
-    // `cardDocument()` runs `attachRealmInfo()` which (re)populates the
-    // realm-info cache, so the hash read for the response ETag below
-    // reflects the post-assembly realm info.
-    let maybeError = await this.#realmIndexQueryEngine.cardDocument(url, {
-      loadLinks: true,
-      skipQueryBackedExpansion,
-      resolveLinksOnly,
-    });
-    if (maybeError === undefined) {
-      return { kind: 'missing' };
-    }
-    if (maybeError.type === 'error') {
-      let { error } = maybeError;
-      return {
-        kind: 'error',
-        error: {
-          status: error.errorDetail.status,
-          title: error.errorDetail.title,
-          message: error.errorDetail.message,
-          stack: error.errorDetail.stack,
-          lastKnownGoodHtml: error.lastKnownGoodHtml,
-          cardTitle: error.cardTitle,
-          scopedCssUrls: error.scopedCssUrls,
+    // The document itself is the `read` operation's — link expansion, the
+    // `links.self` and prefix-form ids, the freshly joined `meta.generation`
+    // and `meta.screenshots`, the file-metadata answer for a path that holds
+    // bytes, and which absence a missing row is. What stays here is the
+    // response around it: the validator, the redirect, the creation time, and
+    // the mapping from a refusal to a status.
+    //
+    // The caller travels with the request although a plain read never consults
+    // it, so that the first read that does cannot silently read a stale one.
+    // That an assembly is shareable between callers rests on the same thing
+    // the response cache's sharing does: a plain read is the same document for
+    // everyone permitted to ask for it. A `read` an author has specialized is
+    // refused rather than served, so nothing actor-dependent reaches here.
+    let result: OperationResult;
+    try {
+      // The read runs `attachRealmInfo()`, which (re)populates the realm-info
+      // cache, so the hash the ETag below folds in reflects the post-assembly
+      // realm info.
+      result = await runOperation(
+        this.operationCore,
+        {
+          target: { kind: 'instance', url: url.href },
+          name: 'read',
+          actor: caller.actor,
+          clientRequestId: caller.clientRequestId,
         },
-      };
+        { skipQueryBackedExpansion, resolveLinksOnly, skipLinkAssemblyBudget },
+      );
+    } catch (e) {
+      if (!isOperationFailure(e)) {
+        throw e;
+      }
+      return cardJsonAssemblyFromFailure(e);
     }
-    let { doc: card } = maybeError;
-    card.data.links = { self: url.href };
-    this.#serveInstanceIdsAsRRI(card);
-    // Surface the instance's index-data generation
-    // (`boxel_index.generation`) in per-instance `meta` so a consumer of the
-    // card+json GET can tell fresh index data from stale, and join the
-    // instance's declared-screenshot manifest into `meta.screenshots` (the
-    // serve-time join — the manifest is never written back into
-    // `boxel_index` or the source file). A fresh `meta` object — never a
-    // mutation of the cached pristine doc's `meta`.
-    card.data.meta = {
-      ...card.data.meta,
-      generation: maybeError.generation,
-      ...(maybeError.screenshots
-        ? {
-            screenshots: screenshotsMetaFromManifest(maybeError.screenshots, {
-              realmURL: this.url,
-              instanceLocalPath: localPath,
-            }),
-          }
-        : {}),
-    };
+    if (!isDocumentResult(result)) {
+      throw new Error(
+        `the read of ${url.href} answered with something other than a document`,
+      );
+    }
+    let { document, headers, queryBacked } = result;
+    if (document.data.type === 'file-meta') {
+      // A file's metadata is derived from its bytes, so there is no index row
+      // to validate it against and nothing here to cache.
+      return { kind: 'file-meta', body: JSON.stringify(document, null, 2) };
+    }
+    let card = document;
 
-    // The 302 redirect for the `.json` form is now done up-front
-    // (see top of getCard). Here we only need to redirect for the
-    // legacy normalization case where `paths.fileURL(localPath)`
-    // produces a different `paths.local()` than what we started
-    // with — same as the prior implementation's behavior.
+    // The 302 redirect for the `.json` form is done up-front (see top of
+    // getCard). Here we only need to redirect for the normalization case where
+    // `paths.fileURL(localPath)` produces a different `paths.local()` than
+    // what we started with.
     let foundPath = this.paths.local(url);
     if (localPath !== foundPath) {
       return { kind: 'redirect', foundPath };
@@ -8202,31 +9569,32 @@ export class Realm {
     // Prefer created_at from DB for instance JSON
     let pathForDb = this.paths.local(url) + '.json';
     let createdAt = await this.getCreatedTime(pathForDb);
-    // Use deps + indexedAt from the just-loaded doc — `cardDocument()`
-    // saw a snapshot that may differ from the early peek if a write
-    // landed between the two reads. Suppress the ETag if the doc
-    // depends on foreign-realm cards: cross-realm invalidation
-    // doesn't cascade `indexed_at`, so a validator we emit here
-    // could 304 a follow-up request whose `included[]` should have
-    // been re-fetched from the foreign realm. A suppressed validator
-    // also makes this assembly unretainable — the response cache keys
-    // on the validator, so without one there is nothing that would make
-    // a superseded entry unreachable.
-    let foreignDeps = this.hasForeignRealmDeps(maybeError.deps);
+    // deps + indexedAt come off the assembly the read reports, not off the
+    // early peek: the two see different snapshots when a write lands between
+    // them, and a validator has to describe the bytes it is sent with.
+    // Suppress the ETag if the doc depends on foreign-realm cards: cross-realm
+    // invalidation doesn't cascade `indexed_at`, so a validator we emit here
+    // could 304 a follow-up request whose `included[]` should have been
+    // re-fetched from the foreign realm. A suppressed validator also makes
+    // this assembly unretainable — the response cache keys on the validator,
+    // so without one there is nothing that would make a superseded entry
+    // unreachable.
+    let foreignDeps = this.hasForeignRealmDeps(headers.deps);
     let responseEtag = foreignDeps
       ? undefined
       : buildCardJsonEtag(
-          maybeError.indexedAt,
+          headers.indexedAt,
           this.getCachedRealmInfoHash(),
-          screenshotsEtagFingerprint(maybeError.screenshots),
-          resolveLinksOnly,
+          screenshotsEtagFingerprint(headers.screenshots),
+          resolveLinksOnly ? 'links-only' : 'full',
+          skipLinkAssemblyBudget,
         );
     return {
       kind: 'document',
       body: JSON.stringify(card, null, 2),
       etag: responseEtag,
       etagSuppressed: foreignDeps,
-      queryBacked: maybeError.queryBacked,
+      queryBacked,
       keyEtag: keyEtag ?? '',
       lastModified: card.data.meta.lastModified,
       created: createdAt,
@@ -8241,27 +9609,28 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
     url: URL,
-    localPath: LocalPath,
   ): Promise<Response> {
-    if (assembly.kind === 'missing') {
-      if (await this.nonJsonFileExists(localPath)) {
-        // A path that points to a non-JSON file (e.g. an uploaded binary)
-        // was asked for as card+json. Return a file-meta JSON document so
-        // the caller receives valid JSON it can discriminate via
-        // `data.type === 'file-meta'` — instead of raw binary bytes that
-        // crash a downstream `response.json()`.
-        let fileMeta = await this.fileMetaDocument(
-          requestContext,
-          localPath,
-          SupportedMimeType.CardJson,
-        );
-        return fileMeta ?? notFound(request, requestContext);
-      }
-      return await this.missingInstanceResponse(
-        request,
+    if (assembly.kind === 'file-meta') {
+      // A path that holds bytes rather than a card (an uploaded binary, say)
+      // was asked for as card+json, so the answer is the file's metadata
+      // document — valid JSON the caller discriminates via
+      // `data.type === 'file-meta'`, instead of raw bytes that crash a
+      // downstream `response.json()`.
+      return createResponse({
+        body: assembly.body,
+        init: { headers: { 'content-type': SupportedMimeType.CardJson } },
         requestContext,
-        localPath,
-      );
+      });
+    }
+    if (assembly.kind === 'not-found') {
+      return notFound(request, requestContext);
+    }
+    if (assembly.kind === 'not-indexed') {
+      // The card's source is on disk and the index has not caught up. A read
+      // served by the replica that took the write rarely gets here — that path
+      // drains its own in-flight indexing first — but a read served by any
+      // other replica has no such handle on the write.
+      return notIndexedYet(request, requestContext);
     }
     if (assembly.kind === 'redirect') {
       return createResponse({
@@ -8293,7 +9662,7 @@ export class Realm {
         error.status >= 400 && error.status <= 599 && error.status !== 404
           ? error.status
           : 500,
-      message: `cannot return card, ${request.url}, from index: ${error.title} - ${error.message}`,
+      message: `cannot return card, ${maskLoggedURL(request.url)}, from index: ${error.title} - ${error.message}`,
       id: request.url,
       additionalError: CardError.fromSerializableError({
         status: error.status,
@@ -8400,14 +9769,20 @@ export class Realm {
     // for `item` directly, so this route serializes cards with their links as
     // often as the other two — and a refresh here would put back exactly the
     // closure a search left out.
+    // One entry's worth of card, so it classifies with the card read rather
+    // than with a search — the same row class, and therefore the same answer
+    // from the policy at every level.
     let duringPrerender = isDuringPrerenderRequest(request);
-    let resolveLinksOnly = !duringPrerender && this.#liveReadsResolveLinksOnly;
+    let resolveLinksOnly =
+      this.#decideLinkShape(request, 'single-row')?.mode === 'links-only';
     let doc = await this.#realmIndexQueryEngine.searchEntry(
       dbUrl,
       { htmlQuery, fieldset, kind },
       {
         loadLinks: true,
-        ...(duringPrerender ? { cacheOnlyDefinitions: true } : {}),
+        ...(duringPrerender
+          ? { cacheOnlyDefinitions: true, skipLinkAssemblyBudget: true }
+          : {}),
         ...(resolveLinksOnly ? { resolveLinksOnly: true } : {}),
       },
     );
@@ -8422,11 +9797,13 @@ export class Realm {
       doc,
       this.getCachedRealmInfoHash(),
       resolveLinksOnly,
+      duringPrerender,
     );
     let ifNoneMatch = request.headers.get('if-none-match');
     if (ifNoneMatch && ifNoneMatchMatches(ifNoneMatch, etag)) {
       return createResponse({
         requestContext,
+        varyOn: LINK_SHAPE_VARY,
         body: null,
         init: {
           status: 304,
@@ -8439,6 +9816,7 @@ export class Realm {
       init: {
         headers: { 'content-type': mimeType, etag },
       },
+      varyOn: LINK_SHAPE_VARY,
       requestContext,
     });
   }
@@ -8462,14 +9840,14 @@ export class Realm {
         return notAcceptable(
           request,
           requestContext,
-          `markdown representation unavailable: ${request.url} has an indexing error`,
+          `markdown representation unavailable: ${maskLoggedURL(request.url)} has an indexing error`,
         );
       }
       if (instanceEntry.markdown == null) {
         return notAcceptable(
           request,
           requestContext,
-          `markdown representation not available for ${request.url}`,
+          `markdown representation not available for ${maskLoggedURL(request.url)}`,
         );
       }
       return createResponse({
@@ -8493,7 +9871,7 @@ export class Realm {
         return notAcceptable(
           request,
           requestContext,
-          `markdown representation not available for ${request.url}`,
+          `markdown representation not available for ${maskLoggedURL(request.url)}`,
         );
       }
       return createResponse({
@@ -8527,14 +9905,22 @@ export class Realm {
     if (await this.openFileForMetadata(localPath)) {
       return methodNotAllowed(request, requestContext);
     }
-    let result = await this.#realmIndexQueryEngine.cardDocument(url);
-    if (!result) {
-      return notFound(request, requestContext);
+    try {
+      // Whether there is a card here is settled by the stored file, read
+      // inside the same lock the removal happens under. That is what makes a
+      // card removable the moment it is written rather than once indexing has
+      // caught up with it, and it is also what tells a card's `.json` from a
+      // JSON file the realm merely holds — which has no card to remove.
+      await commitBatch(this.batchCore, [{ op: 'delete', href: url.href }], {
+        ...(requestContext.authenticatedUser
+          ? { actor: requestContext.authenticatedUser }
+          : {}),
+      });
+    } catch (err: unknown) {
+      return this.#cardWriteRefusal(err, request, requestContext, {
+        id: url.href,
+      });
     }
-    let path = this.paths.local(url) + '.json';
-    await this.delete(path, {
-      initiatingUser: requestContext.authenticatedUser ?? null,
-    });
     return createResponse({
       body: null,
       init: { status: 204 },
@@ -8731,6 +10117,15 @@ export class Realm {
           searchEntryQuery.itemQuery,
         );
       }
+      // Classified from the page the query will actually run with — the clamp
+      // above has already been applied — because that is the only bound on
+      // this read's result count available before it runs, and the link mode
+      // has to be settled before the response is built.
+      let rowClass = rowClassForPageSize(
+        searchEntryQuery.itemQuery.page?.size as number | undefined,
+      );
+      let resolveLinksOnly =
+        this.#decideLinkShape(request, rowClass)?.mode === 'links-only';
       let runSearch = (signal?: AbortSignal) =>
         this.searchEntries(searchEntryQuery, {
           cacheOnlyDefinitions: duringPrerender,
@@ -8740,10 +10135,10 @@ export class Realm {
           // `included[]` expansion is throwaway work in this path.
           omitIncluded: duringPrerender,
           // Live traffic's side of the same question: a prerender takes the
-          // line above and skips the pass, while a live search configured to
-          // stop side-loading keeps the pass and drops only the closure it
-          // would have assembled.
-          resolveLinksOnly: !duringPrerender && this.#liveReadsResolveLinksOnly,
+          // line above and skips the pass, while a live search the policy has
+          // degraded keeps the pass and drops only the closure it would have
+          // assembled.
+          resolveLinksOnly,
           ...(signal ? { signal } : {}),
         });
       // Cut an over-budget item-leg search off (408) rather than run it to
@@ -10575,6 +11970,56 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
   return baseRealm.inRealm(parsed);
 }
 
+// A read's refusal, as the card+json GET reports it. Three of the four codes
+// the read can raise name an outcome the handler already had a shape for; a
+// refusal it does not recognize is an error document rather than a guess, so a
+// behavior added to the read later surfaces as a 500 with its own detail
+// instead of a 404 that claims the card is gone.
+function cardJsonAssemblyFromFailure(
+  failure: OperationFailure,
+): Exclude<CardJsonAssembly, { kind: 'document' } | { kind: 'file-meta' }> {
+  let { error } = failure;
+  if (error.code === 'target-not-found') {
+    return { kind: 'not-found' };
+  }
+  if (error.code === 'target-not-indexed') {
+    return { kind: 'not-indexed' };
+  }
+  // The row's own account of what went wrong, so the response body carries the
+  // underlying title, message and salvage rather than the sentence the refusal
+  // renders from them.
+  let row = erroredTargetRow(failure);
+  if (!row) {
+    return {
+      kind: 'error',
+      error: {
+        status: error.status,
+        title: error.title,
+        message: error.detail,
+        stack: undefined,
+        lastKnownGoodHtml: null,
+        cardTitle: null,
+        scopedCssUrls: [],
+      },
+    };
+  }
+  // Read whole rather than member by member: a row that recorded no title is
+  // reporting that it has none, and coalescing that absence away would put the
+  // refusal's own default in a body the row is supposed to describe.
+  return {
+    kind: 'error',
+    error: {
+      status: row.status,
+      title: row.title,
+      message: row.message,
+      stack: row.stack,
+      lastKnownGoodHtml: row.lastKnownGoodHtml,
+      cardTitle: row.cardTitle,
+      scopedCssUrls: row.scopedCssUrls,
+    },
+  };
+}
+
 function lastModifiedHeader(
   card: LooseSingleCardDocument,
 ): {} | { 'last-modified': string } {
@@ -10583,6 +12028,21 @@ function lastModifiedHeader(
       ? { 'last-modified': formatRFC7231(card.data.meta.lastModified * 1000) }
       : {}
   ) as {} | { 'last-modified': string };
+}
+
+// The document a write's own commit stored, for an answer that does not come
+// out of the index — a write whose indexing is deferred, and the browser-test
+// fallback for a card the index cannot yet speak for. These are the bytes the
+// commit wrote, as the batch reported them, so nothing can have moved
+// underneath them between the write and the answer. Undefined when the batch
+// was not asked for them (`reportStoredContent`).
+function storedCardDocument(
+  result: BatchEntryResult,
+): LooseSingleCardDocument | undefined {
+  let content = result?.meta.storedContent;
+  return content == null
+    ? undefined
+    : (JSON.parse(content) as LooseSingleCardDocument);
 }
 
 // Visibility hook for the foreign-realm-deps ETag suppression — when
@@ -10636,63 +12096,6 @@ export interface CardDefinitionResource {
 // A change set whose every URL names a file that is there to be visited.
 function asUpdates(urls: URL[]): IndexChange[] {
   return urls.map((url) => ({ url, operation: 'update' as const }));
-}
-
-function promoteLocalIdsToRemoteIds({
-  resource,
-  realmURL,
-  included,
-}: {
-  resource: CardResource;
-  included: CardResource[];
-  realmURL: URL;
-}) {
-  if (!resource.relationships) {
-    return;
-  }
-  let normalizedRelationships = normalizeRelationships(resource.relationships);
-
-  function setSelfLink(relationship: Relationship, lid: string) {
-    let sideLoadedResource = included.find((i) => i.lid === lid);
-    if (!sideLoadedResource) {
-      throw new Error(`Could not find local id ${lid} in "included" resources`);
-    }
-    if (
-      sideLoadedResource.meta.realmURL &&
-      sideLoadedResource.meta.realmURL !== realmURL.href
-    ) {
-      return;
-    }
-    let name = getCardDirectoryName(sideLoadedResource.meta?.adoptsFrom, paths);
-    relationship.links = {
-      self: paths.fileURL(`${name}/${lid}`).href,
-    };
-  }
-
-  let paths = new RealmPaths(realmURL);
-  for (let [fieldName, relationship] of Object.entries(
-    normalizedRelationships,
-  )) {
-    if (relationship.data && Array.isArray(relationship.data)) {
-      for (let [index, item] of relationship.data.entries()) {
-        if ('lid' in item) {
-          let indexedRelationship =
-            normalizedRelationships[`${fieldName}.${index}`];
-          if (indexedRelationship) {
-            setSelfLink(indexedRelationship, item.lid);
-          }
-        }
-      }
-      continue;
-    }
-    if (
-      relationship.data &&
-      !Array.isArray(relationship.data) &&
-      'lid' in relationship.data
-    ) {
-      setSelfLink(relationship, relationship.data.lid);
-    }
-  }
 }
 
 function assertRealmPermissions(

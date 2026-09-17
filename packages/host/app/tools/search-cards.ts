@@ -14,7 +14,11 @@ export class SearchCardsByTypeAndTitleTool extends HostBaseTool<
   typeof BaseToolModule.SearchCardsByTypeAndTitleInput,
   typeof BaseToolModule.SearchCardsResult
 > {
-  description = 'Search for card instances by type and/or title';
+  description =
+    'Search for live card instances by type and/or title when you need the ' +
+    'instances themselves — to attach, open, copy, or patch. For discovery ' +
+    '(finding what exists — card types, specs, listings, files), use the ' +
+    'search-entries tool instead.';
 
   static actionVerb = 'Search';
 
@@ -58,9 +62,11 @@ export class SearchCardsByQueryTool extends HostBaseTool<
   @service declare private realmServer: RealmServerService;
 
   description =
-    'Propose a query to search for a card instance filtered by type. \
-  If a card was shared with you, always prioritize search based upon the card that was last shared. \
-  If you do not have information on card module and name, do the search using the `_cardType` attribute.';
+    'Search for live card instances by query when you need the instances ' +
+    'themselves — to attach, open, copy, or patch. If a card was shared with ' +
+    'you, always prioritize search based upon the card that was last shared. ' +
+    'For discovery (finding what exists — card types, specs, listings, ' +
+    'files, or anything reusable), use the search-entries tool instead.';
 
   async getInputType() {
     let commandModule = await this.loadToolModule();

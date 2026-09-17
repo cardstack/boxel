@@ -49,6 +49,17 @@ const log = logger('search-bounds');
 //     decides whether a burst exhausts the heap. Enforced at admission in the
 //     realm-server's request middleware; arrivals above the ceiling wait
 //     briefly for a slot and are then shed with 429 + Retry-After.
+//   - Assembled link resources (SERVER_MAX_ASSEMBLED_LINK_RESOURCES) —
+//     server-side only, and the one bound whose polarity is inverted: every
+//     `loadLinks` assembly is held to it unless a caller opts out, because a
+//     closure is assembled by more routes than search, and a bound that must be
+//     remembered per route is a bound a new route forgets. Counted in resources
+//     rather than in bytes because the resource is what the walk schedules, so
+//     the count bounds the batched reads as well as the assembly; and the cost
+//     it stands in for is the event-loop CPU of cloning, rewriting and
+//     serializing each one, which scales with the count. Counted in resources
+//     rather than in hops because distance does not track expense: a card
+//     carrying dozens of relationships is dozens of resources one hop out.
 //
 // All bounds are exported consts, overridable via env for ops tuning.
 // ---------------------------------------------------------------------------
@@ -61,11 +72,13 @@ const DEFAULT_SEARCH_TIME_BUDGET_MS = 30_000;
 const DEFAULT_SEARCH_CONCURRENCY_CAP = 2;
 const DEFAULT_SERVER_MAX_IN_FLIGHT_SEARCHES = 30;
 const DEFAULT_SEARCH_ADMISSION_WAIT_MS = 1_000;
+const DEFAULT_SERVER_MAX_ASSEMBLED_LINK_RESOURCES = 1_000;
 
 const MIN_PAGE_SIZE = 1;
 const MIN_REALMS = 1;
 const MIN_TIME_BUDGET_MS = 1_000;
 const MIN_CONCURRENCY = 1;
+const MIN_ASSEMBLED_LINK_RESOURCES = 1;
 
 // Clamp an env override to a positive integer, falling back (also clamped) when
 // the value is missing or non-numeric so a bad env var can't disable a bound.
@@ -187,6 +200,149 @@ export const SEARCH_ADMISSION_WAIT_MS = parsePositiveInt(
   0,
 );
 
+// The most link targets one `loadLinks` assembly may take on, and the whole
+// bound on how far a card's transitive link closure is walked.
+//
+// Counted where a target is classified rather than where it lands, which is
+// what lets the ceiling bound the batched reads and not just the assembly. The
+// two totals differ by the targets that turn out to have nothing behind them: a
+// link whose row is missing or errored, and a cross-realm fetch that fails,
+// each spend from the ceiling and add nothing to `included[]`. So a card with
+// many broken links can report its closure clipped while carrying fewer
+// resources than the ceiling allows — the bound is on work undertaken, which is
+// the quantity that costs, and it errs toward doing less of it.
+//
+// Sized as a safety ceiling rather than as a tuning knob. On realms in use the
+// widest card's closure runs to the low hundreds of resources, and a
+// hundred-row page of the most connected type unions to about the same, so the
+// ceiling sits several times above that. It also lands near the point where one
+// assembly would hold the tens of MB of heap SERVER_MAX_IN_FLIGHT_SEARCHES
+// assumes per in-flight search, a serialized resource running a little over
+// 2 KB. So it is not expected to engage; it exists so that no single card graph
+// — authored by a person or by a model, and re-editable at any time — can make
+// one request assemble an unbounded document.
+//
+// Changing this value changes which responses are truncated and what a
+// truncated one contains, while none of the other validator inputs move, so it
+// is folded into the card+json ETag variant (see `cardJsonEtagVariant` in
+// realm.ts). A client holding a validator would otherwise be told the shape it
+// cached is still fresh across a retune.
+export const SERVER_MAX_ASSEMBLED_LINK_RESOURCES = parsePositiveInt(
+  env.SERVER_MAX_ASSEMBLED_LINK_RESOURCES,
+  DEFAULT_SERVER_MAX_ASSEMBLED_LINK_RESOURCES,
+  MIN_ASSEMBLED_LINK_RESOURCES,
+);
+
+// ---------------------------------------------------------------------------
+// The link-shape policy's tuning (see runtime-common/link-shape-policy.ts).
+//
+// These bound the rung below admission control: how much of a result's link
+// graph a live read carries, chosen from prevailing load. Admission control
+// answers a saturated process by refusing work; this answers it one step
+// earlier by serving a cheaper representation, which costs the caller a
+// follow-up fetch rather than the whole request.
+//
+// Every number below was derived from the production realm-server's own
+// `inFlightSearch` record rather than chosen up front. The 7-day distribution
+// (37,644 health samples) is bimodal: 51.5% of samples sit at 0-1 in-flight
+// and 77% at or below 5, while 2.4% pile up at exactly the admission cap —
+// the shedding regime. Between those lies the band this policy acts in.
+//
+// The thresholds are absolute in-flight counts, not fractions of the cap,
+// because that is the unit they were measured in. They were derived against
+// the default cap of 30 and want re-deriving if the cap moves materially;
+// `normalizeThresholds` in the policy keeps them under whatever cap is in
+// force so a policy can never be configured to engage only after shedding has
+// already started.
+// ---------------------------------------------------------------------------
+
+// Half-life of the time-weighted mean of in-flight searches the policy decides
+// on. The measured episodes are hour-long plateaus, so the reading is
+// insensitive to this within the range tried (30s-300s moved its p90 by under
+// 12% on the saturation window). Chosen for stability rather than fit: two
+// minutes puts the reading ~90% of the way to a sustained change after about
+// seven, which is the "changes over minutes" the sticky decision needs, and it
+// flattens the bursts that reach the cap instantaneously without ever being
+// sustained — on a control window whose raw samples peaked at the cap of 30,
+// the smoothed reading peaked at 17.
+const DEFAULT_LINK_SHAPE_LOAD_HALF_LIFE_MS = 120_000;
+
+// The floor on how long a realm holds a level before it may leave it. The
+// hysteresis band below is what actually keeps production steady — this
+// changed nothing on either measured window, at either 60s or 120s. It earns
+// its place by bounding the adversarial case the band cannot: a reading driven
+// to swing the full band repeatedly can still only move a realm once per
+// interval, so the flap rate is bounded by construction rather than by how the
+// signal happens to behave.
+const DEFAULT_LINK_SHAPE_MIN_DWELL_MS = 60_000;
+
+// Engage/release pairs for the two rungs, as sustained in-flight counts.
+//
+// The lower rung degrades only reads that may return more than one row; the
+// upper one degrades every live read. The gap between each engage and its
+// release is the hysteresis band.
+//
+// Measured against two 12-hour production windows — one containing a genuine
+// 2.5-hour saturation episode (30-minute means of 21-23 in-flight), one
+// containing only transient spikes (30-minute means of 1-5, raw samples
+// reaching the cap). At these values the policy spent 14.8% of the saturation
+// window fully degraded and 0.2% of the control window, changing level 0.93
+// times per replica-hour in the first and 0.25 in the second. Lowering the
+// upper rung's engage to 8 raised the control window's degraded time from
+// 0.3% to 3.8% — degrading a fleet whose half-hour means never left single
+// digits — which is what fixes the upper rung at 12 rather than lower.
+const DEFAULT_LINK_SHAPE_MULTI_ROW_ENGAGE = 8;
+const DEFAULT_LINK_SHAPE_MULTI_ROW_RELEASE = 4;
+const DEFAULT_LINK_SHAPE_ALL_ENGAGE = 12;
+const DEFAULT_LINK_SHAPE_ALL_RELEASE = 6;
+
+// How often a process that is serving live reads records the decision it is
+// making, even when that decision is "no change". Without it, a policy that
+// never engages is indistinguishable from one that is not running.
+const DEFAULT_LINK_SHAPE_HEARTBEAT_MS = 60_000;
+
+export const LINK_SHAPE_LOAD_HALF_LIFE_MS = parsePositiveInt(
+  env.LINK_SHAPE_LOAD_HALF_LIFE_MS,
+  DEFAULT_LINK_SHAPE_LOAD_HALF_LIFE_MS,
+  1,
+);
+
+export const LINK_SHAPE_MIN_DWELL_MS = parsePositiveInt(
+  env.LINK_SHAPE_MIN_DWELL_MS,
+  DEFAULT_LINK_SHAPE_MIN_DWELL_MS,
+  0,
+);
+
+export const LINK_SHAPE_MULTI_ROW_ENGAGE = parsePositiveInt(
+  env.LINK_SHAPE_MULTI_ROW_ENGAGE,
+  DEFAULT_LINK_SHAPE_MULTI_ROW_ENGAGE,
+  1,
+);
+
+export const LINK_SHAPE_MULTI_ROW_RELEASE = parsePositiveInt(
+  env.LINK_SHAPE_MULTI_ROW_RELEASE,
+  DEFAULT_LINK_SHAPE_MULTI_ROW_RELEASE,
+  0,
+);
+
+export const LINK_SHAPE_ALL_ENGAGE = parsePositiveInt(
+  env.LINK_SHAPE_ALL_ENGAGE,
+  DEFAULT_LINK_SHAPE_ALL_ENGAGE,
+  1,
+);
+
+export const LINK_SHAPE_ALL_RELEASE = parsePositiveInt(
+  env.LINK_SHAPE_ALL_RELEASE,
+  DEFAULT_LINK_SHAPE_ALL_RELEASE,
+  0,
+);
+
+export const LINK_SHAPE_HEARTBEAT_MS = parsePositiveInt(
+  env.LINK_SHAPE_HEARTBEAT_MS,
+  DEFAULT_LINK_SHAPE_HEARTBEAT_MS,
+  1,
+);
+
 // The effective values the enforcement functions read. They default to the
 // exported consts (the ops-facing knobs); a test overrides them via
 // `setSearchBoundsForTests` to exercise a bound without adding realms or
@@ -196,6 +352,7 @@ let serverMaxPageSize = SERVER_MAX_SEARCH_PAGE_SIZE;
 let serverAbsoluteMaxPageSize = SERVER_ABSOLUTE_MAX_PAGE_SIZE;
 let maxRealmsPerRequest = MAX_REALMS_PER_SEARCH_REQUEST;
 let timeBudgetMs = SEARCH_TIME_BUDGET_MS;
+let maxAssembledLinkResources = SERVER_MAX_ASSEMBLED_LINK_RESOURCES;
 
 // The (size, max) pairs already reported by `warnOncePerClamp`. In practice a
 // clamp is driven by an authored page size — a constant in a card definition —
@@ -213,6 +370,7 @@ export function setSearchBoundsForTests(overrides: {
   serverAbsoluteMaxPageSize?: number;
   maxRealmsPerRequest?: number;
   timeBudgetMs?: number;
+  maxAssembledLinkResources?: number;
 }): void {
   if (overrides.maxPageSize !== undefined) {
     maxPageSize = overrides.maxPageSize;
@@ -229,6 +387,9 @@ export function setSearchBoundsForTests(overrides: {
   if (overrides.timeBudgetMs !== undefined) {
     timeBudgetMs = overrides.timeBudgetMs;
   }
+  if (overrides.maxAssembledLinkResources !== undefined) {
+    maxAssembledLinkResources = overrides.maxAssembledLinkResources;
+  }
 }
 
 export function resetSearchBoundsForTests(): void {
@@ -238,6 +399,15 @@ export function resetSearchBoundsForTests(): void {
   serverAbsoluteMaxPageSize = SERVER_ABSOLUTE_MAX_PAGE_SIZE;
   maxRealmsPerRequest = MAX_REALMS_PER_SEARCH_REQUEST;
   timeBudgetMs = SEARCH_TIME_BUDGET_MS;
+  maxAssembledLinkResources = SERVER_MAX_ASSEMBLED_LINK_RESOURCES;
+}
+
+// The effective assembled-resource budget. Read through a function rather than
+// imported as a const so the test seam above reaches it — a test exercises the
+// bound by lowering it to a handful of resources instead of authoring a
+// thousand-card graph.
+export function assembledLinkResourceBudget(): number {
+  return maxAssembledLinkResources;
 }
 
 // The item leg (`fields[entry]` includes "item" / "item.<field>") is the live

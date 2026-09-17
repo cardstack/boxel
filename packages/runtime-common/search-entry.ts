@@ -1088,6 +1088,14 @@ export function combineSearchEntryResults(
     if (combined.meta.htmlQuery == null && doc.meta?.htmlQuery != null) {
       combined.meta.htmlQuery = doc.meta.htmlQuery;
     }
+    // Any realm that clipped its closure clips the merged one: the combined
+    // `included[]` is the union, so a consumer holding it is short by whatever
+    // that realm withheld. Each realm holds its own ceiling, which is why the
+    // report is a fact rather than a figure — there is no single number here to
+    // merge.
+    if (doc.meta?.linkClosureTruncated) {
+      combined.meta.linkClosureTruncated = true;
+    }
     for (let resource of doc.included ?? []) {
       if (resource.id) {
         // NUL-separated so a `(type, id)` pair can't alias another by

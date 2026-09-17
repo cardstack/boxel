@@ -10,9 +10,11 @@ import {
   CAPTURE_SERVING_PREFIX,
   PREFIX_REALMS,
   RealmPaths,
+  SCOPED_CSS_SERVING_PREFIX,
   foreignQueryParams,
   hasExtension,
   isCaptureServingPath,
+  isHashedScopedCSSRequest,
   isRedirectRoutingRule,
   logger,
   param,
@@ -119,6 +121,47 @@ async function isCaptureServingRequest(
   let paths = new RealmPaths(realmURL);
   return (
     paths.inRealm(requestURL) && isCaptureServingPath(paths.local(requestURL))
+  );
+}
+
+// A hashed scoped-CSS URL — `{realm}_scoped-css/<file>.md5-<hash>.glimmer-scoped.css`
+// — names a stylesheet module the realm serves, never a card the app could
+// open, so the shell has nothing to boot against it and the realm's route
+// answers whatever the request accepts. Falling through matters beyond that
+// tidiness: the realm serves this body with a year-long `immutable`
+// `Cache-Control` and no `Vary: Accept`, which is only sound while the URL
+// yields one body for every `Accept`. Were the shell to answer a `text/html`
+// request for one of these, the same URL would have two bodies and a browser
+// cache — which stores one variant per URL — could hold either for a year.
+//
+// The gate mirrors the realm's own dispatch: GET only, and the `_scoped-css/`
+// prefix as well as the hashed filename shape, so a realm file whose name
+// merely looks hashed keeps opening the app.
+async function isScopedCSSServingRequest(
+  ctxt: Koa.Context,
+  requestURL: URL,
+  routingDeps: RealmRoutingDeps,
+): Promise<boolean> {
+  if (
+    ctxt.method !== 'GET' ||
+    !requestURL.pathname.includes(`/${SCOPED_CSS_SERVING_PREFIX}`)
+  ) {
+    return false;
+  }
+  let realm = await findOrMountRealm(requestURL, routingDeps);
+  if (!realm) {
+    return false;
+  }
+  let realmURL = new URL(realm.url);
+  realmURL.protocol = requestURL.protocol;
+  let paths = new RealmPaths(realmURL);
+  if (!paths.inRealm(requestURL)) {
+    return false;
+  }
+  let localPath = paths.local(requestURL);
+  return (
+    localPath.startsWith(SCOPED_CSS_SERVING_PREFIX) &&
+    isHashedScopedCSSRequest(localPath)
   );
 }
 
@@ -294,10 +337,12 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
 
     if (
       isDocumentEmbedRequest(ctxt) ||
-      (await isCaptureServingRequest(ctxt, requestURL, routingDeps))
+      (await isCaptureServingRequest(ctxt, requestURL, routingDeps)) ||
+      (await isScopedCSSServingRequest(ctxt, requestURL, routingDeps))
     ) {
-      // Fall through to the realm, which serves the file's (or capture's)
-      // own bytes and lets its content type decide what the browser renders.
+      // Fall through to the realm, which serves the file's (capture's, or
+      // stylesheet's) own bytes and lets its content type decide what the
+      // browser renders.
       return next();
     }
     let acceptHeader = ctxt.header.accept ?? '';

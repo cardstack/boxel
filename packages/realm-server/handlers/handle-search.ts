@@ -20,6 +20,11 @@ import {
   emitSearchTiming,
   describeSearchShape,
   emitSearchShape,
+  LinkShapePolicy,
+  requestedLinkShape,
+  rowClassForPageSize,
+  X_BOXEL_LINK_SHAPE_HEADER,
+  type LinkShapeDecision,
   type Query,
   type SearchShapeCacheOutcome,
   type SearchShapeDescriptor,
@@ -87,14 +92,16 @@ export default function handleSearch(opts: {
   // defaults. A test supplies a `ttlMs: 0` cache (coalescing on, retention
   // off) to make two sequential callers each compute.
   liveSearchCache?: LiveSearchCache;
-  // When true, a live search answers each result's relationships but
-  // side-loads none of their targets, leaving the caller to fetch the cards it
-  // displays. Carries the same setting the realms are constructed with, since
-  // the fan-out builds its own opts rather than reading them off a realm.
-  liveReadsResolveLinksOnly?: boolean;
+  // Decides how much of each result's link graph the response carries. The
+  // same policy instance the realms are constructed with, since the fan-out
+  // builds its own opts rather than reading them off a realm — and since the
+  // level is held per realm, sharing the instance is what keeps a federated
+  // search and that realm's own routes on one answer rather than two
+  // independently drifting ladders.
+  linkShapePolicy?: LinkShapePolicy;
 }): (ctxt: Koa.Context) => Promise<void> {
   let { reconciler, searchCache, dbAdapter, virtualNetwork } = opts;
-  let liveReadsResolveLinksOnly = opts.liveReadsResolveLinksOnly ?? false;
+  let linkShapePolicy = opts.linkShapePolicy ?? LinkShapePolicy.pinned('full');
   let liveSearchCache = opts.liveSearchCache ?? new LiveSearchCache();
   return async function (ctxt: Koa.Context) {
     let handlerStart = Date.now();
@@ -147,6 +154,11 @@ export default function handleSearch(opts: {
     // assembly pass entirely: the host re-resolves every result from its raw
     // card+source file, so the transitive `included[]` expansion is
     // throwaway work in this path. Same gating as `cacheOnlyDefinitions`.
+    //
+    // This is also what keeps the assembled-resource budget off a render's
+    // search: the pass the budget bounds does not run at all here, so there is
+    // nothing to exempt. The budget's exemption is carried by the routes that
+    // do run the pass during a render — the card+html entry leg.
     let omitIncluded = cacheOnlyDefinitions;
     let jobPriority = sanitizeJobPriorityHeader(
       ctxt.get(PRERENDER_JOB_PRIORITY_HEADER),
@@ -154,21 +166,6 @@ export default function handleSearch(opts: {
     let prerenderJobId = sanitizePrerenderJobId(
       ctxt.get(PRERENDER_JOB_ID_HEADER),
     );
-    // Live traffic's side of the same question: a prerender skips the pass
-    // outright, while a live search configured to stop side-loading keeps it
-    // and drops only the closure it would have assembled.
-    let resolveLinksOnly = !cacheOnlyDefinitions && liveReadsResolveLinksOnly;
-    let searchOpts: {
-      cacheOnlyDefinitions?: true;
-      omitIncluded?: true;
-      resolveLinksOnly?: true;
-      priority?: number;
-    } = {};
-    if (cacheOnlyDefinitions) searchOpts.cacheOnlyDefinitions = true;
-    if (omitIncluded) searchOpts.omitIncluded = true;
-    if (resolveLinksOnly) searchOpts.resolveLinksOnly = true;
-    if (jobPriority !== null) searchOpts.priority = jobPriority;
-
     // Two bounds are enforced server-side on the live item leg (never during
     // prerender, never on the prerendered-HTML leg): a hard page-size ceiling
     // (applied just below) and the wall-clock time budget (further down). Both
@@ -188,6 +185,36 @@ export default function handleSearch(opts: {
     if (itemLegBounded) {
       parsed.itemQuery = applyServerSearchPageBound(parsed.itemQuery);
     }
+
+    // How much of each result's link graph this response carries. Decided
+    // after the page clamp above, since the clamped page is the only bound on
+    // this search's result count and the cost of a closure scales with it —
+    // and decided before the cache key below, which folds the served mode
+    // because the two modes are two different response bodies.
+    //
+    // A prerender is already asking for less than either shape and never
+    // reaches the policy; its `linkMode` stays `prerender` and it reports no
+    // decision inputs, because none were consulted.
+    let linkShapeDecision: LinkShapeDecision | null = cacheOnlyDefinitions
+      ? null
+      : linkShapePolicy.decideAcross({
+          realms: realmList,
+          rowClass: rowClassForPageSize(
+            parsed.itemQuery.page?.size as number | undefined,
+          ),
+          requested: requestedLinkShape(ctxt.get(X_BOXEL_LINK_SHAPE_HEADER)),
+        });
+    let resolveLinksOnly = linkShapeDecision?.mode === 'links-only';
+    let searchOpts: {
+      cacheOnlyDefinitions?: true;
+      omitIncluded?: true;
+      resolveLinksOnly?: true;
+      priority?: number;
+    } = {};
+    if (cacheOnlyDefinitions) searchOpts.cacheOnlyDefinitions = true;
+    if (omitIncluded) searchOpts.omitIncluded = true;
+    if (resolveLinksOnly) searchOpts.resolveLinksOnly = true;
+    if (jobPriority !== null) searchOpts.priority = jobPriority;
 
     // The inner cache key: the membership query is the key's `query` member
     // (canonicalized by the cache), and every other body-changing request
@@ -249,6 +276,14 @@ export default function handleSearch(opts: {
       query: parsed,
       realms: realmList,
       linkMode,
+      ...(linkShapeDecision
+        ? {
+            requestedLinkMode: linkShapeDecision.requested,
+            linkShapeLoad: linkShapeDecision.load,
+            linkShapeLevel: linkShapeDecision.level,
+            linkShapeRowClass: linkShapeDecision.rowClass,
+          }
+        : {}),
       correlationId: loggingCorrelationId,
       jobId: prerenderJobId,
       consumingRealm,

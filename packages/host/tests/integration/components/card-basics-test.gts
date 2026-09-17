@@ -3235,6 +3235,57 @@ module('Integration | card-basics', function (hooks) {
         );
     });
 
+    test('card container corner follows the theme radius', async function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+        @field cardTitle = contains(StringField, {
+          computeVia: function (this: Pet) {
+            return this.name;
+          },
+        });
+      }
+      class Person extends CardDef {
+        @field pet = linksTo(Pet);
+        @field otherPet = linksTo(Pet);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <@fields.pet @format='embedded' />
+            <@fields.otherPet @format='embedded' />
+          </template>
+        };
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Pet, Person });
+
+      let squareTheme = new Theme({
+        cardInfo: new CardInfoField({ name: 'Square' }),
+        cssVariables: ':root { --radius: 0px; }',
+      });
+      await saveCard(squareTheme, `${testRealmURL}Theme/square`, loader);
+      let mango = new Pet({
+        name: 'Mango',
+        cardInfo: new CardInfoField({ theme: squareTheme }),
+      });
+      await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
+      let vanGogh = new Pet({ name: 'Van Gogh' });
+      await saveCard(vanGogh, `${testRealmURL}Pet/vangogh`, loader);
+      let hassan = new Person({ pet: mango, otherPet: vanGogh });
+
+      await renderCard(loader, hassan, 'isolated');
+
+      assert
+        .dom(`[data-test-card="${testRealmURL}Pet/mango"]`)
+        .hasStyle(
+          { borderRadius: '0px' },
+          'a themed card takes its corner from the theme --radius',
+        );
+      assert
+        .dom(`[data-test-card="${testRealmURL}Pet/vangogh"]`)
+        .hasStyle(
+          { borderRadius: '10px' },
+          'an unthemed card keeps the default corner',
+        );
+    });
+
     test('can #each over a containsMany primitive @fields', async function (assert) {
       class Person extends CardDef {
         @field firstName = contains(StringField);

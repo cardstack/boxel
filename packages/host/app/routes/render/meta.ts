@@ -229,12 +229,19 @@ export default class RenderMetaRoute extends Route<Model> {
       let vn = this.network.virtualNetwork;
       serialized = api.serializeCard(instance, {
         includeComputeds: true,
+        // A card file holds the card's own resource and no linked neighbors,
+        // so no link target's resource belongs in this document. Saying that
+        // up front is what keeps it cheap: the searchable settle above leaves
+        // link targets resident, and at any wider scope the serializer would
+        // walk whatever it finds there — each resident target, and
+        // transitively each target's own — to build an `included[]` this
+        // route then discards. An excluded target still emits its
+        // relationship entry, so the document is unchanged.
+        includedScope: 'none',
         // A query-backed field is resolved live and the index can't invalidate
-        // it, so its serialized value would always be stale — and deep-
-        // serializing the query closure into `included[]` is what wedges a
-        // densely cross-linked realm. Membership comes from the file's own
-        // relationships, so omit query fields here (the relationship data is
-        // stripped below regardless).
+        // it, so its serialized value would always be stale. Membership comes
+        // from the file's own relationships, so omit query fields here (the
+        // relationship data is stripped below regardless).
         omitQueryFields: true,
         maybeRelativeReference: (reference: string) =>
           maybeRelativeReference(
@@ -244,18 +251,18 @@ export default class RenderMetaRoute extends Route<Model> {
           ),
       }) as SingleCardDocument;
       serializeMs = performance.now() - serializeStart;
-      // Emulate the on-disk file serialization: a card file holds only the
-      // card's own resource — relationship slots keep their `links` but drop
-      // the resolved `data`, and no linked neighbors ride along in `included`.
-      // The searchable settle above may have loaded link targets into the
-      // store, and `serializeCard` walks whatever is resident into `included`;
-      // strip both so the serialized instance is a pure function of the card's
-      // own data, independent of which targets happen to be loaded.
+      // The rest of emulating the on-disk file serialization: a relationship
+      // slot keeps its `links` but drops the resolved `data`, so the serialized
+      // instance is a pure function of the card's own data rather than of which
+      // targets happen to be loaded.
       for (let { relationship } of relationshipEntries(
         serialized.data.relationships,
       )) {
         delete relationship.data;
       }
+      // `includedScope: 'none'` builds no `included`; the delete holds the
+      // no-neighbors contract against a card whose own `serialize` hook pushes
+      // one regardless.
       delete serialized.included;
     } finally {
       if (passOpen && typeof api.endComputePass === 'function') {

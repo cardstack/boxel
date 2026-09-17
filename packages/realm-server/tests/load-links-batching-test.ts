@@ -59,6 +59,36 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
     } as LooseSingleCardDocument;
   }
 
+  // A second shape whose link is a FileDef rather than a card, so the file leg
+  // of the same batched read is exercised without moving the card leg's counts.
+  fs['note.txt'] = 'a side-loaded file';
+
+  fs['file-source.gts'] = `
+    import { contains, field, linksTo, CardDef } from "@cardstack/base/card-api";
+    import StringField from "@cardstack/base/string";
+    import { FileDef } from "@cardstack/base/file-api";
+
+    export class FileSource extends CardDef {
+      @field name = contains(StringField);
+      @field attachment = linksTo(FileDef);
+    }
+  `;
+
+  fs['file-source-0.json'] = {
+    data: {
+      attributes: { name: 'File Source' },
+      relationships: {
+        attachment: { links: { self: './note.txt' } },
+      },
+      meta: {
+        adoptsFrom: {
+          module: rri('./file-source'),
+          name: 'FileSource',
+        },
+      },
+    },
+  } as LooseSingleCardDocument;
+
   for (let i = 0; i < NUM_SOURCES; i++) {
     let relationships: Record<string, { links: { self: string } }> = {};
     for (let j = 0; j < NUM_TARGETS; j++) {
@@ -181,6 +211,360 @@ module(basename(import.meta.filename), function () {
         );
       } finally {
         dbExecute.execute = originalExecute;
+      }
+    });
+
+    // The only place this is observable. The response is byte-identical either
+    // way, so nothing asserted on the body can tell a read that fetches every
+    // prerendered format from one that fetches none — the emitted SQL can.
+    test('the link-target read fetches the stored document and none of the rendered output', async function (assert) {
+      let originalExecute = testDbAdapter.execute.bind(testDbAdapter);
+      let dbExecute = testDbAdapter as {
+        execute: typeof testDbAdapter.execute;
+      };
+      let targetPrefix = `${testRealm.href}target-`;
+      let linkTargetSelects: string[] = [];
+
+      try {
+        dbExecute.execute = async (sql, opts) => {
+          let bind = opts?.bind ?? [];
+          let normalized = sql.replace(/\s+/g, ' ');
+          if (
+            /FROM boxel_index\b/.test(normalized) &&
+            /\bi\.url\s+IN\s*\(/.test(normalized) &&
+            bind.some((v) => v === 'instance') &&
+            bind.some(
+              (v) => typeof v === 'string' && v.startsWith(targetPrefix),
+            )
+          ) {
+            linkTargetSelects.push(normalized.split(' FROM ')[0]);
+          }
+          return originalExecute(sql, opts);
+        };
+
+        let result = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              type: { module: rri(`${testRealm}source`), name: 'Source' },
+            },
+          },
+          { loadLinks: true },
+        );
+
+        let includedCount = result.included?.length ?? 0;
+        assert.strictEqual(
+          includedCount,
+          NUM_TARGETS,
+          `the closure is still assembled in full — ${NUM_TARGETS} targets`,
+        );
+        assert.ok(
+          linkTargetSelects.length > 0,
+          `the link targets were read in a batch, got ${linkTargetSelects.length} such queries`,
+        );
+
+        // Expansion puts only the resource into `included[]`; rendered output
+        // is served by the render-set projection, which never reaches this
+        // read. So a caller here cannot have asked for it. The two dependency
+        // graphs are named for the same reason the formats are — nothing here
+        // reads them — and they are the widest columns on the row, so a guard
+        // that omitted them would stay green through the costliest regression
+        // available.
+        for (let select of linkTargetSelects) {
+          for (let column of [
+            'isolated_html',
+            'head_html',
+            'atom_html',
+            'embedded_html',
+            'fitted_html',
+            'markdown',
+            'search_doc',
+            'last_known_good_deps',
+            'deps',
+          ]) {
+            assert.notOk(
+              select.includes(column),
+              `the link-target read does not fetch ${column} — got: ${select}`,
+            );
+          }
+          // Naming columns is what keeps the list above meaningful: a star
+          // would satisfy every assertion here by fetching all of them.
+          assert.notOk(
+            select.includes('i.*'),
+            `the link-target read names its columns — got: ${select}`,
+          );
+          assert.ok(
+            select.includes('pristine_doc'),
+            `the link-target read fetches the stored document — got: ${select}`,
+          );
+          assert.ok(
+            select.includes('screenshots'),
+            `and the declared-screenshot manifest it joins into meta — got: ${select}`,
+          );
+        }
+      } finally {
+        dbExecute.execute = originalExecute;
+      }
+    });
+
+    // The one prerendered_html column this read keeps. It travels on a channel
+    // the index row does not follow, so it is written here directly rather
+    // than captured, and read back through the side-loading path.
+    test('a side-loaded target still carries the declared-screenshot manifest joined into its meta', async function (assert) {
+      let targetURL = `${testRealm.href}target-0.json`;
+      let manifest = {
+        hero: {
+          specHash: 'spec-1',
+          objectKey: 'abc123',
+          contentType: 'image/png',
+          width: 100,
+          height: 100,
+          deviceScaleFactor: 1,
+        },
+      };
+      await testDbAdapter.execute(
+        `UPDATE prerendered_html SET screenshots = $1 WHERE url = $2 AND type = 'instance'`,
+        { bind: [JSON.stringify(manifest), targetURL] },
+      );
+
+      let result = await searchCardsForTest(
+        realm.realmIndexQueryEngine,
+        {
+          filter: {
+            type: { module: rri(`${testRealm}source`), name: 'Source' },
+          },
+        },
+        { loadLinks: true },
+      );
+
+      let target = result.included?.find((r) => r.id?.endsWith('/target-0'));
+      assert.ok(target, 'the target is side-loaded');
+      let screenshots = (
+        target?.meta as { screenshots?: Record<string, unknown> } | undefined
+      )?.screenshots;
+      assert.ok(
+        screenshots?.hero,
+        `the manifest reaches the side-loaded resource's meta, got ${JSON.stringify(
+          screenshots,
+        )}`,
+      );
+    });
+
+    // The file leg of the same batched read. Its consumer builds a file-meta
+    // resource from the stored document, the search doc it falls back to and
+    // the timestamps — so the search doc is fetched here, unlike on the card
+    // leg, and the rendered output and dependency graphs still are not.
+    test('the file-target read fetches what a file-meta resource is built from and none of the rendered output', async function (assert) {
+      let originalExecute = testDbAdapter.execute.bind(testDbAdapter);
+      let dbExecute = testDbAdapter as {
+        execute: typeof testDbAdapter.execute;
+      };
+      let fileTargetSelects: string[] = [];
+
+      try {
+        dbExecute.execute = async (sql, opts) => {
+          let bind = opts?.bind ?? [];
+          let normalized = sql.replace(/\s+/g, ' ');
+          if (
+            /FROM boxel_index\b/.test(normalized) &&
+            /\bi\.url\s+IN\s*\(/.test(normalized) &&
+            bind.some((v) => v === 'file') &&
+            bind.some((v) => typeof v === 'string' && v.endsWith('/note.txt'))
+          ) {
+            fileTargetSelects.push(normalized.split(' FROM ')[0]);
+          }
+          return originalExecute(sql, opts);
+        };
+
+        let result = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              type: {
+                module: rri(`${testRealm}file-source`),
+                name: 'FileSource',
+              },
+            },
+          },
+          { loadLinks: true },
+        );
+
+        let attachment = result.included?.find((r) =>
+          r.id?.endsWith('/note.txt'),
+        );
+        assert.ok(attachment, 'the linked file is side-loaded');
+        assert.strictEqual(
+          attachment?.type,
+          'file-meta',
+          'and is assembled as a file-meta resource',
+        );
+        assert.ok(
+          fileTargetSelects.length > 0,
+          `the file targets were read in a batch, got ${fileTargetSelects.length} such queries`,
+        );
+
+        for (let select of fileTargetSelects) {
+          for (let column of [
+            'isolated_html',
+            'head_html',
+            'atom_html',
+            'embedded_html',
+            'fitted_html',
+            'markdown',
+            'icon_html',
+            'display_names',
+            'last_known_good_deps',
+            'deps',
+          ]) {
+            assert.notOk(
+              select.includes(column),
+              `the file-target read does not fetch ${column} — got: ${select}`,
+            );
+          }
+          assert.notOk(
+            select.includes('i.*'),
+            `the file-target read names its columns — got: ${select}`,
+          );
+          for (let column of [
+            'pristine_doc',
+            'search_doc',
+            'types',
+            'last_modified',
+            'resource_created_at',
+            'realm_url',
+            'screenshots',
+          ]) {
+            assert.ok(
+              select.includes(column),
+              `the file-target read fetches ${column} — got: ${select}`,
+            );
+          }
+        }
+      } finally {
+        dbExecute.execute = originalExecute;
+      }
+    });
+
+    // The narrow select is responsible for carrying the document itself, and
+    // a read that addressed the wrong row or dropped a column would still
+    // satisfy the count and SQL-shape assertions above. The singular read
+    // still fetches every column, so it stands in here as the reference.
+    test('a side-loaded target carries the document the singular read returns', async function (assert) {
+      let result = await searchCardsForTest(
+        realm.realmIndexQueryEngine,
+        {
+          filter: {
+            type: { module: rri(`${testRealm}source`), name: 'Source' },
+          },
+        },
+        { loadLinks: true },
+      );
+
+      let included = result.included ?? [];
+      assert.strictEqual(
+        included.length,
+        NUM_TARGETS,
+        `every target is side-loaded — ${NUM_TARGETS}`,
+      );
+
+      for (let resource of included) {
+        let reference = await realm.realmIndexQueryEngine.instance(
+          new URL(resource.id!),
+        );
+        assert.strictEqual(
+          reference?.type,
+          'instance',
+          `${resource.id} reads back as a live instance`,
+        );
+        let stored =
+          reference?.type === 'instance' ? reference.instance : undefined;
+        assert.deepEqual(
+          resource.attributes,
+          stored?.attributes,
+          `${resource.id} carries the stored attributes`,
+        );
+        // Only the name, not the whole ref: expansion absolutizes a
+        // side-loaded resource's `adoptsFrom` module against the realm, so
+        // the module it carries is deliberately spelled differently from the
+        // relative form the row stores. The name survives that rewrite, and
+        // it is what says the row resolved to the type it should have.
+        assert.strictEqual(
+          (resource.meta as { adoptsFrom?: { name?: string } }).adoptsFrom
+            ?.name,
+          (stored?.meta as { adoptsFrom?: { name?: string } } | undefined)
+            ?.adoptsFrom?.name,
+          `${resource.id} adopts from the stored type`,
+        );
+      }
+    });
+
+    // Error state is one of the two things the narrow read still takes from
+    // the prerendered_html join — the screenshot manifest asserted above is
+    // the other — so the join answers to both. An errored target is left out
+    // of the closure, and the relationship naming it keeps the fallback form
+    // the document carries when a target cannot be resolved.
+    test('an errored link target is left out of the closure and its relationship falls back', async function (assert) {
+      let erroredURL = `${testRealm.href}target-1.json`;
+      await testDbAdapter.execute(
+        `UPDATE boxel_index SET has_error = TRUE, error_doc = $1 WHERE url = $2 AND type = 'instance'`,
+        {
+          bind: [
+            JSON.stringify({ status: 500, title: 'test-induced index error' }),
+            erroredURL,
+          ],
+        },
+      );
+
+      try {
+        let result = await searchCardsForTest(
+          realm.realmIndexQueryEngine,
+          {
+            filter: {
+              type: { module: rri(`${testRealm}source`), name: 'Source' },
+            },
+          },
+          { loadLinks: true },
+        );
+
+        let included = result.included ?? [];
+        assert.strictEqual(
+          included.length,
+          NUM_TARGETS - 1,
+          `the errored target is the only one missing from the closure — ${
+            NUM_TARGETS - 1
+          } remain`,
+        );
+        assert.notOk(
+          included.some((r) => r.id?.endsWith('/target-1')),
+          'the errored target is absent from the closure',
+        );
+        assert.ok(
+          included.some((r) => r.id?.endsWith('/target-0')),
+          'its unerrored siblings are still assembled',
+        );
+
+        // The pointer survives even though the target does not: dropping it
+        // would cost the document a relationship it still declares.
+        let source = result.data.find((r) => r.id?.endsWith('/source-0'));
+        let fallback = (
+          source?.relationships as
+            | Record<string, { data?: { type?: string; id?: string } }>
+            | undefined
+        )?.link1?.data;
+        assert.strictEqual(
+          fallback?.type,
+          'card',
+          'the unresolved relationship still reports a card target',
+        );
+        assert.ok(
+          fallback?.id?.endsWith('/target-1'),
+          `and still names it, got ${fallback?.id}`,
+        );
+      } finally {
+        await testDbAdapter.execute(
+          `UPDATE boxel_index SET has_error = FALSE, error_doc = NULL WHERE url = $1 AND type = 'instance'`,
+          { bind: [erroredURL] },
+        );
       }
     });
   });

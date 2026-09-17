@@ -2201,6 +2201,159 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('a small new card saves even when its resident linked graph would overflow the size limit if inlined', async function (assert) {
+    // Regression: the client size check used to measure the whole POST body,
+    // `included[]` and all. A new card that links to already-saved cards the
+    // tab has loaded serialises those cards into `included` — which the realm
+    // discards on write — so a tiny card could fail "Card size exceeds maximum"
+    // purely because of how much of the realm the tab happened to have resident.
+    let environmentService = getService('environment-service') as any;
+    let originalMaxSize = environmentService.cardSizeLimitBytes;
+    try {
+      // A saved, resident linked card large enough that inlining it into
+      // `included` would blow the limit, while the new card's own document is
+      // tiny. Saved under the realm's default ceiling before the client limit
+      // is lowered; the realm keeps its own (unchanged) ceiling throughout.
+      let bigFriend = new PersonDef({ name: 'x'.repeat(6000) });
+      let savedFriend = await (storeService as any).persistAndUpdate(bigFriend);
+      assert.true(isCardInstance(savedFriend), 'the large linked card saved');
+
+      environmentService.cardSizeLimitBytes = 2500;
+
+      let instance = new PersonDef({ name: 'Small' });
+      (instance as any).bestFriend = bigFriend;
+
+      let result = await (storeService as any).persistAndUpdate(instance);
+      assert.true(
+        isCardInstance(result),
+        "a new card whose own document is under the limit saves regardless of how large a graph it links to — the check measures what the realm stores, not the tab's loaded `included`",
+      );
+      let cardPath = `${(instance as any).id.substring(
+        testRealmURL.length,
+      )}.json`;
+      assert.ok(
+        await testRealmAdapter.openFile(cardPath),
+        'the realm holds the created card',
+      );
+    } finally {
+      environmentService.cardSizeLimitBytes = originalMaxSize;
+    }
+  });
+
+  test('includedScope controls which link targets the serializer builds', async function (assert) {
+    // The write path's saving lives in the serializer itself: an excluded
+    // target contributes only its relationship entry, and neither it nor its
+    // own linked graph is serialized.
+    let cardService = getService('card-service') as any;
+    let api = await cardService.getAPI();
+
+    let saved = new PersonDef({ name: 'Saved' });
+    await (storeService as any).persistAndUpdate(saved);
+    let unsaved = new PersonDef({ name: 'Unsaved' });
+    let instance = new PersonDef({ name: 'Consumer' });
+    (instance as any).bestFriend = saved;
+    (instance as any).friends = [unsaved];
+
+    let all = api.serializeCard(instance, {
+      useAbsoluteURL: true,
+      includedScope: 'all',
+    });
+    assert.ok(
+      (all.included ?? []).find((r: any) => r.id === (saved as any).id),
+      "'all' serializes saved targets into included",
+    );
+    assert.ok(
+      (all.included ?? []).find(
+        (r: any) => r.lid === (unsaved as any)[localId],
+      ),
+      "'all' serializes local targets into included",
+    );
+
+    let local = api.serializeCard(instance, {
+      useAbsoluteURL: true,
+      includedScope: 'local',
+    });
+    assert.notOk(
+      (local.included ?? []).find((r: any) => r.id === (saved as any).id),
+      "'local' does not serialize saved targets",
+    );
+    assert.ok(
+      (local.included ?? []).find(
+        (r: any) => r.lid === (unsaved as any)[localId],
+      ),
+      "'local' serializes local targets — the write's co-creation manifest",
+    );
+
+    let none = api.serializeCard(instance, {
+      useAbsoluteURL: true,
+      includedScope: 'none',
+    });
+    assert.strictEqual(
+      none.included,
+      undefined,
+      "'none' builds no included at all",
+    );
+
+    // What makes the narrower scopes safe wherever they replace 'all': the
+    // primary resource is identical under every scope, because an excluded
+    // target emits the same reference relationship the full walk's tail does
+    // — `links.self` + `id` for a saved target, `lid` for a local one. Only
+    // `included` differs.
+    assert.deepEqual(
+      local.data,
+      all.data,
+      "'local' leaves the primary resource identical to 'all'",
+    );
+    assert.deepEqual(
+      none.data,
+      all.data,
+      "'none' leaves the primary resource identical to 'all'",
+    );
+
+    // The one write-path caller asks for the write shape by intent, and
+    // CardService maps that intent onto the 'local' scope.
+    let viaCardService = await cardService.serializeCard(instance, {
+      useAbsoluteURL: true,
+      withLocalResourcesIncluded: true,
+    });
+    assert.deepEqual(
+      viaCardService,
+      local,
+      "withLocalResourcesIncluded serializes at the 'local' scope",
+    );
+  });
+
+  test('an oversized unsaved link created alongside a card still fails the size check', async function (assert) {
+    // The counterpart that makes the per-resource filter load-bearing: a
+    // `lid`-bearing side-load becomes its own file on the realm, so it must
+    // keep being measured. If the check stopped measuring included members
+    // entirely, this save would sail through client-side and 413 on the
+    // realm instead.
+    let environmentService = getService('environment-service') as any;
+    let originalMaxSize = environmentService.cardSizeLimitBytes;
+    try {
+      environmentService.cardSizeLimitBytes = 2500;
+
+      let bigUnsaved = new PersonDef({ name: 'x'.repeat(6000) });
+      let instance = new PersonDef({ name: 'Small' });
+      (instance as any).bestFriend = bigUnsaved;
+
+      let result = await (storeService as any).persistAndUpdate(instance);
+      assert.false(
+        isCardInstance(result),
+        'the save is refused: the unsaved link is co-created as its own file and is over the ceiling',
+      );
+      assert.ok(
+        String((result as any)?.message).includes(
+          'exceeds maximum allowed size',
+        ),
+        `the error names the size limit (got: ${(result as any)?.message})`,
+      );
+    } finally {
+      environmentService.cardSizeLimitBytes = originalMaxSize;
+    }
+  });
+
   test('a save overlapping a create PATCHes instead of issuing a second POST', async function (assert) {
     // Driven through `persistAndUpdate` rather than `save`, because the
     // autosave queue awaits the in-flight mutation before it saves at all —

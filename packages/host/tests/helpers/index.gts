@@ -15,6 +15,7 @@ import { getService } from '@universal-ember/test-support';
 import QUnit from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
+import type { LinkShapePolicy } from '@cardstack/runtime-common';
 import {
   CachingDefinitionLookup,
   cardDefComputedFields,
@@ -1255,7 +1256,7 @@ export async function setupIntegrationTestRealm({
   permissions,
   mockMatrixUtils,
   skipBootIndex,
-  liveReadsResolveLinksOnly,
+  linkShapePolicy,
   startMatrix = true,
   fileSizeLimitBytes,
   audioSizeLimitBytes,
@@ -1277,7 +1278,7 @@ export async function setupIntegrationTestRealm({
   // Serve card reads the way a realm configured for links-only live reads
   // does: relationships carry their links, but the targets behind them are
   // not side-loaded into `included`, so the reader resolves each one itself.
-  liveReadsResolveLinksOnly?: true;
+  linkShapePolicy?: LinkShapePolicy;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
   audioSizeLimitBytes?: number;
@@ -1294,7 +1295,7 @@ export async function setupIntegrationTestRealm({
     permissions: permissions as RealmPermissions,
     mockMatrixUtils,
     skipBootIndex,
-    liveReadsResolveLinksOnly,
+    linkShapePolicy,
     startMatrix,
     fileSizeLimitBytes,
     audioSizeLimitBytes,
@@ -1378,7 +1379,7 @@ async function setupTestRealm({
   permissions = { '*': ['read', 'write'] },
   mockMatrixUtils,
   skipBootIndex,
-  liveReadsResolveLinksOnly,
+  linkShapePolicy,
   startMatrix = true,
   fileSizeLimitBytes,
   audioSizeLimitBytes,
@@ -1390,7 +1391,7 @@ async function setupTestRealm({
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
   skipBootIndex?: true;
-  liveReadsResolveLinksOnly?: true;
+  linkShapePolicy?: LinkShapePolicy;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
   audioSizeLimitBytes?: number;
@@ -1498,7 +1499,7 @@ async function setupTestRealm({
     // never names it, so the option silently does nothing.
     {
       ...(skipBootIndex ? { skipBootIndex } : {}),
-      ...(liveReadsResolveLinksOnly ? { liveReadsResolveLinksOnly } : {}),
+      ...(linkShapePolicy ? { linkShapePolicy } : {}),
     },
   );
 

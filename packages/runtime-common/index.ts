@@ -1655,6 +1655,7 @@ export * from './media-cache.ts';
 export * from './media-cache-serving.ts';
 export * from './screenshot-perf.ts';
 export * from './capture-spec.ts';
+export * from './capture-url-token.ts';
 export * from './expression.ts';
 export * from './searchable-parity.ts';
 export * from './infer-content-type.ts';
@@ -1685,9 +1686,11 @@ export * from './search-shape.ts';
 export * from './search-resource-helpers.ts';
 export * from './search-entry.ts';
 export * from './search-bounds.ts';
+export * from './link-shape-policy.ts';
 export * from './ttl-response-cache.ts';
 export * from './card-document-cache.ts';
 export * from './request-timings.ts';
+export * from './write-timing.ts';
 export * from './prerendered-html-format.ts';
 export * from './query-field-utils.ts';
 export * from './relationship-utils.ts';
@@ -1748,7 +1751,11 @@ export const isNode =
   Object.prototype.toString.call((globalThis as any).process) ===
   '[object process]';
 
-export { SupportedMimeType, isJsonContentType } from './supported-mime-type.ts';
+export {
+  BOXEL_OPERATIONS_EXT,
+  SupportedMimeType,
+  isJsonContentType,
+} from './supported-mime-type.ts';
 export {
   isUrlLike,
   VirtualNetwork,

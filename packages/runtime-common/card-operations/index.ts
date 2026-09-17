@@ -19,7 +19,8 @@ export type {
   OperationStoredFileMeta,
   RunOperationOptions,
 } from './dispatch.ts';
-export { readOperation } from './read.ts';
+export { readOperation, erroredTargetRow } from './read.ts';
+export type { ErroredTargetRow } from './read.ts';
 export { commitBatch } from './coordinator.ts';
 export type {
   BatchCore,
@@ -78,6 +79,26 @@ export {
 } from './json-splice.ts';
 export type { CardSourceLayout, StoredContainer } from './json-splice.ts';
 export { readSourceOperation } from './read-source.ts';
+export {
+  answered,
+  assertTravelsInEnvelope,
+  atEntry,
+  batchEntryFor,
+  carriesOperationsExt,
+  errorsDocument,
+  isWrite,
+  needsActor,
+  paramsFor,
+  parseOperationsEnvelope,
+  readResult,
+  targetFor,
+  writeResult,
+} from './envelope.ts';
+export type {
+  EnvelopeEntry,
+  EnvelopeResult,
+  ResolvedEnvelopeEntry,
+} from './envelope.ts';
 export { lowerQueryOperation } from './query.ts';
 export type { QueryInvocation } from './query.ts';
 export {

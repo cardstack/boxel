@@ -4,6 +4,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
+  LinkShapePolicy,
   PermissionsContextName,
   rri,
   type LooseSingleCardDocument,
@@ -140,7 +141,7 @@ module('Integration | shared link target reuse', function (hooks) {
     await setupIntegrationTestRealm({
       mockMatrixUtils,
       realmURL: testRealm2URL,
-      liveReadsResolveLinksOnly: true,
+      linkShapePolicy: LinkShapePolicy.pinned('links-only'),
       contents: {
         'test-cards.gts': { Owner, Pet },
         [`${FOREIGN_PET_PATH}.json`]: petDoc('Ghost') as SingleCardDocument,
@@ -152,7 +153,7 @@ module('Integration | shared link target reuse', function (hooks) {
     await setupIntegrationTestRealm({
       mockMatrixUtils,
       realmURL: testRealmURL,
-      liveReadsResolveLinksOnly: true,
+      linkShapePolicy: LinkShapePolicy.pinned('links-only'),
       contents: {
         [`${LOCAL_PET_PATH}.json`]: petDoc('Mango') as SingleCardDocument,
         ...ownerContents('local', LOCAL_PET),
