@@ -1370,6 +1370,35 @@ function serializeNonPresentLink(
   };
 }
 
+// Whether the `includedScope` keeps this link target's resource out of
+// `included[]`. 'all' keeps every resident target, 'local' keeps only the
+// unsaved (`lid`-bearing) ones — the write shape, where `included` is a
+// co-creation manifest — and 'none' keeps none.
+function isExcludedByIncludedScope(
+  value: CardDef,
+  includedScope: SerializeOpts['includedScope'] = 'all',
+): boolean {
+  return value.id ? includedScope !== 'all' : includedScope === 'none';
+}
+
+// The relationship entry that stands in for a link target whose own resource
+// is not inlined: a saved target by `links.self` + `id`, an unsaved one by
+// `lid`. Every reference-only path — an already-visited target, a
+// scope-excluded one, and the tail of a full serialization — emits exactly
+// this, so the spellings cannot drift apart.
+function referenceRelationship(
+  value: CardDef,
+  relationshipType: string,
+  opts?: SerializeOpts,
+): Relationship {
+  return value.id
+    ? {
+        links: { self: makeRelativeURL(value.id, opts) },
+        data: { type: relationshipType, id: value.id },
+      }
+    : { data: { type: relationshipType, lid: value[localId] } };
+}
+
 class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   readonly fieldType = 'linksTo';
   private cardThunk: () => CardT;
@@ -1522,50 +1551,22 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
         `linksTo field '${this.name}' cannot serialize a FileDef without an id`,
       );
     }
-    if (visited.has(value.id)) {
-      return {
-        relationships: {
-          [this.name]: {
-            links: {
-              self: makeRelativeURL(value.id, opts),
-            },
-            data: { type: relationshipType, id: value.id },
-          },
-        },
-      };
-    }
-    if (visited.has((value as CardDef)[localId])) {
-      return {
-        relationships: {
-          [this.name]: {
-            data: { type: relationshipType, lid: (value as CardDef)[localId] },
-          },
-        },
-      };
-    }
-
-    // A target the includedScope excludes needs only its relationship entry —
-    // the same shapes the visited branches above emit — so the recursive
-    // serialization of the target (and the traversal of its own linked graph)
+    // A target already serialized on this walk, or one the includedScope
+    // excludes, needs only its relationship entry — so the recursive
+    // serialization of the target, and the traversal of its own linked graph,
     // is skipped entirely.
-    let includedScope = opts?.includedScope ?? 'all';
     if (
-      (value.id && includedScope !== 'all') ||
-      (!value.id && includedScope === 'none')
+      visited.has(value.id) ||
+      visited.has((value as CardDef)[localId]) ||
+      isExcludedByIncludedScope(value as CardDef, opts?.includedScope)
     ) {
       return {
         relationships: {
-          [this.name]: value.id
-            ? {
-                links: { self: makeRelativeURL(value.id, opts) },
-                data: { type: relationshipType, id: value.id },
-              }
-            : {
-                data: {
-                  type: relationshipType,
-                  lid: (value as CardDef)[localId],
-                },
-              },
+          [this.name]: referenceRelationship(
+            value as CardDef,
+            relationshipType,
+            opts,
+          ),
         },
       };
     }
@@ -1582,21 +1583,11 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     if (serialized) {
       let resource: JSONAPIResource = {
         relationships: {
-          [this.name]: {
-            ...(value.id
-              ? {
-                  links: {
-                    self: makeRelativeURL(value.id, opts),
-                  },
-                  data: { type: relationshipType, id: value.id },
-                }
-              : {
-                  data: {
-                    type: relationshipType,
-                    lid: (value as CardDef)[localId],
-                  },
-                }),
-          },
+          [this.name]: referenceRelationship(
+            value as CardDef,
+            relationshipType,
+            opts,
+          ),
         },
       };
       if (
@@ -2120,40 +2111,19 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
           `linksToMany field '${this.name}' cannot serialize a FileDef without an id`,
         );
       }
-      if (visited.has(value.id)) {
-        relationships[`${this.name}.${i}`] = {
-          links: {
-            self: makeRelativeURL(value.id, opts),
-          },
-          data: { type: relationshipType, id: value.id },
-        };
-        return;
-      }
-      if (visited.has((value as CardDef)[localId])) {
-        relationships[`${this.name}.${i}`] = {
-          data: { type: relationshipType, lid: (value as CardDef)[localId] },
-        };
-        return;
-      }
-
-      // Same includedScope skip as linksTo: an excluded target contributes
-      // its relationship entry only, with no recursive serialization.
-      let includedScope = opts?.includedScope ?? 'all';
+      // Same reference-only rule as linksTo: a target already serialized on
+      // this walk, or one the includedScope excludes, contributes its
+      // relationship entry and nothing else.
       if (
-        (value.id && includedScope !== 'all') ||
-        (!value.id && includedScope === 'none')
+        visited.has(value.id) ||
+        visited.has((value as CardDef)[localId]) ||
+        isExcludedByIncludedScope(value as CardDef, opts?.includedScope)
       ) {
-        relationships[`${this.name}.${i}`] = value.id
-          ? {
-              links: { self: makeRelativeURL(value.id, opts) },
-              data: { type: relationshipType, id: value.id },
-            }
-          : {
-              data: {
-                type: relationshipType,
-                lid: (value as CardDef)[localId],
-              },
-            };
+        relationships[`${this.name}.${i}`] = referenceRelationship(
+          value as CardDef,
+          relationshipType,
+          opts,
+        );
         return;
       }
 
@@ -2181,21 +2151,11 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         doc.included.push(serialized);
       }
 
-      relationships[`${this.name}.${i}`] = {
-        ...(value.id
-          ? {
-              links: {
-                self: makeRelativeURL(value.id, opts),
-              },
-              data: { type: relationshipType, id: value.id },
-            }
-          : {
-              data: {
-                type: relationshipType,
-                lid: (value as CardDef)[localId],
-              },
-            }),
-      };
+      relationships[`${this.name}.${i}`] = referenceRelationship(
+        value as CardDef,
+        relationshipType,
+        opts,
+      );
     });
 
     return { relationships };
