@@ -2637,7 +2637,8 @@ export class Batch {
         if (
           opts?.carryForwardRealmMeta ||
           (opts?.lattice &&
-            opts.latticeInputGeneration !== undefined &&
+            (opts.latticeInputGeneration !== undefined ||
+              opts.latticeRealmUsername !== undefined) &&
             (await this.canCarryLatticeRealmMeta({ latticeCardOnly })))
         ) {
           publicationTimings.catalogueReuseEligible = true;
@@ -2855,7 +2856,7 @@ export class Batch {
     return parseInt(total);
   }
 
-  // A materialized card's value change usually leaves the realm's type
+  // A source or materialized card's value change usually leaves the realm's type
   // catalogue unchanged. Compare only the published cards' contributions to
   // #fetchTypeSummary before reusing that catalogue. Checking inside the
   // publication transaction preserves the same input-generation guard as the

@@ -601,6 +601,23 @@ module(basename(import.meta.filename), function (hooks) {
         ])
       ).length === 1;
     assert.true(await eligible());
+    let [maintenance] = await query(db, [
+      "INSERT INTO jobs (job_type, concurrency_group, priority, timeout, args) VALUES ('scoped-css-gc',",
+      param(`indexing:${realmURL}`),
+      ", 1, 60, '{}') RETURNING id",
+    ]);
+    assert.true(
+      await eligible(),
+      'pending maintenance is not pending card data',
+    );
+    await query(db, [
+      "UPDATE jobs SET status = 'rejected' WHERE id =",
+      param(Number(maintenance.id)),
+    ]);
+    assert.true(
+      await eligible(),
+      'failed maintenance is not failed source indexing',
+    );
     await query(db, [
       'INSERT INTO lattice_pending_generations (realm_url, generation, definition_revision) VALUES (',
       param(realmURL),

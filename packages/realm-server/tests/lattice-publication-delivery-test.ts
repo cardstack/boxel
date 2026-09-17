@@ -12,6 +12,7 @@ import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
   recordLatticePublication,
   LATTICE_PUBLICATION_CHANNEL,
+  type LatticePublicationEvent,
 } from '@cardstack/runtime-common/lattice-publication-outbox';
 import {
   claimPublicationDeliveries,
@@ -68,6 +69,228 @@ module(basename(import.meta.filename), function (hooks) {
       return id;
     });
   }
+  async function change(
+    owner: string,
+    generation: number,
+    kind: LatticePublicationEvent['eventName'] = 'index',
+  ) {
+    return db.withWriteLock('lattice:index:' + realmURL, async (tx) => {
+      if (!tx) throw new Error('Expected pinned PG transaction');
+      return recordLatticePublication(
+        tx,
+        {
+          ...authority,
+          ownerURL: realmURL + owner,
+          realmGeneration: generation,
+        },
+        kind,
+      );
+    });
+  }
+
+  test('pending revisions coalesce without losing distinct owners or inventing their generations', async function (assert) {
+    await change('Day/one.json', 2);
+    await change('Day/one.json', 3);
+    await change('Day/two.json', 3);
+    await change('Day/three.json', 2);
+    let sent: { room: string; event: LatticePublicationEvent }[] = [];
+    let dispatcher = new LatticePublicationDispatcher({
+      lattice,
+      dbAdapter: db,
+      send: async (_realm, room, event) => {
+        sent.push({ room, event });
+        return '$ack';
+      },
+    });
+    while (await dispatcher.drain()) {
+      /* drain bounded batches */
+    }
+    assert.strictEqual(
+      sent.length,
+      4,
+      'two generation-accurate envelopes per recipient instead of four',
+    );
+    for (let room of ['!a:example', '!b:example']) {
+      let events = sent.filter((s) => s.room === room).map((s) => s.event);
+      assert.deepEqual(
+        events
+          .map((e) => ({
+            generation: e.generation,
+            ids: e.invalidations.slice().sort(),
+          }))
+          .sort((a, b) => a.generation - b.generation),
+        [
+          { generation: 2, ids: [realmURL + 'Day/three.json'] },
+          {
+            generation: 3,
+            ids: [realmURL + 'Day/one.json', realmURL + 'Day/two.json'],
+          },
+        ],
+      );
+    }
+    assert.true((await rows()).every((r) => !!r.delivered_at));
+  });
+
+  test('a failed coalesced send retries the identical envelope and acknowledges every covered row only on success', async function (assert) {
+    await change('Day/one.json', 2);
+    await change('Day/two.json', 2);
+    let fail = true;
+    let sent: { room: string; event: LatticePublicationEvent }[] = [];
+    let dispatcher = new LatticePublicationDispatcher({
+      lattice,
+      dbAdapter: db,
+      send: async (_realm, room, event) => {
+        sent.push({ room, event });
+        if (room === '!b:example' && fail)
+          throw new Error('lost acknowledgement');
+        return '$ack';
+      },
+    });
+    await dispatcher.drain();
+    assert.strictEqual(sent.length, 2, 'one envelope per recipient');
+    assert.true(
+      (await rows())
+        .filter((r) => r.user_id === '@a:example')
+        .every((r) => !!r.delivered_at),
+    );
+    assert.true(
+      (await rows())
+        .filter((r) => r.user_id === '@b:example')
+        .every((r) => r.delivered_at === null),
+    );
+    fail = false;
+    await due();
+    await dispatcher.drain();
+    assert.deepEqual(
+      sent.filter((s) => s.room === '!b:example').map((s) => s.event),
+      [
+        sent.find((s) => s.room === '!b:example')!.event,
+        sent.find((s) => s.room === '!b:example')!.event,
+      ],
+    );
+    assert.strictEqual(sent.length, 3);
+    assert.true((await rows()).every((r) => !!r.delivered_at));
+  });
+
+  test('new changes accumulate behind an in-flight recipient without a lost ID', async function (assert) {
+    await change('Day/one.json', 2);
+    let first = await claimPublicationDeliveries(db, undefined, lattice);
+    await change('Day/two.json', 3);
+    await change('Day/three.json', 3);
+    assert.deepEqual(
+      await claimPublicationDeliveries(db, undefined, lattice),
+      [],
+      'leased recipients do not get a second concurrent batch',
+    );
+    let sent: LatticePublicationEvent[] = [];
+    let dispatcher = new LatticePublicationDispatcher({
+      lattice,
+      dbAdapter: db,
+      send: async (_realm, _room, event) => {
+        sent.push(event);
+        return '$ack';
+      },
+    });
+    for (let claim of first) await dispatcher.deliver(claim);
+    await dispatcher.drain();
+    assert.strictEqual(
+      sent.length,
+      4,
+      'one initial and one follow-up per recipient',
+    );
+    assert.true(
+      sent
+        .filter((e) => e.generation === 3)
+        .every((e) => e.invalidations.length === 2),
+    );
+    assert.true((await rows()).every((r) => !!r.delivered_at));
+  });
+
+  test('coalescing keeps HTML readiness separate and spills a large burst without losing identities', async function (assert) {
+    for (let i = 0; i < 70; i++) await change('Day/' + i + '.json', 2);
+    await change('Day/0.json', 2, 'prerender_html');
+    let sent: LatticePublicationEvent[] = [];
+    let dispatcher = new LatticePublicationDispatcher({
+      lattice,
+      dbAdapter: db,
+      send: async (_realm, _room, event) => {
+        sent.push(event);
+        return '$ack';
+      },
+    });
+    let passes = 0;
+    while (await dispatcher.drain()) {
+      if (++passes > 20) throw new Error('Unbounded drain');
+    }
+    let data = sent.filter((e) => e.eventName === 'index');
+    assert.true(data.length < 20, 'bounded envelopes replace per-card sends');
+    assert.true(
+      data.every((e) => e.invalidations.length <= 64),
+      'bounded identities',
+    );
+    assert.strictEqual(new Set(data.flatMap((e) => e.invalidations)).size, 70);
+    assert.strictEqual(
+      sent.filter((e) => e.eventName === 'prerender_html').length,
+      2,
+    );
+    assert.true((await rows()).every((r) => !!r.delivered_at));
+  });
+
+  test('large identities split below the wire budget without losing a card', async function (assert) {
+    for (let i = 0; i < 30; i++)
+      await change('Day/' + i + 'x'.repeat(2000) + '.json', 2);
+    let sent: LatticePublicationEvent[] = [];
+    let dispatcher = new LatticePublicationDispatcher({
+      lattice,
+      dbAdapter: db,
+      send: async (_realm, _room, event) => {
+        sent.push(event);
+        return '$ack';
+      },
+    });
+    let passes = 0;
+    while (await dispatcher.drain()) {
+      if (++passes > 10) throw new Error('Unbounded drain');
+    }
+    assert.true(
+      sent.every(
+        (event) => Buffer.byteLength(JSON.stringify(event)) <= 48 * 1024,
+      ),
+    );
+    assert.strictEqual(new Set(sent.flatMap((e) => e.invalidations)).size, 30);
+    assert.true((await rows()).every((r) => !!r.delivered_at));
+  });
+
+  test('a new publication joining a failed batch gets a new transaction ID with complete coverage', async function (assert) {
+    await change('Day/one.json', 2);
+    await change('Day/two.json', 2);
+    let attempts: LatticePublicationEvent[] = [];
+    let fail = true;
+    let dispatcher = new LatticePublicationDispatcher({
+      lattice,
+      dbAdapter: db,
+      send: async (_realm, room, event) => {
+        if (room === '!b:example') {
+          attempts.push(event);
+          if (fail) throw new Error('ambiguous response');
+        }
+        return '$ack';
+      },
+    });
+    await dispatcher.drain();
+    await change('Day/three.json', 2);
+    fail = false;
+    await due();
+    await dispatcher.drain();
+    assert.strictEqual(attempts.length, 2);
+    assert.notStrictEqual(attempts[0].publicationId, attempts[1].publicationId);
+    assert.deepEqual(
+      attempts[1].invalidations.slice().sort(),
+      ['one', 'three', 'two'].map((n) => realmURL + 'Day/' + n + '.json'),
+    );
+    assert.true((await rows()).every((r) => !!r.delivered_at));
+  });
+
   test('one slow recipient does not hold the other delivery slots', async function (assert) {
     for (let i = 0; i < 4; i++) await publish();
     let started = new Deferred<void>(),
@@ -83,7 +306,7 @@ module(basename(import.meta.filename), function (hooks) {
           waiting = true;
           started.fulfill();
           await release.promise;
-        } else if (++completed === 7) {
+        } else if (++completed === 1) {
           others.fulfill();
         }
         return '$ack';
@@ -104,8 +327,8 @@ module(basename(import.meta.filename), function (hooks) {
       ]);
       assert.strictEqual(
         completed,
-        7,
-        'all other recipients reached before the held send completes',
+        1,
+        'the other recipient gets all four publications in one send before the held send completes',
       );
     } finally {
       clearTimeout(deadline);
@@ -195,6 +418,8 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('parallel dispatchers cannot claim the same obligation and an expired sender cannot acknowledge its replacement', async function (assert) {
+    await publish();
+    await publish();
     await publish();
     let other = new PgAdapter();
     try {

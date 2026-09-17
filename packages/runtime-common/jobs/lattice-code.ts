@@ -1,4 +1,5 @@
 import { RealmPaths } from '../paths.ts';
+import { SOURCE_INDEX_JOB_TYPES_SQL } from './indexing.ts';
 import {
   param,
   textArrayParam,
@@ -92,6 +93,6 @@ export async function captureLatticeCodeChanges(
 export const latticeCodeReadySQL = `(
   j.job_type <> 'lattice-link-code' OR NOT EXISTS (
     SELECT 1 FROM jobs s WHERE s.concurrency_group='indexing:' || (j.args->>'realmURL')
-      AND s.job_type <> 'lattice-materialize' AND s.status='unfulfilled'
+      AND s.job_type IN ${SOURCE_INDEX_JOB_TYPES_SQL} AND s.status='unfulfilled'
   )
 )`;

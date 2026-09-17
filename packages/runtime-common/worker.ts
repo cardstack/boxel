@@ -39,6 +39,10 @@ import type {
   LatticeNativeFileIndexer,
 } from './lattice-native-index.ts';
 import { heartbeatJob } from './queue.ts';
+import { INDEX_JOB_TYPES } from './jobs/indexing.ts';
+// Keep the existing public export while registration and freshness barriers
+// share one list of source-index job types.
+export { INDEX_JOB_TYPES } from './jobs/indexing.ts';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
@@ -152,17 +156,6 @@ export interface IndexingProgressEvent {
   url?: string;
   stats?: Stats;
 }
-
-// The job types an `indexJobsOnly` worker registers. The queue's claim
-// query only dequeues job types a worker has registered handlers for, so
-// restricting registration is what makes such a worker an indexing-only
-// lane: it can never be held by a prerender-html sweep (or any other job
-// type), no matter how the priority tiers are configured.
-export const INDEX_JOB_TYPES = [
-  'from-scratch-index',
-  'incremental-index',
-  'copy-index',
-] as const;
 
 export class Worker {
   #log = logger('worker');

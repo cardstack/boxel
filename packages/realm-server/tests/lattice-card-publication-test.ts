@@ -117,6 +117,46 @@ module(basename(import.meta.filename), function (hooks) {
     return row as unknown as Pick<RealmMetaTable, 'value' | 'generation'>;
   }
 
+  test('a source value edit reuses the catalogue, while added and deleted members rebuild its counts', async function (assert) {
+    await seed();
+    const before = await readCatalogue();
+    const edit = await writer.createBatch(new URL(realm), network);
+    await edit.updateEntry(owner, entry(owner, 13, 0));
+    await edit.done({
+      lattice: publication,
+      latticeRealmUsername: 'source-test',
+    });
+    assert.strictEqual(
+      catalogueScans,
+      0,
+      'value-only source edit does not scan the realm',
+    );
+    assert.deepEqual((await readCatalogue()).value, before.value);
+
+    const added = new URL('added.json', realm);
+    const create = await writer.createBatch(new URL(realm), network);
+    await create.updateEntry(added, entry(added, 1, 0));
+    await create.done({
+      lattice: publication,
+      latticeRealmUsername: 'source-test',
+    });
+    assert.strictEqual(
+      catalogueScans,
+      2,
+      'new member requires both type summaries',
+    );
+    assert.strictEqual((await readCatalogue()).value.instances[0].total, 3);
+
+    const remove = await writer.createBatch(new URL(realm), network);
+    await remove.invalidate([added]);
+    await remove.done({
+      lattice: publication,
+      latticeRealmUsername: 'source-test',
+    });
+    assert.strictEqual(catalogueScans, 4, 'deleted member rebuilds counts too');
+    assert.deepEqual((await readCatalogue()).value, before.value);
+  });
+
   function fileEntry(label: string): FileEntry {
     return {
       type: 'file',

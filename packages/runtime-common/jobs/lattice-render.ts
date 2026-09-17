@@ -1,6 +1,7 @@
 import { param, type Querier } from '../expression.ts';
 import type { PrerenderHtmlArgs } from '../tasks/prerender-html.ts';
 import { prerenderHtmlConcurrencyGroup } from './prerender-html.ts';
+import { SOURCE_INDEX_JOB_TYPES_SQL } from './indexing.ts';
 
 // A retry is an ordinary native HTML job with one durable owner obligation.
 // It does not join a running attempt, whose input has already been captured.
@@ -55,10 +56,10 @@ export const latticeRenderRetryReadySQL = `(
       WHERE p.realm_url = j.args->>'realmURL')
     AND NOT EXISTS (SELECT 1 FROM jobs source
       WHERE source.concurrency_group = 'indexing:' || (j.args->>'realmURL')
-        AND source.job_type <> 'lattice-materialize' AND source.status = 'unfulfilled')
+        AND source.job_type IN ${SOURCE_INDEX_JOB_TYPES_SQL} AND source.status = 'unfulfilled')
     AND COALESCE((SELECT source.status <> 'rejected' FROM jobs source
       WHERE source.concurrency_group = 'indexing:' || (j.args->>'realmURL')
-        AND source.job_type <> 'lattice-materialize' ORDER BY source.id DESC LIMIT 1), TRUE)
+        AND source.job_type IN ${SOURCE_INDEX_JOB_TYPES_SQL} ORDER BY source.id DESC LIMIT 1), TRUE)
     AND NOT EXISTS (SELECT 1 FROM lattice_owners o
       LEFT JOIN realm_generations r ON r.realm_url = o.realm_url
       LEFT JOIN boxel_index i ON i.realm_url = o.realm_url AND i.url = o.owner_url AND i.type = 'instance'

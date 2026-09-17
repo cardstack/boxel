@@ -14,6 +14,7 @@ import {
   withLatticeRenderAuthority,
 } from '@cardstack/runtime-common/lattice-render-authority';
 import { validateLatticeRenderCheckpoint } from '@cardstack/runtime-common/lattice-render-checkpoint';
+import { latticeReadState } from '@cardstack/runtime-common/lattice-materialization';
 import { setupDB } from './helpers/index.ts';
 
 const { module, test } = QUnit;
@@ -139,6 +140,74 @@ module(basename(import.meta.filename), function (hooks) {
       html: '<p>New publication</p>',
       job: 'resolved',
     });
+  });
+
+  test('maintenance does not hold fresh data pending or hide failed source indexing', async function (assert) {
+    const receipt = document().data.meta!.publication!;
+    let [maintenance] = await query(db, [
+      "INSERT INTO jobs (job_type, concurrency_group, priority, timeout, args) VALUES ('scoped-css-gc',",
+      param(`indexing:${realmURL}`),
+      ", 1, 60, '{}') RETURNING id",
+    ]);
+    for (const status of ['unfulfilled', 'rejected', 'resolved']) {
+      await query(db, [
+        'UPDATE jobs SET status =',
+        param(status),
+        'WHERE id =',
+        param(Number(maintenance.id)),
+      ]);
+      assert.strictEqual(
+        await latticeReadState(db, realmURL, ownerURL, receipt),
+        'ready',
+        `${status} maintenance does not change data freshness`,
+      );
+      assert.strictEqual(
+        (await captureLatticeRenderInput(db, realmURL, id)).status,
+        'ready',
+        `${status} maintenance does not block render capture`,
+      );
+    }
+    for (const jobType of [
+      'from-scratch-index',
+      'incremental-index',
+      'copy-index',
+    ]) {
+      let [source] = await query(db, [
+        'INSERT INTO jobs (job_type, concurrency_group, priority, timeout, args) VALUES (',
+        param(jobType),
+        ',',
+        param(`indexing:${realmURL}`),
+        ", 10, 60, '{}') RETURNING id",
+      ]);
+      assert.strictEqual(
+        await latticeReadState(db, realmURL, ownerURL, receipt),
+        'pending',
+        `${jobType} still blocks data freshness`,
+      );
+      await query(db, [
+        "UPDATE jobs SET status = 'rejected' WHERE id =",
+        param(Number(source.id)),
+      ]);
+      await query(db, [
+        "INSERT INTO jobs (job_type, concurrency_group, priority, timeout, args, status) VALUES ('scoped-css-gc',",
+        param(`indexing:${realmURL}`),
+        ", 1, 60, '{}', 'resolved')",
+      ]);
+      await assert.rejects(
+        latticeReadState(db, realmURL, ownerURL, receipt),
+        /indexing failed/,
+        'a newer maintenance success cannot hide failed source indexing',
+      );
+      assert.strictEqual(
+        (await captureLatticeRenderInput(db, realmURL, id)).status,
+        'pending',
+        'render authority also retains the failed source barrier',
+      );
+      await query(db, [
+        "UPDATE jobs SET status = 'resolved' WHERE id =",
+        param(Number(source.id)),
+      ]);
+    }
   });
 
   test('an input superseded during rendering leaves the previous HTML and durable job intact; retry captures current data', async function (assert) {
