@@ -17,6 +17,7 @@ import type {
   CardResource,
   CodeRef,
   Definition,
+  JsonValue,
 } from '@cardstack/runtime-common';
 
 // ============================================================================
@@ -55,10 +56,14 @@ interface StubOptions {
   // clean index row, which is what makes its computed and linked values
   // unavailable rather than empty.
   indexed?: Record<string, IndexedCardValues>;
+  // The realm's own settings, as `realmConfig()` resolves them. Absent is a
+  // realm that configures none, which is not the same as a realm that was
+  // never asked.
+  settings?: Record<string, JsonValue>;
 }
 
 function stub(opts: StubOptions = {}): { core: BatchCore; commits: Commit[] } {
-  let { stored = {}, indexed = {} } = opts;
+  let { stored = {}, indexed = {}, settings = {} } = opts;
   let commits: Commit[] = [];
   let definitions: Record<string, Definition> = {
     Report: reportDefinition(),
@@ -138,6 +143,9 @@ function stub(opts: StubOptions = {}): { core: BatchCore; commits: Commit[] } {
     },
     async lookupDefinition(codeRef) {
       return 'name' in codeRef ? definitions[codeRef.name] : undefined;
+    },
+    async realmConfig() {
+      return settings;
     },
   };
   return { core, commits };
@@ -725,6 +733,79 @@ module(basename(import.meta.filename), function () {
       } finally {
         setOperationPerfSink(undefined);
       }
+    });
+
+    test('a program reads a setting of the realm it is running in', async function (assert) {
+      let { core, commits } = stub({
+        ...openReport(),
+        settings: { approver: '@mae:localhost', escalateAfterDays: 3 },
+      });
+
+      await commitBatch(core, [
+        {
+          op: 'transform',
+          name: 'escalate',
+          href: `${REALM}report-1`,
+          definition: transformOperation(
+            '.status = "escalated to " + realmConfig("approver") + ' +
+              '" after " + (realmConfig("escalateAfterDays") | tostring);',
+          ),
+        },
+      ]);
+
+      assert.strictEqual(
+        attributesOf(commits[0], 'report-1.json').status,
+        'escalated to @mae:localhost after 3',
+        'the realm supplied its settings to the program, typed as it wrote them',
+      );
+    });
+
+    test('a setting the realm does not configure fails the entry', async function (assert) {
+      let { core, commits } = stub({
+        ...openReport(),
+        settings: { escalateAfterDays: 3 },
+      });
+
+      let failure = await refusal(core, [
+        {
+          op: 'transform',
+          name: 'escalate',
+          href: `${REALM}report-1`,
+          definition: transformOperation('.status = realmConfig("approver");'),
+        },
+      ]);
+
+      assert.strictEqual(failure?.status, 422, 'the program was refused');
+      assert.strictEqual(failure?.code, 'program-failed');
+      assert.deepEqual(commits, [], 'and nothing was written');
+    });
+
+    test('a realm that configures nothing says so rather than saying no context arrived', async function (assert) {
+      let { core } = stub(openReport());
+
+      let failure = await refusal(core, [
+        {
+          op: 'transform',
+          name: 'escalate',
+          href: `${REALM}report-1`,
+          definition: transformOperation('.status = realmConfig("approver");'),
+        },
+      ]);
+
+      // The distinction is the whole point of supplying an empty map rather
+      // than leaving the slot out: one message sends the author to the realm's
+      // settings, the other to whatever assembled the request.
+      let detail = String(
+        (failure?.entry as { detail?: string } | undefined)?.detail ?? '',
+      );
+      assert.true(
+        detail.includes('not in the realm configuration'),
+        `the failure names the realm's settings, got: ${detail}`,
+      );
+      assert.false(
+        detail.includes('needs a request context'),
+        'and does not report a missing context',
+      );
     });
   });
 });

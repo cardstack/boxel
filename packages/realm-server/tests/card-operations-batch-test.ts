@@ -20,6 +20,7 @@ import { CardError } from '@cardstack/runtime-common/error';
 import type { CodeRef } from '@cardstack/runtime-common/code-ref';
 import type { RealmIdentifier } from '@cardstack/runtime-common/realm-identifiers';
 import type { Definition } from '@cardstack/runtime-common/definitions';
+import type { JsonValue } from '@cardstack/runtime-common';
 
 // ============================================================================
 // What the coordinator stages, and what it refuses.
@@ -76,6 +77,9 @@ interface StubOptions {
   // is the identity, which keeps a test's expected bytes readable; a test that
   // cares about a serializer refusal supplies its own.
   serialize?: (doc: any) => any;
+  // The realm's own settings, as `realmConfig()` resolves them. Absent is a
+  // realm that configures none.
+  settings?: Record<string, unknown>;
 }
 
 // The bytes a described content stands for. A realm streams these to disk;
@@ -110,7 +114,12 @@ function cardFile(attributes: Record<string, unknown>, adoptsFrom: unknown) {
 }
 
 function stub(opts: StubOptions = {}): Stub {
-  let { stored = {}, definitions = {}, serialize = (doc: any) => doc } = opts;
+  let {
+    stored = {},
+    definitions = {},
+    serialize = (doc: any) => doc,
+    settings = {},
+  } = opts;
   let commits: Commit[] = [];
   let held = 0;
   let maxHeld = 0;
@@ -235,6 +244,9 @@ function stub(opts: StubOptions = {}): Stub {
     },
     async lookupDefinition(codeRef) {
       return 'name' in codeRef ? definitions[codeRef.name] : undefined;
+    },
+    async realmConfig() {
+      return settings as Record<string, JsonValue>;
     },
   };
   return {
@@ -1567,6 +1579,55 @@ module(basename(import.meta.filename), function () {
         'a link-typed param becomes a relationship',
       );
     });
+    test('a named create fills a value from the realm configuration', async function (assert) {
+      let definition: OperationDefinition = {
+        base: 'create',
+        deterministic: true,
+        of: PERSON,
+        fill: { firstName: { $ref: 'realmConfig', key: 'defaultName' } as any },
+      };
+      let { core, commits } = stub({
+        definitions: { Person: personDefinition() },
+        settings: { defaultName: 'Configured' },
+      });
+
+      await commitBatch(
+        core,
+        [{ op: 'create', lid: 'minted', definition }],
+        {},
+      );
+
+      let { data } = JSON.parse(commits[0].writes['Person/minted.json']);
+      assert.strictEqual(
+        data.attributes.firstName,
+        'Configured',
+        'the marker resolved against the settings the realm supplied',
+      );
+    });
+
+    test('a named create naming a setting the realm does not configure is refused', async function (assert) {
+      let definition: OperationDefinition = {
+        base: 'create',
+        deterministic: true,
+        of: PERSON,
+        fill: { firstName: { $ref: 'realmConfig', key: 'defaultName' } as any },
+      };
+      let { core, commits } = stub({
+        definitions: { Person: personDefinition() },
+        settings: { somethingElse: 'x' },
+      });
+
+      // Refused rather than left out: a template that silently wrote nothing
+      // where a setting belongs would store the absence as the value, and a
+      // card missing a field reads as the author's choice.
+      let failure = await refusal(core, [
+        { op: 'create', lid: 'minted', definition },
+      ]);
+      assert.strictEqual(failure?.status, 400);
+      assert.strictEqual(failure?.code, 'invalid-params');
+      assert.deepEqual(commits, [], 'nothing was written');
+    });
+
     test('a named create resolves the actor and the card it is anchored on', async function (assert) {
       let definition: OperationDefinition = {
         base: 'create',

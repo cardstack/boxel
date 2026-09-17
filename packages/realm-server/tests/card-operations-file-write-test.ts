@@ -157,6 +157,11 @@ function stub(stored: Record<string, string> = {}): Stub {
     async lookupDefinition() {
       return undefined;
     },
+    async realmConfig() {
+      // No entry in these suites reads a realm setting; an empty map is the
+      // realm that configures none.
+      return {};
+    },
   };
   return { core, commits, readPaths: () => readPaths };
 }

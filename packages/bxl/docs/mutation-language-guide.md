@@ -471,7 +471,8 @@ being repeated in every AI-written statement:
   "syntax": "readable",
   "context": {
     "params": { "note": "looks right to me" },
-    "actor": "user:ada"
+    "actor": "user:ada",
+    "realmConfig": { "approver": "user:mae" }
   },
   "returning": ["changes", "affected", "paths"]
 }
@@ -484,30 +485,43 @@ program may read. The trusted host supplies both, along with the authoritative
 target and revision; they are not claims the model gets to make about itself.
 None of those concerns makes the actual edit harder to read.
 
-## Read the caller and the payload
+## Read the caller, the payload and the realm
 
-A program sees the Card through `.`. Three calls supply the rest of what a
+A program sees the Card through `.`. Four calls supply the rest of what a
 write needs, each reading a value the host resolved before the program ran:
 `params("note")` is that entry of the payload the caller sent, `actor()` is
-the authenticated caller's user id, and `instance("revision")` is the stored
-document. `instance()` with no argument hands back the whole object.
+the authenticated caller's user id, `instance("revision")` is the stored
+document, and `realmConfig("approver")` is a setting of the realm the edit
+lands in. `instance()` and `realmConfig()` with no argument hand back the
+whole object.
 
 `actor` is the one that takes no argument at all. The host authenticates a
 caller as a user id and knows nothing else about them, so the id is the whole
 of what a program can read — there is no member to name.
 
+`realmConfig` is the one that is not about the request. A program is written
+once against a Card type whose cards live in many realms, so a value that
+differs per realm — who approves an escalation here, what this realm's
+threshold is — belongs to the realm rather than to the program. The realm
+keeps those settings on its RealmConfig card at `realm.json`, under `config`,
+and a setting is whatever JSON was written there: a string, a number, a flag
+or a structure.
+
 ```bxl
 assert(Status = "review", "must still be in review");
 append(Comment, params("note"));
 Reviewer = actor();
+Approver = realmConfig("approver");
 ```
 
 Each of these fails the program rather than reading `null` when the host
 supplied no context, or when the key is not there — an operation records the
 caller as the author of a comment, and a blank author is worse than a refused
-edit. The key is exact and case-sensitive, and stays a literal even when the
-Card has a Field of the same name: `params("Note")` reads the payload, never
-`Note`.
+edit. A realm that carries no such setting is a distinct failure from a host
+that supplied no settings at all, and says so: the first names the realm, the
+second names the request. The key is exact and case-sensitive, and stays a
+literal even when the Card has a Field of the same name: `params("Note")`
+reads the payload, never `Note`.
 
 ## Let an AI make a schema-constrained tool call
 

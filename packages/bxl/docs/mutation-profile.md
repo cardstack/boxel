@@ -528,15 +528,16 @@ Defaults are `delivery: 'complete'`, `transaction: 'atomic'`, and
 
 ## Request context
 
-A program sees the document it is editing through `.`. Three builtins supply
+A program sees the document it is editing through `.`. Four builtins supply
 the rest of what a write operation needs, each reading a value the trusted
 host resolved before the program ran:
 
-| Call                             | Reads                                     |
-| -------------------------------- | ----------------------------------------- |
-| `params("key")`                  | that entry of the payload the caller sent |
-| `actor()`                        | the authenticated caller's user id        |
-| `instance()` / `instance("key")` | the stored document, or one of its fields |
+| Call                                   | Reads                                        |
+| -------------------------------------- | -------------------------------------------- |
+| `params("key")`                        | that entry of the payload the caller sent    |
+| `actor()`                              | the authenticated caller's user id           |
+| `instance()` / `instance("key")`       | the stored document, or one of its fields    |
+| `realmConfig()` / `realmConfig("key")` | the realm's settings, or one of them by name |
 
 `actor` takes no argument. The host authenticates a caller as a user id and
 knows nothing else about them, so the id is the whole of what a program can
@@ -547,6 +548,15 @@ read; `actor("key")` names no builtin and fails saying so.
 audit and which no program can see. A host that wants a program to record its
 caller supplies both.
 
+`realmConfig` is the one slot that describes where the program runs rather
+than who asked for it. A program is planned once against a type whose cards
+live in whatever realms hold them, so a value that differs per realm — an
+approver's id, a threshold, a default assignee — is supplied by the host from
+the target realm rather than written into the program. In Boxel the realm
+keeps those settings on its RealmConfig card at `realm.json`, under `config`,
+and does not include them in the realm info carried on a card response; a
+setting is whatever JSON the realm owner wrote there.
+
 ```ts
 type BxlMutationJsonObject = { [key: string]: BxlMutationJson };
 
@@ -554,6 +564,7 @@ interface BxlMutationContext {
   params?: BxlMutationJsonObject;
   actor?: string;
   instance?: BxlMutationJsonObject;
+  realmConfig?: BxlMutationJsonObject;
 }
 ```
 
@@ -576,8 +587,14 @@ Every failure is loud. Naming one of these where the host supplied no context,
 or asking for a key that is not there, fails the program — a `null` would land
 in the document as a missing comment author or a silently unset field. The
 operation layer validates declared keys before a program runs; the key check
-here is the backstop. `instance()` returns the whole object, which is the
-reading to reach for when a key may legitimately be absent.
+here is the backstop. `instance()` and `realmConfig()` return the whole
+object, which is the reading to reach for when a key may legitimately be
+absent.
+
+A realm that configures nothing supplies an empty map rather than no slot, so
+a program naming a setting is told that this realm has no such setting rather
+than that no configuration arrived. The two point at different fixes — one at
+the realm, one at the caller — which is why they are different messages.
 
 A key is readable only if it is the object's own and its value is not
 `undefined`. A prototype-chain name would otherwise answer with a function,
@@ -605,7 +622,8 @@ wrote it, and `policy`, `authorization` and `predicate` deny them because a
 mutation payload is not an input to an authorization decision or a query
 predicate.
 
-In readable syntax the quoted argument to these three is a literal key name.
+In readable syntax the quoted argument to `params`, `instance` and
+`realmConfig` is a literal key name.
 Everywhere else a quoted string is resolved against the schema's field labels
 — that is how a multi-word label like `"Packing Notes"` is written — which
 would otherwise turn `params("Image")` on a card with an `Image` field into a

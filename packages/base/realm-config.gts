@@ -457,6 +457,10 @@ class RealmSettingsEdit extends Component<typeof RealmSettingsField> {
     return this.rows.filter((row) => row.key.trim() === '').length;
   }
 
+  private get duplicateKeyList(): string {
+    return this.duplicateKeys.join(', ');
+  }
+
   private get duplicateKeys(): string[] {
     let seen = new Set<string>();
     let duplicates = new Set<string>();
@@ -585,7 +589,7 @@ class RealmSettingsEdit extends Component<typeof RealmSettingsField> {
         >
           Repeated
           {{if (eq this.duplicateKeys.length 1) 'setting' 'settings'}}
-          {{this.duplicateKeys}}
+          {{this.duplicateKeyList}}
           — the last row with a given name is the one the realm reads.
         </div>
       {{/if}}
