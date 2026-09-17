@@ -41,6 +41,14 @@ const log = logger('search-bounds');
 //     searches freely.
 //   - Time budget (SEARCH_TIME_BUDGET_MS) — server-side only: a wall-clock
 //     cutoff of the server's own work can't live anywhere else.
+//   - In-flight ceiling (SERVER_MAX_IN_FLIGHT_SEARCHES, with
+//     SEARCH_ADMISSION_WAIT_MS) — server-side only, and unlike the others a
+//     bound on the process rather than on a request: how many searches it runs
+//     at once, across every caller. Each in-flight search holds tens of MB of
+//     heap while its result set is assembled, so this is the number that
+//     decides whether a burst exhausts the heap. Enforced at admission in the
+//     realm-server's request middleware; arrivals above the ceiling wait
+//     briefly for a slot and are then shed with 429 + Retry-After.
 //   - Assembled link resources (SERVER_MAX_ASSEMBLED_LINK_RESOURCES) —
 //     server-side only, and the one bound whose polarity is inverted: every
 //     `loadLinks` assembly is held to it unless a caller opts out, because a
@@ -52,14 +60,6 @@ const log = logger('search-bounds');
 //     serializing each one, which scales with the count. Counted in resources
 //     rather than in hops because distance does not track expense: a card
 //     carrying dozens of relationships is dozens of resources one hop out.
-//   - In-flight ceiling (SERVER_MAX_IN_FLIGHT_SEARCHES, with
-//     SEARCH_ADMISSION_WAIT_MS) — server-side only, and unlike the others a
-//     bound on the process rather than on a request: how many searches it runs
-//     at once, across every caller. Each in-flight search holds tens of MB of
-//     heap while its result set is assembled, so this is the number that
-//     decides whether a burst exhausts the heap. Enforced at admission in the
-//     realm-server's request middleware; arrivals above the ceiling wait
-//     briefly for a slot and are then shed with 429 + Retry-After.
 //
 // All bounds are exported consts, overridable via env for ops tuning.
 // ---------------------------------------------------------------------------
@@ -190,35 +190,6 @@ export const SERVER_MAX_IN_FLIGHT_SEARCHES = parsePositiveInt(
   MIN_CONCURRENCY,
 );
 
-// The most resources one `loadLinks` assembly may side-load into `included[]`.
-// This is the whole bound on how far a card's transitive link closure is
-// walked: the traversal terminates on its own once every reachable resource is
-// visited, so what needs bounding is not the walk's depth but how much it
-// carries back. A card with dozens of relationships reaches dozens of resources
-// in one hop, and dozens of those reach hundreds — so the quantity that tracks
-// cost is the count, and a graph that fans out wide is expensive at any depth.
-//
-// Sized as a safety ceiling rather than as a tuning knob. On realms in use the
-// widest card's closure runs to the low hundreds of resources, and a hundred-row
-// page of the most connected type unions to about the same, so the ceiling sits
-// several times above that. It also lands near the point where one assembly
-// would hold the tens of MB of heap SERVER_MAX_IN_FLIGHT_SEARCHES assumes per
-// in-flight search, a serialized resource running a little over 2 KB. So it is
-// not expected to engage; it exists so that no single card graph — authored by a
-// person or by a model, and re-editable at any time — can make one request
-// assemble an unbounded document.
-//
-// Changing this value changes which responses are truncated and what a
-// truncated one contains, while none of the other validator inputs move, so it
-// is folded into the card+json ETag variant (see `cardJsonEtagVariant` in
-// realm.ts). A client holding a validator would otherwise be 304'd to the shape
-// it cached across a retune.
-export const SERVER_MAX_ASSEMBLED_LINK_RESOURCES = parsePositiveInt(
-  env.SERVER_MAX_ASSEMBLED_LINK_RESOURCES,
-  DEFAULT_SERVER_MAX_ASSEMBLED_LINK_RESOURCES,
-  MIN_ASSEMBLED_LINK_RESOURCES,
-);
-
 // How long a search arriving above SERVER_MAX_IN_FLIGHT_SEARCHES waits for a
 // slot before it is shed. Long enough that a burst which clears in well under
 // a second is served rather than rejected; short enough that a saturated
@@ -227,6 +198,30 @@ export const SEARCH_ADMISSION_WAIT_MS = parsePositiveInt(
   env.SEARCH_ADMISSION_WAIT_MS,
   DEFAULT_SEARCH_ADMISSION_WAIT_MS,
   0,
+);
+
+// The most resources one `loadLinks` assembly may side-load into `included[]`,
+// and the whole bound on how far a card's transitive link closure is walked.
+//
+// Sized as a safety ceiling rather than as a tuning knob. On realms in use the
+// widest card's closure runs to the low hundreds of resources, and a
+// hundred-row page of the most connected type unions to about the same, so the
+// ceiling sits several times above that. It also lands near the point where one
+// assembly would hold the tens of MB of heap SERVER_MAX_IN_FLIGHT_SEARCHES
+// assumes per in-flight search, a serialized resource running a little over
+// 2 KB. So it is not expected to engage; it exists so that no single card graph
+// — authored by a person or by a model, and re-editable at any time — can make
+// one request assemble an unbounded document.
+//
+// Changing this value changes which responses are truncated and what a
+// truncated one contains, while none of the other validator inputs move, so it
+// is folded into the card+json ETag variant (see `cardJsonEtagVariant` in
+// realm.ts). A client holding a validator would otherwise be told the shape it
+// cached is still fresh across a retune.
+export const SERVER_MAX_ASSEMBLED_LINK_RESOURCES = parsePositiveInt(
+  env.SERVER_MAX_ASSEMBLED_LINK_RESOURCES,
+  DEFAULT_SERVER_MAX_ASSEMBLED_LINK_RESOURCES,
+  MIN_ASSEMBLED_LINK_RESOURCES,
 );
 
 // The effective values the enforcement functions read. They default to the
