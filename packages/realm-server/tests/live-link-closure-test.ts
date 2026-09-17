@@ -2,7 +2,11 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import { rri, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  LinkShapePolicy,
+  rri,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument, Realm } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
@@ -15,6 +19,15 @@ import {
 // leaving the consumer to fetch the cards it displays. The two modules below
 // pin each shape on the routes themselves, so which one live traffic gets is
 // visible in a diff rather than in a latency chart.
+//
+// Which shape a deployed realm serves is chosen per read by the link-shape
+// policy, from the load the process is under. These are the controls for that:
+// the first module is what the policy's undegraded branch has to keep
+// producing, so a route that drops its closure for some unrelated reason fails
+// here rather than showing up as a quiet change in response size. The policy's
+// own behaviour — the thresholds, the hysteresis, the caller preference and
+// what a degraded response's validator looks like — is exercised in
+// `link-shape-policy-test.ts` and `link-shape-routes-test.ts`.
 
 const realmURL = testRealmURLFor('test/');
 
@@ -182,7 +195,7 @@ module(basename(import.meta.filename), function () {
     });
   });
 
-  module('a live read configured to resolve links only', function (hooks) {
+  module('a live read whose realm is held at links-only', function (hooks) {
     let request: SuperTest<Test>;
     let realmHref: string;
     let searchPath: string;
@@ -201,7 +214,7 @@ module(basename(import.meta.filename), function () {
       realmURL,
       permissions: { '*': ['read'] },
       fileSystem: buildFileSystem(),
-      liveReadsResolveLinksOnly: true,
+      linkShapePolicy: LinkShapePolicy.pinned('links-only'),
       onRealmSetup,
     });
 
