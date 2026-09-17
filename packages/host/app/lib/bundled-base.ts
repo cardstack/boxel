@@ -3,15 +3,12 @@ import { waitForPromise } from '@ember/test-waiters';
 import type { VirtualNetwork } from '@cardstack/runtime-common';
 
 // Written by the `bundled-base-scoped-css` vite plugin: each bundled base
-// module registers the scoped-CSS specifiers its compiled source imports, the
-// sibling base modules it pulls in, and the names it re-exports rather than
-// declares, as it is evaluated.
+// module registers the scoped-CSS specifiers its compiled source imports and
+// the sibling base modules it pulls in, as it is evaluated.
 // See packages/host/lib/bundled-base-scoped-css.mjs.
 interface BundledBaseModuleImports {
   css: string[];
   imports: string[];
-  // `{ [name this module exposes]: [declaring module, name it has there] }`.
-  reexported: Record<string, [string, string]>;
 }
 
 const scopedCSSRegistry = () =>
@@ -270,33 +267,6 @@ export const BUNDLED_BASE_MODULES: Record<
   'tool-field': () => import('@cardstack/base/tool-field'),
 };
 
-// Where each name a module exposes but does not declare is really declared,
-// following the chain: `file-api` borrows `getDefaultFileMenuItems` from
-// `card-api`, which borrows it in turn from `file-menu-items`, and it is the
-// last of those that declares it.
-function declarersFor(name: string) {
-  let registry = scopedCSSRegistry();
-  let declarers: Record<string, { module: string; name: string }> = {};
-  for (let exposed of Object.keys(registry?.[name]?.reexported ?? {})) {
-    let module = name;
-    let declared = exposed;
-    let seen = new Set<string>();
-    for (;;) {
-      let next = registry?.[module]?.reexported?.[declared];
-      if (!next || seen.has(module)) {
-        break;
-      }
-      seen.add(module);
-      [module, declared] = next;
-    }
-    declarers[exposed] = {
-      module: `@cardstack/base/${module}`,
-      name: declared,
-    };
-  }
-  return declarers;
-}
-
 // Registers on the virtual network, so every loader that shares it serves the
 // bundled modules. Must run after the `@cardstack/base/` realm mapping is
 // registered: a shim id resolves at registration time, and it has to land on
@@ -314,12 +284,6 @@ export function shimBundledBase(virtualNetwork: VirtualNetwork) {
       // `settled()` waiting for it, as it waits for the fetch this replaces.
       resolve: () => waitForPromise(resolve(), `bundled base: ${name}`),
       deps: () => scopedCSSDepsFor(name),
-      // A loader credits the first module it serves with every name that
-      // module exposes, so a module that only borrows a class from a sibling
-      // would take the credit for it and every code ref would then name the
-      // wrong module. Naming where each borrowed class is declared hands the
-      // credit to the module that declares it.
-      reexported: () => declarersFor(name),
     });
   }
 }

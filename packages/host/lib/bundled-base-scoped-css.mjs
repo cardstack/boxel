@@ -18,9 +18,6 @@
 // the loader is actually asked for get served, and one reached from inside an
 // already-bundled chunk never is, so a served module has to answer for the
 // stylesheets of everything it pulls in as well as its own.
-//
-// And each registers where the names it re-exports are really declared, so the
-// loader credits the declarer rather than the module that borrows them.
 import { sep } from 'node:path';
 
 const REGISTRY = '__boxelBundledBaseScopedCSS';
@@ -33,19 +30,6 @@ const SCOPED_CSS_IMPORT = /["']([^"']*\.glimmer-scoped\.css)["']/g;
 // Relative specifiers, which inside packages/base name sibling base modules.
 // Stylesheet specifiers are relative too and are collected separately.
 const RELATIVE_IMPORT = /["'](\.\.?\/[^"']*)["']/g;
-
-// `export { X, Y as Z } from './y'`. A module that re-exports a binding does
-// not declare it, and the loader credits whichever module it serves first with
-// every name that module exposes — so a re-exporter served first takes the
-// credit and a code ref then names the wrong module. Recording where each
-// borrowed name really comes from lets the re-exporter hand the credit
-// straight to the declarer, whatever the serving order and whether or not the
-// declarer is ever served on its own.
-//
-// `export * from './y'` names nothing statically and is not collected; no
-// bundled base module uses it.
-const REEXPORT_CLAUSE =
-  /\bexport\s*\{([^}]*)\}\s*from\s*["'](\.\.?\/[^"']*)["']/g;
 
 function isBaseModule(id) {
   return (
@@ -93,20 +77,6 @@ export function bundledBaseScopedCSS() {
       }
       let name = baseModuleName(id);
       let css = [...code.matchAll(SCOPED_CSS_IMPORT)].map((m) => m[1]);
-      // `{ [exposed name]: [declaring module, name it has there] }`.
-      let reexported = {};
-      for (let match of code.matchAll(REEXPORT_CLAUSE)) {
-        let source = resolveSibling(name, match[2]);
-        for (let clause of match[1].split(',')) {
-          let parts = clause.trim().split(/\s+as\s+/);
-          if (!parts[0]) {
-            continue;
-          }
-          // `X as Y` is exposed as Y and declared as X; a bare `X` is both.
-          let exposed = (parts[1] ?? parts[0]).trim();
-          reexported[exposed] = [source, parts[0].trim()];
-        }
-      }
       let imports = [
         ...new Set(
           [...code.matchAll(RELATIVE_IMPORT)]
@@ -115,14 +85,14 @@ export function bundledBaseScopedCSS() {
             .map((specifier) => resolveSibling(name, specifier)),
         ),
       ].filter((imported) => imported !== name);
-      if (!css.length && !imports.length && !Object.keys(reexported).length) {
+      if (!css.length && !imports.length) {
         return null;
       }
       // A name that turns out to be something other than a base module costs
       // nothing: the reader walks only names the registry holds.
       let registration =
         `\n;(globalThis.${REGISTRY} ??= {})[${JSON.stringify(name)}] = ` +
-        `${JSON.stringify({ css, imports, reexported })};\n`;
+        `${JSON.stringify({ css, imports })};\n`;
       return { code: code + registration, map: null };
     },
   };
