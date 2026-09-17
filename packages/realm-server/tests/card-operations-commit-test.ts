@@ -1478,14 +1478,16 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a realm setting is not carried on a card response', async function (assert) {
+    // A card no operation here writes a setting into, so the blanket check
+    // below reads as a leak rather than as the value an operation deliberately
+    // stored. The realm this suite runs against does configure settings, so a
+    // response that omitted them because there were none would pass for the
+    // wrong reason.
     let response = await request
-      .get('/report-realm-marker')
+      .get('/reviewer')
       .set('Accept', 'application/vnd.card+json');
     assert.strictEqual(response.status, 200, 'the card is served');
 
-    // The realm this suite runs against does configure settings, so a response
-    // that omitted them because there were none would pass for the wrong
-    // reason — the operations above read the very values checked for here.
     let realmInfo = response.body.data.meta.realmInfo;
     assert.strictEqual(
       realmInfo.name,

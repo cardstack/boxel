@@ -317,6 +317,28 @@ async function refusal(
   return undefined;
 }
 
+// The same refusal read for its message rather than for which entry produced
+// it — separate from `refusal` because that one's result is compared whole,
+// and a case that never reads the message would start having to name it.
+async function refusedWith(
+  core: BatchCore,
+  entries: BatchEntry[],
+): Promise<{ status: number; code: string; detail: string }> {
+  try {
+    await commitBatch(core, entries);
+  } catch (err: unknown) {
+    if (!isOperationFailure(err)) {
+      throw err;
+    }
+    return {
+      status: err.error.status,
+      code: err.error.code,
+      detail: err.error.detail ?? '',
+    };
+  }
+  throw new Error('expected the batch to be refused');
+}
+
 module(basename(import.meta.filename), function () {
   module('card operations transform', function () {
     test('a transform runs the program its operation carries', async function (assert) {
@@ -766,7 +788,7 @@ module(basename(import.meta.filename), function () {
         settings: { escalateAfterDays: 3 },
       });
 
-      let failure = await refusal(core, [
+      let failure = await refusedWith(core, [
         {
           op: 'transform',
           name: 'escalate',
@@ -775,15 +797,21 @@ module(basename(import.meta.filename), function () {
         },
       ]);
 
-      assert.strictEqual(failure?.status, 422, 'the program was refused');
-      assert.strictEqual(failure?.code, 'program-failed');
+      // The mapping every program failure takes: a refusal the caller sees as
+      // a 400, carrying the message the builtin produced.
+      assert.strictEqual(failure.status, 400, 'the program was refused');
+      assert.strictEqual(failure.code, 'invalid-params');
+      assert.true(
+        failure.detail.includes('not in the realm configuration'),
+        `the message names the realm's settings, got: ${failure.detail}`,
+      );
       assert.deepEqual(commits, [], 'and nothing was written');
     });
 
     test('a realm that configures nothing says so rather than saying no context arrived', async function (assert) {
       let { core } = stub(openReport());
 
-      let failure = await refusal(core, [
+      let { detail } = await refusedWith(core, [
         {
           op: 'transform',
           name: 'escalate',
@@ -795,9 +823,6 @@ module(basename(import.meta.filename), function () {
       // The distinction is the whole point of supplying an empty map rather
       // than leaving the slot out: one message sends the author to the realm's
       // settings, the other to whatever assembled the request.
-      let detail = String(
-        (failure?.entry as { detail?: string } | undefined)?.detail ?? '',
-      );
       assert.true(
         detail.includes('not in the realm configuration'),
         `the failure names the realm's settings, got: ${detail}`,
