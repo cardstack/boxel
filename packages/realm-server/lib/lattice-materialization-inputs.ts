@@ -144,14 +144,18 @@ async function checkQueryInputs(
       ['o.definition_revision'],
     ),
     `OR (i.pristine_doc->'meta'->'publication'->>'version') IS DISTINCT FROM '1'
-      OR (i.pristine_doc->'meta'->'publication'->>'state') IS DISTINCT FROM 'ready'
       OR (i.pristine_doc->'meta'->'publication'->>'definitionRevision') IS DISTINCT FROM o.definition_revision
       OR jsonb_typeof(i.pristine_doc->'meta'->'publication'->'computedFields') IS DISTINCT FROM 'array'
       OR jsonb_typeof(i.pristine_doc->'meta'->'publication'->'queryFields') IS DISTINCT FROM 'array'`,
+    // A stale frame reads a last body, whatever the row's state: a pending
+    // re-registration keeps it. Only a stub with no output revision blocks.
     ...(frame.stale
-      ? []
+      ? [
+          `OR (i.pristine_doc->'meta'->'publication'->>'outputRevision') IS NULL`,
+        ]
       : [
-          `OR o.dirty_generation IS NOT NULL OR o.published_generation IS NULL
+          `OR (i.pristine_doc->'meta'->'publication'->>'state') IS DISTINCT FROM 'ready'
+      OR o.dirty_generation IS NOT NULL OR o.published_generation IS NULL
       OR i.generation IS DISTINCT FROM o.published_generation
       OR (i.pristine_doc->'meta'->'publication'->>'outputRevision') IS DISTINCT FROM o.published_generation::text
       OR (i.pristine_doc->'meta'->'publication'->>'validatedThrough') IS DISTINCT FROM o.input_generation::text
@@ -555,7 +559,13 @@ export class LatticeMaterializationInputs {
         if (
           row.materialized &&
           (row.stamp_version !== '1' ||
-            row.state !== 'ready' ||
+            (row.state !== 'ready' &&
+              // a stale frame reads a pending re-registration's last body
+              !(
+                this.#frame.stale &&
+                row.state === 'pending' &&
+                row.published != null
+              )) ||
             !row.owner_version ||
             row.retired ||
             row.code_current !== true ||
@@ -640,7 +650,11 @@ export class LatticeMaterializationInputs {
         let resource: LooseCardResource = JSON.parse(body);
         if (resource.type !== 'card' || !resource.meta?.adoptsFrom)
           throw new Error('Invalid published Lattice card data');
-        if (receipt.materialized) latticeSnapshotFields(resource);
+        if (receipt.materialized)
+          latticeSnapshotFields(
+            resource,
+            this.#frame.stale ? { allowPending: true } : undefined,
+          );
         store.set(receipt.url, {
           url: receipt.url,
           generation: receipt.generation,

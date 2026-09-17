@@ -1122,6 +1122,34 @@ module(basename(import.meta.filename), function (hooks) {
       armed,
       'further dirt does not push the deadline out',
     );
+    // The owner's own card re-indexed as a source: a pending re-registration
+    // that evaluated no grains. The window and the armed deadline survive it.
+    const [{ definition_revision }] = await db.execute(
+      'SELECT definition_revision FROM lattice_owners WHERE owner_url=$1',
+      { bind: [owner] },
+    );
+    await db.withWriteLock('lattice:index:' + realm, async (tx) => {
+      await registry.publish(tx!, {
+        realmURL: realm,
+        ownerURL: owner,
+        generation: 9,
+        inputGeneration: 0,
+        definitionRevision: String(definition_revision),
+        watches: [],
+        pending: true,
+      });
+    });
+    row = await ownerRow();
+    assert.strictEqual(
+      Number(row.stale_within),
+      90,
+      'a re-registration without grains keeps the window',
+    );
+    assert.strictEqual(
+      String(row.stale_after),
+      armed,
+      'and keeps the deadline already armed',
+    );
   });
 
   test('the kernel admits an overdue owner past the source, input and obligation fences', async (assert) => {
@@ -1267,14 +1295,17 @@ module(basename(import.meta.filename), function (hooks) {
       [feeder],
       'past it too, while the feeder has never published',
     );
+    // The feeder has published once: its row carries an output revision. Its
+    // state may well be pending again (its card re-indexed as a source); the
+    // body is what a stale attempt reads, and the body is there.
     await db.execute(
-      `UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{meta,publication,state}','"ready"') WHERE url=$1`,
+      `UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{meta,publication,outputRevision}','5') WHERE url=$1`,
       { bind: [feeder] },
     );
     assert.deepEqual(
       names(await registry.ready(realm)),
       [feeder, owner].sort(),
-      'past it the owner runs over what the feeder last published',
+      'past it the owner runs over what the feeder last published, pending state or not',
     );
     assert.deepEqual(
       (await registry.pending(realm, { runnableOnly: true }))

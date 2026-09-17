@@ -526,6 +526,62 @@ module(basename(import.meta.filename), function (hooks) {
     await assert.rejects((await open()).read([url]), /feeder is not current/);
   });
 
+  test('a stale frame reads a feeder re-registered pending with its last body; a bodiless stub still blocks', async (assert) => {
+    // An owner re-indexed as a source is re-registered pending, with its
+    // publication (and output revision) intact.
+    const url = await materializedCard('feeder', 2);
+    await db.execute(
+      `UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{meta,publication,state}','"pending"') WHERE url=$1`,
+      { bind: [url] },
+    );
+    await db.execute(
+      'UPDATE lattice_owners SET dirty_generation=5 WHERE owner_url=$1',
+      { bind: [url] },
+    );
+    await assert.rejects(
+      (await open()).read([url]),
+      /feeder is not current/,
+      'an ordinary frame waits for the feeder',
+    );
+    const staleFrame = () =>
+      LatticeMaterializationInputs.open({
+        db,
+        network,
+        realmURL: realm,
+        actor,
+        generation: 5,
+        loaderEpoch: 'epoch-1',
+        stale: true,
+        lookup: {
+          async lookupDefinition() {
+            return definition;
+          },
+        },
+      });
+    const stale = await staleFrame();
+    const cards = await stale.read([url]);
+    assert.strictEqual(
+      cards[0].resource.attributes?.amount,
+      2,
+      'the body the feeder last published, through its pending state',
+    );
+    const found = await stale.query('records', {
+      filter: { on: codeRef, eq: { group: 'A' } },
+      page: { size: 10 },
+    });
+    assert.strictEqual(found.cards.length, 1, 'and by query');
+    // A registration stub (no output revision) has no body to read.
+    await db.execute(
+      `UPDATE boxel_index SET pristine_doc=(pristine_doc #- '{meta,publication,outputRevision}') WHERE url=$1`,
+      { bind: [url] },
+    );
+    await assert.rejects(
+      (await staleFrame()).read([url]),
+      /feeder is not current/,
+      'a stub with no output revision blocks a stale attempt',
+    );
+  });
+
   test('a stale frame reads a dirty feeder at its last published body', async (assert) => {
     const url = await materializedCard('feeder', 2);
     await db.execute(

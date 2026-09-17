@@ -519,7 +519,26 @@ export class LatticeQueryRegistry
        published_generation = EXCLUDED.published_generation,
        input_generation = EXCLUDED.input_generation, dirty_generation = EXCLUDED.dirty_generation,
        definition_revision = EXCLUDED.definition_revision,
-       retired = EXCLUDED.retired, code_bound = EXCLUDED.code_bound${pg ? ', settle_until = EXCLUDED.settle_until, stale_within = EXCLUDED.stale_within, stale_after = EXCLUDED.stale_after' : ''}`,
+       retired = EXCLUDED.retired, code_bound = EXCLUDED.code_bound${
+         pg
+           ? `, settle_until = EXCLUDED.settle_until,
+       stale_within = COALESCE(EXCLUDED.stale_within, lattice_owners.stale_within),
+       stale_after = ${
+         // A publication that evaluated no grains (a re-registration of a
+         // re-indexed source, the browser producer) keeps the window the
+         // owner has, and a pending re-registration of an owner already
+         // dirty keeps the deadline already armed rather than pushing it
+         // out on every tick; a stale publication re-arms it (it just
+         // fired), a clean one clears it.
+         owner.stale
+           ? 'EXCLUDED.stale_after'
+           : dirtyGeneration !== null
+             ? `COALESCE(lattice_owners.stale_after, EXCLUDED.stale_after,
+                 now() + lattice_owners.stale_within * interval '1 second')`
+             : 'NULL'
+       }`
+           : ''
+       }`,
     ]);
     if (this.db.kind === 'pg') {
       if (owner.retainOutputGeneration !== undefined) {
@@ -1043,7 +1062,11 @@ export class LatticeQueryRegistry
     // bodies rather than waiting for them, so a dirty input does not block
     // it. An input that has never published has no last body to read: a
     // stale attempt over it can only fail, so it blocks the overdue owner
-    // exactly as it blocks an ordinary one.
+    // exactly as it blocks an ordinary one. "Never published" is the row
+    // carrying no output revision -- a registration stub -- not the row's
+    // state: an owner re-indexed as a source is re-registered pending with
+    // its last body intact, and that body is exactly what a stale attempt
+    // reads.
     const overdue = new Set(
       runnableOwners.filter((owner) => owner.stale).map((o) => o.ownerURL),
     );
@@ -1058,7 +1081,7 @@ export class LatticeQueryRegistry
                WHERE o.realm_url=`,
               param(realmURL),
               `AND o.retired=FALSE AND o.dirty_generation IS NOT NULL
-               AND (i.url IS NULL OR (i.pristine_doc->'meta'->'publication'->>'state') IS DISTINCT FROM 'ready'
+               AND (i.url IS NULL OR (i.pristine_doc->'meta'->'publication'->>'outputRevision') IS NULL
                     OR NOT`,
               ...latticeOwnerDefinitionCurrent(
                 ['o.realm_url'],
