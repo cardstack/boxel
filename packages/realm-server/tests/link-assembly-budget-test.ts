@@ -44,7 +44,28 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
 
     export class Target extends CardDef {
       @field name = contains(StringField);
+      @field tag = contains(StringField);
       @field child = linksTo(() => Target);
+    }
+  `;
+
+  // A card whose members are found by running a query rather than by following
+  // a stored link. Its targets are written into `included[]` by the same walk,
+  // so the budget reaches them too — and running out part-way through one field
+  // is the case where a partially-carried field has to stay coherent.
+  fs['query-consumer.gts'] = `
+    import { contains, field, linksToMany, CardDef } from "@cardstack/base/card-api";
+    import StringField from "@cardstack/base/string";
+    import { Target } from "./target";
+
+    export class QueryConsumer extends CardDef {
+      @field name = contains(StringField);
+      @field matches = linksToMany(() => Target, {
+        query: {
+          filter: { eq: { tag: 'query-match' } },
+          page: { size: 50, number: 0 },
+        },
+      });
     }
   `;
 
@@ -72,7 +93,7 @@ ${consumerFields}
     } as LooseSingleCardDocument;
     fs[`target-${i}.json`] = {
       data: {
-        attributes: { name: `Target ${i}` },
+        attributes: { name: `Target ${i}`, tag: 'query-match' },
         relationships: { child: { links: { self: `./child-${i}` } } },
         meta: { adoptsFrom: { module: rri('./target'), name: 'Target' } },
       },
@@ -83,6 +104,17 @@ ${consumerFields}
   for (let i = 0; i < TARGET_COUNT; i++) {
     relationships[`link${i}`] = { links: { self: `./target-${i}` } };
   }
+  fs['probe.gts'] = `
+    import { contains, field, linksTo, CardDef } from "@cardstack/base/card-api";
+    import StringField from "@cardstack/base/string";
+    import { Target } from "./target";
+
+    export class ProbeConsumer extends CardDef {
+      @field name = contains(StringField);
+${consumerFields}
+    }
+  `;
+
   fs['consumer-1.json'] = {
     data: {
       attributes: { name: 'C1' },
@@ -99,6 +131,33 @@ ${consumerFields}
       attributes: { name: 'C2' },
       relationships,
       meta: { adoptsFrom: { module: rri('./consumer'), name: 'Consumer' } },
+    },
+  } as LooseSingleCardDocument;
+
+  // A second fan root over the same targets, read by the SQL probe alone. The
+  // realm's card+json response cache is keyed on the validator, and the budget
+  // is part of that validator — so a probe sharing a root with another test
+  // would be answered from that test's cache entry and observe no SQL at all.
+  //
+  // Its own type, not another `Consumer`: the search tests below count the rows
+  // a `Consumer` query returns, and a third instance would move those counts
+  // while saying nothing about the bound.
+  fs['probe-consumer.json'] = {
+    data: {
+      attributes: { name: 'PROBE' },
+      relationships,
+      meta: {
+        adoptsFrom: { module: rri('./probe'), name: 'ProbeConsumer' },
+      },
+    },
+  } as LooseSingleCardDocument;
+
+  fs['query-consumer-1.json'] = {
+    data: {
+      attributes: { name: 'QC1' },
+      meta: {
+        adoptsFrom: { module: rri('./query-consumer'), name: 'QueryConsumer' },
+      },
     },
   } as LooseSingleCardDocument;
 
@@ -246,61 +305,71 @@ module(basename(import.meta.filename), function () {
     });
 
     test('the budget bounds what is read, not only what is returned', async function (assert) {
-      // The assertion the response body cannot make. A walk that fetched the
-      // whole closure and then returned the first few resources would produce
-      // a byte-identical body to one that never read the rest — only the SQL
-      // says which happened, and reading less is the entire point of a bound
-      // whose justification is event-loop cost.
-      let budget = 2;
-      setSearchBoundsForTests({ maxAssembledLinkResources: budget });
-
-      let originalExecute = testDbAdapter.execute.bind(testDbAdapter);
-      let dbExecute = testDbAdapter as {
-        execute: typeof testDbAdapter.execute;
-      };
-      let linkURLsBound = 0;
-      let linkPrefix = `${realmHref}`;
-      try {
-        dbExecute.execute = async (sql, opts) => {
-          let bind = opts?.bind ?? [];
-          let normalized = sql.replace(/\s+/g, ' ');
-          if (
-            /FROM boxel_index\b/.test(normalized) &&
-            /\bi\.url\s+IN\s*\(/.test(normalized)
-          ) {
-            linkURLsBound += bind.filter(
-              (v) =>
-                typeof v === 'string' &&
-                v.startsWith(linkPrefix) &&
-                /\/(target|child)-\d+/.test(v),
-            ).length;
-          }
-          return originalExecute(sql, opts);
+      // The assertion the response body cannot make. A walk that read the whole
+      // closure and then returned the first few resources would produce a
+      // byte-identical body to one that never read the rest, so only the emitted
+      // SQL says which happened — and reading less is the point of a bound whose
+      // justification is event-loop cost.
+      //
+      // Counted as distinct resources rather than as bind slots: the batched
+      // lookup matches on either column (`i.url IN (…) OR i.file_alias IN (…)`),
+      // so every resource it asks for contributes more than one bind.
+      //
+      // Reads `probe-consumer`, and at budgets no other test uses, because the
+      // response cache is keyed on a validator the budget is folded into: a
+      // (root, budget) pair some earlier test already read would be served from
+      // its entry, and the probe would see no SQL whether or not the bound
+      // works.
+      async function resourcesRead(budget: number): Promise<number> {
+        setSearchBoundsForTests({ maxAssembledLinkResources: budget });
+        let originalExecute = testDbAdapter.execute.bind(testDbAdapter);
+        let dbExecute = testDbAdapter as {
+          execute: typeof testDbAdapter.execute;
         };
-
-        let response = await request
-          .get(cardPath('consumer-1'))
-          .set('Accept', SupportedMimeType.CardJson);
-        assert.strictEqual(response.status, 200, `HTTP 200: ${response.text}`);
-        assert.strictEqual(
-          linkResourceIds(response.body.included).length,
-          budget,
-          'the response carries the budget',
-        );
-      } finally {
-        dbExecute.execute = originalExecute;
+        let asked = new Set<string>();
+        try {
+          dbExecute.execute = async (sql, opts) => {
+            let normalized = sql.replace(/\s+/g, ' ');
+            if (
+              /FROM boxel_index\b/.test(normalized) &&
+              /\bi\.url\s+IN\s*\(/.test(normalized)
+            ) {
+              for (let bound of opts?.bind ?? []) {
+                if (
+                  typeof bound === 'string' &&
+                  /\/(target|child)-\d+/.test(bound)
+                ) {
+                  asked.add(bound.replace(/\.json$/, ''));
+                }
+              }
+            }
+            return originalExecute(sql, opts);
+          };
+          let response = await request
+            .get(cardPath('probe-consumer'))
+            .set('Accept', SupportedMimeType.CardJson);
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200: ${response.text}`,
+          );
+        } finally {
+          dbExecute.execute = originalExecute;
+        }
+        return asked.size;
       }
 
-      // A positive control on the counter itself: it has to be capable of
-      // exceeding the budget, or the assertion below would pass on a run that
-      // counted nothing at all.
-      assert.ok(
-        linkURLsBound > 0,
-        `the batched lookup was observed (bound ${linkURLsBound} link URLs)`,
+      // The positive control. Without it the bounded arm's low count would be
+      // equally consistent with a counter that never matched a query at all.
+      assert.strictEqual(
+        await resourcesRead(FULL_CLOSURE + 1),
+        FULL_CLOSURE,
+        'a budget that fits reads every resource the graph holds',
       );
-      assert.true(
-        linkURLsBound <= budget,
-        `the batched lookup asked for at most the ${budget} resources the budget allows, not the ${FULL_CLOSURE} the graph holds (asked for ${linkURLsBound})`,
+      assert.strictEqual(
+        await resourcesRead(6),
+        6,
+        `and a budget of 6 reads six, rather than reading all ${FULL_CLOSURE} and returning six`,
       );
     });
 
@@ -463,6 +532,59 @@ module(basename(import.meta.filename), function () {
         linkResourceIds(conditional.body.included).length,
         2,
         'and the client receives the shape the new budget produces',
+      );
+    });
+
+    test('a query-backed field clipped part-way through stays coherent', async function (assert) {
+      // The members of a query-backed field are written as `matches.N`
+      // relationships by the same pass that assembles the closure, so the budget
+      // can run out in the middle of one. What must survive is the answer a
+      // consumer cannot cheaply recompute: which cards the field names. The
+      // cards themselves it can fetch.
+      setSearchBoundsForTests({ maxAssembledLinkResources: 3 });
+      let response = await request
+        .get(cardPath('query-consumer-1'))
+        .set('Accept', SupportedMimeType.CardJson);
+
+      assert.strictEqual(response.status, 200, `HTTP 200: ${response.text}`);
+      let relationships = response.body.data.relationships as Record<
+        string,
+        {
+          links?: { self?: string; search?: string };
+          data?: { id: string }[] | { id: string };
+        }
+      >;
+      let umbrella = relationships.matches;
+      assert.strictEqual(
+        Array.isArray(umbrella?.data) ? umbrella.data.length : -1,
+        TARGET_COUNT,
+        'the field still names every match, including the ones not carried',
+      );
+      assert.ok(umbrella?.links?.search, 'and still carries its query link');
+
+      let carried = linkResourceIds(response.body.included);
+      assert.strictEqual(carried.length, 3, 'only the budget is carried');
+      assert.true(
+        response.body.meta?.linkClosureTruncated,
+        'and the document reports the rest is missing',
+      );
+
+      // Every member the response did not carry is still reachable: its own
+      // `matches.N` entry names it, which is what sends a consumer to fetch it
+      // rather than reading the field as short.
+      let named = new Set<string>();
+      for (let [key, rel] of Object.entries(relationships)) {
+        if (!key.startsWith('matches.')) {
+          continue;
+        }
+        if (rel.links?.self) {
+          named.add(rel.links.self.replace(/^\.\//, ''));
+        }
+      }
+      assert.strictEqual(
+        named.size,
+        TARGET_COUNT,
+        'every member names its target, carried or not',
       );
     });
 
