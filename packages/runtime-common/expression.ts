@@ -89,6 +89,11 @@ export interface JsonContains {
   column: string;
   segments: string[];
   value: Param;
+  // Indexes of `segments` that are arrays in the document: the containment
+  // wraps the remainder in an array there ({"lines":[{"player":v}]}), which
+  // is how jsonb containment expresses membership of a plural path -- and
+  // what lets the GIN index on the column serve a plural `eq`.
+  arraySegments?: number[];
 }
 
 // Self-contained membership test: does the JSON array in `column` contain
@@ -126,6 +131,9 @@ export interface FieldArity {
   value: CardExpression;
   pluralValue?: CardExpression;
   usePluralContainer?: boolean;
+  // A string the plural branch may also test by GIN-servable containment
+  // (search_doc @> {…:[value]}) ahead of the json_tree predicate.
+  containValue?: Param;
   errorHint: string;
   kind: 'field-arity';
 }
@@ -325,6 +333,7 @@ export function fieldArity({
   usePluralContainer,
   errorHint,
   pluralValue,
+  containValue,
 }: {
   type: CodeRef;
   path: string;
@@ -332,6 +341,7 @@ export function fieldArity({
   usePluralContainer?: boolean;
   errorHint: string;
   pluralValue?: CardExpression;
+  containValue?: Param;
 }): FieldArity {
   return {
     type,
@@ -340,6 +350,7 @@ export function fieldArity({
     errorHint,
     usePluralContainer,
     pluralValue,
+    ...(containValue ? { containValue } : {}),
     kind: 'field-arity',
   };
 }
@@ -579,11 +590,14 @@ export function expressionToSql(
     } else if (element.kind === 'json-contains') {
       // Render the containment of `column` by {segments: value}. Both branches
       // re-use renderElement so binds are pushed in left-to-right order.
-      let { column, segments, value } = element;
+      let { column, segments, value, arraySegments } = element;
       if (dbAdapterKind === 'sqlite') {
         // SQLite has no `@>`; navigate the singular object path: interior
         // segments with `->`, the leaf with `->>`, then compare. (Only string
-        // leaves reach here, so `->>` text-equality matches the value.)
+        // leaves reach here, so `->>` text-equality matches the value.) A
+        // plural containment is only ever a pruning conjunct beside the exact
+        // json_tree predicate, so here it is simply true.
+        if (arraySegments?.length) return '1=1';
         let frag: Expression = [column];
         segments.forEach((segment, i) => {
           frag.push(i === segments.length - 1 ? '->>' : '->', param(segment));
@@ -592,8 +606,9 @@ export function expressionToSql(
         return frag.map(renderElement).join(' ');
       }
       // Postgres: GIN-servable containment, full nested object from the root.
+      let arrays = new Set(arraySegments ?? []);
       let nested = segments.reduceRight<JSONTypes.Value>(
-        (acc, segment) => ({ [segment]: acc }),
+        (acc, segment, i) => ({ [segment]: arrays.has(i) ? [acc] : acc }),
         (value[dbAdapterKind] ?? value.param ?? null) as JSONTypes.Value,
       );
       return [column, '@>', param(nested as JSONTypes.Object), '::jsonb']

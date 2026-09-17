@@ -2385,6 +2385,10 @@ export class IndexQueryEngine {
           path: key,
           value: [jsonContainsQuery(key, onRef, [param(value)])],
           pluralValue: [query, '=', v],
+          // A plural string path is also tested by containment, which the
+          // GIN index serves; the json_tree predicate keeps the exact
+          // semantics over the rows containment lets through.
+          ...(typeof value === 'string' ? { containValue: param(value) } : {}),
           errorHint: 'filter',
         }),
       ];
@@ -2573,8 +2577,18 @@ export class IndexQueryEngine {
   //   ORDER BY url
 
   private async handleFieldArity(fieldArity: FieldArity): Promise<Expression> {
-    let { path, value, type, pluralValue, usePluralContainer } = fieldArity;
+    let { path, value, type, pluralValue, usePluralContainer, containValue } =
+      fieldArity;
     let definition = await this.getDefinition(type);
+    // jsonb containment is type-sensitive: only a string leaf may be pruned
+    // by it (a numeric array never contains the string form of its member).
+    let containable = false;
+    if (containValue) {
+      let leafField = await getField(definition, path, this.#definitionLookup);
+      containable =
+        leafField.serializerName !== 'number' &&
+        leafField.serializerName !== 'big-integer';
+    }
     let exp: CardExpression = await this.walkFilterFieldPath(
       definition,
       path,
@@ -2582,8 +2596,24 @@ export class IndexQueryEngine {
       // Leaf field handler
       async (_definition, expression, pathTraveled) => {
         if (traveledThruPlural(pathTraveled)) {
+          let containment: Expression = [];
+          if (containable && containValue) {
+            let raw = pathTraveled.split('.');
+            containment = [
+              {
+                kind: 'json-contains',
+                column: 'search_doc',
+                segments: raw.map((segment) => segment.replace(/\[\]$/, '')),
+                arraySegments: raw.flatMap((segment, i) =>
+                  segment.endsWith('[]') ? [i] : [],
+                ),
+                value: containValue,
+              },
+            ];
+          }
           return [
             ...every([
+              ...(containment.length ? [containment] : []),
               pluralValue ?? expression,
               [
                 tableValuedTree(

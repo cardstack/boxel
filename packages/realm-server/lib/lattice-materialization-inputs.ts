@@ -181,6 +181,34 @@ export class LatticeMaterializationInputs {
   static MAX_CARD_BYTES = 4_194_304;
   static MAX_TOTAL_BYTES = 67_108_864;
   static MAX_QUERIES = 64;
+  // The unsettled-inputs guard is a predicate over every owner of a type
+  // scope, joined to their index rows: the 32 renders of a wave ask the same
+  // question of the same rows. A pass is remembered against a fingerprint of
+  // the realm's owner rows (the columns the guard reads) plus the generation
+  // and code epoch; the fingerprint is one aggregate over lattice_owners
+  // (milliseconds) where the guard is a join with JSON extraction per row.
+  static #guardPassed = new Map<string, string>();
+  static async guardOnce(
+    run: (expression: Expression) => Promise<Record<string, unknown>[]>,
+    frame: Frame,
+    scopeKey: string,
+    check: () => Promise<void>,
+  ) {
+    const [row] = await run([
+      `SELECT md5(coalesce(string_agg(owner_url || ':' || coalesce(dirty_generation::text,'') || ':' || coalesce(published_generation::text,'') || ':' || coalesce(input_generation::text,'') || ':' || definition_revision || ':' || retired::text, ',' ORDER BY owner_url),'')) AS fingerprint
+       FROM lattice_owners WHERE realm_url=`,
+      param(frame.realmURL),
+    ]);
+    const key = `${frame.realmURL}|${frame.loaderEpoch}|${frame.stale ? 1 : 0}|${scopeKey}`;
+    const version = `${frame.generation}|${String(row?.fingerprint)}`;
+    if (LatticeMaterializationInputs.#guardPassed.get(key) === version) return;
+    await check();
+    if (LatticeMaterializationInputs.#guardPassed.size >= 256)
+      LatticeMaterializationInputs.#guardPassed.delete(
+        LatticeMaterializationInputs.#guardPassed.keys().next().value!,
+      );
+    LatticeMaterializationInputs.#guardPassed.set(key, version);
+  }
   #db: DBAdapter;
   #frame: Frame;
   #engine: IndexQueryEngine;
@@ -331,10 +359,16 @@ export class LatticeMaterializationInputs {
       const typeScope = await this.#engine.latticeQueryTypeScope(input.filter);
       const scopeKey = JSON.stringify(typeScope);
       if (!this.#queryScopes.has(scopeKey)) {
-        await checkQueryInputs(
+        await LatticeMaterializationInputs.guardOnce(
           (expression) => query(this.#db, expression),
           this.#frame,
-          typeScope,
+          scopeKey,
+          () =>
+            checkQueryInputs(
+              (expression) => query(this.#db, expression),
+              this.#frame,
+              typeScope,
+            ),
         );
         this.#queryScopes.set(scopeKey, typeScope);
       }
@@ -782,7 +816,12 @@ export class LatticeMaterializationInputs {
       async assertCurrent(tx: Querier) {
         await checkFrame(tx, frame, true);
         for (const scope of queryScopes)
-          await checkQueryInputs(tx, frame, scope);
+          await LatticeMaterializationInputs.guardOnce(
+            tx,
+            frame,
+            'commit|' + JSON.stringify(scope),
+            () => checkQueryInputs(tx, frame, scope),
+          );
         if (!receipts.length) return;
         let rows = await tx([
           `SELECT i.url,i.xmin::text AS version FROM boxel_index i
