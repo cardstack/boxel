@@ -8675,6 +8675,16 @@ export class Realm {
       // is decided by the request alone, so letting it reach a query that can
       // fail closed would let an unsatisfiable precondition come back as the
       // lane's 503 — "retry this", for a request no retry can fix.
+      //
+      // "Ahead of the lane check" is as early as it gets, not as early as it
+      // could be. This runs inside the precondition closure, so a request the
+      // realm can answer from the header alone still takes the batch's file
+      // locks and waits out the coordinator's drain before being told 412.
+      // That is latency and lock-holding rather than a wrong answer, and it
+      // buys a single error path: hoisting the check to where `ifMatch` is
+      // first read would put the throw outside `commitBatch`, which both call
+      // sites reach without a `try`, so their refusal handling would have to
+      // grow a second entry point to catch it.
       if (!namesAValidator(ifMatch)) {
         throw new OperationFailure({
           id: url.href,

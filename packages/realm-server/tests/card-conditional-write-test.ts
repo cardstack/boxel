@@ -247,13 +247,21 @@ module(basename(import.meta.filename), function () {
         // write carrying no If-Match at all is what makes this a distinction
         // rather than a restatement: that one must still be 200.
         //
-        // The whitespace and comma spellings are here because RFC 9110
-        // §5.6.1.2 has a recipient ignore empty list elements, which makes
-        // them well-formed lists of nothing rather than junk — so they have to
-        // land on this answer for the same reason, not be rejected as
-        // malformed.
+        // The comma spellings are here because RFC 9110 §5.6.1.2 has a
+        // recipient ignore empty list elements, which makes them well-formed
+        // lists of nothing rather than junk — so they have to land on this
+        // answer for the same reason, not be rejected as malformed.
+        //
+        // These four are four *distinct* values on the wire, which is not the
+        // same as four distinct spellings in the source. Leading and trailing
+        // OWS is stripped twice over before the realm sees a header — once by
+        // the HTTP parser and again by the `Headers` constructor — so a
+        // whitespace-only value arrives as `''` and `' , '` arrives as `','`.
+        // Writing those would pin two inputs while appearing to pin four. The
+        // interior whitespace in `', ,'` survives, which is the case the
+        // §5.6.1.2 reading is actually about.
         let bytesBefore = readFileSync(cardFile('person-1.json'), 'utf8');
-        for (let ifMatch of ['', '   ', ',', ' , ']) {
+        for (let ifMatch of ['', ',', ',,', ', ,']) {
           let response = await request
             .patch('/person-1')
             .send(patchPersonBody('Van Gogh'))
@@ -271,6 +279,28 @@ module(basename(import.meta.filename), function () {
             `and writes nothing for ${JSON.stringify(ifMatch)}`,
           );
         }
+      });
+
+      test('a DELETE whose If-Match names no validator is refused too', async function (assert) {
+        // The removal path builds this precondition separately from the patch
+        // path, so covering one says nothing about the other. It is also the
+        // verb where reading an empty If-Match as an absent one is least
+        // recoverable: a patch applied against a card that moved can be
+        // patched again, and a card removed cannot be un-removed.
+        let response = await request
+          .delete('/person-1')
+          .set('Accept', 'application/vnd.card+json')
+          .set('If-Match', '');
+
+        assert.strictEqual(
+          response.status,
+          412,
+          `HTTP 412 status: ${response.text}`,
+        );
+        assert.true(
+          existsSync(cardFile('person-1.json')),
+          'and the card is still there',
+        );
       });
 
       test('a validator the realm issued matches when the client echoes it as weak', async function (assert) {
@@ -608,6 +638,46 @@ module(basename(import.meta.filename), function () {
           200,
           `the same write succeeds once the lane clears: ${afterUnwedge.text}`,
         );
+      });
+
+      test('an If-Match naming no validator is refused even when the lane will not settle', async function (assert) {
+        // This is what makes the placement of that refusal a claim rather than
+        // a comment. It sits ahead of the lane query deliberately: the answer
+        // is decided by the request alone, so letting it reach a check that
+        // can fail closed would let an unsatisfiable precondition come back as
+        // a 503 — "retry this", for a request no retry can fix.
+        //
+        // Every other spelling-of-nothing test runs against a settled lane, so
+        // it reaches the ordinary comparison and is refused there whatever the
+        // order. Only a wedged lane tells the two placements apart: 412 with
+        // the guard where it is, 503 with it moved below the query. Without
+        // this case, moving that block reddens nothing.
+        //
+        // No skip-index-wait here, and it must stay that way: the point is
+        // that this answer does not depend on indexing, so the request must
+        // not be the one that opts out of waiting for it.
+        let bytesBefore = readFileSync(cardFile('person-1.json'), 'utf8');
+        let unwedge = await wedgeIndexingLane();
+        try {
+          let response = await request
+            .patch('/person-1')
+            .send(patchPersonBody('Van Gogh'))
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-Match', ',');
+
+          assert.strictEqual(
+            response.status,
+            412,
+            `refused on the request, not deferred to the lane: ${response.text}`,
+          );
+          assert.strictEqual(
+            readFileSync(cardFile('person-1.json'), 'utf8'),
+            bytesBefore,
+            'and writes nothing',
+          );
+        } finally {
+          await unwedge();
+        }
       });
 
       test('indexing that cannot invalidate a validator does not refuse the write', async function (assert) {
