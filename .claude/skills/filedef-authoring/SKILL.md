@@ -29,7 +29,7 @@ The content-only renderers — just the file's content, none of the shell chrome
 - Card code (in a realm): `import { MarkdownPreview } from 'https://cardstack.com/base/file-formats/index';`
 - Host / base TS: `import { MarkdownPreview } from '@cardstack/base/file-formats/index';`
 
-The barrel exports **`MarkdownPreview`**, **`ImagePreview`**, and **`AudioPreview`**. Other renderers (`TextPreview`, `CsvPreview`, `JsonPreview`, `CodePreview`, `ArchivePreview`) are module-private; export them from the barrel as call sites need them.
+Which families have a content-only renderer is what the barrel exports — read `file-formats/index.ts` rather than a list here. The rest (`TextPreview`, `CsvPreview`, `JsonPreview`, `CodePreview`, `ArchivePreview`) are module-private; export one from the barrel as call sites need it.
 
 ```gts
 // A markdown file's prose, no file bar / metadata / Download-Copy-link.
@@ -61,6 +61,8 @@ Do **not** render a FileDef field through the shell and then fight the chrome:
 This reaches into shell internals with `:deep()` to hide chrome and un-clamp content. The targeted classes are renderer-internal, not a stable contract, so the CSS breaks silently when the renderer's markup changes — and it duplicates what the content-only components already do. Render `<MarkdownPreview …>` (or `ImagePreview` / `AudioPreview`) directly instead. For worked examples, see `experiments-realm/filedef-fixtures/file-embedding-field-guide.gts` and boxel-home's `LegalDoc`.
 
 A plain wrapped embed with no chrome-fighting (`<@fields.attachments @format='embedded' />`) is fine — the anti-pattern is specifically the `@displayContainer={{false}}` + `:deep()` combination used to simulate a content-only render.
+
+To tune a wrapped embed you cannot pass args to at all — a framework-driven `<@fields.file @format='embedded' />`, which takes no component args — the cross-boundary lever is an inherited custom property, not a selector: markdown reads `--md-preview-background`, `--md-preview-foreground`, and `--md-preview-padding` from any ancestor. The boxel-skills reference `boxel-ui-guidelines/references/delegated-render-control.md` covers the general case (a `class` on the field, the theme cascade, what a child must never decorate).
 
 ## Test gotchas
 
