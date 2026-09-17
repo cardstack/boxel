@@ -1,17 +1,26 @@
 /**
- * The request-context builtins: `params`, `actor` and `instance`.
+ * The request-context builtins: `params`, `actor`, `instance` and
+ * `realmConfig`.
  *
  * A mutation program can see the document it is editing through `.`. These
- * three add the rest of what a card operation needs — what the caller sent,
- * who the caller is, and the stored document behind the edit — each supplied
- * by the host and scoped to one evaluation by `withRequestContext`.
+ * four add the rest of what a card operation needs — what the caller sent,
+ * who the caller is, the stored document behind the edit, and the settings of
+ * the realm the edit lands in — each supplied by the host and scoped to one
+ * evaluation by `withRequestContext`.
  *
- * `params` and `instance` are keyed objects a program reads a member out of.
- * `actor` is not: it is the caller's user id as a string and nothing else, so
- * it has one form, `actor()`. A host authenticates a caller as a user id and
- * knows nothing further about them, so any other member would be whatever
- * request detail the host happened to post — and a program reading one is a
- * commitment to keep posting it.
+ * `params`, `instance` and `realmConfig` are keyed objects a program reads a
+ * member out of. `actor` is not: it is the caller's user id as a string and
+ * nothing else, so it has one form, `actor()`. A host authenticates a caller
+ * as a user id and knows nothing further about them, so any other member would
+ * be whatever request detail the host happened to post — and a program reading
+ * one is a commitment to keep posting it.
+ *
+ * `realmConfig` is the one slot that is not about the request: it is the realm
+ * the program runs in, which is why a type shared across realms can name a
+ * setting — an approver, a threshold, a default assignee — without hard-coding
+ * whichever realm's answer it was authored against. It reaches a program the
+ * same way the other three do because it varies per invocation for the same
+ * reason they do: the realm is decided by the target, not by the type.
  *
  * They are functions rather than `$`-prefixed variables, matching the form
  * card operations are authored in, and named `params` rather than the more
@@ -54,16 +63,22 @@ const SLOT_DESCRIPTIONS: Record<ContextSlot, string> = {
   params: 'the payload the caller sent',
   actor: 'the caller identity',
   instance: 'the stored document being edited',
+  realmConfig: 'the realm configuration',
 };
 
 /**
- * How to ask for a key that may legitimately be absent. `instance()` hands
- * back the whole object with no argument, so a program that wants a default
- * rather than a failure has somewhere to go; a missing payload key has no
- * such reading, since the operation declares its keys.
+ * How to ask for a key that may legitimately be absent. `instance()` and
+ * `realmConfig()` hand back the whole object with no argument, so a program
+ * that wants a default rather than a failure has somewhere to go; a missing
+ * payload key has no such reading, since the operation declares its keys.
+ *
+ * A realm setting is absent for the ordinary reason a stored field is: the
+ * program was authored against every realm that holds the type, and only some
+ * of them set it.
  */
 const OPTIONAL_KEY_HINTS: Partial<Record<ContextSlot, string>> = {
   instance: 'Use `instance()` and index it if the key may be absent.',
+  realmConfig: 'Use `realmConfig()` and index it if the setting may be absent.',
 };
 
 /** The slot's value, once the host is known to have supplied one. */
@@ -223,6 +238,12 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   },
   'instance/1': function* (_input, key) {
     yield requireKey('instance', 'instance(key)', key);
+  },
+  'realmConfig/0': function* () {
+    yield readable(slotObject('realmConfig', 'realmConfig()'));
+  },
+  'realmConfig/1': function* (_input, key) {
+    yield requireKey('realmConfig', 'realmConfig(key)', key);
   },
 };
 

@@ -286,6 +286,7 @@ import {
   validateWriteSize,
 } from './write-size-validation.ts';
 import { isSplicedSource, type SplicedSource } from './spliced-content.ts';
+import type { JsonValue } from './json-validation.ts';
 import {
   computeContentHash,
   computeContentHashFromRanges,
@@ -332,6 +333,36 @@ import {
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
+// The realm's settings, as they arrive from the RealmConfig card at
+// `realm.json` — from its stored bytes on one overlay and from its indexed
+// document on the next.
+//
+// A settings map is whatever JSON the realm owner wrote, so this is where the
+// shape is held to the one a program can read a key out of: an object, and not
+// an array or a scalar. Anything else leaves the realm with no settings and
+// says so in the log, rather than reaching `realmConfig("x")` as a value that
+// cannot be indexed by name. An absent or explicitly null map is the ordinary
+// case of a realm that declares no settings, and is not remarked on.
+
+function assignRealmConfig(
+  realmInfo: RealmInfo,
+  config: unknown,
+  log: { warn: (message: string) => void },
+): void {
+  if (config === undefined || config === null) {
+    return;
+  }
+  if (typeof config !== 'object' || Array.isArray(config)) {
+    log.warn(
+      `ignoring the RealmConfig card's \`config\`, which is ${
+        Array.isArray(config) ? 'an array' : typeof config
+      } rather than a map of settings`,
+    );
+    return;
+  }
+  realmInfo.config = { ...(config as Record<string, JsonValue>) };
+}
+
 export interface RealmSession {
   canRead: boolean;
   canWrite: boolean;
@@ -359,6 +390,13 @@ export type RealmInfo = {
   // `RealmIndexCounts` and `Realm#getIndexCounts`.
   createdAt?: string | null;
   updatedAt?: string | null;
+  // The realm's own settings, which a card operation reads with
+  // `realmConfig("key")`. Present on what `parseRealmInfo` produces and on
+  // nothing the realm serves: `getRealmInfo()` splits it off, so neither the
+  // `meta.realmInfo` stamped on every card response nor the `/_info`
+  // documents carry it. `getRealmConfig()` is where the operation runtime
+  // reads it.
+  config?: Record<string, JsonValue>;
   // Opt-in to producing the full prerendered isolated HTML for the
   // realm's default index card (CardsGrid or Workspace). When
   // undefined / null / false the host's render route substitutes a
@@ -1535,6 +1573,12 @@ export class Realm {
   #screenshotSyncWaitMs: number;
   #readIndexDrainBudgetMs: number;
   #cachedRealmInfo: RealmInfo | null = null;
+  // The `config` half of the same parse, held apart from `#cachedRealmInfo`
+  // for the reason the lifecycle timestamps below are: that object is what the
+  // realm serves and what the card+json ETag hashes, and these settings are
+  // neither. `null` means "not yet parsed"; an empty map is a realm that
+  // carries no settings, which is what an operation naming one is told.
+  #cachedRealmConfig: Record<string, JsonValue> | null = null;
   // md5 of the JSON-stringified `#cachedRealmInfo`. Folded into the
   // card+json ETag so any path that nulls `#cachedRealmInfo` (e.g.
   // invalidateCachedRealmInfo on publish/unpublish) invalidates cached
@@ -1545,7 +1589,9 @@ export class Realm {
   // The in-flight `parseRealmInfo()` promise, so concurrent callers on a cold
   // cache share one read instead of each running their own. Nulled once it
   // settles (see getRealmInfo).
-  #realmInfoPromise: Promise<RealmInfo> | undefined;
+  #realmInfoPromise:
+    | Promise<{ info: RealmInfo; config: Record<string, JsonValue> }>
+    | undefined;
   // Realm lifecycle timestamps, served by `getDetailedRealmInfo` on top of the
   // plain info. Cached separately from `#cachedRealmInfo` rather than folded
   // into it, because that object is hashed into the card+json ETag and
@@ -4355,6 +4401,10 @@ export class Realm {
           }
           return await this.#definitionLookup.lookupDefinition(absolute);
         },
+        // The same parse every card response reads its realm info from, minus
+        // the half that response carries. An executor never opens the realm's
+        // config document itself, for the reason it opens nothing else.
+        realmConfig: () => this.getRealmConfig(),
       };
     }
     return this.#batchCore;
@@ -10598,15 +10648,45 @@ export class Realm {
   // each index swap, and the card+json read path consults this on every
   // request. Cleared on rejection so a transient failure isn't pinned.
   async getRealmInfo(): Promise<RealmInfo> {
-    if (this.#cachedRealmInfo) {
-      return this.#cachedRealmInfo;
+    return (await this.#parsedRealmInfo()).info;
+  }
+
+  // The realm's settings, as `realmConfig()` answers with them. A realm that
+  // declares none has an empty map rather than nothing, so a program naming a
+  // setting is told this realm has no such setting rather than that the host
+  // supplied no configuration at all — two different defects with two
+  // different fixes.
+  async getRealmConfig(): Promise<Record<string, JsonValue>> {
+    return (await this.#parsedRealmInfo()).config;
+  }
+
+  // Both halves of one parse, which is why they are read together rather than
+  // each through its own accessor: `clearRealmIndexCaches()` nulls the cache
+  // on every index swap, so a settings read that primed the cache and then
+  // reached for the field would answer an empty map for a realm that has
+  // settings whenever a swap landed in between.
+  async #parsedRealmInfo(): Promise<{
+    info: RealmInfo;
+    config: Record<string, JsonValue>;
+  }> {
+    if (this.#cachedRealmInfo && this.#cachedRealmConfig) {
+      return { info: this.#cachedRealmInfo, config: this.#cachedRealmConfig };
     }
     if (!this.#realmInfoPromise) {
       this.#realmInfoPromise = (async () => {
-        let info = await this.parseRealmInfo();
+        // The parse produces both halves; what the realm serves is the one
+        // without `config`. Splitting here rather than at each serving site
+        // keeps a setting out of `meta.realmInfo` and `/_info` by construction
+        // instead of by every future caller remembering to, and it keeps the
+        // ETag hash below over exactly the bytes a response carries — so
+        // editing a setting does not invalidate every card's cached
+        // representation in the realm.
+        let { config, ...info } = await this.parseRealmInfo();
+        let settings = config ?? {};
         this.#cachedRealmInfo = info;
+        this.#cachedRealmConfig = settings;
         this.#cachedRealmInfoHash = computeContentHash(JSON.stringify(info));
-        return info;
+        return { info, config: settings };
       })().finally(() => {
         this.#realmInfoPromise = undefined;
       });
@@ -10632,6 +10712,7 @@ export class Realm {
   // would be served against the *pre-publish* hash forever.
   invalidateCachedRealmInfo(): void {
     this.#cachedRealmInfo = null;
+    this.#cachedRealmConfig = null;
     this.#cachedRealmInfoHash = null;
     this.#cachedRegistryTimestamps = null;
     this.#cachedIndexCounts = null;
@@ -10710,6 +10791,7 @@ export class Realm {
         if (attrs.includePrerenderedDefaultRealmIndex === true) {
           realmInfo.includePrerenderedDefaultRealmIndex = true;
         }
+        assignRealmConfig(realmInfo, attrs.config, this.#log);
       }
     } catch (e) {
       this.#log.warn(`failed to read RealmConfig card from disk: ${e}`);
@@ -10747,6 +10829,7 @@ export class Realm {
         if (attrs.includePrerenderedDefaultRealmIndex === true) {
           realmInfo.includePrerenderedDefaultRealmIndex = true;
         }
+        assignRealmConfig(realmInfo, attrs.config, this.#log);
       }
     } catch (e) {
       this.#log.warn(`failed to read RealmConfig card from index: ${e}`);

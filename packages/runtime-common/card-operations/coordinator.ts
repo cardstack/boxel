@@ -42,6 +42,7 @@ import {
   type OperationIdentityResult,
 } from './types.ts';
 import type { CodeRef } from '../code-ref.ts';
+import type { JsonValue } from '../json-validation.ts';
 import type { Definition } from '../definitions.ts';
 import type { LooseSingleCardDocument } from '../index.ts';
 import type { RealmResourceIdentifier } from '../realm-identifiers.ts';
@@ -173,6 +174,10 @@ export interface BatchCore {
     codeRef: CodeRef,
     relativeTo: URL,
   ): Promise<Definition | undefined>;
+  // The realm's own settings, as `realmConfig()` answers with them. A realm
+  // that declares none answers with an empty map, which is what tells a
+  // program naming a setting that this realm has none.
+  realmConfig(): Promise<Record<string, JsonValue>>;
 }
 
 export interface CommitBatchOptions {
@@ -290,6 +295,9 @@ export async function commitBatch(
     // entry link to a card a later entry mints.
     let { lids, foreignLids } = indexLids(entries, paths);
     let { stored, storedMeta } = await readPreState(core, entries, paths);
+    // Read once for the whole batch: a batch commits to one realm, so every
+    // entry in it reads the same settings.
+    let realmConfig = await core.realmConfig();
     // What an append stages for a file it never read whole. Kept beside
     // `stored` rather than in it: the two describe the same file in different
     // terms, and an executor that needs one cannot work from the other.
@@ -314,6 +322,7 @@ export async function commitBatch(
         fileExists: core.fileExists,
         indexedCardValues: core.indexedCardValues,
         actor: opts.actor ?? '',
+        realmConfig,
         serializeCard: core.serializeCard,
         codeRefKey: core.codeRefKey,
         resolveModuleId: core.resolveModuleId,

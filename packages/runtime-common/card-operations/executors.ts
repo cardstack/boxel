@@ -2,6 +2,7 @@ import { cloneDeep, isEqual, merge, mergeWith } from 'lodash-es';
 import { v4 as uuidV4 } from 'uuid';
 
 import { visitModuleDeps, type CodeRef } from '../code-ref.ts';
+import type { JsonValue } from '../json-validation.ts';
 import {
   getImmediateFieldDef,
   type Definition,
@@ -402,6 +403,11 @@ export interface StagingContext {
   // is supplied by the endpoint that verified it — an executor never derives
   // an actor itself.
   actor: string;
+  // The settings of the realm being written, as `realmConfig()` resolves them.
+  // Always present, empty for a realm that declares none: a program naming a
+  // setting is told this realm has no such setting rather than that nothing
+  // supplied a configuration, and those are two different defects.
+  realmConfig: Record<string, JsonValue>;
   // A card document serialized for storage: the bytes the file holds, with
   // every field resolved against the type's definition.
   serializeCard(
@@ -1137,6 +1143,7 @@ export interface ProgramContext {
   params?: Record<string, unknown>;
   actor?: string;
   instance?: Record<string, unknown>;
+  realmConfig?: Record<string, JsonValue>;
 }
 
 export interface BxlMutationModule {
@@ -1458,13 +1465,13 @@ async function transformTargetDefinition(
   return definition;
 }
 
-// The request-scoped values the program reads through `params()`, `actor()`
-// and `instance()`.
+// The request-scoped values the program reads through `params()`, `actor()`,
+// `instance()` and `realmConfig()`.
 //
-// Each slot is supplied only where this invocation has something to put in it,
-// because a program that names a slot the realm left out fails loudly rather
-// than reading an empty one — which is the answer an author wants for
-// `actor()` in a request that authenticated nobody.
+// The first two slots are supplied only where this invocation has something to
+// put in them, because a program that names a slot the realm left out fails
+// loudly rather than reading an empty one — which is the answer an author
+// wants for `actor()` in a request that authenticated nobody.
 //
 // `instance(…)` reads the target's stored values, keyed the same way the
 // named-create template reads them: the card's id, and its attributes. A link
@@ -1472,10 +1479,11 @@ async function transformTargetDefinition(
 // stored value, so it is not something `instance(…)` names — the program
 // reads one with `.field`, against the document it is editing.
 //
-// `realmConfig()` has no slot here yet. The builtin and the `config` map in
-// `.realm.json` it reads arrive together, and supplying an empty map before
-// then would let a program that names a setting read nothing where it should
-// be told the realm has none.
+// `realmConfig()` is the slot that is always supplied, empty map included. A
+// realm that declares no settings is a realm whose settings are known and
+// empty, not a request that arrived without them, and the two read differently
+// to whoever has to fix the program: "this realm has no such setting" points
+// at the realm, "the host supplied no configuration" points at the caller.
 function contextFor(
   params: Record<string, unknown> | undefined,
   resource: CardResource,
@@ -1489,6 +1497,7 @@ function contextFor(
       id: url.href,
       ...(resource.attributes ?? {}),
     },
+    realmConfig: ctx.realmConfig,
   };
 }
 
@@ -2442,20 +2451,29 @@ function resolveMarker(
         isActor: false,
       };
     }
-    case 'realmConfig':
-      // A realm setting is a value the realm supplies, and nothing supplies
-      // one yet: the `config` map a marker reads from arrives with the builtin
-      // that reads it. Refused as the realm's own gap rather than the
-      // caller's, since the declaration is well formed and there is nothing a
-      // caller could send to satisfy it.
-      throw new OperationFailure({
-        status: 501,
-        code: 'internal-error',
-        title: 'Operation not implemented',
-        detail:
-          `\`${path}\` reads a realm setting, which this realm does not yet ` +
-          `supply to an operation`,
-      });
+    case 'realmConfig': {
+      // A setting the realm holds rather than the caller sends, so an absent
+      // one is the realm's gap and not the payload's — and it is refused here
+      // rather than defaulted, for the reason every reference is: a template
+      // that quietly wrote nothing where a setting belongs would store the
+      // absence as the value.
+      let settings = ctx.realmConfig;
+      if (marker.key === undefined) {
+        return { value: { ...settings }, isLink: false, isActor: false };
+      }
+      let key = String(marker.key);
+      if (!Object.prototype.hasOwnProperty.call(settings, key)) {
+        throw new OperationFailure({
+          status: 400,
+          code: 'invalid-params',
+          title: 'Unknown realm setting',
+          detail:
+            `\`${path}\` reads realmConfig("${key}"), which realm ` +
+            `${ctx.realmURL} does not configure`,
+        });
+      }
+      return { value: settings[key], isLink: false, isActor: false };
+    }
     default:
       throw new OperationFailure({
         status: 400,
