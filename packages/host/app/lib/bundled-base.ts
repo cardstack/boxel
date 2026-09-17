@@ -1,6 +1,7 @@
 import { waitForPromise } from '@ember/test-waiters';
 
 import type { VirtualNetwork } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
 
 // Written by the `bundled-base-scoped-css` vite plugin: each bundled base
 // module registers the scoped-CSS specifiers its compiled source imports and
@@ -9,6 +10,7 @@ import type { VirtualNetwork } from '@cardstack/runtime-common';
 interface BundledBaseModuleImports {
   css: string[];
   imports: string[];
+  reexports: string[];
 }
 
 const scopedCSSRegistry = () =>
@@ -267,6 +269,45 @@ export const BUNDLED_BASE_MODULES: Record<
   'tool-field': () => import('@cardstack/base/tool-field'),
 };
 
+// A loader credits the first module it serves with every binding that module's
+// namespace exposes, so a re-exporter served ahead of the module that declares
+// the class takes the credit — `identifyCard` then reports `file-api` for a
+// `FileDef` that `card-api` declares, and the adoption-chain walk, which stops
+// at the module a code ref names, walks past it and fails. A module the loader
+// fetches cannot get this wrong: evaluating it loads what it re-exports from
+// first. A bundled module can, because the bundler resolves that import inside
+// the chunk where the loader never sees it, so the declarer is served here
+// before the module that borrows from it.
+//
+// Each source is imported through the loader that published itself for bundled
+// modules to reach, which is the loader doing the serving. A source that is not
+// a bundled module, or a loader that cannot load it, leaves the order as it was
+// rather than failing the module that asked.
+async function serveDeclarersFirst(
+  name: string,
+  resolve: () => Promise<Record<string, unknown>>,
+) {
+  for (let source of scopedCSSRegistry()?.[name]?.reexports ?? []) {
+    if (!(source in BUNDLED_BASE_MODULES) || servingDeclarer.has(source)) {
+      continue;
+    }
+    servingDeclarer.add(source);
+    try {
+      await Loader.forBundledModules()?.import(`@cardstack/base/${source}`);
+    } catch {
+      // ignored: see above
+    } finally {
+      servingDeclarer.delete(source);
+    }
+  }
+  return resolve();
+}
+
+// Guards the case of two modules that re-export from each other: the second
+// serve finds its source already in flight and goes ahead without it, rather
+// than waiting on a module that is waiting on it.
+const servingDeclarer = new Set<string>();
+
 // Registers on the virtual network, so every loader that shares it serves the
 // bundled modules. Must run after the `@cardstack/base/` realm mapping is
 // registered: a shim id resolves at registration time, and it has to land on
@@ -282,7 +323,11 @@ export function shimBundledBase(virtualNetwork: VirtualNetwork) {
       // so nothing about it reaches the runloop and a test settles before the
       // module has been evaluated. Naming the import to the test waiters keeps
       // `settled()` waiting for it, as it waits for the fetch this replaces.
-      resolve: () => waitForPromise(resolve(), `bundled base: ${name}`),
+      resolve: () =>
+        waitForPromise(
+          serveDeclarersFirst(name, resolve),
+          `bundled base: ${name}`,
+        ),
       deps: () => scopedCSSDepsFor(name),
     });
   }

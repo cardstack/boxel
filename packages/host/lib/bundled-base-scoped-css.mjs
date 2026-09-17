@@ -31,6 +31,13 @@ const SCOPED_CSS_IMPORT = /["']([^"']*\.glimmer-scoped\.css)["']/g;
 // Stylesheet specifiers are relative too and are collected separately.
 const RELATIVE_IMPORT = /["'](\.\.?\/[^"']*)["']/g;
 
+// `export { X } from './y'` and `export * from './y'`. A module that re-exports
+// a class does not declare it, and the loader credits whichever module it
+// serves first with every binding that module exposes — so a re-exporter served
+// first takes the credit and a code ref then names the wrong module.
+const REEXPORT_SOURCE =
+  /\bexport\s*(?:\*(?:\s+as\s+[A-Za-z_$][\w$]*)?|\{[^}]*\})\s*from\s*["'](\.\.?\/[^"']*)["']/g;
+
 function isBaseModule(id) {
   return (
     id.includes(`${sep}packages${sep}base${sep}`) && /\.(gts|ts)(\?|$)/.test(id)
@@ -77,6 +84,13 @@ export function bundledBaseScopedCSS() {
       }
       let name = baseModuleName(id);
       let css = [...code.matchAll(SCOPED_CSS_IMPORT)].map((m) => m[1]);
+      let reexports = [
+        ...new Set(
+          [...code.matchAll(REEXPORT_SOURCE)]
+            .map((m) => resolveSibling(name, m[1]))
+            .filter((source) => source !== name),
+        ),
+      ];
       let imports = [
         ...new Set(
           [...code.matchAll(RELATIVE_IMPORT)]
@@ -85,14 +99,14 @@ export function bundledBaseScopedCSS() {
             .map((specifier) => resolveSibling(name, specifier)),
         ),
       ].filter((imported) => imported !== name);
-      if (!css.length && !imports.length) {
+      if (!css.length && !imports.length && !reexports.length) {
         return null;
       }
       // A name that turns out to be something other than a base module costs
       // nothing: the reader walks only names the registry holds.
       let registration =
         `\n;(globalThis.${REGISTRY} ??= {})[${JSON.stringify(name)}] = ` +
-        `${JSON.stringify({ css, imports })};\n`;
+        `${JSON.stringify({ css, imports, reexports })};\n`;
       return { code: code + registration, map: null };
     },
   };
