@@ -316,6 +316,63 @@ module('Unit | declared screenshots', function (hooks) {
     assert.throws(() => cardApi.getScreenshots(BadType), /type must be one/);
   });
 
+  test('a pdf screenshot is a format-based, geometry-free declaration', function (assert) {
+    class Reports extends cardApi.CardDef {
+      static screenshots: Screenshots = {
+        statement: { format: 'isolated', type: 'pdf' },
+        invoice: { format: 'embedded', type: 'pdf', keyBy: 'generation' },
+      };
+    }
+    let merged = cardApi.getScreenshots(Reports);
+    assert.strictEqual(merged.statement.type, 'pdf');
+    assert.strictEqual(merged.statement.format, 'isolated');
+    assert.strictEqual(
+      merged.statement.width,
+      undefined,
+      'a pdf declares no capture box',
+    );
+    assert.strictEqual(merged.invoice.format, 'embedded');
+  });
+
+  test('a pdf screenshot refuses raster fields, box formats, the render slot, and thumbnails', function (assert) {
+    for (let [spec, pattern] of [
+      [{ format: 'isolated', type: 'pdf', width: 300 }, /'width' is a raster/],
+      [
+        { format: 'isolated', type: 'pdf', height: 300 },
+        /'height' is a raster/,
+      ],
+      [
+        { format: 'isolated', type: 'pdf', deviceScaleFactor: 2 },
+        /'deviceScaleFactor' is a raster/,
+      ],
+      [
+        { format: 'isolated', type: 'pdf', background: 'white' },
+        /'background' is a raster/,
+      ],
+      [
+        { format: 'fitted', type: 'pdf' },
+        /format must be 'isolated' or 'embedded'/,
+      ],
+      [
+        { format: 'atom', type: 'pdf' },
+        /format must be 'isolated' or 'embedded'/,
+      ],
+      [
+        { render: class {}, type: 'pdf' },
+        /the author-supplied pdf render slot is not yet available/,
+      ],
+      [
+        { format: 'isolated', type: 'pdf', useAsThumbnail: true },
+        /useAsThumbnail cannot appear on a pdf/,
+      ],
+    ] as const) {
+      class Bad extends cardApi.CardDef {
+        static screenshots: Record<string, any> = { shot: spec };
+      }
+      assert.throws(() => cardApi.getScreenshots(Bad), pattern);
+    }
+  });
+
   test('a transparent background on a jpeg capture is refused', function (assert) {
     class TransparentJpeg extends cardApi.CardDef {
       static screenshots: Screenshots = {
