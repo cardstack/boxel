@@ -103,7 +103,7 @@ export function makeLatticeCardComputePlan(
       throw new Error(`Ambiguous computation: ${name}`);
     }
     if (field.bxl) {
-      assertSupportedProgram(field.bxl);
+      assertSupportedProgram(field.bxl, outputs[name]);
       fields[name] = { bxl: field.bxl, output: outputs[name] };
     } else if (field.baseCompute) {
       fields[name] = { baseCompute: field.baseCompute, output: outputs[name] };
@@ -349,10 +349,26 @@ export function assertNativeBxlLibraries(
   return [...new Set(libraries)] as BuiltinLibraryName[];
 }
 
-function assertSupportedProgram(program: BxlComputeDefinition) {
+// A program that builds records declares the FieldDef it materializes
+// (`bxl(source, { as: BoxLine })`), which is how the browser turns the raw
+// output into field instances it can serialize. The native path never runs
+// that constructor: it validates the raw record against the declared shape
+// and normalizes it with the field's own codecs. So the option is admitted
+// exactly where the output is a record, and still refused for a scalar or
+// JSON output, where materializing a class would mean the value is not the
+// plain data the engine indexes.
+function isRecordShape(shape: LatticeBxlShape | undefined): boolean {
+  if (!shape || typeof shape === 'string') return false;
+  return 'array' in shape ? isRecordShape(shape.array) : true;
+}
+
+function assertSupportedProgram(
+  program: BxlComputeDefinition,
+  output?: LatticeBxlShape,
+) {
   if (
     program.version !== 1 ||
-    program.materializesClass ||
+    (program.materializesClass && !isRecordShape(output)) ||
     program.customRuntimeLimits
   ) {
     throw new Error('Unsupported native BXL program options');
@@ -501,7 +517,7 @@ export function prepareLatticeCardCompute(plan: LatticeCardComputePlan) {
       throw new Error(`Computed input ${name} must be evaluated, not supplied`);
     }
     if (field.bxl) {
-      assertSupportedProgram(field.bxl);
+      assertSupportedProgram(field.bxl, field.output);
       const libraries = assertNativeBxlLibraries(field.bxl.libraries);
       const compute = bxl(field.bxl.expression, {
         readableSyntax: false,

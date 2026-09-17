@@ -476,7 +476,9 @@ module(basename(import.meta.filename), function (hooks) {
           lines: {
             ...compound('Line', plural),
             isComputed: true,
-            bxl: expression(program),
+            // A record-building program declares the FieldDef it materializes
+            // for the browser; the native path validates the raw record.
+            bxl: { ...expression(program), materializesClass: true },
           },
         },
       },
@@ -616,6 +618,26 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(json(result.serialized).data.attributes.lines, [
       { who: 'row-6', points: 12, day: '2026-03-04', shout: 'row-6!' },
     ]);
+  });
+
+  test('materializing a class is refused for a value that is not a record', async function (assert) {
+    const { root, lookup } = fixtures();
+    root.definition.fieldDefs.total = {
+      ...root.definition.fieldDefs.total,
+      bxl: { ...expression('1'), materializesClass: true },
+    };
+    await assert.rejects(
+      assembleLatticeCardData({
+        id,
+        sourceRevision: 's1',
+        sourceJSON: source({ cardInfo: { name: 'Example' } }),
+        root,
+        lookup,
+        resolve,
+        worker,
+      }),
+      /Unsupported native BXL program options/,
+    );
   });
 
   test('a computed record may not be returned with links or undeclared fields', async function (assert) {
