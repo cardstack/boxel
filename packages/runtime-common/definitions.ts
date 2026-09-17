@@ -146,6 +146,8 @@ export interface Definition {
     displayNames: string[];
     cardType: string;
     materialized?: true;
+    // CardDef.latticeSettleMs, when positive.
+    settleMs?: number;
   };
 }
 

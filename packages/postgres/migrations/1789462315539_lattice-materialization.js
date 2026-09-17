@@ -15,6 +15,8 @@ exports.up = (pgm) => {
       attributes_json text,
       attributes_generation bigint,
       code_bound boolean NOT NULL DEFAULT FALSE,
+      -- CardDef.latticeSettleMs: a dirty owner is not runnable before this.
+      settle_until timestamptz,
       PRIMARY KEY (realm_url, owner_url)
     );
     CREATE INDEX lattice_owners_realm_url_dirty_generation_index

@@ -900,6 +900,18 @@ export class IndexRunner {
     // reads its own members. The cap keeps one job's duration and input
     // residency bounded.
     if (followup) pending = pending.slice(0, LATTICE_WAVE_BATCH);
+    if (followup && !pending.length) {
+      if (
+        await publication.wakeHeldOwners(
+          this.realmURL.href,
+          followup.realmUsername,
+          followup.wave,
+        )
+      )
+        this.#log.debug(
+          `${jobIdentity(this.#jobInfo)} Lattice wave found only owners in their settle window for ${this.realmURL.href}; queued a later wave`,
+        );
+    }
     let maxWaves = followup
       ? 1
       : pending.length

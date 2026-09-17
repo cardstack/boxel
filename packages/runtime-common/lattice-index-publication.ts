@@ -253,6 +253,28 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
     return true;
   }
 
+  // A wave that found nothing runnable while owners sit in their settle
+  // window leaves a queued job behind; the queue's claim eligibility keeps
+  // it unclaimed until a hold passes (the worker's poll is the clock).
+  async wakeHeldOwners(
+    realmURL: string,
+    realmUsername: string,
+    wave: number,
+  ): Promise<boolean> {
+    if (this.db.kind !== 'pg') return false;
+    let [held] = await query(this.db, [
+      'SELECT 1 FROM lattice_owners o WHERE o.realm_url =',
+      param(realmURL),
+      'AND NOT o.retired AND o.dirty_generation IS NOT NULL AND o.settle_until > now() LIMIT 1',
+    ]);
+    if (!held) return false;
+    await this.db.withWriteLock(`lattice:index:${realmURL}`, async (tx) => {
+      if (!tx) throw new Error('Lattice wake-up requires a transaction');
+      await this.enqueuePending(tx, realmURL, realmUsername, wave);
+    });
+    return true;
+  }
+
   async enqueuePending(
     tx: Querier,
     realmURL: string,
@@ -595,6 +617,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
             watches: prepared.watches.get(row.url)!,
             pending: !ready,
             ...(retain ? { retainOutputGeneration: outputGeneration } : {}),
+            ...(manifest.settleMs ? { settleMs: manifest.settleMs } : {}),
           });
         let retainsOutput = retainOutput;
         let accepted = await publishOwner(retainOutput);

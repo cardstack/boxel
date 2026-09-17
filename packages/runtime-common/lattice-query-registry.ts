@@ -53,7 +53,13 @@ export interface LatticeOwnerPublication {
   retired?: boolean;
   pending?: boolean;
   retainOutputGeneration?: number;
+  // See PublicationReceipt.settleMs. Only a ready publication starts a hold.
+  settleMs?: number;
 }
+
+// A dirty owner inside its settle window is not runnable (`pending` with
+// `runnableOnly`, the queue's claim eligibility). `o` is a lattice_owners row.
+export const latticeOwnerSettledSQL = `(o.settle_until IS NULL OR o.settle_until <= now())`;
 
 export type LatticeProducer = Pick<
   LatticeOwnerPublication,
@@ -306,10 +312,18 @@ export class LatticeQueryRegistry
       return false;
     }
     const outputGeneration = owner.retainOutputGeneration ?? generation;
+    const settleMs =
+      !owner.retired &&
+      !owner.pending &&
+      Number.isFinite(owner.settleMs) &&
+      owner.settleMs! > 0
+        ? Math.floor(owner.settleMs!)
+        : undefined;
+    const pg = this.db.kind === 'pg';
     await tx([
       `INSERT INTO lattice_owners
        (realm_url, owner_url, published_generation, input_generation,
-        dirty_generation, definition_revision, retired, code_bound) VALUES (`,
+        dirty_generation, definition_revision, retired, code_bound${pg ? ', settle_until' : ''}) VALUES (`,
       param(realmURL),
       ',',
       param(ownerURL),
@@ -335,11 +349,20 @@ export class LatticeQueryRegistry
             ')',
           ]
         : ['FALSE']),
+      ...(pg
+        ? settleMs !== undefined
+          ? [
+              ', now() + (',
+              param(settleMs),
+              "::bigint * interval '1 millisecond')",
+            ]
+          : [', NULL']
+        : []),
       `) ON CONFLICT (realm_url, owner_url) DO UPDATE SET
        published_generation = EXCLUDED.published_generation,
        input_generation = EXCLUDED.input_generation, dirty_generation = EXCLUDED.dirty_generation,
        definition_revision = EXCLUDED.definition_revision,
-       retired = EXCLUDED.retired, code_bound = EXCLUDED.code_bound`,
+       retired = EXCLUDED.retired, code_bound = EXCLUDED.code_bound${pg ? ', settle_until = EXCLUDED.settle_until' : ''}`,
     ]);
     if (this.db.kind === 'pg') {
       if (owner.retainOutputGeneration !== undefined) {
@@ -558,7 +581,7 @@ export class LatticeQueryRegistry
       'AND o.retired = FALSE AND o.dirty_generation IS NOT NULL',
       ...(opts?.runnableOnly && this.db.kind === 'pg'
         ? [
-            `AND ${latticeOwnerRetryReadySQL} AND NOT EXISTS (SELECT 1 FROM lattice_owner_code b JOIN lattice_code_artifacts c
+            `AND ${latticeOwnerRetryReadySQL} AND ${latticeOwnerSettledSQL} AND NOT EXISTS (SELECT 1 FROM lattice_owner_code b JOIN lattice_code_artifacts c
           ON c.realm_url=b.realm_url AND c.file_url=b.reference->>'fileURL'
           WHERE b.realm_url=o.realm_url AND b.owner_url=o.owner_url AND c.dirty)`,
           ]

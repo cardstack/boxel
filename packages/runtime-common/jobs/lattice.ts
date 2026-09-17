@@ -101,7 +101,7 @@ export const latticeMaterializationReadySQL = `(
   ) OR EXISTS (
     SELECT 1 FROM lattice_owners o WHERE o.realm_url=j.args->>'realmURL'
       AND NOT o.retired AND o.dirty_generation IS NOT NULL
-      AND ${latticeOwnerRetryReadySQL} AND NOT EXISTS (
+      AND ${latticeOwnerRetryReadySQL} AND (o.settle_until IS NULL OR o.settle_until <= now()) AND NOT EXISTS (
         SELECT 1 FROM lattice_owner_code b JOIN lattice_code_artifacts c ON c.realm_url=b.realm_url AND c.file_url=b.reference->>'fileURL'
         WHERE b.realm_url=o.realm_url AND b.owner_url=o.owner_url AND c.dirty)
   )) AND (
