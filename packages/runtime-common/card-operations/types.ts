@@ -528,6 +528,12 @@ export type OperationErrorCode =
   // compare is current, so it refused rather than answer from state it knows
   // may be behind. Carries a 5xx rather than a 412 because nothing about the
   // caller's request is wrong and repeating it unchanged is the remedy.
+  //
+  // Internal taxonomy on the card verbs. Those refusals reach a client as a
+  // status and a sentence — `#cardWriteRefusal` carries the status and the
+  // detail, not this — so a caller there tells this from any other 5xx by
+  // what the detail says. It is on the wire only where an operation result
+  // carries its own error, which is the envelope.
   | 'precondition-unverifiable'
   // The bytes an operation would store are over the realm's ceiling for a
   // card or a file of that kind. Separate from `invalid-params` because the

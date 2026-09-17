@@ -4,6 +4,7 @@ import {
   awaitRealmIndexSettled,
   indexingConcurrencyGroup,
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+  CONTENT_MOVING_INDEX_JOB_TYPES,
   prerenderSpawnedPriority,
   unbuiltIndexFailure,
 } from './jobs/indexing.ts';
@@ -542,13 +543,22 @@ const READ_INDEX_DRAIN_BUDGET_MS = 10_000;
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
 // How long a conditional write waits for the realm's indexing lane before it
-// gives up and refuses. Shorter than the budget a readiness probe takes,
-// because this one waits with the realm's write lock held: every other writer
-// to the realm is queued behind it, so a long wait spends other requests'
-// latency to answer this one. A caller whose write is refused this way retries
-// — by which time the lane has usually moved — where a caller queued behind a
-// ten-second hold has already paid for it.
-const CONDITIONAL_WRITE_INDEX_SETTLE_BUDGET_MS = 3_000;
+// gives up and refuses, and how often it re-asks while waiting.
+//
+// Much shorter than the budget a readiness probe takes, because this one waits
+// with the realm's write lock held and each poll takes a pool client while the
+// lock already pins one. Every other writer to the realm is queued behind it,
+// so the wait spends their latency to answer this request — and the 503 it
+// ends in invites a retry that takes the lock again.
+//
+// A long budget buys little anyway: the jobs it waits on are bounded in
+// minutes, so anything that would finish inside a wait of this size was
+// finishing regardless, and the `jobs_finished` subscription delivers the
+// wakeup rather than the poll. The poll is the backstop, so it is sized to the
+// budget rather than left at a default that would fire only a few times inside
+// it.
+const CONDITIONAL_WRITE_INDEX_SETTLE_BUDGET_MS = 1_000;
+const CONDITIONAL_WRITE_INDEX_SETTLE_POLL_MS = 250;
 
 // Card+JSON ETag is `"<indexed_at>-<realmInfoHash>[-<screenshots>]:card"`
 // — quoted per RFC 9110 §8.8.3 so CDNs / browsers don't re-quote inbound
@@ -7824,15 +7834,15 @@ export class Realm {
       // peer replica's pending job is invisible to it. The realm's indexing
       // lane in the shared jobs table is the view every replica writes to.
       //
-      // The whole lane, not the job types a write races. The drain excludes a
-      // from-scratch pass because it decides whether to *wait*, and waiting on
-      // a system-wide reindex would park every writer behind it. This decides
-      // whether the index can be *believed*, and a from-scratch pass is one of
-      // the strongest reasons it cannot: a realm republish swaps the files
-      // under the write lock and enqueues one before releasing, so the row
-      // still describes the pre-swap card while the bytes are already the new
-      // ones. Any job in the lane means the same thing here — that something
-      // is on its way to changing what the index says.
+      // Scoped to the jobs that can leave a row describing bytes the realm no
+      // longer stores, which is the only staleness a validator comparison can
+      // be wrong about. Asking whether the lane is occupied at all would be
+      // fail-closed and wrong in practice: a from-scratch pass re-derives rows
+      // from files nobody changed, and one lands in every realm's lane after
+      // any deploy that moves the UI checksum, so conditional writes would be
+      // refused fleet-wide for the length of a reindex to guard against a
+      // content change that did not happen. A daily stylesheet GC shares the
+      // lane too and moves no row at all.
       //
       // Refusing when the lane will not settle is the point of checking at
       // all: an unsettled lane is exactly the state in which the row still
@@ -7844,7 +7854,9 @@ export class Realm {
       // the caller's request is wrong and repeating it is the remedy.
       if (this.#dbAdapter) {
         let settled = await awaitRealmIndexSettled(this.#dbAdapter, this.url, {
+          jobTypes: CONTENT_MOVING_INDEX_JOB_TYPES,
           timeoutMs: CONDITIONAL_WRITE_INDEX_SETTLE_BUDGET_MS,
+          pollIntervalMs: CONDITIONAL_WRITE_INDEX_SETTLE_POLL_MS,
         });
         if (!settled) {
           this.#log.warn(

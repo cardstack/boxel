@@ -453,12 +453,7 @@ module(basename(import.meta.filename), function () {
           },
         )) as unknown as { id: string }[];
         let jobId = job[0].id;
-        await dbAdapter.execute(
-          `INSERT INTO job_reservations (job_id, worker_id, locked_until)
-           VALUES ($1, $2, NOW() + INTERVAL '7200 seconds')`,
-          { bind: [jobId, 'conditional-write-test-worker'] },
-        );
-        return async () => {
+        let unwedge = async () => {
           await dbAdapter.execute(
             'DELETE FROM job_reservations WHERE job_id = $1',
             { bind: [jobId] },
@@ -467,6 +462,23 @@ module(basename(import.meta.filename), function () {
             bind: [jobId],
           });
         };
+        try {
+          // The reservation is what stops a worker claiming the job. Until it
+          // lands, what is in the lane is the bare row this fixture exists to
+          // avoid — a job the worker picks up and dies on, poisoning the
+          // realm's next index pass. A throw here would leave that behind with
+          // nothing to remove it, and every later conditional write in this
+          // file would wait out its budget and 503.
+          await dbAdapter.execute(
+            `INSERT INTO job_reservations (job_id, worker_id, locked_until)
+             VALUES ($1, $2, NOW() + INTERVAL '7200 seconds')`,
+            { bind: [jobId, 'conditional-write-test-worker'] },
+          );
+        } catch (err) {
+          await unwedge();
+          throw err;
+        }
+        return unwedge;
       }
 
       test('a conditional write the realm cannot decide is refused, not answered', async function (assert) {
@@ -506,6 +518,21 @@ module(basename(import.meta.filename), function () {
         } finally {
           await unwedge();
         }
+
+        // The control: the same request, unchanged, against an unwedged lane.
+        // Without it a 503 from any other cause would read as this one's, and
+        // the test would pass on a realm that refuses conditional writes for
+        // reasons that have nothing to do with the wedge.
+        let afterUnwedge = await request
+          .patch('/person-1')
+          .send(patchPersonBody('Van Gogh'))
+          .set('Accept', 'application/vnd.card+json')
+          .set('If-Match', etag);
+        assert.strictEqual(
+          afterUnwedge.status,
+          200,
+          `the same write succeeds once the lane clears: ${afterUnwedge.text}`,
+        );
       });
 
       test('a write carrying no If-Match is unaffected by any of this', async function (assert) {

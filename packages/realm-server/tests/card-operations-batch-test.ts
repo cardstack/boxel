@@ -3095,17 +3095,26 @@ module(basename(import.meta.filename), function () {
           'person-1.json': cardFile({ firstName: 'Original' }, PERSON),
         },
       });
-      let lockDepthWhenChecked: number | undefined;
+      let observed: { lockDepth: number; commits: number } | undefined;
       await commitBatch(s.core, [{ op: 'delete', href: `${REALM}person-1` }], {
         precondition: async () => {
-          lockDepthWhenChecked = s.lockDepth();
+          observed = { lockDepth: s.lockDepth(), commits: s.commits.length };
         },
       });
 
       assert.strictEqual(
-        lockDepthWhenChecked,
+        observed?.lockDepth,
         1,
         'the removal held the write lock when its precondition ran',
+      );
+      // A removal reads nothing to stage from, so the commit count is the only
+      // thing that places it ahead of the removal itself. Without this the
+      // test is satisfied by a hook anywhere inside the lock, including after
+      // the file is gone.
+      assert.strictEqual(
+        observed?.commits,
+        0,
+        'and before the removal was committed',
       );
       assert.strictEqual(s.commits.length, 1, 'and the removal then proceeds');
     });
