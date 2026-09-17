@@ -162,11 +162,18 @@ export default function handleSearch(opts: {
       cacheOnlyDefinitions?: true;
       omitIncluded?: true;
       resolveLinksOnly?: true;
+      skipLinkAssemblyBudget?: true;
       priority?: number;
     } = {};
     if (cacheOnlyDefinitions) searchOpts.cacheOnlyDefinitions = true;
     if (omitIncluded) searchOpts.omitIncluded = true;
     if (resolveLinksOnly) searchOpts.resolveLinksOnly = true;
+    // A render's own search is exempt from the assembled-resource budget, the
+    // same way it is exempt from the page and time bounds below — what it
+    // assembles is rendered into cached HTML, which carries no way to report a
+    // clipped closure. It rides in the cache-key opts with the rest, so a
+    // prerender's answer can never be served to a live caller.
+    if (cacheOnlyDefinitions) searchOpts.skipLinkAssemblyBudget = true;
     if (jobPriority !== null) searchOpts.priority = jobPriority;
 
     // Two bounds are enforced server-side on the live item leg (never during

@@ -41,6 +41,18 @@ const log = logger('search-bounds');
 //     searches freely.
 //   - Time budget (SEARCH_TIME_BUDGET_MS) — server-side only: a wall-clock
 //     cutoff of the server's own work can't live anywhere else.
+//   - Assembled link resources (SERVER_MAX_ASSEMBLED_LINK_RESOURCES) —
+//     server-side only, and the one bound whose polarity is inverted: every
+//     `loadLinks` assembly is held to it unless a caller opts out, because a
+//     closure is assembled by more routes than search and a bound that must be
+//     remembered per route is a bound a new route forgets. It replaced a
+//     hop-count cap, which could not express "this is getting expensive":
+//     expense is resources, not distance, and a card carrying dozens of
+//     relationships is already dozens of resources one hop out. Counted in
+//     resources rather than bytes because the resource is what the walk
+//     schedules — it bounds the batched reads as well as the assembly, and the
+//     cost it stands in for is the event-loop CPU of cloning, rewriting and
+//     serializing each one, which scales with the count.
 //   - In-flight ceiling (SERVER_MAX_IN_FLIGHT_SEARCHES, with
 //     SEARCH_ADMISSION_WAIT_MS) — server-side only, and unlike the others a
 //     bound on the process rather than on a request: how many searches it runs
@@ -61,11 +73,13 @@ const DEFAULT_SEARCH_TIME_BUDGET_MS = 30_000;
 const DEFAULT_SEARCH_CONCURRENCY_CAP = 2;
 const DEFAULT_SERVER_MAX_IN_FLIGHT_SEARCHES = 30;
 const DEFAULT_SEARCH_ADMISSION_WAIT_MS = 1_000;
+const DEFAULT_SERVER_MAX_ASSEMBLED_LINK_RESOURCES = 1_000;
 
 const MIN_PAGE_SIZE = 1;
 const MIN_REALMS = 1;
 const MIN_TIME_BUDGET_MS = 1_000;
 const MIN_CONCURRENCY = 1;
+const MIN_ASSEMBLED_LINK_RESOURCES = 1;
 
 // Clamp an env override to a positive integer, falling back (also clamped) when
 // the value is missing or non-numeric so a bad env var can't disable a bound.
@@ -177,6 +191,34 @@ export const SERVER_MAX_IN_FLIGHT_SEARCHES = parsePositiveInt(
   MIN_CONCURRENCY,
 );
 
+// The most resources one `loadLinks` assembly may side-load into `included[]`.
+// This is the whole bound on how far a card's transitive link closure is
+// walked: the traversal terminates on its own once every reachable resource is
+// visited, so what needs bounding is not the walk's depth but how much it
+// carries back. A card with dozens of relationships reaches dozens of resources
+// in one hop, and dozens of those reach hundreds — so the quantity that tracks
+// cost is the count, and a graph that fans out wide is expensive at any depth.
+//
+// Sized as a safety ceiling rather than a tuning knob: it sits far above the
+// closures real content produces (the widest cards on a representative realm
+// assemble ~175 resources, and a page of results unions to ~210), and near the
+// point where a single assembly would hold the tens of MB of heap that
+// SERVER_MAX_IN_FLIGHT_SEARCHES assumes per in-flight search. So it is not
+// expected to engage on healthy traffic; it exists so that no single card graph
+// — authored by a person or by a model, and re-editable at any time — can make
+// one request assemble an unbounded document.
+//
+// Changing this value changes which responses are truncated and what a
+// truncated one contains, while none of the other validator inputs move, so it
+// is folded into the card+json ETag variant (see `cardJsonEtagVariant` in
+// realm.ts). A client holding a validator would otherwise be 304'd to the shape
+// it cached across a retune.
+export const SERVER_MAX_ASSEMBLED_LINK_RESOURCES = parsePositiveInt(
+  env.SERVER_MAX_ASSEMBLED_LINK_RESOURCES,
+  DEFAULT_SERVER_MAX_ASSEMBLED_LINK_RESOURCES,
+  MIN_ASSEMBLED_LINK_RESOURCES,
+);
+
 // How long a search arriving above SERVER_MAX_IN_FLIGHT_SEARCHES waits for a
 // slot before it is shed. Long enough that a burst which clears in well under
 // a second is served rather than rejected; short enough that a saturated
@@ -196,6 +238,7 @@ let serverMaxPageSize = SERVER_MAX_SEARCH_PAGE_SIZE;
 let serverAbsoluteMaxPageSize = SERVER_ABSOLUTE_MAX_PAGE_SIZE;
 let maxRealmsPerRequest = MAX_REALMS_PER_SEARCH_REQUEST;
 let timeBudgetMs = SEARCH_TIME_BUDGET_MS;
+let maxAssembledLinkResources = SERVER_MAX_ASSEMBLED_LINK_RESOURCES;
 
 // The (size, max) pairs already reported by `warnOncePerClamp`. In practice a
 // clamp is driven by an authored page size — a constant in a card definition —
@@ -213,6 +256,7 @@ export function setSearchBoundsForTests(overrides: {
   serverAbsoluteMaxPageSize?: number;
   maxRealmsPerRequest?: number;
   timeBudgetMs?: number;
+  maxAssembledLinkResources?: number;
 }): void {
   if (overrides.maxPageSize !== undefined) {
     maxPageSize = overrides.maxPageSize;
@@ -229,6 +273,9 @@ export function setSearchBoundsForTests(overrides: {
   if (overrides.timeBudgetMs !== undefined) {
     timeBudgetMs = overrides.timeBudgetMs;
   }
+  if (overrides.maxAssembledLinkResources !== undefined) {
+    maxAssembledLinkResources = overrides.maxAssembledLinkResources;
+  }
 }
 
 export function resetSearchBoundsForTests(): void {
@@ -238,6 +285,15 @@ export function resetSearchBoundsForTests(): void {
   serverAbsoluteMaxPageSize = SERVER_ABSOLUTE_MAX_PAGE_SIZE;
   maxRealmsPerRequest = MAX_REALMS_PER_SEARCH_REQUEST;
   timeBudgetMs = SEARCH_TIME_BUDGET_MS;
+  maxAssembledLinkResources = SERVER_MAX_ASSEMBLED_LINK_RESOURCES;
+}
+
+// The effective assembled-resource budget. Read through a function rather than
+// imported as a const so the test seam above reaches it — a test exercises the
+// bound by lowering it to a handful of resources instead of authoring a
+// thousand-card graph.
+export function assembledLinkResourceBudget(): number {
+  return maxAssembledLinkResources;
 }
 
 // The item leg (`fields[entry]` includes "item" / "item.<field>") is the live

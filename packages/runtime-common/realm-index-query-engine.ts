@@ -6,7 +6,6 @@ import {
   baseRealmRRI,
   inferContentType,
   unixTime,
-  maxLinkDepth,
   maybeURL,
   IndexQueryEngine,
   MATCH_RELEVANCE_SORT_KEY,
@@ -97,7 +96,10 @@ import {
   buildQuerySearchURL,
   getValueForResourcePath,
 } from './query-field-utils.ts';
-import { applyServerSearchPageBound } from './search-bounds.ts';
+import {
+  applyServerSearchPageBound,
+  assembledLinkResourceBudget,
+} from './search-bounds.ts';
 import {
   screenshotsMetaFromManifest,
   type ScreenshotManifest,
@@ -178,6 +180,20 @@ type Options = {
   // promptly instead of running every layer to completion. Threaded like
   // `timings`; absent for everything except a bounded live search.
   signal?: AbortSignal;
+  // Exempts this assembly from the assembled-resource budget
+  // (SERVER_MAX_ASSEMBLED_LINK_RESOURCES). Set by the realm-server on its own
+  // during-prerender traffic, which is deliberately unbounded: a render reads
+  // the closure it is given, so a truncated one would be baked into prerendered
+  // HTML and served from the cache long after the request that produced it.
+  // Every other caller is bounded, including one added later that does not know
+  // this option exists — which is the point of expressing the exemption rather
+  // than the bound.
+  skipLinkAssemblyBudget?: boolean;
+  // Fires when the assembled-resource budget stopped the walk short of a
+  // closure. Reported from inside the walk because the caller cannot infer it:
+  // a short `included[]` is what a small graph and a truncated large one both
+  // look like.
+  onLinkClosureTruncated?: () => void;
   // Fires once per query-backed field this pass applies, whatever the
   // outcome. The caller cannot read this off the assembled document:
   // `applyQueryResults` writes the `links.search` marker only when the query
@@ -689,6 +705,9 @@ export class RealmIndexQueryEngine {
     if (collection.included && collection.included.length > 0) {
       doc.included = collection.included;
     }
+    if (collection.meta.linkClosureTruncated) {
+      doc.meta = { linkClosureTruncated: true };
+    }
     return doc;
   }
 
@@ -720,15 +739,28 @@ export class RealmIndexQueryEngine {
 
     if (fullItemRoots.length > 0 && opts?.loadLinks && !opts?.omitIncluded) {
       let omit = itemResources.map((r) => r.id).filter(Boolean) as string[];
+      // One assembly serves the whole page, so the budget is spent across the
+      // page's rows jointly and the report belongs on the document rather than
+      // on any one row: no row is individually the one that ran out.
+      let truncated = false;
       let runLoadLinks = () =>
         this.loadLinks(
           { realmURL: this.realmURL, rootResources: fullItemRoots, omit },
-          opts,
+          {
+            ...opts,
+            onLinkClosureTruncated: () => {
+              truncated = true;
+              opts?.onLinkClosureTruncated?.();
+            },
+          },
         );
       let linked = opts?.timings
         ? await opts.timings.time('loadLinks', runLoadLinks)
         : await runLoadLinks();
       included.push(...linked);
+      if (truncated) {
+        doc.meta.linkClosureTruncated = true;
+      }
     }
 
     if (included.length > 0) {
@@ -822,6 +854,11 @@ export class RealmIndexQueryEngine {
     }
     let queryBacked = false;
     if (opts?.loadLinks) {
+      // Stamped here rather than by each caller, so every route that answers
+      // with an assembled card document — the card+json read and the write
+      // read-backs alike — reports a clipped closure without having to know the
+      // budget exists.
+      let truncated = false;
       let included = await this.loadLinks(
         {
           realmURL: this.realmURL,
@@ -834,10 +871,17 @@ export class RealmIndexQueryEngine {
             queryBacked = true;
             opts.onQueryFieldApplied?.();
           },
+          onLinkClosureTruncated: () => {
+            truncated = true;
+            opts.onLinkClosureTruncated?.();
+          },
         },
       );
       if (included.length > 0) {
         doc.included = included;
+      }
+      if (truncated) {
+        doc.meta = { ...doc.meta, linkClosureTruncated: true };
       }
     }
     relativizeDocument(doc, this.realmURL, this.#realm.virtualNetwork);
@@ -1649,14 +1693,17 @@ export class RealmIndexQueryEngine {
     return new Map(entries);
   }
 
-  // TODO The caller should provide a list of fields to be included via JSONAPI
-  // request. currently we just use the maxLinkDepth to control how deep to load
-  // links.
-  //
   // Level-order BFS: each layer issues at most one batched DB query for
   // in-realm cards and one for in-realm file-meta resources, alongside
   // Promise.all-fanout cross-realm fetches, all running concurrently
   // regardless of how many siblings reference links at that depth.
+  //
+  // The walk is bounded by how many resources it assembles, not by how far it
+  // travels: it terminates on its own once every reachable resource has been
+  // visited, so depth was never what made a closure expensive — width is. The
+  // budget is spent at classification time, before a target's URL joins the
+  // layer's batched read, so an over-budget graph is neither fetched nor
+  // assembled rather than being fetched and then discarded.
   private async loadLinks(
     {
       realmURL,
@@ -1703,9 +1750,39 @@ export class RealmIndexQueryEngine {
       }
     }
 
+    // The assembled-resource budget, and the bookkeeping that spends it.
+    // `committed` counts the resources this pass has undertaken to side-load;
+    // `decided` remembers every target it has already ruled on, so a card
+    // reached down three separate paths costs one slot rather than three.
+    //
+    // Seeded with the roots, the caller's `omit` list and anything already in
+    // `included`, none of which this pass side-loads: a relationship pointing
+    // back at one of them still has its `data` rewritten below, and charging it
+    // would spend the budget on resources the response was always going to
+    // carry anyway. Keyed on the resolved link URL, which is the one spelling
+    // step 2 always computes; a seed recorded only under some other equivalent
+    // form costs one slot it needn't have, which is the harmless direction.
+    let budget = opts?.skipLinkAssemblyBudget
+      ? Infinity
+      : assembledLinkResourceBudget();
+    let committed = 0;
+    let truncated = false;
+    let decided = new Set<string>(omitSet);
+    for (let existing of includedIds) {
+      for (let form of allIdForms(existing)) {
+        decided.add(form);
+      }
+    }
+    for (let resource of rootResources) {
+      if (resource.id != null) {
+        for (let form of allIdForms(resource.id)) {
+          decided.add(form);
+        }
+      }
+    }
+
     type LayerItem = {
       resource: LooseCardResource | FileMetaResource;
-      stack: string[];
       applyLinkFields: boolean;
       // Roots are returned in doc.data; everything else gets cloned and
       // pushed onto included[] *after* its relationships are rewritten in
@@ -1726,7 +1803,6 @@ export class RealmIndexQueryEngine {
       }
       layer.push({
         resource,
-        stack: [],
         applyLinkFields: !!opts?.linkFields,
         isRoot: true,
       });
@@ -1957,6 +2033,25 @@ export class RealmIndexQueryEngine {
             resource.id ? vn.toURL(resource.id) : realmURL,
           );
 
+          // Spend the budget here — before the target joins this layer's
+          // batched read — so an over-budget closure costs neither the read nor
+          // the assembly. A target already ruled on falls through: it has been
+          // paid for, and its relationship still needs the rewrite below.
+          if (!decided.has(linkURL.href)) {
+            if (committed >= budget) {
+              // Out of budget. Leave the relationship exactly as the index
+              // stored it: `links.self` names the target and no `data` claims
+              // it is carried, which is the shape a consumer already reads as
+              // "not loaded" and resolves for itself one card at a time. The
+              // document says so as well — see `linkClosureTruncated` — so a
+              // short `included[]` is distinguishable from a small graph.
+              truncated = true;
+              continue;
+            }
+            committed++;
+            decided.add(linkURL.href);
+          }
+
           let relationshipType = relationship.data?.type as
             | typeof CardResourceType
             | typeof FileMetaResourceType
@@ -2152,22 +2247,12 @@ export class RealmIndexQueryEngine {
           linkResource = crossRealmMap.get(entry.linkURL.href);
         }
 
-        let descendStack =
-          entry.item.resource.id != null
-            ? [entry.item.resource.id, ...entry.item.stack]
-            : entry.item.stack;
-
-        // TODO stop using maxLinkDepth. we should save the JSON-API doc
-        // in the index based on keeping track of the rendered fields
-        // and invalidate the index as consumed cards change.
-        //
-        // Gate uses the CURRENT item's stack length (ancestors only),
-        // matching the original recursive `stack.length <= maxLinkDepth`
-        // check which ran before pushing the current resource onto the
-        // stack for the recursive call. Using descendStack.length here
-        // would cut traversal off one level early.
+        // Every entry that reaches step 4 has already been charged to the
+        // budget (or found to need no charge) in step 2, so there is nothing
+        // left to gate on here: a resource this walk paid for is a resource it
+        // carries.
         let foundLinks = false;
-        if (linkResource && entry.item.stack.length <= maxLinkDepth) {
+        if (linkResource) {
           let alreadyVisited =
             linkResource.id != null && visited.has(linkResource.id);
           if (!alreadyVisited) {
@@ -2176,14 +2261,13 @@ export class RealmIndexQueryEngine {
             }
             // Schedule expansion at the next layer. linkFields applies
             // only at the root layer; nested relationships are fully
-            // loaded up to maxLinkDepth. The clone+push to included[]
+            // loaded within the budget. The clone+push to included[]
             // happens at the END of that layer's processing — once the
             // resource's relationships have been rewritten — so the
             // clone captures the mutations rather than the pre-rewrite
             // state from pristine_doc.
             nextLayer.push({
               resource: linkResource,
-              stack: descendStack,
               applyLinkFields: false,
               isRoot: false,
             });
@@ -2278,8 +2362,18 @@ export class RealmIndexQueryEngine {
       layer = nextLayer;
     }
 
+    if (truncated) {
+      // Logged at warn, once per assembly: the budget is sized not to engage on
+      // healthy content, so a line here is the signal that some graph outgrew
+      // it — and the only place the ceiling that applied is recorded, since the
+      // document carries the fact of the truncation rather than the number.
+      this.#log.warn(
+        `[loadLinks ${invocationId}] assembled-resource budget of ${budget} reached for realm=${realmURL.href} roots=${rootResources.length}; included[] carries ${included.length} of a larger closure and the response reports it truncated`,
+      );
+      opts?.onLinkClosureTruncated?.();
+    }
     this.#log.debug(
-      `[loadLinks ${invocationId}] complete layers=${layerIndex} included=${included.length} visited=${visited.size}`,
+      `[loadLinks ${invocationId}] complete layers=${layerIndex} included=${included.length} visited=${visited.size} committed=${committed}`,
     );
     return included;
   }

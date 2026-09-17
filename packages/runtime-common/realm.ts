@@ -19,6 +19,7 @@ import type { SearchOpts } from './search-utils.ts';
 import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
 import {
   applyServerSearchPageBound,
+  assembledLinkResourceBudget,
   isItemLegSearch,
   runWithSearchTimeBudget,
   SearchBoundError,
@@ -566,6 +567,19 @@ const SOURCE_ETAG_VARIANT = 'source';
 // relationship ids) in canonical prefix (RRI) form for mapped realms.
 const CARD_JSON_ETAG_VARIANT = 'card-rri';
 
+// The variant the card+json validator carries, with the assembled-resource
+// budget folded in. The budget decides which cards come back with a clipped
+// closure and what a clipped one contains, and it is settable per server — so
+// retuning it changes bodies while `indexed_at`, the realm-info hash and the
+// screenshots fingerprint all stand still. That is precisely the case the
+// constant above exists for, except that the change arrives by configuration
+// rather than by revision, so the value has to be in the validator rather than
+// remembered about by whoever edits it. One number for the process, so it
+// fragments no cache: every response at a given build and setting shares it.
+function cardJsonEtagVariant(): string {
+  return `${CARD_JSON_ETAG_VARIANT}-lb${assembledLinkResourceBudget()}`;
+}
+
 // Postgres NOTIFY channel for cross-instance invalidation of #sourceCache /
 // #transpiledModuleCache entries on file writes. Two payload shapes:
 //
@@ -856,8 +870,8 @@ function buildCardJsonEtag(
   // shape it cached, and the two shapes reachable under one key in the
   // response cache.
   let variant = resolveLinksOnly
-    ? `${CARD_JSON_ETAG_VARIANT}-links-only`
-    : CARD_JSON_ETAG_VARIANT;
+    ? `${cardJsonEtagVariant()}-links-only`
+    : cardJsonEtagVariant();
   return `"${base}:${variant}"`;
 }
 
@@ -924,6 +938,15 @@ function buildEntryHtmlEtag(
   }
   if (doc.data.relationships.item && resolveLinksOnly) {
     base = `${base}:links-only`;
+  }
+  // An item carries a link closure, and the assembled-resource budget decides
+  // how much of one — so a response bearing an item is a different body at a
+  // different budget while both generations stand still. This validator has no
+  // constant component to hang that on the way the card+json one does, so the
+  // budget is folded in directly. A pure-html response assembles no closure and
+  // keeps the clean index:html composite.
+  if (doc.data.relationships.item) {
+    base = `${base}:lb${assembledLinkResourceBudget()}`;
   }
   return `"${base}"`;
 }
@@ -7717,6 +7740,11 @@ export class Realm {
         {
           loadLinks: true,
           skipQueryBackedExpansion: false,
+          // A write from inside a render answers from the serialized echo
+          // rather than from a read-back, so reaching here means this is a
+          // live write and the assembled-resource budget applies to its
+          // closure exactly as it does to a live read's.
+          skipLinkAssemblyBudget: false,
         },
       );
       if (!entry || entry?.type === 'error') {
@@ -7869,6 +7897,10 @@ export class Realm {
       await this.#realmIndexQueryEngine.cardDocument(new URL(instanceURL), {
         loadLinks: true,
         skipQueryBackedExpansion,
+        // A render's own read-back is exempt from the assembled-resource
+        // budget for the same reason its card+json GET is: what it assembles
+        // is rendered into HTML that outlives this request.
+        skipLinkAssemblyBudget: skipQueryBackedExpansion,
       });
     let doc: SingleCardDocument;
     if (!result.meta.changed) {
@@ -8165,12 +8197,23 @@ export class Realm {
   #cardJsonLinkShape(request: Request): {
     skipQueryBackedExpansion: boolean;
     resolveLinksOnly: boolean;
+    skipLinkAssemblyBudget: boolean;
   } {
     let skipQueryBackedExpansion = isDuringPrerenderRequest(request);
     return {
       skipQueryBackedExpansion,
       resolveLinksOnly:
         !skipQueryBackedExpansion && this.#liveReadsResolveLinksOnly,
+      // The assembled-resource budget bounds live reads and exempts a render's
+      // own, for the same reason the prerendered-HTML leg is exempt from the
+      // page and time bounds: what a render assembles is baked into cached
+      // HTML, so a ceiling that clipped it would be serving a short closure
+      // from cache long after the pressure that justified it passed. It needs
+      // no separate slot in the validator — the budget is one number for the
+      // process, folded into the card+json ETag variant, and this exemption
+      // travels with `skipQueryBackedExpansion`, which the response cache
+      // already keys on.
+      skipLinkAssemblyBudget: skipQueryBackedExpansion,
     };
   }
 
@@ -8365,6 +8408,8 @@ export class Realm {
             name: 'read',
             ...this.#callerOf(request, requestContext),
           },
+          // No budget flag: a headers-only read assembles no closure, so there
+          // is nothing for it to bound.
           { headersOnly: true, skipQueryBackedExpansion, resolveLinksOnly },
         );
       } catch (e) {
@@ -8525,8 +8570,11 @@ export class Realm {
       // has to describe the shape the assembly will produce, and that
       // validator is what the conditional request and the response cache are
       // both keyed on.
-      let { skipQueryBackedExpansion, resolveLinksOnly } =
-        this.#cardJsonLinkShape(request);
+      let {
+        skipQueryBackedExpansion,
+        resolveLinksOnly,
+        skipLinkAssemblyBudget,
+      } = this.#cardJsonLinkShape(request);
 
       // The `instance()` peek, which yields this card's validator. It runs
       // for a client that sent a validator of its own to compare against,
@@ -8620,6 +8668,7 @@ export class Realm {
           localPath,
           skipQueryBackedExpansion,
           resolveLinksOnly,
+          skipLinkAssemblyBudget,
           peekEtag,
           this.#callerOf(request, requestContext),
         );
@@ -8692,6 +8741,7 @@ export class Realm {
     localPath: LocalPath,
     skipQueryBackedExpansion: boolean,
     resolveLinksOnly: boolean,
+    skipLinkAssemblyBudget: boolean,
     keyEtag: string | undefined,
     caller: { actor: string; clientRequestId: string },
   ): Promise<CardJsonAssembly> {
@@ -8721,7 +8771,7 @@ export class Realm {
           actor: caller.actor,
           clientRequestId: caller.clientRequestId,
         },
-        { skipQueryBackedExpansion, resolveLinksOnly },
+        { skipQueryBackedExpansion, resolveLinksOnly, skipLinkAssemblyBudget },
       );
     } catch (e) {
       if (!isOperationFailure(e)) {
@@ -8960,7 +9010,9 @@ export class Realm {
       { htmlQuery, fieldset, kind },
       {
         loadLinks: true,
-        ...(duringPrerender ? { cacheOnlyDefinitions: true } : {}),
+        ...(duringPrerender
+          ? { cacheOnlyDefinitions: true, skipLinkAssemblyBudget: true }
+          : {}),
         ...(resolveLinksOnly ? { resolveLinksOnly: true } : {}),
       },
     );
@@ -9229,6 +9281,7 @@ export class Realm {
       ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
       ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
       ...(opts?.resolveLinksOnly ? { resolveLinksOnly: true } : {}),
+      ...(opts?.skipLinkAssemblyBudget ? { skipLinkAssemblyBudget: true } : {}),
       // `!== undefined` so an explicit priority 0 (system-initiated) survives.
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
       ...(opts?.timings ? { timings: opts.timings } : {}),
@@ -9305,6 +9358,10 @@ export class Realm {
           // stop side-loading keeps the pass and drops only the closure it
           // would have assembled.
           resolveLinksOnly: !duringPrerender && this.#liveReadsResolveLinksOnly,
+          // A render must read the closure it asked for, not the part that fit
+          // under a live ceiling: the result is cached as HTML, and the cached
+          // copy carries no way to say it was short.
+          skipLinkAssemblyBudget: duringPrerender,
           ...(signal ? { signal } : {}),
         });
       // Cut an over-budget item-leg search off (408) rather than run it to

@@ -166,6 +166,7 @@ export interface OperationIndexQueryEngine {
       loadLinks?: boolean;
       skipQueryBackedExpansion?: boolean;
       resolveLinksOnly?: boolean;
+      skipLinkAssemblyBudget?: boolean;
     },
   ): Promise<SearchResult | undefined>;
   instance(
@@ -192,6 +193,13 @@ export interface RunOperationOptions {
   // caller emits has to fold it in, since it distinguishes two documents
   // assembled from the same index row.
   resolveLinksOnly?: boolean;
+  // Exempt this read's link assembly from the assembled-resource budget. Set
+  // for a read serving a prerender request, whose closure is rendered into HTML
+  // that outlives the request: a clipped one would be cached, and the cached
+  // copy carries no way to say it was clipped. Derived from the same signal as
+  // `skipQueryBackedExpansion`, which is already part of the response cache's
+  // key — so the two shapes never share a cache entry.
+  skipLinkAssemblyBudget?: boolean;
   // Report a stored-bytes read's `version` only where the realm already
   // recorded one, rather than reading the file to fingerprint it.
   //
