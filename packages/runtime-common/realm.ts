@@ -6,7 +6,6 @@ import {
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
   prerenderSpawnedPriority,
   unbuiltIndexFailure,
-  WRITE_RACING_INDEX_JOB_TYPES,
 } from './jobs/indexing.ts';
 import {
   awaitPublishedHtmlReady,
@@ -7825,9 +7824,15 @@ export class Realm {
       // peer replica's pending job is invisible to it. The realm's indexing
       // lane in the shared jobs table is the view every replica writes to.
       //
-      // Scoped to the job types a write races. A from-scratch pass reads files
-      // independently of realm-server writes, so waiting on one would hold
-      // this lock for as long as a system-wide reindex takes.
+      // The whole lane, not the job types a write races. The drain excludes a
+      // from-scratch pass because it decides whether to *wait*, and waiting on
+      // a system-wide reindex would park every writer behind it. This decides
+      // whether the index can be *believed*, and a from-scratch pass is one of
+      // the strongest reasons it cannot: a realm republish swaps the files
+      // under the write lock and enqueues one before releasing, so the row
+      // still describes the pre-swap card while the bytes are already the new
+      // ones. Any job in the lane means the same thing here — that something
+      // is on its way to changing what the index says.
       //
       // Refusing when the lane will not settle is the point of checking at
       // all: an unsettled lane is exactly the state in which the row still
@@ -7839,7 +7844,6 @@ export class Realm {
       // the caller's request is wrong and repeating it is the remedy.
       if (this.#dbAdapter) {
         let settled = await awaitRealmIndexSettled(this.#dbAdapter, this.url, {
-          jobTypes: WRITE_RACING_INDEX_JOB_TYPES,
           timeoutMs: CONDITIONAL_WRITE_INDEX_SETTLE_BUDGET_MS,
         });
         if (!settled) {
