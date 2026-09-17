@@ -23,10 +23,11 @@ import {
   describeConnectionSetup,
   measureConnectionSetup,
 } from '../scripts/load-harness/lib/connection.ts';
+import { LINK_SHAPE_LOAD_HALF_LIFE_MS } from '@cardstack/runtime-common';
 import {
+  DEFAULT_LOAD_HALF_LIFE_MS,
   describeInFlight,
   InFlightReading,
-  LOAD_HALF_LIFE_MS,
 } from '../scripts/load-harness/lib/in-flight.ts';
 import {
   readOnlyReason,
@@ -1239,7 +1240,7 @@ module(basename(import.meta.filename), function () {
       function meanAfter(burstMs: number, totalMs: number): number {
         clock = 0;
         let reading = new InFlightReading({
-          halfLifeMs: LOAD_HALF_LIFE_MS,
+          halfLifeMs: DEFAULT_LOAD_HALF_LIFE_MS,
           now: () => clock,
         });
         let closes = [];
@@ -1299,7 +1300,7 @@ module(basename(import.meta.filename), function () {
     test('the peak count keeps the burst the mean flattens', function (assert) {
       let clock = 0;
       let reading = new InFlightReading({
-        halfLifeMs: LOAD_HALF_LIFE_MS,
+        halfLifeMs: DEFAULT_LOAD_HALF_LIFE_MS,
         now: () => clock,
       });
       let closes = [];
@@ -1340,6 +1341,53 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(reading.inFlight, 0);
     });
 
+    // The harness is copied to the box that runs it and imports nothing from
+    // the repo, so its copy of the server's smoothing window can only be kept
+    // honest from here. A drift would be silent in the worst way: the run would
+    // still print a mean, and the mean would describe a different measurement
+    // from the one the policy takes.
+    test('the driver smooths over the window the server ships', function (assert) {
+      assert.strictEqual(
+        DEFAULT_LOAD_HALF_LIFE_MS,
+        LINK_SHAPE_LOAD_HALF_LIFE_MS,
+        'the harness default follows the constant the realm server defaults to',
+      );
+    });
+
+    // A figure quoted without its window is not comparable to the server's, and
+    // the window is a per-deployment setting rather than a constant.
+    test('the summary names the window it measured over', function (assert) {
+      let clock = 0;
+      let shipped = new InFlightReading({
+        halfLifeMs: DEFAULT_LOAD_HALF_LIFE_MS,
+        now: () => clock,
+      });
+      assert.ok(
+        describeInFlight(shipped).includes(
+          `(${Math.round(DEFAULT_LOAD_HALF_LIFE_MS / 1000)}s mean)`,
+        ),
+        'the shipped window is named',
+      );
+      assert.ok(
+        describeInFlight(shipped).includes('shipped default'),
+        'and said to be the default, so a mismatched target is visible',
+      );
+
+      let retuned = new InFlightReading({
+        halfLifeMs: 30_000,
+        now: () => clock,
+      });
+      let summary = describeInFlight(retuned);
+      assert.ok(
+        summary.includes('(30s mean)'),
+        `a reading over another window says so: ${summary}`,
+      );
+      assert.notOk(
+        summary.includes('120s'),
+        'and does not also claim the shipped one',
+      );
+    });
+
     test('the summary states both figures, and which is which', function (assert) {
       let clock = 0;
       let reading = new InFlightReading({
@@ -1356,8 +1404,8 @@ module(basename(import.meta.filename), function () {
       }
       let summary = describeInFlight(reading);
       assert.ok(
-        summary.includes('peak 7.0 searches in flight'),
-        `the mean is reported as the mean: ${summary}`,
+        summary.includes('peak 7.0 searches in flight (10s mean)'),
+        `the mean is reported as the mean, over its own window: ${summary}`,
       );
       assert.ok(
         summary.includes('7 at once'),

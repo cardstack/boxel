@@ -154,10 +154,12 @@ item`, the same derived workload:
 
 Six times the request rate produced a quarter of the load. In-flight is rate
 multiplied by service time, and service time is the term that moves — so
-**request rate on its own is not a load signal**, and a page-bounded derived
-workload is about ten times too cheap to stand in for the unpaginated queries a
-dashboard issues. Pass `--derive-page-size 0` whenever the question is about
-load rather than about a bounded screen.
+**request rate on its own is not a load signal**. Per search the gap is wider
+than the table's rows suggest: dividing each row's load by its rate, an
+unbounded search costs about nine times what a page-bounded one does, which is
+why 19 readers on the bounded workload sit at the load 10 readers produced.
+Pass `--derive-page-size 0` whenever the question is about load rather than
+about a bounded screen.
 
 **A derived workload is the unmitigated shape, by construction.** It produces
 type-only queries with no predicate — a whole-table read per type — because the
@@ -292,6 +294,7 @@ node run-load.ts --csv ./accounts.csv \
 | `--prime-connections` |      on | Open each batch's connections before timing it. `=false` disables.              |
 | `--model-calls`       |     off | A forwarded request before each write (see below).                              |
 | `--subscribe`         |     off | React to real realm events instead of modelling them (see below).               |
+| `--load-half-life-ms` | 120000  | The window the target smooths its in-flight reading over.                       |
 
 `--model-calls` puts a `_request-forward` call before each write, the position a
 card that generates before saving occupies. The destination is one the realm
@@ -415,10 +418,16 @@ server's own timing rather than inferred.
 ## Driving it hard enough to reach a threshold
 
 The realm server has two mechanisms that engage at a level of concurrency: the
-admission gate answers `429` once in-flight searches reach its cap, and the
-link-shape policy degrades a live read's link closure one rung earlier, at a
-120-second time-weighted mean of the same count. Both are **per replica**, so a
-fleet of N tasks needs N times the load a single process would.
+admission gate bounds in-flight searches at a cap, and the link-shape policy
+degrades a live read's link closure one rung earlier, at a time-weighted mean
+of the same count (a 120-second half-life by default, `LINK_SHAPE_LOAD_HALF_LIFE_MS`
+per deployment). Both are **per replica**, so a fleet of N tasks needs N times
+the load a single process would.
+
+The gate does not answer `429` at the cap. An arrival above it queues and is
+shed only if no slot frees within the admission wait, so a run can hold a
+process at its ceiling and see no shedding at all — a `429` count measures how
+long the queue stayed full, not whether the cap was reached.
 
 A run that reaches neither has measured neither, and its summary cannot tell
 you which of two things happened: the mechanism declined, or it would not have
@@ -429,10 +438,13 @@ that distinction available from the run itself — see below.
 user, one per CSV row, so a 20-row file caps a run at 19 readers. Against a
 deployed realm at `--derive-page-size 0`, 19 readers held a peak 120-second
 mean of **6.3** searches in flight. Read that against the rungs and the cap in
-`packages/runtime-common/search-bounds.ts`; at roughly three readers per unit
-of mean, reaching a rung of 8 wants about 25 readers and one of 12 about 38,
-**per replica**. Growing the pool is what makes a load number realistic,
-and it is also what makes the `429` path reachable.
+`packages/runtime-common/search-bounds.ts`: this run cost about three readers
+per unit of mean, so a rung of 8 wants roughly 25 readers and one of 12 roughly
+36, **per replica**. Treat those as a floor rather than an estimate — the
+scaling is only linear while service time holds, and service time is what rises
+first as a realm saturates. Growing the pool is what makes a load number
+realistic, and it is what puts the admission queue under enough pressure to
+shed.
 
 **Exercising the mechanism is a different question, and much cheaper.** The
 policy's thresholds are environment-readable — `LINK_SHAPE_MULTI_ROW_ENGAGE`
@@ -454,7 +466,9 @@ real traffic, which is the question the pool size answers.
   `linkShapeLevel`, `linkShapeLoad`. This is where a specific degraded response
   and the reading that degraded it can be seen together.
 - Status counts from the realm server's own log — `429` / `5xx` / `408`. These
-  are vantage-independent, unlike any latency this driver reports.
+  are vantage-independent, unlike any latency this driver reports. Read a `429`
+  count as queue pressure sustained past the admission wait, not as "the cap was
+  reached".
 - The concurrency line in this run's summary, as a bound (below).
 
 The realm server's health sampler reports `heapMB` and `eventLoopLagMs` over
@@ -474,9 +488,12 @@ where the driver ran.
 ### The concurrency line
 
 The summary reports the concurrency this driver held, in the two forms the
-server's thresholds are written in: the peak of a 120-second time-weighted mean
-(what the link-shape policy decides on) and the highest count open at one
-moment (what the admission gate decides on). The progress line carries the
+server's thresholds are written in: the peak of a time-weighted mean (what the
+link-shape policy decides on) and the highest count open at one moment (what
+the admission gate decides on). The mean's window is named in the line itself,
+because it is a per-deployment setting rather than a constant — pass
+`--load-half-life-ms` to match a target that overrides
+`LINK_SHAPE_LOAD_HALF_LIFE_MS`, or the two are not the same measurement. The progress line carries the
 current value of that same mean as `load=`, so a run can be steered while it is
 still going — readers added, or a page bound dropped.
 
@@ -495,10 +512,12 @@ are what a saturation run is about:
 - `heapMB` — a single in-flight search costs tens of megabytes
 - `eventLoopLagMs` — saturation shows here long before any response is not a 200
 
-Its `inFlightSearch` is an instantaneous sample and reads mostly zero even
-under sustained load; take concurrency from this run's own summary and from the
-`boxel:link-shape-policy` heartbeat instead, as "Driving it hard enough to reach
-a threshold" above describes.
+Its `inFlightSearch` is a point sample taken every five seconds, so it swings
+across the whole range a run touches and its individual values answer neither
+question: the policy acts on a two-minute mean rather than on any sample, and
+the cap is about the peak rather than the typical. Take concurrency from this
+run's own summary and from the `boxel:link-shape-policy` heartbeat instead, as
+"Driving it hard enough to reach a threshold" above describes.
 
 Staging and production realm servers have different memory limits, so compare
 **ratios** — searches per minute, heap per in-flight search — rather than

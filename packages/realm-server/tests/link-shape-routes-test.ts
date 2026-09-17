@@ -24,6 +24,7 @@ import {
 import type { LooseSingleCardDocument, Realm } from '@cardstack/runtime-common';
 import {
   admitSearchUnconditionally,
+  buildLinkShapePolicy,
   getSearchInFlight,
   getSearchSustainedInFlight,
   resetSearchAdmissionForTests,
@@ -437,11 +438,13 @@ module(basename(import.meta.filename), function () {
   // that waited either out would not be runnable, and one that shortened them
   // would pin numbers nobody deploys.
   //
-  // The thresholds are imported here rather than restated. `link-shape-policy-
-  // test.ts` keeps its own copies on purpose, so that retuning the shipped
-  // values has to face the assertions that pin behaviour at a number; what
-  // these assert is the complementary thing — that whatever those numbers are,
-  // a real reading reaches them and the routes follow.
+  // The thresholds are imported rather than restated, so these assertions
+  // follow a retune instead of pinning one. That is deliberate: what they claim
+  // is not that a rung sits at a particular number but that wherever it sits, a
+  // real reading reaches it and the routes follow. The ladder's own behaviour
+  // at a fixed pair of thresholds is `link-shape-policy-test.ts`, which
+  // constructs its policy with explicit values and so describes the mechanism
+  // rather than the tuning.
   module('the ladder over the process reading', function (hooks) {
     let request: SuperTest<Test>;
     let realmHref: string;
@@ -474,14 +477,15 @@ module(basename(import.meta.filename), function () {
     );
     const TOP_RUNG_HOLD = Math.ceil(LINK_SHAPE_ALL_ENGAGE / SETTLED_FRACTION);
 
-    // `main.ts`'s construction, plus the clock. The limit is the constant the
-    // process gate is built from, which is what the gate reports for a server
-    // nothing has retuned.
-    const policy = new LinkShapePolicy({
-      readLoad: getSearchSustainedInFlight,
-      limit: SERVER_MAX_IN_FLIGHT_SEARCHES,
-      now: () => clock,
-    });
+    // The construction the realm server runs under, not a copy of it. Building
+    // an equivalent policy here would leave the wiring untested in exactly the
+    // way that matters: a change that stopped the policy reading the admission
+    // gate would leave a suite that supplied its own reading green. The clock
+    // is the factory's only seam, and the reason for it is recorded there.
+    //
+    // Evaluated at module load, before any test has retuned the gate, so the
+    // limit it takes is the one a fresh process starts with.
+    const policy = buildLinkShapePolicy({ now: () => clock });
 
     function onRealmSetup(args: {
       testRealm: Realm;

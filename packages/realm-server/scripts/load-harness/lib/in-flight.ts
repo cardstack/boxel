@@ -2,12 +2,18 @@
 // server's own thresholds are expressed in.
 //
 // Two of the server's mechanisms decide on one quantity: the admission gate
-// sheds a search with a `429` once the instantaneous count of in-flight
-// searches reaches its cap, and the link-shape policy degrades a live read's
-// link closure once a *time-weighted mean* of that same count crosses one of
-// its rungs. Both are per replica, per process, and neither is visible from
-// outside — so a run that wants to say how close it came to either has to
-// measure the quantity itself.
+// bounds the instantaneous count of in-flight searches at a cap, and the
+// link-shape policy degrades a live read's link closure once a *time-weighted
+// mean* of that same count crosses one of its rungs. Both are per replica, per
+// process, and neither is visible from outside — so a run that wants to say
+// how close it came to either has to measure the quantity itself.
+//
+// The gate does not shed at the cap. An arrival above it queues in FIFO order
+// and is answered `429` only if no slot frees within the admission wait, so a
+// process pinned at its cap can serve every request and report no shedding at
+// all. A run's `429` count is therefore a measure of how long the queue stayed
+// full, not of whether the cap was reached — reaching it is what the peak
+// count below reports.
 //
 // Request rate is not a stand-in. In-flight is rate multiplied by service
 // time, and service time is the term that moves: a page-bounded workload has
@@ -24,13 +30,19 @@
 // threshold is evidence that this run did not cross it; a reading above one is
 // not evidence that it did.
 
-// The half-life the realm server smooths its own reading over, from
+// The half-life the realm server smooths its own reading over by default, from
 // `LINK_SHAPE_LOAD_HALF_LIFE_MS` in `packages/runtime-common/search-bounds.ts`.
 // Restated rather than imported because this directory is copied to the box
-// that runs it and has no access to the repo around it. A run measured over a
-// different half-life would not be comparable to the reading the policy acts
-// on, which is the only reason to measure it at all.
-export const LOAD_HALF_LIFE_MS = 120_000;
+// that runs it and has no access to the repo around it; `load-harness-test.ts`
+// pins the two together so the copy cannot drift from the constant.
+//
+// It is only a default. That constant is an environment override on the
+// server, so a deployment can smooth over a different window — and a mean
+// taken over the wrong window is not comparable to the reading the policy
+// acts on, which is the only reason to take it. `--load-half-life-ms` states
+// the target's value for a run, and every figure reported names the window it
+// was measured over.
+export const DEFAULT_LOAD_HALF_LIFE_MS = 120_000;
 
 // Elapsed spans inside one process, from a source that cannot step: a forward
 // wall-clock correction of a few seconds collapses the decay weight toward
@@ -50,9 +62,18 @@ export class InFlightReading {
   #peakMean = 0;
 
   constructor(opts?: { halfLifeMs?: number; now?: () => number }) {
-    this.#halfLifeMs = normalizeHalfLife(opts?.halfLifeMs ?? LOAD_HALF_LIFE_MS);
+    this.#halfLifeMs = normalizeHalfLife(
+      opts?.halfLifeMs ?? DEFAULT_LOAD_HALF_LIFE_MS,
+    );
     this.#now = opts?.now ?? monotonicNow;
     this.#meanAt = this.#now();
+  }
+
+  // The window this reading is smoothed over. Reported with every figure taken
+  // from it: a mean is only comparable to the server's if the two were taken
+  // over the same window, and nothing else in the output would say which.
+  get halfLifeMs(): number {
+    return this.#halfLifeMs;
   }
 
   // Requests this driver has open right now.
@@ -137,10 +158,11 @@ function normalizeHalfLife(halfLifeMs: number): number {
 // the caveats travel with the number: the bound is only a bound in one
 // direction, and only over this driver's own traffic.
 export function describeInFlight(reading: InFlightReading): string {
-  let peakMean = reading.peakMean;
+  let window = `${Math.round(reading.halfLifeMs / 1000)}s`;
+  let matchesDefault = reading.halfLifeMs === DEFAULT_LOAD_HALF_LIFE_MS;
   return (
-    `concurrency: peak ${peakMean.toFixed(1)} searches in flight (120s mean), ` +
-    `${reading.peakInFlight} at once\n` +
+    `concurrency: peak ${reading.peakMean.toFixed(1)} searches in flight ` +
+    `(${window} mean), ${reading.peakInFlight} at once\n` +
     `  The realm server's admission gate acts on the instantaneous count and its\n` +
     `  link-shape policy on a mean of the same shape, both per replica. These are\n` +
     `  those two numbers measured from here, which bounds what one replica saw of\n` +
@@ -149,6 +171,12 @@ export function describeInFlight(reading: InFlightReading): string {
     `  the server released it. So a figure under a threshold says this run did not\n` +
     `  reach it; a figure over one does not say it did, and neither accounts for\n` +
     `  other traffic on the realm. Take the server's own reading from the\n` +
-    `  boxel:link-shape-policy heartbeat.`
+    `  boxel:link-shape-policy heartbeat.\n` +
+    (matchesDefault
+      ? `  The ${window} window is the shipped default. If the target sets\n` +
+        `  LINK_SHAPE_LOAD_HALF_LIFE_MS, pass --load-half-life-ms to match it, or\n` +
+        `  this mean and the policy's are not the same measurement.`
+      : `  Measured over ${window} as --load-half-life-ms asked, rather than the\n` +
+        `  shipped default — comparable only to a target smoothing over ${window}.`)
   );
 }

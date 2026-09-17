@@ -51,7 +51,11 @@ import {
   yieldSocketToPool,
   type ConnectionSetup,
 } from './lib/connection.ts';
-import { describeInFlight, InFlightReading } from './lib/in-flight.ts';
+import {
+  DEFAULT_LOAD_HALF_LIFE_MS,
+  describeInFlight,
+  InFlightReading,
+} from './lib/in-flight.ts';
 import {
   DEFAULT_FIELDSET,
   describeFieldset,
@@ -117,6 +121,11 @@ let args = parseArgsOrExit(process.argv.slice(2), {
   // per write without spending tokens; see `modelCall` for exactly how far
   // into the handler it reaches, which is less far than the name suggests.
   modelCalls: false,
+  // The window the TARGET smooths its in-flight reading over, so the
+  // concurrency this run reports is the same measurement the server's
+  // link-shape policy takes. Only change it when the deployment sets
+  // LINK_SHAPE_LOAD_HALF_LIFE_MS; the default is the value the server ships.
+  loadHalfLifeMs: DEFAULT_LOAD_HALF_LIFE_MS,
   // Re-run on the realm's own invalidation events, the way a browser does,
   // rather than on every write this driver happens to make. Without it the
   // harness models the fan-out; with it, it measures it — and a change that
@@ -201,7 +210,7 @@ if (!args.deriveWorkload) {
 // The concurrency this driver holds, in the two forms the realm server's own
 // thresholds are written in. Searches only: a write is not what either the
 // admission gate or the link-shape policy counts.
-let inFlight = new InFlightReading();
+let inFlight = new InFlightReading({ halfLifeMs: args.loadHalfLifeMs });
 
 let stats = {
   search: [] as number[],
