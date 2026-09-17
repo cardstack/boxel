@@ -69,6 +69,10 @@ export interface LatticeInputStageTiming {
   cards?: number;
   inputBytes?: number;
   evaluatorMs?: number;
+  // A query stage's walls: membership (the index search), then the read of
+  // the member rows (headers, bodies, parse). Sequential; they sum to less
+  // than `elapsedMs`.
+  phases?: Record<string, number>;
 }
 
 // Timings are inclusive when a conditional dependency invokes another field.

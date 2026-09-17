@@ -52,11 +52,22 @@ export type NativeValueCodec =
 // A data projection preserves published attributes and explicitly selects the
 // linked data a computation consumes. "id" never loads a target card. This is
 // cached definition data, not a callback that can run application modules.
+// A predicate over a contained collection of the projected card: keep only
+// the members whose leaves equal the given values (`$this.` strings resolve
+// against the owner, like a query's parameters). The program then reads a
+// game's lines for one batter instead of all eighteen, and the watch stays
+// quiet when another batter's line changed.
+export type LatticeProjectionWhere = Record<
+  string,
+  Record<string, string | number | boolean>
+>;
+
 export interface LatticeDataProjection {
   links?: Record<
     string,
     { many: boolean; projection: 'id' | LatticeDataProjection }
   >;
+  where?: LatticeProjectionWhere;
 }
 
 export interface FieldDefinition {

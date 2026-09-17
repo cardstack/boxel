@@ -19,6 +19,35 @@ import {
   LatticeDataProjector,
   assertLatticeDataProjection,
 } from './lattice-data-projection.ts';
+import type { LatticeProjectionWhere } from '@cardstack/runtime-common/definitions';
+
+function resolveWhere(
+  where: LatticeProjectionWhere,
+  root: (name: string) => unknown,
+): LatticeProjectionWhere {
+  const resolved: LatticeProjectionWhere = {};
+  for (const [collection, leaves] of Object.entries(where)) {
+    const out: Record<string, string | number | boolean> = {};
+    for (const [leaf, expected] of Object.entries(leaves)) {
+      if (typeof expected === 'string' && expected.startsWith('$this.')) {
+        const [head, ...tail] = expected.slice('$this.'.length).split('.');
+        let value: any = root(head);
+        for (const part of tail) {
+          if (['__proto__', 'prototype', 'constructor'].includes(part))
+            throw new Error('Invalid input path');
+          value = value == null ? undefined : value[part];
+        }
+        if (!['string', 'number', 'boolean'].includes(typeof value))
+          throw new Error(
+            `Lattice projection predicate ${collection}.${leaf} resolved to no scalar`,
+          );
+        out[leaf] = value;
+      } else out[leaf] = expected;
+    }
+    resolved[collection] = out;
+  }
+  return resolved;
+}
 
 export interface LatticeResolvedQueryInput {
   values: Record<string, any>[];
@@ -173,15 +202,41 @@ export function createLatticeQueryInputResolver({
           // them into the reader so it can enforce its single-realm authority.
           const { realm: _realm, realms: _realms, ...body } = normalized.query;
           const query: Query = { ...body, realms: normalized.realms };
+          // The projection predicate resolves its `$this.` values the way the
+          // query does, against roots that are ready (settling them if not),
+          // and rides with the watch so invalidation reads through the same
+          // lens the program did.
+          let where: LatticeProjectionWhere | undefined;
+          if (declarations[name].where) {
+            for (;;) {
+              let needed: string | undefined;
+              try {
+                where = resolveWhere(declarations[name].where, (root) => {
+                  if (!ready(root)) {
+                    needed = root;
+                    throw new Error('Lattice input not ready');
+                  }
+                  return values[root];
+                });
+              } catch (error) {
+                if (!needed) throw error;
+                await ensure(needed);
+                continue;
+              }
+              break;
+            }
+          }
           const queryStart = performance.now();
           const result = await frame.query(name, query, {
             snapshot: current.snapshot,
+            ...(where ? { where } : {}),
           });
           onTiming?.({
             field: name,
             kind: 'query',
             elapsedMs: performance.now() - queryStart,
             cards: result.cards.length,
+            phases: result.phases,
           });
           signal?.throwIfAborted();
           // A sorted page is deliberate membership: the owner reads the top
@@ -189,6 +244,9 @@ export function createLatticeQueryInputResolver({
           // Any other short result means rows the owner reads went unwatched.
           if (!result.paged && result.meta.page?.total !== result.cards.length)
             throw new Error(`Incomplete Lattice query membership: ${name}`);
+          // The predicate was applied where the rows were read (the shim
+          // asks Postgres for the projected document), so the cards arrive
+          // already sliced; only the declared link joins remain.
           const projectionStart = performance.now();
           const projected = await projector.project(
             result.cards,

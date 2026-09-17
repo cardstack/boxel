@@ -1,3 +1,4 @@
+import type { LatticeProjectionWhere } from '@cardstack/runtime-common/definitions';
 import { createHash } from 'node:crypto';
 import type { CodeRef, RenderResponse } from '@cardstack/runtime-common';
 import { isSingleCardDocument } from '@cardstack/runtime-common/card-document-shape';
@@ -284,8 +285,61 @@ export function createLatticeNativeCardIndexer({
           state: 'pending',
           validatedThrough: request.inputSnapshot?.generation ?? 0,
           ...(result.freshUntil ? { freshUntil: result.freshUntil } : {}),
+          ...(result.freshWithin ? { freshWithin: result.freshWithin } : {}),
           ...(result.staleWithin ? { staleWithin: result.staleWithin } : {}),
           ...(request.inputSnapshot?.stale ? { stale: true as const } : {}),
+          ...(dataReceipt?.projections && !discovery
+            ? {
+                projections: {
+                  ...dataReceipt.projections,
+                  // The identity watch reads every root's cards, so it may
+                  // carry a collection's predicate only where every root
+                  // that reads that collection (`x.*`) reads it through the
+                  // same predicate; a root reading it whole keeps it out.
+                  ...(dataReceipt.identities.length
+                    ? (() => {
+                        const roots = [
+                          ...dataReceipt.watches.map((w) => w.fieldPath),
+                          ...Object.keys(
+                            admission.root.definition.nativeLinkInputs ?? {},
+                          ),
+                        ];
+                        const merged: LatticeProjectionWhere = {};
+                        const collections = new Set(
+                          Object.values(dataReceipt.projections).flatMap(
+                            (where) => Object.keys(where),
+                          ),
+                        );
+                        for (const collection of collections) {
+                          const readers = roots.filter((root) =>
+                            (readPaths?.[root] ?? ['*']).some(
+                              (path) =>
+                                path === '*' || path === `${collection}.*`,
+                            ),
+                          );
+                          const predicates = readers.map((root) =>
+                            JSON.stringify(
+                              dataReceipt.projections![root]?.[collection] ??
+                                null,
+                            ),
+                          );
+                          if (
+                            readers.length &&
+                            predicates.every((p) => p === predicates[0]) &&
+                            predicates[0] !== 'null'
+                          )
+                            merged[collection] = JSON.parse(predicates[0]);
+                        }
+                        const identity: Record<string, LatticeProjectionWhere> =
+                          {};
+                        if (Object.keys(merged).length)
+                          identity['@lattice/inputs'] = merged;
+                        return identity;
+                      })()
+                    : {}),
+                },
+              }
+            : {}),
           ...(readPaths && dataReceipt && !discovery
             ? {
                 readPaths: Object.fromEntries([
@@ -452,6 +506,40 @@ export function createLatticeNativeCardIndexer({
           inputStages,
           omittedInputStages,
         },
+        // Where a materialization's time went, per stage, for the stress
+        // realm's accounting (the debug flag is what turns it on).
+        ...(debug && dataReceipt
+          ? (() => {
+              console.warn(
+                `native indexer: timings ${request.url} ${JSON.stringify({
+                  admission: Math.round(computationStart - admissionStart),
+                  openInputs: Math.round(inputsOpenedAt - workOpenedAt),
+                  computeAndAssemble: Math.round(
+                    performance.now() - computationStart,
+                  ),
+                  queryPreparation: Math.round(queryPreparationMs),
+                  stages: inputStages.map((stage) => ({
+                    field: stage.field,
+                    kind: stage.kind,
+                    ms: Math.round(stage.elapsedMs),
+                    cards: stage.cards,
+                    ...(stage.phases
+                      ? {
+                          phases: Object.fromEntries(
+                            Object.entries(stage.phases).map(([k, v]) => [
+                              k,
+                              Math.round(v),
+                            ]),
+                          ),
+                        }
+                      : {}),
+                  })),
+                  assembly: result.timings,
+                })}`,
+              );
+              return {};
+            })()
+          : {}),
         ...(result.computed ? { compute: result.computed } : {}),
         assertCurrent: async (tx) => {
           // A stale attempt is the one that must land while source work is

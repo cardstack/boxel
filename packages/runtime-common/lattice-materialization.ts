@@ -1,3 +1,4 @@
+import type { LatticeProjectionWhere } from './definitions.ts';
 import type { Query } from './query.ts';
 import type { DBAdapter } from './db.ts';
 import { query, param, type Querier } from './expression.ts';
@@ -24,6 +25,11 @@ export interface PublicationReceipt {
   // producer that evaluates grains (the native worker) supplies it; the
   // browser, which recomputes live, does not.
   freshUntil?: string;
+  // The same hold as a window in seconds from the render: the registry arms
+  // `settle_until` from the publication's own clock (`now() + freshWithin`),
+  // so a hold shorter than the swap that publishes it still holds. When both
+  // are present the window wins.
+  freshWithin?: number;
   // The earliest `staleAfter` bound over the owner's computed fields, as a
   // window in seconds from the clock the programs read: once dirty, the owner
   // must be re-derived within it even while its inputs keep changing.
@@ -36,6 +42,11 @@ export interface PublicationReceipt {
   // work. It is a valid value at its input generation, but the owner keeps
   // its obligation so the ordinary path re-derives it when the stream quiets.
   stale?: true;
+  // Per watch field path, the projection predicate the owner read its
+  // query results through (LatticeDataProjection.where, `$this.` resolved):
+  // the watch compares the same slice of a changed row, so a change outside
+  // it does not dirty the owner. Native producer only.
+  projections?: Record<string, LatticeProjectionWhere>;
   // Per watch field path, the fields of a matching input card the owner's
   // programs read (read-path change detection). A watch without an entry
   // invalidates on any change of a matching row; with one, only when a row
@@ -216,6 +227,24 @@ export function latticeSnapshotFields(
 ) {
   let stamp = resource.meta.publication;
   if (!stamp) return undefined;
+  // An owner registered by discovery and not yet published has a stamp with
+  // no output behind it. Where pending is allowed (display), it deserializes
+  // as a pending instance -- computed fields absent, `publicationState`
+  // pending -- rather than failing every card that links to it.
+  if (
+    opts?.allowPending &&
+    stamp.version === 1 &&
+    stamp.state === 'pending' &&
+    stamp.outputRevision === undefined
+  ) {
+    return {
+      computedFields: Array.isArray(stamp.computedFields)
+        ? stamp.computedFields
+        : [],
+      queryFields: Array.isArray(stamp.queryFields) ? stamp.queryFields : [],
+      scope: { active: true, pending: true },
+    };
+  }
   if (
     stamp.version !== 1 ||
     (stamp.state !== 'ready' &&

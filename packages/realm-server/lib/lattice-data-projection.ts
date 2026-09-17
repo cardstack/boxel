@@ -1,4 +1,8 @@
-import type { LatticeDataProjection } from '@cardstack/runtime-common/definitions';
+import type {
+  LatticeDataProjection,
+  LatticeProjectionWhere,
+} from '@cardstack/runtime-common/definitions';
+import { param, type Expression } from '@cardstack/runtime-common/expression';
 import type {
   LatticeCardInput,
   LatticeLinkInput,
@@ -19,8 +23,9 @@ export function assertLatticeDataProjection(
       Array.isArray(value)
     )
       throw new Error('Invalid or oversized Lattice data projection');
-    if (Object.keys(value).some((key) => key !== 'links'))
+    if (Object.keys(value).some((key) => key !== 'links' && key !== 'where'))
       throw new Error('Unknown Lattice projection option');
+    if (value.where !== undefined) assertLatticeProjectionWhere(value.where);
     if (value.links === undefined) return;
     if (
       !value.links ||
@@ -45,6 +50,98 @@ export function assertLatticeDataProjection(
     }
   };
   visit(value, 0);
+}
+
+const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const RESERVED = ['__proto__', 'constructor', 'prototype'];
+
+export function assertLatticeProjectionWhere(
+  value: unknown,
+): asserts value is LatticeProjectionWhere {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('Invalid Lattice projection predicate');
+  const collections = Object.entries(value as Record<string, unknown>);
+  if (!collections.length || collections.length > 16)
+    throw new Error('Invalid Lattice projection predicate');
+  for (const [collection, leaves] of collections) {
+    if (!NAME.test(collection) || RESERVED.includes(collection))
+      throw new Error('Invalid Lattice projection field');
+    if (!leaves || typeof leaves !== 'object' || Array.isArray(leaves))
+      throw new Error('Invalid Lattice projection predicate');
+    const entries = Object.entries(leaves as Record<string, unknown>);
+    if (!entries.length || entries.length > 8)
+      throw new Error('Invalid Lattice projection predicate');
+    for (const [leaf, expected] of entries) {
+      if (!NAME.test(leaf) || RESERVED.includes(leaf))
+        throw new Error('Invalid Lattice projection field');
+      if (!['string', 'number', 'boolean'].includes(typeof expected))
+        throw new Error('Invalid Lattice projection predicate value');
+    }
+  }
+}
+
+// The predicate, lowered: the same slice, taken where the row is read. The
+// read shim (LatticeMaterializationInputs) asks Postgres for the projected
+// document, so an owner that reads one member of a collection never
+// transfers, parses or budgets the rest. This is the compiled fast path of a
+// per-input read projection: the general form is a BXL `output` program over
+// the member (the card operations `read` stage), which the shim will run in
+// Node at the same point; a target type's own `read` output (redaction) will
+// compose before it. Names were validated by `assertLatticeProjectionWhere`
+// (identifier characters only), so they may be spliced into path literals;
+// values travel as bound parameters.
+export function latticeProjectionWhereSQL(
+  doc: string,
+  where: LatticeProjectionWhere,
+): Expression {
+  let expr: Expression = [doc];
+  for (const [collection, leaves] of Object.entries(where)) {
+    const members = `${doc}->'attributes'->'${collection}'`;
+    const conditions: Expression = [];
+    for (const [leaf, expected] of Object.entries(leaves)) {
+      if (conditions.length) conditions.push(' AND ');
+      conditions.push(
+        `m->'${leaf}' = `,
+        param(JSON.stringify(expected)),
+        '::jsonb',
+      );
+    }
+    expr = [
+      `CASE WHEN jsonb_typeof(${members})='array' THEN jsonb_set(`,
+      ...expr,
+      `,'{attributes,${collection}}',COALESCE((SELECT jsonb_agg(m) FROM jsonb_array_elements(${members}) m WHERE `,
+      ...conditions,
+      `),'[]'::jsonb)) ELSE `,
+      ...expr,
+      ' END',
+    ];
+  }
+  return expr;
+}
+
+// The predicate, applied: a member stays when every named leaf equals its
+// expected value. A collection the card lacks, or holds as something other
+// than an array, is left alone; the program decides what an absent one means.
+export function applyLatticeProjectionWhere<T extends Record<string, any>>(
+  card: T,
+  where: LatticeProjectionWhere,
+): T {
+  let out: Record<string, any> | undefined;
+  for (const [collection, leaves] of Object.entries(where)) {
+    const members = card?.[collection];
+    if (!Array.isArray(members)) continue;
+    const kept = members.filter(
+      (member) =>
+        member &&
+        typeof member === 'object' &&
+        Object.entries(leaves).every(
+          ([leaf, expected]) => member[leaf] === expected,
+        ),
+    );
+    if (kept.length === members.length) continue;
+    (out ??= { ...card })[collection] = kept;
+  }
+  return (out ?? card) as T;
 }
 
 export class LatticeDataProjector {

@@ -507,7 +507,8 @@ export async function assembleLatticeCardData({
   node.shapes.id = 'string';
   // The engine reads the clock; programs read `.__clock` as data. Not a
   // field, so it never reaches the serialized document or search doc.
-  const rootClock = latticeClock();
+  const rootWall = Date.now();
+  const rootClock = latticeClock(new Date(rootWall));
   node.values.__clock = rootClock;
   node.shapes.__clock = { object: { today: 'string', now: 'string' } };
   if (resolveLinkInputs && !deferComputation) {
@@ -630,8 +631,23 @@ export async function assembleLatticeCardData({
     if (instant !== null) freshInstants.push(instant);
   }
   for (const instant of freshInstants) {
-    if (freshUntil === null || instant < freshUntil) freshUntil = instant;
+    // The programs read a minute-truncated clock, so an instant they derive
+    // from it is up to a minute behind the wall: `now + 2s` would already be
+    // past for most of every minute and hold nothing. The hold is the window
+    // the program declared, measured from when it ran: re-base the instant
+    // from the clock it read onto the wall clock of that read.
+    const offset = Date.parse(instant) - Date.parse(rootClock.now);
+    const rebased = Number.isFinite(offset)
+      ? new Date(rootWall + Math.max(0, offset)).toISOString()
+      : instant;
+    if (freshUntil === null || rebased < freshUntil) freshUntil = rebased;
   }
+  // And as a window from the render, so the registry can arm the hold from
+  // the publication's own clock (a hold shorter than the swap still holds).
+  const freshWithin =
+    freshUntil === null
+      ? null
+      : Math.max(1, Math.round((Date.parse(freshUntil) - rootWall) / 1000));
   // The deadline likewise, as a window: the earliest `staleAfter` instant
   // measured from the clock the programs read, in whole seconds. The engine
   // arms it when the owner becomes dirty, not at publication, so a burst
@@ -812,6 +828,7 @@ export async function assembleLatticeCardData({
     searchDoc: result.search,
     validUntil,
     freshUntil,
+    freshWithin,
     staleWithin,
     readPaths,
     sourceRevision,

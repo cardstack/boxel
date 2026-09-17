@@ -23,8 +23,13 @@ import {
   latticeOwnerDefinitionCurrent,
 } from '@cardstack/runtime-common/lattice-code-reference';
 import { latticeCutoffFilter } from '@cardstack/runtime-common/lattice-query-cutoff';
+import type { LatticeProjectionWhere } from '@cardstack/runtime-common/definitions';
 import { LatticeQueryRegistry } from '@cardstack/runtime-common/lattice-query-registry';
 import { latticeReadSetCurrent } from '@cardstack/runtime-common/lattice-kernel';
+import {
+  applyLatticeProjectionWhere,
+  latticeProjectionWhereSQL,
+} from './lattice-data-projection.ts';
 
 interface Frame {
   realmURL: string;
@@ -176,8 +181,14 @@ export class LatticeMaterializationInputs {
   #frame: Frame;
   #engine: IndexQueryEngine;
   #cards = new Map<string, LatticeLinkInput>();
+  // Sliced bodies by projection predicate (see #read); whole ones in #cards.
+  #projected = new Map<string, Map<string, LatticeLinkInput>>();
+  #readCount = 0;
   #receipts = new Map<string, InputReceipt>();
   #watches = new Map<string, Query>();
+  // Per watch field path, the projection predicate the owner read through
+  // (PublicationReceipt.projections): invalidation compares the same slice.
+  #projections = new Map<string, LatticeProjectionWhere>();
   #retainedQueries = new Map<string, string[]>();
   #retainedLinks = new Map<
     string,
@@ -293,7 +304,7 @@ export class LatticeMaterializationInputs {
   async query(
     fieldPath: string,
     queryInput: Query,
-    policy?: { snapshot?: false },
+    policy?: { snapshot?: false; where?: LatticeProjectionWhere },
   ) {
     const retain = policy?.snapshot !== false;
     // Keep membership and the invalidation watch tied to the same expression
@@ -323,11 +334,17 @@ export class LatticeMaterializationInputs {
         );
         this.#queryScopes.set(scopeKey, typeScope);
       }
+      const membershipStart = performance.now();
       let result = await this.#engine.latticeQueryIdentities(
         new URL(this.#frame.realmURL),
         input,
       );
-      let cards = await this.#read(result.urls);
+      const readStart = performance.now();
+      let cards = await this.#read(result.urls, false, policy?.where);
+      const phases = {
+        membership: readStart - membershipStart,
+        read: performance.now() - readStart,
+      };
       // A truncated sorted page watches its key range, not the whole match:
       // the owner reads the page, so a row that cannot reach the page cannot
       // change what it read. The gate rides in the watch's own filter, so
@@ -343,6 +360,8 @@ export class LatticeMaterializationInputs {
             : input,
         ),
       );
+      if (policy?.where)
+        this.#projections.set(fieldPath, structuredClone(policy.where));
       if (retain)
         this.#retainedQueries.set(
           fieldPath,
@@ -353,6 +372,7 @@ export class LatticeMaterializationInputs {
         meta: result.meta,
         paged: result.paged,
         cutoff: result.cutoff,
+        phases,
       };
     });
   }
@@ -395,15 +415,56 @@ export class LatticeMaterializationInputs {
     this.#retainedLinks.set(key, { ownerURL, fieldPath, urls: [...urls] });
   }
 
-  #read(urls: string[], allowMissing?: false): Promise<LatticeCardInput[]>;
+  // A read through a projection predicate is the input read's projection
+  // stage: Postgres returns each member document already sliced to the
+  // members the owner reads (`latticeProjectionWhereSQL`), so nothing else is
+  // transferred, parsed or budgeted. Sliced bodies are kept apart from whole
+  // ones -- another root of the same owner may read the same card whole --
+  // and a card already read whole is sliced in Node instead of re-read. The
+  // receipts are the row's either way: the same version fence, the same
+  // retained identity.
+  #read(
+    urls: string[],
+    allowMissing?: false,
+    where?: LatticeProjectionWhere,
+  ): Promise<LatticeCardInput[]>;
   #read(urls: string[], allowMissing: true): Promise<LatticeLinkInput[]>;
   async #read(
     urls: string[],
     allowMissing = false,
+    where?: LatticeProjectionWhere,
   ): Promise<LatticeLinkInput[]> {
     this.#signal?.throwIfAborted();
     if (urls.length > LatticeMaterializationInputs.MAX_CARDS)
       throw new Error('Lattice input batch exceeds card bound');
+    let store = this.#cards;
+    if (where) {
+      const key = JSON.stringify(where);
+      store = this.#projected.get(key) ?? new Map<string, LatticeLinkInput>();
+      this.#projected.set(key, store);
+      for (const url of urls) {
+        const whole = this.#cards.get(url);
+        if (whole && !store.has(url))
+          store.set(
+            url,
+            whole.resource
+              ? {
+                  ...whole,
+                  resource: {
+                    ...whole.resource,
+                    attributes: applyLatticeProjectionWhere(
+                      whole.resource.attributes ?? {},
+                      where,
+                    ),
+                  },
+                }
+              : whole,
+          );
+      }
+    }
+    const docExpr: Expression = where
+      ? latticeProjectionWhereSQL('i.pristine_doc', where)
+      : ['i.pristine_doc'];
     for (let value of urls) {
       let url = new URL(value);
       if (
@@ -416,14 +477,11 @@ export class LatticeMaterializationInputs {
           'Lattice input must be a canonical card URL in its realm',
         );
     }
-    if (
-      !allowMissing &&
-      urls.some((url) => this.#cards.get(url)?.resource === null)
-    )
+    if (!allowMissing && urls.some((url) => store.get(url)?.resource === null))
       throw new Error('Lattice card input is failed, future or oversized');
-    let missing = [...new Set(urls)].filter((url) => !this.#cards.has(url));
+    let missing = [...new Set(urls)].filter((url) => !store.has(url));
     if (
-      this.#cards.size + missing.length >
+      this.#readCount + missing.length >
       LatticeMaterializationInputs.MAX_CARDS
     )
       throw new Error('Lattice input frame exceeds card bound');
@@ -432,7 +490,9 @@ export class LatticeMaterializationInputs {
       let headers = await query(this.#db, [
         `SELECT i.url,i.xmin::text AS version,i.generation,
           i.xmin::text || ':' || i.cmin::text || ':' || i.ctid::text AS row_version,
-          octet_length(i.pristine_doc::text) AS bytes,i.has_error,i.is_deleted,
+          octet_length((`,
+        ...docExpr,
+        `)::text) AS bytes,i.has_error,i.is_deleted,
           COALESCE(i.pristine_doc->'meta' ? 'publication',FALSE) AS materialized,
           i.pristine_doc->'meta'->'publication'->>'version' AS stamp_version,
           i.pristine_doc->'meta'->'publication'->>'state' AS state,
@@ -539,7 +599,9 @@ export class LatticeMaterializationInputs {
       const present = receipts.filter((receipt) => !receipt.missing);
       let rows = present.length
         ? await query(this.#db, [
-            `SELECT i.url,CASE WHEN i.xmin::text=e.version THEN i.pristine_doc::text END AS body
+            `SELECT i.url,CASE WHEN i.xmin::text=e.version THEN (`,
+            ...docExpr,
+            `)::text END AS body
          FROM boxel_index i JOIN jsonb_to_recordset(`,
             param(
               JSON.stringify(
@@ -559,8 +621,14 @@ export class LatticeMaterializationInputs {
         throw new Error('Lattice input changed during read');
       let bodies = new Map(rows.map((row) => [row.url, row.body as string]));
       for (let receipt of receipts) {
+        // One frame, one version of a card: a card read whole by one root
+        // and sliced by another must be the same row both times.
+        const earlier = this.#receipts.get(receipt.url);
+        if (earlier && earlier.version !== receipt.version)
+          throw new Error('Lattice input changed during read');
+        this.#readCount += earlier ? 0 : 1;
         if (receipt.missing) {
-          this.#cards.set(receipt.url, {
+          store.set(receipt.url, {
             url: receipt.url,
             generation: receipt.generation,
             resource: null,
@@ -573,7 +641,7 @@ export class LatticeMaterializationInputs {
         if (resource.type !== 'card' || !resource.meta?.adoptsFrom)
           throw new Error('Invalid published Lattice card data');
         if (receipt.materialized) latticeSnapshotFields(resource);
-        this.#cards.set(receipt.url, {
+        store.set(receipt.url, {
           url: receipt.url,
           generation: receipt.generation,
           resource,
@@ -582,7 +650,7 @@ export class LatticeMaterializationInputs {
       }
       this.#bytes += bytes;
     }
-    return urls.map((url) => structuredClone(this.#cards.get(url)!));
+    return urls.map((url) => structuredClone(store.get(url)!));
   }
 
   // Call after computation, then attach this compact check to Batch.done.
@@ -643,6 +711,9 @@ export class LatticeMaterializationInputs {
       fieldPath,
       query,
     }));
+    const projections = this.#projections.size
+      ? Object.fromEntries(this.#projections)
+      : undefined;
     const retainedInputs: LatticeIndexedSnapshotInput[] = [];
     const append = (
       fieldPath: string,
@@ -685,11 +756,13 @@ export class LatticeMaterializationInputs {
       for (const url of urls) append(fieldPath, url, owner);
     }
     this.#cards.clear();
+    this.#projected.clear();
     this.#retainedQueries.clear();
     this.#retainedLinks.clear();
     this.#retainedLinkCount = 0;
     return {
       watches,
+      ...(projections ? { projections } : {}),
       retainedInputs,
       identities: receipts.map((row) => row.url.replace(/\.json$/, '')),
       async assertCurrent(tx: Querier) {

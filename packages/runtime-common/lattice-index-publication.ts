@@ -1,3 +1,4 @@
+import type { LatticeProjectionWhere } from './definitions.ts';
 import stringify from 'safe-stable-stringify';
 import { enqueueLattice, latticeOwnerRetryReadySQL } from './jobs/lattice.ts';
 import { recordLatticePublication } from './lattice-publication-outbox.ts';
@@ -346,6 +347,10 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
     let rowsAt = Date.now();
     let ownerWatches = new Map<string, LatticeWatch[]>();
     let ownerReadPaths = new Map<string, Record<string, string[]>>();
+    let ownerProjections = new Map<
+      string,
+      Record<string, LatticeProjectionWhere>
+    >();
     let activeOwners = new Set(active.map((row) => row.owner_url as string));
     let retiringOwners = new Set(
       rows
@@ -368,6 +373,8 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
       ) {
         ownerWatches.set(row.url, manifest.watches);
         if (manifest.readPaths) ownerReadPaths.set(row.url, manifest.readPaths);
+        if (manifest.projections)
+          ownerProjections.set(row.url, manifest.projections);
       }
     }
     let previousRows = replayPrevious
@@ -408,6 +415,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
       documents,
       nativeQueries,
       ownerReadPaths,
+      ownerProjections,
     );
     if (opts?.envelope) {
       perfLog.debug(
@@ -621,6 +629,9 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
             pending: !ready,
             ...(retain ? { retainOutputGeneration: outputGeneration } : {}),
             ...(manifest.freshUntil ? { freshUntil: manifest.freshUntil } : {}),
+            ...(manifest.freshWithin
+              ? { freshWithin: manifest.freshWithin }
+              : {}),
             ...(manifest.staleWithin
               ? { staleWithin: manifest.staleWithin }
               : {}),

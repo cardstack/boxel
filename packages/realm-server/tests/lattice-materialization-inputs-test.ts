@@ -206,6 +206,78 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a projection predicate slices each member where the row is read', async (assert) => {
+    const lines = (mine: number) => [
+      { player: 'me', pa: mine },
+      { player: 'them', pa: 9 },
+    ];
+    const boxed = async (name: string, mine: number) => {
+      const url = await card(name, mine);
+      await db.execute(
+        `UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{attributes,lines}',$2::jsonb) WHERE url=$1`,
+        { bind: [url, JSON.stringify(lines(mine))] },
+      );
+      return url;
+    };
+    const one = await boxed('one', 1);
+    const two = await boxed('two', 2);
+    await card('bare', 3);
+    const input = await open();
+    const query = {
+      filter: { on: codeRef, eq: { group: 'A' } },
+      page: { size: 10 },
+    };
+    const where = { lines: { player: 'me' } };
+    const result = await input.query('records', query, { where });
+    const byURL = new Map(
+      result.cards.map((c) => [c.url, c.resource.attributes]),
+    );
+    assert.deepEqual(
+      byURL.get(one)?.lines,
+      [{ player: 'me', pa: 1 }],
+      'sliced to the predicate',
+    );
+    assert.deepEqual(byURL.get(two)?.lines, [{ player: 'me', pa: 2 }]);
+    assert.strictEqual(
+      byURL.get(realm + 'bare.json')?.lines,
+      undefined,
+      'a card without the collection is left alone',
+    );
+    const bodies = statements.filter((s) => /AS body/.test(s));
+    assert.true(bodies.length > 0, 'bodies were read');
+    assert.true(
+      bodies.every((s) =>
+        /jsonb_array_elements\(i\.pristine_doc->'attributes'->'lines'\)/.test(
+          s,
+        ),
+      ),
+      'the slice is taken in SQL',
+    );
+    // The same card read whole by another root is the whole row, at the
+    // same version, from a separate store; a sliced read after a whole one
+    // slices in Node instead of re-reading.
+    const [whole] = await input.read([one]);
+    assert.deepEqual(whole.resource.attributes?.lines, lines(1));
+    const bodiesBefore = statements.filter((s) => /AS body/.test(s)).length;
+    const again = await input.read([two]);
+    assert.deepEqual(
+      again[0].resource.attributes?.lines,
+      lines(2),
+      'whole after sliced re-reads the row',
+    );
+    assert.strictEqual(
+      statements.filter((s) => /AS body/.test(s)).length,
+      bodiesBefore + 1,
+    );
+    const check = input.seal();
+    assert.deepEqual(
+      check.projections,
+      { records: where },
+      'the predicate rides with the watch',
+    );
+    await publish(check.assertCurrent);
+  });
+
   test('native query preparation reuses the input definitions and retains linked identities', async (assert) => {
     const url = await card('one', 1);
     const input = await open();
@@ -346,7 +418,7 @@ module(basename(import.meta.filename), function (hooks) {
     // returns, before the reader can request or deserialize the card body.
     db.execute = async (sql, opts) => {
       const result = await execute(sql, opts);
-      if (sql.includes('octet_length(i.pristine_doc::text) AS bytes'))
+      if (/octet_length\(\(\s*i\.pristine_doc\s*\)::text\) AS bytes/.test(sql))
         controller.abort(reason);
       return result;
     };

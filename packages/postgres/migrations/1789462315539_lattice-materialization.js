@@ -36,6 +36,9 @@ exports.up = (pgm) => {
       -- Read-path change detection: the fields of a matching row the owner
       -- read (PublicationReceipt.readPaths); NULL invalidates on any change.
       read_paths jsonb,
+      -- The projection predicate the owner read its results through
+      -- (PublicationReceipt.projections): the slice a change is compared on.
+      projection jsonb,
       PRIMARY KEY (realm_url, owner_url, field_path)
     );
     -- jsonb_ops supports the any-token ?| lookup; jsonb_path_ops does not.

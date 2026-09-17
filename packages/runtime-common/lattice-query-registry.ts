@@ -1,3 +1,5 @@
+import type { LatticeProjectionWhere } from './definitions.ts';
+import { latticeOwnerDefinitionCurrent } from './lattice-code-reference.ts';
 import type { DBAdapter } from './db.ts';
 import stringify from 'safe-stable-stringify';
 import type { IndexQueryEngine } from './index-query-engine.ts';
@@ -43,24 +45,56 @@ export interface LatticePreparedWatch extends LatticeWatch {
   terms: Array<{ path: string; value: string }>;
   // See PublicationReceipt.readPaths.
   readPaths?: string[];
+  // See PublicationReceipt.projections.
+  where?: LatticeProjectionWhere;
 }
 
 // Read-path change detection: does a row that stays matched by a watch
 // differ in any field the owner read? Unknown fields count as changed, so a
 // value the search document does not carry keeps the owner conservative.
+// A compound read (`lines.*`) is otherwise always a change, because the
+// search document cannot say which member moved. Read through a projection
+// predicate, the comparison is of the members that pass it: the slice the
+// owner actually read.
+function projectedMembers(
+  document: Record<string, unknown>,
+  collection: string,
+  leaves: Record<string, string | number | boolean>,
+): unknown {
+  const members = document[collection];
+  if (!Array.isArray(members)) return members;
+  return members.filter(
+    (member) =>
+      member &&
+      typeof member === 'object' &&
+      Object.entries(leaves).every(
+        ([leaf, expected]) =>
+          (member as Record<string, unknown>)[leaf] === expected,
+      ),
+  );
+}
+
 export function latticeReadPathsChanged(
   readPaths: readonly string[],
   previous: LatticeDocument,
   next: LatticeDocument,
+  where?: LatticeProjectionWhere,
 ): boolean {
   if (readPaths.includes('*')) return true;
-  const before = previous.search_doc ?? {};
-  const after = next.search_doc ?? {};
+  const before = (previous.search_doc ?? {}) as Record<string, unknown>;
+  const after = (next.search_doc ?? {}) as Record<string, unknown>;
   for (const field of readPaths) {
-    // `field.*`: a compound value read whole; the search document does
-    // not carry it faithfully (a JSON field indexes as null), so it counts
-    // as changed.
-    if (field.endsWith('.*')) return true;
+    if (field.endsWith('.*')) {
+      const collection = field.slice(0, -2);
+      const leaves = where?.[collection];
+      if (!leaves || collection.includes('.')) return true;
+      if (
+        JSON.stringify(projectedMembers(before, collection, leaves)) !==
+        JSON.stringify(projectedMembers(after, collection, leaves))
+      )
+        return true;
+      continue;
+    }
     if (!Object.hasOwn(before, field) || !Object.hasOwn(after, field))
       return true;
     if (
@@ -84,6 +118,8 @@ export interface LatticeOwnerPublication {
   retainOutputGeneration?: number;
   // See PublicationReceipt.freshUntil. Only a ready publication starts a hold.
   freshUntil?: string;
+  // See PublicationReceipt.freshWithin: the hold armed from publication.
+  freshWithin?: number;
   // See PublicationReceipt.staleWithin. Only a ready publication sets it.
   staleWithin?: number;
   // See PublicationReceipt.stale: the owner keeps its obligation.
@@ -137,6 +173,10 @@ export class LatticeQueryRegistry
     documents: LatticeDocument[],
     nativeQueries?: ReadonlyMap<string, LatticeQueryPreparation>,
     ownerReadPaths?: ReadonlyMap<string, Record<string, string[]>>,
+    ownerProjections?: ReadonlyMap<
+      string,
+      Record<string, LatticeProjectionWhere>
+    >,
   ) {
     // Routing and exact matching read the same definitions. Share only this
     // pass's resolved definitions across owners and both phases. The next
@@ -149,13 +189,19 @@ export class LatticeQueryRegistry
       prepared: LatticePreparedWatch[],
     ): LatticePreparedWatch[] => {
       const reads = ownerReadPaths?.get(ownerURL);
-      if (!reads) return prepared;
+      const projections = ownerProjections?.get(ownerURL);
+      if (!reads && !projections) return prepared;
       return prepared.map((watch) => {
-        const paths = reads[watch.fieldPath];
-        return Array.isArray(paths) &&
+        const paths = reads?.[watch.fieldPath];
+        const where = projections?.[watch.fieldPath];
+        return {
+          ...watch,
+          ...(Array.isArray(paths) &&
           paths.every((path) => typeof path === 'string')
-          ? { ...watch, readPaths: [...new Set(paths)] }
-          : watch;
+            ? { readPaths: [...new Set(paths)] }
+            : {}),
+          ...(where && typeof where === 'object' ? { where } : {}),
+        };
       });
     };
     for (let [ownerURL, inputs] of ownerWatches) {
@@ -382,6 +428,12 @@ export class LatticeQueryRegistry
         throw new Error('Lattice publication has an invalid fresh bound');
       freshUntil = instant.toISOString();
     }
+    let freshWithin: number | undefined;
+    if (!owner.retired && !owner.pending && owner.freshWithin !== undefined) {
+      if (!Number.isSafeInteger(owner.freshWithin) || owner.freshWithin < 1)
+        throw new Error('Lattice publication has an invalid fresh window');
+      freshWithin = owner.freshWithin;
+    }
     let staleWithin: number | undefined;
     if (!owner.retired && !owner.pending && owner.staleWithin !== undefined) {
       if (!Number.isSafeInteger(owner.staleWithin) || owner.staleWithin < 1)
@@ -431,10 +483,18 @@ export class LatticeQueryRegistry
             ')',
           ]
         : ['FALSE']),
+      // The hold is measured from this publication, not from the render
+      // that produced it: a window shorter than the swap still holds.
       ...(pg
-        ? freshUntil !== undefined
-          ? [', ', param(freshUntil), '::timestamptz']
-          : [', NULL']
+        ? freshWithin !== undefined
+          ? [
+              ', now() + ',
+              param(freshWithin),
+              "::integer * interval '1 second'",
+            ]
+          : freshUntil !== undefined
+            ? [', ', param(freshUntil), '::timestamptz']
+            : [', NULL']
         : []),
       // The window is kept for the next time the owner turns dirty; the
       // deadline itself is armed only while the owner is dirty, which after a
@@ -519,7 +579,7 @@ export class LatticeQueryRegistry
     for (let watch of owner.watches) {
       await tx([
         `INSERT INTO lattice_query_watches
-         (realm_url, owner_url, field_path, query, routing_tokens, read_paths) VALUES (`,
+         (realm_url, owner_url, field_path, query, routing_tokens, read_paths${this.db.kind === 'pg' ? ', projection' : ''}) VALUES (`,
         param(realmURL),
         ',',
         param(ownerURL),
@@ -537,6 +597,9 @@ export class LatticeQueryRegistry
         ),
         ',',
         param(watch.readPaths ? JSON.stringify(watch.readPaths) : null),
+        ...(this.db.kind === 'pg'
+          ? [',', param(watch.where ? JSON.stringify(watch.where) : null)]
+          : []),
         ')',
       ]);
     }
@@ -570,7 +633,7 @@ export class LatticeQueryRegistry
       }
     }
     let expression: Expression = [
-      `SELECT w.owner_url, w.field_path, w.query, w.read_paths
+      `SELECT w.owner_url, w.field_path, w.query, w.read_paths${this.db.kind === 'pg' ? ', w.projection' : ''}
        FROM lattice_query_watches w WHERE w.realm_url =`,
       param(realmURL),
       'AND',
@@ -594,6 +657,12 @@ export class LatticeQueryRegistry
           : ((typeof row.read_paths === 'string'
               ? JSON.parse(row.read_paths)
               : row.read_paths) as string[]);
+      const where =
+        row.projection == null
+          ? undefined
+          : ((typeof row.projection === 'string'
+              ? JSON.parse(row.projection)
+              : row.projection) as LatticeProjectionWhere);
       return {
         ownerURL: row.owner_url as string,
         fieldPath: row.field_path as string,
@@ -601,6 +670,7 @@ export class LatticeQueryRegistry
           ? JSON.parse(row.query)
           : row.query) as Query,
         ...(Array.isArray(readPaths) ? { readPaths } : {}),
+        ...(where && typeof where === 'object' ? { where } : {}),
       };
     });
   }
@@ -620,6 +690,7 @@ export class LatticeQueryRegistry
       filter: Query['filter'];
       compiled?: Expression;
       readPaths?: string[];
+      where?: LatticeProjectionWhere;
     };
     let watches = new Map<string, Candidate>();
     // The key travels through a SQL parameter (Postgres text admits no NUL),
@@ -642,6 +713,7 @@ export class LatticeQueryRegistry
           filter: watch.query.filter,
           compiled,
           readPaths: watch.readPaths,
+          where: watch.where,
         });
       }
     }
@@ -669,7 +741,12 @@ export class LatticeQueryRegistry
         was &&
         is &&
         watch.readPaths &&
-        !latticeReadPathsChanged(watch.readPaths, oldDocument!, newDocument!)
+        !latticeReadPathsChanged(
+          watch.readPaths,
+          oldDocument!,
+          newDocument!,
+          watch.where,
+        )
       )
         continue;
       owners.add(watch.ownerURL);
@@ -974,12 +1051,22 @@ export class LatticeQueryRegistry
       overdue.size && this.db.kind === 'pg'
         ? (
             await query(this.db, [
-              `SELECT o.owner_url FROM lattice_owners o LEFT JOIN boxel_index i
+              `SELECT o.owner_url FROM lattice_owners o
+               JOIN realm_generations g ON g.realm_url=o.realm_url
+               LEFT JOIN boxel_index i
                ON i.realm_url=o.realm_url AND i.url=o.owner_url AND i.type='instance'
                WHERE o.realm_url=`,
               param(realmURL),
               `AND o.retired=FALSE AND o.dirty_generation IS NOT NULL
-               AND (i.url IS NULL OR (i.pristine_doc->'meta'->'publication'->>'state') IS DISTINCT FROM 'ready')`,
+               AND (i.url IS NULL OR (i.pristine_doc->'meta'->'publication'->>'state') IS DISTINCT FROM 'ready'
+                    OR NOT`,
+              ...latticeOwnerDefinitionCurrent(
+                ['o.realm_url'],
+                ['o.owner_url'],
+                ['g.loader_epoch'],
+                ['o.definition_revision'],
+              ),
+              ')',
             ])
           ).map((row) => String(row.owner_url))
         : [],
@@ -1096,7 +1183,7 @@ export class LatticeQueryRegistry
         ({ ownerURL, stale }) =>
           ready.has(ownerURL) && (!opts?.overdueOnly || stale),
       )
-      .map(({ stale, ...row }) =>
+      .map(({ stale, ...row }): (typeof runnableOwners)[number] =>
         stale && (opts?.overdueOnly || inputs.get(row.ownerURL)!.size > 0)
           ? { ...row, stale: true as const }
           : row,

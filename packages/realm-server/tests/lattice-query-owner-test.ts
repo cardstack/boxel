@@ -27,6 +27,11 @@ import {
   latticePublicationDecision,
   latticeWorkDecision,
 } from '@cardstack/runtime-common/lattice-kernel';
+import { latticeReadPathsChanged } from '@cardstack/runtime-common/lattice-query-registry';
+import {
+  applyLatticeProjectionWhere,
+  assertLatticeProjectionWhere,
+} from '../lib/lattice-data-projection.ts';
 import { LatticeBxlWorker } from '../lib/lattice-bxl-derivation.ts';
 import { createLatticeNativeCardIndexer } from '../lib/lattice-native-card-indexer.ts';
 import { LatticeMaterializationInputs } from '../lib/lattice-materialization-inputs.ts';
@@ -1364,6 +1369,143 @@ module(basename(import.meta.filename), function (hooks) {
     assert.true(
       row.deferred,
       'the next deadline is armed from this publication',
+    );
+  });
+
+  // --- projection predicates: read a game's lines for one batter ---------
+  test('a projection predicate keeps only the members that match, and the watch compares that slice', async (assert) => {
+    const mine = { player: 'me', pa: 4 };
+    const theirs = { player: 'them', pa: 3 };
+    const card = { id: 'g1', lines: [mine, theirs], winner: 'NYA' };
+    assert.deepEqual(
+      applyLatticeProjectionWhere(card, { lines: { player: 'me' } }),
+      { id: 'g1', lines: [mine], winner: 'NYA' },
+      "the other batter's line never reaches the program",
+    );
+    assert.strictEqual(
+      applyLatticeProjectionWhere(card, {
+        lines: { player: 'me' },
+        absent: { x: 1 },
+      }).id,
+      'g1',
+      'a collection the card lacks is left alone',
+    );
+    assert.throws(
+      () =>
+        assertLatticeProjectionWhere({ lines: { player: { nested: true } } }),
+      /predicate value/,
+    );
+    assert.throws(
+      () => assertLatticeProjectionWhere({ __proto__: { player: 'me' } }),
+      /Invalid Lattice projection/,
+    );
+    assert.throws(() => assertLatticeProjectionWhere({}), /predicate/);
+
+    const doc = (lines: unknown[], extra: Record<string, unknown> = {}) =>
+      ({
+        url: realm + 'Game/one.json',
+        search_doc: { id: realm + 'Game/one', lines, ...extra },
+        types: [],
+      }) as any;
+    const where = { lines: { player: 'me' } };
+    assert.false(
+      latticeReadPathsChanged(
+        ['lines.*'],
+        doc([mine, theirs]),
+        doc([mine, { player: 'them', pa: 5 }]),
+        where,
+      ),
+      "another batter's line moving is not a change to this season",
+    );
+    assert.true(
+      latticeReadPathsChanged(
+        ['lines.*'],
+        doc([mine, theirs]),
+        doc([{ player: 'me', pa: 5 }, theirs]),
+        where,
+      ),
+      "this batter's line moving is",
+    );
+    assert.true(
+      latticeReadPathsChanged(
+        ['lines.*'],
+        doc([mine, theirs]),
+        doc([theirs]),
+        where,
+      ),
+      'and so is this batter leaving the box score',
+    );
+    assert.true(
+      latticeReadPathsChanged(
+        ['lines.*'],
+        doc([mine, theirs]),
+        doc([mine, { player: 'them', pa: 5 }]),
+      ),
+      'without a predicate a compound read stays conservative',
+    );
+    assert.true(
+      latticeReadPathsChanged(
+        ['lines.*', 'winner'],
+        doc([mine], { winner: 'NYA' }),
+        doc([mine], { winner: 'BOS' }),
+        where,
+      ),
+      'a scalar the program also read is still compared',
+    );
+  });
+
+  test('a watch published with a projection predicate dirties its owner only for its own slice', async (assert) => {
+    await (await candidate()).publish();
+    const registry = new LatticeQueryRegistry(
+      db,
+      new IndexQueryEngine(db, lookup, network),
+    );
+    // Give the members watch the predicate a season would carry.
+    // Both the query watch and the identity watch carry it, as the indexer
+    // publishes them when every root reading the collection agrees.
+    await db.execute(
+      `UPDATE lattice_query_watches SET read_paths=$2::jsonb, projection=$3::jsonb WHERE owner_url=$1`,
+      {
+        bind: [
+          owner,
+          JSON.stringify(['lines.*']),
+          JSON.stringify({ lines: { player: 'me' } }),
+        ],
+      },
+    );
+    const url = realm + 'Record/one.json';
+    const game = (lines: unknown[]) =>
+      ({
+        url,
+        search_doc: {
+          id: url.replace(/\.json$/, ''),
+          amount: 1,
+          group: 'A',
+          lines,
+        },
+        types: [internalKeyFor(recordRef, undefined, network)],
+      }) as LatticeDocument;
+    const mine = { player: 'me', pa: 4 };
+    assert.deepEqual(
+      await registry.affected(
+        realm,
+        game([mine, { player: 'them', pa: 3 }]),
+        game([mine, { player: 'them', pa: 4 }]),
+      ),
+      [],
+      "a change to the other batter's line leaves the owner clean",
+    );
+    assert.deepEqual(
+      await registry.affected(
+        realm,
+        game([mine, { player: 'them', pa: 3 }]),
+        game([
+          { player: 'me', pa: 5 },
+          { player: 'them', pa: 3 },
+        ]),
+      ),
+      [owner],
+      "a change to this batter's line dirties it",
     );
   });
 
