@@ -1150,15 +1150,21 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           1,
           `the group announced itself once (got ${announced.length})`,
         );
-        assert.deepEqual(
-          [...(announced[0].invalidations ?? [])].sort(),
-          [
-            `${testRealmHref}report-parallel-1`,
-            `${testRealmHref}report-parallel-2`,
-            `${testRealmHref}report-parallel-3`,
-          ],
-          'and the one event names all three members',
-        );
+        // By containment: what a write invalidates is the card plus whatever
+        // depends on it, so an exact list would pin the fixture's link graph
+        // rather than the claim, which is that one event covers all three.
+        for (let card of [
+          'report-parallel-1',
+          'report-parallel-2',
+          'report-parallel-3',
+        ]) {
+          assert.true(
+            (announced[0].invalidations ?? []).includes(
+              `${testRealmHref}${card}`,
+            ),
+            `the one event names ${card}`,
+          );
+        }
       });
 
       test('a member whose precondition does not hold leaves the whole group unwritten', async function (assert) {
