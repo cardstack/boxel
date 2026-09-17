@@ -12,7 +12,11 @@ export type ModuleDescriptor =
       // own, so anything that reads a module's dependencies — the indexer
       // interning scoped CSS, most of all — sees nothing unless the registrar
       // says otherwise.
-      deps?: string[];
+      //
+      // Read when the module is served, not when it is registered: a
+      // registrar may only learn what the module consumed once the module has
+      // been evaluated.
+      deps?: () => string[];
     };
 
 function trimModuleIdentifier(moduleIdentifier: string): string {
@@ -423,7 +427,7 @@ export class PackageShimHandler {
   private resolvedExports = new Map<string, ModuleLike>();
   // Declared dependencies per shimmed module, keyed the same way as
   // `moduleIds`.
-  private moduleDeps = new Map<string, string[]>();
+  private moduleDeps = new Map<string, () => string[]>();
   private log = logger('shim-handler');
 
   constructor(resolveImport: (moduleIdentifier: string) => string) {
@@ -529,8 +533,8 @@ export class PackageShimHandler {
         key,
         withResolveRetry(label, this.log, descriptor.resolve, retryDeps),
       );
-      if (descriptor.deps?.length) {
-        this.moduleDeps.set(key, [...descriptor.deps]);
+      if (descriptor.deps) {
+        this.moduleDeps.set(key, descriptor.deps);
       }
     }
   }
@@ -553,7 +557,7 @@ export class PackageShimHandler {
   // The dependencies declared for a shimmed module, in the same lookup terms
   // as `lookupModule`. Empty for a shim registered without them.
   lookupModuleDeps(url: string): string[] {
-    return this.moduleDeps.get(trimModuleIdentifier(url)) ?? [];
+    return this.moduleDeps.get(trimModuleIdentifier(url))?.() ?? [];
   }
 
   private async getModule(url: string): Promise<ModuleLike | undefined> {

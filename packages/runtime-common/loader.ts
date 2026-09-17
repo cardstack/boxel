@@ -1404,8 +1404,19 @@ export class Loader {
         state: 'evaluated',
         moduleInstance: loaded.module,
         // A shim has no dependency chain the loader can observe, so what it
-        // consumed is whatever its registrar declared.
-        consumedModules: new Set(loaded.deps),
+        // consumed is whatever its registrar declared. Declared deps are
+        // written as the module itself spells them — relative — and are
+        // resolved here against the module's own URL, so they read the same as
+        // the deps of a module this loader fetched.
+        consumedModules: new Set(
+          loaded.deps.map((dep) => {
+            try {
+              return new URL(dep, canonicalURL).href;
+            } catch {
+              return dep;
+            }
+          }),
+        ),
       });
       module.deferred.fulfill();
       return;

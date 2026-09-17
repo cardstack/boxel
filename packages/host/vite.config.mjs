@@ -11,6 +11,8 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scopedCSS } from 'glimmer-scoped-css/rollup';
+
+import { bundledBaseScopedCSS } from './lib/bundled-base-scoped-css.mjs';
 import { boxelUIChecksumPlugin } from './lib/build/boxel-ui-checksum-plugin.mjs';
 
 // Local HTTPS dev access: the realm-server speaks HTTPS+HTTP/2 in local
@@ -316,6 +318,7 @@ export default defineConfig(({ mode }) => ({
     ],
   },
   plugins: [
+    bundledBaseScopedCSS(),
     scopedCSS(),
     classicEmberSupport(),
     ember(),

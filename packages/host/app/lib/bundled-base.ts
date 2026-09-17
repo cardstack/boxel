@@ -1,5 +1,15 @@
 import type { VirtualNetwork } from '@cardstack/runtime-common';
 
+// Written by the `bundled-base-scoped-css` vite plugin: each bundled base
+// module registers the scoped-CSS specifiers its compiled source imports, as
+// it is evaluated. See packages/host/lib/bundled-base-scoped-css.mjs.
+const scopedCSSRegistry = () =>
+  (
+    globalThis as {
+      __boxelBundledBaseScopedCSS?: Record<string, string[]>;
+    }
+  ).__boxelBundledBaseScopedCSS;
+
 // Base modules compiled into the host bundle, keyed by their path under
 // `@cardstack/base/`. Each is served to the loader in place of a fetch of the
 // module from the base realm; the literal `import()` per entry is what lets
@@ -195,10 +205,13 @@ export const BUNDLED_BASE_MODULES: Record<
 // the same realm URL a loader import of the id resolves to.
 export function shimBundledBase(virtualNetwork: VirtualNetwork) {
   for (let [name, resolve] of Object.entries(BUNDLED_BASE_MODULES)) {
-    // `deps` on the descriptor is where each module's scoped-CSS specifiers
-    // belong, once there is a way to know them — see the note on
-    // ModuleDescriptor. Until then a bundled base module reports no
-    // stylesheet, and cards using its components are served unstyled.
-    virtualNetwork.shimAsyncModule({ id: `@cardstack/base/${name}`, resolve });
+    // Each bundled module registers its own scoped-CSS specifiers as it is
+    // evaluated, so this reads them only once the module has been served —
+    // which is exactly when the loader asks what it consumed.
+    virtualNetwork.shimAsyncModule({
+      id: `@cardstack/base/${name}`,
+      resolve,
+      deps: () => scopedCSSRegistry()?.[name] ?? [],
+    });
   }
 }
