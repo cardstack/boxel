@@ -94,7 +94,10 @@ export function analyzeLatticeGtsSource(
           result.exportStars.push(statement.source.value);
       }
     }
-    const moduleReasons = moduleDiagnostics(program);
+    const moduleReasons = moduleDiagnostics(
+      program,
+      syntax.possibleCardsOrFields[0]?.path,
+    );
     if (source.includes('templatePlaceholder'))
       moduleReasons.push({
         code: 'reserved-analysis-identifier',
@@ -418,44 +421,181 @@ function analyzeClass(
   return output;
 }
 
+// A bounded syntax interpreter, never eval/Function/import. It resolves only
+// immutable literals and expression-bodied local factories, so common BXL
+// helpers do not force authored JavaScript execution in the data worker.
+class StaticExpressionError extends Error {}
+const staticClass = Symbol('static-class');
+const staticBxl = Symbol('static-bxl');
+type StaticEnvironment = Map<string, unknown>;
+function staticValue(
+  node: t.Node | null | undefined,
+  path: NodePath,
+  environment: StaticEnvironment = new Map(),
+  budget = { steps: 0, active: new Set<t.Node>() },
+): unknown {
+  if (!node || ++budget.steps > 10000 || budget.active.size > 64)
+    throw new StaticExpressionError('Static expression budget exceeded');
+  const literal = literalValue(node);
+  if (literal.ok) return literal.value;
+  const descend = (child: t.Node | null | undefined) =>
+    staticValue(child, path, environment, budget);
+  if (t.isIdentifier(node)) {
+    if (environment.has(node.name)) return environment.get(node.name);
+    const binding = path.scope.getBinding(node.name);
+    if (!binding?.constant)
+      throw new StaticExpressionError('Mutable or unknown binding');
+    if (binding.path.isClassDeclaration()) return { [staticClass]: true };
+    if (
+      !binding.path.isVariableDeclarator() ||
+      !binding.path.node.init ||
+      !binding.path.parentPath.isVariableDeclaration({ kind: 'const' })
+    )
+      throw new StaticExpressionError('Not an immutable expression');
+    const init = binding.path.node.init;
+    if (budget.active.has(init))
+      throw new StaticExpressionError('Cyclic static expression');
+    budget.active.add(init);
+    try {
+      return staticValue(init, binding.path, new Map(), budget);
+    } finally {
+      budget.active.delete(init);
+    }
+  }
+  if (t.isTemplateLiteral(node)) {
+    let value = node.quasis[0].value.cooked ?? node.quasis[0].value.raw;
+    for (let i = 0; i < node.expressions.length; i++) {
+      const part = descend(node.expressions[i]);
+      if (!['string', 'number', 'boolean'].includes(typeof part))
+        throw new StaticExpressionError(
+          'Template interpolation must be scalar',
+        );
+      value +=
+        String(part) +
+        (node.quasis[i + 1].value.cooked ?? node.quasis[i + 1].value.raw);
+      if (value.length > 1_048_576)
+        throw new StaticExpressionError('Static string exceeds budget');
+    }
+    return value;
+  }
+  if (t.isArrayExpression(node)) return node.elements.map(descend);
+  if (t.isObjectExpression(node)) {
+    const value: Record<string, unknown> = Object.create(null);
+    for (const property of node.properties) {
+      if (!t.isObjectProperty(property) || property.computed)
+        throw new StaticExpressionError(
+          'Static object cannot have spreads or accessors',
+        );
+      const key = propertyName(property.key);
+      if (!key)
+        throw new StaticExpressionError('Static object needs literal keys');
+      value[key] = descend(property.value);
+    }
+    return value;
+  }
+  if (t.isCallExpression(node) && t.isIdentifier(node.callee)) {
+    const binding = path.scope.getBinding(node.callee.name);
+    if (!binding?.constant)
+      throw new StaticExpressionError('Mutable or unknown callee');
+    const args = node.arguments.map(descend);
+    if (
+      binding.path.isImportSpecifier() &&
+      binding.path.parentPath.isImportDeclaration() &&
+      binding.path.parentPath.node.source.value === '@cardstack/bxl' &&
+      ['bxl', 'expression', 'expr'].includes(
+        propertyName(binding.path.node.imported) ?? '',
+      )
+    ) {
+      const [text, supplied = {}] = args;
+      if (
+        args.length > 2 ||
+        typeof text !== 'string' ||
+        !supplied ||
+        typeof supplied !== 'object' ||
+        Array.isArray(supplied)
+      )
+        throw new StaticExpressionError('BXL requires static text and options');
+      const options = { ...supplied } as Record<string, unknown>;
+      if (
+        Object.keys(options).some(
+          (key) =>
+            ![
+              'readableSyntax',
+              'libraries',
+              'memoize',
+              'validUntil',
+              'freshUntil',
+              'staleAfter',
+              'as',
+            ].includes(key),
+        )
+      )
+        throw new StaticExpressionError('Unsupported static BXL option');
+      const shape = options.as;
+      if (
+        shape !== undefined &&
+        !(typeof shape === 'object' && shape !== null && staticClass in shape)
+      )
+        throw new StaticExpressionError(
+          'BXL shape must be a local class binding',
+        );
+      delete options.as;
+      const definition = getBxlComputeDefinition(
+        bxl(text, options as BxlOptions),
+      )!;
+      return {
+        [staticBxl]: { ...definition, materializesClass: shape !== undefined },
+      };
+    }
+    if (
+      !binding.path.isVariableDeclarator() ||
+      !binding.path.parentPath.isVariableDeclaration({ kind: 'const' }) ||
+      !t.isArrowFunctionExpression(binding.path.node.init) ||
+      !t.isExpression(binding.path.node.init.body)
+    )
+      throw new StaticExpressionError(
+        'Only expression-bodied const factories are static',
+      );
+    const factory = binding.path.node.init;
+    if (
+      factory.async ||
+      factory.params.length !== args.length ||
+      factory.params.some((param) => !t.isIdentifier(param)) ||
+      budget.active.has(factory)
+    )
+      throw new StaticExpressionError(
+        'Unsupported or recursive static factory',
+      );
+    const params = new Map(
+      factory.params.map((param, index) => [
+        (param as t.Identifier).name,
+        args[index],
+      ]),
+    );
+    budget.active.add(factory);
+    try {
+      return staticValue(factory.body, binding.path, params, budget);
+    } finally {
+      budget.active.delete(factory);
+    }
+  }
+  throw new StaticExpressionError(`Unsupported static expression ${node.type}`);
+}
+
 function lowerBxl(
   node: t.Node,
   path: NodePath,
 ): BxlComputeDefinition | undefined {
-  if (!t.isCallExpression(node) || !t.isIdentifier(node.callee))
-    return undefined;
-  const binding = path.scope.getBinding(node.callee.name);
-  if (
-    !binding?.constant ||
-    !binding.path.isImportSpecifier() ||
-    !binding.path.parentPath.isImportDeclaration() ||
-    binding.path.parentPath.node.source.value !== '@cardstack/bxl' ||
-    !['bxl', 'expression', 'expr'].includes(
-      propertyName(binding.path.node.imported) ?? '',
-    )
-  )
-    return undefined;
-  const text = literalValue(node.arguments[0]);
-  const options = node.arguments[1]
-    ? literalValue(node.arguments[1])
-    : { ok: true, value: {} };
-  if (
-    node.arguments.length > 2 ||
-    !text.ok ||
-    typeof text.value !== 'string' ||
-    !options.ok ||
-    !options.value ||
-    Array.isArray(options.value) ||
-    typeof options.value !== 'object'
-  )
-    return undefined;
-  if (
-    Object.keys(options.value).some(
-      (key) => !['readableSyntax', 'libraries', 'memoize'].includes(key),
-    )
-  )
-    return undefined;
-  return getBxlComputeDefinition(bxl(text.value, options.value as BxlOptions));
+  let value: unknown;
+  try {
+    value = staticValue(node, path);
+  } catch (error) {
+    if (error instanceof StaticExpressionError) return undefined;
+    throw error;
+  }
+  return typeof value === 'object' && value !== null && staticBxl in value
+    ? (value as { [staticBxl]: BxlComputeDefinition })[staticBxl]
+    : undefined;
 }
 
 function propertyName(node: t.Node): string | undefined {
@@ -579,7 +719,19 @@ function hasStaticEffects(
   );
 }
 
-function moduleDiagnostics(program: t.Program): LatticeGtsDiagnostic[] {
+function moduleDiagnostics(
+  program: t.Program,
+  path?: NodePath,
+): LatticeGtsDiagnostic[] {
+  const isStatic = (node: t.Node | null | undefined) => {
+    if (!path || !node) return false;
+    try {
+      staticValue(node, path);
+      return true;
+    } catch {
+      return false;
+    }
+  };
   const diagnostics: LatticeGtsDiagnostic[] = [];
   for (const statement of program.body) {
     if (
@@ -610,6 +762,7 @@ function moduleDiagnostics(program: t.Program): LatticeGtsDiagnostic[] {
         (item) =>
           t.isIdentifier(item.id) &&
           (isLiteral(item.init) ||
+            isStatic(item.init) ||
             isTemplateExpression(item.init) ||
             t.isArrowFunctionExpression(item.init) ||
             t.isFunctionExpression(item.init)),

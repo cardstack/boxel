@@ -3780,18 +3780,23 @@ export class Batch {
     if (
       this.latticeEnabled &&
       opts?.latticeDeferOwners &&
-      this.#splitPrerenderHtml &&
-      urls.every((url) => url.href.endsWith('.json'))
+      this.#splitPrerenderHtml
     ) {
       // Dependency-only updates belong to Lattice's durable secondary job.
       // Leaving the published row intact avoids replacing its completed
-      // computed output with discovery's nulls. Explicit owner writes and
-      // definition edits must still discover the owner's current schema.
+      // computed output with discovery's nulls. For code changes, only owners
+      // with file-owned code proofs can wait for the separate linker to decide
+      // whether their data program changed. HTML expands its own dependency
+      // graph from the original seeds, even when these data visits are pruned.
+      // Explicit owner source writes always remain primary work.
       let owners = await this.#query([
         'SELECT o.owner_url FROM lattice_owners o JOIN boxel_index i ON i.realm_url = o.realm_url AND i.url = o.owner_url',
         "AND i.type = 'instance' WHERE o.realm_url =",
         param(this.realmURL.href),
         "AND o.retired = FALSE AND i.is_deleted = FALSE AND i.pristine_doc->'meta'->'publication' IS NOT NULL",
+        ...(urls.every((url) => url.href.endsWith('.json'))
+          ? []
+          : ['AND o.code_bound = TRUE']),
       ]);
       deferredOwners = new Set(owners.map((row) => row.owner_url as string));
       for (let seed of seeds) deferredOwners.delete(seed);

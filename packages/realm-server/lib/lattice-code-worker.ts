@@ -15,6 +15,10 @@ import {
   type LatticeGtsCodeReceipt,
 } from '@cardstack/runtime-common/lattice-gts-link';
 import type { LatticeGtsAnalysis } from '@cardstack/runtime-common/lattice-gts-analysis-contract';
+import {
+  LATTICE_GTS_ANALYZER_REVISION,
+  LATTICE_GTS_DATA_REVISION_ALGORITHM,
+} from '@cardstack/runtime-common/lattice-gts-analysis-contract';
 import type { LatticeCodeLinker } from '@cardstack/runtime-common/jobs/lattice-code';
 import type { LatticeNativeRealmPolicy } from './lattice-postgres-admission.ts';
 import { assertLatticeCodePolicy } from './lattice-code-admission.ts';
@@ -202,9 +206,8 @@ export function createLatticeCodeWorker({
             revision: policy!.runtimeRevision,
             exports: ['bxl', 'expression', 'expr'],
           };
-        const moduleURL = network.toRealURLHref(
-          network.resolveURL(module, relativeTo).href,
-        );
+        // Database identities use the realm URL, not its private HTTP transport.
+        const moduleURL = network.resolveURL(module, relativeTo).href;
         const url = /\.(gts|ts|js|gjs)$/.test(moduleURL)
           ? moduleURL
           : `${moduleURL}.gts`;
@@ -212,10 +215,8 @@ export function createLatticeCodeWorker({
         const bootstrap = policy!.codeLinking?.trustedModules.find(
           (candidate) =>
             network
-              .toRealURLHref(
-                network.resolveURL(candidate.moduleURL, undefined).href,
-              )
-              .replace(/\.gts$/, '') === moduleURL.replace(/\.gts$/, ''),
+              .resolveURL(candidate.moduleURL, undefined)
+              .href.replace(/\.gts$/, '') === moduleURL.replace(/\.gts$/, ''),
         );
         let input: LatticeGtsLinkInput | undefined;
         if (bootstrap) {
@@ -232,10 +233,43 @@ export function createLatticeCodeWorker({
             const sourceURL = new RealmPaths(
               new URL(expected.realmURL),
             ).fileURL(expected.sourcePath).href;
-            const { stamp } = await readFile(sourceURL, false);
-            if (stamp.hash !== expected.sourceMD5)
-              throw new Error('Bootstrap source changed');
-            stamps.push(JSON.stringify([sourceURL, stamp.hash]));
+            const { stamp, analysis } = await readFile(
+              sourceURL,
+              Boolean(expected.dataRevision),
+            );
+            if (expected.dataRevision) {
+              // This is a bounded reviewed data module, not permission to run
+              // its JavaScript. Every exported declaration must be declarative;
+              // source freshness remains independently fenced by checkCodeScope.
+              if (
+                expected.dataRevision.algorithm !==
+                  LATTICE_GTS_DATA_REVISION_ALGORITHM ||
+                analysis?.analyzerRevision !== LATTICE_GTS_ANALYZER_REVISION ||
+                analysis.state !== 'analyzed' ||
+                analysis.fileId !== sourceURL ||
+                analysis.sourceRevision.digest !== stamp.hash ||
+                analysis.dataRevision?.algorithm !==
+                  expected.dataRevision.algorithm ||
+                analysis.dataRevision?.digest !==
+                  expected.dataRevision.digest ||
+                !analysis.exports.length ||
+                analysis.diagnostics.length ||
+                [...analysis.exports, ...analysis.localDefinitions].some(
+                  (item) => item.indexing !== 'requires-linking',
+                ) ||
+                (sourceURL === url &&
+                  bootstrap.exports.some(
+                    (name) =>
+                      !analysis.exports.some((item) => item.name === name),
+                  ))
+              )
+                return undefined;
+              stamps.push(JSON.stringify([sourceURL, expected.dataRevision]));
+            } else {
+              if (stamp.hash !== expected.sourceMD5)
+                throw new Error('Bootstrap source changed');
+              stamps.push(JSON.stringify([sourceURL, stamp.hash]));
+            }
           }
           // Include the exported implementation itself, not only helpers.
           if (!scope.has(url))
@@ -289,13 +323,15 @@ export function createLatticeCodeWorker({
         const root = await readAvailable(fileURL, fileURL);
         const exports: Record<string, LatticeGtsCodeReceipt> =
           Object.create(null);
-        if (root?.kind === 'source') {
+        if (root) {
           // Named exports first; star-only barrels are linked on demand by
           // consumers. Do not load every exported card just to list a barrel.
-          for (const definition of root.analysis.exports) {
-            exports[definition.name] = await linkLatticeGtsDefinition({
+          for (const name of root.kind === 'source'
+            ? root.analysis.exports.map((item) => item.name)
+            : root.exports) {
+            exports[name] = await linkLatticeGtsDefinition({
               root,
-              name: definition.name,
+              name,
               runtimeRevision: policy.runtimeRevision,
               read,
             });

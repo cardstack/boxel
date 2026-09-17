@@ -15,6 +15,56 @@ export class Counter extends CardDef {
 }`;
 
 module(basename(import.meta.filename), function () {
+  test('resolves bounded immutable BXL factories, time grains and record shapes without executing authored code', function (assert) {
+    const text = `${imports}
+const FACTOR = '2';
+const expression = (factor: string) => \`.amount * \${factor}\`;
+const FUTURE = '(.__clock.now | fromdateiso8601) + 2 | todateiso8601';
+const fresh = (text: string, as: any) => formula(text, {readableSyntax: false, libraries: ['core'], freshUntil: FUTURE, as});
+export class Row extends FieldDef { @field amount = contains(NumberField); }
+export class Counter extends CardDef {
+ @field amount = contains(NumberField);
+ @field result = contains(Row, {computeVia: fresh(expression(FACTOR), Row)});
+ static isolated = <template>{{@model.result}}</template>;
+}`;
+    const analyzed = analyzeLatticeGtsSource(fileId, text);
+    assert.deepEqual(analyzed.diagnostics, []);
+    assert.true(
+      analyzed.exports.every((item) => item.indexing === 'requires-linking'),
+      JSON.stringify(analyzed.exports),
+    );
+    const program = analyzed.exports
+      .find((item) => item.name === 'Counter')!
+      .fields.find((item) => item.name === 'result')!.bxl!;
+    assert.strictEqual(program.expression, '.amount * 2');
+    assert.true(program.materializesClass);
+    assert.ok(program.freshUntil);
+    assert.notDeepEqual(
+      analyzeLatticeGtsSource(
+        fileId,
+        text.replace("FACTOR = '2'", "FACTOR = '3'"),
+      ).dataRevision,
+      analyzed.dataRevision,
+    );
+  });
+
+  test('mutable, recursive and imperative factories remain browser-only', function (assert) {
+    for (const helper of [
+      "let factor = '2'; const make = () => formula(factor); factor = '3';",
+      'const make = () => make();',
+      "const make = () => { throw new Error('must not execute'); };",
+      'const make = () => formula(globalThis.readSecret());',
+      "const make = async () => formula('.amount');",
+    ]) {
+      const analyzed = analyzeLatticeGtsSource(
+        fileId,
+        `${imports}\n${helper}\nexport class Counter extends CardDef { @field amount = contains(NumberField, {computeVia: make()}); }`,
+      );
+      assert.strictEqual(analyzed.exports[0].indexing, 'chrome-data');
+      assert.notOk(analyzed.exports[0].fields[0].bxl);
+    }
+  });
+
   test('template, style and comment edits keep the data revision but change the source revision', function (assert) {
     const before = analyzeLatticeGtsSource(fileId, source);
     assert.ok(before.dataRevision, 'persist a separate data program revision');

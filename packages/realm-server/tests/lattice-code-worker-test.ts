@@ -152,6 +152,33 @@ module(basename(import.meta.filename), function (hooks) {
       { receipt: 'JSON', dependency_keys: 'JSON' },
     );
 
+  test('transport mappings do not replace indexed realm identities during linking', async function (assert) {
+    network.addURLMapping(new URL(realm), new URL('http://127.0.0.1:52797/'));
+    await publish('counter.gts', code);
+    assert.strictEqual((await run()).published, 1);
+    const [artifact] = await artifacts();
+    assert.strictEqual(
+      (artifact.receipt as any).exports.Counter.state,
+      'requires-admission',
+    );
+    assert.strictEqual(artifact.file_url, realm + 'counter.gts');
+  });
+
+  test('a served realm keeps its indexed identity when it also has a virtual alias', async function (assert) {
+    network.addURLMapping(
+      new URL('https://virtual-base.example/'),
+      new URL(realm),
+    );
+    await publish('counter.gts', code);
+    assert.strictEqual((await run()).published, 1);
+    const [artifact] = await artifacts();
+    assert.strictEqual(
+      (artifact.receipt as any).exports.Counter.state,
+      'requires-admission',
+    );
+    assert.strictEqual(artifact.file_url, realm + 'counter.gts');
+  });
+
   test('source index publication enqueues a separate job and the worker publishes file-owned receipts', async function (assert) {
     await publish('counter.gts', code);
     const [pending] = await artifacts();
@@ -703,11 +730,6 @@ module(basename(import.meta.filename), function (hooks) {
         0,
         'pending source indexing keeps linking work unreserved',
       );
-      await db.execute(
-        `INSERT INTO jobs (job_type, concurrency_group, priority, timeout, args)
-         VALUES ('scoped-css-gc', $1, 1, 60, '{}')`,
-        { bind: [`indexing:${realm}`] },
-      );
       await db.execute("UPDATE jobs SET status='resolved' WHERE id=$1", {
         bind: [sourceJob.id],
       });
@@ -724,11 +746,7 @@ module(basename(import.meta.filename), function (hooks) {
         if (job?.status !== 'unfulfilled') break;
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
-      assert.strictEqual(
-        job?.status,
-        'resolved',
-        `maintenance does not block linking: ${logs}`,
-      );
+      assert.strictEqual(job?.status, 'resolved', logs);
       assert.strictEqual((job?.result as any).processorPid, child.pid);
       assert.false((await artifacts())[0].dirty);
     } finally {

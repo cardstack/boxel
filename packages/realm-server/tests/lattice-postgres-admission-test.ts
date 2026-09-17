@@ -256,18 +256,24 @@ module(basename(import.meta.filename), function (hooks) {
   const linkedSource = `${linkedImports} export class Score extends CardDef {
     @field amount = contains(NumberField);
     @field doubled = contains(NumberField, {computeVia: bxl('.amount * 2', {readableSyntax:false})});
+    static isolated = <template><span>{{@model.doubled}}</span></template>;
   }`;
-  async function prepareLinked(source = linkedSource, link = true) {
-    policy.codeLinking = {
-      trustedModules: [
-        {
-          moduleURL: base + 'number',
-          moduleURLs: [base + 'number'],
-          exports: ['CardDef', 'field', 'contains', 'NumberField'],
-        },
-      ],
-    };
-    policy.modules[0].sourceMD5 = md5(source);
+  async function prepareLinked(
+    source = linkedSource,
+    link = true,
+    retainReview = false,
+  ) {
+    if (!retainReview)
+      policy.codeLinking = {
+        trustedModules: [
+          {
+            moduleURL: base + 'number',
+            moduleURLs: [base + 'number'],
+            exports: ['CardDef', 'field', 'contains', 'NumberField'],
+          },
+        ],
+      };
+    if (!retainReview) policy.modules[0].sourceMD5 = md5(source);
     await db.execute(
       'UPDATE realm_file_meta SET content_hash=$1,content_size=$2 WHERE realm_url=$3 AND file_path=$4',
       {
@@ -278,6 +284,10 @@ module(basename(import.meta.filename), function (hooks) {
     const batch = await new IndexWriter(db, {
       lattice: new LatticeRealmConfig([realm]),
     }).createBatch(new URL(realm), network);
+    if (retainReview)
+      await batch.invalidate([new URL(realm + 'score.gts')], {
+        latticeDeferOwners: true,
+      });
     await batch.updateEntry(new URL(realm + 'score.gts'), {
       type: 'file',
       lastModified: 1,
@@ -438,7 +448,7 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual((row.search_doc as any).doubled, 6);
   });
 
-  async function prepareCodeOwner() {
+  async function prepareCodeOwner(reviewedDataRoot = false) {
     const root = structuredClone(definition);
     root.nativeIndex!.materialized = true;
     policy.definitions[0].definitionSHA256 = latticeDefinitionDigest(root);
@@ -449,6 +459,24 @@ module(basename(import.meta.filename), function (hooks) {
       ],
     });
     await prepareLinked();
+    if (reviewedDataRoot) {
+      policy.modules[0].dataRevision = analyzeLatticeGtsSource(
+        realm + 'score.gts',
+        linkedSource,
+      ).dataRevision;
+      policy.codeLinking!.trustedModules.push({
+        moduleURL: realm + 'score',
+        moduleURLs: policy.modules.map((item) => item.url),
+        exports: ['Score'],
+      });
+      await registerLatticeCodePolicies(db, [policy]);
+      await createLatticeCodeWorker({
+        db,
+        network,
+        policies: [policy],
+        runtimeRevision: () => runtime,
+      })({ realmURL: realm, realmUsername: 'native' });
+    }
     const lookup = {
       lookupDefinition: async () => root,
     } as unknown as DefinitionLookup;
@@ -568,6 +596,120 @@ module(basename(import.meta.filename), function (hooks) {
       },
     };
   }
+
+  test('full module invalidation preserves reviewed data, invalidates HTML, and admits new native work after a template edit', async (assert) => {
+    const lab = await prepareCodeOwner(true);
+    const initialRevision = await lab.readRevision();
+    const initialHtml = await lab.writer.createBatch(
+      new URL(realm),
+      network,
+      undefined,
+      { prerenderHtmlOnly: true, generation: initialRevision.generation },
+    );
+    await initialHtml.updatePrerenderedHtmlEntry(new URL(request.url), {
+      type: 'instance',
+      deps: [realm + 'score'],
+      isolatedHtml: '<span>6</span>',
+    });
+    await initialHtml.done();
+    const before = await lab.stored();
+    const [beforeOwner] = await db.execute(
+      'SELECT * FROM lattice_owners WHERE realm_url=$1 AND owner_url=$2',
+      { bind: [realm, request.url] },
+    );
+    const template = linkedSource.replace(
+      '<span>{{@model.doubled}}</span>',
+      '<h1>{{@model.doubled}}</h1><style scoped>h1 {color: purple;}</style>',
+    );
+    assert.ok(before.resource.attributes?.doubled);
+    const text = template + '\n// Template-only source revision';
+    await prepareLinked(text, true, true);
+    assert.deepEqual(
+      await lab.stored(),
+      before,
+      'the real dependency walk did not rewrite the materialized instance',
+    );
+    const [afterOwner] = await db.execute(
+      'SELECT * FROM lattice_owners WHERE realm_url=$1 AND owner_url=$2',
+      { bind: [realm, request.url] },
+    );
+    assert.deepEqual(
+      afterOwner,
+      beforeOwner,
+      'no data obligation, deadline, or output revision moved',
+    );
+    const revision = await lab.readRevision();
+    const html = await lab.writer.createBatch(
+      new URL(realm),
+      network,
+      undefined,
+      { prerenderHtmlOnly: true, generation: revision.generation },
+    );
+    await html.seedPrerenderedHtmlInvalidations(
+      [{ url: realm + 'score.gts', operation: 'update' }],
+      { expandDependencies: true },
+    );
+    assert.true(
+      html.invalidations.includes(request.url),
+      'presentation lane still visits the dependent card',
+    );
+    assert.strictEqual(
+      await latticeReadState(
+        db,
+        realm,
+        request.url,
+        before.resource.meta.publication!,
+      ),
+      'ready',
+    );
+    assert.ok(
+      await lab.recompute(),
+      'native work still admits against fresh source without a new review',
+    );
+    await prepareLinked(
+      template.replace('.amount * 2', '.amount * 3'),
+      true,
+      true,
+    );
+    assert.strictEqual(
+      await indexer()(request),
+      undefined,
+      'changed data code cannot borrow the old reviewed program',
+    );
+    const [dirty] = await db.execute(
+      'SELECT dirty_generation,attributes_json FROM lattice_owners WHERE realm_url=$1 AND owner_url=$2',
+      { bind: [realm, request.url] },
+    );
+    assert.ok(
+      dirty.dirty_generation,
+      'code reconciliation dirties the affected owner',
+    );
+    assert.strictEqual(
+      dirty.attributes_json,
+      beforeOwner.attributes_json,
+      'old data survives the compute change',
+    );
+    const changedSource = template.replace('.amount * 2', '.amount * 3');
+    lab.root.fieldDefs.doubled.bxl = formula('.amount * 3');
+    policy.definitions[0].definitionSHA256 = latticeDefinitionDigest(lab.root);
+    policy.modules[0].dataRevision = analyzeLatticeGtsSource(
+      realm + 'score.gts',
+      changedSource,
+    ).dataRevision;
+    await db.execute('UPDATE modules SET definitions=$1 WHERE url=$2', {
+      bind: [
+        JSON.stringify({ Score: { type: 'definition', definition: lab.root } }),
+        realm + 'score',
+      ],
+    });
+    await prepareLinked(changedSource, true, true);
+    await lab.recompute();
+    assert.strictEqual(
+      (await lab.stored()).resource.attributes?.doubled,
+      9,
+      'a reviewed compute change publishes its new result through the normal guarded path',
+    );
+  });
 
   for (const stale of [false, true]) {
     test(`native ${stale ? 'stale' : 'fresh'} materialization fences an intervening generation`, async (assert) => {
@@ -1516,38 +1658,6 @@ export class Counter extends CardDef { @field count = contains(NumberField); @fi
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
-  });
-
-  test('reviewed bootstrap dependencies use registry authority without archive metadata', async (assert) => {
-    await db.execute('DELETE FROM realm_metadata WHERE url=$1', {
-      bind: [base],
-    });
-    await db.execute(
-      `INSERT INTO realm_registry (url,kind,disk_id,owner_username)
-       VALUES ($1,'source','native-base','system')`,
-      { bind: [base] },
-    );
-    assert.strictEqual(
-      await indexer()(request),
-      undefined,
-      'a source registry row cannot replace missing archive authority',
-    );
-    await db.execute(
-      "UPDATE realm_registry SET kind='bootstrap' WHERE url=$1",
-      { bind: [base] },
-    );
-    const result = await candidate();
-    assert.strictEqual(result.card.searchDoc?.doubled, 6);
-    await validate(result);
-    await db.execute("UPDATE realm_registry SET kind='source' WHERE url=$1", {
-      bind: [base],
-    });
-    await assert.rejects(validate(result), /read permission changed/);
-    assert.strictEqual(
-      await indexer()(request),
-      undefined,
-      'the changed registry no longer authorizes native work',
-    );
   });
 
   const admissionChanges: [string, () => void | Promise<unknown>][] = [

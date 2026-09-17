@@ -13,6 +13,7 @@ import type { LatticeCodeReference } from '@cardstack/runtime-common/lattice-cod
 export type LatticeCodeAdmission = ((tx: Querier) => Promise<void>) & {
   reference: LatticeCodeReference;
   coversReview: boolean;
+  moduleHashes: Map<string, string>;
 };
 
 export function latticeCodePolicyRevision(policy: LatticeNativeRealmPolicy) {
@@ -116,7 +117,9 @@ export async function readLatticeCodeAdmission(
       `SELECT c.work_version,c.receipt->'exports'->`,
       param(exportName),
       `->>'fingerprint' AS fingerprint,
-      c.scope FROM lattice_code_artifacts c JOIN lattice_code_realms r ON r.realm_url=c.realm_url WHERE`,
+      c.receipt->'exports'->`,
+      param(exportName),
+      `->'files' AS files,c.scope FROM lattice_code_artifacts c JOIN lattice_code_realms r ON r.realm_url=c.realm_url WHERE`,
       ...identity,
       'AND r.actor_user_id=c.actor_user_id AND r.runtime_revision=c.runtime_revision AND r.policy_revision=',
       param(latticeCodePolicyRevision(policy)),
@@ -139,7 +142,7 @@ export async function readLatticeCodeAdmission(
       param(exportName),
       "AND jsonb_typeof(c.scope)='array' AND octet_length(c.scope::text)<=131072",
     ],
-    { scope: 'JSON' },
+    { scope: 'JSON', files: 'JSON' },
   );
   if (
     !row ||
@@ -234,15 +237,45 @@ export async function readLatticeCodeAdmission(
   // authored import closure. Do not use the narrower receipt for persistent
   // freshness unless it covers every reviewed implementation source and grant.
   // Native execution still has the existing complete review/publication fence.
+  // A reviewed root receipt seals its full implementation closure. Its worker
+  // checked any optional data revision against current FileDef analysis before
+  // publishing. Ordinary linked sources do not gain this byte-pin exception.
+  const reviewedRoot =
+    Array.isArray(row.files) &&
+    row.files.some(
+      (file) =>
+        file != null &&
+        typeof file === 'object' &&
+        !Array.isArray(file) &&
+        file.kind === 'trusted' &&
+        file.fileId === fileURL,
+    )
+      ? policy.codeLinking?.trustedModules.find(
+          (item) =>
+            item.moduleURL.replace(/\.gts$/, '') ===
+            fileURL.replace(/\.gts$/, ''),
+        )
+      : undefined;
+  const moduleHashes = new Map<string, string>();
   const coversReview = policy.modules.every((module) =>
     scope.some(
       (source) =>
         source.realm === module.realmURL &&
         source.path === module.sourcePath &&
-        source.hash === module.sourceMD5 &&
+        (source.hash === module.sourceMD5 ||
+          (module.dataRevision &&
+            reviewedRoot?.moduleURLs.includes(module.url))) &&
         source.username ===
           (module.cacheScope === 'public' ? '*' : module.authUserId),
     ),
   );
-  return Object.assign(check, { reference, coversReview });
+  if (coversReview)
+    for (const module of policy.modules) {
+      const source = scope.find(
+        (source) =>
+          source.realm === module.realmURL && source.path === module.sourcePath,
+      )!;
+      moduleHashes.set(module.url, source.hash);
+    }
+  return Object.assign(check, { reference, coversReview, moduleHashes });
 }

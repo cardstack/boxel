@@ -1,3 +1,4 @@
+import type { LatticeGtsAnalysis } from '@cardstack/runtime-common/lattice-gts-analysis-contract';
 import { createHash } from 'node:crypto';
 import { baseRealm } from '@cardstack/runtime-common';
 import stringify from 'safe-stable-stringify';
@@ -36,6 +37,7 @@ export interface LatticeReviewedModule {
   // The existing realm_file_meta hash, pinned by the definition review. This
   // identifies source bytes; it is not a signature or an authorization grant.
   sourceMD5: string;
+  dataRevision?: LatticeGtsAnalysis['dataRevision'];
 }
 
 export interface LatticeReviewedDefinition {
@@ -586,7 +588,8 @@ function createPostgresAdmission(
             cache_scope: module.cacheScope,
             auth_user_id: module.authUserId,
             file_path: module.sourcePath,
-            content_hash: module.sourceMD5,
+            content_hash:
+              codeCheck?.moduleHashes.get(module.url) ?? module.sourceMD5,
             username: module.cacheScope === 'public' ? '*' : module.authUserId,
           })),
         ),

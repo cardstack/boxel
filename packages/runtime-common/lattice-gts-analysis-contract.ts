@@ -2,7 +2,7 @@ import type { BxlComputeDefinition } from '@cardstack/bxl';
 import type { ClassReference } from './schema-analysis-plugin.ts';
 
 // Consumers of persisted facts must not load the parser or the BXL compiler.
-export const LATTICE_GTS_ANALYZER_REVISION = 'lattice-gts-source-v3';
+export const LATTICE_GTS_ANALYZER_REVISION = 'lattice-gts-source-v4';
 
 export const LATTICE_GTS_DATA_REVISION_ALGORITHM = 'boxel-gts-data-ast-v1';
 
