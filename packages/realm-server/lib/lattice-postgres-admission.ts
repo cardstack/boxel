@@ -360,6 +360,7 @@ function createPostgresAdmission(
     files,
     modules,
     codeCheck,
+    allowGenerationAdvance,
   }: {
     requestIdentity: Pick<
       LatticeNativeCardIndexRequest,
@@ -372,6 +373,7 @@ function createPostgresAdmission(
     files: FileReceipt[];
     modules: ModuleReceipt[];
     codeCheck?: (tx: Querier) => Promise<void>;
+    allowGenerationAdvance: boolean;
   }): LatticeNativeCardAdmission['assertCurrent'] {
     return async (tx, receipt) => {
       if (
@@ -405,6 +407,7 @@ function createPostgresAdmission(
         receipt.request.generation,
         receipt.request.loaderEpoch,
         expectedLoaderEpoch,
+        allowGenerationAdvance,
       ]);
       if (!checked.has(realmKey)) {
         const [current] = await tx([
@@ -414,8 +417,11 @@ function createPostgresAdmission(
         ]);
         if (
           !current ||
-          Number(current.current_generation) !==
-            receipt.request.generation - 1 ||
+          (allowGenerationAdvance
+            ? Number(current.current_generation) <
+              receipt.request.generation - 1
+            : Number(current.current_generation) !==
+              receipt.request.generation - 1) ||
           current.loader_epoch !== expectedLoaderEpoch
         )
           throw new Error('Native realm generation changed before publication');
@@ -836,6 +842,11 @@ function createPostgresAdmission(
       ...(file ? { file } : {}),
       assertCurrent: publicationCheck({
         requestIdentity,
+        // Source indexing is fenced by exact file/module receipts. A stale
+        // computation also keeps its input frame and dirty obligation; only
+        // ordinary computations require an unchanged realm clock.
+        allowGenerationAdvance:
+          !request.inputSnapshot || Boolean(request.inputSnapshot.stale),
         sourceSHA256,
         expectedDefinitions,
         // A GTS edit mints the output epoch before it is committed. Analysis

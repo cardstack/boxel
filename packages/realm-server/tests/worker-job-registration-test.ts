@@ -36,7 +36,7 @@ function makeWorker(
   indexJobsOnly?: boolean,
   extra: Pick<
     ConstructorParameters<typeof Worker>[0],
-    'codeLinker' | 'latticeJobsOnly'
+    'codeLinker' | 'latticeJobsOnly' | 'prerenderJobsOnly'
   > = {},
 ) {
   // Worker.run() only touches these dependencies at registration time via
@@ -82,6 +82,24 @@ module(basename(import.meta.filename), function () {
         'screenshot-card',
       ],
       'all job types are registered',
+    );
+  });
+
+  test('each dedicated lane registers only its own execution type', async (assert) => {
+    for (const [role, expected] of [
+      [{ latticeJobsOnly: true }, ['lattice-materialize']],
+      [{ prerenderJobsOnly: true }, ['prerender_html']],
+    ] as const) {
+      const registered: string[] = [];
+      await makeWorker(makeStubQueue(registered), false, {
+        ...role,
+        codeLinker: async () => ({ published: 0, superseded: 0 }),
+      }).run();
+      assert.deepEqual(registered, [...expected]);
+    }
+    assert.throws(
+      () => makeWorker(makeStubQueue([]), true, { prerenderJobsOnly: true }),
+      /only one dedicated/,
     );
   });
 

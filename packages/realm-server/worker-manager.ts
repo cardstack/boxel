@@ -135,10 +135,15 @@ let {
   highPriorityCount = 0,
   userIndexCount = 0,
   latticeCount = 0,
+  indexCount = 0,
+  prerenderCount = 0,
   fromUrl: fromUrls,
   toUrl: toUrls,
   migrateDB,
   prerendererUrl,
+  indexPrerendererUrl,
+  latticePrerendererUrl,
+  htmlPrerendererUrl,
   serviceName = 'worker',
   skipPrerenderHtmlRealm: skipPrerenderHtmlRealms = [],
 } = yargs(process.argv.slice(2))
@@ -152,6 +157,15 @@ let {
     highPriorityCount: {
       description:
         'The number of workers that service user-initiated jobs, including user-initiated prerender-html, and nothing below that tier (default 0)',
+      type: 'number',
+    },
+    indexCount: {
+      description:
+        'Dedicated primary workers at every indexing priority (default 0)',
+      type: 'number',
+    },
+    prerenderCount: {
+      description: 'Dedicated tertiary HTML workers (default 0)',
       type: 'number',
     },
     latticeCount: {
@@ -186,6 +200,20 @@ let {
     matrixURL: {
       description: 'The matrix homeserver for the realm server',
       demandOption: true,
+      type: 'string',
+    },
+    indexPrerendererUrl: {
+      description:
+        'Separate browser service for the primary lane when indexing needs Chrome',
+      type: 'string',
+    },
+    latticePrerendererUrl: {
+      description:
+        'Separate browser service for secondary computations that cannot run natively',
+      type: 'string',
+    },
+    htmlPrerendererUrl: {
+      description: 'Separate browser service for tertiary HTML rendering',
       type: 'string',
     },
     prerendererUrl: {
@@ -663,7 +691,7 @@ let adapter: PgAdapter;
 
 (async () => {
   log.info(
-    `starting ${userIndexCount} user-index ${pluralize(
+    `starting ${indexCount} primary, ${prerenderCount} HTML, ${userIndexCount} user-index ${pluralize(
       'worker',
       userIndexCount,
     )}, ${latticeCount} Lattice ${pluralize('worker', latticeCount)}, ${highPriorityCount} high-priority ${pluralize(
@@ -705,6 +733,12 @@ let adapter: PgAdapter;
   // indexing, publish-awaited renders, and ordinary user renders alike — and
   // never system-tier jobs. The all-priority pool floors at the lowest tier
   // and serves everything, including system-initiated prerender-html.
+  for (let i = 0; i < indexCount; i++) {
+    await startWorker(0, urlMappings, { indexJobsOnly: true });
+  }
+  for (let i = 0; i < prerenderCount; i++) {
+    await startWorker(0, urlMappings, { prerenderJobsOnly: true });
+  }
   for (let i = 0; i < userIndexCount; i++) {
     await startWorker(userInitiatedPriority, urlMappings, {
       indexJobsOnly: true,
@@ -817,17 +851,32 @@ async function markFailedIndexEntry({
 async function startWorker(
   priority: number,
   urlMappings: [URL | string, URL][],
-  opts?: { indexJobsOnly?: boolean; latticeJobsOnly?: boolean },
+  opts?: {
+    indexJobsOnly?: boolean;
+    latticeJobsOnly?: boolean;
+    prerenderJobsOnly?: boolean;
+  },
 ) {
+  // Separate Node claim pools alone do not reserve browser tabs. A deployment
+  // can route each lane to independent Chrome capacity as well. Native/BXL
+  // materialization never uses that browser service.
+  const renderURL = opts?.indexJobsOnly
+    ? (indexPrerendererUrl ?? prerendererUrl)
+    : opts?.latticeJobsOnly
+      ? (latticePrerendererUrl ?? prerendererUrl)
+      : opts?.prerenderJobsOnly
+        ? (htmlPrerendererUrl ?? prerendererUrl)
+        : prerendererUrl;
   let worker = spawn(
     'node',
     [
       'worker.ts',
       `--matrixURL='${matrixURL}'`,
-      `--prerendererUrl=${prerendererUrl}`,
+      `--prerendererUrl=${renderURL}`,
       `--priority=${priority}`,
       ...(opts?.indexJobsOnly ? [`--indexJobsOnly`] : []),
       ...(opts?.latticeJobsOnly ? [`--latticeJobsOnly`] : []),
+      ...(opts?.prerenderJobsOnly ? [`--prerenderJobsOnly`] : []),
       ...skipPrerenderHtmlRealms.map(
         (realmURL) => `--skipPrerenderHtmlRealm=${realmURL}`,
       ),

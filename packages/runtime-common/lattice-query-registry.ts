@@ -1,3 +1,4 @@
+import { latticeConcurrencyGroup } from './jobs/lattice.ts';
 import { latticeDemandFor } from './lattice-demand.ts';
 import {
   latticePropagateDemand,
@@ -15,7 +16,6 @@ import {
   latticeOwnerCodeVersionSQL,
   latticeOwnerRetryReadySQL,
 } from './jobs/lattice.ts';
-import { indexingConcurrencyGroup } from './jobs/indexing.ts';
 import {
   latticePublicationDecision,
   latticeWorkDecision,
@@ -925,7 +925,7 @@ export class LatticeQueryRegistry
     if (work.reservation) {
       if (this.db.kind !== 'pg')
         throw new Error('Lattice queue reservations require PostgreSQL');
-      const group = indexingConcurrencyGroup(work.realmURL);
+      const group = latticeConcurrencyGroup(work.realmURL);
       // Same order as claim/coalescing: group lock before job/reservation rows.
       // At publication this shares the existing pinned transaction, keeping
       // replacement claims and finalization outside its validity/commit span.
@@ -1022,7 +1022,7 @@ export class LatticeQueryRegistry
     if (!work.reservation) return;
     if (this.db.kind !== 'pg')
       throw new Error('Lattice queue reservations require PostgreSQL');
-    const group = indexingConcurrencyGroup(work.realmURL);
+    const group = latticeConcurrencyGroup(work.realmURL);
     await acquireConcurrencyGroupLock(tx, group);
     const [reservation] = await tx([
       `SELECT r.id FROM job_reservations r JOIN jobs j ON j.id=r.job_id

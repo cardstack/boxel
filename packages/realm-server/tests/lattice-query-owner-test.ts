@@ -271,10 +271,13 @@ module(basename(import.meta.filename), function (hooks) {
     group = 'A',
     openWork?: Parameters<typeof createLatticeNativeCardIndexer>[0]['openWork'],
     discovery = false,
-    opts?: { stale?: true; ownerURL?: string },
+    opts?: { stale?: true; ownerURL?: string; isolated?: boolean },
   ) {
     const candidateOwner = opts?.ownerURL ?? owner;
-    const batch = await writer.createBatch(new URL(realm), network);
+    const batch = await writer.createBatch(new URL(realm), network, undefined, {
+      latticeMaterialization: opts?.isolated,
+    });
+    const inputGeneration = batch.currentGeneration - 1;
     const indexer = createIndexer(openWork);
     const result = await indexer({
       url: candidateOwner,
@@ -329,11 +332,154 @@ module(basename(import.meta.filename), function (hooks) {
           lattice: publication,
           ...(discovery
             ? { latticeRealmUsername: 'reader' }
-            : { latticeInputGeneration: batch.currentGeneration - 1 }),
+            : { latticeInputGeneration: inputGeneration }),
           countIndexEntries: false,
         }),
     };
   }
+
+  test('overlapping candidate attempts cannot replace each other or primary staging', async (assert) => {
+    const older = await candidate('A', undefined, false, { isolated: true });
+    const primary = await writer.createBatch(new URL(realm), network);
+    await primary.updateEntry(new URL(owner), {
+      type: 'instance',
+      resource: {
+        ...older.result.card.serialized!.data,
+        attributes: { group: 'source-only' },
+      },
+      searchData: { group: 'source-only' },
+      types: [],
+      displayNames: [],
+      deps: new Set(),
+      lastModified: 1,
+      resourceCreatedAt: 1,
+    } as InstanceEntry);
+    await db.execute(
+      "UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{attributes,amount}','7'),search_doc=jsonb_set(search_doc,'{amount}','7') WHERE url=$1",
+      { bind: [realm + 'Person/one.json'] },
+    );
+    const newer = await candidate('A', undefined, false, { isolated: true });
+    const [staged] = await db.execute(
+      'SELECT count(*) AS n FROM lattice_index_candidates WHERE url=$1',
+      { bind: [owner] },
+    );
+    assert.strictEqual(Number(staged.n), 2, 'both attempts have their own row');
+    await assert.rejects(
+      older.publish(),
+      /input changed/,
+      'old inputs still fence an expired candidate',
+    );
+    await older.batch.discardLatticeCandidates();
+    await newer.publish();
+    const [published] = await db.execute(
+      "SELECT pristine_doc->'attributes' AS value FROM boxel_index WHERE url=$1 AND type='instance'",
+      { bind: [owner] },
+    );
+    assert.strictEqual(
+      (published.value as any).total,
+      7,
+      'only the validated attempt publishes',
+    );
+    const [source] = await db.execute(
+      "SELECT pristine_doc->'attributes'->>'group' AS value FROM boxel_index_working WHERE url=$1 AND type='instance'",
+      { bind: [owner] },
+    );
+    assert.strictEqual(
+      source.value,
+      'source-only',
+      'publication and cleanup leave primary staging untouched',
+    );
+    await newer.batch.discardLatticeCandidates();
+    const [remaining] = await db.execute(
+      'SELECT count(*) AS n FROM lattice_index_candidates',
+    );
+    assert.strictEqual(Number(remaining.n), 0);
+  });
+
+  test('a stale candidate rebases beside primary indexing; a fresh candidate does not', async (assert) => {
+    staleTotal();
+    await (await candidate()).publish();
+    await db.execute(
+      "UPDATE lattice_owners SET dirty_generation=6,stale_after=now()-interval '1 second' WHERE owner_url=$1",
+      { bind: [owner] },
+    );
+    const stale = await candidate('A', undefined, false, {
+      isolated: true,
+      stale: true,
+    });
+    const fresh = await candidate('A', undefined, false, { isolated: true });
+    const primary = await writer.createBatch(new URL(realm), network);
+    const writeUnrelated = async (batch: typeof primary, name: string) => {
+      const url = realm + name + '.json';
+      await batch.updateEntry(new URL(url), {
+        type: 'instance',
+        resource: {
+          id: rri(url.slice(0, -5)),
+          type: 'card',
+          attributes: { group: 'Z', amount: 0 },
+          meta: { adoptsFrom: recordRef },
+        },
+        searchData: { group: 'Z', amount: 0 },
+        types: [internalKeyFor(recordRef, undefined, network)],
+        displayNames: ['Record'],
+        deps: new Set(),
+        lastModified: 1,
+        resourceCreatedAt: 1,
+      } as InstanceEntry);
+    };
+    await writeUnrelated(primary, 'Unrelated/one');
+    await primary.done({
+      lattice: publication,
+      latticeRealmUsername: 'reader',
+      countIndexEntries: false,
+    });
+    assert.strictEqual(primary.currentGeneration, 7);
+    const nextPrimary = await writer.createBatch(new URL(realm), network);
+    await writeUnrelated(nextPrimary, 'Unrelated/two');
+    await assert.rejects(
+      fresh.publish(),
+      /generation or read authority changed/,
+      'ordinary attempts cannot call old inputs fresh',
+    );
+    await stale.publish();
+    assert.strictEqual(
+      stale.batch.currentGeneration,
+      8,
+      'stale output gets a new commit revision',
+    );
+    const row = await ownerRow();
+    assert.notStrictEqual(
+      row.dirty_generation,
+      null,
+      'stale output keeps its obligation',
+    );
+    const [body] = await db.execute(
+      "SELECT pristine_doc->'meta'->'publication' AS receipt FROM boxel_index WHERE url=$1 AND type='instance'",
+      { bind: [owner] },
+    );
+    assert.strictEqual(
+      (body.receipt as any).validatedThrough,
+      6,
+      'input revision was not relabeled as fresh',
+    );
+    await nextPrimary.done({
+      lattice: publication,
+      latticeRealmUsername: 'reader',
+      countIndexEntries: false,
+    });
+    assert.strictEqual(
+      nextPrimary.currentGeneration,
+      9,
+      'primary also advances past the intervening wave',
+    );
+    const [clock] = await db.execute(
+      'SELECT current_generation FROM realm_generations WHERE realm_url=$1',
+      { bind: [realm] },
+    );
+    assert.strictEqual(Number(clock.current_generation), 9);
+    await stale.batch.discardLatticeCandidates();
+    await fresh.batch.discardLatticeCandidates();
+  });
 
   test('native query publication retains input bytes automatically and honors per-field policy', async (assert) => {
     root.fieldDefs.members.snapshot = false;

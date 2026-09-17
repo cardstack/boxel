@@ -1,3 +1,4 @@
+import { latticeConcurrencyGroup } from './jobs/lattice.ts';
 import { recordLatticeReadDemand } from './lattice-demand.ts';
 import { Deferred } from './deferred.ts';
 import { latticeInputHave } from './lattice-input-residency.ts';
@@ -2218,16 +2219,15 @@ export class Realm {
       // No body or invalid JSON — use default (running only).
     }
 
-    if (cancelPending) {
-      await cancelAllJobsInConcurrencyGroup(
-        this.#dbAdapter,
-        indexingConcurrencyGroup(this.url),
-      );
-    } else {
-      await cancelRunningJobsInConcurrencyGroup(
-        this.#dbAdapter,
-        indexingConcurrencyGroup(this.url),
-      );
+    for (const group of [
+      indexingConcurrencyGroup(this.url),
+      ...(this.latticeEnabled ? [latticeConcurrencyGroup(this.url)] : []),
+    ]) {
+      if (cancelPending) {
+        await cancelAllJobsInConcurrencyGroup(this.#dbAdapter, group);
+      } else {
+        await cancelRunningJobsInConcurrencyGroup(this.#dbAdapter, group);
+      }
     }
 
     return createResponse({

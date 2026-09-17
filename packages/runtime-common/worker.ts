@@ -185,6 +185,7 @@ export class Worker {
   #realmServerMatrixUsername;
   #indexJobsOnly: boolean;
   #latticeJobsOnly: boolean;
+  #prerenderJobsOnly: boolean;
   #skipPrerenderHtmlRealms: string[];
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
   #createPrerenderAuth: (
@@ -210,6 +211,7 @@ export class Worker {
     createPrerenderAuth,
     indexJobsOnly,
     latticeJobsOnly,
+    prerenderJobsOnly,
     codeLinker,
     skipPrerenderHtmlRealms,
     mediaCacheAdapter,
@@ -232,6 +234,7 @@ export class Worker {
     // is a dedicated indexing lane — see INDEX_JOB_TYPES above.
     indexJobsOnly?: boolean;
     latticeJobsOnly?: boolean;
+    prerenderJobsOnly?: boolean;
     codeLinker?: LatticeCodeLinker;
     skipPrerenderHtmlRealms?: string[];
     // The MediaCache object store, absent when the process has none
@@ -259,6 +262,15 @@ export class Worker {
     this.#createPrerenderAuth = createPrerenderAuth;
     this.#indexJobsOnly = indexJobsOnly ?? false;
     this.#latticeJobsOnly = latticeJobsOnly ?? false;
+    this.#prerenderJobsOnly = prerenderJobsOnly ?? false;
+    if (
+      [
+        this.#indexJobsOnly,
+        this.#latticeJobsOnly,
+        this.#prerenderJobsOnly,
+      ].filter(Boolean).length > 1
+    )
+      throw new Error('A worker can own only one dedicated execution lane');
     this.#codeLinker = codeLinker;
     this.#skipPrerenderHtmlRealms = skipPrerenderHtmlRealms ?? [];
     this.#mediaCacheAdapter = mediaCacheAdapter;
@@ -346,14 +358,21 @@ export class Worker {
           Tasks['screenshotCard'](taskArgs),
         ),
     };
-    let jobTypes = this.#latticeJobsOnly
-      ? ['lattice-materialize']
-      : this.#indexJobsOnly
-        ? (INDEX_JOB_TYPES as readonly string[])
-        : Object.keys(registrations);
+    let jobTypes = this.#prerenderJobsOnly
+      ? ['prerender_html']
+      : this.#latticeJobsOnly
+        ? ['lattice-materialize']
+        : this.#indexJobsOnly
+          ? (INDEX_JOB_TYPES as readonly string[])
+          : Object.keys(registrations);
     // Only an explicitly configured Node processor claims linking work. The
     // source-index and materialization lanes keep their own capacity.
-    if (this.#codeLinker && !this.#latticeJobsOnly && !this.#indexJobsOnly) {
+    if (
+      this.#codeLinker &&
+      !this.#latticeJobsOnly &&
+      !this.#indexJobsOnly &&
+      !this.#prerenderJobsOnly
+    ) {
       await this.#queue.register(LATTICE_CODE_JOB_TYPE, this.#codeLinker);
     }
     await Promise.all(jobTypes.map((jobType) => registrations[jobType]()));

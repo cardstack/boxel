@@ -526,6 +526,12 @@ export class IndexRunner {
         latticeRealmUsername: current.#latticeRealmUsername,
       });
       await current.#lattice?.analyzeAfterFullIndex();
+      if (current.#latticeRealmUsername)
+        current.#notifyInvalidationsReady(
+          discoverResult.urls,
+          new Set(discoverResult.deletedUrls),
+          true,
+        );
       swapMs = Date.now() - finalizeStart;
       current.#latticeSourceWriteMs = current.batch.writeMs;
       if (!current.#latticeRealmUsername)
@@ -764,6 +770,16 @@ export class IndexRunner {
         lattice: current.#lattice,
         latticeRealmUsername: current.#latticeRealmUsername,
       });
+      if (current.#latticeRealmUsername)
+        current.#notifyInvalidationsReady(
+          invalidations.map((url) => url.href),
+          new Set(
+            [...operations]
+              .filter(([, operation]) => operation === 'delete')
+              .map(([url]) => url),
+          ),
+          true,
+        );
       swapMs = Date.now() - finalizeStart;
       current.#latticeSourceWriteMs = current.batch.writeMs;
       if (!current.#latticeRealmUsername)
@@ -837,7 +853,7 @@ export class IndexRunner {
     try {
       // Under a source backlog the queue claims this job only for owners
       // past their staleness deadline (`latticeOverdueWorkSQL`, taking its
-      // turn between index jobs); an ordinary attempt beside them would
+      // own queue lane); an ordinary attempt beside them would
       // yield to that backlog and take the wave down with it, so the wave
       // is composed of stale attempts alone.
       const backlog =
@@ -902,9 +918,9 @@ export class IndexRunner {
     }
   }
 
-  // Drain the durable registry inside the existing per-realm indexing job.
-  // A crash retries that queue job and discovers pending work again. Failed
-  // waves remain pending and fail the job; they never publish partial output.
+  // Queued waves own the secondary lane and attempt-scoped candidates. Legacy
+  // inline drains remain inside their indexing job. A retry discovers durable
+  // dirty work; it never resumes another attempt's unfinished output.
   async #drainLattice(followup?: {
     realmUsername: string;
     wave: number;
@@ -968,6 +984,8 @@ export class IndexRunner {
         this.#batch = await this.#indexWriter.createBatch(
           this.realmURL,
           this.#virtualNetwork,
+          undefined,
+          { latticeMaterialization: Boolean(followup) },
         );
         this.#latticeTimings.latticeBatchSetupMs += Date.now() - setupStartedAt;
         this.#inputSnapshot = {
@@ -1144,6 +1162,7 @@ export class IndexRunner {
           latticeFollowup: followup,
           countIndexEntries: false,
         });
+        await this.batch.discardLatticeCandidates();
         for (const ownerURL of completedOwners)
           if (!this.batch.latticeRetainedOutputs.has(ownerURL))
             published.add(ownerURL);
@@ -1159,6 +1178,7 @@ export class IndexRunner {
         );
       return [...published].map((url) => new URL(url));
     } finally {
+      await this.#batch?.discardLatticeCandidates();
       this.#inputSnapshot = undefined;
       this.#latticeTimings.latticeMaterializationMs += Date.now() - startedAt;
     }
@@ -1168,7 +1188,15 @@ export class IndexRunner {
   // genuine deletions (the URLs in `deletes`) as 'delete', everything else —
   // fan-out dependents are always re-renders — as 'update'. Only fires in
   // split mode; the fused path renders HTML inline and enqueues nothing.
-  #notifyInvalidationsReady(urls: string[], deletes: Set<string>) {
+  #notifyInvalidationsReady(
+    urls: string[],
+    deletes: Set<string>,
+    committed = false,
+  ) {
+    // A concurrent wave may advance the clock while primary work is running.
+    // HTML must be tagged with the revision actually committed, not the
+    // tentative revision at admission. Flag-off retains the early enqueue.
+    if (this.#latticeRealmUsername && !committed) return;
     if (!this.#onInvalidationsReady || urls.length === 0) {
       return;
     }

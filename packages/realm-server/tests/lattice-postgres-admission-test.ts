@@ -229,6 +229,28 @@ module(basename(import.meta.filename), function (hooks) {
     });
   }
 
+  test('primary native admission tolerates an intervening data publication but still fences its source', async (assert) => {
+    const prepared = await candidate();
+    await db.execute(
+      'UPDATE realm_generations SET current_generation=current_generation+1 WHERE realm_url=$1',
+      { bind: [realm] },
+    );
+    await validate(prepared);
+    assert.ok(
+      true,
+      'an unrelated wave does not invalidate primary computation',
+    );
+    await db.execute(
+      "UPDATE realm_generations SET loader_epoch='changed' WHERE realm_url=$1",
+      { bind: [realm] },
+    );
+    await assert.rejects(
+      validate(prepared),
+      /generation changed/,
+      'code epoch fencing remains intact',
+    );
+  });
+
   const linkedImports = `import {CardDef, field, contains, NumberField} from '${base}number';
     import {bxl} from '@cardstack/bxl';`;
   const linkedSource = `${linkedImports} export class Score extends CardDef {
@@ -547,6 +569,71 @@ module(basename(import.meta.filename), function (hooks) {
     };
   }
 
+  for (const stale of [false, true]) {
+    test(`native ${stale ? 'stale' : 'fresh'} materialization fences an intervening generation`, async (assert) => {
+      const lab = await prepareCodeOwner();
+      const revision = await lab.readRevision();
+      const lookup = {
+        lookupDefinition: async () => lab.root,
+      } as unknown as DefinitionLookup;
+      const run = createLatticeNativeCardIndexer({
+        worker,
+        admit: createPostgresLatticeAdmission({
+          db,
+          network,
+          policies: [policy],
+          runtimeRevision: () => runtime,
+        }),
+        openInputs: async () =>
+          LatticeMaterializationInputs.open({
+            db,
+            network,
+            realmURL: realm,
+            actor,
+            lookup,
+            ...revision,
+            ...(stale ? { stale: true as const } : {}),
+          }),
+      });
+      const prepared = await run({
+        ...request,
+        generation: revision.generation + 1,
+        loaderEpoch: revision.loaderEpoch,
+        inputSnapshot: {
+          realmURL: realm,
+          generation: revision.generation,
+          ...(stale ? { stale: true as const } : {}),
+        },
+      });
+      if (!prepared) throw new Error('Expected native materialization');
+      await db.execute(
+        'UPDATE realm_generations SET current_generation=current_generation+1 WHERE realm_url=$1',
+        { bind: [realm] },
+      );
+      if (stale) {
+        await validate(prepared);
+        assert.ok(
+          true,
+          'stale computation tolerates an unrelated committed revision',
+        );
+        await db.execute(
+          "UPDATE realm_file_meta SET content_hash='changed' WHERE file_path='Score/one.json'",
+        );
+        await assert.rejects(
+          validate(prepared),
+          /source or reviewed code/,
+          'staleness never weakens the owner source fence',
+        );
+      } else {
+        await assert.rejects(
+          validate(prepared),
+          /generation changed/,
+          'an ordinary computation cannot report old input as current',
+        );
+      }
+    });
+  }
+
   test('equal native output retains its code authority until the code itself changes', async (assert) => {
     const lab = await prepareCodeOwner();
     const before = (await lab.stored()).resource;
@@ -840,7 +927,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
       await db.execute(
         "UPDATE jobs SET status='resolved' WHERE job_type='lattice-materialize' AND concurrency_group=$1",
-        { bind: ['indexing:' + realm] },
+        { bind: ['lattice:' + realm] },
       );
       await persistFileMeta(
         db,
@@ -862,7 +949,7 @@ module(basename(import.meta.filename), function (hooks) {
       })({ realmURL: realm, realmUsername: 'native' });
       const wakeups = await db.execute(
         "SELECT id FROM jobs WHERE job_type='lattice-materialize' AND status='unfulfilled' AND concurrency_group=$1",
-        { bind: ['indexing:' + realm] },
+        { bind: ['lattice:' + realm] },
       );
       assert.strictEqual(
         wakeups.length,
@@ -1564,9 +1651,9 @@ export class Counter extends CardDef { @field count = contains(NumberField); @fi
         () => db.execute("UPDATE realm_generations SET loader_epoch='code-2'"),
       ],
       [
-        'source generation',
+        'missing source clock',
         'realm generation',
-        () => db.execute('UPDATE realm_generations SET current_generation=2'),
+        () => db.execute('DELETE FROM realm_generations'),
       ],
       [
         'runtime revision',

@@ -1,3 +1,6 @@
+import { removeRealmDatabaseArtifacts } from '../handlers/realm-destruction-utils.ts';
+import { latticeConcurrencyGroup } from '@cardstack/runtime-common/jobs/lattice';
+import { prerenderHtmlConcurrencyGroup } from '@cardstack/runtime-common/jobs/prerender-html';
 import QUnit from 'qunit';
 import { basename } from 'node:path';
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
@@ -51,6 +54,110 @@ module(basename(import.meta.filename), function (hooks) {
     beforeEach: async (adapter) => {
       db = adapter;
     },
+  });
+
+  test('realm teardown removes all three lanes and abandoned secondary candidates', async (assert) => {
+    const realm = 'https://lattice-lane-teardown.example/';
+    for (const [type, group] of [
+      ['incremental-index', `indexing:${realm}`],
+      ['lattice-materialize', latticeConcurrencyGroup(realm)],
+      ['prerender_html', prerenderHtmlConcurrencyGroup(realm)],
+    ])
+      await db.execute(
+        'INSERT INTO jobs(job_type,concurrency_group,priority,timeout,args) VALUES($1,$2,10,30,$3)',
+        { bind: [type, group, JSON.stringify({ realmURL: realm })] },
+      );
+    await db.execute(
+      `INSERT INTO lattice_index_candidates(batch_id,url,file_alias,realm_url,type,generation)
+      VALUES('00000000-0000-0000-0000-000000000001',$1,$1,$2,'instance',1)`,
+      { bind: [realm + 'one.json', realm] },
+    );
+    await removeRealmDatabaseArtifacts({ dbAdapter: db, realmURL: realm });
+    const [jobs] = await db.execute(
+      "SELECT count(*) AS n FROM jobs WHERE args->>'realmURL'=$1 AND status='unfulfilled'",
+      { bind: [realm] },
+    );
+    const [candidates] = await db.execute(
+      'SELECT count(*) AS n FROM lattice_index_candidates WHERE realm_url=$1',
+      { bind: [realm] },
+    );
+    assert.strictEqual(Number(jobs.n), 0);
+    assert.strictEqual(Number(candidates.n), 0);
+  });
+
+  test('a blocked HTML job cannot occupy primary or secondary queue lanes', async (assert) => {
+    assert.timeout(20_000);
+    const realm = 'https://lattice-three-lanes.example/';
+    const publisher = new PgQueuePublisher(db);
+    const types = [
+      'prerender_html',
+      'incremental-index',
+      'lattice-materialize',
+    ];
+    const groups = [
+      prerenderHtmlConcurrencyGroup(realm),
+      `indexing:${realm}`,
+      latticeConcurrencyGroup(realm),
+    ];
+    const started = types.map(() => new Deferred<void>());
+    const release = types.map(() => new Deferred<void>());
+    const adapters = types.map(() => new PgAdapter());
+    const runners = types.map((type, i) => {
+      const runner = new PgQueueRunner({
+        adapter: adapters[i],
+        workerId: `lane-${i}`,
+        lattice: new LatticeRealmConfig([realm]),
+      });
+      runner.register(type, async () => {
+        started[i].fulfill();
+        await release[i].promise;
+        return {};
+      });
+      return runner;
+    });
+    try {
+      await db.execute(
+        `INSERT INTO lattice_owners(realm_url,owner_url,published_generation,input_generation,dirty_generation,definition_revision,retired,stale_after)
+        VALUES($1,$2,1,1,2,'epoch',FALSE,now()-interval '1 second')`,
+        { bind: [realm, realm + 'Board/one.json'] },
+      );
+      const jobs = [];
+      for (let i = 0; i < types.length; i++)
+        jobs.push(
+          await publisher.publish({
+            jobType: types[i],
+            concurrencyGroup: groups[i],
+            priority: 10,
+            timeout: 30,
+            args: { realmURL: realm },
+          }),
+        );
+      await runners[0].start();
+      await started[0].promise;
+      await Promise.all(runners.slice(1).map((runner) => runner.start()));
+      await Promise.all(started.slice(1).map((event) => event.promise));
+      const [active] = await db.execute(
+        `SELECT count(DISTINCT j.concurrency_group) AS n FROM jobs j JOIN job_reservations r ON r.job_id=j.id
+        WHERE j.args->>'realmURL'=$1 AND r.completed_at IS NULL AND r.locked_until>now()`,
+        { bind: [realm] },
+      );
+      assert.strictEqual(
+        Number(active.n),
+        3,
+        'all three reservations are active together while HTML remains blocked',
+      );
+      release[1].fulfill();
+      release[2].fulfill();
+      await Promise.all(jobs.slice(1).map((job) => job.done));
+      assert.ok(true, 'both data lanes complete before HTML is released');
+      release[0].fulfill();
+      await jobs[0].done;
+    } finally {
+      release.forEach((event) => event.fulfill());
+      await Promise.all(runners.map((runner) => runner.destroy()));
+      await publisher.destroy();
+      await Promise.all(adapters.map((adapter) => adapter.close()));
+    }
   });
 
   test('a background collection window wakes at its deadline without another write', async function (assert) {

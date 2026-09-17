@@ -1,3 +1,4 @@
+import { latticeConcurrencyGroup } from '@cardstack/runtime-common/jobs/lattice';
 import type { DBAdapter, Expression, Querier } from '@cardstack/runtime-common';
 import {
   addExplicitParens,
@@ -75,13 +76,14 @@ export async function removeRealmDatabaseArtifacts(args: {
 }) {
   let { dbAdapter, realmURL, querier } = args;
   let q = querier ?? dbAdapterQuerier(dbAdapter);
-  // Both of the realm's job lanes must be drained: a surviving
+  // All three of the realm's job lanes must be drained: a surviving
   // prerender_html job would run against whatever realm later occupies this
   // URL and stamp this realm's (higher) generation into its
   // prerendered_html rows, silently pinning them against the monotonic swap
   // guard until the new realm's generation catches up.
   for (let concurrencyGroup of [
     indexingConcurrencyGroup(realmURL),
+    latticeConcurrencyGroup(realmURL),
     prerenderHtmlConcurrencyGroup(realmURL),
   ]) {
     await cancelRunningJobsInConcurrencyGroup(dbAdapter, concurrencyGroup, q);
@@ -112,6 +114,10 @@ export async function removeRealmDatabaseArtifacts(args: {
   await q([`DELETE FROM modules WHERE resolved_realm_url =`, param(realmURL)]);
   await q([
     `DELETE FROM boxel_index_working WHERE realm_url =`,
+    param(realmURL),
+  ]);
+  await q([
+    `DELETE FROM lattice_index_candidates WHERE realm_url =`,
     param(realmURL),
   ]);
   await q([`DELETE FROM boxel_index WHERE realm_url =`, param(realmURL)]);

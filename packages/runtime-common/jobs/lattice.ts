@@ -1,5 +1,4 @@
 import { param, type Querier } from '../expression.ts';
-import { indexingConcurrencyGroup } from './indexing.ts';
 import { acquireConcurrencyGroupLock } from '../queue-concurrency-lock.ts';
 import { latticeWorkAttemptLimit } from '../lattice-kernel.ts';
 import type { LatticeReadScope } from '../lattice-work.ts';
@@ -9,9 +8,13 @@ export const LATTICE_JOB_TYPE = 'lattice-materialize';
 // The dedicated worker's type filter, not this number, reserves capacity.
 export const LATTICE_PRIORITY = 8;
 
-// Called only under the per-realm index publication transaction. The shared
-// index concurrency group prevents two writers using the same working-table
-// generation. Never join a reserved job: it has already captured its inputs.
+export function latticeConcurrencyGroup(realmURL: string): string {
+  return `lattice:${realmURL}`;
+}
+
+// Only the short guarded swap shares the primary publication lock. Candidate
+// rows are attempt-scoped, so a reserved wave can run beside source indexing.
+// Never join a reserved job: it has already captured its inputs.
 export async function enqueueLattice(
   tx: Querier,
   realmURL: string,
@@ -20,7 +23,7 @@ export async function enqueueLattice(
   attempt = 0,
   waitForRead?: LatticeReadScope,
 ) {
-  const group = indexingConcurrencyGroup(realmURL);
+  const group = latticeConcurrencyGroup(realmURL);
   // Share the claim lock, not just the publication lock. Otherwise a worker
   // can reserve a candidate between our unreserved check and the args update.
   await acquireConcurrencyGroupLock(tx, group);
@@ -98,14 +101,11 @@ export const latticeOverdueWorkSQL = `EXISTS (
   SELECT 1 FROM lattice_owners o WHERE o.realm_url=j.args->>'realmURL'
     AND NOT o.retired AND o.dirty_generation IS NOT NULL
     AND o.stale_after IS NOT NULL AND o.stale_after <= now())`;
-// Service-lead fairness between the two lanes sharing a realm's group: a
-// wave is claimed ahead of the queued index jobs only when the job that
-// last finished in the group was not a wave, so under a backlog the group
-// alternates index job, wave, index job, wave. Neither lane can starve the
-// other: an index job always follows a wave, and a wave with overdue work
-// always follows an index job.
+// Dedicated lanes reserve independent capacity. A general-purpose worker may
+// still help either lane; when it does, alternate overdue waves with source
+// jobs using the realm's last completed data job across both groups.
 export const latticeWaveTurnSQL = `COALESCE((SELECT f.job_type FROM jobs f
-  WHERE f.concurrency_group=j.concurrency_group AND f.status<>'unfulfilled'
+  WHERE f.args->>'realmURL'=j.args->>'realmURL' AND f.job_type IN ('incremental-index','from-scratch-index','copy-index','lattice-materialize') AND f.status<>'unfulfilled'
   ORDER BY f.finished_at DESC NULLS LAST, f.id DESC LIMIT 1),'') <> 'lattice-materialize'`;
 
 // A cancelled attempt can leave a durable authority wait condition. Do not

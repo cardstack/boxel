@@ -100,6 +100,39 @@
    PRIMARY KEY ( realm_url )
 );
 
+ CREATE TABLE IF NOT EXISTS lattice_index_candidates (
+   url TEXT NOT NULL,
+   file_alias TEXT NOT NULL,
+   type TEXT NOT NULL,
+   generation INTEGER NOT NULL,
+   realm_url TEXT NOT NULL,
+   pristine_doc BLOB,
+   search_doc BLOB,
+   error_doc BLOB,
+   deps BLOB DEFAULT '[]',
+   types BLOB,
+   icon_html TEXT,
+   isolated_html TEXT,
+   indexed_at,
+   is_deleted BOOLEAN,
+   last_modified,
+   embedded_html BLOB,
+   atom_html TEXT,
+   fitted_html BLOB,
+   display_names BLOB,
+   resource_created_at,
+   head_html TEXT,
+   has_error BOOLEAN DEFAULT false NOT NULL,
+   last_known_good_deps BLOB,
+   markdown TEXT,
+   diagnostics BLOB,
+   job_id INTEGER,
+   valid_until,
+   batch_id NOT NULL,
+   staged_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
+   PRIMARY KEY ( batch_id, url, realm_url, type )
+);
+
  CREATE TABLE IF NOT EXISTS lattice_index_events (
    realm_url TEXT NOT NULL,
    generation NOT NULL,
@@ -142,6 +175,9 @@
    attributes_json TEXT,
    attributes_generation,
    code_bound BOOLEAN DEFAULT false NOT NULL,
+   settle_until,
+   stale_within INTEGER,
+   stale_after,
    PRIMARY KEY ( realm_url, owner_url )
 );
 
@@ -158,6 +194,8 @@
    field_path TEXT NOT NULL,
    query BLOB NOT NULL,
    routing_tokens BLOB DEFAULT '["[\"\",\"\"]"]' NOT NULL,
+   read_paths BLOB,
+   projection BLOB,
    PRIMARY KEY ( realm_url, owner_url, field_path )
 );
 

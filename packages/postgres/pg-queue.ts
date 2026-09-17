@@ -993,7 +993,7 @@ export class PgQueueRunner implements QueueRunner {
           OR j.created_at + interval '5 seconds' <= clock_timestamp())
         AND (j.job_type <> 'lattice-materialize' OR NOT EXISTS (
           SELECT 1 FROM jobs source
-          WHERE source.concurrency_group = j.concurrency_group
+          WHERE source.concurrency_group = 'indexing:' || (j.args->>'realmURL')
             AND source.status = 'unfulfilled'
             AND source.job_type IN ('incremental-index', 'from-scratch-index', 'copy-index')
         ) OR ${latticeOverdueWorkSQL})

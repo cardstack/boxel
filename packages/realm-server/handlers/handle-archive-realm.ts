@@ -1,3 +1,4 @@
+import { latticeConcurrencyGroup } from '@cardstack/runtime-common/jobs/lattice';
 import type Koa from 'koa';
 import {
   archiveRealm,
@@ -22,6 +23,7 @@ const log = logger('handle-archive');
 export default function handleArchiveRealm({
   dbAdapter,
   sendEvent,
+  lattice,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let target = await resolveAndAuthorizeArchiveTarget(
@@ -49,6 +51,11 @@ export default function handleArchiveRealm({
         dbAdapter,
         indexingConcurrencyGroup(realmURL),
       );
+      if (lattice?.isEnabled(realmURL))
+        await cancelAllJobsInConcurrencyGroup(
+          dbAdapter,
+          latticeConcurrencyGroup(realmURL),
+        );
 
       let response = createResponse({
         body: JSON.stringify(

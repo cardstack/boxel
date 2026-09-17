@@ -1,4 +1,8 @@
 import {
+  latticeWorkingTable,
+  latticeWorkingScope,
+} from './lattice-candidates.ts';
+import {
   assertLatticeInputAuthority,
   type LatticeBrowserInputCapture,
 } from './lattice-browser-inputs.ts';
@@ -122,6 +126,7 @@ export class IndexWriter {
     opts?: {
       splitPrerenderHtml?: boolean;
       prerenderHtmlOnly?: boolean;
+      latticeMaterialization?: boolean;
       generation?: number;
     },
   ) {
@@ -637,6 +642,7 @@ export class Batch {
   // `seedPrerenderedHtmlInvalidations`).
   #prerenderHtmlOnly: boolean;
   #explicitGeneration: number | undefined;
+  #candidateBatch: string | undefined;
   #priorLoaderEpoch = '0';
   #mintedLoaderEpoch: string | undefined;
   #hasExecutableInvalidation = false;
@@ -668,6 +674,7 @@ export class Batch {
     opts?: {
       splitPrerenderHtml?: boolean;
       prerenderHtmlOnly?: boolean;
+      latticeMaterialization?: boolean;
       generation?: number;
       latticeEnabled?: boolean;
       retainedSnapshots?: LatticeRetainedSnapshots;
@@ -683,6 +690,18 @@ export class Batch {
       opts?.splitPrerenderHtml ?? dbAdapter.kind === 'pg';
     this.#prerenderHtmlOnly = opts?.prerenderHtmlOnly ?? false;
     this.#explicitGeneration = opts?.generation;
+    if (opts?.latticeMaterialization) {
+      if (
+        !this.latticeEnabled ||
+        dbAdapter.kind !== 'pg' ||
+        !this.#splitPrerenderHtml ||
+        this.#prerenderHtmlOnly
+      )
+        throw new Error(
+          'Isolated Lattice candidates require the PostgreSQL data lane',
+        );
+      this.#candidateBatch = uuidv4();
+    }
     this.#currentInvalidationId = uuidv4();
     this.ready = this.setupBatch();
   }
@@ -775,6 +794,14 @@ export class Batch {
       ]);
     }
     await this.setNextGeneration();
+    if (this.#candidateBatch) {
+      // Crash debris is never resumed. Queue attempts expire after ten minutes;
+      // keep a full day's margin and sweep only this realm's abandoned rows.
+      await this.#query([
+        "DELETE FROM lattice_index_candidates WHERE staged_at < now() - interval '1 day' AND realm_url=",
+        param(this.realmURL.href),
+      ]);
+    }
     await this.loadResumedRows();
   }
 
@@ -1575,13 +1602,16 @@ export class Batch {
     if (!this.#splitPrerenderHtml) {
       await this.writePrerenderedHtmlRow(url, htmlEntry, seq);
     }
-    let { nameExpressions, valueExpressions } = asExpressions(preparedEntry, {
-      jsonFields: this.#jsonColumnNames(),
-    });
+    let { nameExpressions, valueExpressions } = asExpressions(
+      this.#candidateRow(preparedEntry),
+      {
+        jsonFields: this.#jsonColumnNames(),
+      },
+    );
     await this.#query([
       ...upsert(
-        'boxel_index_working',
-        'boxel_index_working_pkey',
+        latticeWorkingTable(this.#candidateBatch),
+        `${latticeWorkingTable(this.#candidateBatch)}_pkey`,
         nameExpressions,
         valueExpressions,
       ),
@@ -1601,6 +1631,8 @@ export class Batch {
     let jsonFields = this.#jsonColumnNames();
     let groups = new Map<string, PreparedIndexRow[]>();
     for (let row of rows) {
+      if (this.#candidateBatch)
+        row = { ...row, preparedEntry: this.#candidateRow(row.preparedEntry) };
       let signature = Object.keys(row.preparedEntry).sort().join(',');
       let group = groups.get(signature);
       if (group) {
@@ -1617,8 +1649,8 @@ export class Batch {
         );
         await this.#query([
           ...upsert(
-            'boxel_index_working',
-            'boxel_index_working_pkey',
+            latticeWorkingTable(this.#candidateBatch),
+            `${latticeWorkingTable(this.#candidateBatch)}_pkey`,
             nameExpressions,
             valueExpressions,
           ),
@@ -1646,14 +1678,28 @@ export class Batch {
         );
         await this.#query([
           ...upsertMultipleRows(
-            'boxel_index_working',
-            'boxel_index_working_pkey',
+            latticeWorkingTable(this.#candidateBatch),
+            `${latticeWorkingTable(this.#candidateBatch)}_pkey`,
             nameExpressions,
             valueExpressions,
           ),
         ]);
       }
     }
+  }
+
+  #candidateRow<T extends object>(row: T): T {
+    return this.#candidateBatch
+      ? { ...row, batch_id: this.#candidateBatch }
+      : row;
+  }
+
+  async discardLatticeCandidates(): Promise<void> {
+    if (!this.#candidateBatch) return;
+    await query(this.#dbAdapter, [
+      'DELETE FROM lattice_index_candidates WHERE batch_id =',
+      param(this.#candidateBatch),
+    ]);
   }
 
   #jsonColumnNames(): string[] {
@@ -2447,7 +2493,10 @@ export class Batch {
           this.#latticeQueryPreparations,
           // An owner publication reads only the document envelope; see
           // LatticeIndexPublication.prepare.
-          { envelope: opts?.latticeInputGeneration !== undefined },
+          {
+            envelope: opts?.latticeInputGeneration !== undefined,
+            candidateBatch: this.#candidateBatch,
+          },
         );
     publicationTimings.prepareMs = Date.now() - publicationStartedAt;
     let latticeCardOnly =
@@ -2467,13 +2516,16 @@ export class Batch {
             throw new Error('Lattice publication requires a transaction');
           for (let check of checks) await check(tx);
         }
+        if (tx && (opts?.latticeRealmUsername || this.#candidateBatch))
+          await this.#rebasePublication(tx);
         const retainedOwners = new Set<string>();
         if (tx && this.#retainedInputs.size) {
           for (const row of await tx([
-            'SELECT url FROM boxel_index_working WHERE realm_url=',
+            `SELECT url FROM ${latticeWorkingTable(this.#candidateBatch)} WHERE realm_url=`,
             param(this.realmURL.href),
             'AND generation=',
             param(this.generation),
+            ...latticeWorkingScope(this.#candidateBatch),
             "AND type='instance' AND has_error IS NOT TRUE AND is_deleted IS NOT TRUE",
             'AND pristine_doc IS NOT NULL AND url = ANY(',
             textArrayParam([...this.#retainedInputs.keys()]),
@@ -2508,12 +2560,13 @@ export class Batch {
           // reset reuses a generation number. Compatibility/error outputs
           // cannot inherit a previous native binding from the same URL.
           await tx([
-            `DELETE FROM lattice_owner_code b USING boxel_index_working w
+            `DELETE FROM lattice_owner_code b USING ${latticeWorkingTable(this.#candidateBatch)} w
                WHERE b.realm_url=w.realm_url AND b.owner_url=w.url AND w.type='instance'
                  AND w.realm_url=`,
             param(this.realmURL.href),
             'AND w.generation=',
             param(this.generation),
+            ...latticeWorkingScope(this.#candidateBatch, 'w'),
           ]);
           // Only native capability registration supplies these bindings.
           // Never recover one from authored JSON or a previous working row.
@@ -2575,6 +2628,7 @@ export class Batch {
               prepared: latticePrepared,
               inputGeneration: opts.latticeInputGeneration,
               changedCode,
+              candidateBatch: this.#candidateBatch,
             },
           );
         }
@@ -2819,7 +2873,7 @@ export class Batch {
       [
         `SELECT i.url, i.type, i.types->>0 AS code_ref,
         i.display_names->>0 AS display_name, i.icon_html
-       FROM ${table} i WHERE`,
+       FROM ${table === 'boxel_index_working' ? latticeWorkingTable(this.#candidateBatch) : table} i WHERE`,
         ...every([
           ['i.realm_url =', param(this.realmURL.href)],
           [
@@ -2844,6 +2898,9 @@ export class Batch {
           ],
           any([['i.is_deleted = false'], ['i.is_deleted IS NULL']]),
         ]),
+        ...(table === 'boxel_index_working'
+          ? latticeWorkingScope(this.#candidateBatch, 'i')
+          : []),
       ] as Expression;
     let [row] = await this.#query([
       'WITH lattice_previous AS (',
@@ -2915,9 +2972,27 @@ export class Batch {
     table: 'boxel_index' | 'boxel_index_working' = 'boxel_index_working',
   ): Promise<CardTypeSummary[]> {
     let results = await this.#query([
-      `SELECT CAST(count(DISTINCT i.url) AS INTEGER) as total, MAX(i.display_names->>0) as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
-       FROM ${table} as i
-          WHERE`,
+      `SELECT CAST(count(DISTINCT i.url) AS INTEGER) as total, MAX(i.display_names->>0) as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html FROM`,
+      ...(this.latticeEnabled &&
+      this.#dbAdapter.kind === 'pg' &&
+      table === 'boxel_index_working'
+        ? [
+            '(SELECT url,realm_url,type,display_names,types,icon_html,is_deleted FROM boxel_index WHERE realm_url=',
+            param(this.realmURL.href),
+            'AND NOT (url = ANY(',
+            textArrayParam([...this.#invalidations]),
+            ')) UNION ALL SELECT url,realm_url,type,display_names,types,icon_html,is_deleted FROM',
+            latticeWorkingTable(this.#candidateBatch),
+            'WHERE realm_url=',
+            param(this.realmURL.href),
+            'AND url = ANY(',
+            textArrayParam([...this.#invalidations]),
+            ')',
+            ...latticeWorkingScope(this.#candidateBatch),
+            ')',
+          ]
+        : [table]),
+      'as i WHERE',
       ...every([
         ['i.realm_url =', param(this.realmURL.href)],
         ['i.type = ', param(indexType)],
@@ -2934,6 +3009,32 @@ export class Batch {
       `ORDER BY MAX(i.display_names->>0) ASC NULLS LAST`,
     ] as Expression);
     return results as unknown as CardTypeSummary[];
+  }
+
+  // Computation does not reserve a realm clock tick. Allocate it only inside
+  // the publication lock, after all candidate fences pass. Other lanes may
+  // have committed while this batch computed; their rows are never restamped.
+  async #rebasePublication(tx: Querier): Promise<void> {
+    const [realm] = await tx([
+      'SELECT current_generation FROM realm_generations WHERE realm_url=',
+      param(this.realmURL.href),
+      'FOR UPDATE',
+    ]);
+    const next = Number(realm.current_generation) + 1;
+    if (next === this.generation) return;
+    await tx([
+      `UPDATE ${latticeWorkingTable(this.#candidateBatch)} SET generation=`,
+      param(next),
+      'WHERE realm_url=',
+      param(this.realmURL.href),
+      'AND generation=',
+      param(this.generation),
+      'AND url = ANY(',
+      textArrayParam([...this.#invalidations]),
+      ')',
+      ...latticeWorkingScope(this.#candidateBatch),
+    ]);
+    this.generation = next;
   }
 
   private async applyBatchUpdates(opts?: { latticeCardOnly?: boolean }) {
@@ -2973,7 +3074,7 @@ export class Batch {
         ...addExplicitParens(separatedByCommas(columns)),
         'SELECT',
         ...separatedByCommas(columns),
-        'FROM boxel_index_working',
+        `FROM ${latticeWorkingTable(this.#candidateBatch)}`,
         'WHERE',
         ...every([
           ['realm_url =', param(this.realmURL.href)],
@@ -2987,6 +3088,7 @@ export class Batch {
             ),
           ],
         ]),
+        ...latticeWorkingScope(this.#candidateBatch),
         'ON CONFLICT ON CONSTRAINT boxel_index_pkey DO UPDATE SET',
         ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
       ] as Expression);

@@ -1,3 +1,7 @@
+import {
+  latticeWorkingTable,
+  latticeWorkingScope,
+} from './lattice-candidates.ts';
 import type { LatticeProjectionWhere } from './definitions.ts';
 import stringify from 'safe-stable-stringify';
 import { enqueueLattice, latticeOwnerRetryReadySQL } from './jobs/lattice.ts';
@@ -318,6 +322,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
       // a day owner is over a megabyte, stays in Postgres; `commit` compares
       // and updates it there. Source passes and replay keep the full rows.
       envelope?: boolean;
+      candidateBatch?: string;
     },
   ) {
     let startedAt = Date.now();
@@ -333,11 +338,12 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
         this.db,
         [
           opts?.envelope
-            ? "SELECT url, type, has_error, is_deleted, CASE WHEN pristine_doc IS NULL THEN NULL ELSE jsonb_build_object('meta', pristine_doc->'meta') END AS pristine_doc, search_doc, types FROM boxel_index_working WHERE realm_url ="
-            : 'SELECT url, type, has_error, is_deleted, pristine_doc, search_doc, types FROM boxel_index_working WHERE realm_url =',
+            ? `SELECT url, type, has_error, is_deleted, CASE WHEN pristine_doc IS NULL THEN NULL ELSE jsonb_build_object('meta', pristine_doc->'meta') END AS pristine_doc, search_doc, types FROM ${latticeWorkingTable(opts?.candidateBatch)} WHERE realm_url =`
+            : `SELECT url, type, has_error, is_deleted, pristine_doc, search_doc, types FROM ${latticeWorkingTable(opts?.candidateBatch)} WHERE realm_url =`,
           param(realmURL),
           'AND generation =',
           param(generation),
+          ...latticeWorkingScope(opts?.candidateBatch),
           ...(active.length
             ? []
             : ["AND pristine_doc->'meta'->'publication' IS NOT NULL"]),
@@ -450,6 +456,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
       inputGeneration?: number;
       replayPrevious?: Map<string, BoxelIndexTable | undefined>;
       changedCode?: ReadonlySet<string>;
+      candidateBatch?: string;
     },
   ): Promise<Set<string>> {
     let {
@@ -460,6 +467,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
       inputGeneration,
       replayPrevious,
       changedCode,
+      candidateBatch,
     } = args;
     // Even the no-watch fast path was prepared outside the lock. Another
     // publisher may have registered the realm's first owner since then; a
@@ -469,7 +477,15 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
     const retained = new Set<string>();
     const skipped: string[] = [];
     if (!prepared.rows.length && !prepared.hadOwners) return retained;
-    if (inputGeneration !== undefined && inputGeneration !== generation - 1) {
+    if (
+      inputGeneration !== undefined &&
+      (inputGeneration > generation - 1 ||
+        (inputGeneration !== generation - 1 &&
+          (!candidateBatch ||
+            prepared.rows.some(
+              (row) => row.pristine_doc?.meta.publication?.stale !== true,
+            ))))
+    ) {
       throw new Error('Lattice publication does not follow its input revision');
     }
     if (inputGeneration !== undefined) {
@@ -544,10 +560,11 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
                       md5((i.pristine_doc #- '{meta,publication}')::text) =
                         md5((w.pristine_doc #- '{meta,publication}')::text) AS same_body
                  FROM boxel_index i
-                 LEFT JOIN boxel_index_working w
+                 LEFT JOIN ${latticeWorkingTable(candidateBatch)} w
                    ON w.realm_url = i.realm_url AND w.url = i.url
                   AND w.type = 'instance' AND w.generation =`,
               param(generation),
+              ...latticeWorkingScope(candidateBatch, 'w'),
               'WHERE i.realm_url =',
               param(realmURL),
               'AND i.url =',
@@ -656,12 +673,13 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
             // publication in place (drop this wave's working row) and let the
             // owner take a later wave.
             await tx([
-              'DELETE FROM boxel_index_working WHERE realm_url =',
+              `DELETE FROM ${latticeWorkingTable(candidateBatch)} WHERE realm_url =`,
               param(realmURL),
               'AND url =',
               param(row.url),
               "AND type = 'instance' AND generation =",
               param(generation),
+              ...latticeWorkingScope(candidateBatch),
             ]);
             skipped.push(row.url);
             timings.publishMs += Date.now() - phaseAt;
@@ -692,13 +710,14 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
             envelope
               ? [
                   `UPDATE lattice_owners SET attributes_json = (
-                     SELECT (w.pristine_doc->'attributes')::text FROM boxel_index_working w
+                     SELECT (w.pristine_doc->'attributes')::text FROM ${latticeWorkingTable(candidateBatch)} w
                       WHERE w.realm_url =`,
                   param(realmURL),
                   'AND w.url =',
                   param(row.url),
                   "AND w.type = 'instance' AND w.generation =",
                   param(generation),
+                  ...latticeWorkingScope(candidateBatch, 'w'),
                   '), attributes_generation =',
                   param(finalOutputGeneration),
                   'WHERE realm_url =',
@@ -724,7 +743,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
           await tx(
             envelope
               ? [
-                  "UPDATE boxel_index_working SET pristine_doc = jsonb_set(pristine_doc, '{meta,publication}',",
+                  `UPDATE ${latticeWorkingTable(candidateBatch)} SET pristine_doc = jsonb_set(pristine_doc, '{meta,publication}',`,
                   param(JSON.stringify(publication)),
                   '::jsonb), job_id = NULL, generation =',
                   param(finalOutputGeneration),
@@ -734,9 +753,10 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
                   param(row.url),
                   "AND type = 'instance' AND generation =",
                   param(generation),
+                  ...latticeWorkingScope(candidateBatch),
                 ]
               : [
-                  'UPDATE boxel_index_working SET pristine_doc =',
+                  `UPDATE ${latticeWorkingTable(candidateBatch)} SET pristine_doc =`,
                   param(JSON.stringify(resource)),
                   ', job_id = NULL, generation =',
                   param(finalOutputGeneration),
@@ -746,6 +766,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
                   param(row.url),
                   "AND type = 'instance' AND generation =",
                   param(generation),
+                  ...latticeWorkingScope(candidateBatch),
                 ],
           );
         timings.workingMs += Date.now() - phaseAt;
@@ -821,10 +842,11 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
     // and re-promote an already committed source pass under its old generation.
     if (!replayPrevious)
       await tx([
-        'UPDATE boxel_index_working SET job_id = NULL WHERE realm_url =',
+        `UPDATE ${latticeWorkingTable(candidateBatch)} SET job_id = NULL WHERE realm_url =`,
         param(realmURL),
         'AND generation =',
         param(generation),
+        ...latticeWorkingScope(candidateBatch),
       ]);
     if (skipped.length)
       console.log(

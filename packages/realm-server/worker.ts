@@ -87,6 +87,7 @@ let {
   prerendererUrl,
   indexJobsOnly = false,
   latticeJobsOnly = false,
+  prerenderJobsOnly = false,
   skipPrerenderHtmlRealm: skipPrerenderHtmlRealms = [],
 } = yargs(process.argv.slice(2))
   .usage('Start worker')
@@ -120,6 +121,10 @@ let {
       description: 'URL of the prerender server to invoke',
       demandOption: true,
       type: 'string',
+    },
+    prerenderJobsOnly: {
+      description: 'Claim only HTML prerender jobs in the tertiary lane',
+      type: 'boolean',
     },
     latticeJobsOnly: {
       description: 'Claim only Lattice secondary materialization jobs',
@@ -258,6 +263,7 @@ let autoMigrate = migrateDB || undefined;
     createPrerenderAuth,
     indexJobsOnly,
     latticeJobsOnly,
+    prerenderJobsOnly,
     skipPrerenderHtmlRealms: skipPrerenderHtmlRealms.map(String),
     mediaCacheAdapter: createMediaCacheAdapterFromEnv(),
     nativeCardIndexer: nativeComputation?.indexer,
