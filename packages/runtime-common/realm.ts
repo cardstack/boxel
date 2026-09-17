@@ -4266,7 +4266,8 @@ export class Realm {
     if (!this.#batchCore) {
       this.#batchCore = {
         realmURL: this.url,
-        withWriteLock: (fn) => this.#dbAdapter.withWriteLock(this.url, fn),
+        withWriteLocks: (localPaths, fn) =>
+          this.#dbAdapter.withFileWriteLocks(this.url, localPaths, fn),
         fileExists: (localPath) => this.#adapter.exists(localPath),
         readSourceFile: async (localPath) => {
           let file = await this.readFileAsText(localPath);

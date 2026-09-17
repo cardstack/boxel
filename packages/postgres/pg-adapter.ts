@@ -53,7 +53,42 @@ export function hashUserIdForCostLock(matrixUserId: string): string {
   return digest.readBigInt64BE(0).toString();
 }
 
+// Lock key for one file within one realm (see PgAdapter.withFileWriteLocks).
+// Namespaced away from both the realm-write and user-cost spaces: a file lock
+// and its realm's lock must never collide, or a writer holding a file would
+// exclude a realm-lifecycle caller that has nothing to do with it. The realm
+// URL and the path are joined through a separator that cannot appear in
+// either, so two different (realm, path) pairs cannot produce one key by
+// running together at the join.
+export function hashFilePathForAdvisoryLock(
+  realmUrl: string,
+  localPath: string,
+): string {
+  const digest = createHash('sha256')
+    .update('file-write:')
+    .update(realmUrl)
+    .update('\u0000')
+    .update(localPath)
+    .digest();
+  return digest.readBigInt64BE(0).toString();
+}
+
 const log = logger('pg-adapter');
+
+// One line per file-write lock acquisition. Separate from `pg-adapter`'s own
+// channel because it is operational signal rather than adapter diagnostics,
+// and it answers the question request latency cannot: a write that took a
+// minute either did a minute of work or spent it queued behind another writer
+// of the same card, and only `waitMs` against `holdMs` tells those apart.
+//
+// Emitted for every acquisition, not sampled and not gated on a correlation
+// id. Writes are a small fraction of a realm's requests — hundreds an hour
+// against tens of thousands of reads — and a contended write is rarely one
+// that was instrumented in advance.
+//
+// The line leads with a fixed token because the log envelope does not carry
+// the channel name: filtering for this signal means matching the content.
+const lockLog = logger('realm:write-lock');
 
 type MigrationNameFixes = {
   migrationRenames: Array<[string, string]>;
@@ -176,6 +211,12 @@ export class PgAdapter implements DBAdapter {
   // same-user user, not one per concurrent same-user request. See
   // withUserCostLock for the full rationale.
   #userCostQueue = new Map<string, Promise<void>>();
+  // The same coalescer, for writers contending over one set of files. Keyed by
+  // the lock keys a call asks for, joined in the order they are taken — so two
+  // writers aimed at one card chain in memory and only the head of the chain
+  // pins a pool connection while it waits, and two writers aimed at different
+  // cards never meet here at all. See withFileWriteLocks.
+  #fileWriteQueue = new Map<string, Promise<void>>();
 
   constructor(opts?: { autoMigrate?: boolean; migrationLogging?: boolean }) {
     if (opts?.autoMigrate) {
@@ -515,6 +556,91 @@ export class PgAdapter implements DBAdapter {
     return await this.#runWithAdvisoryXactLock(lockKey, realmUrl, fn);
   }
 
+  // Serialize the writers of a set of files, rather than the writers of a
+  // realm. What a card write needs to be exclusive over is the read-merge-write
+  // of the files it touches: two writers that both read one card's stored
+  // bytes, merge independently, and write must not interleave, or the second
+  // silently drops the first's changes. That is a property of the files, and
+  // holding the realm instead charges every other writer in the realm for it —
+  // including the writers of cards this one never reads.
+  //
+  // Scope is what separates this from `withWriteLock`. Both are
+  // `pg_advisory_xact_lock`, so both serialize across replicas and both release
+  // on commit or rollback with no stale-lock mode. This one takes a key per
+  // file, in a key space of its own, so a realm-lifecycle caller holding the
+  // realm lock and a card write holding one of its files do not exclude each
+  // other. A caller that must exclude every writer in the realm — destroying
+  // it, publishing it — still wants `withWriteLock`.
+  //
+  // Deadlock: keys are sorted and taken in that order, so two batches whose
+  // file sets overlap take the shared keys in the same sequence and one waits
+  // rather than each holding what the other needs. The sort is on the key
+  // rather than the path so it does not depend on locale or on how a path was
+  // spelled. Duplicates collapse — one file named twice in a batch is one lock.
+  //
+  // Pool footprint: a waiter blocks on `pg_advisory_xact_lock` with its client
+  // already checked out and its transaction open, so N contending writers would
+  // pin N clients from the pool indexing and `_federated-search` also draw on.
+  // The in-process queue in front bounds that to one pinned client per
+  // contended file set per replica, the same trade `withUserCostLock` makes
+  // and for the same reason.
+  //
+  // The callback gets no pinned querier. These locks serialize file writers;
+  // they do not group the writes into a transaction, and the work inside —
+  // writing bytes through the filesystem adapter, enqueueing indexing — is not
+  // transactional with this connection anyway.
+  //
+  // Re-entrancy: a caller holding any of these keys must not ask for them
+  // again. A second `pg_advisory_xact_lock` on a held key runs on a different
+  // pooled connection and waits on the first's transaction forever.
+  async withFileWriteLocks<T>(
+    realmUrl: string,
+    localPaths: readonly string[],
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const lockKeys = [
+      ...new Set(
+        localPaths.map((localPath) =>
+          hashFilePathForAdvisoryLock(realmUrl, localPath),
+        ),
+      ),
+    ].sort();
+    if (lockKeys.length === 0) {
+      // Nothing to serialize against. A batch with no files to write has no
+      // read-merge-write to protect, and taking a lock keyed on the empty set
+      // would serialize exactly those callers against each other for nothing.
+      return await fn();
+    }
+    const queueKey = lockKeys.join(',');
+    const previous = this.#fileWriteQueue.get(queueKey) ?? Promise.resolve();
+    const myWork = (async (): Promise<T> => {
+      try {
+        await previous;
+      } catch {
+        // A prior caller's failure must not cascade — the next writer of
+        // these files still gets its turn at the lock.
+      }
+      return await this.#runWithAdvisoryXactLocks(lockKeys, realmUrl, fn);
+    })();
+    // What the next caller for this same file set waits on: outcome-erased so
+    // its own try/catch is not sensitive to ours, and tee'd off `myWork` to
+    // keep one source of truth for completion timing.
+    const myCompletion: Promise<void> = myWork.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.#fileWriteQueue.set(queueKey, myCompletion);
+    // Compact the map once the chain is idle. Only delete if no later caller
+    // has overwritten the tail — otherwise the chain is unlinked and a
+    // same-file-set caller races past it.
+    void myCompletion.finally(() => {
+      if (this.#fileWriteQueue.get(queueKey) === myCompletion) {
+        this.#fileWriteQueue.delete(queueKey);
+      }
+    });
+    return await myWork;
+  }
+
   // Per-matrix-user serialization barrier for billable upstream proxy calls.
   // Two concurrent requests from the same matrix user — including across
   // replicas with no stickiness — must not both kick off an upstream call
@@ -587,6 +713,68 @@ export class PgAdapter implements DBAdapter {
       }
     });
     return await myWork;
+  }
+
+  // Take several advisory locks in one transaction, in the order given, and
+  // run `fn` holding all of them. Postgres keeps every xact-lock a transaction
+  // takes until it ends, so the set is released together on commit or
+  // rollback; there is no partial hold to unwind if a later key blocks.
+  //
+  // Each key is its own statement rather than one set-returning call, because
+  // the order keys are taken in is what prevents deadlock and a single
+  // statement over a set does not promise the order it evaluates them in. A
+  // single-file write — the common case — is one statement either way.
+  //
+  // The timing line is the signal this lock is judged on: `waitMs` is how long
+  // the writer queued behind other writers of these same files, `holdMs` how
+  // long it kept them from running. A realm-wide stall and a contended single
+  // card look identical from request latency alone; they differ here.
+  async #runWithAdvisoryXactLocks<T>(
+    lockKeys: readonly string[],
+    contextLabel: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    return await this.withConnection(async (queryFn) => {
+      await queryFn(['BEGIN']);
+      const waitStart = Date.now();
+      let holdStart: number | undefined;
+      try {
+        for (const lockKey of lockKeys) {
+          await queryFn([
+            `SELECT pg_advisory_xact_lock(`,
+            param(lockKey),
+            `::bigint)`,
+          ]);
+        }
+        holdStart = Date.now();
+        const result = await fn();
+        await queryFn(['COMMIT']);
+        return result;
+      } catch (err: unknown) {
+        try {
+          await queryFn(['ROLLBACK']);
+        } catch (rollbackErr: unknown) {
+          // Rollback failed — the xact-locks are still released when the
+          // connection's transaction is aborted (pg auto-rollbacks on client
+          // release), so there is no stale-lock problem. Logged for
+          // visibility, and the original error is what propagates.
+          log.warn(
+            `ROLLBACK after advisory-lock error for ${contextLabel} failed: ${String(rollbackErr)}`,
+          );
+        }
+        throw err;
+      } finally {
+        const now = Date.now();
+        // A caller that never reached the hold waited for the whole of its
+        // time here and held for none of it, which is what a failed
+        // acquisition should read as rather than as a zero-length wait.
+        const waitMs = (holdStart ?? now) - waitStart;
+        const holdMs = holdStart === undefined ? 0 : now - holdStart;
+        lockLog.info(
+          `writeLock realm=${contextLabel} waitMs=${waitMs} holdMs=${holdMs} files=${lockKeys.length}`,
+        );
+      }
+    });
   }
 
   async #runWithAdvisoryXactLock<T>(

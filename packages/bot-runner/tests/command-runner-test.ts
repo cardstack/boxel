@@ -100,6 +100,7 @@ module('command runner', () => {
       close: async () => {},
       getColumnNames: async () => [],
       withWriteLock: async (_url, fn) => fn(undefined),
+      withFileWriteLocks: async (_url, _paths, fn) => fn(),
       withUserCostLock: async (_userId, fn) => fn(),
     } as DBAdapter;
 
@@ -248,6 +249,7 @@ module('command runner', () => {
       close: async () => {},
       getColumnNames: async () => [],
       withWriteLock: async (_url, fn) => fn(undefined),
+      withFileWriteLocks: async (_url, _paths, fn) => fn(),
       withUserCostLock: async (_userId, fn) => fn(),
     } as DBAdapter;
 
@@ -511,6 +513,7 @@ module('command runner', () => {
       close: async () => {},
       getColumnNames: async () => [],
       withWriteLock: async (_url, fn) => fn(undefined),
+      withFileWriteLocks: async (_url, _paths, fn) => fn(),
       withUserCostLock: async (_userId, fn) => fn(),
     } as DBAdapter;
 
@@ -608,6 +611,7 @@ module('command runner', () => {
       close: async () => {},
       getColumnNames: async () => [],
       withWriteLock: async (_url, fn) => fn(undefined),
+      withFileWriteLocks: async (_url, _paths, fn) => fn(),
       withUserCostLock: async (_userId, fn) => fn(),
     } as DBAdapter;
 
@@ -747,6 +751,7 @@ module('command runner', () => {
       close: async () => {},
       getColumnNames: async () => [],
       withWriteLock: async (_url, fn) => fn(undefined),
+      withFileWriteLocks: async (_url, _paths, fn) => fn(),
       withUserCostLock: async (_userId, fn) => fn(),
     } as DBAdapter;
 
@@ -954,6 +959,7 @@ module('command runner', () => {
       close: async () => {},
       getColumnNames: async () => [],
       withWriteLock: async (_url, fn) => fn(undefined),
+      withFileWriteLocks: async (_url, _paths, fn) => fn(),
       withUserCostLock: async (_userId, fn) => fn(),
     } as DBAdapter;
 
@@ -1100,6 +1106,7 @@ module('command runner', () => {
       close: async () => {},
       getColumnNames: async () => [],
       withWriteLock: async (_url, fn) => fn(undefined),
+      withFileWriteLocks: async (_url, _paths, fn) => fn(),
       withUserCostLock: async (_userId, fn) => fn(),
     } as DBAdapter;
 
@@ -1250,6 +1257,7 @@ module('command runner', () => {
       close: async () => {},
       getColumnNames: async () => [],
       withWriteLock: async (_url, fn) => fn(undefined),
+      withFileWriteLocks: async (_url, _paths, fn) => fn(),
       withUserCostLock: async (_userId, fn) => fn(),
     } as DBAdapter;
 
@@ -1439,6 +1447,7 @@ module('command runner', () => {
       close: async () => {},
       getColumnNames: async () => [],
       withWriteLock: async (_url, fn) => fn(undefined),
+      withFileWriteLocks: async (_url, _paths, fn) => fn(),
       withUserCostLock: async (_userId, fn) => fn(),
     } as DBAdapter;
 
@@ -1619,6 +1628,7 @@ module('command runner', () => {
       close: async () => {},
       getColumnNames: async () => [],
       withWriteLock: async (_url, fn) => fn(undefined),
+      withFileWriteLocks: async (_url, _paths, fn) => fn(),
       withUserCostLock: async (_userId, fn) => fn(),
     } as DBAdapter;
 
