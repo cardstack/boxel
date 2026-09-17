@@ -8,6 +8,7 @@ import fsExtra from 'fs-extra';
 const { existsSync, readFileSync } = fsExtra;
 import type { Realm } from '@cardstack/runtime-common';
 import { rri } from '@cardstack/runtime-common';
+import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
 import {
   setupPermissionedRealmCached,
   setupMatrixRoom,
@@ -431,6 +432,93 @@ module(basename(import.meta.filename), function () {
           400,
           'the payload is reported before the precondition it would also fail',
         );
+      });
+
+      test('a conditional write the realm cannot decide is refused, not answered', async function (assert) {
+        // The validator is built from the index, so a lane that will not
+        // settle is exactly the state in which the row still describes the
+        // pre-write card and a stale validator would match. Parking an
+        // unfulfilled job in the realm's indexing lane puts the gate in that
+        // state without needing a real slow index pass: nothing claims it, so
+        // it never drains.
+        let read = await request
+          .get('/person-1')
+          .set('Accept', 'application/vnd.card+json');
+        let etag = read.get('etag') ?? '';
+        assert.ok(etag, 'the read hands out a validator');
+
+        let inserted = (await dbAdapter.execute(
+          `INSERT INTO jobs (job_type, concurrency_group, args, status, timeout)
+           VALUES ($1, $2, '{}'::jsonb, 'unfulfilled', 7200)
+           RETURNING id`,
+          {
+            bind: [
+              'incremental-index',
+              indexingConcurrencyGroup(realmURL.href),
+            ],
+          },
+        )) as unknown as { id: string }[];
+
+        try {
+          let response = await request
+            .patch('/person-1')
+            .send(patchPersonBody('Van Gogh'))
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-Match', etag);
+
+          // Not a 412: the caller's validator may well be current, and the
+          // realm is saying it cannot tell — which is its own fault to report,
+          // and which repeating the request fixes.
+          assert.strictEqual(
+            response.status,
+            503,
+            `HTTP 503 status: ${response.text}`,
+          );
+          assert.false(
+            readFileSync(cardFile('person-1.json'), 'utf8').includes(
+              'Van Gogh',
+            ),
+            'and the write did not land',
+          );
+        } finally {
+          await dbAdapter.execute('DELETE FROM jobs WHERE id = $1', {
+            bind: [inserted[0].id],
+          });
+        }
+      });
+
+      test('an unconditional write is unaffected by a lane that will not settle', async function (assert) {
+        // The gate belongs to the precondition, not to writing: a caller that
+        // named no validator asked nothing that an unsettled index could make
+        // undecidable, and must not inherit a refusal from one.
+        let inserted = (await dbAdapter.execute(
+          `INSERT INTO jobs (job_type, concurrency_group, args, status, timeout)
+           VALUES ($1, $2, '{}'::jsonb, 'unfulfilled', 7200)
+           RETURNING id`,
+          {
+            bind: [
+              'incremental-index',
+              indexingConcurrencyGroup(realmURL.href),
+            ],
+          },
+        )) as unknown as { id: string }[];
+
+        try {
+          let response = await request
+            .patch('/person-1')
+            .send(patchPersonBody('Van Gogh'))
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+        } finally {
+          await dbAdapter.execute('DELETE FROM jobs WHERE id = $1', {
+            bind: [inserted[0].id],
+          });
+        }
       });
 
       test('a write carrying no If-Match is unaffected by any of this', async function (assert) {

@@ -542,6 +542,15 @@ const READINESS_REQUEST_BUDGET_MS = 10_000;
 const READ_INDEX_DRAIN_BUDGET_MS = 10_000;
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
+// How long a conditional write waits for the realm's indexing lane before it
+// gives up and refuses. Shorter than the budget a readiness probe takes,
+// because this one waits with the realm's write lock held: every other writer
+// to the realm is queued behind it, so a long wait spends other requests'
+// latency to answer this one. A caller whose write is refused this way retries
+// — by which time the lane has usually moved — where a caller queued behind a
+// ten-second hold has already paid for it.
+const CONDITIONAL_WRITE_INDEX_SETTLE_BUDGET_MS = 3_000;
+
 // Card+JSON ETag is `"<indexed_at>-<realmInfoHash>[-<screenshots>]:card"`
 // — quoted per RFC 9110 §8.8.3 so CDNs / browsers don't re-quote inbound
 // validators and split the cache key. Three inputs feed the base:
@@ -7831,6 +7840,7 @@ export class Realm {
       if (this.#dbAdapter) {
         let settled = await awaitRealmIndexSettled(this.#dbAdapter, this.url, {
           jobTypes: WRITE_RACING_INDEX_JOB_TYPES,
+          timeoutMs: CONDITIONAL_WRITE_INDEX_SETTLE_BUDGET_MS,
         });
         if (!settled) {
           this.#log.warn(
