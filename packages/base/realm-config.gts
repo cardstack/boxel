@@ -699,8 +699,8 @@ class RealmSettingsEmbedded extends Component<typeof RealmSettingsField> {
         <tbody>
           {{#each this.entries key='key' as |entry|}}
             <tr data-test-realm-setting={{entry.key}}>
-              <td class='key'>{{entry.key}}</td>
-              <td class='value'>{{entry.text}}</td>
+              <td class='key' data-test-setting-name>{{entry.key}}</td>
+              <td class='value' data-test-setting-text>{{entry.text}}</td>
             </tr>
           {{/each}}
         </tbody>
