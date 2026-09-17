@@ -1744,7 +1744,9 @@ export class IndexQueryEngine {
     if (
       !Number.isSafeInteger(size) ||
       size! < 1 ||
-      size! > 2000 ||
+      // The input frame's own card bound (LatticeMaterializationInputs
+      // .MAX_CARDS); a realm-wide odometer reads every game of a season.
+      size! > 4096 ||
       !Number.isSafeInteger(number) ||
       number < 0 ||
       !Number.isSafeInteger(number * size!)

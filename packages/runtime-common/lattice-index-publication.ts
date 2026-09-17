@@ -648,10 +648,13 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
           accepted = await publishOwner(false);
         }
         if (!accepted) {
-          if (prepared.rows.length > 1 && !replayPrevious) {
-            // One obsolete member must not discard a whole materialization
-            // wave. Leave its last publication in place (drop this wave's
-            // working row) and let the owner take the next wave.
+          {
+            // An obsolete member must not discard a materialization wave --
+            // nor, when it is the wave's only member, the whole drain: the
+            // job's retries render the same owner into the same race and the
+            // chain dies with every other owner still dirty. Leave its last
+            // publication in place (drop this wave's working row) and let the
+            // owner take a later wave.
             await tx([
               'DELETE FROM boxel_index_working WHERE realm_url =',
               param(realmURL),
@@ -664,7 +667,6 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
             timings.publishMs += Date.now() - phaseAt;
             continue;
           }
-          throw new Error('Lattice rejected an obsolete owner publication');
         }
         const finalOutputGeneration = retainsOutput
           ? outputGeneration

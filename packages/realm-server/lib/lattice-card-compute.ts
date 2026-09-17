@@ -461,7 +461,10 @@ export function latticeNativeRuntimeLimits(): {
 export function latticeBxlOutputLimit(shape: LatticeBxlShape): number {
   if (shape === 'json') return 8 * 1_048_576;
   if (typeof shape === 'string') return 65_536;
-  if ('array' in shape) return latticeBxlOutputLimit(shape.array);
+  // A plural output is as many members as the input admits (a quadrant of
+  // every qualified season): bound it like a JSON field, not like one member.
+  if ('array' in shape)
+    return Math.max(4 * 1_048_576, latticeBxlOutputLimit(shape.array));
   return Math.max(
     65_536,
     ...Object.values(shape.object).map(latticeBxlOutputLimit),
