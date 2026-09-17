@@ -535,6 +535,18 @@ export type OperationErrorCode =
   // The request named a `baseVersion` the target is no longer at, on an
   // operation that requires the base to match.
   | 'version-conflict'
+  // A conditional request could not be decided, as distinct from being
+  // decided against: the realm could not establish that the state it would
+  // compare is current, so it refused rather than answer from state it knows
+  // may be behind. Carries a 5xx rather than a 412 because nothing about the
+  // caller's request is wrong and repeating it unchanged is the remedy.
+  //
+  // Internal taxonomy on the card verbs. Those refusals reach a client as a
+  // status and a sentence — `#cardWriteRefusal` carries the status and the
+  // detail, not this — so a caller there tells this from any other 5xx by
+  // what the detail says. It is on the wire only where an operation result
+  // carries its own error, which is the envelope.
+  | 'precondition-unverifiable'
   // The operation reads the invoking actor and the request authenticated
   // nobody. Distinct from `invalid-params` because nothing the caller sent is
   // wrong: the remedy is credentials, which is what its 401 says.
