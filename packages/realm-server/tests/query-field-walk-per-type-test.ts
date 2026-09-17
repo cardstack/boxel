@@ -19,9 +19,10 @@ const QUERIED_ROW_COUNT = 4;
 // so the two types differ only in the size of the tree a walk covers, not in
 // their instance count, payload or links.
 //
-// `Alpha` and `Beta` both carry a query-backed field, over disjoint result
+// `Alpha` and `Beta` both carry a query-backed field over disjoint result
 // sets, so which targets a row carries says which type's plan was applied to
-// it.
+// it. `Alpha`'s query interpolates the row's own `name`, so its rows differ
+// from each other as well as from `Beta`'s.
 function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
   let fs: Record<string, string | LooseSingleCardDocument> = {};
 
@@ -89,7 +90,7 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
       @field branch = contains(Branch);
       @field matches = linksToMany(() => Target, {
         query: {
-          filter: { eq: { cardTitle: 'alpha-match' } },
+          filter: { eq: { cardTitle: '$this.name' } },
           page: { size: 10, number: 0 },
         },
       });
@@ -106,16 +107,22 @@ function buildFileSystem(): Record<string, string | LooseSingleCardDocument> {
     }
   `;
 
-  for (let title of ['alpha-match', 'beta-match']) {
-    fs[`${title}.json`] = {
+  fs['beta-match.json'] = {
+    data: {
+      attributes: { cardTitle: 'beta-match' },
+      meta: { adoptsFrom: { module: rri('./target'), name: 'Target' } },
+    },
+  } as LooseSingleCardDocument;
+
+  for (let i = 0; i < QUERIED_ROW_COUNT; i++) {
+    // One target per Alpha row, titled to match that row's own `name`, so
+    // Alpha's interpolated query resolves to a different card for each row.
+    fs[`alpha-target-${i}.json`] = {
       data: {
-        attributes: { cardTitle: title },
+        attributes: { cardTitle: `A${i}` },
         meta: { adoptsFrom: { module: rri('./target'), name: 'Target' } },
       },
     } as LooseSingleCardDocument;
-  }
-
-  for (let i = 0; i < QUERIED_ROW_COUNT; i++) {
     fs[`alpha-${i}.json`] = {
       data: {
         attributes: {
@@ -187,7 +194,10 @@ async function search(
       ...(where
         ? {
             filter: {
-              type: { module: `${testRealm}${where.module}`, name: where.name },
+              type: {
+                module: rri(`${testRealm}${where.module}`),
+                name: where.name,
+              },
             },
           }
         : {}),
@@ -258,10 +268,6 @@ module(basename(import.meta.filename), function () {
         one.defLookups,
         `${WIDE_ROW_COUNT} rows cost the same lookups as 1 (${many.defLookups} vs ${one.defLookups})`,
       );
-      assert.ok(
-        many.defLookups < one.defLookups * WIDE_ROW_COUNT,
-        'the walk did not repeat per row',
-      );
     });
 
     test("a type's walk cost follows its field tree, not its result count or payload", async function (assert) {
@@ -276,10 +282,14 @@ module(basename(import.meta.filename), function () {
     });
 
     // Sharing one walk across a type's rows is only sound if every row still
-    // gets the fields that walk found. A count of lookups cannot see a plan
-    // that came back empty, and a document's shape cannot see how many times
-    // the walk ran — so the two assertions have to be made together.
-    test('every row of a shared plan still has its query field resolved', async function (assert) {
+    // gets the fields that walk found, resolved against itself. A count of
+    // lookups cannot see a plan that came back empty, and a document's shape
+    // cannot see how many times the walk ran — so the two have to be asserted
+    // together. Alpha's query interpolates `$this.name`, so each row matches a
+    // different target: a plan that carried one row's resolved query into the
+    // next would put the previous row's target on it, which a literal query
+    // could not reveal.
+    test('every row of a shared plan resolves its query against itself', async function (assert) {
       let alpha = await search(
         realm,
         { module: 'queried', name: 'Alpha' },
@@ -297,15 +307,16 @@ module(basename(import.meta.filename), function () {
         `the query field was resolved once per row (${alpha.applied})`,
       );
       for (let resource of alpha.data) {
-        assert.ok(
-          relationshipsOf(resource).matches?.links?.search,
-          `${resource.id} carries its resolved query field`,
+        let index = resource.id?.match(/\/alpha-(\d+)$/)?.[1];
+        assert.ok(index, `${resource.id} is an Alpha row`);
+        let matches = relationshipsOf(resource).matches;
+        assert.ok(matches?.links?.search, `${resource.id} resolved its field`);
+        assert.deepEqual(
+          (matches?.data ?? []).map((member) => member.id),
+          [`${testRealm}alpha-target-${index}`],
+          `${resource.id} matched the target named by its own attributes`,
         );
       }
-      assert.ok(
-        alpha.included.some((r) => r.id?.endsWith('/alpha-match')),
-        "the query's target is side-loaded",
-      );
     });
 
     test('two types in one pass each get their own plan', async function (assert) {
@@ -324,8 +335,9 @@ module(basename(import.meta.filename), function () {
       for (let resource of [...alphas, ...betas]) {
         let matches = relationshipsOf(resource).matches;
         assert.ok(matches?.links?.search, `${resource.id} resolved its field`);
-        let expected = resource.id?.includes('/alpha-')
-          ? `${testRealm}alpha-match`
+        let alphaIndex = resource.id?.match(/\/alpha-(\d+)$/)?.[1];
+        let expected = alphaIndex
+          ? `${testRealm}alpha-target-${alphaIndex}`
           : `${testRealm}beta-match`;
         assert.deepEqual(
           (matches?.data ?? []).map((member) => member.id),

@@ -962,8 +962,8 @@ export class RealmIndexQueryEngine {
   private async populateQueryFields(
     resource: LooseCardResource | FileMetaResource,
     realmURL: URL,
-    opts?: Options,
-    plans?: QueryFieldPlanCache,
+    opts: Options | undefined,
+    plans: QueryFieldPlanCache,
   ): Promise<void> {
     if (!resource.meta?.adoptsFrom) {
       return;
@@ -983,6 +983,13 @@ export class RealmIndexQueryEngine {
     }
     let plan = await this.queryFieldPlan(codeRef, opts, plans);
     for (let { fieldName, fieldDefinition, queryDefinition } of plan) {
+      // The caller's narrowing is applied per resource rather than inside the
+      // walk, so the plan stays a function of the type alone and the cache
+      // key describes the whole of what it holds. Same place
+      // `populateQueryFieldsFromMeta` applies it.
+      if (opts?.linkFields && !opts.linkFields.includes(fieldName)) {
+        continue;
+      }
       let { results, errors, searchURL, total } =
         await this.executeQueryForField({
           fieldDefinition,
@@ -1023,10 +1030,10 @@ export class RealmIndexQueryEngine {
   private async queryFieldPlan(
     codeRef: import('./code-ref.ts').ResolvedCodeRef,
     opts: Options | undefined,
-    plans: QueryFieldPlanCache | undefined,
+    plans: QueryFieldPlanCache,
   ): Promise<QueryFieldPlanEntry[]> {
     let key = internalKeyFor(codeRef, undefined, this.#realm.virtualNetwork);
-    let cached = plans?.get(key);
+    let cached = plans.get(key);
     if (cached) {
       return await cached;
     }
@@ -1051,7 +1058,7 @@ export class RealmIndexQueryEngine {
       );
       return plan;
     })();
-    plans?.set(key, pending);
+    plans.set(key, pending);
     return await pending;
   }
 
@@ -1083,9 +1090,6 @@ export class RealmIndexQueryEngine {
         (fieldDefinition.type === 'linksTo' ||
           fieldDefinition.type === 'linksToMany')
       ) {
-        if (opts?.linkFields && !opts.linkFields.includes(fullFieldName)) {
-          continue;
-        }
         into.push({
           fieldName: fullFieldName,
           fieldDefinition,
@@ -1133,11 +1137,13 @@ export class RealmIndexQueryEngine {
     codeRef: import('./code-ref.ts').ResolvedCodeRef,
     opts: Options | undefined,
   ): Promise<import('./definitions.ts').Definition | undefined> {
-    // Every lookup here reads the definition cache, so this tally is what a
-    // request's field-tree walking actually cost. It is reported per request
-    // rather than per result because a type with a large composite field tree
-    // spends more of it per row than a type with a small one — which is the
-    // difference the response's size and result count do not show.
+    // Calls into the definition lookup — one per distinct composite field a
+    // type's walk descends into, per pass. What each call costs varies: one
+    // that joins an in-flight populate waits on it and reads nothing, while a
+    // miss can drive a prerender. Reported per request rather than per result
+    // because a type with a large composite field tree makes more of these
+    // calls per row than a type with a small one, which is a difference
+    // neither the response's size nor its result count shows.
     opts?.timings?.incr('defLookups');
     if (opts?.cacheOnlyDefinitions) {
       return await this.#definitionLookup.lookupCachedDefinition(codeRef);
