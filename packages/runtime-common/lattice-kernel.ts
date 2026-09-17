@@ -159,6 +159,41 @@ export function latticeInterleaveStale<
   return out;
 }
 
+// Reserved capacity across tiers. The first `reserve` slots of a wave are
+// filled round-robin across owner types (the card's directory in its URL:
+// every board, season and game type gets a slot every wave), the rest keep
+// the caller's bulk order. Without it a wave under a feed is filled by
+// whichever tier has the most dirty owners (hundreds of player seasons) and
+// the aggregates the user is watching never get a turn; with only it the
+// few aggregates, re-dirtied by every leaf, would crowd out the leaves.
+export function latticeReserveAcrossTypes<T extends { ownerURL: string }>(
+  ready: readonly T[],
+  reserve: number,
+): T[] {
+  if (reserve <= 0 || ready.length <= reserve) return [...ready];
+  const byType = new Map<string, T[]>();
+  for (const item of ready) {
+    const segments = item.ownerURL.split('/');
+    const type = segments.length > 1 ? segments[segments.length - 2] : '';
+    let group = byType.get(type);
+    if (!group) byType.set(type, (group = []));
+    group.push(item);
+  }
+  const chosen = new Set<T>();
+  const groups = [...byType.values()];
+  for (let round = 0; chosen.size < reserve; round++) {
+    let any = false;
+    for (const group of groups) {
+      if (round < group.length && chosen.size < reserve) {
+        chosen.add(group[round]);
+        any = true;
+      }
+    }
+    if (!any) break;
+  }
+  return [...chosen, ...ready.filter((item) => !chosen.has(item))];
+}
+
 export interface LatticePendingWork {
   id: string;
   // Only unsettled inputs, at canonical identities supplied by the adapter.
