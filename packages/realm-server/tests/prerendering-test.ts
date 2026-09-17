@@ -618,6 +618,82 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test("a module's lowered operations report whether they read the actor", async function (assert) {
+      // Lowering runs in the prerender host, and this is where the realm
+      // server sees what it produced: the visit hands back the definitions it
+      // built, so a member computed at lowering time is asserted on directly
+      // rather than through indexing and an endpoint. `readsActor` is what
+      // lets a transport refuse an operation needing an identity before any of
+      // a batch runs, so it has to survive this channel to be worth anything.
+      const moduleURL = `${realmURL}report.gts`;
+      await realmAdapter.write(
+        'report.gts',
+        `
+          import { CardDef, FieldDef, field, contains, containsMany, StringField, Component } from '@cardstack/base/card-api';
+          import { operation, params, actor } from '@cardstack/base/operations';
+
+          export class ReportComment extends FieldDef {
+            @field body = contains(StringField);
+            @field postedBy = contains(StringField);
+          }
+
+          export class ExternalReport extends CardDef {
+            static displayName = "External Report";
+            @field status = contains(StringField);
+            @field comments = containsMany(ReportComment);
+
+            @operation static addComment = {
+              base: 'transform',
+              params: { body: StringField },
+              append: {
+                to: 'comments',
+                value: { body: params('body'), postedBy: actor() },
+              },
+            };
+
+            @operation static escalate = {
+              base: 'transform',
+              set: { status: 'escalated' },
+            };
+
+            static isolated = class extends Component<typeof this> {
+              <template>{{@model.status}}</template>
+            }
+          }
+        `,
+      );
+      realm.__testOnlyClearCaches();
+
+      let result = await prerenderer.prerenderModule({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: moduleURL,
+        auth: auth(),
+        renderOptions: { clearCache: true },
+      });
+
+      let key = `${trimExecutableExtension(rri(moduleURL))}/ExternalReport`;
+      let entry = result.response.definitions[key];
+      if (entry?.type === 'definition') {
+        let operations = entry.definition.operations ?? {};
+        let issues = operations.addComment?.issues ?? [];
+        assert.deepEqual(issues, [], 'the declaration lowers cleanly');
+        assert.true(
+          operations.addComment?.readsActor,
+          'an operation whose program names actor() says so',
+        );
+        assert.strictEqual(
+          operations.escalate?.readsActor,
+          undefined,
+          'and one that never reads it carries nothing, which is the absence ' +
+            'a transport reads as "no identity needed"',
+        );
+      } else {
+        assert.ok(false, "the visit should carry the type's definition");
+      }
+    });
+
     test('module prerender reuses pooled page after updates', async function (assert) {
       const moduleURL = `${realmURL}person.gts`;
 

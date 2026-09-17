@@ -19,6 +19,7 @@ import type { SearchOpts } from './search-utils.ts';
 import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
 import {
   applyServerSearchPageBound,
+  assembledLinkResourceBudget,
   isItemLegSearch,
   runWithSearchTimeBudget,
   SearchBoundError,
@@ -193,18 +194,42 @@ import {
   type LooseCardResource,
   type FileMetaResource,
 } from './index.ts';
-import { runOperation } from './card-operations/dispatch.ts';
+import {
+  canonicalizeTarget,
+  newOperationScope,
+  resolveOperation,
+  runOperation,
+} from './card-operations/dispatch.ts';
 import type {
   OperationCore,
+  OperationScope,
   OperationStoredFile,
   OperationStoredFileMeta,
 } from './card-operations/dispatch.ts';
 import {
+  answered,
+  assertTravelsInEnvelope,
+  atEntry,
+  batchEntryFor,
+  carriesOperationsExt,
+  errorsDocument,
+  isWrite,
+  needsActor,
+  paramsFor,
+  parseOperationsEnvelope,
+  readResult,
+  targetFor,
+  writeResult,
+  type EnvelopeEntry,
+  type EnvelopeResult,
+  type ResolvedEnvelopeEntry,
+} from './card-operations/envelope.ts';
+import {
+  OperationFailure,
   isDocumentResult,
   isHeadResult,
   isOperationFailure,
   isSourceResult,
-  type OperationFailure,
   type OperationRequest,
   type OperationResult,
   type OperationSourceResult,
@@ -670,6 +695,19 @@ const SOURCE_ETAG_VARIANT = 'source';
 // relationship ids) in canonical prefix (RRI) form for mapped realms.
 const CARD_JSON_ETAG_VARIANT = 'card-rri';
 
+// The variant the card+json validator carries, with the assembled-resource
+// budget folded in. The budget decides which cards come back with a clipped
+// closure and what a clipped one contains, and it is settable per server, so
+// changing it changes bodies while `indexed_at`, the realm-info hash and the
+// screenshots fingerprint all stand still. That is the case the constant above
+// exists for, except that the change arrives by configuration rather than by
+// revision — so the value belongs in the validator rather than in the memory of
+// whoever edits it. One number for the process, so it fragments no cache: every
+// response at a given build and setting shares it.
+function cardJsonEtagVariant(): string {
+  return `${CARD_JSON_ETAG_VARIANT}-lb${assembledLinkResourceBudget()}`;
+}
+
 // Postgres NOTIFY channel for cross-instance invalidation of #sourceCache /
 // #transpiledModuleCache entries on file writes. Two payload shapes:
 //
@@ -947,14 +985,14 @@ function buildEtag(
 // fields expanded, because nothing reads either off a write response.
 //
 // These three take different validators because a client holding one must not
-// be 304'd to another's body. They are not the only way a body can vary at
-// one `indexed_at`: a read from inside a prerender leaves query-backed fields
-// unexpanded while still side-loading static links, and that body shares
-// `full`'s validator deliberately — it is never served to a client that
-// caches, and the response cache separates it by folding
-// `skipQueryBackedExpansion` into its own key rather than into the ETag.
-// Adding a member here is the wrong move for a variation the validator does
-// not have to carry.
+// be 304'd to another's body. The `full` shape splits once more below, on
+// whether the assembled-resource budget bounded the closure it carries, since
+// a bounded body and an exempt one differ at one `indexed_at`. Query-backed
+// expansion gets no member here: a read from inside a prerender leaves those
+// fields unexpanded, but that body is never served to a client that caches,
+// and the response cache separates it by folding `skipQueryBackedExpansion`
+// into its own key rather than into the ETag. Adding a member here is the
+// wrong move for a variation the validator does not have to carry.
 type CardJsonShape = 'full' | 'links-only' | 'write-echo';
 
 function buildCardJsonEtag(
@@ -962,6 +1000,7 @@ function buildCardJsonEtag(
   realmInfoHash: string | undefined,
   screenshotsFingerprint?: string,
   shape: CardJsonShape = 'full',
+  unboundedAssembly = false,
 ): string | undefined {
   if (indexedAt == null) {
     return undefined;
@@ -976,10 +1015,25 @@ function buildCardJsonEtag(
   // rather than per revision. Without it, a client that cached a narrower
   // shape would be 304'd to it when it later asks for the full one, and the
   // shapes would be reachable under one key in the response cache.
-  let variant =
-    shape === 'full'
-      ? CARD_JSON_ETAG_VARIANT
-      : `${CARD_JSON_ETAG_VARIANT}-${shape}`;
+  //
+  // A full read is the only shape that assembles a link closure, so it is the
+  // only one the assembled-resource budget can move — and it splits again on
+  // whether that budget applied. An assembly exempt from the budget carries its
+  // whole closure at any ceiling, so it is named as such rather than by a
+  // number that does not bind it: naming the exemption leaves an exempt
+  // response's validator untouched by a retune, which cannot change its body,
+  // and keeps the two shapes from sharing a validator — which would let a
+  // conditional request be answered with the other shape's body. That is the
+  // hazard the exemption exists to prevent, since an exempt read is a render's,
+  // and a clipped closure reused by one is baked into cached HTML.
+  let variant: string;
+  if (shape !== 'full') {
+    variant = `${CARD_JSON_ETAG_VARIANT}-${shape}`;
+  } else if (unboundedAssembly) {
+    variant = `${CARD_JSON_ETAG_VARIANT}-lb-off`;
+  } else {
+    variant = cardJsonEtagVariant();
+  }
   return `"${base}:${variant}"`;
 }
 
@@ -1028,6 +1082,7 @@ function buildEntryHtmlEtag(
   doc: EntrySingleDocument,
   realmInfoHash: string | undefined,
   resolveLinksOnly = false,
+  unboundedAssembly = false,
 ): string {
   let indexGeneration = doc.data.meta?.generation ?? 0;
   let htmlIds = doc.data.relationships.html?.data ?? [];
@@ -1046,6 +1101,20 @@ function buildEntryHtmlEtag(
   }
   if (doc.data.relationships.item && resolveLinksOnly) {
     base = `${base}:links-only`;
+  }
+  // An item carries a link closure, and the assembled-resource budget decides
+  // how much of one — so a response bearing an item is a different body at a
+  // different budget while both generations stand still. This validator has no
+  // constant component to hang that on the way the card+json one does, so the
+  // budget is folded in directly. A pure-html response assembles no closure, and
+  // neither does a links-only item, so neither carries the component. An item
+  // assembled exempt from the budget carries its whole closure at any ceiling,
+  // so it is named as such rather than by a number that does not bind it —
+  // which is also what keeps it from sharing a validator with the bounded shape.
+  if (doc.data.relationships.item && !resolveLinksOnly) {
+    base = unboundedAssembly
+      ? `${base}:lb-off`
+      : `${base}:lb${assembledLinkResourceBudget()}`;
   }
   return `"${base}"`;
 }
@@ -1974,6 +2043,38 @@ export class Realm {
         '/_atomic',
         SupportedMimeType.JSONAPI,
         this.handleAtomicOperations.bind(this),
+      )
+      // The operations envelope, under the media type that carries its
+      // extension and under the plain JSON:API one it extends. Both reach the
+      // same handler, which reads the `ext` parameter itself: matching only the
+      // extended spelling would leave a body sent as plain
+      // `application/vnd.api+json` — the near miss a client makes — falling
+      // through to a path nothing serves, and answering "no such route" to a
+      // request that named this one.
+      //
+      // The method chooses the permission the realm checks, so the two verbs
+      // are what separates a batch that may write from one that may not:
+      // `POST` needs realm write, `QUERY` needs realm read, and a `QUERY`
+      // carrying a write is refused by the handler.
+      .post(
+        '/_operations',
+        SupportedMimeType.BoxelOperations,
+        this.handleOperations.bind(this),
+      )
+      .query(
+        '/_operations',
+        SupportedMimeType.BoxelOperations,
+        this.handleOperations.bind(this),
+      )
+      .post(
+        '/_operations',
+        SupportedMimeType.JSONAPI,
+        this.handleOperations.bind(this),
+      )
+      .query(
+        '/_operations',
+        SupportedMimeType.JSONAPI,
+        this.handleOperations.bind(this),
       )
       .post(
         '/_cancel-indexing-job',
@@ -3023,24 +3124,31 @@ export class Realm {
   }
 
   // Public mutation entry points (`write`, `writeMany`, `delete`, `deleteAll`)
-  // serialize concurrent same-URL writers across replicas via the per-realm
-  // advisory lock. The lock spans the FS write + index update so two
+  // serialize concurrent writers of the same file across replicas via the
+  // per-file advisory locks. The locks span the FS write + index update so two
   // replicas can't both commit on top of the same pre-state.
   //
+  // They are the same locks a batch takes, keyed the same way, which is what
+  // makes the two paths exclude each other: a batch merging over a card's
+  // stored bytes and a `writeMany` replacing them wholesale are writers of one
+  // file, and letting them interleave would lose whichever landed first.
+  //
   // A caller that needs its READ inside the same critical section as the write
-  // — the `/_atomic` precheck — takes the lock at its own boundary and invokes
-  // `_batchWriteUnlocked` directly, because re-entering through the public
-  // methods would deadlock: a second `pg_advisory_xact_lock` on the same key
-  // blocks on its own pinned pool connection. A batch does the same thing one
-  // level up, holding the lock across every read it stages from and the commit
-  // it hands them to.
+  // — the `/_atomic` precheck — takes the locks at its own boundary and
+  // invokes `_batchWriteUnlocked` directly, because re-entering through the
+  // public methods would deadlock: a second `pg_advisory_xact_lock` on a key
+  // already held blocks on its own pinned pool connection. A batch does the
+  // same thing one level up, holding the locks across every read it stages
+  // from and the commit it hands them to.
   async write(
     path: LocalPath,
     contents: string | Uint8Array,
     options?: WriteOptions,
   ): Promise<FileWriteResult> {
-    let results = await this.#dbAdapter.withWriteLock(this.url, () =>
-      this._batchWriteUnlocked(new Map([[path, contents]]), options),
+    let results = await this.#dbAdapter.withFileWriteLocks(
+      this.url,
+      [path],
+      () => this._batchWriteUnlocked(new Map([[path, contents]]), options),
     );
     return results[0];
   }
@@ -3049,7 +3157,7 @@ export class Realm {
     files: Map<LocalPath, string | Uint8Array>,
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
-    return this.#dbAdapter.withWriteLock(this.url, () =>
+    return this.#dbAdapter.withFileWriteLocks(this.url, [...files.keys()], () =>
       this._batchWriteUnlocked(files, options),
     );
   }
@@ -3091,10 +3199,11 @@ export class Realm {
   // caller's own ordering hold when it both replaces a file's content and adds
   // to the end of it: the append lands on the content the write left.
   //
-  // Assumes the realm's write lock is held — the caller reads the pre-state it
-  // stages from inside the same critical section. `write` and `writeMany` are
-  // the locked public entry points that reach this; `delete` and `deleteAll`
-  // have their own unlocked primitives and do not.
+  // Assumes the write locks on the files it touches are held — the caller
+  // reads the pre-state it stages from inside the same critical section.
+  // `write` and `writeMany` are the locked public entry points that reach
+  // this; `delete` and `deleteAll` have their own unlocked primitives and do
+  // not.
   //
   // Files are changed one at a time and there is no rollback: a file system
   // failure partway through leaves the files handled before it changed, and
@@ -3824,6 +3933,33 @@ export class Realm {
       : href;
   }
 
+  // The files an atomic request will write, for the locks it takes before its
+  // precheck reads any of them. Path math over what each operation names, by
+  // the same resolution the write loop applies, so the set cannot disagree
+  // with the paths actually written.
+  //
+  // An href that does not resolve is left out rather than refused here. The
+  // precheck inside the lock is what reports it, and a file this request
+  // cannot name is one no lock of its would exclude anyone from.
+  #atomicWritePaths(operations: AtomicOperation[]): LocalPath[] {
+    let paths = new Set<LocalPath>();
+    for (let operation of filterAtomicOperations(operations)) {
+      if (!operation.href) {
+        continue;
+      }
+      try {
+        paths.add(
+          this.paths.local(
+            new URL(this.#resolveAtomicHref(operation.href), this.paths.url),
+          ),
+        );
+      } catch {
+        continue;
+      }
+    }
+    return [...paths];
+  }
+
   private async checkBeforeAtomicWrite(
     operations: AtomicOperation[],
   ): Promise<AtomicPayloadValidationError[]> {
@@ -3968,191 +4104,459 @@ export class Realm {
       });
     }
     let atomicOperations = json['atomic:operations'] as AtomicOperation[];
+    let atomicWritePaths = this.#atomicWritePaths(atomicOperations);
 
-    // Take the per-realm advisory lock from the precheck through the
-    // write. Without this, two replicas could both pass
+    // Take the advisory lock on every file the operations name, from the
+    // precheck through the write. Without this, two replicas could both pass
     // `checkBeforeAtomicWrite` for the same `add` operation (file does
     // not exist), then both proceed to write — last writer wins on disk
     // but indexer state is incoherent. Inside the lock we invoke
-    // `_batchWriteUnlocked` directly to avoid re-acquiring the same
+    // `_batchWriteUnlocked` directly to avoid re-acquiring a held
     // advisory lock through `writeMany` (which would deadlock on a
     // different pinned pool connection).
-    return await this.#dbAdapter.withWriteLock(this.url, async () => {
-      let atomicCheckErrors =
-        await this.checkBeforeAtomicWrite(atomicOperations);
-      if (atomicCheckErrors.length > 0) {
+    //
+    // The set is resolved here, before the lock, by the same path math the
+    // loop below applies to each operation. An href that does not resolve is
+    // left out rather than refused: the precheck inside the lock is what
+    // reports it, and locking nothing for a file this request cannot name
+    // excludes nobody.
+    return await this.#dbAdapter.withFileWriteLocks(
+      this.url,
+      atomicWritePaths,
+      async () => {
+        let atomicCheckErrors =
+          await this.checkBeforeAtomicWrite(atomicOperations);
+        if (atomicCheckErrors.length > 0) {
+          return createResponse({
+            body: JSON.stringify({ errors: atomicCheckErrors }),
+            init: {
+              status: this.lowestStatusCode(atomicCheckErrors),
+              headers: { 'content-type': SupportedMimeType.JSONAPI },
+            },
+            requestContext,
+          });
+        }
+
+        let operations = filterAtomicOperations(atomicOperations);
+        let files = new Map<LocalPath, string>();
+        let writeResults: FileWriteResult[] = [];
+
+        for (let operation of operations) {
+          let resource = operation.data;
+          let href = operation.href;
+          let localPath = this.paths.local(
+            new URL(this.#resolveAtomicHref(href), this.paths.url),
+          );
+          let exists = await this.#adapter.exists(localPath);
+          if (operation.op === 'add' && exists) {
+            return createResponse({
+              body: JSON.stringify({
+                errors: [
+                  {
+                    title: 'Resource already exists',
+                    detail: `Resource ${href} already exists`,
+                    status: 409,
+                  },
+                ],
+              }),
+              init: {
+                status: 409,
+                headers: { 'content-type': SupportedMimeType.JSONAPI },
+              },
+              requestContext,
+            });
+          }
+          if (operation.op === 'update' && !exists) {
+            return createResponse({
+              body: JSON.stringify({
+                errors: [
+                  {
+                    title: 'Resource does not exist',
+                    detail: `Resource ${href} does not exist`,
+                    status: 404,
+                  },
+                ],
+              }),
+              init: {
+                status: 404,
+                headers: { 'content-type': SupportedMimeType.JSONAPI },
+              },
+              requestContext,
+            });
+          }
+          if (isModuleResource(resource)) {
+            let content = resource.attributes?.content ?? '';
+            this.assertWriteSize(content, 'file', localPath);
+            files.set(localPath, content);
+          } else if (isCardResource(resource)) {
+            let doc = {
+              data: resource,
+            };
+            let jsonString = JSON.stringify(doc, null, 2);
+            this.assertWriteSize(jsonString, 'card', localPath);
+            files.set(localPath, jsonString);
+          } else {
+            return createResponse({
+              body: JSON.stringify({
+                errors: [
+                  {
+                    status: 400,
+                    title: 'Invalid resource',
+                    detail: `Operation data is not a valid card resource or module resource`,
+                  },
+                ],
+              }),
+              init: {
+                status: 400,
+                headers: { 'content-type': SupportedMimeType.JSONAPI },
+              },
+              requestContext,
+            });
+          }
+        }
+
+        if (files.size > 0) {
+          try {
+            // /_atomic returns once writes are durable, not once they are
+            // indexed. Callers that need indexed state must drain via
+            // realm.incrementalIndexing() (server-side), wait on the
+            // matrix 'index' incremental event (client-side), or opt-in
+            // to a synchronous response by passing `?waitForIndex=true`
+            // on the POST URL. The query-param path is intended for
+            // one-shot CLI / agent flows where Matrix subscription is
+            // impractical and a search poll-loop would race indexing
+            // latency. Mixed module+instance batches are still
+            // serialized correctly: the in-loop intermediate flush in
+            // _batchWriteUnlocked at the `lastWriteType === 'module' &&
+            // currentWriteType === 'instance'` gate is always awaited,
+            // so an instance's fileSerialization sees its module already
+            // indexed.
+            let waitForIndex =
+              new URL(request.url).searchParams.get('waitForIndex') === 'true';
+            writeResults = await this._batchWriteUnlocked(files, {
+              clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+              serializeFile: true,
+              waitForIndex,
+              initiatingUser: requestContext.authenticatedUser ?? null,
+            });
+          } catch (e: any) {
+            if (e instanceof CardError) {
+              return responseWithError(e, requestContext);
+            }
+            // Log the underlying exception before returning 500 —
+            // otherwise callers only see "Write Error" and the original
+            // stack trace is lost, making atomic-batch failures
+            // effectively undebuggable. Include e.cause explicitly: errors
+            // like FilterRefersToNonexistentTypeError carry the actionable
+            // detail (which module/definition was missing, or that a
+            // concurrent invalidation discarded the lookup) in their cause,
+            // not their message, so without this the real reason is swallowed.
+            let cause =
+              e?.cause instanceof Error
+                ? `${e.cause.message}\n${e.cause.stack ?? '(no stack)'}`
+                : e?.cause != null
+                  ? String(e.cause)
+                  : undefined;
+            this.#log.error(
+              `Atomic write failed: ${e.message}${
+                cause ? `\ncause: ${cause}` : ''
+              }\n${e.stack ?? '(no stack)'}`,
+            );
+            return createResponse({
+              body: JSON.stringify({
+                errors: [{ title: 'Write Error', detail: e.message }],
+              }),
+              init: {
+                status: 500,
+                headers: { 'content-type': SupportedMimeType.JSONAPI },
+              },
+              requestContext,
+            });
+          }
+        }
+
+        let results: AtomicOperationResult[] = writeResults.map(
+          ({ path, created }) => ({
+            data: {
+              // Serve the created instance id in canonical RRI (prefix) form, to
+              // match getCard / create / patch (no-op for unmapped realms).
+              id: this.#virtualNetwork.unresolveURL(
+                this.paths.fileURL(path).href,
+              ),
+            },
+            meta: {
+              created,
+            },
+          }),
+        );
         return createResponse({
-          body: JSON.stringify({ errors: atomicCheckErrors }),
+          body: JSON.stringify({ 'atomic:results': results }, null, 2),
           init: {
-            status: this.lowestStatusCode(atomicCheckErrors),
-            headers: { 'content-type': SupportedMimeType.JSONAPI },
+            status: 201,
+            headers: {
+              'content-type': SupportedMimeType.JSONAPI,
+            },
           },
           requestContext,
         });
+      },
+    );
+  }
+
+  // The operations envelope: a batch of named operations, committed all or
+  // nothing.
+  //
+  // This is the second front door onto the operation core and it adds no
+  // behavior of its own. It reads the batch off the wire, asks the core which
+  // behavior each entry's name resolves to for its target, runs the reads and
+  // hands the writes to the coordinator — the same `runOperation` and
+  // `commitBatch` the card verbs dispatch into, so the two transports cannot
+  // drift into meaning different things by the same operation.
+  //
+  // **Access posture.** Operations are identity-aware but not access-enforced.
+  // The realm's own read/write permission is the whole of what is checked: any
+  // caller who may write the realm may invoke any operation that writes it,
+  // and any caller who may read it may invoke any read. An operation's program
+  // can read `actor()` and an `assert` can refuse on what it finds, but the
+  // realm verifies no claim beyond the one its permission check already made,
+  // and refuses nothing on the strength of who is asking. Treat every
+  // operation's result as reachable by any permitted caller of this realm.
+  private async handleOperations(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    try {
+      return await this.#runOperationsBatch(request, requestContext);
+    } catch (err: unknown) {
+      if (!isOperationFailure(err)) {
+        throw err;
       }
-
-      let operations = filterAtomicOperations(atomicOperations);
-      let files = new Map<LocalPath, string>();
-      let writeResults: FileWriteResult[] = [];
-
-      for (let operation of operations) {
-        let resource = operation.data;
-        let href = operation.href;
-        let localPath = this.paths.local(
-          new URL(this.#resolveAtomicHref(href), this.paths.url),
-        );
-        let exists = await this.#adapter.exists(localPath);
-        if (operation.op === 'add' && exists) {
-          return createResponse({
-            body: JSON.stringify({
-              errors: [
-                {
-                  title: 'Resource already exists',
-                  detail: `Resource ${href} already exists`,
-                  status: 409,
-                },
-              ],
-            }),
-            init: {
-              status: 409,
-              headers: { 'content-type': SupportedMimeType.JSONAPI },
-            },
-            requestContext,
-          });
-        }
-        if (operation.op === 'update' && !exists) {
-          return createResponse({
-            body: JSON.stringify({
-              errors: [
-                {
-                  title: 'Resource does not exist',
-                  detail: `Resource ${href} does not exist`,
-                  status: 404,
-                },
-              ],
-            }),
-            init: {
-              status: 404,
-              headers: { 'content-type': SupportedMimeType.JSONAPI },
-            },
-            requestContext,
-          });
-        }
-        if (isModuleResource(resource)) {
-          let content = resource.attributes?.content ?? '';
-          this.assertWriteSize(content, 'file', localPath);
-          files.set(localPath, content);
-        } else if (isCardResource(resource)) {
-          let doc = {
-            data: resource,
-          };
-          let jsonString = JSON.stringify(doc, null, 2);
-          this.assertWriteSize(jsonString, 'card', localPath);
-          files.set(localPath, jsonString);
-        } else {
-          return createResponse({
-            body: JSON.stringify({
-              errors: [
-                {
-                  status: 400,
-                  title: 'Invalid resource',
-                  detail: `Operation data is not a valid card resource or module resource`,
-                },
-              ],
-            }),
-            init: {
-              status: 400,
-              headers: { 'content-type': SupportedMimeType.JSONAPI },
-            },
-            requestContext,
-          });
-        }
-      }
-
-      if (files.size > 0) {
-        try {
-          // /_atomic returns once writes are durable, not once they are
-          // indexed. Callers that need indexed state must drain via
-          // realm.incrementalIndexing() (server-side), wait on the
-          // matrix 'index' incremental event (client-side), or opt-in
-          // to a synchronous response by passing `?waitForIndex=true`
-          // on the POST URL. The query-param path is intended for
-          // one-shot CLI / agent flows where Matrix subscription is
-          // impractical and a search poll-loop would race indexing
-          // latency. Mixed module+instance batches are still
-          // serialized correctly: the in-loop intermediate flush in
-          // _batchWriteUnlocked at the `lastWriteType === 'module' &&
-          // currentWriteType === 'instance'` gate is always awaited,
-          // so an instance's fileSerialization sees its module already
-          // indexed.
-          let waitForIndex =
-            new URL(request.url).searchParams.get('waitForIndex') === 'true';
-          writeResults = await this._batchWriteUnlocked(files, {
-            clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-            serializeFile: true,
-            waitForIndex,
-            initiatingUser: requestContext.authenticatedUser ?? null,
-          });
-        } catch (e: any) {
-          if (e instanceof CardError) {
-            return responseWithError(e, requestContext);
-          }
-          // Log the underlying exception before returning 500 —
-          // otherwise callers only see "Write Error" and the original
-          // stack trace is lost, making atomic-batch failures
-          // effectively undebuggable. Include e.cause explicitly: errors
-          // like FilterRefersToNonexistentTypeError carry the actionable
-          // detail (which module/definition was missing, or that a
-          // concurrent invalidation discarded the lookup) in their cause,
-          // not their message, so without this the real reason is swallowed.
-          let cause =
-            e?.cause instanceof Error
-              ? `${e.cause.message}\n${e.cause.stack ?? '(no stack)'}`
-              : e?.cause != null
-                ? String(e.cause)
-                : undefined;
-          this.#log.error(
-            `Atomic write failed: ${e.message}${
-              cause ? `\ncause: ${cause}` : ''
-            }\n${e.stack ?? '(no stack)'}`,
-          );
-          return createResponse({
-            body: JSON.stringify({
-              errors: [{ title: 'Write Error', detail: e.message }],
-            }),
-            init: {
-              status: 500,
-              headers: { 'content-type': SupportedMimeType.JSONAPI },
-            },
-            requestContext,
-          });
-        }
-      }
-
-      let results: AtomicOperationResult[] = writeResults.map(
-        ({ path, created }) => ({
-          data: {
-            // Serve the created instance id in canonical RRI (prefix) form, to
-            // match getCard / create / patch (no-op for unmapped realms).
-            id: this.#virtualNetwork.unresolveURL(
-              this.paths.fileURL(path).href,
-            ),
-          },
-          meta: {
-            created,
-          },
-        }),
-      );
-      return createResponse({
-        body: JSON.stringify({ 'atomic:results': results }, null, 2),
-        init: {
-          status: 201,
-          headers: {
-            'content-type': SupportedMimeType.JSONAPI,
-          },
-        },
+      // A batch is all-or-nothing, so the first refusal is the whole answer:
+      // nothing was written, no index job was enqueued and no event was
+      // broadcast, whichever stage produced it.
+      return this.#operationsResponse(
+        errorsDocument(err.error),
+        err.error.status,
         requestContext,
+      );
+    }
+  }
+
+  async #runOperationsBatch(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    if (!carriesOperationsExt(request.headers.get('Content-Type'))) {
+      throw new OperationFailure({
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid content type',
+        detail:
+          `a batch of operations is sent as ` +
+          `"${SupportedMimeType.BoxelOperations}"; this request's ` +
+          `content type does not name that extension`,
       });
+    }
+    let body: unknown;
+    try {
+      body = JSON.parse(await request.text());
+    } catch {
+      throw new OperationFailure({
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid operations envelope',
+        detail: `the request body is not valid JSON`,
+      });
+    }
+    let entries = parseOperationsEnvelope(body, this.url, {
+      resolveIdentifier: (href) => this.#resolveAtomicHref(href),
+    });
+    let caller = this.#callerOf(request, requestContext);
+    // One row peek per target for the whole resolution pass: entries often
+    // name the same card, and which behavior a name resolves to is read off
+    // the target's stored type.
+    let scope = newOperationScope(this.operationCore);
+    // Settled rather than raced, so the entry a refusal names is the earliest
+    // one the caller got wrong rather than whichever index read came back
+    // first. A batch with two bad entries would otherwise report a different
+    // one run to run.
+    let outcomes = await Promise.allSettled(
+      entries.map((entry) => this.#resolveEnvelopeEntry(entry, scope)),
+    );
+    let refused = outcomes.find((outcome) => outcome.status === 'rejected');
+    if (refused) {
+      throw refused.reason;
+    }
+    let resolved = outcomes.map(
+      (outcome) =>
+        (outcome as PromiseFulfilledResult<ResolvedEnvelopeEntry>).value,
+    );
+
+    // `QUERY` is the read-only spelling, and the realm derives the permission
+    // it checks from the method — so a write reaching here arrived on a
+    // request that was only authorized to read. Refused before anything is
+    // staged rather than let through to a permission check that already
+    // passed for the wrong question.
+    if (request.method === 'QUERY') {
+      let write = resolved.find(({ definition }) => isWrite(definition.base));
+      if (write) {
+        throw new OperationFailure({
+          ...(write.entry.href ? { id: write.entry.href } : {}),
+          status: 400,
+          code: 'wrong-entry-point',
+          title: 'Write in a read-only batch',
+          detail:
+            `operation "${write.entry.name}" writes, and a QUERY batch is ` +
+            `authorized to read; send a batch that writes as a POST`,
+          meta: { entry: write.entry.index },
+        });
+      }
+    }
+
+    // An anonymous caller on a realm anyone may read or write has no identity
+    // for an operation to read, and whether an operation reads one is settled
+    // by its stored definition — so the batch is refused here, before any of
+    // it runs, rather than part-way through by whichever entry reached the
+    // actor first. No identity is invented to stand in: a fabricated id would
+    // be written into cards and compared in filters as though someone had
+    // acted.
+    if (!caller.actor) {
+      let needing = resolved.find(({ definition }) => needsActor(definition));
+      if (needing) {
+        throw new OperationFailure({
+          ...(needing.entry.href ? { id: needing.entry.href } : {}),
+          status: 401,
+          code: 'actor-required',
+          title: 'Operation needs an identity',
+          detail:
+            `operation "${needing.entry.name}" reads the invoking actor, and ` +
+            `this request authenticated nobody`,
+          meta: { entry: needing.entry.index },
+        });
+      }
+    }
+
+    // Reads run first and against the state the batch started from, which is
+    // what "an entry sees pre-batch state" means for a mixed batch: a read
+    // entry never observes what a write entry in the same batch stages, and
+    // reading before the coordinator takes the write lock is what keeps a read
+    // from waiting on one.
+    let results: (EnvelopeResult | undefined)[] = new Array(entries.length);
+    for (let { entry, target, definition } of resolved) {
+      if (isWrite(definition.base)) {
+        continue;
+      }
+      let result: OperationResult;
+      try {
+        result = await runOperation(this.operationCore, {
+          target,
+          name: entry.name,
+          ...(entry.data ? { params: paramsFor(entry) } : {}),
+          ...caller,
+        });
+      } catch (err: unknown) {
+        throw atEntry(err, entry.index);
+      }
+      results[entry.index] = readResult(entry, result);
+    }
+
+    let writes = resolved.filter(({ definition }) => isWrite(definition.base));
+    if (writes.length > 0) {
+      let staged = writes.map(({ entry, definition }) => {
+        try {
+          return batchEntryFor(entry, definition);
+        } catch (err: unknown) {
+          throw atEntry(err, entry.index);
+        }
+      });
+      // Every staged entry carries the position the caller sent it under, so
+      // a refusal from the coordinator names that one rather than the position
+      // it took among the entries that write — in the key, in the key beside
+      // it naming a conflicting entry, and in the prose.
+      let committed = await commitBatch(this.batchCore, staged, {
+        clientRequestId: caller.clientRequestId || null,
+        actor: caller.actor || undefined,
+      });
+      for (let [index, { entry }] of writes.entries()) {
+        results[entry.index] = writeResult(committed[index], (url) =>
+          this.#virtualNetwork.unresolveURL(url),
+        );
+      }
+    }
+
+    return this.#operationsResponse(
+      {
+        // Built by index rather than by mapping the array: an unassigned
+        // position is a hole, `map` skips one, and the hole then serializes
+        // as `null` — which is what a delete reports.
+        'atomic:results': Array.from({ length: entries.length }, (_, index) =>
+          answered(results[index], index),
+        ),
+      },
+      200,
+      requestContext,
+    );
+  }
+
+  // Which behavior one entry's name means for its target, labelled with the
+  // entry's position.
+  //
+  // The name is resolved against the target's own definition, never read off
+  // the wire — the envelope carries the operation's name, and what a `delete`
+  // does is whatever the card's type says it does.
+  async #resolveEnvelopeEntry(
+    entry: EnvelopeEntry,
+    scope: OperationScope,
+  ): Promise<ResolvedEnvelopeEntry> {
+    try {
+      // Canonicalized once, here, and everything downstream sees the result:
+      // the definition is resolved from it, the read runs against it, and the
+      // staged entry writes it. A trailing slash, a query string and a
+      // fragment all name the card they hang off, and the index is read by
+      // exact URL — so resolving the raw spelling would report a declared
+      // operation as unknown on a card whose type declares it, and would leave
+      // the entry's result carrying an id no other surface spells that way.
+      let target = canonicalizeTarget(
+        this.operationCore,
+        targetFor(entry, this.url),
+      );
+      let canonical =
+        target.kind === 'instance' && target.url !== entry.href
+          ? { ...entry, href: target.url }
+          : entry;
+      let definition = await resolveOperation(
+        this.operationCore,
+        target,
+        canonical.name,
+        scope,
+      );
+      assertTravelsInEnvelope(canonical, definition);
+      return { entry: canonical, target, definition };
+    } catch (err: unknown) {
+      throw atEntry(err, entry.index);
+    }
+  }
+
+  // A batch's answer is never HTTP-cached. It is not a resource with a
+  // validator: the same request run twice writes twice, and a read entry's
+  // document is served without the index-time validator the card+json `GET`
+  // builds — so there is nothing here a conditional request could be answered
+  // against, and no ETag is emitted for one to be compared with.
+  #operationsResponse(
+    body: unknown,
+    status: number,
+    requestContext: RequestContext,
+  ): Response {
+    return createResponse({
+      body: JSON.stringify(body, null, 2),
+      init: {
+        status,
+        headers: {
+          'content-type': SupportedMimeType.BoxelOperations,
+          'cache-control': 'no-store',
+        },
+      },
+      requestContext,
     });
   }
 
@@ -4261,7 +4665,7 @@ export class Realm {
     path: LocalPath,
     options?: { waitForIndex?: boolean; initiatingUser?: string | null },
   ): Promise<void> {
-    await this.#dbAdapter.withWriteLock(this.url, () =>
+    await this.#dbAdapter.withFileWriteLocks(this.url, [path], () =>
       this._deleteUnlocked(path, options),
     );
   }
@@ -4329,7 +4733,7 @@ export class Realm {
   }
 
   async deleteAll(paths: LocalPath[]): Promise<void> {
-    await this.#dbAdapter.withWriteLock(this.url, () =>
+    await this.#dbAdapter.withFileWriteLocks(this.url, paths, () =>
       this._deleteAllUnlocked(paths),
     );
   }
@@ -4442,7 +4846,8 @@ export class Realm {
     if (!this.#batchCore) {
       this.#batchCore = {
         realmURL: this.url,
-        withWriteLock: (fn) => this.#dbAdapter.withWriteLock(this.url, fn),
+        withWriteLocks: (localPaths, fn) =>
+          this.#dbAdapter.withFileWriteLocks(this.url, localPaths, fn),
         fileExists: (localPath) => this.#adapter.exists(localPath),
         readSourceFile: async (localPath) => {
           let file = await this.readFileAsText(localPath);
@@ -8276,11 +8681,12 @@ export class Realm {
     // than merging into what is there, the realm-managed `meta` keys a client
     // echo must never persist, a type that cannot change, the relationship
     // merge, and leaving an unchanged card's file exactly as it is. It runs
-    // under the realm's write lock, which spans the read of the stored file
-    // and the write of the merged one, so two patches of one card cannot both
-    // compute a merge over the same pre-state and have the second silently
-    // lose the first. The merge base is that stored file rather than the
-    // index, which is downstream of it and can lag.
+    // under the write lock on the card's own file, which spans the read of the
+    // stored file and the write of the merged one, so two patches of one card
+    // cannot both compute a merge over the same pre-state and have the second
+    // silently lose the first. Two patches of *different* cards hold different
+    // locks and do not wait on each other. The merge base is that stored file
+    // rather than the index, which is downstream of it and can lag.
     //
     // Side-loaded resources ride along as the document's `included`, each
     // created under the `lid` the caller named it with, in the same batch as
@@ -8662,11 +9068,28 @@ export class Realm {
   #cardJsonLinkShape(request: Request): {
     skipQueryBackedExpansion: boolean;
     resolveLinksOnly: boolean;
+    skipLinkAssemblyBudget: boolean;
   } {
+    let duringPrerender = isDuringPrerenderRequest(request);
     return {
-      skipQueryBackedExpansion: isDuringPrerenderRequest(request),
+      skipQueryBackedExpansion: duringPrerender,
       resolveLinksOnly:
         this.#decideLinkShape(request, 'single-row')?.mode === 'links-only',
+      // The assembled-resource budget bounds live reads. This branch exempts a
+      // read carrying the during-prerender marker, for the same reason the
+      // prerendered-HTML leg is exempt from the page and time bounds: what a
+      // render assembles is baked into cached HTML, so a ceiling that clipped
+      // it would serve a short closure from cache long after the pressure that
+      // justified it had passed.
+      //
+      // It is defensive rather than load-bearing. No caller attaches that
+      // marker to a card+json request, so the exemption a render relies on is
+      // the one on the card+html entry leg, which does receive it and does run
+      // the assembly pass. The branch stays so it is correct if the marker ever
+      // arrives here. The validator names the exemption rather than the
+      // ceiling, so an exempt body and a bounded one never share one — see
+      // `buildCardJsonEtag`.
+      skipLinkAssemblyBudget: duringPrerender,
     };
   }
 
@@ -8850,8 +9273,11 @@ export class Realm {
     let url = this.paths.fileURL(localPath);
     let start = Date.now();
     try {
-      let { skipQueryBackedExpansion, resolveLinksOnly } =
-        this.#cardJsonLinkShape(request);
+      let {
+        skipQueryBackedExpansion,
+        resolveLinksOnly,
+        skipLinkAssemblyBudget,
+      } = this.#cardJsonLinkShape(request);
       let result: OperationResult;
       try {
         result = await runOperation(
@@ -8861,6 +9287,8 @@ export class Realm {
             name: 'read',
             ...this.#callerOf(request, requestContext),
           },
+          // No budget flag: a headers-only read assembles no closure, so there
+          // is nothing for it to bound.
           { headersOnly: true, skipQueryBackedExpansion, resolveLinksOnly },
         );
       } catch (e) {
@@ -8900,6 +9328,7 @@ export class Realm {
             this.getCachedRealmInfoHash(),
             screenshotsEtagFingerprint(result.screenshots),
             resolveLinksOnly ? 'links-only' : 'full',
+            skipLinkAssemblyBudget,
           );
       let cacheControl = this.cardJsonCacheControl(requestContext);
       let lastModified: Record<string, string> =
@@ -9023,8 +9452,11 @@ export class Realm {
       // has to describe the shape the assembly will produce, and that
       // validator is what the conditional request and the response cache are
       // both keyed on.
-      let { skipQueryBackedExpansion, resolveLinksOnly } =
-        this.#cardJsonLinkShape(request);
+      let {
+        skipQueryBackedExpansion,
+        resolveLinksOnly,
+        skipLinkAssemblyBudget,
+      } = this.#cardJsonLinkShape(request);
 
       // The `instance()` peek, which yields this card's validator. It runs
       // for a client that sent a validator of its own to compare against,
@@ -9079,6 +9511,7 @@ export class Realm {
             realmInfoHash,
             screenshotsEtagFingerprint(instanceEntry.screenshots),
             resolveLinksOnly ? 'links-only' : 'full',
+            skipLinkAssemblyBudget,
           );
         }
         if (
@@ -9119,6 +9552,7 @@ export class Realm {
           localPath,
           skipQueryBackedExpansion,
           resolveLinksOnly,
+          skipLinkAssemblyBudget,
           peekEtag,
           this.#callerOf(request, requestContext),
         );
@@ -9192,6 +9626,7 @@ export class Realm {
     localPath: LocalPath,
     skipQueryBackedExpansion: boolean,
     resolveLinksOnly: boolean,
+    skipLinkAssemblyBudget: boolean,
     keyEtag: string | undefined,
     caller: { actor: string; clientRequestId: string },
   ): Promise<CardJsonAssembly> {
@@ -9221,7 +9656,7 @@ export class Realm {
           actor: caller.actor,
           clientRequestId: caller.clientRequestId,
         },
-        { skipQueryBackedExpansion, resolveLinksOnly },
+        { skipQueryBackedExpansion, resolveLinksOnly, skipLinkAssemblyBudget },
       );
     } catch (e) {
       if (!isOperationFailure(e)) {
@@ -9272,6 +9707,7 @@ export class Realm {
           this.getCachedRealmInfoHash(),
           screenshotsEtagFingerprint(headers.screenshots),
           resolveLinksOnly ? 'links-only' : 'full',
+          skipLinkAssemblyBudget,
         );
     return {
       kind: 'document',
@@ -9464,7 +9900,9 @@ export class Realm {
       { htmlQuery, fieldset, kind },
       {
         loadLinks: true,
-        ...(duringPrerender ? { cacheOnlyDefinitions: true } : {}),
+        ...(duringPrerender
+          ? { cacheOnlyDefinitions: true, skipLinkAssemblyBudget: true }
+          : {}),
         ...(resolveLinksOnly ? { resolveLinksOnly: true } : {}),
       },
     );
@@ -9479,6 +9917,7 @@ export class Realm {
       doc,
       this.getCachedRealmInfoHash(),
       resolveLinksOnly,
+      duringPrerender,
     );
     let ifNoneMatch = request.headers.get('if-none-match');
     if (ifNoneMatch && ifNoneMatchMatches(ifNoneMatch, etag)) {

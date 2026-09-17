@@ -1752,7 +1752,11 @@ export const isNode =
   Object.prototype.toString.call((globalThis as any).process) ===
   '[object process]';
 
-export { SupportedMimeType, isJsonContentType } from './supported-mime-type.ts';
+export {
+  BOXEL_OPERATIONS_EXT,
+  SupportedMimeType,
+  isJsonContentType,
+} from './supported-mime-type.ts';
 export {
   isUrlLike,
   VirtualNetwork,

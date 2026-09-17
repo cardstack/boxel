@@ -37,6 +37,18 @@ export interface DBAdapter {
     realmUrl: string,
     fn: (txQuerier: Querier | undefined) => Promise<T>,
   ) => Promise<T>;
+  // Per-file write-lock primitive, for a writer whose exclusivity is over the
+  // files it reads and rewrites rather than over the realm. PgAdapter
+  // implements it as one `pg_advisory_xact_lock` per file, taken in key order
+  // on a pinned-connection transaction, so writers of one card serialize
+  // across replicas while writers of different cards run in parallel. SQLite
+  // is a passthrough, as above. See PgAdapter.withFileWriteLocks for the
+  // design notes (deadlock ordering, pool footprint, re-entrancy).
+  withFileWriteLocks: <T>(
+    realmUrl: string,
+    localPaths: readonly string[],
+    fn: () => Promise<T>,
+  ) => Promise<T>;
   // Per-matrix-user cost-barrier primitive: serializes concurrent billable
   // upstream proxy calls for the same user across replicas so the next
   // request can't kick off another upstream call before the previous

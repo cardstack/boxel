@@ -74,6 +74,7 @@ import * as SaveCardToolModule from './save-card';
 import * as ScreenshotCardToolModule from './screenshot-card';
 import * as SearchAndChooseToolModule from './search-and-choose';
 import * as SearchCardsToolModule from './search-cards';
+import * as SearchEntriesToolModule from './search-entries';
 import * as SearchGoogleImagesToolModule from './search-google-images';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
 import * as SendRequestViaProxyToolModule from './send-request-via-proxy';
@@ -279,6 +280,7 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
   shimHostToolModule(virtualNetwork, 'save-card', SaveCardToolModule);
   shimHostToolModule(virtualNetwork, 'serialize-card', SerializeCardToolModule);
   shimHostToolModule(virtualNetwork, 'search-cards', SearchCardsToolModule);
+  shimHostToolModule(virtualNetwork, 'search-entries', SearchEntriesToolModule);
   shimHostToolModule(
     virtualNetwork,
     'search-and-choose',
@@ -544,6 +546,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   SearchAndChooseToolModule.default,
   SearchCardsToolModule.SearchCardsByQueryTool,
   SearchCardsToolModule.SearchCardsByTypeAndTitleTool,
+  SearchEntriesToolModule.default,
   SearchGoogleImagesToolModule.default,
   SendAiAssistantMessageModule.default,
   SendBotTriggerEventToolModule.default,

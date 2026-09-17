@@ -65,6 +65,10 @@ interface Stub {
   // correctness depends on the order of: the pre-staging drain, and the read
   // of the realm's settings that must describe the state the drain left.
   calls: () => string[];
+  // The files the batch asked to be serialized over, sorted. What the lock
+  // covers is not visible in any response, so a test that cares which writers
+  // a batch excludes has to read it here.
+  lockedPaths: () => string[];
 }
 
 interface StubOptions {
@@ -130,12 +134,14 @@ function stub(opts: StubOptions = {}): Stub {
   let drains = 0;
   let readsOutsideLock = 0;
   let calls: string[] = [];
+  let lockedPaths: string[] = [];
 
   let core: BatchCore = {
     realmURL: REALM,
-    async withWriteLock(fn) {
+    async withWriteLocks(localPaths, fn) {
       held++;
       maxHeld = Math.max(maxHeld, held);
+      lockedPaths = [...localPaths].sort();
       try {
         return await fn();
       } finally {
@@ -263,6 +269,7 @@ function stub(opts: StubOptions = {}): Stub {
     drainCount: () => drains,
     readsOutsideLock: () => readsOutsideLock,
     calls: () => [...calls],
+    lockedPaths: () => lockedPaths,
   };
 }
 
@@ -1538,6 +1545,80 @@ module(basename(import.meta.filename), function () {
         0,
         'nothing the batch acts on is read before the lock is held, and the ' +
           'commit runs while it still is',
+      );
+    });
+    test('the lock covers the files the batch touches and nothing else', async function (assert) {
+      let { core, lockedPaths } = stub({
+        stored: {
+          'person-1.json': cardFile({ firstName: 'Original' }, PERSON),
+          'Person/bystander.json': cardFile({ firstName: 'Bystander' }, PERSON),
+        },
+      });
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'create',
+            lid: 'one',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'One' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+          {
+            op: 'update',
+            href: `${REALM}person-1`,
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Two' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        {},
+      );
+      assert.deepEqual(
+        lockedPaths(),
+        ['Person/one.json', 'person-1', 'person-1.json'],
+        'the card being minted and the card being patched are locked; an ' +
+          'href is locked in both spellings because only the stored bytes ' +
+          'say whether it named a card or a file',
+      );
+      assert.notOk(
+        lockedPaths().includes('Person/bystander.json'),
+        'a card the batch never names is not locked, so its writers are ' +
+          'not excluded by this one',
+      );
+    });
+    test('a create the client did not name locks nothing for itself', async function (assert) {
+      // Its file is named after an id minted while staging, so no other
+      // writer can be aimed at that path and there is nothing to exclude.
+      let { core, lockedPaths } = stub();
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'create',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Anonymous' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        {},
+      );
+      assert.deepEqual(
+        lockedPaths(),
+        [],
+        'nothing is locked for a card whose path no other writer can know',
       );
     });
     test('a named create stages the type and attributes its declaration names', async function (assert) {
