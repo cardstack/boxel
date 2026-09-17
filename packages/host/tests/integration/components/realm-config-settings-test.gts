@@ -163,25 +163,35 @@ module('Integration | realm-config | settings', function (hooks) {
       );
   });
 
-  test('a setting whose name is a prototype member survives an edit', async function (assert) {
-    // `JSON.parse` makes this name an own property, so a realm can hold one.
-    // Rebuilding the map through a plain object would answer it by invoking
-    // the prototype setter, and the setting would be gone after any edit.
-    await renderRealmConfig(
-      JSON.parse(
-        '{"__proto__": "@mae:localhost", "approver": "@ada:localhost"}',
-      ),
-      'edit',
-    );
+  test('a setting named after a prototype member survives an edit', async function (assert) {
+    // Rebuilding the map through a plain object would answer this name by
+    // invoking the prototype setter rather than creating an entry, so the row
+    // would disappear the moment any other row was touched — and an object
+    // value would become the rebuilt map's prototype.
+    //
+    // Driven by typing the name rather than by seeding the realm with one.
+    // Whether a stored `__proto__` setting survives the realm's own round trip
+    // to this editor is a separate question this test does not assert; what is
+    // pinned here is that the editor's own rebuild does not drop it.
+    await renderRealmConfig({ approver: '@ada:localhost' }, 'edit');
 
-    await fillIn('[data-test-setting-value="1"]', '@bea:localhost');
+    await click('[data-test-add-setting]');
+    await fillIn('[data-test-setting-key="1"]', '__proto__');
+    await fillIn('[data-test-setting-value="1"]', '@mae:localhost');
+
+    // The edit that would have dropped it: a change to some unrelated row,
+    // which rebuilds the whole map.
+    await fillIn('[data-test-setting-value="0"]', '@bea:localhost');
 
     assert
-      .dom('[data-test-setting-key="0"]')
+      .dom('[data-test-setting-key="1"]')
       .hasValue('__proto__', 'the row is still there');
     assert
-      .dom('[data-test-setting-value="0"]')
+      .dom('[data-test-setting-value="1"]')
       .hasValue('@mae:localhost', 'and still holds its value');
+    assert
+      .dom('[data-test-unnamed-settings]')
+      .doesNotExist('and it counts as named');
   });
 
   test('a number the file cannot hold is kept as the text that was typed', async function (assert) {
