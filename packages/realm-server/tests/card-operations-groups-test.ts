@@ -4,9 +4,16 @@ import { basename } from 'path';
 
 import {
   commitBatch,
+  invocationsIn,
   isOperationFailure,
+  parseOperationsEnvelope,
+  resultsTree,
+  stagedTree,
   type BatchCore,
+  type BatchEntry,
   type BatchNode,
+  type EntryPosition,
+  type EnvelopeResult,
   type OperationError,
 } from '@cardstack/runtime-common/card-operations';
 import { isSplicedSource } from '@cardstack/runtime-common';
@@ -236,7 +243,212 @@ async function elapsed(run: () => Promise<unknown>): Promise<number> {
   return Date.now() - started;
 }
 
+// A batch body carrying `operations` at the top level.
+function envelope(...operations: unknown[]) {
+  return { 'boxel:operations': operations };
+}
+
+function invoke(name: string, href?: string): Record<string, unknown> {
+  return { op: 'invoke', 'boxel:name': name, ...(href ? { href } : {}) };
+}
+
+function group(
+  op: 'parallel' | 'serial',
+  ...members: unknown[]
+): Record<string, unknown> {
+  return { op, 'boxel:operations': members };
+}
+
+// A body nested `depth` groups deep, with one invocation at the bottom.
+function nested(depth: number): Record<string, unknown> {
+  let node: Record<string, unknown> = invoke('escalate', '/report');
+  for (let at = 0; at < depth; at++) {
+    node = group('serial', node);
+  }
+  return node;
+}
+
+function parseRefusal(body: unknown): OperationError {
+  try {
+    parseOperationsEnvelope(body, REALM);
+  } catch (err: unknown) {
+    if (isOperationFailure(err)) {
+      return err.error;
+    }
+    throw err;
+  }
+  throw new Error('expected the envelope to be refused');
+}
+
 module(basename(import.meta.filename), function () {
+  module('wire grammar', function () {
+    test('a top-level entry is named by its index and a nested one by its path', async function (assert) {
+      let tree = parseOperationsEnvelope(
+        envelope(
+          invoke('escalate', '/report-1'),
+          group(
+            'parallel',
+            invoke('escalate', '/report-2'),
+            group('serial', invoke('escalate', '/report-3')),
+          ),
+        ),
+        REALM,
+      );
+
+      assert.deepEqual(
+        invocationsIn(tree).map((entry) => entry.position),
+        [
+          0,
+          '[1].boxel:operations[0]',
+          '[1].boxel:operations[1].boxel:operations[0]',
+        ],
+        'the entries come back depth-first, each named the way a caller can ' +
+          'point at it',
+      );
+    });
+
+    test('a group holding no members is refused, naming the group', async function (assert) {
+      let error = parseRefusal(
+        envelope(invoke('escalate', '/report-1'), group('parallel')),
+      );
+
+      assert.strictEqual(error.status, 400, 'HTTP 400 status');
+      assert.strictEqual(error.meta?.entry, 1);
+      assert.true(
+        error.detail.includes('no members'),
+        `the detail says what is missing: ${error.detail}`,
+      );
+    });
+
+    test("a group carrying an invocation's members is refused", async function (assert) {
+      for (let [member, value] of [
+        ['boxel:name', 'escalate'],
+        ['href', '/report-1'],
+        ['data', { body: 'x' }],
+      ] as [string, unknown][]) {
+        let error = parseRefusal(
+          envelope({
+            ...group('serial', invoke('escalate', '/report-1')),
+            [member]: value,
+          }),
+        );
+
+        assert.true(
+          error.detail.includes(member),
+          `"${member}" is refused, and named: ${error.detail}`,
+        );
+      }
+    });
+
+    test('a group carrying no member list is refused', async function (assert) {
+      let error = parseRefusal(envelope({ op: 'serial' }));
+
+      assert.true(
+        error.detail.includes('boxel:operations'),
+        `the detail names the member it looked for: ${error.detail}`,
+      );
+    });
+
+    test('an entry naming no verb the envelope carries is refused', async function (assert) {
+      let error = parseRefusal(envelope({ op: 'add', href: '/report-1' }));
+
+      for (let verb of ['invoke', 'parallel', 'serial']) {
+        assert.true(
+          error.detail.includes(verb),
+          `the detail names "${verb}": ${error.detail}`,
+        );
+      }
+    });
+
+    test('nesting is bounded, and the bound is well past anything composed by hand', async function (assert) {
+      // The grammar nests to any depth; what is bounded is how deep a body
+      // may drive the two recursive walks it is read and staged by.
+      assert.strictEqual(
+        invocationsIn(parseOperationsEnvelope(envelope(nested(32)), REALM))
+          .length,
+        1,
+        'a body at the bound is read',
+      );
+
+      let error = parseRefusal(envelope(nested(33)));
+      assert.strictEqual(error.status, 400, 'HTTP 400 status');
+      assert.true(
+        error.detail.includes('deep'),
+        `and past it the refusal says so: ${error.detail}`,
+      );
+    });
+
+    test('the results mirror the shape of the request', async function (assert) {
+      let tree = parseOperationsEnvelope(
+        envelope(
+          invoke('read', '/report-1'),
+          group(
+            'parallel',
+            group('serial', invoke('escalate', '/report-2')),
+            invoke('escalate', '/report-3'),
+          ),
+        ),
+        REALM,
+      );
+      let results = new Map<EntryPosition, EnvelopeResult>(
+        invocationsIn(tree).map((entry, index) => [
+          entry.position,
+          { data: { id: `answer-${index}` } },
+        ]),
+      );
+
+      assert.deepEqual(resultsTree(tree, results), [
+        { data: { id: 'answer-0' } },
+        [[{ data: { id: 'answer-1' } }], { data: { id: 'answer-2' } }],
+      ]);
+    });
+
+    test('the staged tree keeps the schedule and drops the entries that only read', async function (assert) {
+      let tree = parseOperationsEnvelope(
+        envelope(
+          group('parallel', invoke('read', '/report-1')),
+          group(
+            'parallel',
+            invoke('read', '/report-2'),
+            group('serial', invoke('escalate', '/report-3')),
+          ),
+        ),
+        REALM,
+      );
+      let entries = invocationsIn(tree);
+      let staged = new Map<EntryPosition, BatchEntry>(
+        entries
+          .filter((entry) => entry.name === 'escalate')
+          .map((entry) => [
+            entry.position,
+            {
+              op: 'transform',
+              href: entry.href!,
+              label: entry.position,
+            } as BatchEntry,
+          ]),
+      );
+
+      assert.deepEqual(stagedTree(tree, staged), [
+        {
+          op: 'parallel',
+          members: [
+            {
+              op: 'serial',
+              members: [
+                {
+                  op: 'transform',
+                  href: `${REALM}report-3`,
+                  label: '[1].boxel:operations[1].boxel:operations[0]',
+                },
+              ],
+            },
+          ],
+        },
+      ]);
+    });
+  });
+
   module('scheduling', function () {
     test('the members of a parallel group stage at the same time', async function (assert) {
       let held = gate(3);
