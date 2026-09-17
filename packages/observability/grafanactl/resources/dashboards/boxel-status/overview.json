@@ -2718,7 +2718,7 @@
           },
           "viewMode": "list"
         },
-        "title": "Active Alerts",
+        "title": "Active Alerts (preview smoke test)",
         "type": "alertlist"
       },
       {
