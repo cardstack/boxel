@@ -55,6 +55,24 @@ function parseSearchQuery(searchURL: URL) {
   return parse(searchURL.searchParams.toString()) as Record<string, any>;
 }
 
+// The `handler=` total a `realm:write-timing` line reports, in ms.
+function handlerMs(line: string): number | undefined {
+  let match = /\bhandler=(\d+)ms\b/.exec(line);
+  return match ? Number(match[1]) : undefined;
+}
+
+// The stages a `realm:write-timing` line attributes the handler across, keyed
+// by stage name. Read from after the `handler=` total so the total itself is
+// not counted as one of them.
+function stageMs(line: string): Record<string, number> {
+  let tail = line.slice(line.search(/\bhandler=\d+ms\b/));
+  let stages: Record<string, number> = {};
+  for (let [, stage, ms] of tail.matchAll(/\b([a-zA-Z]+)=(\d+)(?!ms)\b/g)) {
+    stages[stage] = Number(ms);
+  }
+  return stages;
+}
+
 // Create minimal valid PNG bytes for testing
 function makeMinimalPng(): Uint8Array {
   let signature = [137, 80, 78, 71, 13, 10, 26, 10];
@@ -3331,7 +3349,11 @@ module(basename(import.meta.filename), function () {
             'lock',
             'drain',
             'stage',
-            'write',
+            'persist',
+            'enqueue',
+            'awaitIndex',
+            'invalidate',
+            'commit',
             'readback',
             'stringify',
           ]) {
@@ -3340,9 +3362,69 @@ module(basename(import.meta.filename), function () {
               `line attributes the ${stage} stage: ${line}`,
             );
           }
-          assert.ok(
-            /\bhandler=\d+ms\b/.test(line),
+          let handler = handlerMs(line);
+          assert.notStrictEqual(
+            handler,
+            undefined,
             `line reports the whole handler: ${line}`,
+          );
+          // The guard that keeps the stages a timeline rather than a set of
+          // overlapping measurements. A stage that contained the ones inside
+          // it would count their time twice and push the total past the
+          // handler, and every share read off the line would be wrong by the
+          // same factor.
+          let stages = stageMs(line);
+          let total = Object.values(stages).reduce((sum, ms) => sum + ms, 0);
+          assert.ok(
+            total <= handler!,
+            `the stages sum to no more than the handler (${total} <= ${handler}): ${line}`,
+          );
+        });
+
+        // The wait for a worker is the one stage this header removes, and a
+        // caller reaching for it is asking to stop paying for it. A line that
+        // reported the same stages either way could not show that it worked.
+        test('a write that opts out of waiting for the index reports no wait', async function (assert) {
+          let lines: string[] = [];
+          setWriteTimingSinkForTests((line) => lines.push(line));
+          try {
+            let response = await request
+              .patch('/hassan')
+              .send({
+                data: {
+                  type: 'card',
+                  attributes: { firstName: 'Hassan Deferred' },
+                  meta: {
+                    adoptsFrom: { module: rri('./friend.gts'), name: 'Friend' },
+                  },
+                },
+              })
+              .set('Accept', 'application/vnd.card+json')
+              .set(SKIP_INDEX_WAIT_HEADER, 'true');
+
+            assert.strictEqual(
+              response.status,
+              200,
+              `HTTP 200: ${response.text}`,
+            );
+          } finally {
+            setWriteTimingSinkForTests(undefined);
+          }
+
+          assert.strictEqual(lines.length, 1, 'the write emitted one line');
+          let line = lines[0];
+          let stages = stageMs(line);
+          assert.ok(
+            'persist' in stages,
+            `the write still reports making the bytes durable: ${line}`,
+          );
+          assert.ok(
+            'enqueue' in stages,
+            `and still reports queueing its index job: ${line}`,
+          );
+          assert.notOk(
+            'awaitIndex' in stages,
+            `but reports no wait for a worker to run it: ${line}`,
           );
         });
 
