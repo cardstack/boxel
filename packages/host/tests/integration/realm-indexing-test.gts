@@ -4869,7 +4869,6 @@ module(`Integration | realm indexing`, function (hooks) {
       // decision rather than a snapshot to re-record.
       [
         '@cardstack/base/card-api',
-        '@cardstack/base/file-menu-items',
         '@cardstack/base/number',
         '@cardstack/base/searchable',
         '@cardstack/base/string',
@@ -4935,7 +4934,6 @@ module(`Integration | realm indexing`, function (hooks) {
       // decision rather than a snapshot to re-record.
       [
         '@cardstack/base/card-api',
-        '@cardstack/base/file-menu-items',
         '@cardstack/base/number',
         '@cardstack/base/searchable',
         '@cardstack/base/spec',
