@@ -337,18 +337,25 @@ export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 // `realm.json` — from its stored bytes on one overlay and from its indexed
 // document on the next.
 //
+// Called only where the attribute is present, so that the second overlay can
+// clear what the first assigned, the way every other field in these two
+// overlays is applied. Without that, a realm whose settings are removed would
+// keep serving them from whichever overlay still carried them.
+//
 // A settings map is whatever JSON the realm owner wrote, so this is where the
 // shape is held to the one a program can read a key out of: an object, and not
-// an array or a scalar. Anything else leaves the realm with no settings and
-// says so in the log, rather than reaching `realmConfig("x")` as a value that
-// cannot be indexed by name. An absent or explicitly null map is the ordinary
-// case of a realm that declares no settings, and is not remarked on.
+// an array or a scalar. Anything else — including an explicit null, which is
+// how an owner writes "no settings" — leaves the realm with none, whichever
+// overlay meets it, and a value that is not a map says so in the log rather
+// than reaching `realmConfig("x")` as something that cannot be indexed by
+// name.
 function assignRealmConfig(
   realmInfo: RealmInfo,
   config: unknown,
   log: { warn: (message: string) => void },
 ): void {
-  if (config === undefined || config === null) {
+  if (config === null) {
+    delete realmInfo.config;
     return;
   }
   if (typeof config !== 'object' || Array.isArray(config)) {
@@ -357,6 +364,7 @@ function assignRealmConfig(
         Array.isArray(config) ? 'an array' : typeof config
       } rather than a map of settings`,
     );
+    delete realmInfo.config;
     return;
   }
   // Copied whole rather than shallowly, because the object this is given
@@ -396,11 +404,12 @@ export type RealmInfo = {
   createdAt?: string | null;
   updatedAt?: string | null;
   // The realm's own settings, which a card operation reads with
-  // `realmConfig("key")`. Present on what `parseRealmInfo` produces and on
-  // nothing the realm serves: `getRealmInfo()` splits it off, so neither the
-  // `meta.realmInfo` stamped on every card response nor the `/_info`
-  // documents carry it. `getRealmConfig()` is where the operation runtime
-  // reads it.
+  // `realmConfig("key")`. It is on this type because the overlays that read
+  // the config document assign it here alongside the realm's name — but
+  // `parseRealmInfo` hands it back apart from the info it serves, so nothing
+  // the realm puts on the wire carries it: not the `meta.realmInfo` stamped on
+  // card and file-meta documents, and not `/_info`. `getRealmConfig()` is
+  // where the operation runtime reads it.
   config?: Record<string, JsonValue>;
   // Opt-in to producing the full prerendered isolated HTML for the
   // realm's default index card (CardsGrid or Workspace). When
@@ -7368,7 +7377,7 @@ export class Realm {
     let name = localPath.split('/').pop() ?? localPath;
     let inferredContentType = inferContentType(name);
     let createdAt = await this.getCreatedTime(localPath);
-    let realmInfo = await this.parseRealmInfo();
+    let { info: realmInfo } = await this.parseRealmInfo();
     let persistedMeta = this.#dbAdapter
       ? await getContentMeta(this.#dbAdapter, this.url, localPath)
       : { contentHash: undefined, contentSize: undefined };
@@ -7417,7 +7426,7 @@ export class Realm {
     let name = localPath.split('/').pop() ?? localPath;
     let inferredContentType = inferContentType(name);
     let createdAt = fileEntry.resourceCreatedAt ?? fileEntry.lastModified;
-    let realmInfo = await this.parseRealmInfo();
+    let { info: realmInfo } = await this.parseRealmInfo();
     let searchDoc = fileEntry.searchDoc ?? {};
     let searchHash =
       typeof searchDoc.contentHash === 'string'
@@ -10661,8 +10670,14 @@ export class Realm {
   // setting is told this realm has no such setting rather than that the host
   // supplied no configuration at all — two different defects with two
   // different fixes.
+  //
+  // A copy per caller, for the reason the builtins copy a value on its way
+  // into a program: what comes back is put into a card resource and carried
+  // through a serializer, and one in-place write anywhere along there would
+  // change what every later operation in this process reads. The map is small
+  // and this is once per batch.
   async getRealmConfig(): Promise<Record<string, JsonValue>> {
-    return (await this.#parsedRealmInfo()).config;
+    return structuredClone((await this.#parsedRealmInfo()).config);
   }
 
   // Both halves of one parse, which is why they are read together rather than
@@ -10679,14 +10694,11 @@ export class Realm {
     }
     if (!this.#realmInfoPromise) {
       this.#realmInfoPromise = (async () => {
-        // The parse produces both halves; what the realm serves is the one
-        // without `config`. Splitting here rather than at each serving site
-        // keeps a setting out of `meta.realmInfo` and `/_info` by construction
-        // instead of by every future caller remembering to, and it keeps the
-        // ETag hash below over exactly the bytes a response carries — so
-        // editing a setting does not invalidate every card's cached
-        // representation in the realm.
-        let { config, ...info } = await this.parseRealmInfo();
+        // The parse hands back the two halves already apart; this only
+        // memoizes them. The hash covers the served half alone, which is
+        // exactly the bytes a response carries — so editing a setting does not
+        // invalidate every card's cached representation in the realm.
+        let { info, config } = await this.parseRealmInfo();
         let settings = config ?? {};
         this.#cachedRealmInfo = info;
         this.#cachedRealmConfig = settings;
@@ -10726,7 +10738,16 @@ export class Realm {
     this.#indexCountsPromise = null;
   }
 
-  private async parseRealmInfo(): Promise<RealmInfo> {
+  // The realm's config document, read as the two things it holds: the info
+  // every realm-info route serves, and the settings only the operation runtime
+  // reads. They are returned apart rather than as one object a caller narrows,
+  // because three of this class's own routes stamp what comes back straight
+  // into a response — so a settings map that arrived inside `info` would be on
+  // the wire by default and stay off it only by each caller remembering.
+  private async parseRealmInfo(): Promise<{
+    info: RealmInfo;
+    config: Record<string, JsonValue> | undefined;
+  }> {
     let [lastPublishedAt, metadata] = await Promise.all([
       this.getLastPublishedAt(),
       this.getRealmMetadata(),
@@ -10796,7 +10817,9 @@ export class Realm {
         if (attrs.includePrerenderedDefaultRealmIndex === true) {
           realmInfo.includePrerenderedDefaultRealmIndex = true;
         }
-        assignRealmConfig(realmInfo, attrs.config, this.#log);
+        if ('config' in attrs) {
+          assignRealmConfig(realmInfo, attrs.config, this.#log);
+        }
       }
     } catch (e) {
       this.#log.warn(`failed to read RealmConfig card from disk: ${e}`);
@@ -10834,13 +10857,16 @@ export class Realm {
         if (attrs.includePrerenderedDefaultRealmIndex === true) {
           realmInfo.includePrerenderedDefaultRealmIndex = true;
         }
-        assignRealmConfig(realmInfo, attrs.config, this.#log);
+        if ('config' in attrs) {
+          assignRealmConfig(realmInfo, attrs.config, this.#log);
+        }
       }
     } catch (e) {
       this.#log.warn(`failed to read RealmConfig card from index: ${e}`);
     }
 
-    return realmInfo;
+    let { config, ...info } = realmInfo;
+    return { info, config };
   }
 
   // RealmInfo plus the realm-lifecycle timestamps, for the realm server's batch
@@ -10914,7 +10940,7 @@ export class Realm {
     _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let realmInfo = await this.parseRealmInfo();
+    let { info: realmInfo } = await this.parseRealmInfo();
 
     let doc = {
       data: {

@@ -1505,6 +1505,57 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  // The other two routes that stamp the realm's info into what they serve.
+  // They are named separately because each reaches the parse by a different
+  // path than a card response does, and a split that held only for card+json
+  // would leave both of these carrying the settings.
+  test('a realm setting is not carried on a file document', async function (assert) {
+    let response = await request
+      .get('/release-notes.md')
+      .set('Accept', 'application/vnd.card.file-meta+json');
+    assert.strictEqual(response.status, 200, 'the file document is served');
+
+    assert.strictEqual(
+      response.body.data.meta.realmInfo.name,
+      'Card Operations Test Realm',
+      'the document carries the realm info it always did',
+    );
+    assert.strictEqual(
+      response.body.data.meta.realmInfo.config,
+      undefined,
+      'and not the settings',
+    );
+    assert.false(
+      JSON.stringify(response.body).includes('@mae:localhost'),
+      'no setting reaches the file document by any other route',
+    );
+  });
+
+  test('a realm setting is not carried on the realm info endpoint', async function (assert) {
+    // The route `/_catalog-realms` fans out to for every publicly readable
+    // realm, with no session — so a setting served here is one anyone can
+    // read.
+    let response = await request
+      .get('/_info')
+      .set('Accept', 'application/vnd.api+json');
+    assert.strictEqual(response.status, 200, 'the realm info is served');
+
+    assert.strictEqual(
+      response.body.data.attributes.name,
+      'Card Operations Test Realm',
+      'the response carries the realm info it always did',
+    );
+    assert.strictEqual(
+      response.body.data.attributes.config,
+      undefined,
+      'and not the settings',
+    );
+    assert.false(
+      JSON.stringify(response.body).includes('@mae:localhost'),
+      'no setting reaches the realm info by any other route',
+    );
+  });
+
   test('a payload the declaration does not describe is refused before any program runs', async function (assert) {
     let undeclared = await refusalFrom(() =>
       invoke('escalate', 'report-set', { body: 'nope' }),

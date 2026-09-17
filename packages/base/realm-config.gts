@@ -374,11 +374,12 @@ export class RoutingRuleField extends FieldDef {
 
 // The JSON spelling of one setting's value, which is what the table shows and
 // what the editor reads back. A string is shown bare so an id or a path reads
-// as itself; a string that would itself parse as JSON is quoted, so the
-// setting whose value is the text "3" comes back as that text rather than as
-// the number.
+// as itself, and quoted wherever reading the bare form back would produce
+// something else — the setting whose value is the text "3" comes back as that
+// text rather than as the number. Asking `settingValue` is what makes that the
+// round-trip itself rather than a rule that has to track it.
 function settingText(value: unknown): string {
-  if (typeof value === 'string' && parseSetting(value) === undefined) {
+  if (typeof value === 'string' && settingValue(value) === value) {
     return value;
   }
   return JSON.stringify(value) ?? '';
@@ -396,9 +397,24 @@ function parseSetting(text: string): unknown {
 // The inverse of settingText. Text that parses as JSON is that value; text
 // that does not is the string it already is, so an author writing a Matrix id
 // or a path never has to quote it.
+//
+// A number JSON can parse but cannot hold is treated as text it could not
+// parse, because the file is where the value ends up: `1e400` parses as
+// `Infinity` and would be written as `null`, and `-0` would be written as `0`.
+// Keeping those as the characters the author typed is what stops the row from
+// naming a type the stored setting does not have.
 function settingValue(text: string): unknown {
   let parsed = parseSetting(text.trim());
-  return parsed === undefined ? text : parsed;
+  if (parsed === undefined) {
+    return text;
+  }
+  if (typeof parsed === 'number' && !Number.isFinite(parsed)) {
+    return text;
+  }
+  if (Object.is(parsed, -0)) {
+    return text;
+  }
+  return parsed;
 }
 
 // What a value will be stored as, named for the author, and only where that
@@ -506,7 +522,13 @@ class RealmSettingsEdit extends Component<typeof RealmSettingsField> {
   // stored JSON would do with the duplicate anyway; the advisory above the
   // table is what tells the author the shadowed row is not being read.
   private commit() {
-    let settings: Record<string, unknown> = {};
+    // Built on a null prototype so every name is an own key. A plain object
+    // would answer a setting named `__proto__` by invoking the prototype
+    // setter — the setting would vanish, and a structured value would become
+    // this map's prototype. `JSON.parse` makes that name an own property, so a
+    // realm really can hold one, and it renders here until the first edit.
+    // The read sides are careful about the same name, and this matches them.
+    let settings: Record<string, unknown> = Object.create(null);
     for (let row of this.rows) {
       let key = row.key.trim();
       if (!key) {

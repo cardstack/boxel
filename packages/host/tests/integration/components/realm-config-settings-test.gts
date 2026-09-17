@@ -163,6 +163,40 @@ module('Integration | realm-config | settings', function (hooks) {
       );
   });
 
+  test('a setting whose name is a prototype member survives an edit', async function (assert) {
+    // `JSON.parse` makes this name an own property, so a realm can hold one.
+    // Rebuilding the map through a plain object would answer it by invoking
+    // the prototype setter, and the setting would be gone after any edit.
+    await renderRealmConfig(
+      JSON.parse(
+        '{"__proto__": "@mae:localhost", "approver": "@ada:localhost"}',
+      ),
+      'edit',
+    );
+
+    await fillIn('[data-test-setting-value="1"]', '@bea:localhost');
+
+    assert
+      .dom('[data-test-setting-key="0"]')
+      .hasValue('__proto__', 'the row is still there');
+    assert
+      .dom('[data-test-setting-value="0"]')
+      .hasValue('@mae:localhost', 'and still holds its value');
+  });
+
+  test('a number the file cannot hold is kept as the text that was typed', async function (assert) {
+    await renderRealmConfig({ approver: '@mae:localhost' }, 'edit');
+
+    // `JSON.parse('1e400')` is `Infinity`, which `JSON.stringify` writes as
+    // `null` — so calling this a number would name a type the stored setting
+    // does not have.
+    await fillIn('[data-test-setting-value="0"]', '1e400');
+
+    assert
+      .dom('[data-test-setting-type="0"]')
+      .doesNotExist('it is text, and the row does not claim otherwise');
+  });
+
   test('a setting can be removed', async function (assert) {
     await renderRealmConfig({ approver: '@mae:localhost' }, 'edit');
 

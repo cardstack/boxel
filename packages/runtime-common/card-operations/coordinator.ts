@@ -251,6 +251,24 @@ export async function commitBatch(
     // tell every subscriber that something changed.
     return [];
   }
+  // Read before the lock, and once for the whole batch.
+  //
+  // Before the lock because a cold read is a parse of the realm's config
+  // document — several queries and a file read — and every write in the realm
+  // would otherwise queue behind whichever batch happened to find the cache
+  // cold, including the batches that name no setting at all.
+  //
+  // Once because a batch commits to one realm, and because what a program
+  // reads is the realm's configuration as the batch found it. That is the one
+  // place the batch does not compose: `stored` moves as entries stage, so a
+  // later entry sees an earlier one's bytes, while a batch that rewrites
+  // `realm.json` does not move its own settings. Nothing would be gained by
+  // making it: the settings a realm serves come from its indexed config card,
+  // so they lag a write to it until the index swap drops the cache — a request
+  // issued straight after this batch reads the old values too, and a batch
+  // that refreshed mid-flight would be the only reader in the system that did
+  // not.
+  let realmConfig = await core.realmConfig();
   return await core.withWriteLock(async () => {
     // Drained inside the lock, before anything is staged. Staging serializes
     // each card against its type's definition, and a module written moments
@@ -295,9 +313,6 @@ export async function commitBatch(
     // entry link to a card a later entry mints.
     let { lids, foreignLids } = indexLids(entries, paths);
     let { stored, storedMeta } = await readPreState(core, entries, paths);
-    // Read once for the whole batch: a batch commits to one realm, so every
-    // entry in it reads the same settings.
-    let realmConfig = await core.realmConfig();
     // What an append stages for a file it never read whole. Kept beside
     // `stored` rather than in it: the two describe the same file in different
     // terms, and an executor that needs one cannot work from the other.
