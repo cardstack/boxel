@@ -1433,24 +1433,12 @@ module('Integration | realm', function (hooks) {
       relationships: {
         'pets.0': {
           links: { self: `./dir/mango` },
-          data: {
-            id: `${testRealmURL}dir/mango`,
-            type: 'card',
-          },
         },
         'pets.1': {
           links: { self: `./dir/van-gogh` },
-          data: {
-            id: `${testRealmURL}dir/van-gogh`,
-            type: 'card',
-          },
         },
         friend: {
           links: { self: `./dir/friend` },
-          data: {
-            id: `${testRealmURL}dir/friend`,
-            type: 'card',
-          },
         },
       },
       meta: {
@@ -1557,11 +1545,9 @@ module('Integration | realm', function (hooks) {
       relationships: {
         'pets.0': {
           links: { self: `./dir/mango` },
-          data: { id: `${testRealmURL}dir/mango`, type: 'card' },
         },
         'pets.1': {
           links: { self: `./dir/van-gogh` },
-          data: { id: `${testRealmURL}dir/van-gogh`, type: 'card' },
         },
       },
       meta: {
@@ -1670,7 +1656,6 @@ module('Integration | realm', function (hooks) {
     assert.deepEqual(json.data.relationships, {
       'inners.0.other': {
         links: { self: `./2` },
-        data: { id: `${testRealmURL}2`, type: 'card' },
       },
     });
     assert.deepEqual(
@@ -1904,14 +1889,9 @@ module('Integration | realm', function (hooks) {
       relationships: {
         'pets.0': {
           links: { self: `./dir/van-gogh` },
-          data: { id: `${testRealmURL}dir/van-gogh`, type: 'card' },
         },
         friend: {
           links: { self: `./dir/different-friend` },
-          data: {
-            id: `${testRealmURL}dir/different-friend`,
-            type: 'card',
-          },
         },
       },
       meta: {
@@ -2047,17 +2027,9 @@ module('Integration | realm', function (hooks) {
       relationships: {
         friend: {
           links: { self: `./dir/different-friend` },
-          data: {
-            id: `${testRealmURL}dir/different-friend`,
-            type: 'card',
-          },
         },
         'pets.0': {
           links: { self: `./dir/van-gogh` },
-          data: {
-            id: `${testRealmURL}dir/van-gogh`,
-            type: 'card',
-          },
         },
       },
       meta: {
