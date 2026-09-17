@@ -1593,6 +1593,14 @@ export class Realm {
   // neither. `null` means "not yet parsed"; an empty map is a realm that
   // carries no settings, which is what an operation naming one is told.
   #cachedRealmConfig: Record<string, JsonValue> | null = null;
+  // Bumped by every invalidation, and captured by a parse before it starts.
+  // A parse that reads the realm's state and then has an index swap land
+  // underneath it is holding values the realm has already moved past, so it
+  // answers the caller who is waiting on it and stops there rather than
+  // writing them into the cache — where they would be read by every later
+  // operation until the next swap, and staged into cards by the ones that
+  // read a setting.
+  #realmInfoGeneration = 0;
   // md5 of the JSON-stringified `#cachedRealmInfo`. Folded into the
   // card+json ETag so any path that nulls `#cachedRealmInfo` (e.g.
   // invalidateCachedRealmInfo on publish/unpublish) invalidates cached
@@ -10694,15 +10702,24 @@ export class Realm {
     }
     if (!this.#realmInfoPromise) {
       this.#realmInfoPromise = (async () => {
+        // Captured before the read begins, so an invalidation that lands while
+        // it is in flight is visible when it finishes.
+        let generation = this.#realmInfoGeneration;
         // The parse hands back the two halves already apart; this only
         // memoizes them. The hash covers the served half alone, which is
         // exactly the bytes a response carries — so editing a setting does not
         // invalidate every card's cached representation in the realm.
         let { info, config } = await this.parseRealmInfo();
         let settings = config ?? {};
-        this.#cachedRealmInfo = info;
-        this.#cachedRealmConfig = settings;
-        this.#cachedRealmInfoHash = computeContentHash(JSON.stringify(info));
+        if (generation === this.#realmInfoGeneration) {
+          this.#cachedRealmInfo = info;
+          this.#cachedRealmConfig = settings;
+          this.#cachedRealmInfoHash = computeContentHash(JSON.stringify(info));
+        }
+        // Answered either way: this is the realm as the caller asking for it
+        // found it, which is what every reader of a memoized parse gets. What
+        // the check above prevents is that reading outliving the request, by
+        // becoming the answer given to everyone after it.
         return { info, config: settings };
       })().finally(() => {
         this.#realmInfoPromise = undefined;
@@ -10728,6 +10745,7 @@ export class Realm {
   // RealmConfig card or `realm_metadata`, so without this hook a 304
   // would be served against the *pre-publish* hash forever.
   invalidateCachedRealmInfo(): void {
+    this.#realmInfoGeneration++;
     this.#cachedRealmInfo = null;
     this.#cachedRealmConfig = null;
     this.#cachedRealmInfoHash = null;
