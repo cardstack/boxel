@@ -7,7 +7,7 @@ import type { DirResult } from 'tmp';
 import fsExtra from 'fs-extra';
 const { existsSync, readFileSync } = fsExtra;
 import type { Realm } from '@cardstack/runtime-common';
-import { rri } from '@cardstack/runtime-common';
+import { SKIP_INDEX_WAIT_HEADER, rri } from '@cardstack/runtime-common';
 import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
 import { LinkShapePolicy } from '@cardstack/runtime-common/link-shape-policy';
 import {
@@ -573,6 +573,7 @@ module(basename(import.meta.filename), function () {
             .patch('/person-1')
             .send(patchPersonBody('Van Gogh'))
             .set('Accept', 'application/vnd.card+json')
+            .set(SKIP_INDEX_WAIT_HEADER, 'true')
             .set('If-Match', etag);
 
           // Not a 412: the caller's validator may well be current, and the
@@ -600,6 +601,7 @@ module(basename(import.meta.filename), function () {
           .patch('/person-1')
           .send(patchPersonBody('Van Gogh'))
           .set('Accept', 'application/vnd.card+json')
+          .set(SKIP_INDEX_WAIT_HEADER, 'true')
           .set('If-Match', etag);
         assert.strictEqual(
           afterUnwedge.status,
@@ -626,6 +628,19 @@ module(basename(import.meta.filename), function () {
         // Its sibling above is the discriminator: the same wedge, the same
         // request, differing only in which job holds the lane, and that one
         // must still be 503. If the two ever agree, one of them is wrong.
+        //
+        // Both carry `x-boxel-skip-index-wait`, and this half cannot do
+        // without it. A wedge occupies the realm's index concurrency group, so
+        // while it is held no index job for this realm can be claimed —
+        // including the one this very write enqueues. A write that is allowed
+        // through therefore cannot finish indexing until the wedge lifts, and
+        // a response that waited for its own indexing would hang rather than
+        // answer. That is a property of the fixture, not of the gate: the
+        // refusing sibling never reaches indexing precisely because it is
+        // refused, which is why only this half feels it. The header makes the
+        // write answer from its serialized echo, so what is measured is
+        // whether the gate let it proceed rather than whether the wedge also
+        // blocks the work behind it.
         let read = await request
           .get('/person-1')
           .set('Accept', 'application/vnd.card+json');
