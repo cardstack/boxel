@@ -24,6 +24,11 @@ import {
   measureConnectionSetup,
 } from '../scripts/load-harness/lib/connection.ts';
 import {
+  describeInFlight,
+  InFlightReading,
+  LOAD_HALF_LIFE_MS,
+} from '../scripts/load-harness/lib/in-flight.ts';
+import {
   readOnlyReason,
   workloadFromCardTypeSummary,
   type CardTypeSummaryEntry,
@@ -1195,6 +1200,172 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         ensureTrailingSlash('https://example.test/o/r/'),
         'https://example.test/o/r/',
+      );
+    });
+  });
+
+  // The concurrency a run holds, which is the only figure in a summary that
+  // can be compared against a realm server's own thresholds. Getting it wrong
+  // is silent in the direction that matters: a mean that tracked the
+  // instantaneous count would report every burst as sustained load and put a
+  // run over a rung it never approached.
+  module('driver concurrency', function () {
+    test('the mean is time-weighted, so a request only counts for as long as it is open', function (assert) {
+      let clock = 0;
+      let reading = new InFlightReading({
+        halfLifeMs: 10_000,
+        now: () => clock,
+      });
+      assert.strictEqual(reading.mean, 0, 'a driver that has sent nothing');
+
+      let close = reading.open();
+      assert.strictEqual(reading.inFlight, 1);
+      assert.strictEqual(
+        reading.mean,
+        0,
+        'a request that has only just been sent has contributed no time',
+      );
+
+      clock += 10_000; // one half-life held at 1
+      assert.ok(
+        Math.abs(reading.mean - 0.5) < 0.01,
+        `after one half-life at 1 the mean is ~0.5, got ${reading.mean}`,
+      );
+      close();
+    });
+
+    test('a burst moves the mean far less than the same count held', function (assert) {
+      let clock = 0;
+      function meanAfter(burstMs: number, totalMs: number): number {
+        clock = 0;
+        let reading = new InFlightReading({
+          halfLifeMs: LOAD_HALF_LIFE_MS,
+          now: () => clock,
+        });
+        let closes = [];
+        for (let i = 0; i < 30; i++) {
+          closes.push(reading.open());
+        }
+        clock += burstMs;
+        for (let close of closes) {
+          close();
+        }
+        clock += totalMs - burstMs;
+        return reading.peakMean;
+      }
+      // The same peak count over the same wall clock, held for 5s against 10
+      // minutes. This separation is the whole reason a run reports a mean: a
+      // reader firing its whole query set at once produces the first shape,
+      // and a policy tuned against the second must not see it as such.
+      let burst = meanAfter(5_000, 600_000);
+      let sustained = meanAfter(600_000, 600_000);
+      assert.ok(
+        burst < 1,
+        `30 requests open for 5s over 10 minutes peak under 1, got ${burst}`,
+      );
+      assert.ok(
+        sustained > 25,
+        `the same 30 held for 10 minutes peak above 25, got ${sustained}`,
+      );
+    });
+
+    test('the peak mean outlives the quiet stretch at the end of a run', function (assert) {
+      let clock = 0;
+      let reading = new InFlightReading({
+        halfLifeMs: 10_000,
+        now: () => clock,
+      });
+      let closes = [reading.open(), reading.open(), reading.open()];
+      clock += 100_000; // ten half-lives held at 3
+      assert.ok(
+        reading.mean > 2.9,
+        `held at 3 for ten half-lives, got ${reading.mean}`,
+      );
+
+      for (let close of closes) {
+        close();
+      }
+      clock += 100_000;
+      assert.ok(
+        reading.mean < 0.01,
+        `the mean decays back toward zero unattended, got ${reading.mean}`,
+      );
+      assert.ok(
+        reading.peakMean > 2.9,
+        `while the peak the run reached is still reportable, got ${reading.peakMean}`,
+      );
+    });
+
+    test('the peak count keeps the burst the mean flattens', function (assert) {
+      let clock = 0;
+      let reading = new InFlightReading({
+        halfLifeMs: LOAD_HALF_LIFE_MS,
+        now: () => clock,
+      });
+      let closes = [];
+      for (let i = 0; i < 12; i++) {
+        closes.push(reading.open());
+      }
+      clock += 50;
+      for (let close of closes) {
+        close();
+      }
+      clock += 600_000;
+      // The admission gate acts on the instantaneous count, so a burst that
+      // leaves the mean at nothing is still the thing a 429 would have come
+      // from. Both numbers are reported for that reason.
+      assert.strictEqual(reading.peakInFlight, 12);
+      assert.ok(
+        reading.peakMean < 0.1,
+        `while the mean barely registers it, got ${reading.peakMean}`,
+      );
+    });
+
+    test('a request closed twice is only returned once', function (assert) {
+      let clock = 0;
+      let reading = new InFlightReading({
+        halfLifeMs: 10_000,
+        now: () => clock,
+      });
+      let first = reading.open();
+      let second = reading.open();
+      first();
+      first();
+      assert.strictEqual(
+        reading.inFlight,
+        1,
+        'the second request is still open',
+      );
+      second();
+      assert.strictEqual(reading.inFlight, 0);
+    });
+
+    test('the summary states both figures, and which is which', function (assert) {
+      let clock = 0;
+      let reading = new InFlightReading({
+        halfLifeMs: 10_000,
+        now: () => clock,
+      });
+      let closes = [];
+      for (let i = 0; i < 7; i++) {
+        closes.push(reading.open());
+      }
+      clock += 100_000;
+      for (let close of closes) {
+        close();
+      }
+      let summary = describeInFlight(reading);
+      assert.ok(
+        summary.includes('peak 7.0 searches in flight'),
+        `the mean is reported as the mean: ${summary}`,
+      );
+      assert.ok(
+        summary.includes('7 at once'),
+        `and the count as the count: ${summary}`,
+      );
+      assert.ok(
+        summary.includes('boxel:link-shape-policy'),
+        'and the reader is sent to the server figure this one bounds',
       );
     });
   });

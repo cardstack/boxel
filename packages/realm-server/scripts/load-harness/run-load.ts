@@ -51,6 +51,7 @@ import {
   yieldSocketToPool,
   type ConnectionSetup,
 } from './lib/connection.ts';
+import { describeInFlight, InFlightReading } from './lib/in-flight.ts';
 import {
   DEFAULT_FIELDSET,
   describeFieldset,
@@ -197,6 +198,11 @@ if (!args.deriveWorkload) {
   fieldset = resolveFieldset(workload.fieldset);
 }
 
+// The concurrency this driver holds, in the two forms the realm server's own
+// thresholds are written in. Searches only: a write is not what either the
+// admission gate or the link-shape policy counts.
+let inFlight = new InFlightReading();
+
 let stats = {
   search: [] as number[],
   headers: [] as number[],
@@ -321,6 +327,11 @@ async function search(
 ): Promise<void> {
   let query = queryForPass(spec, readerIndex, pass);
   let started = Date.now();
+  // Open before the request and close in `finally`, so the span counted here
+  // is the whole time the realm server has this search outstanding — including
+  // the body, which the server has already let go of. That asymmetry is why
+  // the summary reads this as a bound rather than as the server's own figure.
+  let closeInFlight = inFlight.open();
   try {
     let response = await fetch(searchUrl, {
       method: 'QUERY',
@@ -359,6 +370,8 @@ async function search(
     if (stats.searchErrors <= 3) {
       console.error(`  search ${spec.label} failed: ${errorMessage(e)}`);
     }
+  } finally {
+    closeInFlight();
   }
 }
 
@@ -787,6 +800,9 @@ let reportTimer = setInterval(() => {
     `[${new Date().toISOString().slice(11, 19)}] ` +
       `searches=${stats.searches} (${stats.searchErrors} err)  ` +
       `writes=${stats.writes} (${stats.writeErrors} err)  ` +
+      // The number to steer a run by: readers can be added while it is still
+      // running, and the rate alone will not say whether that helped.
+      `load=${inFlight.mean.toFixed(1)}  ` +
       `${summarize('search', stats.search.slice(-200))}`,
   );
 }, 30000);
@@ -991,6 +1007,12 @@ function finish() {
   let minutes = args.minutes || 1;
   console.log(`\nrate: ${Math.round(stats.searches / minutes)} searches/min`);
 
+  // Rate is not the load. In-flight is rate multiplied by service time, and
+  // service time is the term that moves — so the two lines have to be read
+  // together, and only the second one is comparable to a server-side
+  // threshold.
+  console.log(describeInFlight(inFlight));
+
   // The distinction this harness exists to protect. Measured from outside the
   // region, the body leg is the observer's connection and says nothing about
   // the platform: a run whose end-to-end p50 was 6.1 s covered 225 ms of actual
@@ -1008,11 +1030,15 @@ function finish() {
   }
 
   console.log(
-    `\nNow read the server side: inFlightSearch / heapMB / eventLoopLagMs from the\n` +
-      `realm-server health sampler over this window. Those, not these numbers, are\n` +
-      `what admission control and per-search heap have to move. Each search was\n` +
-      `stamped with an x-boxel-logging-correlation-id, so a slow one here can be\n` +
-      `joined to the server's own timing by its corr= id.`,
+    `\nNow read the server side. heapMB and eventLoopLagMs come from the realm-\n` +
+      `server health sampler over this window; the concurrency the policies act on\n` +
+      `does not, because the sampler reports an instantaneous count on a cadence\n` +
+      `coarser than the bursts it is trying to catch. Take that from the per-request\n` +
+      `boxel:search-shape records (linkMode / linkShapeLevel / linkShapeLoad) and\n` +
+      `from the boxel:link-shape-policy heartbeat, which is the one line that\n` +
+      `separates a policy that declined from one that is not running. Each search\n` +
+      `was stamped with an x-boxel-logging-correlation-id, so a slow one here can\n` +
+      `be joined to the server's own timing by its corr= id.`,
   );
   process.exit(0);
 }
