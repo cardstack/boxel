@@ -17,6 +17,12 @@ export type ModuleDescriptor =
       // registrar may only learn what the module consumed once the module has
       // been evaluated.
       deps?: () => string[];
+      // Where the names this module re-exports are really declared, keyed by
+      // the name this module exposes. A loader credits the first module it
+      // serves with every name that module exposes, so a re-exporter served
+      // ahead of the declarer would otherwise take the credit and every code
+      // ref for that class would name the wrong module.
+      reexported?: () => Record<string, { module: string; name: string }>;
     };
 
 function trimModuleIdentifier(moduleIdentifier: string): string {
@@ -428,6 +434,11 @@ export class PackageShimHandler {
   // Declared dependencies per shimmed module, keyed the same way as
   // `moduleIds`.
   private moduleDeps = new Map<string, () => string[]>();
+  // Re-exported names per shimmed module, keyed the same way.
+  private moduleReexported = new Map<
+    string,
+    () => Record<string, { module: string; name: string }>
+  >();
   private log = logger('shim-handler');
 
   constructor(resolveImport: (moduleIdentifier: string) => string) {
@@ -536,6 +547,9 @@ export class PackageShimHandler {
       if (descriptor.deps) {
         this.moduleDeps.set(key, descriptor.deps);
       }
+      if (descriptor.reexported) {
+        this.moduleReexported.set(key, descriptor.reexported);
+      }
     }
   }
 
@@ -558,6 +572,15 @@ export class PackageShimHandler {
   // as `lookupModule`. Empty for a shim registered without them.
   lookupModuleDeps(url: string): string[] {
     return this.moduleDeps.get(trimModuleIdentifier(url))?.() ?? [];
+  }
+
+  // Where a shimmed module's re-exported names are really declared, in the
+  // same lookup terms as `lookupModule`. Empty for a shim registered without
+  // them.
+  lookupModuleReexported(
+    url: string,
+  ): Record<string, { module: string; name: string }> {
+    return this.moduleReexported.get(trimModuleIdentifier(url))?.() ?? {};
   }
 
   private async getModule(url: string): Promise<ModuleLike | undefined> {

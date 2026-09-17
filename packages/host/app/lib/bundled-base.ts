@@ -1,16 +1,17 @@
 import { waitForPromise } from '@ember/test-waiters';
 
 import type { VirtualNetwork } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
 
 // Written by the `bundled-base-scoped-css` vite plugin: each bundled base
-// module registers the scoped-CSS specifiers its compiled source imports and
-// the sibling base modules it pulls in, as it is evaluated.
+// module registers the scoped-CSS specifiers its compiled source imports, the
+// sibling base modules it pulls in, and the names it re-exports rather than
+// declares, as it is evaluated.
 // See packages/host/lib/bundled-base-scoped-css.mjs.
 interface BundledBaseModuleImports {
   css: string[];
   imports: string[];
-  reexports: string[];
+  // `{ [name this module exposes]: [declaring module, name it has there] }`.
+  reexported: Record<string, [string, string]>;
 }
 
 const scopedCSSRegistry = () =>
@@ -269,44 +270,32 @@ export const BUNDLED_BASE_MODULES: Record<
   'tool-field': () => import('@cardstack/base/tool-field'),
 };
 
-// A loader credits the first module it serves with every binding that module's
-// namespace exposes, so a re-exporter served ahead of the module that declares
-// the class takes the credit — `identifyCard` then reports `file-api` for a
-// `FileDef` that `card-api` declares, and the adoption-chain walk, which stops
-// at the module a code ref names, walks past it and fails. A module the loader
-// fetches cannot get this wrong: evaluating it loads what it re-exports from
-// first. A bundled module can, because the bundler resolves that import inside
-// the chunk where the loader never sees it, so the declarer is served here
-// before the module that borrows from it.
-//
-// Each source is imported through the loader that published itself for bundled
-// modules to reach, which is the loader doing the serving. A source that is not
-// a bundled module, or a loader that cannot load it, leaves the order as it was
-// rather than failing the module that asked.
-async function serveDeclarersFirst(
-  name: string,
-  resolve: () => Promise<Record<string, unknown>>,
-) {
-  for (let source of scopedCSSRegistry()?.[name]?.reexports ?? []) {
-    if (!(source in BUNDLED_BASE_MODULES) || servingDeclarer.has(source)) {
-      continue;
+// Where each name a module exposes but does not declare is really declared,
+// following the chain: `file-api` borrows `getDefaultFileMenuItems` from
+// `card-api`, which borrows it in turn from `file-menu-items`, and it is the
+// last of those that declares it.
+function declarersFor(name: string) {
+  let registry = scopedCSSRegistry();
+  let declarers: Record<string, { module: string; name: string }> = {};
+  for (let exposed of Object.keys(registry?.[name]?.reexported ?? {})) {
+    let module = name;
+    let declared = exposed;
+    let seen = new Set<string>();
+    for (;;) {
+      let next = registry?.[module]?.reexported?.[declared];
+      if (!next || seen.has(module)) {
+        break;
+      }
+      seen.add(module);
+      [module, declared] = next;
     }
-    servingDeclarer.add(source);
-    try {
-      await Loader.forBundledModules()?.import(`@cardstack/base/${source}`);
-    } catch {
-      // ignored: see above
-    } finally {
-      servingDeclarer.delete(source);
-    }
+    declarers[exposed] = {
+      module: `@cardstack/base/${module}`,
+      name: declared,
+    };
   }
-  return resolve();
+  return declarers;
 }
-
-// Guards the case of two modules that re-export from each other: the second
-// serve finds its source already in flight and goes ahead without it, rather
-// than waiting on a module that is waiting on it.
-const servingDeclarer = new Set<string>();
 
 // Registers on the virtual network, so every loader that shares it serves the
 // bundled modules. Must run after the `@cardstack/base/` realm mapping is
@@ -323,12 +312,14 @@ export function shimBundledBase(virtualNetwork: VirtualNetwork) {
       // so nothing about it reaches the runloop and a test settles before the
       // module has been evaluated. Naming the import to the test waiters keeps
       // `settled()` waiting for it, as it waits for the fetch this replaces.
-      resolve: () =>
-        waitForPromise(
-          serveDeclarersFirst(name, resolve),
-          `bundled base: ${name}`,
-        ),
+      resolve: () => waitForPromise(resolve(), `bundled base: ${name}`),
       deps: () => scopedCSSDepsFor(name),
+      // A loader credits the first module it serves with every name that
+      // module exposes, so a module that only borrows a class from a sibling
+      // would take the credit for it and every code ref would then name the
+      // wrong module. Naming where each borrowed class is declared hands the
+      // credit to the module that declares it.
+      reexported: () => declarersFor(name),
     });
   }
 }

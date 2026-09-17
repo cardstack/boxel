@@ -211,6 +211,16 @@ export class VirtualNetwork {
     return this.packageShimHandler.lookupModuleDeps(this.toRealURLHref(url));
   }
 
+  // Where a shimmed module's re-exported names are really declared, so the
+  // loader credits the declarer rather than the module that borrows them.
+  getShimmedModuleReexported(
+    url: string,
+  ): Record<string, { module: string; name: string }> {
+    return this.packageShimHandler.lookupModuleReexported(
+      this.toRealURLHref(url),
+    );
+  }
+
   addURLMapping(from: URL, to: URL) {
     this.urlMappings.push([from.href, to.href]);
     // unresolveURL and toRealURLHref chase through urlMappings (the latter via

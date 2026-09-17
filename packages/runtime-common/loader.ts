@@ -1168,6 +1168,8 @@ export class Loader {
         (response as any)[Symbol.for('shimmed-module')] = shimmedModule;
         (response as any)[Symbol.for('shimmed-module-deps')] =
           this.virtualNetwork?.getShimmedModuleDeps(request.url) ?? [];
+        (response as any)[Symbol.for('shimmed-module-reexported')] =
+          this.virtualNetwork?.getShimmedModuleReexported(request.url) ?? {};
         return response;
       }
 
@@ -1290,9 +1292,17 @@ export class Loader {
   // (`https://localhost:4201/base/X`) for the same module. Returns the
   // input unchanged when no virtual alias is registered.
 
+  // `reexported` says where the names a module exposes but does not declare
+  // really come from. A binding is credited to the first module exposing it
+  // that gets served, so a re-exporter served ahead of the declarer would take
+  // the credit and every code ref for that class would name the wrong module —
+  // and the declarer may never be served on its own at all. Crediting the
+  // declarer named here settles it in either order. A module the loader fetches
+  // never needs this: evaluating it loads what it re-exports from first.
   private captureIdentitiesOfModuleExports(
     module: any,
     moduleIdentifier: string,
+    reexported: Record<string, { module: string; name: string }> = {},
   ) {
     // Identities are recorded in canonical identifier form so that
     // `identify()` output matches the form persisted in code refs.
@@ -1306,10 +1316,18 @@ export class Loader {
         typeof propName === 'string' &&
         !this.identities.has(exportedEntity)
       ) {
-        this.identities.set(exportedEntity, {
-          module: moduleId,
-          name: propName,
-        });
+        let borrowed = reexported[propName];
+        this.identities.set(
+          exportedEntity,
+          borrowed
+            ? {
+                module: this.canonicalIdentifier(
+                  trimModuleIdentifier(borrowed.module),
+                ),
+                name: borrowed.name,
+              }
+            : { module: moduleId, name: propName },
+        );
         Loader.loaders.set(exportedEntity, this);
       }
     }
@@ -1350,6 +1368,7 @@ export class Loader {
           module: Record<string, unknown>;
           url: string;
           deps: string[];
+          reexported: Record<string, { module: string; name: string }>;
         };
 
     try {
@@ -1398,7 +1417,11 @@ export class Loader {
     this.setCanonicalModuleURL(moduleIdentifier, canonicalURL);
 
     if (loaded.type === 'shimmed') {
-      this.captureIdentitiesOfModuleExports(loaded.module, moduleIdentifier);
+      this.captureIdentitiesOfModuleExports(
+        loaded.module,
+        moduleIdentifier,
+        loaded.reexported,
+      );
 
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
@@ -1599,6 +1622,7 @@ export class Loader {
         module: Record<string, unknown>;
         url: string;
         deps: string[];
+        reexported: Record<string, { module: string; name: string }>;
       }
   > {
     let response: MaybeCachedResponse;
@@ -1664,6 +1688,8 @@ export class Loader {
         module: (response as any)[Symbol.for('shimmed-module')],
         url: canonicalURL,
         deps: (response as any)[Symbol.for('shimmed-module-deps')] ?? [],
+        reexported:
+          (response as any)[Symbol.for('shimmed-module-reexported')] ?? {},
       };
     }
     let source = await response.text();
