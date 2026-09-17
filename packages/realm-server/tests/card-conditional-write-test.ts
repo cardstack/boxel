@@ -653,6 +653,7 @@ module(basename(import.meta.filename), function () {
             .patch('/person-1')
             .send(patchPersonBody('Van Gogh'))
             .set('Accept', 'application/vnd.card+json')
+            .set(SKIP_INDEX_WAIT_HEADER, 'true')
             .set('If-Match', etag);
 
           assert.strictEqual(
