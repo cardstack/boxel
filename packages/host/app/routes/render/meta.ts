@@ -232,10 +232,11 @@ export default class RenderMetaRoute extends Route<Model> {
         // A card file holds the card's own resource and no linked neighbors,
         // so no link target's resource belongs in this document. Saying that
         // up front is what keeps it cheap: the searchable settle above leaves
-        // the link graph resident, and at any wider scope the serializer would
-        // walk all of it — each target, and each target's own targets — to
-        // build an `included[]` this route then discards. An excluded target
-        // still emits its relationship entry, so the document is unchanged.
+        // link targets resident, and at any wider scope the serializer would
+        // walk whatever it finds there — each resident target, and
+        // transitively each target's own — to build an `included[]` this
+        // route then discards. An excluded target still emits its
+        // relationship entry, so the document is unchanged.
         includedScope: 'none',
         // A query-backed field is resolved live and the index can't invalidate
         // it, so its serialized value would always be stale. Membership comes
