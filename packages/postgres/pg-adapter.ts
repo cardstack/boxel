@@ -73,6 +73,17 @@ export function hashFilePathForAdvisoryLock(
   return digest.readBigInt64BE(0).toString();
 }
 
+// How many files one write may lock individually before it takes the realm
+// instead. Advisory locks occupy a cluster-wide table sized by
+// `max_locks_per_transaction`, and a transaction holding one per file would
+// exhaust it on a caller that names a file per entry — the realm-wide
+// `deleteAll` an unpublish performs is the one that reaches that scale.
+//
+// Sized by the shape of the callers rather than by the table: an interactive
+// card write names one file and its side-loads, a composed batch a few dozen.
+// Anything past this is a bulk operation whose natural scope is the realm.
+const MAX_FILE_WRITE_LOCKS = 256;
+
 const log = logger('pg-adapter');
 
 // One line per file-write lock acquisition. Separate from `pg-adapter`'s own
@@ -567,10 +578,10 @@ export class PgAdapter implements DBAdapter {
   // Scope is what separates this from `withWriteLock`. Both are
   // `pg_advisory_xact_lock`, so both serialize across replicas and both release
   // on commit or rollback with no stale-lock mode. This one takes a key per
-  // file, in a key space of its own, so a realm-lifecycle caller holding the
-  // realm lock and a card write holding one of its files do not exclude each
-  // other. A caller that must exclude every writer in the realm — destroying
-  // it, publishing it — still wants `withWriteLock`.
+  // file, in a key space of its own, so two writers of different cards do not
+  // exclude each other. A caller that must exclude every writer in the realm —
+  // destroying it, publishing it — still wants `withWriteLock`, and this one
+  // holds the realm's own key in shared mode so that caller still excludes it.
   //
   // Deadlock: keys are sorted and taken in that order, so two batches whose
   // file sets overlap take the shared keys in the same sequence and one waits
@@ -598,20 +609,42 @@ export class PgAdapter implements DBAdapter {
     localPaths: readonly string[],
     fn: () => Promise<T>,
   ): Promise<T> {
-    const lockKeys = [
+    const fileKeys = [
       ...new Set(
         localPaths.map((localPath) =>
           hashFilePathForAdvisoryLock(realmUrl, localPath),
         ),
       ),
     ].sort();
-    if (lockKeys.length === 0) {
+    if (fileKeys.length === 0) {
       // Nothing to serialize against. A batch with no files to write has no
       // read-merge-write to protect, and taking a lock keyed on the empty set
       // would serialize exactly those callers against each other for nothing.
       return await fn();
     }
-    const queueKey = lockKeys.join(',');
+    const realmKey = hashRealmUrlForAdvisoryLock(realmUrl);
+    // Past the ceiling the file keys are dropped for the realm's own key, held
+    // exclusively. Every advisory lock a transaction takes occupies a slot in
+    // a cluster-wide table sized by `max_locks_per_transaction`, so a caller
+    // naming a file per entry — unpublishing a realm hands `deleteAll` every
+    // file in it — would otherwise take thousands of them at once and fail the
+    // write with "out of shared memory". Falling back to the realm is sound
+    // rather than merely cheap: it excludes strictly more writers than the
+    // file keys would, and a caller touching this many files is realm-scoped
+    // in effect already.
+    const bulk = fileKeys.length > MAX_FILE_WRITE_LOCKS;
+    const lockPlan: { key: string; mode: 'shared' | 'exclusive' }[] = bulk
+      ? [{ key: realmKey, mode: 'exclusive' }]
+      : [
+          // Shared on the realm, so file writers do not exclude each other
+          // through it, but a realm-lifecycle caller taking the realm key
+          // exclusively — destroying, publishing or unpublishing the realm —
+          // still excludes every one of them. Without this the two lock spaces
+          // are disjoint and a realm could be torn down under a live write.
+          { key: realmKey, mode: 'shared' as const },
+          ...fileKeys.map((key) => ({ key, mode: 'exclusive' as const })),
+        ];
+    const queueKey = bulk ? `bulk:${realmKey}` : fileKeys.join(',');
     const previous = this.#fileWriteQueue.get(queueKey) ?? Promise.resolve();
     const myWork = (async (): Promise<T> => {
       try {
@@ -620,7 +653,7 @@ export class PgAdapter implements DBAdapter {
         // A prior caller's failure must not cascade — the next writer of
         // these files still gets its turn at the lock.
       }
-      return await this.#runWithAdvisoryXactLocks(lockKeys, realmUrl, fn);
+      return await this.#runWithAdvisoryXactLocks(lockPlan, realmUrl, fn);
     })();
     // What the next caller for this same file set waits on: outcome-erased so
     // its own try/catch is not sensitive to ours, and tee'd off `myWork` to
@@ -730,7 +763,7 @@ export class PgAdapter implements DBAdapter {
   // long it kept them from running. A realm-wide stall and a contended single
   // card look identical from request latency alone; they differ here.
   async #runWithAdvisoryXactLocks<T>(
-    lockKeys: readonly string[],
+    lockPlan: readonly { key: string; mode: 'shared' | 'exclusive' }[],
     contextLabel: string,
     fn: () => Promise<T>,
   ): Promise<T> {
@@ -739,10 +772,12 @@ export class PgAdapter implements DBAdapter {
       const waitStart = Date.now();
       let holdStart: number | undefined;
       try {
-        for (const lockKey of lockKeys) {
+        for (const { key, mode } of lockPlan) {
           await queryFn([
-            `SELECT pg_advisory_xact_lock(`,
-            param(lockKey),
+            mode === 'shared'
+              ? `SELECT pg_advisory_xact_lock_shared(`
+              : `SELECT pg_advisory_xact_lock(`,
+            param(key),
             `::bigint)`,
           ]);
         }
@@ -771,7 +806,7 @@ export class PgAdapter implements DBAdapter {
         const waitMs = (holdStart ?? now) - waitStart;
         const holdMs = holdStart === undefined ? 0 : now - holdStart;
         lockLog.info(
-          `writeLock realm=${contextLabel} waitMs=${waitMs} holdMs=${holdMs} files=${lockKeys.length}`,
+          `writeLock realm=${contextLabel} waitMs=${waitMs} holdMs=${holdMs} files=${lockPlan.filter(({ mode }) => mode === 'exclusive').length} scope=${lockPlan[0]?.mode === 'exclusive' ? 'realm' : 'files'}`,
         );
       }
     });

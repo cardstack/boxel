@@ -455,24 +455,97 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('does not serialize against the realm write lock', async function (assert) {
-      // The two key spaces are disjoint, so a realm-lifecycle caller holding
-      // the realm and a card write holding one of its files do not exclude
-      // each other.
-      await runInsideWindow(assert, {
-        what: 'a file write runs while the realm lock is held',
-        openOuter: (onEntered, released) =>
-          dbAdapter.withWriteLock(REALM, async () => {
-            onEntered();
-            await released;
-          }),
-        runInner: () =>
-          dbAdapter.withFileWriteLocks(
-            REALM,
-            ['Widget/one.json'],
-            async () => 'ok',
-          ),
+    test('waits for a realm-lifecycle caller holding the realm lock', async function (assert) {
+      // A file writer holds the realm's own key in shared mode, so a caller
+      // that takes it exclusively — destroying, publishing or unpublishing the
+      // realm — still excludes every writer in it. Without that, the two key
+      // spaces would be disjoint and a realm could be torn down under a live
+      // write.
+      const events: string[] = [];
+      const eventTimes: number[] = [];
+      const startedAt = Date.now();
+      const push = (e: string) => {
+        events.push(e);
+        eventTimes.push(Date.now());
+      };
+
+      let signalRealmEntered!: () => void;
+      const realmEntered = new Promise<void>((r) => {
+        signalRealmEntered = r;
       });
+      const realm = dbAdapter.withWriteLock(REALM, async () => {
+        push('realm-start');
+        signalRealmEntered();
+        await new Promise((r) => setTimeout(r, 150));
+        push('realm-end');
+      });
+      await Promise.race([realmEntered, realm]);
+      const file = dbAdapter.withFileWriteLocks(
+        REALM,
+        ['Widget/one.json'],
+        async () => {
+          push('file-start');
+          push('file-end');
+        },
+      );
+
+      await Promise.all([realm, file]);
+
+      assert.deepEqual(
+        events,
+        ['realm-start', 'realm-end', 'file-start', 'file-end'],
+        `a file write waits for the realm lock to be released; timeline: ${timeline(events, startedAt, eventTimes)}`,
+      );
+    });
+
+    test('takes the realm exclusively rather than a key per file past the ceiling', async function (assert) {
+      // A caller naming more files than the ceiling — a realm-wide `deleteAll`
+      // is the one that reaches it — would otherwise hold one advisory lock
+      // per file and exhaust the cluster's lock table. It takes the realm
+      // instead, which excludes strictly more writers, so an unrelated card's
+      // writer waits where it would not have for a smaller batch.
+      const events: string[] = [];
+      const eventTimes: number[] = [];
+      const startedAt = Date.now();
+      const push = (e: string) => {
+        events.push(e);
+        eventTimes.push(Date.now());
+      };
+
+      const many = Array.from(
+        { length: 300 },
+        (_unused, i) => `Widget/bulk-${i}.json`,
+      );
+      let signalBulkEntered!: () => void;
+      const bulkEntered = new Promise<void>((r) => {
+        signalBulkEntered = r;
+      });
+      const bulk = dbAdapter.withFileWriteLocks(REALM, many, async () => {
+        push('bulk-start');
+        signalBulkEntered();
+        await new Promise((r) => setTimeout(r, 150));
+        push('bulk-end');
+      });
+      await Promise.race([bulkEntered, bulk]);
+      // A file the bulk caller never named. Under per-file keys this would run
+      // straight through; under the realm key it waits, which is what says the
+      // fallback actually happened.
+      const other = dbAdapter.withFileWriteLocks(
+        REALM,
+        ['Gadget/one.json'],
+        async () => {
+          push('other-start');
+          push('other-end');
+        },
+      );
+
+      await Promise.all([bulk, other]);
+
+      assert.deepEqual(
+        events,
+        ['bulk-start', 'bulk-end', 'other-start', 'other-end'],
+        `past the ceiling the realm is held, so a writer of an unnamed file waits; timeline: ${timeline(events, startedAt, eventTimes)}`,
+      );
     });
 
     test('takes no lock for an empty file set', async function (assert) {
