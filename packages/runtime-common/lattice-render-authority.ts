@@ -1,7 +1,10 @@
 import type { DBAdapter } from './db.ts';
 import { param, query, type Querier } from './expression.ts';
 import type { LooseCardResource } from './resource-types.ts';
-import { indexingConcurrencyGroup } from './jobs/indexing.ts';
+import {
+  indexingConcurrencyGroup,
+  SOURCE_INDEX_JOB_TYPES_SQL,
+} from './jobs/indexing.ts';
 import { assertLatticeOwnerCodes } from './lattice-code-reference.ts';
 import {
   createLatticeRenderCheckpoint,
@@ -63,10 +66,10 @@ async function readAuthority(
     `((EXISTS (SELECT 1 FROM lattice_pending_generations p WHERE p.realm_url = o.realm_url))
        OR (EXISTS (SELECT 1 FROM jobs j WHERE j.concurrency_group =`,
     param(indexingConcurrencyGroup(realmURL)),
-    `AND j.job_type <> 'lattice-materialize' AND j.status = 'unfulfilled'))
+    `AND j.job_type IN ${SOURCE_INDEX_JOB_TYPES_SQL} AND j.status = 'unfulfilled'))
        OR ((SELECT j.status FROM jobs j WHERE j.concurrency_group =`,
     param(indexingConcurrencyGroup(realmURL)),
-    `AND j.job_type <> 'lattice-materialize' ORDER BY j.id DESC LIMIT 1) = 'rejected')) AS unsettled
+    `AND j.job_type IN ${SOURCE_INDEX_JOB_TYPES_SQL} ORDER BY j.id DESC LIMIT 1) = 'rejected')) AS unsettled
      FROM lattice_owners o
      LEFT JOIN realm_generations r ON r.realm_url = o.realm_url
      LEFT JOIN boxel_index i ON i.realm_url = o.realm_url

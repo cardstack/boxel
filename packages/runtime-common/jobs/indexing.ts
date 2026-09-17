@@ -16,6 +16,18 @@ import { isObjectLike } from 'lodash-es';
 
 export const INCREMENTAL_INDEX_JOB_TIMEOUT_SEC = 10 * 60;
 
+// Source-index writers, shared by worker registration and Lattice's freshness
+// barriers. Maintenance may share their concurrency group without representing
+// an unpublished source change (for example scoped-css-gc).
+export const INDEX_JOB_TYPES = [
+  'from-scratch-index',
+  'incremental-index',
+  'copy-index',
+] as const;
+export const SOURCE_INDEX_JOB_TYPES_SQL = `(${INDEX_JOB_TYPES.map(
+  (type) => `'${type}'`,
+).join(', ')})`;
+
 // Every job that writes a realm's index — from-scratch, incremental, copy —
 // shares one concurrency group, which is what makes them serialize per realm.
 // Anything that reasons about a realm's index jobs as a set (enqueue,

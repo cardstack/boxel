@@ -5,7 +5,10 @@ import { CardError } from './error.ts';
 import type { LooseCardResource } from './resource-types.ts';
 import type { SingleCardDocument } from './document-types.ts';
 import type { SerializedError } from './error.ts';
-import { indexingConcurrencyGroup } from './jobs/indexing.ts';
+import {
+  indexingConcurrencyGroup,
+  SOURCE_INDEX_JOB_TYPES_SQL,
+} from './jobs/indexing.ts';
 import { latticeOwnerDefinitionCurrent } from './lattice-code-reference.ts';
 
 // Versioned provenance for the ordinary attributes/relationship payload. The
@@ -241,13 +244,13 @@ export async function latticeReadState(
   // must ignore its own queue job while consuming already-ready feeders.
   if (db.kind === 'pg' && !opts?.latticeInput) {
     let pending = await query(db, [
-      "SELECT 1 FROM jobs WHERE status = 'unfulfilled' AND job_type <> 'lattice-materialize' AND concurrency_group =",
+      `SELECT 1 FROM jobs WHERE status = 'unfulfilled' AND job_type IN ${SOURCE_INDEX_JOB_TYPES_SQL} AND concurrency_group =`,
       param(indexingConcurrencyGroup(realmURL)),
       'LIMIT 1',
     ]);
     if (pending.length) return 'pending';
     let [latest] = await query(db, [
-      "SELECT status FROM jobs WHERE job_type <> 'lattice-materialize' AND concurrency_group =",
+      `SELECT status FROM jobs WHERE job_type IN ${SOURCE_INDEX_JOB_TYPES_SQL} AND concurrency_group =`,
       param(indexingConcurrencyGroup(realmURL)),
       'ORDER BY id DESC LIMIT 1',
     ]);

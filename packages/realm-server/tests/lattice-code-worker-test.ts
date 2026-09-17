@@ -592,6 +592,11 @@ module(basename(import.meta.filename), function (hooks) {
         0,
         'pending source indexing keeps linking work unreserved',
       );
+      await db.execute(
+        `INSERT INTO jobs (job_type, concurrency_group, priority, timeout, args)
+         VALUES ('scoped-css-gc', $1, 1, 60, '{}')`,
+        { bind: [`indexing:${realm}`] },
+      );
       await db.execute("UPDATE jobs SET status='resolved' WHERE id=$1", {
         bind: [sourceJob.id],
       });
@@ -608,7 +613,11 @@ module(basename(import.meta.filename), function (hooks) {
         if (job?.status !== 'unfulfilled') break;
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
-      assert.strictEqual(job?.status, 'resolved', logs);
+      assert.strictEqual(
+        job?.status,
+        'resolved',
+        `maintenance does not block linking: ${logs}`,
+      );
       assert.strictEqual((job?.result as any).processorPid, child.pid);
       assert.false((await artifacts())[0].dirty);
     } finally {
