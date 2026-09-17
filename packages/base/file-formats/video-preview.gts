@@ -61,7 +61,7 @@ export class VideoPreview extends GlimmerComponent<ContentPreviewSignature> {
 
   <template>
     {{#if this.isFitted}}
-      <div class='video-fitted' data-test-video-fitted>
+      <div class='video-fitted' ...attributes data-test-video-fitted>
         <VideoIcon
           class='video-glyph'
           width='26'
@@ -76,7 +76,12 @@ export class VideoPreview extends GlimmerComponent<ContentPreviewSignature> {
         {{/if}}
       </div>
     {{else}}
-      <div class='video' data-mode={{this.format}} data-test-video-preview>
+      <div
+        class='video'
+        data-mode={{this.format}}
+        ...attributes
+        data-test-video-preview
+      >
         {{#if this.mediaUrl}}
           <FileVideo
             class='video-player'
@@ -96,6 +101,16 @@ export class VideoPreview extends GlimmerComponent<ContentPreviewSignature> {
     {{/if}}
 
     <style scoped>
+      /* The matte pair is the family's own `--fd-*`, which is outside the theme
+         contract, so it resolves once here and is read bare below. It degrades
+         to `--tooltip` — the one inverted surface the theme guarantees a
+         foreground for — which is the same mapping the office badge uses. */
+      .video-fitted,
+      .video {
+        --video-matte: var(--fd-slate, var(--tooltip));
+        --video-matte-ink: var(--fd-paper, var(--tooltip-foreground));
+      }
+
       /* Fitted: no player. The poster thumbnail is the fitted shell's job; this
          is the fallback when the file carries none — the family glyph with the
          running time anchored in a corner. */
@@ -106,29 +121,33 @@ export class VideoPreview extends GlimmerComponent<ContentPreviewSignature> {
         display: grid;
         place-items: center;
         overflow: hidden;
-        padding: 8px;
-        background: var(--fd-slate, #1f2430);
+        padding: var(--boxel-sp-2xs);
+        background-color: var(--video-matte);
+        color: var(--video-matte-ink);
       }
       .video-glyph {
-        color: var(--fd-paper, #d4d8e0);
+        color: inherit;
       }
       .video-clock {
         position: absolute;
-        right: 6px;
-        bottom: 5px;
+        right: var(--boxel-sp-3xs);
+        bottom: var(--boxel-sp-3xs);
         font-family: var(--font-mono);
-        font-size: 0.5625rem;
+        font-size: var(--boxel-eyebrow-font-size);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         font-weight: 700;
-        letter-spacing: 0.04em;
-        color: var(--fd-paper, var(--card, #f7f7f5));
-        background: rgb(0 0 0 / 42%);
-        padding: 1px 5px;
-        border-radius: 3px;
+        color: var(--video-matte-ink);
+        /* A readability scrim over arbitrary footage: black darkens whatever
+           frame is behind it in either scheme, where a token would flip. */
+        background-color: color-mix(in oklch, transparent, black 42%);
+        padding: 1px var(--boxel-sp-4xs);
+        border-radius: var(--boxel-border-radius-2xs);
       }
 
       /* Embedded/isolated: the player fills the stage the shell frames (the
-         video shell already picks a height and aspect for it), letterboxed on a
-         matte so nothing is cropped. */
+         video shell already picks a height and aspect for it), letterboxed on
+         the same matte so nothing is cropped. */
       .video {
         width: 100%;
         height: 100%;
@@ -136,7 +155,8 @@ export class VideoPreview extends GlimmerComponent<ContentPreviewSignature> {
         display: grid;
         place-items: center;
         overflow: hidden;
-        background: var(--fd-slate, #1f2430);
+        background-color: var(--video-matte);
+        color: var(--video-matte-ink);
       }
       .video-player {
         display: block;
@@ -144,20 +164,21 @@ export class VideoPreview extends GlimmerComponent<ContentPreviewSignature> {
         height: 100%;
         max-height: 100%;
         object-fit: contain;
-        background: #000;
+        background-color: var(--video-matte);
       }
       .video-noviz {
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 6px;
-        color: var(--fd-paper, #d4d8e0);
+        gap: var(--boxel-sp-2xs);
+        color: inherit;
       }
       .video-noviz-label {
         font-family: var(--font-mono);
-        font-size: 0.53125rem;
-        letter-spacing: 0.1em;
+        font-size: var(--boxel-eyebrow-font-size);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
         opacity: 0.8;
       }
