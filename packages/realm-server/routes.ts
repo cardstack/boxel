@@ -6,6 +6,7 @@ import type {
   Realm,
   VirtualNetwork,
   Prerenderer,
+  LinkShapePolicy,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
@@ -143,9 +144,8 @@ export type CreateRoutesArgs = {
   // (coalescing on, retention off) to force each caller to compute; when
   // unset the handler constructs its own with production defaults.
   liveSearchCache?: LiveSearchCache;
-  // When true, a live search answers each result's relationships but
-  // side-loads none of their targets.
-  liveReadsResolveLinksOnly?: boolean;
+  // Decides how much of each result's link graph a live search carries.
+  linkShapePolicy?: LinkShapePolicy;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
@@ -253,7 +253,7 @@ export function createRoutes(args: CreateRoutesArgs) {
       dbAdapter: args.dbAdapter,
       virtualNetwork: args.virtualNetwork,
       liveSearchCache: args.liveSearchCache,
-      liveReadsResolveLinksOnly: args.liveReadsResolveLinksOnly,
+      linkShapePolicy: args.linkShapePolicy,
     }),
   );
   router.all(

@@ -14,6 +14,7 @@ import {
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
   DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
+  LinkShapePolicy,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm.ts';
 import yargs from 'yargs';
@@ -47,6 +48,10 @@ import { ModuleCacheCoordinator } from './lib/module-cache-coordination.ts';
 import { JobsFinishedListener } from './lib/jobs-finished-listener.ts';
 import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import { startHealthSampler } from './health-sampler.ts';
+import {
+  getSearchAdmissionLimit,
+  getSearchSustainedInFlight,
+} from './search-inflight.ts';
 import { startEventLoopHeartbeat } from './liveness/event-loop-heartbeat.ts';
 import { startLivenessResponder } from './liveness/index.ts';
 import { resolveFullIndexOnStartup } from './lib/full-index-on-startup.ts';
@@ -184,14 +189,21 @@ const SKIP_BOOT_INDEX = process.env.REALM_SERVER_SKIP_BOOT_INDEX === 'true';
 const PRERENDER_COALESCE_ACROSS_PROCESSES =
   process.env.PRERENDER_COALESCE_ACROSS_PROCESSES === 'true';
 
-// How much of a card's link graph a live read carries. Off, a live card GET
-// or search assembles the card's whole transitive link closure into
-// `included[]` so a consumer can render every linked field without asking for
-// anything more. On, the response answers each card's relationships and stops
-// there, and the consumer fetches the linked cards it displays. Absent means
-// off, so an environment that has not set it keeps side-loading.
-const LIVE_READS_RESOLVE_LINKS_ONLY =
-  process.env.REALM_SERVER_LIVE_READS_RESOLVE_LINKS_ONLY === 'true';
+// How much of a card's link graph each live read carries, chosen per realm
+// from the load this process is under. It reads the same in-flight count
+// admission control already computes — in its sustained form, since a shape
+// that flapped per request would fragment every validator it is folded into —
+// and degrades a response one rung before admission control would refuse the
+// request outright.
+//
+// This is the process's only control over the shape. There is deliberately no
+// environment variable beside it: an operator-set flag cannot express "depends
+// on concurrency", and two mechanisms deciding one thing is how they come to
+// disagree.
+const linkShapePolicy = new LinkShapePolicy({
+  readLoad: getSearchSustainedInFlight,
+  limit: getSearchAdmissionLimit(),
+});
 
 let {
   port,
@@ -667,9 +679,7 @@ const reportHostShellToManager = async () => {
           ...(process.env.DISABLE_MODULE_CACHING === 'true'
             ? { disableModuleCaching: true }
             : {}),
-          ...(LIVE_READS_RESOLVE_LINKS_ONLY
-            ? { liveReadsResolveLinksOnly: true as const }
-            : {}),
+          linkShapePolicy,
         },
       );
       // Publish synchronously into realms[] + virtualNetwork. The
@@ -723,7 +733,7 @@ const reportHostShellToManager = async () => {
       : undefined,
     prerenderer,
     reportHostShell: reportHostShellToManager,
-    liveReadsResolveLinksOnly: LIVE_READS_RESOLVE_LINKS_ONLY,
+    linkShapePolicy,
   });
 
   let httpServer = server.listen(port);
