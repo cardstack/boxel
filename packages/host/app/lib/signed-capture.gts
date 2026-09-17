@@ -29,6 +29,11 @@ import { not } from '@cardstack/boxel-ui/helpers';
 
 import type CaptureUrlSignerService from '../services/capture-url-signer';
 
+// How long a failed mint is held before the one retry it gets. Long enough to
+// outlast a blip, short enough that a viewer isn't left looking at an error
+// that would have cleared.
+const ERROR_RETRY_MS = 30 * 1000;
+
 // Base cards' render-context signal: set during a server-side prerender,
 // absent in a live client render (the same global `pdf-viewer` and
 // `query-field-support` read). Prerendered markup must carry only durable
@@ -59,14 +64,35 @@ interface Loaded {
 }
 
 // Renderless provider: yields a loadable form of `@url` once minted. Backed
-// by the signer service's memo, so re-renders and sibling components asking
-// for the same URL share one mint; a token nearing expiry re-mints on the
-// next render that reads it.
+// by the signer service's memo, so sibling components asking for the same URL
+// share one mint.
+//
+// One mint per `@url`, held for the component's life. A token going stale is
+// a clock event, and the yielded value is a Glimmer reference cached against
+// tracked state, so nothing invalidates it — deliberately: re-minting on a
+// timer would swap the URL under an `<object>` or `<img>` that has already
+// loaded, reloading the embed every few minutes to serve a consumer that may
+// never appear. The contract that follows for card authors is that the
+// yielded URL is live from the moment it is yielded, so a consumer that can
+// first appear long after that — an embed behind a conditional this block
+// controls — belongs behind its own `<SignedCapture>`, which mints when it is
+// created. A failed mint is the one case that does ask again — once, since
+// there is nothing loaded to disturb.
 export class SignedCapture extends GlimmerComponent<SignedCaptureSignature> {
   @service declare private captureUrlSigner: CaptureUrlSignerService;
 
   @tracked private loaded: Loaded | undefined;
   private inflightFor: string | undefined;
+  private retryTimer: ReturnType<typeof setTimeout> | undefined;
+  private retriedFor: string | undefined;
+
+  willDestroy() {
+    super.willDestroy();
+    if (this.retryTimer !== undefined) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = undefined;
+    }
+  }
 
   private get current(): Loaded | undefined {
     let url = this.args.url;
@@ -108,6 +134,7 @@ export class SignedCapture extends GlimmerComponent<SignedCaptureSignature> {
             forUrl: url,
             error: e instanceof Error ? e.message : String(e),
           };
+          this.scheduleRetry(url);
         }
       })
       .finally(() => {
@@ -115,6 +142,25 @@ export class SignedCapture extends GlimmerComponent<SignedCaptureSignature> {
           this.inflightFor = undefined;
         }
       });
+  }
+
+  // Without this a mint failure is permanent for the component instance: the
+  // yielded value only recomputes when tracked state changes, so no later
+  // render asks again. One retry, on a timer, is what lets a transient
+  // failure clear itself. Bounded at one per URL on purpose — a realm that is
+  // refusing because the caller has no read would otherwise be polled for as
+  // long as the card stays open, and the error is already on screen.
+  private scheduleRetry(url: string) {
+    if (this.retriedFor === url || this.retryTimer !== undefined) {
+      return;
+    }
+    this.retriedFor = url;
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = undefined;
+      if (this.args.url === url && !this.isDestroyed && !this.isDestroying) {
+        this.requestSign(url);
+      }
+    }, ERROR_RETRY_MS);
   }
 
   <template>{{yield this.signedUrl this.errorMessage}}</template>
