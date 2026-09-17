@@ -139,6 +139,26 @@ export function latticeWorkFailureAttempts(
   return Math.min(attempts + 1, latticeWorkAttemptLimit);
 }
 
+// Wave composition. A wave is cut from the head of the ready list, and the
+// ready list sorts ordinary owners by attempts and URL. An owner past its
+// staleness deadline is the one with a promise to keep: alternate stale
+// attempts with ordinary ones so a bulk drain (thousands of games ahead of
+// a few hundred seasons in URL order) still republishes the upper tiers
+// every window, at half a wave's worth of throughput.
+export function latticeInterleaveStale<
+  T extends { stale?: true; [key: string]: unknown },
+>(ready: readonly T[]): T[] {
+  const stale = ready.filter((item) => item.stale);
+  if (!stale.length || stale.length === ready.length) return [...ready];
+  const ordinary = ready.filter((item) => !item.stale);
+  const out: T[] = [];
+  for (let i = 0; i < Math.max(stale.length, ordinary.length); i++) {
+    if (i < stale.length) out.push(stale[i]);
+    if (i < ordinary.length) out.push(ordinary[i]);
+  }
+  return out;
+}
+
 export interface LatticePendingWork {
   id: string;
   // Only unsettled inputs, at canonical identities supplied by the adapter.

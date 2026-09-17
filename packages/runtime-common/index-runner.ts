@@ -50,6 +50,7 @@ import {
   type LatticeReadScope,
   type LatticeScheduledWork,
 } from './lattice-work.ts';
+import { latticeInterleaveStale } from './lattice-kernel.ts';
 import type { Querier } from './expression.ts';
 import { resolveModuleCacheContext } from './index-runner/prewarm-modules.ts';
 import {
@@ -917,7 +918,8 @@ export class IndexRunner {
     // pending owner, so one wave can publish a batch of them; a batch never
     // reads its own members. The cap keeps one job's duration and input
     // residency bounded.
-    if (followup) pending = pending.slice(0, LATTICE_WAVE_BATCH);
+    if (followup)
+      pending = latticeInterleaveStale(pending).slice(0, LATTICE_WAVE_BATCH);
     if (followup && !pending.length) {
       if (
         await publication.wakeHeldOwners(

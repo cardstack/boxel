@@ -24,6 +24,7 @@ import { latticeMaterialize } from '@cardstack/runtime-common/tasks/lattice';
 import { enqueueLattice } from '@cardstack/runtime-common/jobs/lattice';
 import { LatticeWorkSuperseded } from '@cardstack/runtime-common/lattice-work';
 import {
+  latticeInterleaveStale,
   latticePublicationDecision,
   latticeWorkDecision,
 } from '@cardstack/runtime-common/lattice-kernel';
@@ -1191,6 +1192,22 @@ module(basename(import.meta.filename), function (hooks) {
         { publishedAt: 6, dirtyAt: 7 },
       ).status,
       'reject',
+    );
+    // A wave alternates stale attempts with ordinary owners, so a drain
+    // of many games ahead of a few seasons in URL order still gives the
+    // seasons half of every wave.
+    const g = (id: string) => ({ ownerURL: id });
+    const s = (id: string) => ({ ownerURL: id, stale: true as const });
+    assert.deepEqual(
+      latticeInterleaveStale([g('g1'), g('g2'), g('g3'), s('s1'), s('s2')]).map(
+        (o) => o.ownerURL,
+      ),
+      ['s1', 'g1', 's2', 'g2', 'g3'],
+    );
+    assert.deepEqual(
+      latticeInterleaveStale([g('g1'), g('g2')]).map((o) => o.ownerURL),
+      ['g1', 'g2'],
+      'no stale owners, no change',
     );
   });
 
