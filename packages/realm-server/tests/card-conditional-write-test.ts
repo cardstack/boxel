@@ -493,9 +493,12 @@ module(basename(import.meta.filename), function () {
           .send({
             data: {
               type: 'card',
-              attributes: { firstName: 'Mango' },
+              attributes: { cardInfo: { name: 'Mango' } },
               meta: {
-                adoptsFrom: { module: rri('./person.gts'), name: 'Person' },
+                adoptsFrom: {
+                  module: rri('@cardstack/base/card-api'),
+                  name: 'CardDef',
+                },
               },
             },
           })
@@ -510,7 +513,7 @@ module(basename(import.meta.filename), function () {
         assert.ok(id, 'the create reports the id it minted');
         assert.strictEqual(
           response.body?.data?.meta?.version,
-          storedVersion(`Person/${id.split('/').pop()}.json`),
+          storedVersion(`${id.slice(realmURL.href.length)}.json`),
           'the version is the fingerprint of the file it wrote',
         );
       });
