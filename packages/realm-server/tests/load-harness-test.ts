@@ -28,6 +28,7 @@ import {
   DEFAULT_LOAD_HALF_LIFE_MS,
   describeInFlight,
   InFlightReading,
+  inFlightProgressLabel,
 } from '../scripts/load-harness/lib/in-flight.ts';
 import {
   readOnlyReason,
@@ -1386,6 +1387,40 @@ module(basename(import.meta.filename), function () {
         summary.includes('120s'),
         'and does not also claim the shipped one',
       );
+    });
+
+    // The progress line is what a long run is steered by, and it is the figure
+    // most likely to be quoted away from the summary that would otherwise say
+    // which window it was taken over.
+    test('the live figure carries its window too', function (assert) {
+      let clock = 0;
+      let reading = new InFlightReading({
+        halfLifeMs: DEFAULT_LOAD_HALF_LIFE_MS,
+        now: () => clock,
+      });
+      let closes = [];
+      for (let i = 0; i < 4; i++) {
+        closes.push(reading.open());
+      }
+      clock += 10 * DEFAULT_LOAD_HALF_LIFE_MS;
+      assert.strictEqual(inFlightProgressLabel(reading), '4.0@120s');
+
+      clock = 0;
+      let retuned = new InFlightReading({
+        halfLifeMs: 30_000,
+        now: () => clock,
+      });
+      let close = retuned.open();
+      clock += 10 * 30_000;
+      assert.strictEqual(
+        inFlightProgressLabel(retuned),
+        '1.0@30s',
+        'a run against a target that smooths differently says so on every line',
+      );
+      close();
+      for (let c of closes) {
+        c();
+      }
     });
 
     test('the summary states both figures, and which is which', function (assert) {

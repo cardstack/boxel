@@ -55,6 +55,7 @@ import {
   DEFAULT_LOAD_HALF_LIFE_MS,
   describeInFlight,
   InFlightReading,
+  inFlightProgressLabel,
 } from './lib/in-flight.ts';
 import {
   DEFAULT_FIELDSET,
@@ -810,8 +811,11 @@ let reportTimer = setInterval(() => {
       `searches=${stats.searches} (${stats.searchErrors} err)  ` +
       `writes=${stats.writes} (${stats.writeErrors} err)  ` +
       // The number to steer a run by: readers can be added while it is still
-      // running, and the rate alone will not say whether that helped.
-      `load=${inFlight.mean.toFixed(1)}  ` +
+      // running, and the rate alone will not say whether that helped. It names
+      // its own window, because a line read off a scrolling terminal is
+      // separated from the summary and the flags that would otherwise say
+      // which window it was taken over.
+      `load=${inFlightProgressLabel(inFlight)}  ` +
       `${summarize('search', stats.search.slice(-200))}`,
   );
 }, 30000);

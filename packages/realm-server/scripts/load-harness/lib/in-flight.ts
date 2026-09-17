@@ -154,6 +154,15 @@ function normalizeHalfLife(halfLifeMs: number): number {
   return halfLifeMs;
 }
 
+// The live figure, for a progress line that has one column to spend on it.
+// Carries its window because that is the whole of what makes it comparable to
+// anything: a run is steered by this number while it is going, and a line
+// copied out of a terminal keeps neither the summary below it nor the flags
+// above it.
+export function inFlightProgressLabel(reading: InFlightReading): string {
+  return `${reading.mean.toFixed(1)}@${Math.round(reading.halfLifeMs / 1000)}s`;
+}
+
 // The concurrency paragraph of a run summary. Kept next to the measurement so
 // the caveats travel with the number: the bound is only a bound in one
 // direction, and only over this driver's own traffic.
