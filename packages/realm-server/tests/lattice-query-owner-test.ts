@@ -1204,6 +1204,23 @@ module(basename(import.meta.filename), function (hooks) {
        VALUES($1,$2,5,4,6,'epoch',FALSE)`,
       { bind: [realm, feeder] },
     );
+    // Registered by discovery but never published: there is no last body a
+    // stale attempt could read, so it blocks an overdue owner too.
+    await db.execute(
+      `UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{meta,publication}',$2::jsonb) WHERE url=$1`,
+      {
+        bind: [
+          feeder,
+          JSON.stringify({
+            version: 1,
+            state: 'pending',
+            validatedThrough: 0,
+            computedFields: [],
+            queryFields: [],
+          }),
+        ],
+      },
+    );
     await db.execute(
       "UPDATE boxel_index SET deps = COALESCE(deps,'[]'::jsonb) || $2::jsonb WHERE url=$1",
       { bind: [owner, JSON.stringify([feeder])] },
@@ -1222,6 +1239,15 @@ module(basename(import.meta.filename), function (hooks) {
     await db.execute(
       "UPDATE lattice_owners SET stale_after = now() - interval '1 second' WHERE owner_url=$1",
       { bind: [owner] },
+    );
+    assert.deepEqual(
+      names(await registry.ready(realm)),
+      [feeder],
+      'past it too, while the feeder has never published',
+    );
+    await db.execute(
+      `UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{meta,publication,state}','"ready"') WHERE url=$1`,
+      { bind: [feeder] },
     );
     assert.deepEqual(
       names(await registry.ready(realm)),

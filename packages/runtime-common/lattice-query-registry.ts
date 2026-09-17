@@ -963,9 +963,26 @@ export class LatticeQueryRegistry
     const runnableOwners = await this.pending(realmURL, { runnableOnly: true });
     const runnable = new Set(runnableOwners.map((owner) => owner.ownerURL));
     // Past its deadline an owner reads its dirty inputs' last published
-    // bodies rather than waiting for them, so no pending input blocks it.
+    // bodies rather than waiting for them, so a dirty input does not block
+    // it. An input that has never published has no last body to read: a
+    // stale attempt over it can only fail, so it blocks the overdue owner
+    // exactly as it blocks an ordinary one.
     const overdue = new Set(
       runnableOwners.filter((owner) => owner.stale).map((o) => o.ownerURL),
+    );
+    const neverPublished = new Set<string>(
+      overdue.size && this.db.kind === 'pg'
+        ? (
+            await query(this.db, [
+              `SELECT o.owner_url FROM lattice_owners o LEFT JOIN boxel_index i
+               ON i.realm_url=o.realm_url AND i.url=o.owner_url AND i.type='instance'
+               WHERE o.realm_url=`,
+              param(realmURL),
+              `AND o.retired=FALSE AND o.dirty_generation IS NOT NULL
+               AND (i.url IS NULL OR (i.pristine_doc->'meta'->'publication'->>'state') IS DISTINCT FROM 'ready')`,
+            ])
+          ).map((row) => String(row.owner_url))
+        : [],
     );
     const inputs = new Map(
       pending.map(({ ownerURL }) => [ownerURL, new Set<string>()]),
@@ -1058,7 +1075,11 @@ export class LatticeQueryRegistry
       pending.map(({ ownerURL }) => ({
         id: ownerURL,
         runnable: runnable.has(ownerURL),
-        pendingInputs: overdue.has(ownerURL) ? [] : [...inputs.get(ownerURL)!],
+        pendingInputs: overdue.has(ownerURL)
+          ? [...inputs.get(ownerURL)!].filter((input) =>
+              neverPublished.has(input),
+            )
+          : [...inputs.get(ownerURL)!],
       })),
     );
     if (frontier.cycle.length)
