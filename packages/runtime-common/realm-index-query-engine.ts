@@ -114,6 +114,13 @@ const RECURSING_DEPTH = 3;
 // One query-backed field the walk found, at the path it sits at in the type's
 // field tree. The walk reads definitions only, so an entry describes the type
 // and not the resource it is later applied to.
+//
+// Every resource of a type is handed this same entry, so an entry is read-only
+// to its consumers. `queryDefinition` in particular is a template rather than
+// a query — a `$this.` token in it resolves against whichever resource is
+// being served — and `normalizeQueryDefinition` is what keeps that safe, by
+// copying before it substitutes. Substituting in place would answer the first
+// resource's query and then hand that answer to the rest.
 interface QueryFieldPlanEntry {
   fieldName: string;
   fieldDefinition: FieldDefinition;
