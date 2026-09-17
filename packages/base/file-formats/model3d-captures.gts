@@ -9,13 +9,20 @@
 // readiness signal drops. Unchanged bytes byte-hash to the same still across
 // reindexes.
 //
-// three.js loads from the same pinned CDN builds the live orbit viewer uses,
-// only inside the capture render.
+// three.js is the host's vendored copy (not a CDN fetch inside the render:
+// this capture runs on prerender infrastructure, where public-network
+// reachability would otherwise be a standing availability dependency of
+// every realm that holds a 3D model), reached through `loadThree` below —
+// a statically-imported sync shim whose function performs the host-side
+// lazy chunk load, the same doorway shape the PDF sibling uses for pdf.js.
+// The live orbit viewer keeps its own CDN load; both pin the same version so
+// framing and shading agree.
 import GlimmerComponent from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 
 import { fileResourceURL } from './file-image';
+
+import { loadThree } from '@cardstack/boxel-host/lib/three-loader';
 
 import type { ScreenshotSpec } from '../card-api';
 
@@ -35,14 +42,37 @@ export class Model3dStillCapture extends GlimmerComponent<CaptureSignature> {
   // The capture engine waits (bounded) for no `data-screenshot-pending`
   // attribute before shooting: the WebGL first frame isn't visible to the
   // engine's image-paint wait, so the component owns the readiness signal.
-  @tracked pending = true;
-
+  //
+  // Both signals are written by mutating the attribute directly, not by a
+  // tracked re-render: capture pages run in backgrounded pooled tabs, where
+  // the timers a tracked update's render flush rides are throttled, so the
+  // flip can sit unflushed past the engine's whole wait. The engine polls raw
+  // DOM mutations, so raw DOM is the reliable channel.
   private renderStill = modifier((element: HTMLElement) => {
     let cancelled = false;
     let renderer: any;
+    // Readiness resolves only on a rendered frame.
     let finish = () => {
       if (!cancelled) {
-        this.pending = false;
+        element.removeAttribute('data-screenshot-pending');
+      }
+    };
+    // A model that cannot produce a still — a failed fetch, bytes no loader
+    // parses, empty geometry, a tab with no WebGL context, a library chunk
+    // that fails to load — never becomes ready: swap in the
+    // definitive-failure signal so the engine fails this slot immediately
+    // instead of holding the prerender lane for the full pending budget on
+    // every retry. Failing the slot is the point — no manifest entry lands,
+    // so nothing is served for the poster (the fitted cell's cube glyph
+    // stays in charge) and the retry lane retries the environmental cases.
+    // Resolving readiness instead would persist the empty capture box — a
+    // blank white still keyed on these exact bytes — and the thumbnail seam
+    // would serve it as if it were the model until the file changed. The
+    // attribute value carries the cause into the slot's failure diagnostics.
+    let fail = (cause: unknown) => {
+      if (!cancelled) {
+        element.removeAttribute('data-screenshot-pending');
+        element.setAttribute('data-screenshot-failed', String(cause));
       }
     };
     (async () => {
@@ -50,25 +80,16 @@ export class Model3dStillCapture extends GlimmerComponent<CaptureSignature> {
         let model = this.args.model;
         let url = fileResourceURL(model);
         if (!url) {
+          fail('no file resource url on the model');
           return;
         }
         let extension = extensionOf(String(model?.name ?? url));
         let isThreeMf = extension === '3mf';
         let isStl = extension === 'stl';
-        let [THREE, loaderModule] = await Promise.all([
-          // @ts-expect-error Pinned browser ESM import; the Boxel loader resolves https:// at runtime
-          import('https://esm.sh/three@0.160.0'),
-          isThreeMf
-            ? // @ts-expect-error Pinned browser ESM import; 3MFLoader brings its own fflate dependency
-              import('https://esm.sh/three@0.160.0/examples/jsm/loaders/3MFLoader.js')
-            : isStl
-              ? // @ts-expect-error Pinned browser ESM import; STLLoader handles ASCII and binary STL
-                import('https://esm.sh/three@0.160.0/examples/jsm/loaders/STLLoader.js')
-              : // @ts-expect-error Pinned browser ESM import; the Boxel loader resolves https:// at runtime
-                import('https://esm.sh/three@0.160.0/examples/jsm/loaders/GLTFLoader.js'),
-        ]);
-        let response = await fetch(url);
+        let [{ THREE, GLTFLoader, STLLoader, ThreeMFLoader }, response] =
+          await Promise.all([loadThree(), fetch(url)]);
         if (!response.ok) {
+          fail(`fetching the model returned ${response.status}`);
           return;
         }
         let bytes = await response.arrayBuffer();
@@ -78,9 +99,9 @@ export class Model3dStillCapture extends GlimmerComponent<CaptureSignature> {
 
         let root: any;
         if (isThreeMf) {
-          root = new loaderModule.ThreeMFLoader().parse(bytes);
+          root = new ThreeMFLoader().parse(bytes);
         } else if (isStl) {
-          let geometry = new loaderModule.STLLoader().parse(bytes);
+          let geometry = new STLLoader().parse(bytes);
           geometry.computeVertexNormals();
           root = new THREE.Mesh(
             geometry,
@@ -92,11 +113,17 @@ export class Model3dStillCapture extends GlimmerComponent<CaptureSignature> {
           );
         } else {
           let gltf = await new Promise<any>((resolve, reject) =>
-            new loaderModule.GLTFLoader().parse(bytes, url, resolve, reject),
+            new GLTFLoader().parse(bytes, url, resolve, reject),
           );
           root = gltf.scene;
         }
         if (cancelled) {
+          return;
+        }
+        root.updateMatrixWorld(true);
+        let bounds = new THREE.Box3().setFromObject(root);
+        if (bounds.isEmpty()) {
+          fail('the model has no renderable geometry');
           return;
         }
 
@@ -117,13 +144,8 @@ export class Model3dStillCapture extends GlimmerComponent<CaptureSignature> {
         let fill = new THREE.DirectionalLight(0xaec6ff, 1.1);
         fill.position.set(-4, 1, -2);
         scene.add(fill);
-
-        root.updateMatrixWorld(true);
-        let bounds = new THREE.Box3().setFromObject(root);
-        if (bounds.isEmpty()) {
-          return;
-        }
         scene.add(root);
+
         let size = bounds.getSize(new THREE.Vector3());
         let center = bounds.getCenter(new THREE.Vector3());
 
@@ -155,17 +177,18 @@ export class Model3dStillCapture extends GlimmerComponent<CaptureSignature> {
         camera.updateProjectionMatrix();
 
         renderer.render(scene, camera);
-      } catch {
-        // An unparsable model is an absent still, not a broken capture
-        // render: readiness resolves either way and the fitted cell keeps
-        // its glyph fallback.
-      } finally {
         finish();
+      } catch (error) {
+        fail(error);
       }
     })();
     return () => {
       cancelled = true;
+      // Pooled capture tabs run many captures on one long-lived heap, and
+      // browsers cap live WebGL contexts (around sixteen); `dispose()` frees
+      // GPU resources but not the context itself, so force the loss too.
       try {
+        renderer?.forceContextLoss();
         renderer?.dispose();
       } catch {
         // best-effort teardown of a context that may already be gone
@@ -176,7 +199,7 @@ export class Model3dStillCapture extends GlimmerComponent<CaptureSignature> {
   <template>
     <div
       class='model3d-still-capture'
-      data-screenshot-pending={{if this.pending 'true'}}
+      data-screenshot-pending='true'
       {{this.renderStill}}
     >
     </div>
