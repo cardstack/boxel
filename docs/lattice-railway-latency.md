@@ -26,9 +26,9 @@ ordering, complete outputs, existing client instances, and flag-off behavior.
       registration check: 3 passed / 0 failed. Full logs retained in
       `/tmp/lattice-r2-before.log`, `/tmp/lattice-r2-after.log`, and
       `/tmp/lattice-worker-registration.log`.
-- [ ] R3: Run `pnpm lint` in modified packages, checkpoint engine changes, deploy
+- [x] R3: Run `pnpm lint` in modified packages, checkpoint engine changes, deploy
       the pinned engine to the isolated demo, then repeat the same synthetic probe.
-- [ ] R4: Verify publication receipt and visible count, retain exact timings and
+- [x] R4: Verify publication receipt and visible count, retain exact timings and
       failures, restore the measurement-owned record, and report the remaining gap.
 
 Both modified packages ran `pnpm lint`: JavaScript lint passed. Package type
@@ -45,3 +45,43 @@ that overlap source execution. No hardware speedup or p95 claim from three runs.
 
 Stop this slice after one measured deployment; additional hypotheses become
 explicit follow-ups rather than an unbounded optimization loop.
+
+## Deployment and observed outcome
+
+Engine a7ff492a6e is deployed on the isolated Railway realm and worker. Four
+post-recovery synthetic toggles observed fresh HTTP data at 3,528 / 2,858 /
+2,869 / 3,117 ms. Two independent browser stores (same account) confirmed the
+changes without reload. The last trial took 9,216 ms to both DOMs: Synapse
+rejected the publication three times with 429 rc_messages, so delivery took
+four attempts. A bounded allowance for the internal sender, configured in the
+private infrastructure repository, removed retries in the following two trials:
+first fresh HTTP 2,986 / 3,017 ms; both DOMs 3,332 / 3,234 ms. These timings are
+PATCH-dispatch to observation, not UI Post-click measurements.
+
+This is not a 500–800 ms success and not a controlled comparison with main or
+the local Mac. Earlier warm HTTP samples were 4,351 / 4,203 / 3,988 / 3,401 ms,
+but user edits and runtime/cache changes prevent attributing that whole difference
+to this patch. New source finalization commonly measured 81–101 ms, versus
+228–246 ms in two preceding logged trials; outliers remain. No new whole-output
+parity or active-typing preservation claim is made by this follow-up.
+
+Retained deployment failure: the first worker stopped because its operator review
+still pinned the old runtime revision. Restoring the matching runtime policy was
+not enough: the restarted realm's definition cache lacked 48 of 64 reviewed
+modules, causing native admission refusal and a failing Chrome fallback. Normal
+module lookups plus scoped invalidation repaired the queued sources and day.
+Both existing dashboards then advanced from 7 to 10 of 17. No user data was
+replaced. The measurement-owned record is restored to done. A pre-deployment
+native-review check now prevents the revision mismatch. Cold-cache admission
+recovery and startup database connection budgeting remain explicit follow-ups.
+
+User-approved next direction is notification coalescing using the existing durable
+outbox: collapse repeat notices for the same owner, union different changed owner
+IDs per recipient/realm, and preserve fenced claims, idempotent delivery and
+pending-versus-published semantics. A new client-demand registry is not required
+for this first reduction. No coalescing implementation is claimed in this slice.
+
+Detailed operational evidence is in the private infrastructure repository at
+`docs/railway-record-count-latency.md`, with raw logs and samples in its ignored
+`.cache/evidence` directory. The engine's 64 focused tests pass; the retained
+package type-check failures above remain open.
