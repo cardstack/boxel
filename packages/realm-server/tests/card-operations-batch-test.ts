@@ -61,6 +61,10 @@ interface Stub {
   lockDepth: () => number;
   drainCount: () => number;
   readsOutsideLock: () => number;
+  // What the batch asked the realm for, in order. Two entries a batch's
+  // correctness depends on the order of: the pre-staging drain, and the read
+  // of the realm's settings that must describe the state the drain left.
+  calls: () => string[];
 }
 
 interface StubOptions {
@@ -125,6 +129,7 @@ function stub(opts: StubOptions = {}): Stub {
   let maxHeld = 0;
   let drains = 0;
   let readsOutsideLock = 0;
+  let calls: string[] = [];
 
   let core: BatchCore = {
     realmURL: REALM,
@@ -182,6 +187,7 @@ function stub(opts: StubOptions = {}): Stub {
     },
     async drainIndexing() {
       drains++;
+      calls.push('drain');
     },
     async isIgnored(url) {
       return (opts.ignored ?? []).some((p) => url.href === `${REALM}${p}`);
@@ -246,6 +252,7 @@ function stub(opts: StubOptions = {}): Stub {
       return 'name' in codeRef ? definitions[codeRef.name] : undefined;
     },
     async realmConfig() {
+      calls.push('settings');
       return settings as Record<string, JsonValue>;
     },
   };
@@ -255,6 +262,7 @@ function stub(opts: StubOptions = {}): Stub {
     lockDepth: () => maxHeld,
     drainCount: () => drains,
     readsOutsideLock: () => readsOutsideLock,
+    calls: () => [...calls],
   };
 }
 
@@ -1602,6 +1610,63 @@ module(basename(import.meta.filename), function () {
         data.attributes.firstName,
         'Configured',
         'the marker resolved against the settings the realm supplied',
+      );
+    });
+
+    test('the realm is asked for its settings only when the batch reads one', async function (assert) {
+      // Reading them is a parse of the realm's config document, and most
+      // batches name no setting. One that does not must not pay for it.
+      let plain = stub({ definitions: { Person: personDefinition() } });
+      await commitBatch(
+        plain.core,
+        [
+          {
+            op: 'create',
+            lid: 'minted',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Plain' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        {},
+      );
+      assert.deepEqual(
+        plain.calls(),
+        ['drain'],
+        'a batch that names no setting never asks for them',
+      );
+    });
+
+    test('the settings a batch stages from describe the state its drain left', async function (assert) {
+      // The drain waits for indexing already in flight — which may be a write
+      // to the realm's own config card. Settings read before it would stage
+      // values the realm has already replaced, from a different moment than
+      // the files staged beside them.
+      let definition: OperationDefinition = {
+        base: 'create',
+        deterministic: true,
+        of: PERSON,
+        fill: { firstName: { $ref: 'realmConfig', key: 'defaultName' } as any },
+      };
+      let { core, calls } = stub({
+        definitions: { Person: personDefinition() },
+        settings: { defaultName: 'Configured' },
+      });
+
+      await commitBatch(
+        core,
+        [{ op: 'create', lid: 'minted', definition }],
+        {},
+      );
+
+      assert.deepEqual(
+        calls(),
+        ['drain', 'settings'],
+        'the settings are read after the drain, not before it',
       );
     });
 

@@ -251,24 +251,33 @@ export async function commitBatch(
     // tell every subscriber that something changed.
     return [];
   }
-  // Read before the lock, and once for the whole batch.
+  // The realm's settings, read at most once for the whole batch and only if
+  // something in it asks — a thunk rather than a value, for two reasons that
+  // pull in opposite directions.
   //
-  // Before the lock because a cold read is a parse of the realm's config
-  // document — several queries and a file read — and every write in the realm
-  // would otherwise queue behind whichever batch happened to find the cache
-  // cold, including the batches that name no setting at all.
+  // Not eagerly, because a cold read is a parse of the realm's config document
+  // — several queries and a file read — and the batches that name no setting
+  // are most of them. Deferring it means they pay nothing.
   //
-  // Once because a batch commits to one realm, and because what a program
-  // reads is the realm's configuration as the batch found it. That is the one
-  // place the batch does not compose: `stored` moves as entries stage, so a
-  // later entry sees an earlier one's bytes, while a batch that rewrites
-  // `realm.json` does not move its own settings. Nothing would be gained by
-  // making it: the settings a realm serves come from its indexed config card,
-  // so they lag a write to it until the index swap drops the cache — a request
-  // issued straight after this batch reads the old values too, and a batch
-  // that refreshed mid-flight would be the only reader in the system that did
-  // not.
-  let realmConfig = await core.realmConfig();
+  // And not before the lock, which is the other way to avoid charging them:
+  // everything a batch stages against is read after the pre-staging drain, so
+  // a settings map read before it would be from a different moment than the
+  // files beside it. A `realm.json` write still indexing when this batch
+  // arrives is exactly the case — the drain waits for it, and a snapshot taken
+  // earlier would stage `realmConfig()` values the realm has already replaced.
+  // Nothing runs this until staging, which is inside the lock and past the
+  // drain, so the settings and the stored bytes describe one pre-state.
+  //
+  // Once because a batch commits to one realm. What it does not do is move as
+  // the batch stages: `stored` composes so a later entry sees an earlier one's
+  // bytes, while a batch that rewrites `realm.json` does not change its own
+  // settings. Nothing would be gained by making it — the settings a realm
+  // serves come from its indexed config card, so they lag a write to it until
+  // the index swap drops the cache. A request issued straight after this batch
+  // reads the old values too, and a batch that refreshed mid-flight would be
+  // the only reader in the system that did not.
+  let settings: Promise<Record<string, JsonValue>> | undefined;
+  let realmConfig = () => (settings ??= core.realmConfig());
   return await core.withWriteLock(async () => {
     // Drained inside the lock, before anything is staged. Staging serializes
     // each card against its type's definition, and a module written moments

@@ -404,10 +404,16 @@ export interface StagingContext {
   // an actor itself.
   actor: string;
   // The settings of the realm being written, as `realmConfig()` resolves them.
-  // Always present, empty for a realm that declares none: a program naming a
-  // setting is told this realm has no such setting rather than that nothing
-  // supplied a configuration, and those are two different defects.
-  realmConfig: Record<string, JsonValue>;
+  // A function because most batches never ask: reading them is a parse of the
+  // realm's config document, and nothing should pay for it to stage a card
+  // that names no setting. It answers the same map however often it is called,
+  // so every entry in the batch reads one snapshot.
+  //
+  // The map is always there to be read, empty for a realm that declares none:
+  // a program naming a setting is told this realm has no such setting rather
+  // than that nothing supplied a configuration, and those are two different
+  // defects.
+  realmConfig(): Promise<Record<string, JsonValue>>;
   // A card document serialized for storage: the bytes the file holds, with
   // every field resolved against the type's definition.
   serializeCard(
@@ -1346,7 +1352,7 @@ async function transform(
       syntax: program.syntax,
       programId: `${name}:${uuidV4()}`,
       targetId: url.href,
-      context: contextFor(params, resource, url, ctx),
+      context: contextFor(params, resource, url, ctx, await ctx.realmConfig()),
       overlays,
       // A relationship is stored relative to the file that holds it, and a
       // program compares and rewrites card identities, so the stored spelling
@@ -1489,6 +1495,7 @@ function contextFor(
   resource: CardResource,
   url: URL,
   ctx: StagingContext,
+  realmConfig: Record<string, JsonValue>,
 ): ProgramContext {
   return {
     ...(params ? { params } : {}),
@@ -1497,7 +1504,7 @@ function contextFor(
       id: url.href,
       ...(resource.attributes ?? {}),
     },
-    realmConfig: ctx.realmConfig,
+    realmConfig,
   };
 }
 
@@ -2186,6 +2193,7 @@ async function resourceFromTemplate(
   }
   let anchor = entry.href ? anchorResource(entry, ctx) : undefined;
   let linkFields = await linkFieldsOf(of, entry, ctx);
+  let realmConfig = await ctx.realmConfig();
   let resource: CardResource = { type: 'card', meta: { adoptsFrom: of } };
   for (let [field, template] of Object.entries(definition.fill ?? {})) {
     let resolved = resolveTemplate(template, {
@@ -2194,6 +2202,7 @@ async function resourceFromTemplate(
       ctx,
       anchor,
       field,
+      realmConfig,
     });
     if (resolved.value === undefined) {
       continue;
@@ -2310,6 +2319,10 @@ interface TemplateScope {
   ctx: StagingContext;
   anchor: { id: string; resource: CardResource } | undefined;
   field: string;
+  // The realm's settings, resolved before the template is walked. Resolving
+  // one is asynchronous and walking a template is not, so it arrives here
+  // rather than being read where it is used.
+  realmConfig: Record<string, JsonValue>;
 }
 
 interface ResolvedTemplate {
@@ -2457,7 +2470,7 @@ function resolveMarker(
       // rather than defaulted, for the reason every reference is: a template
       // that quietly wrote nothing where a setting belongs would store the
       // absence as the value.
-      let settings = ctx.realmConfig;
+      let settings = scope.realmConfig;
       if (marker.key === undefined) {
         return { value: { ...settings }, isLink: false, isActor: false };
       }
