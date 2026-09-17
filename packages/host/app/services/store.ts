@@ -3582,7 +3582,7 @@ export default class StoreService extends Service implements StoreInterface {
               // relativeTo because its up to the realm server to assign us an ID, so
               // URL's should be absolute
               useAbsoluteURL: true,
-              withIncluded: true,
+              withLocalResourcesIncluded: true,
               omitQueryFields: true,
             });
 
