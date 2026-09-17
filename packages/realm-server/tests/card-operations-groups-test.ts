@@ -9,6 +9,7 @@ import {
   parseOperationsEnvelope,
   resultsTree,
   stagedTree,
+  STAGING_WIDTH,
   type BatchCore,
   type BatchEntry,
   type BatchNode,
@@ -340,6 +341,25 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test('an invoke carrying members is refused', async function (assert) {
+      // The mirror of the group-side check. Dropped instead, the batch would
+      // answer 200 having run the parent operation and none of the entries the
+      // caller wrapped inside it.
+      let error = parseRefusal(
+        envelope({
+          ...invoke('escalate', '/report-1'),
+          'boxel:operations': [invoke('escalate', '/report-2')],
+        }),
+      );
+
+      assert.strictEqual(error.status, 400, 'HTTP 400 status');
+      assert.strictEqual(error.meta?.entry, 0);
+      assert.true(
+        error.detail.includes('boxel:operations'),
+        `the detail names the member that does not belong: ${error.detail}`,
+      );
+    });
+
     test('a group carrying no member list is refused', async function (assert) {
       let error = parseRefusal(envelope({ op: 'serial' }));
 
@@ -538,6 +558,105 @@ module(basename(import.meta.filename), function () {
       assert.true(
         together * 2 < serially,
         `parallel ${together}ms is well under serial ${serially}ms`,
+      );
+    });
+
+    test('a parallel group stages at most a bounded number of members at once', async function (assert) {
+      // Twice the bound, against a gate that opens only once the bound has
+      // been reached: the gate cannot open unless that many stage together,
+      // and the peak cannot exceed it unless the width is unbounded. So the
+      // two numbers between them rule out both a serial schedule and an
+      // unbounded one.
+      let members = STAGING_WIDTH * 2;
+      let cards = Array.from({ length: members }, (_, at) => `person-${at}`);
+      let held = gate(STAGING_WIDTH);
+      let inFlight = 0;
+      let peak = 0;
+      let { core, commits } = stub({
+        stored: Object.fromEntries(
+          cards.map((card) => [`${card}.json`, personFile(card)]),
+        ),
+        onStage: async () => {
+          peak = Math.max(peak, ++inFlight);
+          try {
+            await held.wait();
+          } finally {
+            inFlight--;
+          }
+        },
+      });
+
+      await commitBatch(core, [
+        {
+          op: 'parallel',
+          members: cards.map((card) => setAttribute(card, { nickname: 'x' })),
+        },
+      ]);
+
+      assert.strictEqual(
+        peak,
+        STAGING_WIDTH,
+        `at most ${STAGING_WIDTH} members staged at once, and that many did`,
+      );
+      assert.strictEqual(
+        Object.keys(commits[0].writes).length,
+        members,
+        'and every member of the group still landed',
+      );
+    });
+
+    test('a member reads its anchor card as the group found it', async function (assert) {
+      // A named create reads the card its `href` names through `instance(…)`,
+      // and that file is one it never writes — so the conflict rule does not
+      // refuse this pair, and what the create reads is decided by the state
+      // its branch was given.
+      let anchored = (lid: string): BatchNode =>
+        ({
+          op: 'create',
+          lid,
+          href: `${REALM}person-1`,
+          params: {},
+          definition: {
+            base: 'create',
+            of: PERSON,
+            fill: { firstName: { $ref: 'instance', key: 'firstName' } },
+          },
+        }) as unknown as BatchNode;
+
+      let together = stub({ stored: { 'person-1.json': personFile('Mango') } });
+      await commitBatch(together.core, [
+        {
+          op: 'parallel',
+          members: [
+            setAttribute('person-1', { firstName: 'Changed' }),
+            anchored('from-parallel'),
+          ],
+        },
+      ]);
+      assert.strictEqual(
+        JSON.parse(together.commits[0].writes['Person/from-parallel.json']).data
+          .attributes.firstName,
+        'Mango',
+        'the create reads the card as the group found it, not as its sibling ' +
+          'staged it',
+      );
+
+      let ordered = stub({ stored: { 'person-1.json': personFile('Mango') } });
+      await commitBatch(ordered.core, [
+        {
+          op: 'serial',
+          members: [
+            setAttribute('person-1', { firstName: 'Changed' }),
+            anchored('from-serial'),
+          ],
+        },
+      ]);
+      assert.strictEqual(
+        JSON.parse(ordered.commits[0].writes['Person/from-serial.json']).data
+          .attributes.firstName,
+        'Changed',
+        'and in serial order it reads what the step before it staged, which ' +
+          'is what says the two schedules differ here',
       );
     });
 
@@ -763,6 +882,34 @@ module(basename(import.meta.filename), function () {
         nickname: 'a',
         title: 'b',
       });
+    });
+
+    test('two single-entry branches of one parallel group are still siblings', async function (assert) {
+      // The claims of a branch travel up to the group that holds it, which is
+      // the only thing that catches a pair with a group between them. Without
+      // it this batch commits and the first entry's change is simply gone,
+      // which is the one failure shape in this module that is silent.
+      let { core, commits } = stub({
+        stored: { 'person-1.json': personFile('Mango') },
+      });
+
+      let error = await refusal(core, [
+        {
+          op: 'parallel',
+          members: [
+            { op: 'serial', members: [setAttribute('person-1', { a: 1 })] },
+            { op: 'serial', members: [setAttribute('person-1', { b: 2 })] },
+          ],
+        },
+      ]);
+
+      assert.strictEqual(error.code, 'conflicting-targets');
+      assert.deepEqual(
+        [error.meta?.conflictsWith, error.meta?.entry],
+        [0, 1],
+        'both entries are named through the branches that hold them',
+      );
+      assert.deepEqual(commits, [], 'nothing was committed');
     });
 
     test('two entries in separate parallel groups are not siblings', async function (assert) {

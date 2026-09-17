@@ -1169,7 +1169,6 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
       test('a member whose precondition does not hold leaves the whole group unwritten', async function (assert) {
         let jobsBefore = await indexJobIds();
-        let since = Date.now();
 
         let response = await post(
           envelope(
@@ -1200,22 +1199,18 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           storedCard('report-closed.json').data.attributes?.status,
           'closed',
         );
+        // The job is the whole of what is checked here, and it is checked
+        // rather than the broadcast because the broadcast cannot be: the realm
+        // announces out of band, which is why the positive case above waits up
+        // to 30s for its own event. Read with no wait, an empty window says
+        // only that nothing has arrived yet — it would be empty for a batch
+        // that did commit — so asserting it would be asserting nothing. No job
+        // is the same claim made in a form that can fail: the announcement
+        // follows the job, and this batch enqueued none.
         assert.deepEqual(
           await indexJobIds(),
           jobsBefore,
-          'no index job was enqueued',
-        );
-        // Narrowed to the cards this batch named rather than counted over the
-        // window, for the reason the positive case above waits: the realm is
-        // shared, and a broadcast from an earlier test can land here.
-        assert.deepEqual(
-          (await incrementalIndexEventsSince(since)).filter((event) =>
-            (event.invalidations ?? []).some((url) =>
-              url.startsWith(`${testRealmHref}report-abandoned-`),
-            ),
-          ),
-          [],
-          'and no index event was broadcast',
+          'no index job was enqueued, so there is nothing to announce',
         );
       });
 

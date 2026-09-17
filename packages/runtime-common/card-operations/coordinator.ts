@@ -541,12 +541,22 @@ interface StagingState {
 // A copy for one member of a parallel group.
 //
 // The members of a parallel group are entries that do not compose, so none of
-// them may read what another staged. Giving each its own view is what makes
-// that structural rather than a property of which files today's executors
-// happen to read: an executor that started reading a second file would still
-// see the state the group started from. The maps hold one key per file the
-// batch names, and `compose` replaces their values rather than editing them,
-// so the copy is shallow and costs the batch's own size.
+// them may read what another staged. This is what makes that hold, and it is
+// load-bearing today rather than insurance against a future executor: a named
+// create reads its anchor card — the `href` its template reaches through
+// `instance(…)` — out of this state, and that is a file the entry never
+// writes, so `claimsOf` does not claim it and the conflict rule does not
+// refuse the pair. `parallel(update X, a create anchored on X)` is therefore
+// admitted, and what the create reads is decided here: the card as the group
+// found it.
+//
+// Deleting this does not redden the suite, which is a fact about an `await`
+// rather than about the invariant — `resourceFromTemplate` reaches the anchor
+// read before it yields, so the sibling's `compose` never gets a turn. Move
+// one `await` earlier and the two answers diverge with nothing to say so.
+//
+// The maps hold one key per file the batch names, and `compose` replaces
+// their values rather than editing them, so the copy is shallow.
 function fork(state: StagingState): StagingState {
   return {
     stored: new Map(state.stored),
@@ -626,6 +636,74 @@ interface StagingRun {
   ): Promise<StagedChange>;
 }
 
+// How many members of one parallel group stage at a time.
+//
+// A group's width is the caller's to choose and staging is not free: an entry
+// may open a stored file, read an indexed row, resolve a definition and
+// serialize a card. Unbounded, a single authorized request would decide how
+// much of the realm's connection pool it holds and how many copies of the
+// batch's staging state are live at once — both proportional to a number the
+// caller picked.
+//
+// Bounded rather than capped, because width is a shape a real batch has: a
+// line appended to fifty logs, a hundred cards found by a query. Refusing
+// those would be refusing what grouping is for, while running them eight at a
+// time costs only wall-clock. Eight is read off the connection pool it has to
+// share: the adapter allows 40 per process and search alone is observed to
+// want 20+ at peak, so a batch that took tens of them would queue the
+// indexer's own commits behind itself — and a waiter inside the pool is
+// indistinguishable from slow SQL in the logs.
+//
+// A ceiling for ops to raise where the pool is bigger, in the shape the
+// realm's other bounds use. `process` is read defensively: this module is
+// isomorphic and the coordinator's own callers are server-side, but the
+// bundle is not.
+const DEFAULT_STAGING_WIDTH = 8;
+
+export const STAGING_WIDTH = ((): number => {
+  let raw =
+    typeof process !== 'undefined'
+      ? process.env?.CARD_OPERATIONS_STAGING_WIDTH
+      : undefined;
+  let parsed = raw != null && raw !== '' ? Number(raw) : NaN;
+  return Number.isFinite(parsed) && parsed >= 1
+    ? Math.floor(parsed)
+    : DEFAULT_STAGING_WIDTH;
+})();
+
+// Run `work` over `items` with at most `limit` of them in flight, answering in
+// item order with each outcome settled rather than raced — the same shape
+// `Promise.allSettled` answers in, so the caller reads refusals in the order
+// the entries were sent whatever order the work finished in.
+//
+// Each item's work is started only as a worker reaches it, which is what keeps
+// whatever that work allocates — a copy of the staging state, an open file —
+// bounded by `limit` rather than by the number of items.
+async function settledInOrder<Item, Result>(
+  items: readonly Item[],
+  limit: number,
+  work: (item: Item) => Promise<Result>,
+): Promise<PromiseSettledResult<Result>[]> {
+  let outcomes: PromiseSettledResult<Result>[] = new Array(items.length);
+  let next = 0;
+  let worker = async (): Promise<void> => {
+    for (let index = next++; index < items.length; index = next++) {
+      try {
+        outcomes[index] = {
+          status: 'fulfilled',
+          value: await work(items[index]),
+        };
+      } catch (reason: unknown) {
+        outcomes[index] = { status: 'rejected', reason };
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, () => worker()),
+  );
+  return outcomes;
+}
+
 async function stageRun(
   nodes: readonly Scheduled[],
   mode: 'parallel' | 'serial',
@@ -671,13 +749,19 @@ async function stageConcurrently(
   state: StagingState,
   run: StagingRun,
 ): Promise<Claims> {
-  let forks = nodes.map(() => fork(state));
-  let outcomes = await Promise.allSettled(
-    nodes.map((node, index) =>
-      node.kind === 'entry'
-        ? stageOne(node, forks[index], run)
-        : stageRun(node.members, node.mode, forks[index], run),
-    ),
+  let outcomes = await settledInOrder(nodes, STAGING_WIDTH, async (node) =>
+    // A member that is a single entry needs no copy of the state. The only
+    // thing it would put in one is its own staged change, through the compose
+    // at the end of `stageOne` — and the fold-back below applies that to the
+    // state around the group anyway. Skipping both leaves it reading the
+    // state the group started from, which is what a copy would have given it.
+    //
+    // A member that is a group does need one: its own run composes as it
+    // goes, so that a serial step inside it builds on the step before, and
+    // those intermediate states are no business of the branch beside it.
+    node.kind === 'entry'
+      ? await stageOne(node, state, run, { compose: false })
+      : await stageRun(node.members, node.mode, fork(state), run),
   );
   // Settled rather than raced, and the earliest refusal in request order is
   // the one reported. Raced, a group with two entries the caller got wrong
@@ -718,6 +802,12 @@ async function stageOne(
   node: ScheduledEntry,
   state: StagingState,
   run: StagingRun,
+  // Whether this entry folds its own change into the state it staged against.
+  // A serial step does, so the step after it builds on this one. A direct
+  // member of a parallel group does not: it shares the state around the group
+  // with its siblings, and the fold-back that follows the group applies every
+  // member's change in request order.
+  { compose: composeIn }: { compose: boolean } = { compose: true },
 ): Promise<Claims> {
   let { entry, at } = node;
   let change = await run.stage(entry, run.positions[at], state);
@@ -726,15 +816,24 @@ async function stageOne(
     ? (state.stored.get(change.primaryPath)?.contentHash ??
       state.storedMeta.get(change.primaryPath)?.contentHash)
     : undefined;
-  compose(state, entry, change);
+  if (composeIn) {
+    compose(state, entry, change);
+  }
   return claimsOf(change, at);
 }
 
 // The files one entry stages a change to: the ones it rewrites, the ones it
-// adds to, and the ones it removes. All three count, because what makes two
-// members of a parallel group independent is that the commit does not have to
-// order them — and an append that lands after a rewrite rather than before it
-// is an order.
+// adds to, and the ones it removes.
+//
+// All three count, and the append leg is the one worth stating, because it is
+// the case where refusing is a choice rather than a necessity. A rewrite and
+// an append to one file, or a removal and anything else, need an order picked
+// for them, and the commit is not the place to pick one. Two appends do not:
+// the commit joins them in request order, so that pair alone would land with a
+// well-defined result. It is refused anyway, because a parallel group is a
+// claim the caller makes about its members rather than a question about what
+// the commit can cope with — and an append stages without reading its target,
+// so saying those two serially costs the batch nothing.
 function claimsOf(change: StagedChange, at: number): Claims {
   let claims: Claims = new Map();
   for (let path of [
@@ -761,10 +860,10 @@ function conflictingTargets(
     title: 'Conflicting entries',
     detail:
       `entries ${positions[owner]} and ${positions[other]} are members of ` +
-      `one parallel group and both change ${path}; a parallel group's ` +
-      `members stage against the state the group started from, so neither ` +
-      `composes over the other and only one of them could land — put them ` +
-      `in serial order if both are meant to change it`,
+      `one parallel group and both change ${path}; a parallel group says its ` +
+      `members are independent of each other, and two entries changing one ` +
+      `file are not — put them in serial order, which is how a batch says ` +
+      `that both touch it`,
     meta: { entry: positions[other], conflictsWith: positions[owner] },
   });
 }

@@ -294,6 +294,20 @@ function parseInvocation(
   paths: RealmPaths,
   opts: ParseEnvelopeOptions,
 ): EnvelopeEntry {
+  // The mirror of the group-side check, and refused for the same reason: an
+  // entry carrying members is a caller that believes those members will run.
+  // Read as a refusal rather than ignored, because ignoring them is the one
+  // outcome with no signal in it — a group mislabelled as an invocation would
+  // answer 200 having carried out the parent operation and none of the batch
+  // the caller wrapped in it.
+  if (operation['boxel:operations'] !== undefined) {
+    throw refuse(
+      `entry ${position} is an "invoke" and carries "boxel:operations"; ` +
+        `members belong to a "parallel" or a "serial" group, and an ` +
+        `invocation runs one operation`,
+      position,
+    );
+  }
   let name = operation['boxel:name'];
   if (typeof name !== 'string' || name.length === 0) {
     throw refuse(

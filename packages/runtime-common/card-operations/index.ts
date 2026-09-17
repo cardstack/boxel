@@ -21,7 +21,7 @@ export type {
 } from './dispatch.ts';
 export { readOperation, erroredTargetRow } from './read.ts';
 export type { ErroredTargetRow } from './read.ts';
-export { commitBatch } from './coordinator.ts';
+export { commitBatch, STAGING_WIDTH } from './coordinator.ts';
 export type {
   BatchCore,
   BatchEntryResult,
