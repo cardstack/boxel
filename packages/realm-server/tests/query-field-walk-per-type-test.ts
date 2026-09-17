@@ -311,8 +311,11 @@ module(basename(import.meta.filename), function () {
     test('two types in one pass each get their own plan', async function (assert) {
       let all = await search(realm, undefined, 100);
 
-      let alphas = all.data.filter((r) => r.id?.includes('/alpha-'));
-      let betas = all.data.filter((r) => r.id?.includes('/beta-'));
+      // The instance cards only. An unfiltered search also carries each
+      // card's `.json` file row and the query's own target cards, and neither
+      // kind has a query field to resolve.
+      let alphas = all.data.filter((r) => /\/alpha-\d+$/.test(r.id ?? ''));
+      let betas = all.data.filter((r) => /\/beta-\d+$/.test(r.id ?? ''));
       assert.strictEqual(alphas.length, QUERIED_ROW_COUNT, 'Alphas returned');
       assert.strictEqual(betas.length, QUERIED_ROW_COUNT, 'Betas returned');
 
