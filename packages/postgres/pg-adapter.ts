@@ -533,12 +533,16 @@ export class PgAdapter implements DBAdapter {
   // those helpers, all their writes commit or roll back together with the
   // advisory lock's own transaction. Queries `fn` issues through the shared
   // dbAdapter still go via separate pool connections and are NOT part of
-  // this transaction. The data-plane mutation paths in runtime-common
-  // (CS-11125) intentionally do not consume `txQuerier`: their inner work
-  // (writing files via the FS adapter, enqueuing indexing jobs, broadcasting
-  // NOTIFY events) is not transactional with the lock-holder's connection.
-  // The lock there serves only to serialize concurrent same-URL writers
-  // across replicas, not to group DB statements into a single tx.
+  // this transaction.
+  //
+  // What reaches this method is the realm-lifecycle work — creating,
+  // destroying, publishing and unpublishing a realm — which is the work that
+  // wants the realm itself held and the pinned querier's atomicity. A card
+  // write takes `withFileWriteLocks` instead: it is scoped to the files it
+  // touches, and its inner work (writing them through the FS adapter,
+  // enqueuing indexing, broadcasting NOTIFY) is not transactional with a
+  // lock-holder's connection in any case, so it is handed no querier to
+  // consume.
   //
   // Pool-exhaustion caveat: when the callback opts into the pinned querier
   // for all of its DB work, only one client is checked out for the entire
@@ -557,8 +561,9 @@ export class PgAdapter implements DBAdapter {
   // already holding it — a second `pg_advisory_xact_lock` on the same key
   // would pin a different pool connection and block forever on its own
   // transaction. Code that wraps a wider critical section around a method
-  // that also takes the lock must invoke the unlocked inner variant (e.g.
-  // realm.ts uses `_batchWriteUnlocked` inside its own withWriteLock).
+  // that also takes the lock must invoke the unlocked inner variant, the way
+  // `withFileWriteLocks`'s callers reach `_batchWriteUnlocked` rather than the
+  // public write methods that would take those locks again.
   async withWriteLock<T>(
     realmUrl: string,
     fn: (txQuerier: Querier | undefined) => Promise<T>,

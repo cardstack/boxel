@@ -590,8 +590,9 @@ function lockPaths(
 }
 
 // Refuses at compile time to let an operation exist that nothing above locks
-// for. Every member is listed with the route its files are reached by, so
-// adding one to `BatchEntry` fails the build here until its route is stated.
+// for, from both directions: adding a member to `BatchEntry` fails the build
+// until its route is stated, and an existing member losing the route it is
+// listed under fails it too.
 //
 // It is a guard rather than a formality because of how the failure would
 // present otherwise: an operation whose files reach neither route locks
@@ -614,6 +615,13 @@ function assertOpReachesALock(entry: BatchEntry): void {
     case 'transform':
     case 'appendLine':
     case 'appendContainsMany':
+      // The route itself, not just the membership. These five are locked
+      // through the path `href` names, so this stops compiling the moment one
+      // of them stops requiring it — an update addressed by a `lid` the way a
+      // create can be would otherwise pass `lockPaths`'s `if (!entry.href)`
+      // and take no lock, with nothing failing to say so.
+      entry.href satisfies string;
+      return;
     case 'create':
       return;
     default: {
