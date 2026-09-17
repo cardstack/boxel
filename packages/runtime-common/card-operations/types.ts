@@ -446,6 +446,15 @@ export interface OperationIdentityResult {
     // does not move when the file is rewritten. Null where the realm has no
     // record of one.
     created: number | null;
+    // Whether this entry left the file holding something other than what it
+    // held when the entry staged. False where the work came out identical to
+    // what was already stored — a patch that changes nothing — which the
+    // commit leaves alone, modification time and all.
+    changed: boolean;
+    // The bytes the file now holds, for a caller that asked for them with
+    // `reportStoredContent`. Absent otherwise, and absent for an entry whose
+    // content is not a document the caller could read.
+    storedContent?: string;
     // Present only on a conditional write: whether the target was still at
     // the `baseVersion` the request named. A false here is not an error — the
     // write happened, and the caller decides what a moved base means.

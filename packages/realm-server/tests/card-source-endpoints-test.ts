@@ -29,6 +29,7 @@ import {
 import { query, param } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
+  ABSENT_OR_NULL_CLIENT_REQUEST_ID,
   expectIncrementalIndexEvent,
   maxPrerenderHtmlJobId,
   settlePrerenderHtmlJobs,
@@ -932,6 +933,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: ABSENT_OR_NULL_CLIENT_REQUEST_ID,
             },
           );
         });
@@ -1063,6 +1065,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: null,
             },
           );
         });
@@ -1212,7 +1215,12 @@ module(basename(import.meta.filename), function () {
           await expectIncrementalIndexEvent(
             `${testRealmURL}raw-instance.json`,
             since,
-            { assert, getMessagesSince, realm: testRealmHref },
+            {
+              assert,
+              getMessagesSince,
+              realm: testRealmHref,
+              clientRequestId: null,
+            },
           );
 
           let indexed = await request
@@ -1299,7 +1307,12 @@ module(basename(import.meta.filename), function () {
           await expectIncrementalIndexEvent(
             `${testRealmURL}durable-before-indexed.gts`,
             since,
-            { assert, getMessagesSince, realm: testRealmHref },
+            {
+              assert,
+              getMessagesSince,
+              realm: testRealmHref,
+              clientRequestId: null,
+            },
           );
         });
 
@@ -2118,6 +2131,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: null,
             },
           );
         });

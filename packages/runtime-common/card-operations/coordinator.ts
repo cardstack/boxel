@@ -42,6 +42,7 @@ import {
   type OperationIdentityResult,
 } from './types.ts';
 import type { CodeRef } from '../code-ref.ts';
+import type { RequestTimings } from '../request-timings.ts';
 import type { Definition } from '../definitions.ts';
 import type { LooseSingleCardDocument } from '../index.ts';
 import type { RealmResourceIdentifier } from '../realm-identifiers.ts';
@@ -148,7 +149,8 @@ export interface BatchCore {
       lastModified: number;
       // When the realm first recorded this file. Read by the commit as it
       // writes, inside the lock, so a caller reporting it never has to ask
-      // again afterwards.
+      // again afterwards — and a concurrent removal of the same path cannot
+      // take the row away between the commit and the answer.
       created: number | null;
       contentHash: string;
     }[];
@@ -198,7 +200,41 @@ export interface CommitBatchOptions {
   // whichever way this is set. See the drain in `commitBatch` for what the
   // wait actually buys, and the realm's own card-write gate for the case
   // stated at length.
+  //
+  // A write made from inside a render must skip both, and there it is a
+  // requirement rather than a preference: the job it would wait on needs the
+  // render slot that caller is holding, so waiting deadlocks.
   waitForIndex?: boolean;
+  // Report the bytes each entry's primary file now holds, on the entry's
+  // `meta.storedContent`. Off by default: a batch's results say what a card
+  // is and what version it holds, and a caller wanting its document reads it
+  // back, so carrying every entry's document would make a batch of many
+  // entries answer with the realm's contents. It is here for a caller that
+  // has no read to make — one whose write indexes deferred and answers from
+  // what it wrote — which would otherwise have to go back to the file the
+  // commit just closed.
+  reportStoredContent?: boolean;
+  // What a link to a side-loaded resource the batch will not write means. Such
+  // a resource is one claiming another realm, which is not this batch's to
+  // create, so the link resolves to nothing either way — the question is
+  // whether that is the caller's mistake or its intent.
+  //
+  // `refuse` is the default and the answer a caller composing a batch wants:
+  // it sent the resource, so silently writing a card with that edge empty
+  // would describe a payload it did not send, and the remedy — name the card
+  // by URL, or stop claiming a realm for it — is one only the caller can
+  // apply. The card endpoints ask for `leave`, because a `POST` or `PATCH`
+  // carrying such a payload has always stored the card with the edge empty
+  // and answered success: serialization records a link it cannot resolve as
+  // an explicit null.
+  foreignSideLoadLink?: 'refuse' | 'leave';
+  // Per-request wall-clock collector, threaded from a caller that reports
+  // where its write's time went. The stages a commit owns are not observable
+  // from outside it — waiting for the realm's write lock and draining
+  // indexing already in flight both happen before the caller's own work
+  // starts, and either can be the whole of a slow write — so they are stamped
+  // here or not at all. Absent, and so a no-op, for every other caller.
+  timings?: RequestTimings;
 }
 
 // One entry's answer, in the order the entries were sent. A write reports the
@@ -218,7 +254,15 @@ export async function commitBatch(
     // tell every subscriber that something changed.
     return [];
   }
+  // Stamped from outside the lock so the wait for it is its own stage: a
+  // batch queued behind the realm's other writers spends its time here, and
+  // from the handler that is indistinguishable from slow indexing.
+  let lockRequestedAt = Date.now();
+  let timings = opts.timings;
+  let timed = <T>(stage: string, fn: () => Promise<T>): Promise<T> =>
+    timings ? timings.time(stage, fn) : fn();
   return await core.withWriteLock(async () => {
+    timings?.add('lock', Date.now() - lockRequestedAt);
     // Drained inside the lock, before anything is staged. Staging serializes
     // each card against its type's definition, and a module written moments
     // earlier may still be indexing; without this a batch that follows a
@@ -245,69 +289,84 @@ export async function commitBatch(
     // whose response does not read indexed state can take it, and a
     // prerender-originated write *must*: the job it would wait on needs the
     // render slot that caller is holding, so waiting deadlocks.
-    if (opts.waitForIndex !== false) {
-      await core.drainIndexing();
+    //
+    // All of that is about the opt-out. The drain is skipped on its own terms
+    // as well, for a batch that stages nothing: a removal names a file and
+    // reads the bytes already there, resolving no definition, so a batch of
+    // removals would wait for indexing it has no use for. That matters
+    // because this wait happens with the realm's write lock held — a removal
+    // issued while a bulk import drains would park here holding it, with
+    // every other writer queued behind.
+    if (opts.waitForIndex !== false && entries.some(stagesContent)) {
+      await timed('drain', () => core.drainIndexing());
     }
-    // Every `lid` in the batch resolves to a URL before any executor runs. A
-    // created card's file is named after its `lid`, so its URL is path math
-    // over the type it adopts — no read and no write — which is what lets an
-    // entry link to a card a later entry mints.
-    let positions = positionsOf(entries);
-    let { lids, foreignLids } = indexLids(entries, positions, paths);
-    let { stored, storedMeta } = await readPreState(core, entries, paths);
-    // What an append stages for a file it never read whole. Kept beside
-    // `stored` rather than in it: the two describe the same file in different
-    // terms, and an executor that needs one cannot work from the other.
-    let splices = new Map<LocalPath, SplicedSource>();
     let staged: StagedChange[] = [];
     // The version each entry's merge was computed over, captured as it stages
     // rather than read back at the end: `stored` moves underneath the batch
     // as entries compose, so by the commit it no longer holds what the first
     // entry to touch a file merged over.
     let baseHashes: (string | undefined)[] = [];
-    for (let [index, entry] of entries.entries()) {
-      let change = await stageEntry(entry, positions[index], {
-        realmURL: core.realmURL,
-        paths,
-        lids,
-        foreignLids,
-        stored,
-        storedMeta,
-        splices,
-        openSourceBytes: core.openSourceBytes,
-        fileExists: core.fileExists,
-        indexedCardValues: core.indexedCardValues,
-        actor: opts.actor ?? '',
-        serializeCard: core.serializeCard,
-        codeRefKey: core.codeRefKey,
-        resolveModuleId: core.resolveModuleId,
-        storedLink: core.storedLink,
-        resolvedLink: core.resolvedLink,
-        lookupDefinition: core.lookupDefinition,
-      });
-      baseHashes.push(
-        change.primaryPath
-          ? (stored.get(change.primaryPath)?.contentHash ??
-              storedMeta.get(change.primaryPath)?.contentHash)
-          : undefined,
-      );
-      compose(stored, storedMeta, splices, entry, change);
-      staged.push(change);
+    // Resolved before anything stages and carried through every refusal, so a
+    // batch holding only some of what a caller composed still reports against
+    // the caller's numbering rather than its own.
+    let positions = positionsOf(entries);
+    // Stamped from a `finally`: an entry that cannot be carried out throws
+    // from the staging work, and a write that failed is exactly the one whose
+    // time someone is trying to account for.
+    let stageStart = Date.now();
+    try {
+      // Every `lid` in the batch resolves to a URL before any executor runs. A
+      // created card's file is named after its `lid`, so its URL is path math
+      // over the type it adopts — no read and no write — which is what lets an
+      // entry link to a card a later entry mints.
+      let { lids, foreignLids } = indexLids(entries, positions, paths);
+      let { stored, storedMeta } = await readPreState(core, entries, paths);
+      // What an append stages for a file it never read whole. Kept beside
+      // `stored` rather than in it: the two describe the same file in different
+      // terms, and an executor that needs one cannot work from the other.
+      let splices = new Map<LocalPath, SplicedSource>();
+      for (let [index, entry] of entries.entries()) {
+        let change = await stageEntry(entry, positions[index], {
+          realmURL: core.realmURL,
+          paths,
+          lids,
+          foreignLids,
+          foreignSideLoadLink: opts.foreignSideLoadLink,
+          stored,
+          storedMeta,
+          splices,
+          openSourceBytes: core.openSourceBytes,
+          fileExists: core.fileExists,
+          indexedCardValues: core.indexedCardValues,
+          actor: opts.actor ?? '',
+          serializeCard: core.serializeCard,
+          codeRefKey: core.codeRefKey,
+          resolveModuleId: core.resolveModuleId,
+          storedLink: core.storedLink,
+          resolvedLink: core.resolvedLink,
+          lookupDefinition: core.lookupDefinition,
+        });
+        baseHashes.push(
+          change.primaryPath
+            ? (stored.get(change.primaryPath)?.contentHash ??
+                storedMeta.get(change.primaryPath)?.contentHash)
+            : undefined,
+        );
+        compose(stored, storedMeta, splices, entry, change);
+        staged.push(change);
+      }
+      assertWritesAllowed(staged, positions);
+      assertLinkedCardsSurvive(staged, paths, positions);
+      assertWritesFit(core, staged, positions);
+      await assertRemovalsAllowed(core, paths, staged, positions);
+      await assertDestinationsFree(core, staged, positions);
+    } finally {
+      timings?.add('stage', Date.now() - stageStart);
     }
-    assertWritesAllowed(staged, positions);
-    assertLinkedCardsSurvive(staged, paths, positions);
-    assertWritesFit(core, staged, positions);
-    await assertRemovalsAllowed(core, paths, staged, positions);
-    await assertDestinationsFree(core, staged, positions);
     // Everything above either produced bytes for every entry or threw, and a
     // throw leaves the realm as it was.
-    return await commitStaged(
-      core,
-      entries,
-      staged,
-      baseHashes,
-      positions,
-      opts,
+    return await timed('write', () =>
+      commitStaged(core, entries, staged, baseHashes, positions, opts),
     );
   });
 }
@@ -1189,6 +1248,21 @@ async function commitStaged(
         generation: committed.generation,
         lastModified: written.lastModified,
         created: written.created,
+        // Whether this entry left the file holding something other than what
+        // it held when the entry staged. Read off the two hashes the commit
+        // already produced — the version the entry's work was computed over,
+        // and the version the file now carries — so it costs nothing and
+        // cannot disagree with what was written. A patch that changes nothing
+        // reports `false` here, which is how a caller tells "the realm agreed
+        // to this" from "the realm did something".
+        //
+        // Per entry rather than per file: where two entries name one card the
+        // second composes over what the first staged, so it reports whether
+        // *it* changed the answer, not whether the commit did.
+        changed: baseHashes[index] !== written.contentHash,
+        ...(opts.reportStoredContent
+          ? { storedContent: primaryContent(change) }
+          : {}),
         ...(change.diagnostics ? { diagnostics: change.diagnostics } : {}),
         // Compared against the fingerprint the file carried before the commit,
         // read inside this same lock. A mismatch is not an error — the write
@@ -1199,4 +1273,25 @@ async function commitStaged(
       },
     };
   });
+}
+
+// Whether an entry produces content the realm has to make sense of, which is
+// what the pre-staging drain is for: serializing a card resolves the
+// definitions its type is built from, and a module written moments earlier may
+// still be indexing. A removal produces none — it names a file and reads the
+// bytes already there — so a batch of removals resolves nothing and has
+// nothing to wait for.
+function stagesContent(entry: BatchEntry): boolean {
+  return entry.op !== 'delete';
+}
+
+// The content an entry staged for the file its result reports. Taken from the
+// staged change rather than read back afterwards: these are the bytes the
+// commit wrote, whereas the file has been open to every other writer since the
+// lock was released. Undefined where the entry described its file instead of
+// materializing it — an append names an addition, not the file's next content
+// — and where the content is raw bytes, which no caller reads a document from.
+function primaryContent(change: StagedChange): string | undefined {
+  let write = change.writes.find((write) => write.path === change.primaryPath);
+  return typeof write?.content === 'string' ? write.content : undefined;
 }
