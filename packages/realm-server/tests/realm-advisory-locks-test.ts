@@ -2,9 +2,10 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import {
+  PgAdapter,
+  hashFilePathForAdvisoryLock,
   hashRealmUrlForAdvisoryLock,
   hashUserIdForCostLock,
-  type PgAdapter,
 } from '@cardstack/postgres';
 import { setupDB } from './helpers/index.ts';
 
@@ -168,6 +169,495 @@ module(basename(import.meta.filename), function () {
       // this would block forever (test timeout would fire).
       const result = await dbAdapter.withWriteLock(url, async () => 'ok');
       assert.strictEqual(result, 'ok', 'lock released after prior failure');
+    });
+  });
+
+  module('hashFilePathForAdvisoryLock', function () {
+    test('is deterministic', function (assert) {
+      const realm = 'http://localhost:4201/luke/my-realm/';
+      assert.strictEqual(
+        hashFilePathForAdvisoryLock(realm, 'Widget/one.json'),
+        hashFilePathForAdvisoryLock(realm, 'Widget/one.json'),
+      );
+    });
+
+    test('yields different keys for different paths in one realm', function (assert) {
+      const realm = 'http://localhost:4201/luke/my-realm/';
+      assert.notStrictEqual(
+        hashFilePathForAdvisoryLock(realm, 'Widget/one.json'),
+        hashFilePathForAdvisoryLock(realm, 'Widget/two.json'),
+      );
+    });
+
+    test('yields different keys for one path in different realms', function (assert) {
+      assert.notStrictEqual(
+        hashFilePathForAdvisoryLock('http://localhost:4201/a/', 'Card/1.json'),
+        hashFilePathForAdvisoryLock('http://localhost:4201/b/', 'Card/1.json'),
+      );
+    });
+
+    test('cannot be collided by moving the boundary between realm and path', function (assert) {
+      // The realm and the path are joined through a separator, so a realm
+      // whose text ends where another's path begins must not hash to the same
+      // key. Without a separator both of these would digest one identical
+      // byte sequence and two unrelated files would share a lock.
+      assert.notStrictEqual(
+        hashFilePathForAdvisoryLock('http://localhost:4201/a/b/', 'c.json'),
+        hashFilePathForAdvisoryLock('http://localhost:4201/a/', 'b/c.json'),
+      );
+    });
+
+    test('is disjoint from the realm-write key space', function (assert) {
+      const realm = 'http://localhost:4201/luke/my-realm/';
+      assert.notStrictEqual(
+        hashFilePathForAdvisoryLock(realm, ''),
+        hashRealmUrlForAdvisoryLock(realm),
+      );
+    });
+
+    test('returns a string parseable as a signed 64-bit integer', function (assert) {
+      const key = hashFilePathForAdvisoryLock(
+        'http://localhost:4201/luke/my-realm/',
+        'Widget/one.json',
+      );
+      assert.ok(
+        /^-?\d+$/.test(key),
+        `key is a decimal integer string (got ${key})`,
+      );
+      const asBigInt = BigInt(key);
+      const MAX = 2n ** 63n - 1n;
+      const MIN = -(2n ** 63n);
+      assert.ok(asBigInt <= MAX, 'within int64 upper bound');
+      assert.ok(asBigInt >= MIN, 'within int64 lower bound');
+    });
+  });
+
+  module('PgAdapter.withFileWriteLocks', function (hooks) {
+    let dbAdapter: PgAdapter;
+    setupDB(hooks, {
+      beforeEach: async (adapter) => {
+        dbAdapter = adapter;
+      },
+    });
+
+    const REALM = 'http://localhost:4201/files/';
+
+    // Hold `outer` open until `inner` has run to completion, and report what
+    // happened if it never does. Every concurrency claim below is shaped this
+    // way rather than as a race between two sleeps: the outer caller does not
+    // release until the inner one is finished, so an inner call that completes
+    // proves it was never excluded, and one that is excluded blocks and trips
+    // the guard with a timeline instead of hanging until the suite times out.
+    // A fixed-duration window would instead be asserting that postgres
+    // answered fast enough, which is a different claim and a flaky one.
+    async function runInsideWindow(
+      assert: Assert,
+      opts: {
+        openOuter: (
+          onEntered: () => void,
+          released: Promise<void>,
+        ) => Promise<unknown>;
+        runInner: () => Promise<unknown>;
+        what: string;
+      },
+    ): Promise<void> {
+      const startedAt = Date.now();
+      const events: string[] = [];
+      const eventTimes: number[] = [];
+      const push = (e: string) => {
+        events.push(e);
+        eventTimes.push(Date.now());
+      };
+      let signalEntered!: () => void;
+      const entered = new Promise<void>((r) => {
+        signalEntered = r;
+      });
+      let release!: () => void;
+      const released = new Promise<void>((r) => {
+        release = r;
+      });
+      const outer = opts.openOuter(() => {
+        push('outer-held');
+        signalEntered();
+      }, released);
+      // Race the entry signal against the outer promise, so a rejection
+      // during acquisition surfaces here instead of leaving us awaiting a
+      // signal that will never fire.
+      await Promise.race([entered, outer]);
+      let guardTimer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const inner = opts.runInner().then((value) => {
+          push('inner-done');
+          return value;
+        });
+        const guard = new Promise<never>((_resolve, reject) => {
+          guardTimer = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  `${opts.what}: the inner caller did not finish while the outer lock was held, so the two excluded each other; timeline: ${timeline(events, startedAt, eventTimes)}`,
+                ),
+              ),
+            5000,
+          );
+        });
+        await Promise.race([inner, guard]);
+        assert.ok(
+          events.includes('inner-done'),
+          `${opts.what}; timeline: ${timeline(events, startedAt, eventTimes)}`,
+        );
+      } finally {
+        if (guardTimer) {
+          clearTimeout(guardTimer);
+        }
+        release();
+        await outer;
+      }
+    }
+
+    test('runs the callback and returns its value', async function (assert) {
+      const result = await dbAdapter.withFileWriteLocks(
+        REALM,
+        ['Widget/one.json'],
+        async () => 42,
+      );
+      assert.strictEqual(result, 42);
+    });
+
+    test('serializes two concurrent writers of one file', async function (assert) {
+      const events: string[] = [];
+      const eventTimes: number[] = [];
+      const startedAt = Date.now();
+      const push = (e: string) => {
+        events.push(e);
+        eventTimes.push(Date.now());
+      };
+
+      let signalFirstEntered!: () => void;
+      const firstEntered = new Promise<void>((r) => {
+        signalFirstEntered = r;
+      });
+      const first = dbAdapter.withFileWriteLocks(
+        REALM,
+        ['Widget/one.json'],
+        async () => {
+          push('1-start');
+          signalFirstEntered();
+          await new Promise((r) => setTimeout(r, 150));
+          push('1-end');
+        },
+      );
+      await Promise.race([firstEntered, first]);
+      const second = dbAdapter.withFileWriteLocks(
+        REALM,
+        ['Widget/one.json'],
+        async () => {
+          push('2-start');
+          push('2-end');
+        },
+      );
+
+      await Promise.all([first, second]);
+
+      assert.deepEqual(
+        events,
+        ['1-start', '1-end', '2-start', '2-end'],
+        `the second writer of one card runs only after the first releases; timeline: ${timeline(events, startedAt, eventTimes)}`,
+      );
+    });
+
+    test('runs writers of different files in the same realm in parallel', async function (assert) {
+      // The property the per-file scope exists for: one card's write, however
+      // long it holds, does not stall the writer of another card in the same
+      // realm.
+      await runInsideWindow(assert, {
+        what: 'a writer of one card runs while another card is held',
+        openOuter: (onEntered, released) =>
+          dbAdapter.withFileWriteLocks(REALM, ['Widget/one.json'], async () => {
+            onEntered();
+            await released;
+          }),
+        runInner: () =>
+          dbAdapter.withFileWriteLocks(
+            REALM,
+            ['Gadget/one.json'],
+            async () => 'ok',
+          ),
+      });
+    });
+
+    test('serializes writers whose file sets overlap in one file', async function (assert) {
+      const events: string[] = [];
+      const eventTimes: number[] = [];
+      const startedAt = Date.now();
+      const push = (e: string) => {
+        events.push(e);
+        eventTimes.push(Date.now());
+      };
+
+      let signalFirstEntered!: () => void;
+      const firstEntered = new Promise<void>((r) => {
+        signalFirstEntered = r;
+      });
+      // Two batches that share exactly one file. Sharing one is enough to
+      // order them, which is what stops a batch reading a file another batch
+      // is part-way through rewriting.
+      const first = dbAdapter.withFileWriteLocks(
+        REALM,
+        ['Widget/one.json', 'Gadget/one.json'],
+        async () => {
+          push('1-start');
+          signalFirstEntered();
+          await new Promise((r) => setTimeout(r, 150));
+          push('1-end');
+        },
+      );
+      await Promise.race([firstEntered, first]);
+      const second = dbAdapter.withFileWriteLocks(
+        REALM,
+        ['Gadget/one.json', 'Gadget/two.json'],
+        async () => {
+          push('2-start');
+          push('2-end');
+        },
+      );
+
+      await Promise.all([first, second]);
+
+      assert.deepEqual(
+        events,
+        ['1-start', '1-end', '2-start', '2-end'],
+        `a batch waits for another holding a file it also needs; timeline: ${timeline(events, startedAt, eventTimes)}`,
+      );
+    });
+
+    test('takes the shared files in one order whichever order the sets name them', async function (assert) {
+      // Two callers naming the same two files in opposite orders, each on its
+      // own adapter. The second adapter is what makes this observable: both
+      // callers reduce to the same sorted key list, so on one adapter they
+      // share a `#fileWriteQueue` entry and chain in memory — the second never
+      // reaches postgres while the first holds anything, and the assertion
+      // below would hold however the keys were ordered. Separate adapters have
+      // separate queues and one lock space, which is also the shape this rule
+      // exists for: two replicas, no shared memory between them.
+      //
+      // Taken sorted, the two acquire in the same sequence and one simply
+      // waits. Taken in the order each was given, one would hold this file
+      // while waiting for that one and the other the reverse, which postgres
+      // can only resolve by killing one of them as a deadlock. The guard turns
+      // that into a named failure rather than a suite that hangs here.
+      const second = new PgAdapter();
+      let guardTimer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const both = Promise.all([
+          dbAdapter.withFileWriteLocks(
+            REALM,
+            ['Widget/one.json', 'Gadget/one.json'],
+            async () => {
+              // Held across the other caller's own acquisition, so the two
+              // windows overlap rather than running one after the other.
+              await new Promise((r) => setTimeout(r, 150));
+              return 'first';
+            },
+          ),
+          second.withFileWriteLocks(
+            REALM,
+            ['Gadget/one.json', 'Widget/one.json'],
+            async () => {
+              await new Promise((r) => setTimeout(r, 150));
+              return 'second';
+            },
+          ),
+        ]);
+        const guard = new Promise<never>((_resolve, reject) => {
+          guardTimer = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  'neither caller finished: two writers of one pair of files ' +
+                    'each held what the other needed',
+                ),
+              ),
+            8000,
+          );
+        });
+        assert.deepEqual(
+          await Promise.race([both, guard]),
+          ['first', 'second'],
+          'both callers complete rather than each holding what the other needs',
+        );
+      } finally {
+        if (guardTimer) {
+          clearTimeout(guardTimer);
+        }
+        await second.close();
+      }
+    });
+
+    test('waits for a realm-lifecycle caller holding the realm lock', async function (assert) {
+      // A file writer holds the realm's own key in shared mode, so a caller
+      // that takes it exclusively — destroying, publishing or unpublishing the
+      // realm — still excludes every writer in it. Without that, the two key
+      // spaces would be disjoint and a realm could be torn down under a live
+      // write.
+      const events: string[] = [];
+      const eventTimes: number[] = [];
+      const startedAt = Date.now();
+      const push = (e: string) => {
+        events.push(e);
+        eventTimes.push(Date.now());
+      };
+
+      let signalRealmEntered!: () => void;
+      const realmEntered = new Promise<void>((r) => {
+        signalRealmEntered = r;
+      });
+      const realm = dbAdapter.withWriteLock(REALM, async () => {
+        push('realm-start');
+        signalRealmEntered();
+        await new Promise((r) => setTimeout(r, 150));
+        push('realm-end');
+      });
+      await Promise.race([realmEntered, realm]);
+      const file = dbAdapter.withFileWriteLocks(
+        REALM,
+        ['Widget/one.json'],
+        async () => {
+          push('file-start');
+          push('file-end');
+        },
+      );
+
+      await Promise.all([realm, file]);
+
+      assert.deepEqual(
+        events,
+        ['realm-start', 'realm-end', 'file-start', 'file-end'],
+        `a file write waits for the realm lock to be released; timeline: ${timeline(events, startedAt, eventTimes)}`,
+      );
+    });
+
+    test('takes the realm exclusively rather than a key per file past the ceiling', async function (assert) {
+      // A caller naming more files than the ceiling — a realm-wide `deleteAll`
+      // is the one that reaches it — would otherwise hold one advisory lock
+      // per file and exhaust the cluster's lock table. It takes the realm
+      // instead, which excludes strictly more writers, so an unrelated card's
+      // writer waits where it would not have for a smaller batch.
+      const events: string[] = [];
+      const eventTimes: number[] = [];
+      const startedAt = Date.now();
+      const push = (e: string) => {
+        events.push(e);
+        eventTimes.push(Date.now());
+      };
+
+      const many = Array.from(
+        { length: 300 },
+        (_unused, i) => `Widget/bulk-${i}.json`,
+      );
+      let signalBulkEntered!: () => void;
+      const bulkEntered = new Promise<void>((r) => {
+        signalBulkEntered = r;
+      });
+      const bulk = dbAdapter.withFileWriteLocks(REALM, many, async () => {
+        push('bulk-start');
+        signalBulkEntered();
+        await new Promise((r) => setTimeout(r, 150));
+        push('bulk-end');
+      });
+      await Promise.race([bulkEntered, bulk]);
+      // A file the bulk caller never named. Under per-file keys this would run
+      // straight through; under the realm key it waits, which is what says the
+      // fallback actually happened.
+      const other = dbAdapter.withFileWriteLocks(
+        REALM,
+        ['Gadget/one.json'],
+        async () => {
+          push('other-start');
+          push('other-end');
+        },
+      );
+
+      await Promise.all([bulk, other]);
+
+      assert.deepEqual(
+        events,
+        ['bulk-start', 'bulk-end', 'other-start', 'other-end'],
+        `past the ceiling the realm is held, so a writer of an unnamed file waits; timeline: ${timeline(events, startedAt, eventTimes)}`,
+      );
+    });
+
+    test('does not serialize two writers that each name no file', async function (assert) {
+      // A write naming no file has no read-merge-write to protect, so two of
+      // them hold only the realm guard — shared, and shared holders do not
+      // conflict.
+      await runInsideWindow(assert, {
+        what: 'a write naming no file runs while another one is held',
+        openOuter: (onEntered, released) =>
+          dbAdapter.withFileWriteLocks(REALM, [], async () => {
+            onEntered();
+            await released;
+          }),
+        runInner: () =>
+          dbAdapter.withFileWriteLocks(REALM, [], async () => 'ok'),
+      });
+    });
+
+    test('still takes the realm guard when it names no file', async function (assert) {
+      // The case a create the client did not name produces: its path is minted
+      // while staging, so there is no file to lock — but it does write, and a
+      // realm being destroyed, published or unpublished under it must still
+      // exclude it. Dropping the guard along with the file keys is what would
+      // let that happen, and nothing in the write's own response would show it.
+      const events: string[] = [];
+      const eventTimes: number[] = [];
+      const startedAt = Date.now();
+      const push = (e: string) => {
+        events.push(e);
+        eventTimes.push(Date.now());
+      };
+
+      let signalRealmEntered!: () => void;
+      const realmEntered = new Promise<void>((r) => {
+        signalRealmEntered = r;
+      });
+      const realm = dbAdapter.withWriteLock(REALM, async () => {
+        push('realm-start');
+        signalRealmEntered();
+        await new Promise((r) => setTimeout(r, 150));
+        push('realm-end');
+      });
+      await Promise.race([realmEntered, realm]);
+      const write = dbAdapter.withFileWriteLocks(REALM, [], async () => {
+        push('write-start');
+        push('write-end');
+      });
+
+      await Promise.all([realm, write]);
+
+      assert.deepEqual(
+        events,
+        ['realm-start', 'realm-end', 'write-start', 'write-end'],
+        `a write naming no file waits for the realm lock; timeline: ${timeline(events, startedAt, eventTimes)}`,
+      );
+    });
+
+    test('releases the locks when the callback throws', async function (assert) {
+      const paths = ['Widget/one.json', 'Gadget/one.json'];
+      await assert.rejects(
+        dbAdapter.withFileWriteLocks(REALM, paths, async () => {
+          throw new Error('deliberate failure');
+        }),
+        /deliberate failure/,
+      );
+      // Every key the failed caller took has to be free, not just the first —
+      // a later key left held would block only a batch that reaches it.
+      const result = await dbAdapter.withFileWriteLocks(
+        REALM,
+        paths,
+        async () => 'ok',
+      );
+      assert.strictEqual(result, 'ok', 'locks released after prior failure');
     });
   });
 

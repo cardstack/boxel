@@ -3056,24 +3056,31 @@ export class Realm {
   }
 
   // Public mutation entry points (`write`, `writeMany`, `delete`, `deleteAll`)
-  // serialize concurrent same-URL writers across replicas via the per-realm
-  // advisory lock. The lock spans the FS write + index update so two
+  // serialize concurrent writers of the same file across replicas via the
+  // per-file advisory locks. The locks span the FS write + index update so two
   // replicas can't both commit on top of the same pre-state.
   //
+  // They are the same locks a batch takes, keyed the same way, which is what
+  // makes the two paths exclude each other: a batch merging over a card's
+  // stored bytes and a `writeMany` replacing them wholesale are writers of one
+  // file, and letting them interleave would lose whichever landed first.
+  //
   // A caller that needs its READ inside the same critical section as the write
-  // — the `/_atomic` precheck — takes the lock at its own boundary and invokes
-  // `_batchWriteUnlocked` directly, because re-entering through the public
-  // methods would deadlock: a second `pg_advisory_xact_lock` on the same key
-  // blocks on its own pinned pool connection. A batch does the same thing one
-  // level up, holding the lock across every read it stages from and the commit
-  // it hands them to.
+  // — the `/_atomic` precheck — takes the locks at its own boundary and
+  // invokes `_batchWriteUnlocked` directly, because re-entering through the
+  // public methods would deadlock: a second `pg_advisory_xact_lock` on a key
+  // already held blocks on its own pinned pool connection. A batch does the
+  // same thing one level up, holding the locks across every read it stages
+  // from and the commit it hands them to.
   async write(
     path: LocalPath,
     contents: string | Uint8Array,
     options?: WriteOptions,
   ): Promise<FileWriteResult> {
-    let results = await this.#dbAdapter.withWriteLock(this.url, () =>
-      this._batchWriteUnlocked(new Map([[path, contents]]), options),
+    let results = await this.#dbAdapter.withFileWriteLocks(
+      this.url,
+      [path],
+      () => this._batchWriteUnlocked(new Map([[path, contents]]), options),
     );
     return results[0];
   }
@@ -3082,7 +3089,7 @@ export class Realm {
     files: Map<LocalPath, string | Uint8Array>,
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
-    return this.#dbAdapter.withWriteLock(this.url, () =>
+    return this.#dbAdapter.withFileWriteLocks(this.url, [...files.keys()], () =>
       this._batchWriteUnlocked(files, options),
     );
   }
@@ -3124,10 +3131,11 @@ export class Realm {
   // caller's own ordering hold when it both replaces a file's content and adds
   // to the end of it: the append lands on the content the write left.
   //
-  // Assumes the realm's write lock is held — the caller reads the pre-state it
-  // stages from inside the same critical section. `write` and `writeMany` are
-  // the locked public entry points that reach this; `delete` and `deleteAll`
-  // have their own unlocked primitives and do not.
+  // Assumes the write locks on the files it touches are held — the caller
+  // reads the pre-state it stages from inside the same critical section.
+  // `write` and `writeMany` are the locked public entry points that reach
+  // this; `delete` and `deleteAll` have their own unlocked primitives and do
+  // not.
   //
   // Files are changed one at a time and there is no rollback: a file system
   // failure partway through leaves the files handled before it changed, and
@@ -3857,6 +3865,33 @@ export class Realm {
       : href;
   }
 
+  // The files an atomic request will write, for the locks it takes before its
+  // precheck reads any of them. Path math over what each operation names, by
+  // the same resolution the write loop applies, so the set cannot disagree
+  // with the paths actually written.
+  //
+  // An href that does not resolve is left out rather than refused here. The
+  // precheck inside the lock is what reports it, and a file this request
+  // cannot name is one no lock of its would exclude anyone from.
+  #atomicWritePaths(operations: AtomicOperation[]): LocalPath[] {
+    let paths = new Set<LocalPath>();
+    for (let operation of filterAtomicOperations(operations)) {
+      if (!operation.href) {
+        continue;
+      }
+      try {
+        paths.add(
+          this.paths.local(
+            new URL(this.#resolveAtomicHref(operation.href), this.paths.url),
+          ),
+        );
+      } catch {
+        continue;
+      }
+    }
+    return [...paths];
+  }
+
   private async checkBeforeAtomicWrite(
     operations: AtomicOperation[],
   ): Promise<AtomicPayloadValidationError[]> {
@@ -4001,192 +4036,203 @@ export class Realm {
       });
     }
     let atomicOperations = json['atomic:operations'] as AtomicOperation[];
+    let atomicWritePaths = this.#atomicWritePaths(atomicOperations);
 
-    // Take the per-realm advisory lock from the precheck through the
-    // write. Without this, two replicas could both pass
+    // Take the advisory lock on every file the operations name, from the
+    // precheck through the write. Without this, two replicas could both pass
     // `checkBeforeAtomicWrite` for the same `add` operation (file does
     // not exist), then both proceed to write — last writer wins on disk
     // but indexer state is incoherent. Inside the lock we invoke
-    // `_batchWriteUnlocked` directly to avoid re-acquiring the same
+    // `_batchWriteUnlocked` directly to avoid re-acquiring a held
     // advisory lock through `writeMany` (which would deadlock on a
     // different pinned pool connection).
-    return await this.#dbAdapter.withWriteLock(this.url, async () => {
-      let atomicCheckErrors =
-        await this.checkBeforeAtomicWrite(atomicOperations);
-      if (atomicCheckErrors.length > 0) {
+    //
+    // The set is resolved here, before the lock, by the same path math the
+    // loop below applies to each operation. An href that does not resolve is
+    // left out rather than refused: the precheck inside the lock is what
+    // reports it, and locking nothing for a file this request cannot name
+    // excludes nobody.
+    return await this.#dbAdapter.withFileWriteLocks(
+      this.url,
+      atomicWritePaths,
+      async () => {
+        let atomicCheckErrors =
+          await this.checkBeforeAtomicWrite(atomicOperations);
+        if (atomicCheckErrors.length > 0) {
+          return createResponse({
+            body: JSON.stringify({ errors: atomicCheckErrors }),
+            init: {
+              status: this.lowestStatusCode(atomicCheckErrors),
+              headers: { 'content-type': SupportedMimeType.JSONAPI },
+            },
+            requestContext,
+          });
+        }
+
+        let operations = filterAtomicOperations(atomicOperations);
+        let files = new Map<LocalPath, string>();
+        let writeResults: FileWriteResult[] = [];
+
+        for (let operation of operations) {
+          let resource = operation.data;
+          let href = operation.href;
+          let localPath = this.paths.local(
+            new URL(this.#resolveAtomicHref(href), this.paths.url),
+          );
+          let exists = await this.#adapter.exists(localPath);
+          if (operation.op === 'add' && exists) {
+            return createResponse({
+              body: JSON.stringify({
+                errors: [
+                  {
+                    title: 'Resource already exists',
+                    detail: `Resource ${href} already exists`,
+                    status: 409,
+                  },
+                ],
+              }),
+              init: {
+                status: 409,
+                headers: { 'content-type': SupportedMimeType.JSONAPI },
+              },
+              requestContext,
+            });
+          }
+          if (operation.op === 'update' && !exists) {
+            return createResponse({
+              body: JSON.stringify({
+                errors: [
+                  {
+                    title: 'Resource does not exist',
+                    detail: `Resource ${href} does not exist`,
+                    status: 404,
+                  },
+                ],
+              }),
+              init: {
+                status: 404,
+                headers: { 'content-type': SupportedMimeType.JSONAPI },
+              },
+              requestContext,
+            });
+          }
+          if (isModuleResource(resource)) {
+            let content = resource.attributes?.content ?? '';
+            this.assertWriteSize(content, 'file', localPath);
+            files.set(localPath, content);
+          } else if (isCardResource(resource)) {
+            let doc = {
+              data: resource,
+            };
+            let jsonString = JSON.stringify(doc, null, 2);
+            this.assertWriteSize(jsonString, 'card', localPath);
+            files.set(localPath, jsonString);
+          } else {
+            return createResponse({
+              body: JSON.stringify({
+                errors: [
+                  {
+                    status: 400,
+                    title: 'Invalid resource',
+                    detail: `Operation data is not a valid card resource or module resource`,
+                  },
+                ],
+              }),
+              init: {
+                status: 400,
+                headers: { 'content-type': SupportedMimeType.JSONAPI },
+              },
+              requestContext,
+            });
+          }
+        }
+
+        if (files.size > 0) {
+          try {
+            // /_atomic returns once writes are durable, not once they are
+            // indexed. Callers that need indexed state must drain via
+            // realm.incrementalIndexing() (server-side), wait on the
+            // matrix 'index' incremental event (client-side), or opt-in
+            // to a synchronous response by passing `?waitForIndex=true`
+            // on the POST URL. The query-param path is intended for
+            // one-shot CLI / agent flows where Matrix subscription is
+            // impractical and a search poll-loop would race indexing
+            // latency. Mixed module+instance batches are still
+            // serialized correctly: the in-loop intermediate flush in
+            // _batchWriteUnlocked at the `lastWriteType === 'module' &&
+            // currentWriteType === 'instance'` gate is always awaited,
+            // so an instance's fileSerialization sees its module already
+            // indexed.
+            let waitForIndex =
+              new URL(request.url).searchParams.get('waitForIndex') === 'true';
+            writeResults = await this._batchWriteUnlocked(files, {
+              clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+              serializeFile: true,
+              waitForIndex,
+              initiatingUser: requestContext.authenticatedUser ?? null,
+            });
+          } catch (e: any) {
+            if (e instanceof CardError) {
+              return responseWithError(e, requestContext);
+            }
+            // Log the underlying exception before returning 500 —
+            // otherwise callers only see "Write Error" and the original
+            // stack trace is lost, making atomic-batch failures
+            // effectively undebuggable. Include e.cause explicitly: errors
+            // like FilterRefersToNonexistentTypeError carry the actionable
+            // detail (which module/definition was missing, or that a
+            // concurrent invalidation discarded the lookup) in their cause,
+            // not their message, so without this the real reason is swallowed.
+            let cause =
+              e?.cause instanceof Error
+                ? `${e.cause.message}\n${e.cause.stack ?? '(no stack)'}`
+                : e?.cause != null
+                  ? String(e.cause)
+                  : undefined;
+            this.#log.error(
+              `Atomic write failed: ${e.message}${
+                cause ? `\ncause: ${cause}` : ''
+              }\n${e.stack ?? '(no stack)'}`,
+            );
+            return createResponse({
+              body: JSON.stringify({
+                errors: [{ title: 'Write Error', detail: e.message }],
+              }),
+              init: {
+                status: 500,
+                headers: { 'content-type': SupportedMimeType.JSONAPI },
+              },
+              requestContext,
+            });
+          }
+        }
+
+        let results: AtomicOperationResult[] = writeResults.map(
+          ({ path, created }) => ({
+            data: {
+              // Serve the created instance id in canonical RRI (prefix) form, to
+              // match getCard / create / patch (no-op for unmapped realms).
+              id: this.#virtualNetwork.unresolveURL(
+                this.paths.fileURL(path).href,
+              ),
+            },
+            meta: {
+              created,
+            },
+          }),
+        );
         return createResponse({
-          body: JSON.stringify({ errors: atomicCheckErrors }),
+          body: JSON.stringify({ 'atomic:results': results }, null, 2),
           init: {
-            status: this.lowestStatusCode(atomicCheckErrors),
-            headers: { 'content-type': SupportedMimeType.JSONAPI },
+            status: 201,
+            headers: {
+              'content-type': SupportedMimeType.JSONAPI,
+            },
           },
           requestContext,
         });
-      }
-
-      let operations = filterAtomicOperations(atomicOperations);
-      let files = new Map<LocalPath, string>();
-      let writeResults: FileWriteResult[] = [];
-
-      for (let operation of operations) {
-        let resource = operation.data;
-        let href = operation.href;
-        let localPath = this.paths.local(
-          new URL(this.#resolveAtomicHref(href), this.paths.url),
-        );
-        let exists = await this.#adapter.exists(localPath);
-        if (operation.op === 'add' && exists) {
-          return createResponse({
-            body: JSON.stringify({
-              errors: [
-                {
-                  title: 'Resource already exists',
-                  detail: `Resource ${href} already exists`,
-                  status: 409,
-                },
-              ],
-            }),
-            init: {
-              status: 409,
-              headers: { 'content-type': SupportedMimeType.JSONAPI },
-            },
-            requestContext,
-          });
-        }
-        if (operation.op === 'update' && !exists) {
-          return createResponse({
-            body: JSON.stringify({
-              errors: [
-                {
-                  title: 'Resource does not exist',
-                  detail: `Resource ${href} does not exist`,
-                  status: 404,
-                },
-              ],
-            }),
-            init: {
-              status: 404,
-              headers: { 'content-type': SupportedMimeType.JSONAPI },
-            },
-            requestContext,
-          });
-        }
-        if (isModuleResource(resource)) {
-          let content = resource.attributes?.content ?? '';
-          this.assertWriteSize(content, 'file', localPath);
-          files.set(localPath, content);
-        } else if (isCardResource(resource)) {
-          let doc = {
-            data: resource,
-          };
-          let jsonString = JSON.stringify(doc, null, 2);
-          this.assertWriteSize(jsonString, 'card', localPath);
-          files.set(localPath, jsonString);
-        } else {
-          return createResponse({
-            body: JSON.stringify({
-              errors: [
-                {
-                  status: 400,
-                  title: 'Invalid resource',
-                  detail: `Operation data is not a valid card resource or module resource`,
-                },
-              ],
-            }),
-            init: {
-              status: 400,
-              headers: { 'content-type': SupportedMimeType.JSONAPI },
-            },
-            requestContext,
-          });
-        }
-      }
-
-      if (files.size > 0) {
-        try {
-          // /_atomic returns once writes are durable, not once they are
-          // indexed. Callers that need indexed state must drain via
-          // realm.incrementalIndexing() (server-side), wait on the
-          // matrix 'index' incremental event (client-side), or opt-in
-          // to a synchronous response by passing `?waitForIndex=true`
-          // on the POST URL. The query-param path is intended for
-          // one-shot CLI / agent flows where Matrix subscription is
-          // impractical and a search poll-loop would race indexing
-          // latency. Mixed module+instance batches are still
-          // serialized correctly: the in-loop intermediate flush in
-          // _batchWriteUnlocked at the `lastWriteType === 'module' &&
-          // currentWriteType === 'instance'` gate is always awaited,
-          // so an instance's fileSerialization sees its module already
-          // indexed.
-          let waitForIndex =
-            new URL(request.url).searchParams.get('waitForIndex') === 'true';
-          writeResults = await this._batchWriteUnlocked(files, {
-            clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-            serializeFile: true,
-            waitForIndex,
-            initiatingUser: requestContext.authenticatedUser ?? null,
-          });
-        } catch (e: any) {
-          if (e instanceof CardError) {
-            return responseWithError(e, requestContext);
-          }
-          // Log the underlying exception before returning 500 —
-          // otherwise callers only see "Write Error" and the original
-          // stack trace is lost, making atomic-batch failures
-          // effectively undebuggable. Include e.cause explicitly: errors
-          // like FilterRefersToNonexistentTypeError carry the actionable
-          // detail (which module/definition was missing, or that a
-          // concurrent invalidation discarded the lookup) in their cause,
-          // not their message, so without this the real reason is swallowed.
-          let cause =
-            e?.cause instanceof Error
-              ? `${e.cause.message}\n${e.cause.stack ?? '(no stack)'}`
-              : e?.cause != null
-                ? String(e.cause)
-                : undefined;
-          this.#log.error(
-            `Atomic write failed: ${e.message}${
-              cause ? `\ncause: ${cause}` : ''
-            }\n${e.stack ?? '(no stack)'}`,
-          );
-          return createResponse({
-            body: JSON.stringify({
-              errors: [{ title: 'Write Error', detail: e.message }],
-            }),
-            init: {
-              status: 500,
-              headers: { 'content-type': SupportedMimeType.JSONAPI },
-            },
-            requestContext,
-          });
-        }
-      }
-
-      let results: AtomicOperationResult[] = writeResults.map(
-        ({ path, created }) => ({
-          data: {
-            // Serve the created instance id in canonical RRI (prefix) form, to
-            // match getCard / create / patch (no-op for unmapped realms).
-            id: this.#virtualNetwork.unresolveURL(
-              this.paths.fileURL(path).href,
-            ),
-          },
-          meta: {
-            created,
-          },
-        }),
-      );
-      return createResponse({
-        body: JSON.stringify({ 'atomic:results': results }, null, 2),
-        init: {
-          status: 201,
-          headers: {
-            'content-type': SupportedMimeType.JSONAPI,
-          },
-        },
-        requestContext,
-      });
-    });
+      },
+    );
   }
 
   // The operations envelope: a batch of named operations, committed all or
@@ -4551,7 +4597,7 @@ export class Realm {
     path: LocalPath,
     options?: { waitForIndex?: boolean; initiatingUser?: string | null },
   ): Promise<void> {
-    await this.#dbAdapter.withWriteLock(this.url, () =>
+    await this.#dbAdapter.withFileWriteLocks(this.url, [path], () =>
       this._deleteUnlocked(path, options),
     );
   }
@@ -4619,7 +4665,7 @@ export class Realm {
   }
 
   async deleteAll(paths: LocalPath[]): Promise<void> {
-    await this.#dbAdapter.withWriteLock(this.url, () =>
+    await this.#dbAdapter.withFileWriteLocks(this.url, paths, () =>
       this._deleteAllUnlocked(paths),
     );
   }
@@ -4732,7 +4778,8 @@ export class Realm {
     if (!this.#batchCore) {
       this.#batchCore = {
         realmURL: this.url,
-        withWriteLock: (fn) => this.#dbAdapter.withWriteLock(this.url, fn),
+        withWriteLocks: (localPaths, fn) =>
+          this.#dbAdapter.withFileWriteLocks(this.url, localPaths, fn),
         fileExists: (localPath) => this.#adapter.exists(localPath),
         readSourceFile: async (localPath) => {
           let file = await this.readFileAsText(localPath);
@@ -8562,11 +8609,12 @@ export class Realm {
     // than merging into what is there, the realm-managed `meta` keys a client
     // echo must never persist, a type that cannot change, the relationship
     // merge, and leaving an unchanged card's file exactly as it is. It runs
-    // under the realm's write lock, which spans the read of the stored file
-    // and the write of the merged one, so two patches of one card cannot both
-    // compute a merge over the same pre-state and have the second silently
-    // lose the first. The merge base is that stored file rather than the
-    // index, which is downstream of it and can lag.
+    // under the write lock on the card's own file, which spans the read of the
+    // stored file and the write of the merged one, so two patches of one card
+    // cannot both compute a merge over the same pre-state and have the second
+    // silently lose the first. Two patches of *different* cards hold different
+    // locks and do not wait on each other. The merge base is that stored file
+    // rather than the index, which is downstream of it and can lag.
     //
     // Side-loaded resources ride along as the document's `included`, each
     // created under the `lid` the caller named it with, in the same batch as
