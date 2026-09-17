@@ -34,7 +34,13 @@ if (typeof module !== 'undefined') {
           '--headless',
           '--disable-dbus',
           '--disable-dev-shm-usage',
-          '--disable-software-rasterizer',
+          // Headless Chrome on a CI runner has no GPU, and
+          // --disable-software-rasterizer would leave it with no WebGL at all:
+          // a canvas returns no context and any renderer built on one throws
+          // while it is being constructed. SwiftShader is the fallback that
+          // gives those tests a context, and Chrome requires the explicit
+          // opt-in flag to use it for WebGL.
+          '--enable-unsafe-swiftshader',
           '--js-flags=--max-old-space-size=4096 --expose-gc',
           '--enable-precise-memory-info',
           '--mute-audio',
