@@ -21,6 +21,7 @@ import type { LooseCardResource } from '@cardstack/runtime-common/resource-types
 import {
   assertLatticeOwnerCodes,
   latticeOwnerDefinitionCurrent,
+  latticeOwnerCodeStatuses,
 } from '@cardstack/runtime-common/lattice-code-reference';
 import { latticeCutoffFilter } from '@cardstack/runtime-common/lattice-query-cutoff';
 import type { LatticeProjectionWhere } from '@cardstack/runtime-common/definitions';
@@ -131,20 +132,20 @@ async function checkQueryInputs(
   const pending = await tx([
     `SELECT 1 FROM lattice_owners o LEFT JOIN boxel_index i
      ON i.realm_url=o.realm_url AND i.url=o.owner_url AND i.type='instance'
+     LEFT JOIN (`,
+    ...latticeOwnerCodeStatuses(
+      [param(frame.realmURL)],
+      [param(frame.loaderEpoch)],
+    ),
+    `) codes ON codes.owner_url=o.owner_url
      WHERE o.realm_url=`,
     param(frame.realmURL),
     `AND o.retired=FALSE AND (i.url IS NULL OR (`,
     ...typeScope,
     `)) AND (
       i.url IS NULL OR i.has_error IS TRUE OR i.is_deleted IS TRUE
-      OR NOT`,
-    ...latticeOwnerDefinitionCurrent(
-      ['o.realm_url'],
-      ['o.owner_url'],
-      [param(frame.loaderEpoch)],
-      ['o.definition_revision'],
-    ),
-    `OR (i.pristine_doc->'meta'->'publication'->>'version') IS DISTINCT FROM '1'
+      OR NOT codes.current
+      OR (i.pristine_doc->'meta'->'publication'->>'version') IS DISTINCT FROM '1'
       OR (i.pristine_doc->'meta'->'publication'->>'definitionRevision') IS DISTINCT FROM o.definition_revision
       OR jsonb_typeof(i.pristine_doc->'meta'->'publication'->'computedFields') IS DISTINCT FROM 'array'
       OR jsonb_typeof(i.pristine_doc->'meta'->'publication'->'queryFields') IS DISTINCT FROM 'array'`,
@@ -573,10 +574,13 @@ export class LatticeMaterializationInputs {
         if (
           row.has_error ||
           !Number.isSafeInteger(generation) ||
-          generation > this.#frame.generation ||
           generation < 0
         )
           throw new Error('Lattice card input is failed, future or oversized');
+        if (generation > this.#frame.generation)
+          throw new LatticeInputsPending(
+            'Lattice card input advanced beyond the captured generation',
+          );
         if (row.is_deleted) {
           if (!allowMissing)
             throw new Error(
@@ -830,7 +834,12 @@ export class LatticeMaterializationInputs {
       identities: receipts.map((row) => row.url.replace(/\.json$/, '')),
       async assertCurrent(tx: Querier) {
         await checkFrame(tx, frame, true);
-        for (const scope of queryScopes)
+        // An intermediate result is complete for the membership it captured.
+        // New entrants after that read belong to its retained dirty obligation;
+        // a newly indexed stub must not veto the already captured result.
+        // Ordinary publications still require current membership. Both paths
+        // keep the read-row, code, authority and reservation fences below.
+        for (const scope of frame.stale ? [] : queryScopes)
           await LatticeMaterializationInputs.guardOnce(
             db,
             tx,

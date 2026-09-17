@@ -610,6 +610,84 @@ module(basename(import.meta.filename), function (hooks) {
     });
   }
 
+  test('an intermediate query can publish its captured membership when a later stub arrives', async (assert) => {
+    const url = await materializedCard('captured', 2);
+    const staleFrame = () =>
+      LatticeMaterializationInputs.open({
+        db,
+        network,
+        realmURL: realm,
+        actor,
+        generation: 5,
+        loaderEpoch: 'epoch-1',
+        stale: true,
+        lookup: {
+          async lookupDefinition() {
+            return definition;
+          },
+        },
+      });
+    const input = await staleFrame();
+    const result = await input.query('records', {
+      filter: { type: codeRef },
+      page: { size: 10 },
+    });
+    assert.deepEqual(
+      result.cards.map((row) => row.resource.attributes?.amount),
+      [2],
+    );
+    const receipt = input.seal();
+    const next = await materializedCard('new-stub', 3, 6, 5);
+    await db.execute(
+      "UPDATE boxel_index SET pristine_doc=pristine_doc #- '{meta,publication,outputRevision}' WHERE url=$1",
+      { bind: [next] },
+    );
+    await db.execute(
+      'UPDATE realm_generations SET current_generation=6 WHERE realm_url=$1',
+      { bind: [realm] },
+    );
+    await publish(receipt.assertCurrent);
+    assert.ok(
+      true,
+      'a newer entrant does not veto a complete captured intermediate result',
+    );
+    await assert.rejects(
+      (await staleFrame()).query('records', {
+        filter: { type: codeRef },
+        page: { size: 10 },
+      }),
+      (error: unknown) => error instanceof LatticeInputsPending,
+      'a new attempt still cannot consume the bodiless input',
+    );
+    await db.execute(
+      "UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{attributes,amount}','9') WHERE url=$1",
+      { bind: [url] },
+    );
+    await assert.rejects(
+      publish(receipt.assertCurrent),
+      /input changed before publication/,
+      'captured input row revisions still fence publication',
+    );
+  });
+
+  test('an input newer than its captured frame defers rather than recording a computation failure', async (assert) => {
+    const url = await card('advanced', 2);
+    const input = await open();
+    await db.execute('UPDATE boxel_index SET generation=6 WHERE url=$1', {
+      bind: [url],
+    });
+    await assert.rejects(
+      input.read([url]),
+      (error: unknown) => error instanceof LatticeInputsPending,
+      'the next wave needs a new frame',
+    );
+    assert.throws(
+      () => input.seal(),
+      /incomplete/,
+      'no partial result can publish',
+    );
+  });
+
   test('a stale frame reads a dirty feeder at its last published body', async (assert) => {
     const url = await materializedCard('feeder', 2);
     await db.execute(
@@ -1140,8 +1218,10 @@ module(basename(import.meta.filename), function (hooks) {
       const frame = await open();
       await assert.rejects(
         frame.readLinks([url, realm + 'unknown.json']),
-        /failed, future or oversized/,
-        'an unknown target cannot disguise the other input failure as decline',
+        state.generation > 5
+          ? (error: unknown) => error instanceof LatticeInputsPending
+          : /failed, future or oversized/,
+        'an unknown target cannot disguise a failed or advanced input as decline',
       );
       assert.throws(() => frame.seal(), /incomplete/);
     }

@@ -13,7 +13,8 @@ import {
   type FileEntry,
 } from '@cardstack/runtime-common';
 import { analyzeLatticeGtsSource } from '@cardstack/runtime-common/lattice-gts-analysis';
-import { query } from '@cardstack/runtime-common/expression';
+import { query, param } from '@cardstack/runtime-common/expression';
+import { latticeOwnerCodeStatuses } from '@cardstack/runtime-common/lattice-code-reference';
 import {
   persistFileMeta,
   removeFileMeta,
@@ -242,13 +243,24 @@ module(basename(import.meta.filename), function (hooks) {
     const owners = () =>
       query(db, ['SELECT * FROM lattice_owners ORDER BY owner_url']);
     const before = await owners();
-    const current = async () =>
-      (
+    const current = async () => {
+      const single = (
         await db.execute(
           "SELECT lattice_owner_code_current($1,$2,'new-loader') AS current",
           { bind: [realm, owner] },
         )
       )[0].current;
+      const bulk = await query(
+        db,
+        latticeOwnerCodeStatuses([param(realm)], [param('new-loader')]),
+      );
+      assert.strictEqual(
+        bulk.find((row) => row.owner_url === owner)?.current,
+        single,
+        'bulk proof validation has the same code/source fence as the per-owner check',
+      );
+      return single;
+    };
     assert.true(await current());
     await publish(
       'counter.gts',

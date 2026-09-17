@@ -1196,7 +1196,12 @@ module(basename(import.meta.filename), function (hooks) {
         `UPDATE boxel_index SET ${changes[state as keyof typeof changes]} WHERE url=$1`,
         { bind: [realm + 'Person/one.json'] },
       );
-      await assert.rejects(candidate(), /failed, future or oversized/);
+      await assert.rejects(
+        candidate(),
+        state === 'future'
+          ? (error: unknown) => error instanceof LatticeWorkSuperseded
+          : /failed, future or oversized/,
+      );
     });
   }
 

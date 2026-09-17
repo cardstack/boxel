@@ -5,7 +5,7 @@ import {
   type LatticeDemandPriority,
 } from './lattice-scheduling.ts';
 import type { LatticeProjectionWhere } from './definitions.ts';
-import { latticeOwnerDefinitionCurrent } from './lattice-code-reference.ts';
+import { latticeOwnerCodeStatuses } from './lattice-code-reference.ts';
 import type { DBAdapter } from './db.ts';
 import stringify from 'safe-stable-stringify';
 import type { IndexQueryEngine } from './index-query-engine.ts';
@@ -1103,20 +1103,22 @@ export class LatticeQueryRegistry
            AND i.pristine_doc->'meta'->'publication' IS NOT NULL
            AND (i.pristine_doc->'meta'->'publication'->>'outputRevision') IS NULL
            UNION SELECT o.owner_url FROM lattice_owners o
-           JOIN realm_generations g ON g.realm_url=o.realm_url
            LEFT JOIN boxel_index i ON i.realm_url=o.realm_url
              AND i.url=o.owner_url AND i.type='instance'
+           LEFT JOIN (`,
+            ...latticeOwnerCodeStatuses(
+              [param(realmURL)],
+              [
+                '(SELECT loader_epoch FROM realm_generations WHERE realm_url=',
+                param(realmURL),
+                ')',
+              ],
+            ),
+            `) codes ON codes.owner_url=o.owner_url
            WHERE o.realm_url=`,
             param(realmURL),
             `AND o.retired=FALSE AND o.dirty_generation IS NOT NULL
-           AND (i.url IS NULL OR NOT`,
-            ...latticeOwnerDefinitionCurrent(
-              ['o.realm_url'],
-              ['o.owner_url'],
-              ['g.loader_epoch'],
-              ['o.definition_revision'],
-            ),
-            ')',
+           AND (i.url IS NULL OR NOT codes.current)`,
           ])
         : [];
     const neverPublished = new Set(
