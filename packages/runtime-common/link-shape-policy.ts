@@ -504,6 +504,11 @@ export function rowClassForPageSize(
   return pageSize === 1 ? 'single-row' : 'multi-row';
 }
 
+// The lowest release the reading can actually cross. The mean decays toward
+// zero without arriving, so a release must sit above it for the rung to be
+// two-way.
+const MIN_RELEASE = 0.5;
+
 // Keep the ladder monotonic and under the cap it is measured against.
 //
 // Three invariants matter and none is guaranteed by the env overrides that
@@ -517,18 +522,11 @@ export function rowClassForPageSize(
 // underflow — about a day and a half of unbroken idleness at the shipped
 // half-life. The env parser floors the release knobs at zero, so that last one
 // is a plausible number an operator can type.
-// The lowest release the reading can actually cross. The mean decays toward
-// zero without arriving, so a release must sit above it for the rung to be
-// two-way.
-const MIN_RELEASE = 0.5;
-
 function normalizeThresholds(
   engage: [number, number],
   release: [number, number],
   limit: number,
 ): { engage: [number, number]; release: [number, number] } {
-  // Every engage strictly below the cap, and the upper rung no lower than the
-  // lower one.
   // Every engage at least one clear of the release below it, and strictly
   // below the cap, so both bands have width and both rungs sit under the point
   // where the process shed.

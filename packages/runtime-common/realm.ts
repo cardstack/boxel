@@ -35,8 +35,15 @@ import {
 // The routes whose representation the link-shape preference selects declare it
 // alongside `Accept`, so a shared cache keys on it rather than treating the
 // two shapes as one resource and answering either caller with whichever it
-// stored. The responses that carry no shape — source, modules, media — leave
-// it off, since listing a header a route ignores only fragments its cache.
+// stored.
+//
+// What decides membership is whether an HTTP cache can key the response, not
+// whether the response carries a shape. Source, modules and media carry no
+// shape and leave the header off, since listing a header a route ignores only
+// fragments its cache. The search routes do carry a shape and leave it off as
+// well: they answer the QUERY verb with the query in the body — `_search`
+// refuses every other method outright — so no HTTP cache reaches either body,
+// and the in-process caches that do hold one key on the served mode directly.
 const LINK_SHAPE_VARY = [X_BOXEL_LINK_SHAPE_HEADER];
 import {
   CARD_DOCUMENT_CACHE_HEADER,
