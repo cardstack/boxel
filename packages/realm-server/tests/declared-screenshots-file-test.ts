@@ -806,12 +806,7 @@ module(basename(import.meta.filename), function (hooks) {
         ),
       ),
     );
-    let baseline = await maxPrerenderHtmlJobId(testDbAdapter, realm.url);
-    await realm.write('part.glb', glbBytes);
-    await settlePrerenderHtmlJobs(testDbAdapter, realm.url, {
-      afterJobId: baseline,
-      timeout: 60000,
-    });
+    await writeAndSettle('part.glb', glbBytes);
 
     let fileRow = await prerenderedHtmlRowFor(
       testDbAdapter,
@@ -833,6 +828,36 @@ module(basename(import.meta.filename), function (hooks) {
     assert.ok(
       fitted.includes(`_screenshot/part.glb?name=poster`),
       `the fitted rendering carries the still URL (got: ${fitted.slice(0, 500)})`,
+    );
+  });
+
+  test('an unparsable 3D model captures no still', async function (assert) {
+    // A GLB magic header followed by garbage: the loader rejects, and the
+    // capture component swaps its readiness signal for
+    // `data-screenshot-failed`, so the slot fails immediately. No manifest
+    // entry may land — resolving readiness instead would persist the empty
+    // capture box as a blank white still and serve it as the thumbnail for
+    // the life of these bytes.
+    await writeAndSettle(
+      'broken.glb',
+      new Uint8Array([0x67, 0x6c, 0x54, 0x46, 0xde, 0xad, 0xbe, 0xef]),
+    );
+
+    let fileRow = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}broken.glb`,
+      'file',
+    );
+    assert.ok(fileRow, 'the file row still indexes');
+    let manifest = fileRow!.screenshots as ScreenshotManifest | null;
+    assert.notOk(
+      manifest?.poster,
+      'no poster entry lands for an unparsable model',
+    );
+    assert.strictEqual(
+      (await declaredLedgerRows(`${testRealm}broken.glb`)).length,
+      0,
+      'no ledger row lands for an unparsable model',
     );
   });
 
