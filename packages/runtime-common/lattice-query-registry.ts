@@ -1144,12 +1144,21 @@ export class LatticeQueryRegistry
         pg: [`CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) dep`],
         sqlite: [`CROSS JOIN json_each(i.deps) dep`],
       }),
-      `JOIN lattice_owners d ON d.realm_url=o.realm_url
-         AND (d.owner_url=dep.value OR d.owner_url=dep.value||'.json')
+      // Two concrete aliases make this an equality join. An OR on every
+      // expanded dependency forced repeated bitmap probes for large frontiers.
+      // The union retains both spellings without treating module URLs as cards.
+      `JOIN (SELECT realm_url,owner_url,owner_url AS input_alias FROM lattice_owners
+         WHERE realm_url=`,
+      param(realmURL),
+      `AND retired=FALSE AND dirty_generation IS NOT NULL
+       UNION ALL SELECT realm_url,owner_url,substr(owner_url,1,length(owner_url)-5) AS input_alias
+         FROM lattice_owners WHERE realm_url=`,
+      param(realmURL),
+      `AND retired=FALSE AND dirty_generation IS NOT NULL AND owner_url LIKE '%.json'
+       ) d ON d.realm_url=o.realm_url AND d.input_alias=dep.value
        WHERE o.realm_url=`,
       param(realmURL),
-      `AND i.type='instance' AND o.retired=FALSE AND o.dirty_generation IS NOT NULL
-       AND d.retired=FALSE AND d.dirty_generation IS NOT NULL`,
+      `AND i.type='instance' AND o.retired=FALSE AND o.dirty_generation IS NOT NULL`,
     ]);
     for (const edge of edges)
       inputs.get(String(edge.owner_url))?.add(String(edge.input_url));
