@@ -1698,12 +1698,11 @@ export class RealmIndexQueryEngine {
   // Promise.all-fanout cross-realm fetches, all running concurrently
   // regardless of how many siblings reference links at that depth.
   //
-  // The walk is bounded by how many resources it assembles, not by how far it
-  // travels: it terminates on its own once every reachable resource has been
-  // visited, so depth was never what made a closure expensive — width is. The
-  // budget is spent at classification time, before a target's URL joins the
-  // layer's batched read, so an over-budget graph is neither fetched nor
-  // assembled rather than being fetched and then discarded.
+  // The walk is bounded by how many resources it assembles rather than by how
+  // far it travels. It terminates on its own once every reachable resource has
+  // been visited, so what needs bounding is the width it brings back. The budget
+  // is spent at classification time, before a target's URL joins the layer's
+  // batched read, so an over-budget graph is neither fetched nor assembled.
   private async loadLinks(
     {
       realmURL,

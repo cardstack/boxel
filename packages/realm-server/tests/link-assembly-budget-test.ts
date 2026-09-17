@@ -25,9 +25,9 @@ import {
 // hop out, and hundreds two hops out, at any depth limit.
 //
 // The fixture is a fan: one consumer linking to TARGET_COUNT targets, each of
-// which links on to its own child. So the full closure is 2 × TARGET_COUNT, one
-// hop is TARGET_COUNT, and a budget set between them clips mid-walk rather than
-// at a layer boundary — which is the case a depth limit could not express.
+// which links on to its own child. So the full closure is 2 × TARGET_COUNT and
+// one hop is TARGET_COUNT, which lets a budget set between them clip mid-walk
+// rather than at a layer boundary.
 
 const realmURL = testRealmURLFor('test/');
 const TARGET_COUNT = 8;
@@ -193,8 +193,9 @@ module(basename(import.meta.filename), function () {
         'the document reports the closure it carries is partial',
       );
       // The clip lands mid-walk: the first hop fits and the second does not, so
-      // a caller receives every target and only some of their children. A hop
-      // count could only have chosen between all of the second layer and none.
+      // a caller receives every target and only some of their children. The
+      // budget is spent per resource, so where it runs out is where it stops —
+      // it does not round to a whole layer in either direction.
       assert.strictEqual(
         ids.filter((id) => id.includes('/target-')).length,
         TARGET_COUNT,
@@ -446,8 +447,9 @@ module(basename(import.meta.filename), function () {
         'a different budget is a different validator',
       );
 
-      // And the old validator no longer matches, so a client holding it is
-      // sent the new shape rather than being told its copy is fresh.
+      // And the validator minted under the first budget does not match, so a
+      // client holding it is sent the shape the second budget produces rather
+      // than being told the copy it has is fresh.
       let conditional = await request
         .get(cardPath('consumer-1'))
         .set('Accept', SupportedMimeType.CardJson)

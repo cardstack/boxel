@@ -569,13 +569,13 @@ const CARD_JSON_ETAG_VARIANT = 'card-rri';
 
 // The variant the card+json validator carries, with the assembled-resource
 // budget folded in. The budget decides which cards come back with a clipped
-// closure and what a clipped one contains, and it is settable per server — so
-// retuning it changes bodies while `indexed_at`, the realm-info hash and the
-// screenshots fingerprint all stand still. That is precisely the case the
-// constant above exists for, except that the change arrives by configuration
-// rather than by revision, so the value has to be in the validator rather than
-// remembered about by whoever edits it. One number for the process, so it
-// fragments no cache: every response at a given build and setting shares it.
+// closure and what a clipped one contains, and it is settable per server, so
+// changing it changes bodies while `indexed_at`, the realm-info hash and the
+// screenshots fingerprint all stand still. That is the case the constant above
+// exists for, except that the change arrives by configuration rather than by
+// revision — so the value belongs in the validator rather than in the memory of
+// whoever edits it. One number for the process, so it fragments no cache: every
+// response at a given build and setting shares it.
 function cardJsonEtagVariant(): string {
   return `${CARD_JSON_ETAG_VARIANT}-lb${assembledLinkResourceBudget()}`;
 }
@@ -869,10 +869,9 @@ function buildCardJsonEtag(
   // would leave every client that holds a validator being 304'd to the
   // shape it cached, and the two shapes reachable under one key in the
   // response cache.
-  // The budget rides only on the shape that carries a closure. A links-only
-  // read assembles none, so no budget can change its body and folding one in
-  // would make a retune revalidate responses it cannot have altered — and would
-  // move those validators on this deploy for no reason.
+  // The budget rides only on the shape that carries a closure. A links-only read
+  // assembles none, so no budget can change its body, and folding one in would
+  // make a retune revalidate responses it cannot have altered.
   let variant = resolveLinksOnly
     ? `${CARD_JSON_ETAG_VARIANT}-links-only`
     : cardJsonEtagVariant();
@@ -948,7 +947,7 @@ function buildEntryHtmlEtag(
   // different budget while both generations stand still. This validator has no
   // constant component to hang that on the way the card+json one does, so the
   // budget is folded in directly. A pure-html response assembles no closure, and
-  // neither does a links-only item; both keep the validator they had.
+  // neither does a links-only item, so neither carries the component.
   if (doc.data.relationships.item && !resolveLinksOnly) {
     base = `${base}:lb${assembledLinkResourceBudget()}`;
   }

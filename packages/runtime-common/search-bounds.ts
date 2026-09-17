@@ -44,15 +44,14 @@ const log = logger('search-bounds');
 //   - Assembled link resources (SERVER_MAX_ASSEMBLED_LINK_RESOURCES) —
 //     server-side only, and the one bound whose polarity is inverted: every
 //     `loadLinks` assembly is held to it unless a caller opts out, because a
-//     closure is assembled by more routes than search and a bound that must be
-//     remembered per route is a bound a new route forgets. It replaced a
-//     hop-count cap, which could not express "this is getting expensive":
-//     expense is resources, not distance, and a card carrying dozens of
-//     relationships is already dozens of resources one hop out. Counted in
-//     resources rather than bytes because the resource is what the walk
-//     schedules — it bounds the batched reads as well as the assembly, and the
-//     cost it stands in for is the event-loop CPU of cloning, rewriting and
-//     serializing each one, which scales with the count.
+//     closure is assembled by more routes than search, and a bound that must be
+//     remembered per route is a bound a new route forgets. Counted in resources
+//     rather than in bytes because the resource is what the walk schedules, so
+//     the count bounds the batched reads as well as the assembly; and the cost
+//     it stands in for is the event-loop CPU of cloning, rewriting and
+//     serializing each one, which scales with the count. Counted in resources
+//     rather than in hops because distance does not track expense: a card
+//     carrying dozens of relationships is dozens of resources one hop out.
 //   - In-flight ceiling (SERVER_MAX_IN_FLIGHT_SEARCHES, with
 //     SEARCH_ADMISSION_WAIT_MS) — server-side only, and unlike the others a
 //     bound on the process rather than on a request: how many searches it runs
@@ -199,15 +198,13 @@ export const SERVER_MAX_IN_FLIGHT_SEARCHES = parsePositiveInt(
 // in one hop, and dozens of those reach hundreds — so the quantity that tracks
 // cost is the count, and a graph that fans out wide is expensive at any depth.
 //
-// Sized as a safety ceiling rather than a tuning knob, against the closures
-// real content produces. On a link-heavy classroom realm the dashboard's own
-// root card assembles 127 resources for 291 KB; the widest card on that realm
-// reaches 175, and a hundred-row page of the most connected type unions to 210.
-// So the ceiling sits roughly five times above healthy traffic — and near the
-// point where one assembly would hold the tens of MB of heap that
-// SERVER_MAX_IN_FLIGHT_SEARCHES assumes per in-flight search, since those
-// figures put a resource at a little over 2 KB once serialized. It is not
-// expected to engage; it exists so that no single card graph — authored by a
+// Sized as a safety ceiling rather than as a tuning knob. On realms in use the
+// widest card's closure runs to the low hundreds of resources, and a hundred-row
+// page of the most connected type unions to about the same, so the ceiling sits
+// several times above that. It also lands near the point where one assembly
+// would hold the tens of MB of heap SERVER_MAX_IN_FLIGHT_SEARCHES assumes per
+// in-flight search, a serialized resource running a little over 2 KB. So it is
+// not expected to engage; it exists so that no single card graph — authored by a
 // person or by a model, and re-editable at any time — can make one request
 // assemble an unbounded document.
 //
