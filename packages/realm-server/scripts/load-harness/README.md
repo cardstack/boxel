@@ -447,14 +447,20 @@ realistic, and it is what puts the admission queue under enough pressure to
 shed.
 
 **Exercising the mechanism is a different question, and much cheaper.** The
-policy's thresholds are environment-readable — `LINK_SHAPE_MULTI_ROW_ENGAGE`
-and `LINK_SHAPE_ALL_ENGAGE`, with `LINK_SHAPE_MULTI_ROW_RELEASE` and
-`LINK_SHAPE_ALL_RELEASE` for the hysteresis band. Setting them low on a
+rungs are thresholds on the load reading, settable per environment —
+`LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD` and `LINK_SHAPE_ALL_ENGAGE_THRESHOLD`,
+with `LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD` and
+`LINK_SHAPE_ALL_RELEASE_THRESHOLD` for the hysteresis band. Lowering them on a
 non-production fleet for the duration of a run puts a real deployment through
 both transitions, the dwell, the band, and the validator and cache-variant
 fragmentation each transition causes, at a load the existing pool can produce.
 What it does not do is tell you where the shipped thresholds sit relative to
 real traffic, which is the question the pool size answers.
+
+They arrive as SSM parameters resolved once at container start, so writing a
+parameter changes nothing until a new deployment applies it. What each
+threshold means, and the sequence for setting one, is in the
+`search-shape-diagnosis` skill.
 
 **What to read while it runs**, in order:
 

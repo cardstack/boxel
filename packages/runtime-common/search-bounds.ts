@@ -276,7 +276,14 @@ const DEFAULT_LINK_SHAPE_LOAD_HALF_LIFE_MS = 120_000;
 // signal happens to behave.
 const DEFAULT_LINK_SHAPE_MIN_DWELL_MS = 60_000;
 
-// Engage/release pairs for the two rungs, as sustained in-flight counts.
+// Engage/release pairs for the two rungs.
+//
+// Each value is a **threshold on the load reading** — the time-weighted mean
+// of in-flight searches this process is serving, per replica — and not a
+// setting that selects a link shape. Crossing one moves a realm's rung; which
+// shape a rung then serves is fixed by the ladder, not by these. Hence the
+// `_THRESHOLD` suffix: a bare `…_ENGAGE` reads as a switch that turns a shape
+// on, which is the one thing these do not do.
 //
 // The lower rung degrades only reads that may return more than one row; the
 // upper one degrades every live read. The gap between each engage and its
@@ -291,10 +298,10 @@ const DEFAULT_LINK_SHAPE_MIN_DWELL_MS = 60_000;
 // upper rung's engage to 8 raised the control window's degraded time from
 // 0.3% to 3.8% — degrading a fleet whose half-hour means never left single
 // digits — which is what fixes the upper rung at 12 rather than lower.
-const DEFAULT_LINK_SHAPE_MULTI_ROW_ENGAGE = 8;
-const DEFAULT_LINK_SHAPE_MULTI_ROW_RELEASE = 4;
-const DEFAULT_LINK_SHAPE_ALL_ENGAGE = 12;
-const DEFAULT_LINK_SHAPE_ALL_RELEASE = 6;
+const DEFAULT_LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD = 8;
+const DEFAULT_LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD = 4;
+const DEFAULT_LINK_SHAPE_ALL_ENGAGE_THRESHOLD = 12;
+const DEFAULT_LINK_SHAPE_ALL_RELEASE_THRESHOLD = 6;
 
 // How often a process that is serving live reads records the decision it is
 // making, even when that decision is "no change". Without it, a policy that
@@ -313,27 +320,27 @@ export const LINK_SHAPE_MIN_DWELL_MS = parsePositiveInt(
   0,
 );
 
-export const LINK_SHAPE_MULTI_ROW_ENGAGE = parsePositiveInt(
-  env.LINK_SHAPE_MULTI_ROW_ENGAGE,
-  DEFAULT_LINK_SHAPE_MULTI_ROW_ENGAGE,
+export const LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD = parsePositiveInt(
+  env.LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD,
+  DEFAULT_LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD,
   1,
 );
 
-export const LINK_SHAPE_MULTI_ROW_RELEASE = parsePositiveInt(
-  env.LINK_SHAPE_MULTI_ROW_RELEASE,
-  DEFAULT_LINK_SHAPE_MULTI_ROW_RELEASE,
+export const LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD = parsePositiveInt(
+  env.LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD,
+  DEFAULT_LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD,
   0,
 );
 
-export const LINK_SHAPE_ALL_ENGAGE = parsePositiveInt(
-  env.LINK_SHAPE_ALL_ENGAGE,
-  DEFAULT_LINK_SHAPE_ALL_ENGAGE,
+export const LINK_SHAPE_ALL_ENGAGE_THRESHOLD = parsePositiveInt(
+  env.LINK_SHAPE_ALL_ENGAGE_THRESHOLD,
+  DEFAULT_LINK_SHAPE_ALL_ENGAGE_THRESHOLD,
   1,
 );
 
-export const LINK_SHAPE_ALL_RELEASE = parsePositiveInt(
-  env.LINK_SHAPE_ALL_RELEASE,
-  DEFAULT_LINK_SHAPE_ALL_RELEASE,
+export const LINK_SHAPE_ALL_RELEASE_THRESHOLD = parsePositiveInt(
+  env.LINK_SHAPE_ALL_RELEASE_THRESHOLD,
+  DEFAULT_LINK_SHAPE_ALL_RELEASE_THRESHOLD,
   0,
 );
 

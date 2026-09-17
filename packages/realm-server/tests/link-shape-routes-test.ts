@@ -4,13 +4,13 @@ import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import {
   DURING_PRERENDER_HEADER,
-  LINK_SHAPE_ALL_ENGAGE,
-  LINK_SHAPE_ALL_RELEASE,
+  LINK_SHAPE_ALL_ENGAGE_THRESHOLD,
+  LINK_SHAPE_ALL_RELEASE_THRESHOLD,
   LINK_SHAPE_HEARTBEAT_MS,
   LINK_SHAPE_LOAD_HALF_LIFE_MS,
   LINK_SHAPE_MIN_DWELL_MS,
-  LINK_SHAPE_MULTI_ROW_ENGAGE,
-  LINK_SHAPE_MULTI_ROW_RELEASE,
+  LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD,
+  LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD,
   LinkShapePolicy,
   rri,
   SERVER_MAX_IN_FLIGHT_SEARCHES,
@@ -473,9 +473,11 @@ module(basename(import.meta.filename), function () {
     // anything, so a band too narrow to hold one of these fails with both
     // numbers in the message rather than silently exercising the wrong rung.
     const FIRST_RUNG_HOLD = Math.ceil(
-      LINK_SHAPE_MULTI_ROW_ENGAGE / SETTLED_FRACTION,
+      LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD / SETTLED_FRACTION,
     );
-    const TOP_RUNG_HOLD = Math.ceil(LINK_SHAPE_ALL_ENGAGE / SETTLED_FRACTION);
+    const TOP_RUNG_HOLD = Math.ceil(
+      LINK_SHAPE_ALL_ENGAGE_THRESHOLD / SETTLED_FRACTION,
+    );
 
     // The construction the realm server runs under, not a copy of it. Building
     // an equivalent policy here would leave the wiring untested in exactly the
@@ -675,11 +677,11 @@ module(basename(import.meta.filename), function () {
     // ladder is unreachable and nothing says so.
     test('a process at its admission ceiling reads above both rungs', function (assert) {
       let reading = hold(assert, SERVER_MAX_IN_FLIGHT_SEARCHES, {
-        atLeast: LINK_SHAPE_ALL_ENGAGE,
+        atLeast: LINK_SHAPE_ALL_ENGAGE_THRESHOLD,
       });
       assert.ok(
-        reading > LINK_SHAPE_MULTI_ROW_ENGAGE,
-        `and above the lower rung at ${LINK_SHAPE_MULTI_ROW_ENGAGE}`,
+        reading > LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD,
+        `and above the lower rung at ${LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD}`,
       );
       assert.ok(
         reading <= SERVER_MAX_IN_FLIGHT_SEARCHES,
@@ -689,8 +691,8 @@ module(basename(import.meta.filename), function () {
 
     test('a real reading past the first engage degrades a multi-row read and spares a single-row one', async function (assert) {
       let reading = hold(assert, FIRST_RUNG_HOLD, {
-        atLeast: LINK_SHAPE_MULTI_ROW_ENGAGE,
-        below: LINK_SHAPE_ALL_ENGAGE,
+        atLeast: LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD,
+        below: LINK_SHAPE_ALL_ENGAGE_THRESHOLD,
       });
 
       let search = await multiRowSearch();
@@ -720,7 +722,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(transition?.thresholdKind, 'engage');
       assert.strictEqual(
         transition?.threshold,
-        LINK_SHAPE_MULTI_ROW_ENGAGE,
+        LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD,
         'the record names the shipped threshold the real reading crossed',
       );
       assert.strictEqual(
@@ -736,7 +738,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a real reading past the top engage degrades a single-row read too', async function (assert) {
-      hold(assert, TOP_RUNG_HOLD, { atLeast: LINK_SHAPE_ALL_ENGAGE });
+      hold(assert, TOP_RUNG_HOLD, { atLeast: LINK_SHAPE_ALL_ENGAGE_THRESHOLD });
 
       // One rung per read, so the realm takes two consults to reach the top.
       await cardRead();
@@ -761,7 +763,7 @@ module(basename(import.meta.filename), function () {
     // thrown away. A reading far above both rungs is exactly the case that
     // would jump them in one step without it.
     test('the ladder cannot take both rungs without the dwell between them', async function (assert) {
-      hold(assert, TOP_RUNG_HOLD, { atLeast: LINK_SHAPE_ALL_ENGAGE });
+      hold(assert, TOP_RUNG_HOLD, { atLeast: LINK_SHAPE_ALL_ENGAGE_THRESHOLD });
 
       await cardRead();
       assert.strictEqual(policy.levelFor(realmKey), 'multi-row');
@@ -784,7 +786,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('the closure comes back as the reading decays past the releases', async function (assert) {
-      hold(assert, TOP_RUNG_HOLD, { atLeast: LINK_SHAPE_ALL_ENGAGE });
+      hold(assert, TOP_RUNG_HOLD, { atLeast: LINK_SHAPE_ALL_ENGAGE_THRESHOLD });
       await cardRead();
       clock += LINK_SHAPE_MIN_DWELL_MS;
       await cardRead();
@@ -792,12 +794,12 @@ module(basename(import.meta.filename), function () {
 
       let reading = quiesce();
       assert.ok(
-        reading < LINK_SHAPE_ALL_RELEASE,
-        `an idle process reads ${reading.toFixed(3)}, under the top rung's release at ${LINK_SHAPE_ALL_RELEASE}`,
+        reading < LINK_SHAPE_ALL_RELEASE_THRESHOLD,
+        `an idle process reads ${reading.toFixed(3)}, under the top rung's release at ${LINK_SHAPE_ALL_RELEASE_THRESHOLD}`,
       );
       assert.ok(
-        reading < LINK_SHAPE_MULTI_ROW_RELEASE,
-        `and under the lower rung's at ${LINK_SHAPE_MULTI_ROW_RELEASE}`,
+        reading < LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD,
+        `and under the lower rung's at ${LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD}`,
       );
 
       await cardRead();
@@ -825,8 +827,8 @@ module(basename(import.meta.filename), function () {
     // all, which is the ambiguity a load run cannot otherwise resolve.
     test('the heartbeat reports the process reading while nothing is changing', async function (assert) {
       hold(assert, FIRST_RUNG_HOLD, {
-        atLeast: LINK_SHAPE_MULTI_ROW_ENGAGE,
-        below: LINK_SHAPE_ALL_ENGAGE,
+        atLeast: LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD,
+        below: LINK_SHAPE_ALL_ENGAGE_THRESHOLD,
       });
       await multiRowSearch();
       assert.strictEqual(policy.levelFor(realmKey), 'multi-row');
@@ -868,8 +870,8 @@ module(basename(import.meta.filename), function () {
     // process's own.
     test('a degraded search reports the real reading and the level it was decided at', async function (assert) {
       let reading = hold(assert, FIRST_RUNG_HOLD, {
-        atLeast: LINK_SHAPE_MULTI_ROW_ENGAGE,
-        below: LINK_SHAPE_ALL_ENGAGE,
+        atLeast: LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD,
+        below: LINK_SHAPE_ALL_ENGAGE_THRESHOLD,
       });
       let shapes: SearchShapeEvent[] = [];
       setSearchShapeSink((event) => shapes.push(event));
