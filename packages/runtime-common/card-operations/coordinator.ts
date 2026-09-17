@@ -292,9 +292,12 @@ export async function commitBatch(
       // as well, for a batch that stages nothing: a removal names a file and
       // reads the bytes already there, resolving no definition, so a batch of
       // removals would wait for indexing it has no use for. That matters
-      // because this wait happens with the realm's write lock held — a removal
-      // issued while a bulk import drains would park here holding it, with
-      // every other writer queued behind.
+      // because this wait happens with the batch's file locks held — a removal
+      // issued while a bulk import drains would park here holding them, with
+      // every other writer of those files queued behind. The scope is narrower
+      // than it was, but the wait is not: the drain is for the realm's
+      // indexing, so a batch that parks here parks for work that has nothing
+      // to do with the files it holds.
       if (opts.waitForIndex !== false && entries.some(stagesContent)) {
         await core.drainIndexing();
       }

@@ -2922,10 +2922,11 @@ export class Realm {
   // caller's own ordering hold when it both replaces a file's content and adds
   // to the end of it: the append lands on the content the write left.
   //
-  // Assumes the realm's write lock is held — the caller reads the pre-state it
-  // stages from inside the same critical section. `write` and `writeMany` are
-  // the locked public entry points that reach this; `delete` and `deleteAll`
-  // have their own unlocked primitives and do not.
+  // Assumes the write locks on the files it touches are held — the caller
+  // reads the pre-state it stages from inside the same critical section.
+  // `write` and `writeMany` are the locked public entry points that reach
+  // this; `delete` and `deleteAll` have their own unlocked primitives and do
+  // not.
   //
   // Files are changed one at a time and there is no rollback: a file system
   // failure partway through leaves the files handled before it changed, and
@@ -7849,11 +7850,12 @@ export class Realm {
     // than merging into what is there, the realm-managed `meta` keys a client
     // echo must never persist, a type that cannot change, the relationship
     // merge, and leaving an unchanged card's file exactly as it is. It runs
-    // under the realm's write lock, which spans the read of the stored file
-    // and the write of the merged one, so two patches of one card cannot both
-    // compute a merge over the same pre-state and have the second silently
-    // lose the first. The merge base is that stored file rather than the
-    // index, which is downstream of it and can lag.
+    // under the write lock on the card's own file, which spans the read of the
+    // stored file and the write of the merged one, so two patches of one card
+    // cannot both compute a merge over the same pre-state and have the second
+    // silently lose the first. Two patches of *different* cards hold different
+    // locks and do not wait on each other. The merge base is that stored file
+    // rather than the index, which is downstream of it and can lag.
     //
     // Side-loaded resources ride along as the document's `included`, each
     // created under the `lid` the caller named it with, in the same batch as

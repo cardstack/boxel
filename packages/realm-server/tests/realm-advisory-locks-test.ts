@@ -2,10 +2,10 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import {
+  PgAdapter,
   hashFilePathForAdvisoryLock,
   hashRealmUrlForAdvisoryLock,
   hashUserIdForCostLock,
-  type PgAdapter,
 } from '@cardstack/postgres';
 import { setupDB } from './helpers/index.ts';
 
@@ -431,28 +431,67 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('takes the shared file in one order whichever order the sets name it', async function (assert) {
-      // Two batches naming the same two files in opposite orders. Both take
-      // the keys sorted, so neither ends up holding what the other needs, and
-      // they complete rather than deadlocking — which would otherwise show up
-      // as the suite timing out here.
-      const both = await Promise.all([
-        dbAdapter.withFileWriteLocks(
-          REALM,
-          ['Widget/one.json', 'Gadget/one.json'],
-          async () => 'first',
-        ),
-        dbAdapter.withFileWriteLocks(
-          REALM,
-          ['Gadget/one.json', 'Widget/one.json'],
-          async () => 'second',
-        ),
-      ]);
-      assert.deepEqual(
-        both,
-        ['first', 'second'],
-        'both batches complete rather than each holding what the other needs',
-      );
+    test('takes the shared files in one order whichever order the sets name them', async function (assert) {
+      // Two callers naming the same two files in opposite orders, each on its
+      // own adapter. The second adapter is what makes this observable: both
+      // callers reduce to the same sorted key list, so on one adapter they
+      // share a `#fileWriteQueue` entry and chain in memory — the second never
+      // reaches postgres while the first holds anything, and the assertion
+      // below would hold however the keys were ordered. Separate adapters have
+      // separate queues and one lock space, which is also the shape this rule
+      // exists for: two replicas, no shared memory between them.
+      //
+      // Taken sorted, the two acquire in the same sequence and one simply
+      // waits. Taken in the order each was given, one would hold this file
+      // while waiting for that one and the other the reverse, which postgres
+      // can only resolve by killing one of them as a deadlock. The guard turns
+      // that into a named failure rather than a suite that hangs here.
+      const second = new PgAdapter();
+      let guardTimer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const both = Promise.all([
+          dbAdapter.withFileWriteLocks(
+            REALM,
+            ['Widget/one.json', 'Gadget/one.json'],
+            async () => {
+              // Held across the other caller's own acquisition, so the two
+              // windows overlap rather than running one after the other.
+              await new Promise((r) => setTimeout(r, 150));
+              return 'first';
+            },
+          ),
+          second.withFileWriteLocks(
+            REALM,
+            ['Gadget/one.json', 'Widget/one.json'],
+            async () => {
+              await new Promise((r) => setTimeout(r, 150));
+              return 'second';
+            },
+          ),
+        ]);
+        const guard = new Promise<never>((_resolve, reject) => {
+          guardTimer = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  'neither caller finished: two writers of one pair of files ' +
+                    'each held what the other needed',
+                ),
+              ),
+            8000,
+          );
+        });
+        assert.deepEqual(
+          await Promise.race([both, guard]),
+          ['first', 'second'],
+          'both callers complete rather than each holding what the other needs',
+        );
+      } finally {
+        if (guardTimer) {
+          clearTimeout(guardTimer);
+        }
+        await second.close();
+      }
     });
 
     test('waits for a realm-lifecycle caller holding the realm lock', async function (assert) {
@@ -548,12 +587,12 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('takes no lock for an empty file set', async function (assert) {
-      // A batch with no files to write has no read-merge-write to protect.
-      // Keying on the empty set would serialize exactly those callers against
-      // each other, which is why the empty case runs without a lock at all.
+    test('does not serialize two writers that each name no file', async function (assert) {
+      // A write naming no file has no read-merge-write to protect, so two of
+      // them hold only the realm guard — shared, and shared holders do not
+      // conflict.
       await runInsideWindow(assert, {
-        what: 'an empty file set runs while another empty file set is held',
+        what: 'a write naming no file runs while another one is held',
         openOuter: (onEntered, released) =>
           dbAdapter.withFileWriteLocks(REALM, [], async () => {
             onEntered();
@@ -562,6 +601,45 @@ module(basename(import.meta.filename), function () {
         runInner: () =>
           dbAdapter.withFileWriteLocks(REALM, [], async () => 'ok'),
       });
+    });
+
+    test('still takes the realm guard when it names no file', async function (assert) {
+      // The case a create the client did not name produces: its path is minted
+      // while staging, so there is no file to lock — but it does write, and a
+      // realm being destroyed, published or unpublished under it must still
+      // exclude it. Dropping the guard along with the file keys is what would
+      // let that happen, and nothing in the write's own response would show it.
+      const events: string[] = [];
+      const eventTimes: number[] = [];
+      const startedAt = Date.now();
+      const push = (e: string) => {
+        events.push(e);
+        eventTimes.push(Date.now());
+      };
+
+      let signalRealmEntered!: () => void;
+      const realmEntered = new Promise<void>((r) => {
+        signalRealmEntered = r;
+      });
+      const realm = dbAdapter.withWriteLock(REALM, async () => {
+        push('realm-start');
+        signalRealmEntered();
+        await new Promise((r) => setTimeout(r, 150));
+        push('realm-end');
+      });
+      await Promise.race([realmEntered, realm]);
+      const write = dbAdapter.withFileWriteLocks(REALM, [], async () => {
+        push('write-start');
+        push('write-end');
+      });
+
+      await Promise.all([realm, write]);
+
+      assert.deepEqual(
+        events,
+        ['realm-start', 'realm-end', 'write-start', 'write-end'],
+        `a write naming no file waits for the realm lock; timeline: ${timeline(events, startedAt, eventTimes)}`,
+      );
     });
 
     test('releases the locks when the callback throws', async function (assert) {

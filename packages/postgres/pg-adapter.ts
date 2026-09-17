@@ -598,6 +598,26 @@ export class PgAdapter implements DBAdapter {
   // contended file set per replica, the same trade `withUserCostLock` makes
   // and for the same reason.
   //
+  // What that queue does not bound is writers of *different* files, and
+  // nothing else does either — the realm key is taken shared, so it no longer
+  // holds a replica to one critical section per realm the way an exclusive
+  // realm lock did. Each section pins its client for its whole duration and
+  // its inner work draws further clients from the same pool, so per-realm peak
+  // demand is the number of concurrent writers rather than one.
+  //
+  // Left unbounded deliberately. The number of sections in flight is arrival
+  // rate times hold time, and the hold is what this scope shortens: a writer
+  // no longer waits out another card's indexing, so the case that built up a
+  // long queue of writers is the one that stops happening. A realm taking a
+  // few hundred writes an hour against a hold measured in seconds keeps well
+  // under one concurrent section on average. Adding a cap would reintroduce,
+  // at a fixed width, the queueing this removes.
+  //
+  // The pool is the backstop if that reasoning is ever wrong: past its ceiling
+  // `pool.connect()` makes writers wait for a client instead of failing, which
+  // degrades the same way the previous lock did and is visible as `waitMs` on
+  // the lock's own telemetry.
+  //
   // The callback gets no pinned querier. These locks serialize file writers;
   // they do not group the writes into a transaction, and the work inside —
   // writing bytes through the filesystem adapter, enqueueing indexing — is not
@@ -611,6 +631,11 @@ export class PgAdapter implements DBAdapter {
     localPaths: readonly string[],
     fn: () => Promise<T>,
   ): Promise<T> {
+    // Before anything waits, so the wait this call reports covers the in-
+    // process queue below as well as the lock itself. A writer that spent its
+    // time chained in memory waited just as long as one that spent it blocked
+    // in postgres, and the queue is where same-file contention now lands.
+    const enqueuedAt = Date.now();
     const fileKeys = [
       ...new Set(
         localPaths.map((localPath) =>
@@ -618,13 +643,23 @@ export class PgAdapter implements DBAdapter {
         ),
       ),
     ].sort();
-    if (fileKeys.length === 0) {
-      // Nothing to serialize against. A batch with no files to write has no
-      // read-merge-write to protect, and taking a lock keyed on the empty set
-      // would serialize exactly those callers against each other for nothing.
-      return await fn();
-    }
     const realmKey = hashRealmUrlForAdvisoryLock(realmUrl);
+    if (fileKeys.length === 0) {
+      // A write that names no file still runs under the realm guard. It has no
+      // read-merge-write of its own to protect — a create the client did not
+      // name mints a path while staging that no other writer can be aimed at —
+      // but it does write, and a realm-lifecycle caller taking the realm key
+      // exclusively must still exclude it. Dropping the guard here is what
+      // would let a realm be torn down under a create.
+      //
+      // No in-process chaining: a shared holder conflicts with no other shared
+      // holder, so there is nothing for a queue in front of it to bound.
+      return await this.#runWithAdvisoryXactLocks(
+        [{ key: realmKey, mode: 'shared' }],
+        { realmUrl, fileCount: 0, enqueuedAt },
+        fn,
+      );
+    }
     // Past the ceiling the file keys are dropped for the realm's own key, held
     // exclusively. Every advisory lock a transaction takes occupies a slot in
     // a cluster-wide table sized by `max_locks_per_transaction`, so a caller
@@ -657,7 +692,7 @@ export class PgAdapter implements DBAdapter {
       }
       return await this.#runWithAdvisoryXactLocks(
         lockPlan,
-        { realmUrl, fileCount: fileKeys.length },
+        { realmUrl, fileCount: fileKeys.length, enqueuedAt },
         fn,
       );
     })();
@@ -766,16 +801,16 @@ export class PgAdapter implements DBAdapter {
   //
   // The timing line is the signal this lock is judged on: `waitMs` is how long
   // the writer queued behind other writers of these same files, `holdMs` how
-  // long it kept them from running. A realm-wide stall and a contended single
-  // card look identical from request latency alone; they differ here.
+  // long it kept them from running. A write that spent a minute working and
+  // one that spent it queued look identical from request latency alone; they
+  // differ here.
   async #runWithAdvisoryXactLocks<T>(
     lockPlan: readonly { key: string; mode: 'shared' | 'exclusive' }[],
-    context: { realmUrl: string; fileCount: number },
+    context: { realmUrl: string; fileCount: number; enqueuedAt: number },
     fn: () => Promise<T>,
   ): Promise<T> {
     return await this.withConnection(async (queryFn) => {
       await queryFn(['BEGIN']);
-      const waitStart = Date.now();
       let holdStart: number | undefined;
       try {
         for (const { key, mode } of lockPlan) {
@@ -806,10 +841,17 @@ export class PgAdapter implements DBAdapter {
         throw err;
       } finally {
         const now = Date.now();
+        // Measured from before the in-process queue rather than from the
+        // transaction, so it covers everything between the call and the hold:
+        // waiting behind a same-file writer in memory, checking out a pool
+        // client, and blocking in postgres. Timing only the last of those
+        // would report no contention in exactly the case the queue exists for,
+        // where the wait is spent in memory and never reaches the lock.
+        //
         // A caller that never reached the hold waited for the whole of its
         // time here and held for none of it, which is what a failed
         // acquisition should read as rather than as a zero-length wait.
-        const waitMs = (holdStart ?? now) - waitStart;
+        const waitMs = (holdStart ?? now) - context.enqueuedAt;
         const holdMs = holdStart === undefined ? 0 : now - holdStart;
         // `files` is what the write named, and `scope` says whether it got a
         // key each or fell back to the realm — so a long `waitMs` at
