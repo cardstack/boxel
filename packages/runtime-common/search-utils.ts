@@ -118,11 +118,6 @@ export type SearchOpts = {
   // stop side-loading the link closure; unset, a live search assembles the
   // whole closure as before.
   resolveLinksOnly?: boolean;
-  // Exempt this search's link assembly from the assembled-resource budget. Set
-  // only for the realm-server's own during-prerender traffic, whose closure is
-  // rendered into cached HTML and so must not be clipped by a ceiling the
-  // cached copy cannot report.
-  skipLinkAssemblyBudget?: boolean;
   priority?: number;
   // Correlation id minted by the client — a prerendering host stamps
   // `x-boxel-logging-correlation-id` on its `_federated-search` fetch, and so

@@ -854,6 +854,7 @@ function buildCardJsonEtag(
   realmInfoHash: string | undefined,
   screenshotsFingerprint?: string,
   resolveLinksOnly = false,
+  unboundedAssembly = false,
 ): string | undefined {
   if (indexedAt == null) {
     return undefined;
@@ -869,12 +870,25 @@ function buildCardJsonEtag(
   // would leave every client that holds a validator being 304'd to the
   // shape it cached, and the two shapes reachable under one key in the
   // response cache.
-  // The budget rides only on the shape that carries a closure. A links-only read
-  // assembles none, so no budget can change its body, and folding one in would
-  // make a retune revalidate responses it cannot have altered.
-  let variant = resolveLinksOnly
-    ? `${CARD_JSON_ETAG_VARIANT}-links-only`
-    : cardJsonEtagVariant();
+  // Three shapes, three variants, because all three are different bodies at the
+  // same `indexed_at`.
+  //
+  // A links-only read assembles no closure, so no budget can change its body.
+  // An assembly exempt from the budget carries its whole closure whatever the
+  // ceiling is — so it takes a variant of its own, and one that does NOT name
+  // the budget: a request that revalidates across a retune is entitled to its
+  // 304, and sharing a validator with the bounded shape would instead let a
+  // conditional request be answered with the other shape's body. That is the
+  // hazard the exemption exists to prevent, since an exempt read is a render's,
+  // and a truncated closure reused by one is baked into cached HTML.
+  let variant: string;
+  if (resolveLinksOnly) {
+    variant = `${CARD_JSON_ETAG_VARIANT}-links-only`;
+  } else if (unboundedAssembly) {
+    variant = `${CARD_JSON_ETAG_VARIANT}-lb-off`;
+  } else {
+    variant = cardJsonEtagVariant();
+  }
   return `"${base}:${variant}"`;
 }
 
@@ -923,6 +937,7 @@ function buildEntryHtmlEtag(
   doc: EntrySingleDocument,
   realmInfoHash: string | undefined,
   resolveLinksOnly = false,
+  unboundedAssembly = false,
 ): string {
   let indexGeneration = doc.data.meta?.generation ?? 0;
   let htmlIds = doc.data.relationships.html?.data ?? [];
@@ -947,9 +962,14 @@ function buildEntryHtmlEtag(
   // different budget while both generations stand still. This validator has no
   // constant component to hang that on the way the card+json one does, so the
   // budget is folded in directly. A pure-html response assembles no closure, and
-  // neither does a links-only item, so neither carries the component.
+  // neither does a links-only item, so neither carries the component. An item
+  // assembled exempt from the budget carries its whole closure at any ceiling,
+  // so it is named as such rather than by a number that does not bind it —
+  // which is also what keeps it from sharing a validator with the bounded shape.
   if (doc.data.relationships.item && !resolveLinksOnly) {
-    base = `${base}:lb${assembledLinkResourceBudget()}`;
+    base = unboundedAssembly
+      ? `${base}:lb-off`
+      : `${base}:lb${assembledLinkResourceBudget()}`;
   }
   return `"${base}"`;
 }
@@ -7922,6 +7942,7 @@ export class Realm {
           lastModified: unchanged.doc.data.meta.lastModified ?? lastModified,
           created,
           requestContext,
+          unboundedAssembly: duringPrerender,
         });
       }
       // The index holds no document for this card — it has never been indexed,
@@ -7980,6 +8001,8 @@ export class Realm {
         lastModified,
         created,
         requestContext,
+        // `readEntry(false)` above, so this read-back was bounded.
+        unboundedAssembly: false,
       });
     }
     let stored = storedCardDocument(result);
@@ -8041,12 +8064,19 @@ export class Realm {
       lastModified,
       created,
       requestContext,
+      unboundedAssembly,
     }: {
       instanceURL: string;
       localPath: LocalPath;
       lastModified: number | null;
       created: number | null;
       requestContext: RequestContext;
+      // Whether the read-back behind `entry` was exempt from the
+      // assembled-resource budget. It travels with the entry rather than being
+      // recomputed here, because the two callers differ: a render's read-back
+      // is exempt and an ordinary one is not, and the validator below has to
+      // describe the document it is sent with.
+      unboundedAssembly: boolean;
     },
   ): Promise<Response> {
     let doc: SingleCardDocument = merge({}, entry.doc, {
@@ -8077,6 +8107,8 @@ export class Realm {
           entry.indexedAt,
           this.getCachedRealmInfoHash(),
           screenshotsEtagFingerprint(entry.screenshots),
+          false,
+          unboundedAssembly,
         );
     this.#serveInstanceIdsAsRRI(doc);
     return createResponse({
@@ -8400,8 +8432,11 @@ export class Realm {
     let url = this.paths.fileURL(localPath);
     let start = Date.now();
     try {
-      let { skipQueryBackedExpansion, resolveLinksOnly } =
-        this.#cardJsonLinkShape(request);
+      let {
+        skipQueryBackedExpansion,
+        resolveLinksOnly,
+        skipLinkAssemblyBudget,
+      } = this.#cardJsonLinkShape(request);
       let result: OperationResult;
       try {
         result = await runOperation(
@@ -8452,6 +8487,7 @@ export class Realm {
             this.getCachedRealmInfoHash(),
             screenshotsEtagFingerprint(result.screenshots),
             resolveLinksOnly,
+            skipLinkAssemblyBudget,
           );
       let cacheControl = this.cardJsonCacheControl(requestContext);
       let lastModified: Record<string, string> =
@@ -8632,6 +8668,7 @@ export class Realm {
             realmInfoHash,
             screenshotsEtagFingerprint(instanceEntry.screenshots),
             resolveLinksOnly,
+            skipLinkAssemblyBudget,
           );
         }
         if (
@@ -8825,6 +8862,7 @@ export class Realm {
           this.getCachedRealmInfoHash(),
           screenshotsEtagFingerprint(headers.screenshots),
           resolveLinksOnly,
+          skipLinkAssemblyBudget,
         );
     return {
       kind: 'document',
@@ -9030,6 +9068,7 @@ export class Realm {
       doc,
       this.getCachedRealmInfoHash(),
       resolveLinksOnly,
+      duringPrerender,
     );
     let ifNoneMatch = request.headers.get('if-none-match');
     if (ifNoneMatch && ifNoneMatchMatches(ifNoneMatch, etag)) {
@@ -9284,7 +9323,6 @@ export class Realm {
       ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
       ...(opts?.omitIncluded ? { omitIncluded: true } : {}),
       ...(opts?.resolveLinksOnly ? { resolveLinksOnly: true } : {}),
-      ...(opts?.skipLinkAssemblyBudget ? { skipLinkAssemblyBudget: true } : {}),
       // `!== undefined` so an explicit priority 0 (system-initiated) survives.
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
       ...(opts?.timings ? { timings: opts.timings } : {}),
@@ -9361,10 +9399,6 @@ export class Realm {
           // stop side-loading keeps the pass and drops only the closure it
           // would have assembled.
           resolveLinksOnly: !duringPrerender && this.#liveReadsResolveLinksOnly,
-          // A render must read the closure it asked for, not the part that fit
-          // under a live ceiling: the result is cached as HTML, and the cached
-          // copy carries no way to say it was short.
-          skipLinkAssemblyBudget: duringPrerender,
           ...(signal ? { signal } : {}),
         });
       // Cut an over-budget item-leg search off (408) rather than run it to

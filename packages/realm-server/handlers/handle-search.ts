@@ -147,6 +147,11 @@ export default function handleSearch(opts: {
     // assembly pass entirely: the host re-resolves every result from its raw
     // card+source file, so the transitive `included[]` expansion is
     // throwaway work in this path. Same gating as `cacheOnlyDefinitions`.
+    //
+    // This is also what keeps the assembled-resource budget off a render's
+    // search: the pass the budget bounds does not run at all here, so there is
+    // nothing to exempt. The budget's exemption is carried by the routes that
+    // do run the pass during a render — the card+html entry leg.
     let omitIncluded = cacheOnlyDefinitions;
     let jobPriority = sanitizeJobPriorityHeader(
       ctxt.get(PRERENDER_JOB_PRIORITY_HEADER),
@@ -162,18 +167,11 @@ export default function handleSearch(opts: {
       cacheOnlyDefinitions?: true;
       omitIncluded?: true;
       resolveLinksOnly?: true;
-      skipLinkAssemblyBudget?: true;
       priority?: number;
     } = {};
     if (cacheOnlyDefinitions) searchOpts.cacheOnlyDefinitions = true;
     if (omitIncluded) searchOpts.omitIncluded = true;
     if (resolveLinksOnly) searchOpts.resolveLinksOnly = true;
-    // A render's own search is exempt from the assembled-resource budget, the
-    // same way it is exempt from the page and time bounds below — what it
-    // assembles is rendered into cached HTML, which carries no way to report a
-    // clipped closure. It rides in the cache-key opts with the rest, so a
-    // prerender's answer can never be served to a live caller.
-    if (cacheOnlyDefinitions) searchOpts.skipLinkAssemblyBudget = true;
     if (jobPriority !== null) searchOpts.priority = jobPriority;
 
     // Two bounds are enforced server-side on the live item leg (never during

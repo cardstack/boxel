@@ -200,8 +200,17 @@ export const SEARCH_ADMISSION_WAIT_MS = parsePositiveInt(
   0,
 );
 
-// The most resources one `loadLinks` assembly may side-load into `included[]`,
-// and the whole bound on how far a card's transitive link closure is walked.
+// The most link targets one `loadLinks` assembly may take on, and the whole
+// bound on how far a card's transitive link closure is walked.
+//
+// Counted where a target is classified rather than where it lands, which is
+// what lets the ceiling bound the batched reads and not just the assembly. The
+// two totals differ by the targets that turn out to have nothing behind them: a
+// link whose row is missing or errored, and a cross-realm fetch that fails,
+// each spend from the ceiling and add nothing to `included[]`. So a card with
+// many broken links can report its closure clipped while carrying fewer
+// resources than the ceiling allows — the bound is on work undertaken, which is
+// the quantity that costs, and it errs toward doing less of it.
 //
 // Sized as a safety ceiling rather than as a tuning knob. On realms in use the
 // widest card's closure runs to the low hundreds of resources, and a

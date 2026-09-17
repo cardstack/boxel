@@ -572,7 +572,15 @@ module(basename(import.meta.filename), function () {
       // Every member the response did not carry is still reachable: its own
       // `matches.N` entry names it, which is what sends a consumer to fetch it
       // rather than reading the field as short.
+      //
+      // A query-backed member is answered in the pass that assembles the
+      // closure, so it goes out carrying `data` as well as `links.self` —
+      // including the ones clipped here, whose `data` therefore names a
+      // resource `included[]` does not hold. That is the shape both `LinksTo`
+      // and `LinksToMany` deserialize to a not-loaded value, so it is pinned
+      // here rather than left to read either way.
       let named = new Set<string>();
+      let carryingData = 0;
       for (let [key, rel] of Object.entries(relationships)) {
         if (!key.startsWith('matches.')) {
           continue;
@@ -580,11 +588,101 @@ module(basename(import.meta.filename), function () {
         if (rel.links?.self) {
           named.add(rel.links.self.replace(/^\.\//, ''));
         }
+        if (rel.data && !Array.isArray(rel.data)) {
+          carryingData++;
+        }
       }
       assert.strictEqual(
         named.size,
         TARGET_COUNT,
         'every member names its target, carried or not',
+      );
+      assert.strictEqual(
+        carryingData,
+        TARGET_COUNT,
+        'and every member carries the identity the query answered, clipped or not',
+      );
+      let carriedIds = new Set(carried);
+      assert.true(
+        carried.length < TARGET_COUNT && carriedIds.size === carried.length,
+        'while included[] holds only some of them — so some data names an absent resource',
+      );
+    });
+
+    test('a bounded read and an exempt one never share a validator', async function (assert) {
+      // The two shapes are different bodies at the same index generation, so a
+      // shared validator would let a conditional request be answered with the
+      // other one's. That direction matters most: an exempt read is a render's,
+      // and a truncated closure reused by one is baked into cached HTML, which
+      // is the outcome the exemption exists to prevent.
+      setSearchBoundsForTests({ maxAssembledLinkResources: 2 });
+
+      let live = await request
+        .get(cardPath('consumer-1'))
+        .set('Accept', SupportedMimeType.CardJson);
+      let exempt = await request
+        .get(cardPath('consumer-1'))
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('x-boxel-during-prerender', '1');
+
+      assert.ok(live.headers['etag'], 'the bounded read emits a validator');
+      assert.ok(exempt.headers['etag'], 'the exempt read emits one too');
+      assert.notStrictEqual(
+        live.headers['etag'],
+        exempt.headers['etag'],
+        'and they differ, because the bodies do',
+      );
+      assert.strictEqual(
+        linkResourceIds(live.body.included).length,
+        2,
+        'the bounded body is clipped',
+      );
+      assert.strictEqual(
+        linkResourceIds(exempt.body.included).length,
+        FULL_CLOSURE,
+        'and the exempt body is whole',
+      );
+
+      // The exempt shape is answered with its own body rather than 304'd to the
+      // clipped one it would otherwise have matched.
+      let conditional = await request
+        .get(cardPath('consumer-1'))
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('x-boxel-during-prerender', '1')
+        .set('If-None-Match', live.headers['etag']);
+      assert.strictEqual(
+        conditional.status,
+        200,
+        'the bounded validator does not satisfy an exempt request',
+      );
+      assert.strictEqual(
+        linkResourceIds(conditional.body.included).length,
+        FULL_CLOSURE,
+        'which receives the whole closure',
+      );
+    });
+
+    test('retuning the budget leaves an exempt validator alone', async function (assert) {
+      // The ceiling does not bind an exempt assembly, so its body cannot vary
+      // with the ceiling — and a validator that moved anyway would make every
+      // render revalidate for nothing on an operator's retune.
+      setSearchBoundsForTests({ maxAssembledLinkResources: 2 });
+      let before = await request
+        .get(cardPath('consumer-2'))
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('x-boxel-during-prerender', '1');
+
+      setSearchBoundsForTests({ maxAssembledLinkResources: 7 });
+      let after = await request
+        .get(cardPath('consumer-2'))
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('x-boxel-during-prerender', '1');
+
+      assert.ok(before.headers['etag'], 'the exempt read emits a validator');
+      assert.strictEqual(
+        after.headers['etag'],
+        before.headers['etag'],
+        'and it is unchanged across a retune',
       );
     });
 

@@ -2038,12 +2038,16 @@ export class RealmIndexQueryEngine {
           // paid for, and its relationship still needs the rewrite below.
           if (!decided.has(linkURL.href)) {
             if (committed >= budget) {
-              // Out of budget. Leave the relationship exactly as the index
-              // stored it: `links.self` names the target and no `data` claims
-              // it is carried, which is the shape a consumer already reads as
-              // "not loaded" and resolves for itself one card at a time. The
-              // document says so as well — see `linkClosureTruncated` — so a
-              // short `included[]` is distinguishable from a small graph.
+              // Out of budget. The relationship is left exactly as it stands:
+              // a stored link carries `links.self` and no `data`, while a
+              // query-backed member carries both, because step 1 has already
+              // answered it. Either way the target is named and absent from
+              // `included[]`, which both `LinksTo` and `LinksToMany`
+              // deserialize to a not-loaded value whose getter fetches the card
+              // on demand — so the two shapes differ on the wire and not in
+              // what a consumer does with them. The document says a closure was
+              // clipped as well, see `linkClosureTruncated`, so a short
+              // `included[]` is distinguishable from a small graph.
               truncated = true;
               continue;
             }

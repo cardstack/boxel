@@ -861,8 +861,8 @@ module(basename(import.meta.filename), function () {
           let etag = response.get('etag') ?? '';
           assert.ok(etag, 'response carries an ETag');
           assert.true(
-            /^"\d+(?:-[0-9a-f]+)?:card-rri"$/.test(etag),
-            `ETag matches "<indexed_at>(-<realmInfoHash>)?:card-rri" pattern (got ${etag})`,
+            /^"\d+(?:-[0-9a-f]+)?:card-rri-lb\d+"$/.test(etag),
+            `ETag matches "<indexed_at>(-<realmInfoHash>)?:card-rri-lb<budget>" pattern (got ${etag})`,
           );
           assert.strictEqual(
             response.get('cache-control'),
@@ -3545,8 +3545,8 @@ module(basename(import.meta.filename), function () {
           let patchEtag = patchResponse.get('etag') ?? '';
           assert.ok(patchEtag, 'PATCH response carries an ETag');
           assert.true(
-            /^"\d+(?:-[0-9a-f]+)?:card-rri"$/.test(patchEtag),
-            `PATCH ETag matches "<indexed_at>(-<realmInfoHash>)?:card-rri" pattern (got ${patchEtag})`,
+            /^"\d+(?:-[0-9a-f]+)?:card-rri-lb\d+"$/.test(patchEtag),
+            `PATCH ETag matches "<indexed_at>(-<realmInfoHash>)?:card-rri-lb<budget>" pattern (got ${patchEtag})`,
           );
           assert.notStrictEqual(
             patchEtag,
