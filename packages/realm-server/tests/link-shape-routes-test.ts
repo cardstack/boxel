@@ -507,15 +507,38 @@ module(basename(import.meta.filename), function () {
       onRealmSetup,
     });
 
-    // Take `count` slots on the process gate the way an in-render fan-out
-    // takes them, hold them long enough for the mean to all but catch up, and
-    // report where the reading landed.
-    function hold(count: number): number {
+    // Take `count` slots on the process gate the way an in-render fan-out takes
+    // them, hold them long enough for the mean to all but catch up, and report
+    // where the reading landed — having first pinned it inside the band the
+    // caller is aiming at.
+    //
+    // Every hold states its band, including the ones whose test would fail
+    // anyway. A reading that missed its rung still fails, but it fails several
+    // lines later as a level that is not the expected one, and that message
+    // cannot tell a moved threshold from a broken ladder. Since the slot counts
+    // are derived precisely so that the next retune walks into these tests, the
+    // message it walks into should name both numbers.
+    function hold(
+      assert: Assert,
+      count: number,
+      band: { atLeast: number; below?: number },
+    ): number {
       for (let i = 0; i < count; i++) {
         held.push(admitSearchUnconditionally());
       }
       clock += SETTLE_HALF_LIVES * LINK_SHAPE_LOAD_HALF_LIFE_MS;
-      return getSearchSustainedInFlight();
+      let reading = getSearchSustainedInFlight();
+      assert.ok(
+        reading >= band.atLeast,
+        `${count} concurrent searches read ${reading.toFixed(2)}, at or above ${band.atLeast}`,
+      );
+      if (band.below !== undefined) {
+        assert.ok(
+          reading < band.below,
+          `and below ${band.below}, so this exercises the intended rung alone`,
+        );
+      }
+      return reading;
     }
 
     // Hand every slot back and let the reading fall as far as it goes. Ten
@@ -651,11 +674,9 @@ module(basename(import.meta.filename), function () {
     // ceiling and still read below a rung placed too high — in which case the
     // ladder is unreachable and nothing says so.
     test('a process at its admission ceiling reads above both rungs', function (assert) {
-      let reading = hold(SERVER_MAX_IN_FLIGHT_SEARCHES);
-      assert.ok(
-        reading > LINK_SHAPE_ALL_ENGAGE,
-        `holding the full ceiling of ${SERVER_MAX_IN_FLIGHT_SEARCHES} reads ${reading.toFixed(2)}, above the top rung at ${LINK_SHAPE_ALL_ENGAGE}`,
-      );
+      let reading = hold(assert, SERVER_MAX_IN_FLIGHT_SEARCHES, {
+        atLeast: LINK_SHAPE_ALL_ENGAGE,
+      });
       assert.ok(
         reading > LINK_SHAPE_MULTI_ROW_ENGAGE,
         `and above the lower rung at ${LINK_SHAPE_MULTI_ROW_ENGAGE}`,
@@ -667,15 +688,10 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a real reading past the first engage degrades a multi-row read and spares a single-row one', async function (assert) {
-      let reading = hold(FIRST_RUNG_HOLD);
-      assert.ok(
-        reading >= LINK_SHAPE_MULTI_ROW_ENGAGE,
-        `${FIRST_RUNG_HOLD} concurrent searches read ${reading.toFixed(2)}, at or above the lower rung at ${LINK_SHAPE_MULTI_ROW_ENGAGE}`,
-      );
-      assert.ok(
-        reading < LINK_SHAPE_ALL_ENGAGE,
-        `and below the top rung at ${LINK_SHAPE_ALL_ENGAGE}, so this exercises the lower one alone`,
-      );
+      let reading = hold(assert, FIRST_RUNG_HOLD, {
+        atLeast: LINK_SHAPE_MULTI_ROW_ENGAGE,
+        below: LINK_SHAPE_ALL_ENGAGE,
+      });
 
       let search = await multiRowSearch();
       assert.strictEqual(search.status, 200, `HTTP 200: ${search.text}`);
@@ -720,11 +736,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a real reading past the top engage degrades a single-row read too', async function (assert) {
-      let reading = hold(TOP_RUNG_HOLD);
-      assert.ok(
-        reading >= LINK_SHAPE_ALL_ENGAGE,
-        `${TOP_RUNG_HOLD} concurrent searches read ${reading.toFixed(2)}, at or above the top rung at ${LINK_SHAPE_ALL_ENGAGE}`,
-      );
+      hold(assert, TOP_RUNG_HOLD, { atLeast: LINK_SHAPE_ALL_ENGAGE });
 
       // One rung per read, so the realm takes two consults to reach the top.
       await cardRead();
@@ -749,7 +761,7 @@ module(basename(import.meta.filename), function () {
     // thrown away. A reading far above both rungs is exactly the case that
     // would jump them in one step without it.
     test('the ladder cannot take both rungs without the dwell between them', async function (assert) {
-      hold(TOP_RUNG_HOLD);
+      hold(assert, TOP_RUNG_HOLD, { atLeast: LINK_SHAPE_ALL_ENGAGE });
 
       await cardRead();
       assert.strictEqual(policy.levelFor(realmKey), 'multi-row');
@@ -772,7 +784,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('the closure comes back as the reading decays past the releases', async function (assert) {
-      hold(TOP_RUNG_HOLD);
+      hold(assert, TOP_RUNG_HOLD, { atLeast: LINK_SHAPE_ALL_ENGAGE });
       await cardRead();
       clock += LINK_SHAPE_MIN_DWELL_MS;
       await cardRead();
@@ -812,7 +824,10 @@ module(basename(import.meta.filename), function () {
     // policy never engages is indistinguishable from one running no policy at
     // all, which is the ambiguity a load run cannot otherwise resolve.
     test('the heartbeat reports the process reading while nothing is changing', async function (assert) {
-      hold(FIRST_RUNG_HOLD);
+      hold(assert, FIRST_RUNG_HOLD, {
+        atLeast: LINK_SHAPE_MULTI_ROW_ENGAGE,
+        below: LINK_SHAPE_ALL_ENGAGE,
+      });
       await multiRowSearch();
       assert.strictEqual(policy.levelFor(realmKey), 'multi-row');
       policyEvents = [];
@@ -852,7 +867,10 @@ module(basename(import.meta.filename), function () {
     // that never ran. The record is only evidence if the reading on it is the
     // process's own.
     test('a degraded search reports the real reading and the level it was decided at', async function (assert) {
-      let reading = hold(FIRST_RUNG_HOLD);
+      let reading = hold(assert, FIRST_RUNG_HOLD, {
+        atLeast: LINK_SHAPE_MULTI_ROW_ENGAGE,
+        below: LINK_SHAPE_ALL_ENGAGE,
+      });
       let shapes: SearchShapeEvent[] = [];
       setSearchShapeSink((event) => shapes.push(event));
 
