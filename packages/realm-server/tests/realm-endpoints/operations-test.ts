@@ -27,6 +27,7 @@ import {
   createJWT,
   setupMatrixRoom,
   setupPermissionedRealmCached,
+  waitUntil,
   withRealmPath,
   type RealmRequest,
 } from '../helpers/index.ts';
@@ -1099,6 +1100,9 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         let jobsBefore = await indexJobIds();
         let since = Date.now();
 
+        // Tagged so the batch's own broadcast can be told from the ones this
+        // realm makes for the rest of the file's tests: it is shared, and a
+        // straggler from an earlier test can land inside the window.
         let response = await post(
           envelope(
             parallel(
@@ -1107,7 +1111,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
               invoke('escalate', { href: '/report-parallel-3' }),
             ),
           ),
-        );
+        ).set('X-Boxel-Client-Request-Id', 'parallel-group');
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         for (let card of [
@@ -1126,10 +1130,34 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           1,
           'the whole group indexed under one job',
         );
+        // The realm broadcasts out of band from the commit, so the event is
+        // waited for rather than read off the window the response returned in.
+        await waitUntil(
+          async () =>
+            (await incrementalIndexEventsSince(since)).some(
+              (event) => event.clientRequestId === 'parallel-group',
+            ),
+          {
+            timeout: 30_000,
+            timeoutMessage: "the group's index event never arrived",
+          },
+        );
+        let announced = (await incrementalIndexEventsSince(since)).filter(
+          (event) => event.clientRequestId === 'parallel-group',
+        );
         assert.strictEqual(
-          (await incrementalIndexEventsSince(since)).length,
+          announced.length,
           1,
-          'and announced itself once',
+          `the group announced itself once (got ${announced.length})`,
+        );
+        assert.deepEqual(
+          [...(announced[0].invalidations ?? [])].sort(),
+          [
+            `${testRealmHref}report-parallel-1`,
+            `${testRealmHref}report-parallel-2`,
+            `${testRealmHref}report-parallel-3`,
+          ],
+          'and the one event names all three members',
         );
       });
 
@@ -1171,8 +1199,15 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           jobsBefore,
           'no index job was enqueued',
         );
+        // Narrowed to the cards this batch named rather than counted over the
+        // window, for the reason the positive case above waits: the realm is
+        // shared, and a broadcast from an earlier test can land here.
         assert.deepEqual(
-          await incrementalIndexEventsSince(since),
+          (await incrementalIndexEventsSince(since)).filter((event) =>
+            (event.invalidations ?? []).some((url) =>
+              url.startsWith(`${testRealmHref}report-abandoned-`),
+            ),
+          ),
           [],
           'and no index event was broadcast',
         );
@@ -1306,10 +1341,14 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         // question about the schedule.
         let response = await post(
           envelope(
-            invoke('create', { data: person('author', 'Author') }),
+            invoke('create', { data: person('tree-author', 'Author') }),
             parallel(
-              invoke('create', { data: person('fan-1', 'Fan One', 'author') }),
-              invoke('create', { data: person('fan-2', 'Fan Two', 'author') }),
+              invoke('create', {
+                data: person('tree-fan-1', 'Fan One', 'tree-author'),
+              }),
+              invoke('create', {
+                data: person('tree-fan-2', 'Fan Two', 'tree-author'),
+              }),
             ),
           ),
         );

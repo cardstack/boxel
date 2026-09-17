@@ -262,10 +262,13 @@ function parseGroup(
     );
   }
   if (members.length === 0) {
-    // A group is how a batch says how its members run, so one holding none
-    // says nothing. Refused rather than carried out as a no-op: the batch the
-    // caller composed has a hole in it, and the position of every entry after
-    // it is a position the caller did not intend either.
+    // A group says how the entries it holds are run, so one holding none says
+    // nothing at all. Refused rather than carried out as a no-op, because the
+    // shape it produces is indistinguishable from success: an empty group
+    // answers with an empty array of results, which reads as "these all
+    // carried out" rather than as "you sent none" — and the likeliest way to
+    // send one is a caller that built its members from a list and got back
+    // fewer than it meant to.
     throw refuse(
       `entry ${position} is a "${op}" group holding no members; a group ` +
         `carries the entries it schedules`,
