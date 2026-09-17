@@ -6,6 +6,7 @@ import {
 } from './lattice-scheduling.ts';
 import type { LatticeProjectionWhere } from './definitions.ts';
 import { latticeOwnerCodeStatuses } from './lattice-code-reference.ts';
+import { latticeQueryReadinessScope } from './lattice-query-readiness.ts';
 import type { DBAdapter } from './db.ts';
 import stringify from 'safe-stable-stringify';
 import type { IndexQueryEngine } from './index-query-engine.ts';
@@ -1177,7 +1178,10 @@ export class LatticeQueryRegistry
       { query: 'JSON' },
     );
     const compiler = this.engine.reverseCompilationScope();
-    const scopes = new Map<string, string[]>();
+    const scopes = new Map<
+      string,
+      { scope: Expression; owners: Set<string> }
+    >();
     for (const watch of watches) {
       const ownerURL = String(watch.owner_url);
       if (!runnable.has(ownerURL)) continue;
@@ -1201,39 +1205,81 @@ export class LatticeQueryRegistry
             inputs.get(ownerURL)?.add(input);
         continue;
       }
-      // Different rooms/dates can share one readiness scope. Their exact
-      // membership predicates remain separate in the reverse-query registry.
-      const scope = await compiler.latticeQueryTypeScope(filter);
+      const scope =
+        this.db.kind === 'pg'
+          ? await latticeQueryReadinessScope(
+              filter,
+              (filter) => compiler.latticeQueryTypeScope(filter),
+              ['i.code_current IS TRUE'],
+              (ref) => compiler.latticeQuerySourceFields(ref),
+            )
+          : await compiler.latticeQueryTypeScope(filter);
       const key = stringify(scope)!;
-      let candidates = scopes.get(key);
-      if (!candidates) {
-        // Same conservative type scope as native input admission. Old computed
-        // values may be false negatives for exact membership, sort or page.
-        const rows = await query(this.db, [
-          `SELECT o.owner_url FROM lattice_owners o LEFT JOIN boxel_index i
-           ON i.realm_url=o.realm_url AND i.url=o.owner_url AND i.type='instance'
-           WHERE o.realm_url=`,
-          param(realmURL),
-          `AND o.retired=FALSE AND o.dirty_generation IS NOT NULL
-           AND (i.url IS NULL OR (`,
-          ...scope,
-          '))',
-          ...(this.db.kind === 'pg'
-            ? [
-                'UNION SELECT i.url AS owner_url FROM boxel_index i WHERE i.realm_url=',
-                param(realmURL),
-                "AND i.type='instance' AND i.is_deleted IS NOT TRUE AND i.url = ANY(",
-                textArrayParam([...neverPublished]),
-                ') AND (',
-                ...scope,
-                ')',
-              ]
-            : []),
-        ]);
-        candidates = rows.map((row) => String(row.owner_url));
-        scopes.set(key, candidates);
+      let group = scopes.get(key);
+      if (!group) {
+        group = { scope, owners: new Set() };
+        scopes.set(key, group);
       }
-      for (const candidate of candidates) inputs.get(ownerURL)?.add(candidate);
+      group.owners.add(ownerURL);
+    }
+    // A precise source partition gives each consumer its own scope. Batch them
+    // so this does not turn one coarse type query into N database round trips.
+    // This is a local pending frontier, not a global order of card definitions.
+    const groups = [...scopes.values()];
+    for (let offset = 0; offset < groups.length; offset += 64) {
+      const batch = groups.slice(offset, offset + 64);
+      const rows = await query(this.db, [
+        'WITH pending_inputs AS MATERIALIZED (',
+        `SELECT o.owner_url,i.url,i.realm_url,i.types,i.search_doc,i.pristine_doc`,
+        ...(this.db.kind === 'pg' ? [', codes.current AS code_current'] : []),
+        `FROM lattice_owners o LEFT JOIN boxel_index i
+         ON i.realm_url=o.realm_url AND i.url=o.owner_url AND i.type='instance'`,
+        ...(this.db.kind === 'pg'
+          ? [
+              'LEFT JOIN (',
+              ...latticeOwnerCodeStatuses(
+                [param(realmURL)],
+                [
+                  '(SELECT loader_epoch FROM realm_generations WHERE realm_url=',
+                  param(realmURL),
+                  ')',
+                ],
+              ),
+              ') codes ON codes.owner_url=o.owner_url',
+            ]
+          : []),
+        'WHERE o.realm_url=',
+        param(realmURL),
+        'AND o.retired=FALSE AND o.dirty_generation IS NOT NULL',
+        ...(this.db.kind === 'pg'
+          ? [
+              `UNION SELECT i.url AS owner_url,i.url,i.realm_url,i.types,i.search_doc,i.pristine_doc,
+               (i.pristine_doc->'meta'->'publication'->>'definitionRevision' =
+                (SELECT loader_epoch FROM realm_generations WHERE realm_url=`,
+              param(realmURL),
+              ')) AS code_current FROM boxel_index i WHERE i.realm_url=',
+              param(realmURL),
+              "AND i.type='instance' AND i.is_deleted IS NOT TRUE AND i.url = ANY(",
+              textArrayParam([...neverPublished]),
+              ')',
+            ]
+          : []),
+        ')',
+        ...batch.flatMap(
+          ({ scope }, index): Expression => [
+            ...(index ? ['UNION ALL'] : []),
+            'SELECT CAST(',
+            param(index),
+            'AS INTEGER) AS scope_id,i.owner_url FROM pending_inputs i WHERE i.url IS NULL OR (',
+            ...scope,
+            ')',
+          ],
+        ),
+      ]);
+      for (const row of rows) {
+        for (const owner of batch[Number(row.scope_id)].owners)
+          inputs.get(owner)?.add(String(row.owner_url));
+      }
     }
     const priorities = latticePropagateDemand(
       latticeDemandFor(this.db).cache.priorities(realmURL),

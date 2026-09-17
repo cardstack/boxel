@@ -160,21 +160,21 @@ module('lattice-work-frontier-test.ts | postgres', function (hooks) {
     });
     const summary = await owner('Z-summary', 'PatientDaySummary');
     assert.deepEqual(await registry.ready(realm), [
-      { ownerURL: summary, generation: 2 },
+      { ownerURL: summary, generation: 2, pendingInputCount: 0 },
     ]);
     await db.execute(
       'UPDATE lattice_owners SET dirty_generation=NULL WHERE owner_url=$1',
       { bind: [summary] },
     );
     assert.deepEqual(await registry.ready(realm), [
-      { ownerURL: board, generation: 2 },
+      { ownerURL: board, generation: 2, pendingInputCount: 0 },
     ]);
     await db.execute(
       'UPDATE lattice_owners SET dirty_generation=NULL WHERE owner_url=$1',
       { bind: [board] },
     );
     assert.deepEqual(await registry.ready(realm), [
-      { ownerURL: census, generation: 2 },
+      { ownerURL: census, generation: 2, pendingInputCount: 0 },
     ]);
   });
 
@@ -192,7 +192,7 @@ module('lattice-work-frontier-test.ts | postgres', function (hooks) {
       { bind: [realm, input, JSON.stringify({ fileURL })] },
     );
     assert.deepEqual(await registry.ready(realm), [
-      { ownerURL: independent, generation: 2 },
+      { ownerURL: independent, generation: 2, pendingInputCount: 0 },
     ]);
     assert.strictEqual(
       (await registry.pending(realm)).length,
@@ -223,15 +223,93 @@ module('lattice-work-frontier-test.ts | postgres', function (hooks) {
       bind: [JSON.stringify([`${realm}cards/PatientDaySummary`]), foreign],
     });
     assert.deepEqual(await registry.ready(realm), [
-      { ownerURL: unknown, generation: 2 },
+      { ownerURL: unknown, generation: 2, pendingInputCount: 0 },
     ]);
     await db.execute(
       'UPDATE lattice_owners SET retired=TRUE WHERE owner_url=$1',
       { bind: [unknown] },
     );
     assert.deepEqual(await registry.ready(realm), [
-      { ownerURL: parent, generation: 2 },
+      { ownerURL: parent, generation: 2, pendingInputCount: 0 },
     ]);
+  });
+
+  test('a published local input releases its consumer before the rest of its type', async (assert) => {
+    await db.execute(
+      `INSERT INTO realm_generations(realm_url,current_generation,loader_epoch) VALUES($1,2,'test')`,
+      { bind: [realm] },
+    );
+    const parent = await owner('A-parent', 'WardBoard', {
+      query: {
+        filter: {
+          on: clinicalModuleRef(realm, 'PatientDaySummary'),
+          eq: { patientId: 'left' },
+        },
+      },
+    });
+    const left = await owner('B-left', 'PatientDaySummary');
+    const right = await owner('Z-right', 'PatientDaySummary');
+    for (const [url, patientId] of [
+      [left, 'left'],
+      [right, 'right'],
+    ]) {
+      await db.execute(
+        `UPDATE boxel_index SET search_doc=$2,pristine_doc=$3 WHERE url=$1`,
+        {
+          bind: [
+            url,
+            JSON.stringify({ patientId }),
+            JSON.stringify({
+              meta: {
+                publication: {
+                  version: 1,
+                  state: 'pending',
+                  definitionRevision: 'test',
+                  computedFields: ['criticalCount'],
+                  queryFields: [],
+                  sourceFields: { patientId: 'string' },
+                },
+              },
+            }),
+          ],
+        },
+      );
+    }
+    assert.deepEqual(
+      (await registry.ready(realm)).map((o) => o.ownerURL),
+      [left, right],
+    );
+    await db.execute(
+      'UPDATE lattice_owners SET dirty_generation=NULL WHERE owner_url=$1',
+      { bind: [left] },
+    );
+    await db.execute(
+      `UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{meta,publication,outputRevision}','2') WHERE url=$1`,
+      { bind: [left] },
+    );
+    assert.deepEqual(
+      (await registry.ready(realm)).map((o) => o.ownerURL),
+      [parent, right],
+      'consumer and unrelated input can run together',
+    );
+    const [pending] = await db.execute(
+      'SELECT dirty_generation FROM lattice_owners WHERE owner_url=$1',
+      { bind: [right] },
+    );
+    assert.strictEqual(
+      Number(pending.dirty_generation),
+      2,
+      'no obligation was discarded',
+    );
+    await db.execute(
+      `UPDATE boxel_index SET search_doc=jsonb_set(search_doc,'{patientId}','"left"') WHERE url=$1`,
+      { bind: [right] },
+    );
+    assert.deepEqual(
+      (await registry.ready(realm)).map((o) => o.ownerURL),
+      [right],
+      'new relevant entrant withholds consumer again',
+    );
   });
 
   test('cycles fail explicitly without discarding obligations', async (assert) => {
@@ -268,14 +346,14 @@ module('lattice-work-frontier-test.ts | postgres', function (hooks) {
       query: { filter: { in: { id: [input.slice(0, -5)] } } },
     });
     assert.deepEqual(await registry.ready(realm), [
-      { ownerURL: input, generation: 2 },
+      { ownerURL: input, generation: 2, pendingInputCount: 0 },
     ]);
     await db.execute(
       'UPDATE lattice_owners SET dirty_generation=NULL WHERE owner_url=$1',
       { bind: [input] },
     );
     assert.deepEqual(await registry.ready(realm), [
-      { ownerURL: parent, generation: 2 },
+      { ownerURL: parent, generation: 2, pendingInputCount: 0 },
     ]);
   });
 });

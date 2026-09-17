@@ -27,6 +27,7 @@ import { latticeCutoffFilter } from '@cardstack/runtime-common/lattice-query-cut
 import type { LatticeProjectionWhere } from '@cardstack/runtime-common/definitions';
 import { LatticeInputsPending } from '@cardstack/runtime-common/lattice-work';
 import { LatticeQueryRegistry } from '@cardstack/runtime-common/lattice-query-registry';
+import { latticeQueryReadinessScope } from '@cardstack/runtime-common/lattice-query-readiness';
 import { latticeReadSetCurrent } from '@cardstack/runtime-common/lattice-kernel';
 import {
   applyLatticeProjectionWhere,
@@ -121,7 +122,7 @@ async function checkFrame(tx: Querier, frame: Frame, lock = false) {
 async function checkQueryInputs(
   tx: Querier,
   frame: Frame,
-  typeScope: Expression,
+  { typeScope, sourceScope }: QueryReadiness,
 ) {
   // Do not evaluate membership using stale computeds: an old value can be a
   // false negative, so checking freshness only on returned rows is insufficient.
@@ -142,7 +143,9 @@ async function checkQueryInputs(
     param(frame.realmURL),
     `AND o.retired=FALSE AND (i.url IS NULL OR (`,
     ...typeScope,
-    `)) AND (
+    ') AND (codes.current IS NOT TRUE OR (',
+    ...sourceScope,
+    `))) AND (
       i.url IS NULL OR i.has_error IS TRUE OR i.is_deleted IS TRUE
       OR NOT codes.current
       OR (i.pristine_doc->'meta'->'publication'->>'version') IS DISTINCT FROM '1'
@@ -171,13 +174,18 @@ async function checkQueryInputs(
      AND i.pristine_doc->'meta'->'publication' IS NOT NULL
      AND (i.pristine_doc->'meta'->'publication'->>'outputRevision') IS NULL
      AND (`,
-    ...typeScope,
+    ...sourceScope,
     ') LIMIT 1',
   ]);
   if (pending.length)
     throw new LatticeInputsPending(
       'Lattice query has unsettled materialized inputs',
     );
+}
+
+interface QueryReadiness {
+  typeScope: Expression;
+  sourceScope: Expression;
 }
 
 // A computation reads published card DATA. This object never imports CardDef,
@@ -241,7 +249,7 @@ export class LatticeMaterializationInputs {
     { ownerURL: string; fieldPath: string; urls: string[] }
   >();
   #retainedLinkCount = 0;
-  #queryScopes = new Map<string, Expression>();
+  #queryScopes = new Map<string, QueryReadiness>();
   #bytes = 0;
   #failed = false;
   #sealed = false;
@@ -371,7 +379,17 @@ export class LatticeMaterializationInputs {
       )
         throw new Error('Lattice query paths must be unique and bounded');
       const typeScope = await this.#engine.latticeQueryTypeScope(input.filter);
-      const scopeKey = JSON.stringify(typeScope);
+      const sourceScope = await latticeQueryReadinessScope(
+        input.filter,
+        (filter) => this.#engine.latticeQueryTypeScope(filter),
+        [
+          "i.pristine_doc->'meta'->'publication'->>'definitionRevision' =",
+          param(this.#frame.loaderEpoch),
+        ],
+        (ref) => this.#engine.latticeQuerySourceFields(ref),
+      );
+      const scopes = { typeScope, sourceScope };
+      const scopeKey = JSON.stringify(scopes);
       if (!this.#queryScopes.has(scopeKey)) {
         await LatticeMaterializationInputs.guardOnce(
           this.#db,
@@ -382,10 +400,10 @@ export class LatticeMaterializationInputs {
             checkQueryInputs(
               (expression) => query(this.#db, expression),
               this.#frame,
-              typeScope,
+              scopes,
             ),
         );
-        this.#queryScopes.set(scopeKey, typeScope);
+        this.#queryScopes.set(scopeKey, scopes);
       }
       const membershipStart = performance.now();
       let result = await this.#engine.latticeQueryIdentities(

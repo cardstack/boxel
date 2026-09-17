@@ -832,6 +832,11 @@ module(basename(import.meta.filename), function (hooks) {
       'total',
     ]);
     assert.deepEqual(data.meta.publication?.queryFields, ['chosen', 'members']);
+    assert.deepEqual(
+      data.meta.publication?.sourceFields,
+      { group: 'string' },
+      'only admitted source primitives can narrow readiness',
+    );
     assert.deepEqual(data.meta.publication?.watches, []);
     assert.false(
       statements.some((sql) => sql.includes('END AS body')),

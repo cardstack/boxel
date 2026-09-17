@@ -8,6 +8,7 @@ import type {
   LatticeNativeCardIndexRequest,
   LatticeInputStageTiming,
 } from '@cardstack/runtime-common/lattice-native-index';
+import { latticeSourceFields } from '@cardstack/runtime-common/lattice-query-readiness';
 import {
   extractLatticeJsonFile,
   type LatticeNativeFileAdmission,
@@ -283,6 +284,7 @@ export function createLatticeNativeCardIndexer({
         const manifest: PublicationReceipt = {
           version: 1,
           state: 'pending',
+          sourceFields: latticeSourceFields(admission.root.definition),
           validatedThrough: request.inputSnapshot?.generation ?? 0,
           ...(result.freshUntil ? { freshUntil: result.freshUntil } : {}),
           ...(result.freshWithin ? { freshWithin: result.freshWithin } : {}),

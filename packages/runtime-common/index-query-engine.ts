@@ -1,6 +1,7 @@
 import type * as JSONTypes from 'json-typescript';
 import { flatten } from 'lodash-es';
 import stringify from 'safe-stable-stringify';
+import { latticeSourceFields } from './lattice-query-readiness.ts';
 import { LATTICE_PRIORITY } from './jobs/lattice.ts';
 import { LATTICE_DISPLAY_TOKEN_PREFIX } from './lattice-display.ts';
 import { latticeInputArtifactReceipt } from './lattice-input-artifacts.ts';
@@ -1803,6 +1804,15 @@ export class IndexQueryEngine {
       }
     }
     return { urls: results.map((row) => row.url!), meta, paged, cutoff };
+  }
+
+  async latticeQuerySourceFields(ref: CodeRef) {
+    try {
+      return latticeSourceFields(await this.getDefinition(ref));
+    } catch (error) {
+      if (isFilterRefersToNonexistentTypeError(error)) return {};
+      throw error;
+    }
   }
 
   // A stale computed value can miss the full predicate. Readiness must consider

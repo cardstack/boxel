@@ -29,7 +29,12 @@ const definition: Definition = {
   type: 'card-def',
   displayName: 'Record',
   codeRef,
-  fields: { amount: 'number', group: 'string', id: 'string' },
+  fields: {
+    amount: 'number',
+    group: 'string',
+    members: 'strings',
+    id: 'string',
+  },
   fieldDefs: {
     number: {
       type: 'contains',
@@ -42,6 +47,14 @@ const definition: Definition = {
       type: 'contains',
       isPrimitive: true,
       isComputed: false,
+      nativeCodec: { kind: 'primitive', scalar: 'string' },
+      fieldOrCard: { module: rri(realm + 'string'), name: 'String' },
+    },
+    strings: {
+      type: 'containsMany',
+      isPrimitive: true,
+      isComputed: false,
+      nativeCodec: { kind: 'primitive', scalar: 'string' },
       fieldOrCard: { module: rri(realm + 'string'), name: 'String' },
     },
   },
@@ -911,6 +924,178 @@ module(basename(import.meta.filename), function (hooks) {
       { bind: [url] },
     );
     await assert.rejects((await open()).read([url]), /has no provenance/);
+  });
+
+  async function sourceProof(
+    url: string,
+    fields: Record<string, string> = { group: 'string' },
+  ) {
+    await db.execute(
+      `UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{meta,publication,sourceFields}',$2::jsonb) WHERE url=$1`,
+      { bind: [url, JSON.stringify(fields)] },
+    );
+  }
+
+  test('source partitions release a consumer while another partition remains dirty', async (assert) => {
+    const unrelated = await materializedCard('other', 2);
+    await sourceProof(unrelated);
+    await db.execute(
+      'UPDATE lattice_owners SET dirty_generation=5 WHERE owner_url=$1',
+      { bind: [unrelated] },
+    );
+    await card('mine', 3, 'B');
+    const input = await open();
+    const result = await input.query('records', {
+      filter: { on: codeRef, eq: { group: 'B' } },
+      page: { size: 10 },
+    });
+    assert.deepEqual(
+      result.cards.map((c) => c.resource.attributes?.amount),
+      [3],
+    );
+    await publish(input.seal().assertCurrent);
+    await assert.rejects(
+      (await open()).query('records', {
+        filter: { on: codeRef, eq: { group: 'A' } },
+        page: { size: 10 },
+      }),
+      /unsettled materialized inputs/,
+      'the relevant consumer defers',
+    );
+  });
+
+  test('new unregistered stubs only withhold consumers in their source partition', async (assert) => {
+    const stub = await materializedCard('stub', 2);
+    await sourceProof(stub);
+    await db.execute(
+      `UPDATE boxel_index SET pristine_doc=pristine_doc #- '{meta,publication,outputRevision}' WHERE url=$1`,
+      { bind: [stub] },
+    );
+    await db.execute('DELETE FROM lattice_owners WHERE owner_url=$1', {
+      bind: [stub],
+    });
+    const input = await open();
+    const result = await input.query('other', {
+      filter: { on: codeRef, eq: { group: 'B' } },
+      page: { size: 10 },
+    });
+    assert.strictEqual(result.cards.length, 0);
+    await publish(input.seal().assertCurrent);
+    await assert.rejects(
+      (await open()).query('mine', {
+        filter: { on: codeRef, eq: { group: 'A' } },
+        page: { size: 10 },
+      }),
+      /unsettled materialized inputs/,
+    );
+  });
+
+  for (const [name, filter] of Object.entries<Filter>({
+    'OR with an unknown computed branch': {
+      on: codeRef,
+      any: [{ eq: { group: 'B' } }, { range: { amount: { gt: 10 } } }],
+    },
+    NOT: { on: codeRef, not: { eq: { group: 'A' } } },
+    'computed field also listed as source': {
+      on: codeRef,
+      eq: { amount: 'large' },
+    },
+  }))
+    test('source pruning preserves ' + name, async (assert) => {
+      const url = await materializedCard('feeder', 2);
+      await sourceProof(url, { group: 'string', amount: 'string' });
+      await db.execute(
+        'UPDATE lattice_owners SET dirty_generation=5 WHERE owner_url=$1',
+        { bind: [url] },
+      );
+      await assert.rejects(
+        (await open()).query('records', { filter, page: { size: 10 } }),
+        /unsettled materialized inputs/,
+      );
+    });
+
+  test('string-array source membership and OR use the same conservative scope', async (assert) => {
+    const url = await materializedCard('feeder', 2);
+    await sourceProof(url, { group: 'string', members: 'strings' });
+    await db.execute(
+      `UPDATE boxel_index SET search_doc=jsonb_set(search_doc,'{members}','["alice","bob"]') WHERE url=$1`,
+      { bind: [url] },
+    );
+    await db.execute(
+      'UPDATE lattice_owners SET dirty_generation=5 WHERE owner_url=$1',
+      { bind: [url] },
+    );
+    const input = await open();
+    const absent = await input.query('other', {
+      filter: {
+        on: codeRef,
+        any: [{ eq: { members: 'charlie' } }, { in: { group: ['B', 'C'] } }],
+      },
+      page: { size: 10 },
+    });
+    assert.strictEqual(absent.cards.length, 0);
+    await publish(input.seal().assertCurrent);
+    await assert.rejects(
+      (await open()).query('mine', {
+        filter: {
+          on: codeRef,
+          any: [
+            { eq: { group: 'B' } },
+            { in: { members: ['charlie', 'bob'] } },
+          ],
+        },
+        page: { size: 10 },
+      }),
+      /unsettled materialized inputs/,
+    );
+    await sourceProof(url, { group: 'strings' });
+    await assert.rejects(
+      (await open()).query('mismatch', {
+        filter: { on: codeRef, eq: { group: 'B' } },
+        page: { size: 10 },
+      }),
+      /unsettled materialized inputs/,
+      'different schema arity cannot authorize exclusion',
+    );
+  });
+
+  test('source partition receipts still reject code changes and entrants before ordinary publication', async (assert) => {
+    const url = await materializedCard('feeder', 2);
+    await sourceProof(url);
+    const input = await open();
+    await input.query('other', {
+      filter: { on: codeRef, eq: { group: 'B' } },
+      page: { size: 10 },
+    });
+    const receipt = input.seal();
+    await db.execute(
+      `UPDATE boxel_index SET search_doc=jsonb_set(search_doc,'{group}','"B"') WHERE url=$1`,
+      { bind: [url] },
+    );
+    await db.execute(
+      'UPDATE lattice_owners SET dirty_generation=5 WHERE owner_url=$1',
+      { bind: [url] },
+    );
+    await assert.rejects(
+      publish(receipt.assertCurrent),
+      /unsettled materialized inputs/,
+    );
+    await db.execute(
+      `UPDATE boxel_index SET search_doc=jsonb_set(search_doc,'{group}','"A"') WHERE url=$1`,
+      { bind: [url] },
+    );
+    await db.execute(
+      `UPDATE lattice_owners SET definition_revision='obsolete' WHERE owner_url=$1`,
+      { bind: [url] },
+    );
+    await assert.rejects(
+      (await open()).query('other', {
+        filter: { on: codeRef, eq: { group: 'B' } },
+        page: { size: 10 },
+      }),
+      /unsettled materialized inputs/,
+      'obsolete code cannot authorize exclusion',
+    );
   });
 
   test('a dirty nonmatching feeder cannot turn into a confirmed empty query result', async (assert) => {

@@ -19,6 +19,9 @@ export interface PublicationReceipt {
   state: 'pending' | 'ready';
   computedFields: string[];
   queryFields: string[];
+  // Native source-only primitives, independent of computed input progress.
+  // Unknown/legacy producers omit this and retain conservative readiness.
+  sourceFields?: Record<string, 'string' | 'strings'>;
   watches: Array<{ fieldPath: string; query: Query }>;
   validatedThrough: number;
   outputRevision?: number;
