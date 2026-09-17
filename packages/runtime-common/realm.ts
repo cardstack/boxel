@@ -19,6 +19,7 @@ import type { SearchOpts } from './search-utils.ts';
 import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
 import {
   applyServerSearchPageBound,
+  assembledLinkResourceBudget,
   isItemLegSearch,
   runWithSearchTimeBudget,
   SearchBoundError,
@@ -193,18 +194,42 @@ import {
   type LooseCardResource,
   type FileMetaResource,
 } from './index.ts';
-import { runOperation } from './card-operations/dispatch.ts';
+import {
+  canonicalizeTarget,
+  newOperationScope,
+  resolveOperation,
+  runOperation,
+} from './card-operations/dispatch.ts';
 import type {
   OperationCore,
+  OperationScope,
   OperationStoredFile,
   OperationStoredFileMeta,
 } from './card-operations/dispatch.ts';
 import {
+  answered,
+  assertTravelsInEnvelope,
+  atEntry,
+  batchEntryFor,
+  carriesOperationsExt,
+  errorsDocument,
+  isWrite,
+  needsActor,
+  paramsFor,
+  parseOperationsEnvelope,
+  readResult,
+  targetFor,
+  writeResult,
+  type EnvelopeEntry,
+  type EnvelopeResult,
+  type ResolvedEnvelopeEntry,
+} from './card-operations/envelope.ts';
+import {
+  OperationFailure,
   isDocumentResult,
   isHeadResult,
   isOperationFailure,
   isSourceResult,
-  type OperationFailure,
   type OperationRequest,
   type OperationResult,
   type OperationSourceResult,
@@ -618,6 +643,19 @@ const SOURCE_ETAG_VARIANT = 'source';
 // relationship ids) in canonical prefix (RRI) form for mapped realms.
 const CARD_JSON_ETAG_VARIANT = 'card-rri';
 
+// The variant the card+json validator carries, with the assembled-resource
+// budget folded in. The budget decides which cards come back with a clipped
+// closure and what a clipped one contains, and it is settable per server, so
+// changing it changes bodies while `indexed_at`, the realm-info hash and the
+// screenshots fingerprint all stand still. That is the case the constant above
+// exists for, except that the change arrives by configuration rather than by
+// revision — so the value belongs in the validator rather than in the memory of
+// whoever edits it. One number for the process, so it fragments no cache: every
+// response at a given build and setting shares it.
+function cardJsonEtagVariant(): string {
+  return `${CARD_JSON_ETAG_VARIANT}-lb${assembledLinkResourceBudget()}`;
+}
+
 // Postgres NOTIFY channel for cross-instance invalidation of #sourceCache /
 // #transpiledModuleCache entries on file writes. Two payload shapes:
 //
@@ -895,14 +933,14 @@ function buildEtag(
 // fields expanded, because nothing reads either off a write response.
 //
 // These three take different validators because a client holding one must not
-// be 304'd to another's body. They are not the only way a body can vary at
-// one `indexed_at`: a read from inside a prerender leaves query-backed fields
-// unexpanded while still side-loading static links, and that body shares
-// `full`'s validator deliberately — it is never served to a client that
-// caches, and the response cache separates it by folding
-// `skipQueryBackedExpansion` into its own key rather than into the ETag.
-// Adding a member here is the wrong move for a variation the validator does
-// not have to carry.
+// be 304'd to another's body. The `full` shape splits once more below, on
+// whether the assembled-resource budget bounded the closure it carries, since
+// a bounded body and an exempt one differ at one `indexed_at`. Query-backed
+// expansion gets no member here: a read from inside a prerender leaves those
+// fields unexpanded, but that body is never served to a client that caches,
+// and the response cache separates it by folding `skipQueryBackedExpansion`
+// into its own key rather than into the ETag. Adding a member here is the
+// wrong move for a variation the validator does not have to carry.
 type CardJsonShape = 'full' | 'links-only' | 'write-echo';
 
 function buildCardJsonEtag(
@@ -910,6 +948,7 @@ function buildCardJsonEtag(
   realmInfoHash: string | undefined,
   screenshotsFingerprint?: string,
   shape: CardJsonShape = 'full',
+  unboundedAssembly = false,
 ): string | undefined {
   if (indexedAt == null) {
     return undefined;
@@ -924,10 +963,25 @@ function buildCardJsonEtag(
   // rather than per revision. Without it, a client that cached a narrower
   // shape would be 304'd to it when it later asks for the full one, and the
   // shapes would be reachable under one key in the response cache.
-  let variant =
-    shape === 'full'
-      ? CARD_JSON_ETAG_VARIANT
-      : `${CARD_JSON_ETAG_VARIANT}-${shape}`;
+  //
+  // A full read is the only shape that assembles a link closure, so it is the
+  // only one the assembled-resource budget can move — and it splits again on
+  // whether that budget applied. An assembly exempt from the budget carries its
+  // whole closure at any ceiling, so it is named as such rather than by a
+  // number that does not bind it: naming the exemption leaves an exempt
+  // response's validator untouched by a retune, which cannot change its body,
+  // and keeps the two shapes from sharing a validator — which would let a
+  // conditional request be answered with the other shape's body. That is the
+  // hazard the exemption exists to prevent, since an exempt read is a render's,
+  // and a clipped closure reused by one is baked into cached HTML.
+  let variant: string;
+  if (shape !== 'full') {
+    variant = `${CARD_JSON_ETAG_VARIANT}-${shape}`;
+  } else if (unboundedAssembly) {
+    variant = `${CARD_JSON_ETAG_VARIANT}-lb-off`;
+  } else {
+    variant = cardJsonEtagVariant();
+  }
   return `"${base}:${variant}"`;
 }
 
@@ -976,6 +1030,7 @@ function buildEntryHtmlEtag(
   doc: EntrySingleDocument,
   realmInfoHash: string | undefined,
   resolveLinksOnly = false,
+  unboundedAssembly = false,
 ): string {
   let indexGeneration = doc.data.meta?.generation ?? 0;
   let htmlIds = doc.data.relationships.html?.data ?? [];
@@ -994,6 +1049,20 @@ function buildEntryHtmlEtag(
   }
   if (doc.data.relationships.item && resolveLinksOnly) {
     base = `${base}:links-only`;
+  }
+  // An item carries a link closure, and the assembled-resource budget decides
+  // how much of one — so a response bearing an item is a different body at a
+  // different budget while both generations stand still. This validator has no
+  // constant component to hang that on the way the card+json one does, so the
+  // budget is folded in directly. A pure-html response assembles no closure, and
+  // neither does a links-only item, so neither carries the component. An item
+  // assembled exempt from the budget carries its whole closure at any ceiling,
+  // so it is named as such rather than by a number that does not bind it —
+  // which is also what keeps it from sharing a validator with the bounded shape.
+  if (doc.data.relationships.item && !resolveLinksOnly) {
+    base = unboundedAssembly
+      ? `${base}:lb-off`
+      : `${base}:lb${assembledLinkResourceBudget()}`;
   }
   return `"${base}"`;
 }
@@ -1906,6 +1975,38 @@ export class Realm {
         '/_atomic',
         SupportedMimeType.JSONAPI,
         this.handleAtomicOperations.bind(this),
+      )
+      // The operations envelope, under the media type that carries its
+      // extension and under the plain JSON:API one it extends. Both reach the
+      // same handler, which reads the `ext` parameter itself: matching only the
+      // extended spelling would leave a body sent as plain
+      // `application/vnd.api+json` — the near miss a client makes — falling
+      // through to a path nothing serves, and answering "no such route" to a
+      // request that named this one.
+      //
+      // The method chooses the permission the realm checks, so the two verbs
+      // are what separates a batch that may write from one that may not:
+      // `POST` needs realm write, `QUERY` needs realm read, and a `QUERY`
+      // carrying a write is refused by the handler.
+      .post(
+        '/_operations',
+        SupportedMimeType.BoxelOperations,
+        this.handleOperations.bind(this),
+      )
+      .query(
+        '/_operations',
+        SupportedMimeType.BoxelOperations,
+        this.handleOperations.bind(this),
+      )
+      .post(
+        '/_operations',
+        SupportedMimeType.JSONAPI,
+        this.handleOperations.bind(this),
+      )
+      .query(
+        '/_operations',
+        SupportedMimeType.JSONAPI,
+        this.handleOperations.bind(this),
       )
       .post(
         '/_cancel-indexing-job',
@@ -4132,6 +4233,263 @@ export class Realm {
         });
       },
     );
+  }
+
+  // The operations envelope: a batch of named operations, committed all or
+  // nothing.
+  //
+  // This is the second front door onto the operation core and it adds no
+  // behavior of its own. It reads the batch off the wire, asks the core which
+  // behavior each entry's name resolves to for its target, runs the reads and
+  // hands the writes to the coordinator — the same `runOperation` and
+  // `commitBatch` the card verbs dispatch into, so the two transports cannot
+  // drift into meaning different things by the same operation.
+  //
+  // **Access posture.** Operations are identity-aware but not access-enforced.
+  // The realm's own read/write permission is the whole of what is checked: any
+  // caller who may write the realm may invoke any operation that writes it,
+  // and any caller who may read it may invoke any read. An operation's program
+  // can read `actor()` and an `assert` can refuse on what it finds, but the
+  // realm verifies no claim beyond the one its permission check already made,
+  // and refuses nothing on the strength of who is asking. Treat every
+  // operation's result as reachable by any permitted caller of this realm.
+  private async handleOperations(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    try {
+      return await this.#runOperationsBatch(request, requestContext);
+    } catch (err: unknown) {
+      if (!isOperationFailure(err)) {
+        throw err;
+      }
+      // A batch is all-or-nothing, so the first refusal is the whole answer:
+      // nothing was written, no index job was enqueued and no event was
+      // broadcast, whichever stage produced it.
+      return this.#operationsResponse(
+        errorsDocument(err.error),
+        err.error.status,
+        requestContext,
+      );
+    }
+  }
+
+  async #runOperationsBatch(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    if (!carriesOperationsExt(request.headers.get('Content-Type'))) {
+      throw new OperationFailure({
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid content type',
+        detail:
+          `a batch of operations is sent as ` +
+          `"${SupportedMimeType.BoxelOperations}"; this request's ` +
+          `content type does not name that extension`,
+      });
+    }
+    let body: unknown;
+    try {
+      body = JSON.parse(await request.text());
+    } catch {
+      throw new OperationFailure({
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid operations envelope',
+        detail: `the request body is not valid JSON`,
+      });
+    }
+    let entries = parseOperationsEnvelope(body, this.url, {
+      resolveIdentifier: (href) => this.#resolveAtomicHref(href),
+    });
+    let caller = this.#callerOf(request, requestContext);
+    // One row peek per target for the whole resolution pass: entries often
+    // name the same card, and which behavior a name resolves to is read off
+    // the target's stored type.
+    let scope = newOperationScope(this.operationCore);
+    // Settled rather than raced, so the entry a refusal names is the earliest
+    // one the caller got wrong rather than whichever index read came back
+    // first. A batch with two bad entries would otherwise report a different
+    // one run to run.
+    let outcomes = await Promise.allSettled(
+      entries.map((entry) => this.#resolveEnvelopeEntry(entry, scope)),
+    );
+    let refused = outcomes.find((outcome) => outcome.status === 'rejected');
+    if (refused) {
+      throw refused.reason;
+    }
+    let resolved = outcomes.map(
+      (outcome) =>
+        (outcome as PromiseFulfilledResult<ResolvedEnvelopeEntry>).value,
+    );
+
+    // `QUERY` is the read-only spelling, and the realm derives the permission
+    // it checks from the method — so a write reaching here arrived on a
+    // request that was only authorized to read. Refused before anything is
+    // staged rather than let through to a permission check that already
+    // passed for the wrong question.
+    if (request.method === 'QUERY') {
+      let write = resolved.find(({ definition }) => isWrite(definition.base));
+      if (write) {
+        throw new OperationFailure({
+          ...(write.entry.href ? { id: write.entry.href } : {}),
+          status: 400,
+          code: 'wrong-entry-point',
+          title: 'Write in a read-only batch',
+          detail:
+            `operation "${write.entry.name}" writes, and a QUERY batch is ` +
+            `authorized to read; send a batch that writes as a POST`,
+          meta: { entry: write.entry.index },
+        });
+      }
+    }
+
+    // An anonymous caller on a realm anyone may read or write has no identity
+    // for an operation to read, and whether an operation reads one is settled
+    // by its stored definition — so the batch is refused here, before any of
+    // it runs, rather than part-way through by whichever entry reached the
+    // actor first. No identity is invented to stand in: a fabricated id would
+    // be written into cards and compared in filters as though someone had
+    // acted.
+    if (!caller.actor) {
+      let needing = resolved.find(({ definition }) => needsActor(definition));
+      if (needing) {
+        throw new OperationFailure({
+          ...(needing.entry.href ? { id: needing.entry.href } : {}),
+          status: 401,
+          code: 'actor-required',
+          title: 'Operation needs an identity',
+          detail:
+            `operation "${needing.entry.name}" reads the invoking actor, and ` +
+            `this request authenticated nobody`,
+          meta: { entry: needing.entry.index },
+        });
+      }
+    }
+
+    // Reads run first and against the state the batch started from, which is
+    // what "an entry sees pre-batch state" means for a mixed batch: a read
+    // entry never observes what a write entry in the same batch stages, and
+    // reading before the coordinator takes the write lock is what keeps a read
+    // from waiting on one.
+    let results: (EnvelopeResult | undefined)[] = new Array(entries.length);
+    for (let { entry, target, definition } of resolved) {
+      if (isWrite(definition.base)) {
+        continue;
+      }
+      let result: OperationResult;
+      try {
+        result = await runOperation(this.operationCore, {
+          target,
+          name: entry.name,
+          ...(entry.data ? { params: paramsFor(entry) } : {}),
+          ...caller,
+        });
+      } catch (err: unknown) {
+        throw atEntry(err, entry.index);
+      }
+      results[entry.index] = readResult(entry, result);
+    }
+
+    let writes = resolved.filter(({ definition }) => isWrite(definition.base));
+    if (writes.length > 0) {
+      let staged = writes.map(({ entry, definition }) => {
+        try {
+          return batchEntryFor(entry, definition);
+        } catch (err: unknown) {
+          throw atEntry(err, entry.index);
+        }
+      });
+      // Every staged entry carries the position the caller sent it under, so
+      // a refusal from the coordinator names that one rather than the position
+      // it took among the entries that write — in the key, in the key beside
+      // it naming a conflicting entry, and in the prose.
+      let committed = await commitBatch(this.batchCore, staged, {
+        clientRequestId: caller.clientRequestId || null,
+        actor: caller.actor || undefined,
+      });
+      for (let [index, { entry }] of writes.entries()) {
+        results[entry.index] = writeResult(committed[index], (url) =>
+          this.#virtualNetwork.unresolveURL(url),
+        );
+      }
+    }
+
+    return this.#operationsResponse(
+      {
+        // Built by index rather than by mapping the array: an unassigned
+        // position is a hole, `map` skips one, and the hole then serializes
+        // as `null` — which is what a delete reports.
+        'atomic:results': Array.from({ length: entries.length }, (_, index) =>
+          answered(results[index], index),
+        ),
+      },
+      200,
+      requestContext,
+    );
+  }
+
+  // Which behavior one entry's name means for its target, labelled with the
+  // entry's position.
+  //
+  // The name is resolved against the target's own definition, never read off
+  // the wire — the envelope carries the operation's name, and what a `delete`
+  // does is whatever the card's type says it does.
+  async #resolveEnvelopeEntry(
+    entry: EnvelopeEntry,
+    scope: OperationScope,
+  ): Promise<ResolvedEnvelopeEntry> {
+    try {
+      // Canonicalized once, here, and everything downstream sees the result:
+      // the definition is resolved from it, the read runs against it, and the
+      // staged entry writes it. A trailing slash, a query string and a
+      // fragment all name the card they hang off, and the index is read by
+      // exact URL — so resolving the raw spelling would report a declared
+      // operation as unknown on a card whose type declares it, and would leave
+      // the entry's result carrying an id no other surface spells that way.
+      let target = canonicalizeTarget(
+        this.operationCore,
+        targetFor(entry, this.url),
+      );
+      let canonical =
+        target.kind === 'instance' && target.url !== entry.href
+          ? { ...entry, href: target.url }
+          : entry;
+      let definition = await resolveOperation(
+        this.operationCore,
+        target,
+        canonical.name,
+        scope,
+      );
+      assertTravelsInEnvelope(canonical, definition);
+      return { entry: canonical, target, definition };
+    } catch (err: unknown) {
+      throw atEntry(err, entry.index);
+    }
+  }
+
+  // A batch's answer is never HTTP-cached. It is not a resource with a
+  // validator: the same request run twice writes twice, and a read entry's
+  // document is served without the index-time validator the card+json `GET`
+  // builds — so there is nothing here a conditional request could be answered
+  // against, and no ETag is emitted for one to be compared with.
+  #operationsResponse(
+    body: unknown,
+    status: number,
+    requestContext: RequestContext,
+  ): Response {
+    return createResponse({
+      body: JSON.stringify(body, null, 2),
+      init: {
+        status,
+        headers: {
+          'content-type': SupportedMimeType.BoxelOperations,
+          'cache-control': 'no-store',
+        },
+      },
+      requestContext,
+    });
   }
 
   // we track our own writes so that we can eliminate echoes in the file watcher
@@ -8638,11 +8996,28 @@ export class Realm {
   #cardJsonLinkShape(request: Request): {
     skipQueryBackedExpansion: boolean;
     resolveLinksOnly: boolean;
+    skipLinkAssemblyBudget: boolean;
   } {
+    let duringPrerender = isDuringPrerenderRequest(request);
     return {
-      skipQueryBackedExpansion: isDuringPrerenderRequest(request),
+      skipQueryBackedExpansion: duringPrerender,
       resolveLinksOnly:
         this.#decideLinkShape(request, 'single-row')?.mode === 'links-only',
+      // The assembled-resource budget bounds live reads. This branch exempts a
+      // read carrying the during-prerender marker, for the same reason the
+      // prerendered-HTML leg is exempt from the page and time bounds: what a
+      // render assembles is baked into cached HTML, so a ceiling that clipped
+      // it would serve a short closure from cache long after the pressure that
+      // justified it had passed.
+      //
+      // It is defensive rather than load-bearing. No caller attaches that
+      // marker to a card+json request, so the exemption a render relies on is
+      // the one on the card+html entry leg, which does receive it and does run
+      // the assembly pass. The branch stays so it is correct if the marker ever
+      // arrives here. The validator names the exemption rather than the
+      // ceiling, so an exempt body and a bounded one never share one — see
+      // `buildCardJsonEtag`.
+      skipLinkAssemblyBudget: duringPrerender,
     };
   }
 
@@ -8826,8 +9201,11 @@ export class Realm {
     let url = this.paths.fileURL(localPath);
     let start = Date.now();
     try {
-      let { skipQueryBackedExpansion, resolveLinksOnly } =
-        this.#cardJsonLinkShape(request);
+      let {
+        skipQueryBackedExpansion,
+        resolveLinksOnly,
+        skipLinkAssemblyBudget,
+      } = this.#cardJsonLinkShape(request);
       let result: OperationResult;
       try {
         result = await runOperation(
@@ -8837,6 +9215,8 @@ export class Realm {
             name: 'read',
             ...this.#callerOf(request, requestContext),
           },
+          // No budget flag: a headers-only read assembles no closure, so there
+          // is nothing for it to bound.
           { headersOnly: true, skipQueryBackedExpansion, resolveLinksOnly },
         );
       } catch (e) {
@@ -8876,6 +9256,7 @@ export class Realm {
             this.getCachedRealmInfoHash(),
             screenshotsEtagFingerprint(result.screenshots),
             resolveLinksOnly ? 'links-only' : 'full',
+            skipLinkAssemblyBudget,
           );
       let cacheControl = this.cardJsonCacheControl(requestContext);
       let lastModified: Record<string, string> =
@@ -8999,8 +9380,11 @@ export class Realm {
       // has to describe the shape the assembly will produce, and that
       // validator is what the conditional request and the response cache are
       // both keyed on.
-      let { skipQueryBackedExpansion, resolveLinksOnly } =
-        this.#cardJsonLinkShape(request);
+      let {
+        skipQueryBackedExpansion,
+        resolveLinksOnly,
+        skipLinkAssemblyBudget,
+      } = this.#cardJsonLinkShape(request);
 
       // The `instance()` peek, which yields this card's validator. It runs
       // for a client that sent a validator of its own to compare against,
@@ -9055,6 +9439,7 @@ export class Realm {
             realmInfoHash,
             screenshotsEtagFingerprint(instanceEntry.screenshots),
             resolveLinksOnly ? 'links-only' : 'full',
+            skipLinkAssemblyBudget,
           );
         }
         if (
@@ -9095,6 +9480,7 @@ export class Realm {
           localPath,
           skipQueryBackedExpansion,
           resolveLinksOnly,
+          skipLinkAssemblyBudget,
           peekEtag,
           this.#callerOf(request, requestContext),
         );
@@ -9168,6 +9554,7 @@ export class Realm {
     localPath: LocalPath,
     skipQueryBackedExpansion: boolean,
     resolveLinksOnly: boolean,
+    skipLinkAssemblyBudget: boolean,
     keyEtag: string | undefined,
     caller: { actor: string; clientRequestId: string },
   ): Promise<CardJsonAssembly> {
@@ -9197,7 +9584,7 @@ export class Realm {
           actor: caller.actor,
           clientRequestId: caller.clientRequestId,
         },
-        { skipQueryBackedExpansion, resolveLinksOnly },
+        { skipQueryBackedExpansion, resolveLinksOnly, skipLinkAssemblyBudget },
       );
     } catch (e) {
       if (!isOperationFailure(e)) {
@@ -9248,6 +9635,7 @@ export class Realm {
           this.getCachedRealmInfoHash(),
           screenshotsEtagFingerprint(headers.screenshots),
           resolveLinksOnly ? 'links-only' : 'full',
+          skipLinkAssemblyBudget,
         );
     return {
       kind: 'document',
@@ -9440,7 +9828,9 @@ export class Realm {
       { htmlQuery, fieldset, kind },
       {
         loadLinks: true,
-        ...(duringPrerender ? { cacheOnlyDefinitions: true } : {}),
+        ...(duringPrerender
+          ? { cacheOnlyDefinitions: true, skipLinkAssemblyBudget: true }
+          : {}),
         ...(resolveLinksOnly ? { resolveLinksOnly: true } : {}),
       },
     );
@@ -9455,6 +9845,7 @@ export class Realm {
       doc,
       this.getCachedRealmInfoHash(),
       resolveLinksOnly,
+      duringPrerender,
     );
     let ifNoneMatch = request.headers.get('if-none-match');
     if (ifNoneMatch && ifNoneMatchMatches(ifNoneMatch, etag)) {

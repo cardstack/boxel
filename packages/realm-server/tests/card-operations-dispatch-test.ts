@@ -480,9 +480,7 @@ module(basename(import.meta.filename), function () {
     test('a file def carries the two writes that work on its bytes', async function (assert) {
       // A file's metadata is content-derived and read-only, so what a write on
       // one reaches is the bytes: an `update` replaces them wholesale, and an
-      // `appendLine` adds a line to the end of a text file. Appending a line is
-      // the one behavior that goes the other way — a line appended to a card's
-      // stored file leaves behind something that is no longer a card.
+      // `appendLine` adds a line to the end of a text file.
       let file = stub();
       for (let name of ['update', 'appendLine']) {
         let resolved = await resolveOperation(file.core, FILE, name);
@@ -492,13 +490,25 @@ module(basename(import.meta.filename), function () {
           `a file carries "${name}", undeclared, as a base operation`,
         );
       }
-
+    });
+    test('appending a line is admitted for any instance, whatever its URL says', async function (assert) {
+      // A line appended to a card's stored file leaves behind something that is
+      // no longer a card, so this is the one write a card must not carry — and
+      // it is refused by `stageAppendLine`, not here. Dispatch classifies an
+      // instance target by its extension, and the registered-extension table
+      // does not name every stored file: a `.log`, a `.css`, a `.yml` holds
+      // bytes and serves them, and each classifies as a card. Refusing here
+      // would turn those away before the only code that can tell them from a
+      // card — the executor, which reads whether the path holds a card's
+      // `.json` and what content type its bytes are.
       let card = stub();
-      let onCard = await refusalFrom(() =>
-        resolveOperation(card.core, CARD, 'appendLine'),
+      let resolved = await resolveOperation(card.core, CARD, 'appendLine');
+      assert.strictEqual(
+        resolved.base,
+        'appendLine',
+        'the behavior resolves, and what it may be applied to is the ' +
+          "executor's to decide",
       );
-      assert.strictEqual(onCard.code, 'operation-not-allowed');
-      assert.strictEqual(onCard.status, 405);
     });
     test('a write is carried out by the coordinator rather than by this dispatch', async function (assert) {
       // Every write takes the realm's write lock once for the whole batch it

@@ -8,6 +8,7 @@ import {
   checkExpressionProgram,
   checkMutationProgram,
   paramKeysRead,
+  callsActor,
   usesVolatileCall,
 } from './bxl-emit.ts';
 import { isDefinitionFreeBaseOperation } from './types.ts';
@@ -436,7 +437,43 @@ async function lowerOperation(
     operation.output,
   ].every((program) => !program || !usesVolatileCall(program.source));
 
+  if (readsActor(operation)) {
+    operation.readsActor = true;
+  }
+
   return operation;
+}
+
+// Whether anything this operation runs or fills reads the invoking actor.
+//
+// Asked here, where the whole lowered operation is in hand, rather than at
+// invocation: the answer cannot change between one request and the next, and
+// every member that can carry an actor is in front of us — the three programs,
+// and the two marker-carrying templates. A caller asking the same question
+// from a request would have to remember this list, and would be reading
+// program text on a path that must not reach the BXL package at all.
+function readsActor(operation: OperationDefinition): boolean {
+  for (let program of [operation.program, operation.input, operation.output]) {
+    if (program && callsActor(program.source)) {
+      return true;
+    }
+  }
+  return [operation.fill, operation.items].some(
+    (template) => template !== undefined && templateReadsActor(template),
+  );
+}
+
+function templateReadsActor(template: OperationTemplate): boolean {
+  if (Array.isArray(template)) {
+    return template.some(templateReadsActor);
+  }
+  if (template === null || typeof template !== 'object') {
+    return false;
+  }
+  if ((template as Record<string, unknown>).$ref === 'actor') {
+    return true;
+  }
+  return Object.values(template).some(templateReadsActor);
 }
 
 // ---------------------------------------------------------------------------

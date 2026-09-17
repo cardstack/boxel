@@ -164,3 +164,31 @@ export function paramKeysRead(source: string): string[] {
   }
   return keys;
 }
+
+// Whether a program reads the invoking actor. Read the same way the two scans
+// above read their names, and for the same reason: one token pass covers both
+// program flavors, a name inside a string literal is a `str` token and never
+// matches, and the neighbours rule out a field access (`.actor`) and an object
+// key (`{actor: 1}`).
+//
+// A program this cannot tokenize answers false. Such a program cannot run
+// either, and it is refused for being unreadable — reporting it as needing an
+// identity would answer a question about the caller that the program's own
+// text never raised.
+export function callsActor(source: string): boolean {
+  let tokens: { type: string; value: unknown }[];
+  try {
+    tokens = tokenizeNativeJq(source, { readableSyntax: false }) as {
+      type: string;
+      value: unknown;
+    }[];
+  } catch {
+    return false;
+  }
+  return tokens.some((token, index) => {
+    if (token.type !== 'ident' || String(token.value) !== 'actor') {
+      return false;
+    }
+    return tokens[index - 1]?.value !== '.' && tokens[index + 1]?.value !== ':';
+  });
+}

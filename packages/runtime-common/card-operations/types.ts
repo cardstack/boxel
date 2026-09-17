@@ -129,6 +129,18 @@ export interface OperationDefinition {
   // holds — a non-deterministic one would land a different value locally than
   // the server computes, and reconciliation would report a phantom conflict.
   deterministic: boolean;
+  // Whether carrying this operation out needs to know who the caller is:
+  // whether any program it runs calls `actor()`, or any template it fills
+  // carries an actor marker. Recorded here rather than asked at invocation
+  // because it is a property of the declaration, fixed from the moment the
+  // module is indexed — so a transport can refuse a request that authenticated
+  // nobody before any of the batch runs, instead of part-way through by
+  // whichever entry reached the actor first.
+  //
+  // Absent means no, which is also what an entry built before this was
+  // recorded reports. A definition-cache entry is rebuilt on demand, so such
+  // an entry is replaced rather than corrected.
+  readsActor?: true;
   // Set when lowering found problems. The operation is stored either way, so
   // invoking it reports what is wrong with it rather than "unknown
   // operation".
@@ -523,6 +535,10 @@ export type OperationErrorCode =
   // The request named a `baseVersion` the target is no longer at, on an
   // operation that requires the base to match.
   | 'version-conflict'
+  // The operation reads the invoking actor and the request authenticated
+  // nobody. Distinct from `invalid-params` because nothing the caller sent is
+  // wrong: the remedy is credentials, which is what its 401 says.
+  | 'actor-required'
   // The bytes an operation would store are over the realm's ceiling for a
   // card or a file of that kind. Separate from `invalid-params` because the
   // payload is well formed and the remedy is to send less of it, and because
