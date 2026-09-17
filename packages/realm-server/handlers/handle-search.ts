@@ -154,6 +154,11 @@ export default function handleSearch(opts: {
     // assembly pass entirely: the host re-resolves every result from its raw
     // card+source file, so the transitive `included[]` expansion is
     // throwaway work in this path. Same gating as `cacheOnlyDefinitions`.
+    //
+    // This is also what keeps the assembled-resource budget off a render's
+    // search: the pass the budget bounds does not run at all here, so there is
+    // nothing to exempt. The budget's exemption is carried by the routes that
+    // do run the pass during a render — the card+html entry leg.
     let omitIncluded = cacheOnlyDefinitions;
     let jobPriority = sanitizeJobPriorityHeader(
       ctxt.get(PRERENDER_JOB_PRIORITY_HEADER),

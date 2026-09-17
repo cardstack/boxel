@@ -154,8 +154,6 @@ export const EXTRA_TOKENS_PRICING: Record<number, number> = {
   80000: 100, // in USD
 };
 
-export const maxLinkDepth = 5;
-
 export const DEFAULT_PERMISSIONS = Object.freeze([
   'read',
   'write',

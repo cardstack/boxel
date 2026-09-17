@@ -132,6 +132,7 @@ async function readDocument(
     loadLinks: true,
     skipQueryBackedExpansion: opts.skipQueryBackedExpansion ?? false,
     resolveLinksOnly: opts.resolveLinksOnly ?? false,
+    skipLinkAssemblyBudget: opts.skipLinkAssemblyBudget ?? false,
   });
   if (result === undefined) {
     // A path with no instance row may still hold bytes: a file asked for as
