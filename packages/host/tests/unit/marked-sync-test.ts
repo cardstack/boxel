@@ -133,6 +133,83 @@ ${REPLACE_MARKER}
     );
   });
 
+  test('splitCodePatchFencesGluedToProse leaves a glued fence inside a patch alone', function (assert) {
+    // A patch that writes a document about the patch format carries the
+    // anti-example inside its own halves. Splitting it there would change
+    // the file the model asked for, or stop the SEARCH half matching.
+    let body = `Here is the doc.
+\`\`\`markdown
+https://example.com/realm/skill.md
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+Wrong — the fence must start a line:
+
+Here it is!\`\`\`json
+https://example.com/realm/a.json (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+{}
+${REPLACE_MARKER}
+\`\`\`
+
+${REPLACE_MARKER}
+\`\`\`
+`;
+    assert.strictEqual(splitCodePatchFencesGluedToProse(body), body);
+  });
+
+  test('splitCodePatchFencesGluedToProse treats the fence it produces as an opener', function (assert) {
+    // The split fence opens a block, so a glued anti-example inside that
+    // block's content is not split a second time.
+    let patchTail = `https://example.com/realm/skill.md (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+Do not do this!\`\`\`json
+https://example.com/realm/a.json (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+{}
+${REPLACE_MARKER}
+\`\`\`\`
+`;
+    assert.strictEqual(
+      splitCodePatchFencesGluedToProse(
+        `Writing it.\`\`\`\`markdown\n${patchTail}`,
+      ),
+      `Writing it.\n\`\`\`\`markdown\n${patchTail}`,
+    );
+  });
+
+  test('splitCodePatchFencesGluedToProse splits a four-backtick fence before its first backtick', function (assert) {
+    let tail = `https://example.com/realm/a.json (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+{}
+${REPLACE_MARKER}
+\`\`\`\`
+`;
+    assert.strictEqual(
+      splitCodePatchFencesGluedToProse(`Writing now!\`\`\`\`json\n${tail}`),
+      `Writing now!\n\`\`\`\`json\n${tail}`,
+    );
+  });
+
+  test('splitCodePatchFencesGluedToProse keeps CRLF line endings on both produced lines', function (assert) {
+    let tail = [
+      'https://example.com/realm/a.json (new)',
+      SEARCH_MARKER,
+      SEPARATOR_MARKER,
+      '{}',
+      REPLACE_MARKER,
+      '```',
+      '',
+    ].join('\r\n');
+    assert.strictEqual(
+      splitCodePatchFencesGluedToProse(`Go!\`\`\`json\r\n${tail}`),
+      `Go!\r\n\`\`\`json\r\n${tail}`,
+    );
+  });
+
   test('a patch that writes markdown with fenced code inside renders as one block, and the patch after it keeps its url', function (assert) {
     // Without widening, the first bare ``` inside the plan closes the patch's
     // fence; the fence meant to close the patch then opens a block that

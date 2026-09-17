@@ -92,6 +92,47 @@ const CODE_FENCE_PATTERN = /^(\s*)(`{3,}|~{3,})(.*)\r?$/;
 // list marker.
 const LIST_PREFIXED_CODE_FENCE_PATTERN =
   /^(\s*)(?:[-*+]|\d{1,9}[.)])\s+(`{3,}|~{3,})(.*)\r?$/;
+// Where a line sits relative to fenced code: it opens a fence, closes one,
+// is content inside one, or is ordinary prose outside any fence. Every pass
+// that rewrites prose asks this before touching a line, so fenced content —
+// which the applier matches against the target file — survives verbatim.
+type FencePosition = 'open' | 'close' | 'inside' | 'outside';
+
+class FenceTracker {
+  private inFence = false;
+  private fenceChar = '';
+  private fenceLength = 0;
+
+  // Feed the next line and learn where it sits. A fence closes only on a run
+  // of the same character at least as long as the one that opened it, with
+  // nothing after it.
+  feed(line: string): FencePosition {
+    if (this.inFence) {
+      let closeMatch = line.match(CODE_FENCE_PATTERN);
+      if (
+        closeMatch &&
+        closeMatch[2][0] === this.fenceChar &&
+        closeMatch[2].length >= this.fenceLength &&
+        closeMatch[3].trim() === ''
+      ) {
+        this.inFence = false;
+        return 'close';
+      }
+      return 'inside';
+    }
+    let openMatch =
+      line.match(CODE_FENCE_PATTERN) ??
+      line.match(LIST_PREFIXED_CODE_FENCE_PATTERN);
+    if (openMatch) {
+      this.inFence = true;
+      this.fenceChar = openMatch[2][0];
+      this.fenceLength = openMatch[2].length;
+      return 'open';
+    }
+    return 'outside';
+  }
+}
+
 // Prefix decorative bullets with a standard list marker so marked treats them
 // as list items — but never inside fenced code blocks. Fenced content must
 // survive rendering verbatim: search/replace patches are extracted back out
@@ -104,31 +145,11 @@ const LIST_PREFIXED_CODE_FENCE_PATTERN =
 // apart needs block context that only the lexer has. Since the patch format
 // is always fenced, indented code blocks are left to the rewrite.
 function normalizeDecorativeBullets(markdown: string): string {
-  let inFence = false;
-  let fenceChar = '';
-  let fenceLength = 0;
+  let fences = new FenceTracker();
   return markdown
     .split('\n')
     .map((line) => {
-      if (inFence) {
-        let closeMatch = line.match(CODE_FENCE_PATTERN);
-        if (
-          closeMatch &&
-          closeMatch[2][0] === fenceChar &&
-          closeMatch[2].length >= fenceLength &&
-          closeMatch[3].trim() === ''
-        ) {
-          inFence = false;
-        }
-        return line;
-      }
-      let openMatch =
-        line.match(CODE_FENCE_PATTERN) ??
-        line.match(LIST_PREFIXED_CODE_FENCE_PATTERN);
-      if (openMatch) {
-        inFence = true;
-        fenceChar = openMatch[2][0];
-        fenceLength = openMatch[2].length;
+      if (fences.feed(line) !== 'outside') {
         return line;
       }
       return line.replace(
@@ -166,21 +187,39 @@ const FILE_URL_LINE_PATTERN = /^\s*https?:\/\/\S+(\s*\(\s*new\s*\))?\s*\r?$/;
 // line break before the fence is missing. Put it back when the two lines after
 // the fence are a file url and the SEARCH marker, which is what makes this a
 // patch rather than prose that happens to end in backticks.
-const FENCE_GLUED_TO_PROSE_PATTERN = /^(.*\S)(`{3,}\w*)\s*(\r?)$/;
+//
+// The prose group is lazy and must end on a character that is neither
+// whitespace nor a backtick, so a four-backtick fence is split before its
+// first backtick rather than after it. Only horizontal whitespace may sit
+// between the fence and the line end, so a CRLF line's `\r` reaches its own
+// group and both produced lines keep it.
+const FENCE_GLUED_TO_PROSE_PATTERN = /^(.*?[^\s`])(`{3,}\w*)[ \t]*(\r?)$/;
 
+//
+// Only prose outside any fenced block is split. A patch that writes a document
+// about the patch format carries this very anti-example inside its own halves;
+// splitting it there would change the file the model asked for, or stop the
+// SEARCH half from matching its target. When a split does fire, the fence line
+// it produces opens a block, and the tracker is told so.
 export function splitCodePatchFencesGluedToProse(markdown: string): string {
   let lines = markdown.split('\n');
-  for (let i = 0; i + 2 < lines.length; i++) {
+  let fences = new FenceTracker();
+  for (let i = 0; i < lines.length; i++) {
+    if (fences.feed(lines[i]) !== 'outside') {
+      continue;
+    }
     let glued = lines[i].match(FENCE_GLUED_TO_PROSE_PATTERN);
     if (
       glued &&
-      !CODE_FENCE_PATTERN.test(lines[i]) &&
+      i + 2 < lines.length &&
       FILE_URL_LINE_PATTERN.test(lines[i + 1]) &&
       SEARCH_MARKER_PATTERN.test(lines[i + 2])
     ) {
       let [, prose, fence, cr] = glued;
-      lines.splice(i, 1, `${prose}${cr}`, `${fence}${cr}`);
+      let fenceLine = `${fence}${cr}`;
+      lines.splice(i, 1, `${prose}${cr}`, fenceLine);
       i++;
+      fences.feed(fenceLine);
     }
   }
   return lines.join('\n');
