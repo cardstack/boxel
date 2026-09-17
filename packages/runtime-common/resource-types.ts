@@ -119,6 +119,19 @@ export type CardResourceMeta = Meta & {
   // writes like `realmInfo`/`realmURL`. The `screenshotURLs` getter on
   // CardDef/FileDef reads this.
   screenshots?: ScreenshotsMeta;
+  // The fingerprint of the `.json` file the realm stores for this card — the
+  // card's write identity, and the base an optimistic client reconciles
+  // against. It moves only when that file is rewritten, so it is stable across
+  // the re-indexes a linked card's change causes.
+  //
+  // Distinct from the HTTP `ETag` on the same response, which tracks the
+  // served document rather than the stored file and is therefore the wrong
+  // thing to hold an edit against — though it is what a conditional write
+  // (`If-Match`) names, because that is a cache validator's job.
+  //
+  // Serve-time output like the keys above: stripped from a write's payload, so
+  // a client echoing back what it was served never persists one.
+  version?: string;
 };
 
 export type FileMetaResourceResourceMeta = Meta & {

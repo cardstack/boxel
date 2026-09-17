@@ -940,6 +940,30 @@ export function notAcceptable(
   );
 }
 
+// The card at the URL is not the one the request's `If-Match` names, so the
+// write is refused before anything is staged. The status is the whole answer a
+// conditional client acts on — it re-reads the card and decides what to do
+// about the edit it was holding — so the body only names which validator was
+// asked for.
+export function preconditionFailed({
+  request,
+  requestContext,
+  id,
+}: {
+  request: Request;
+  requestContext: RequestContext;
+  id: string;
+}): Response {
+  return responseWithError(
+    new CardError(
+      `${request.method} of ${id} requires the card to match ` +
+        `If-Match: ${request.headers.get('if-match')}, and it does not`,
+      { status: 412, id },
+    ),
+    requestContext,
+  );
+}
+
 export function badRequest({
   message,
   requestContext,

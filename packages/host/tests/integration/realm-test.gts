@@ -759,6 +759,7 @@ module('Integration | realm', function (hooks) {
     let ownerCreatedAt = await getFileCreatedAt(realm, 'dir/owner.json');
     let petCreatedAt = await getFileCreatedAt(realm, `Pet/${id}.json`);
     assert.ok(uuidValidate(id), 'card ID is a UUID');
+    delete json.data.meta.version;
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -1126,6 +1127,7 @@ module('Integration | realm', function (hooks) {
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
+    delete json.data.meta.version;
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -1303,6 +1305,7 @@ module('Integration | realm', function (hooks) {
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
+    delete json.data.meta.version;
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -1523,6 +1526,7 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
 
+    delete json.data.meta.version;
     assert.deepEqual(json.data, {
       type: 'card',
       id: `${testRealmURL}jackie`,
@@ -1647,6 +1651,7 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
 
+    delete json.data.meta.version;
     assert.deepEqual(json.data, {
       type: 'card',
       id: `${testRealmURL}jackie`,
@@ -1869,6 +1874,7 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
 
+    delete json.data.meta.version;
     assert.deepEqual(json.data, {
       type: 'card',
       id: `${testRealmURL}jackie`,
@@ -1994,6 +2000,7 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
 
+    delete json.data.meta.version;
     assert.deepEqual(json.data, {
       type: 'card',
       id: `${testRealmURL}jackie`,
@@ -2137,6 +2144,7 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
 
+    delete json.data.meta.version;
     assert.deepEqual(json.data, {
       type: 'card',
       id: `${testRealmURL}jackie`,
@@ -2272,6 +2280,7 @@ module('Integration | realm', function (hooks) {
     let json = await response.json();
     let mangoCreatedAt = await getFileCreatedAt(realm, 'dir/mango.json');
     let marikoCreatedAt = await getFileCreatedAt(realm, 'dir/mariko.json');
+    delete json.data.meta.version;
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -2462,6 +2471,7 @@ module('Integration | realm', function (hooks) {
 
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
+    delete json.data.meta.version;
     assert.deepEqual(json, {
       data: {
         type: 'card',

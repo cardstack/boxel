@@ -87,6 +87,7 @@ import {
   removeFileMeta,
   getCreatedTime,
   getContentMeta,
+  getFileMeta,
   getFileMetaForPaths,
 } from './file-meta.ts';
 import {
@@ -96,6 +97,7 @@ import {
   notAcceptable,
   methodNotAllowed,
   badRequest,
+  preconditionFailed,
   CardError,
   responseWithError,
   formattedError,
@@ -7737,6 +7739,11 @@ export class Realm {
         },
       });
     }
+    // The version the commit just minted, reported by the write that produced
+    // it rather than read back out of `realm_file_meta` — a second read would
+    // answer for whatever the file holds now, which after a concurrent write
+    // is not what this response carries.
+    doc.data.meta.version = result.meta.version;
     this.#serveInstanceIdsAsRRI(doc);
     return createResponse({
       body: JSON.stringify(doc, null, 2),
@@ -7750,6 +7757,69 @@ export class Realm {
       },
       requestContext,
     });
+  }
+
+  // A conditional write: the 412 a `PATCH` or `DELETE` carrying `If-Match`
+  // answers when the card is no longer the one the caller saw, or `undefined`
+  // for a request that may proceed. Called before the commit, so a refused
+  // write stages nothing, enqueues no indexing and broadcasts no event.
+  //
+  // The comparand is the card's `ETag` — the same validator a `GET` of it
+  // hands out and an `If-None-Match` is compared against — not the card's
+  // `version`. That is what an HTTP conditional request names, and it is the
+  // stricter of the two: it moves when the served document may differ, so a
+  // client that revalidated its copy and then wrote holds a validator that
+  // still describes what it read.
+  //
+  // Comparison is `ifNoneMatchMatches`': `*`, comma lists, and the `W/` prefix
+  // ignored on both sides. RFC 9110 §13.1.1 asks for strong comparison here
+  // where §13.1.2 allows weak, but the realm emits no weak validators, so the
+  // two rules differ only over a validator no response of ours produced.
+  //
+  // `*` asks only that a card be there, which is what the handler settles
+  // itself — an absent one gets the 404 it always would, which says more than
+  // a 412 does. A concrete validator has to match one, so a card the realm
+  // can offer no validator for — never indexed, or an `ETag` suppressed
+  // because the document depends on another realm — fails the precondition:
+  // "this is the card you saw" is a claim the realm cannot make.
+  async #conditionalWriteRefusal(
+    request: Request,
+    url: URL,
+    requestContext: RequestContext,
+  ): Promise<Response | undefined> {
+    let ifMatch = request.headers.get('if-match');
+    if (!ifMatch) {
+      return undefined;
+    }
+    if (ifMatch.trim() === '*') {
+      return undefined;
+    }
+    await this.getRealmInfo();
+    let entry = await this.#realmIndexQueryEngine.instance(url, {
+      includeErrors: true,
+    });
+    if (entry?.type !== 'instance' || this.hasForeignRealmDeps(entry.deps)) {
+      return preconditionFailed({ request, requestContext, id: url.href });
+    }
+    // Every validator the realm would hand out for this card as it stands.
+    // A card+json read picks its link shape per request — the setting can
+    // differ between the read that gave the client its validator and this
+    // write — and the shapes take different variants of one validator so a
+    // client holding either is not 304'd to the other. That distinction is
+    // about representations; this question is about the card, and all of
+    // these describe the same card at the same `indexed_at`. Refusing a write
+    // because the read that preceded it answered in the narrower shape would
+    // refuse on a server setting rather than on anything the caller did.
+    let realmInfoHash = this.getCachedRealmInfoHash();
+    let screenshots = screenshotsEtagFingerprint(entry.screenshots);
+    let issued = [
+      buildCardJsonEtag(entry.indexedAt, realmInfoHash, screenshots, false),
+      buildCardJsonEtag(entry.indexedAt, realmInfoHash, screenshots, true),
+    ];
+    if (issued.some((etag) => etag && ifNoneMatchMatches(ifMatch, etag))) {
+      return undefined;
+    }
+    return preconditionFailed({ request, requestContext, id: url.href });
   }
 
   private async patchCardInstance(
@@ -7797,6 +7867,18 @@ export class Realm {
           });
         }
       }
+    }
+
+    // Read after the body, so a payload the realm would have refused anyway
+    // still gets the 400 that names what is wrong with it, and a 412 means
+    // only that the card moved.
+    let refusal = await this.#conditionalWriteRefusal(
+      request,
+      new URL(instanceURL),
+      requestContext,
+    );
+    if (refusal) {
+      return refusal;
     }
 
     // The merge belongs to the update this stages: arrays replacing rather
@@ -7865,6 +7947,7 @@ export class Realm {
       });
     }
     let created = result.meta.created;
+    let version = result.meta.version;
     let readEntry = async (skipQueryBackedExpansion: boolean) =>
       await this.#realmIndexQueryEngine.cardDocument(new URL(instanceURL), {
         loadLinks: true,
@@ -7886,6 +7969,10 @@ export class Realm {
           // the one the index recorded for it.
           lastModified: unchanged.doc.data.meta.lastModified ?? lastModified,
           created,
+          // Nothing was written, so this is the version the card already held
+          // — which is the point of reporting it: a patch that changes nothing
+          // leaves a client's base where it was.
+          version,
           requestContext,
         });
       }
@@ -7904,6 +7991,7 @@ export class Realm {
       }
       lastModified = result?.meta.lastModified ?? lastModified;
       created = result?.meta.created ?? created;
+      version = result?.meta.version ?? version;
     }
     if (answerFromEcho) {
       // See serializedInstanceEcho: the write indexed deferred, so there is
@@ -7923,6 +8011,7 @@ export class Realm {
         instanceURL,
         lastModified,
       );
+      doc.data.meta.version = version;
       this.#serveInstanceIdsAsRRI(doc);
       return createResponse({
         body: JSON.stringify(doc, null, 2),
@@ -7944,6 +8033,7 @@ export class Realm {
         localPath,
         lastModified,
         created,
+        version,
         requestContext,
       });
     }
@@ -7969,6 +8059,7 @@ export class Realm {
         meta: {
           ...(stored.data.meta ?? {}),
           lastModified,
+          version,
         },
       },
     }) as SingleCardDocument;
@@ -8005,19 +8096,26 @@ export class Realm {
       localPath,
       lastModified,
       created,
+      version,
       requestContext,
     }: {
       instanceURL: string;
       localPath: LocalPath;
       lastModified: number | null;
       created: number | null;
+      version: string;
       requestContext: RequestContext;
     },
   ): Promise<Response> {
     let doc: SingleCardDocument = merge({}, entry.doc, {
       data: {
         links: { self: instanceURL },
-        meta: { lastModified },
+        // The version the commit reported for the file it left behind, which
+        // is the one this response's bytes describe. The index row this
+        // document came from carries no fingerprint of the source, and reading
+        // one back would answer for the file as it stands now rather than as
+        // this write left it.
+        meta: { lastModified, version },
       },
     });
     // The PATCH echo carries the joined `meta.screenshots` like a GET does —
@@ -8735,7 +8833,7 @@ export class Realm {
       );
     }
     let { document, headers, queryBacked } = result;
-    if (document.data.type === 'file-meta') {
+    if (!isSingleCardDocument(document)) {
       // A file's metadata is derived from its bytes, so there is no index row
       // to validate it against and nothing here to cache.
       return { kind: 'file-meta', body: JSON.stringify(document, null, 2) };
@@ -8751,9 +8849,31 @@ export class Realm {
       return { kind: 'redirect', foundPath };
     }
 
-    // Prefer created_at from DB for instance JSON
+    // Prefer created_at from DB for instance JSON. The card's `version` comes
+    // out of the same row, so reporting it costs this read's column list
+    // rather than a second round-trip.
     let pathForDb = this.paths.local(url) + '.json';
-    let createdAt = await this.getCreatedTime(pathForDb);
+    let { createdAt, contentHash } = await this.storedFileMetaFor(pathForDb);
+    // The card's write identity: the fingerprint of the `.json` the realm
+    // stores, which moves only when that file is rewritten. Deliberately not
+    // the `ETag` beside it — that one is the HTTP cache validator and tracks
+    // the served *document*, so it also moves when a card this one links to is
+    // re-indexed. A client holding an optimistic edit reconciles on `version`.
+    //
+    // Only the realm's own write path records a hash, so a card that reached
+    // disk some other way — a deployed or seeded realm, a fixture copied into
+    // place — has none until it is next written, and the key is absent rather
+    // than computed: hashing the file to answer a read would put a bounded but
+    // real file read on every uncached GET of every such card.
+    //
+    // Read after the document and reported with it, so the pair a caller acts
+    // on is the pair one assembly produced. The response cache keeps them
+    // together for the same reason: it retains the serialized body, so a
+    // cached document and the version it was assembled beside are served
+    // together or not at all.
+    if (contentHash !== undefined) {
+      card.data.meta.version = contentHash;
+    }
     // deps + indexedAt come off the assembly the read reports, not off the
     // early peek: the two see different snapshots when a write lands between
     // them, and a validator has to describe the bytes it is sent with.
@@ -9080,6 +9200,14 @@ export class Realm {
     if (await this.openFileForMetadata(localPath)) {
       return methodNotAllowed(request, requestContext);
     }
+    let refusal = await this.#conditionalWriteRefusal(
+      request,
+      url,
+      requestContext,
+    );
+    if (refusal) {
+      return refusal;
+    }
     try {
       // Whether there is a card here is settled by the stored file, read
       // inside the same lock the removal happens under. That is what makes a
@@ -9107,6 +9235,18 @@ export class Realm {
   private async getCreatedTime(path: LocalPath): Promise<number | undefined> {
     if (!this.#dbAdapter) return undefined;
     return getCreatedTime(this.#dbAdapter, this.url, path);
+  }
+
+  // The whole `realm_file_meta` row for a path, for a caller that reports more
+  // than one of its columns and would otherwise read the row once per column.
+  private async storedFileMetaFor(path: LocalPath): Promise<{
+    createdAt: number | undefined;
+    contentHash: string | undefined;
+  }> {
+    if (!this.#dbAdapter) {
+      return { createdAt: undefined, contentHash: undefined };
+    }
+    return getFileMeta(this.#dbAdapter, this.url, path);
   }
 
   private async directoryEntries(

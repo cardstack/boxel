@@ -740,8 +740,12 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       // `generation` is index metadata the realm stamps on the card+json GET;
       // it rides along in the loaded card the same way lastModified/realmInfo
       // do (and, like them, is stripped from the persisted source), so drop it
-      // before comparing against the card's source serialization.
+      // before comparing against the card's source serialization. `version` —
+      // the fingerprint of the stored file — rides and is stripped the same
+      // way, and describes the bytes this comparison is against rather than
+      // belonging to them.
       delete json.data.meta.generation;
+      delete json.data.meta.version;
       assert.strictEqual(
         stringify(json),
         stringify(expected),

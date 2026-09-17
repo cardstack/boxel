@@ -53,6 +53,63 @@ export async function getContentMeta(
   };
 }
 
+// Everything `realm_file_meta` records about one file, in one row read.
+//
+// The two single-path readers above answer one column group each, so a caller
+// that wants both pays two round-trips for one row. A card+json GET is exactly
+// that caller: it reports the file's creation time as `x-created` and its
+// content hash as the card's `meta.version`.
+export async function getFileMeta(
+  db: DBAdapter,
+  realmURL: string,
+  localPath: string,
+): Promise<{
+  createdAt: number | undefined;
+  contentHash: string | undefined;
+  contentSize: number | undefined;
+}> {
+  let absent = {
+    createdAt: undefined,
+    contentHash: undefined,
+    contentSize: undefined,
+  };
+  if (!db) {
+    return absent;
+  }
+  let rows = await query(db, [
+    'SELECT created_at, content_hash, content_size FROM realm_file_meta WHERE realm_url =',
+    param(realmURL),
+    'AND file_path =',
+    param(localPath),
+    'LIMIT 1',
+  ]);
+  if (!rows || rows.length === 0) {
+    return absent;
+  }
+  let createdAt = rows[0]['created_at'];
+  let contentHash = rows[0]['content_hash'];
+  let contentSize = rows[0]['content_size'];
+  return {
+    // Each column is absent on its own: indexing inserts `created_at` alone
+    // for a file that reached disk outside the realm's write API, and only
+    // the write path ever fills the hash columns, so a row can hold either
+    // without the other.
+    createdAt:
+      createdAt == null
+        ? undefined
+        : typeof createdAt === 'string'
+          ? parseInt(createdAt)
+          : Number(createdAt),
+    contentHash: contentHash == null ? undefined : String(contentHash),
+    contentSize:
+      contentSize == null
+        ? undefined
+        : typeof contentSize === 'string'
+          ? parseInt(contentSize)
+          : Number(contentSize),
+  };
+}
+
 // Reads created_at + content hash/size for many paths in a single query. Only
 // paths with a persisted row are returned; a caller treats an absent path as
 // "no persisted meta for this file" and falls back to its own per-path read.
