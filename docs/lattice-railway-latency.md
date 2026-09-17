@@ -86,7 +86,7 @@ Detailed operational evidence is in the private infrastructure repository at
 `.cache/evidence` directory. The engine's 64 focused tests pass; the retained
 package type-check failures above remain open.
 
-## C1 — coalesce publication notifications (active)
+## C1 — coalesce publication notifications (complete)
 
 Pass/fail command before implementation:
 `MATRIX_REGISTRATION_SHARED_SECRET=unused-lattice-db-tests TEST_FILES=lattice-publication-delivery-test,lattice-delivery-opt-in-test pnpm test`.
@@ -119,4 +119,37 @@ recipient progress is still checked before releasing the held sender.
 `pnpm lint` ran in realm-server: JavaScript passed; type checks still report four
 errors in untouched Boxel UI drag/drop declarations and dropdown argument typing.
 No changed-file diagnostics. Full log: `/tmp/lattice-coalesce-lint.log`.
-Live deployment and notification-count measurements remain pending at this checkpoint.
+Engine c9fcd82a3f is deployed on the Railway realm only; the worker remains on
+a7ff492a6e with its matching native review. Host and client protocol are unchanged.
+The controlled delivery-only burst replayed eight already-committed day notices
+to two existing recipients. Sixteen delivery obligations became two Matrix events
+(one per recipient), an 87.5% reduction. All sixteen rows were acknowledged on
+attempt one. This is a burst-delivery experiment, not eight source writes or an
+end-to-end throughput measurement.
+
+Two subsequent real probe writes changed both existing browser stores from
+10/17 to 9/17 and back to 10/17 without reload. PATCH dispatch to first fresh HTTP
+was 2,810 / 3,086 ms. Both confirmed DOM values were observed around 3,172 /
+3,262 ms; the first trial timestamps begin each browser read, the second ends it,
+so these are approximate polling observations, not precise render timestamps.
+Both stores used the same account. The owned probe is restored to done. These
+samples do not establish an isolated-write latency improvement over the preceding
+3,234–3,332 ms trials, nor new whole-output parity or active-editing coverage.
+
+Retained deployment failure: the first write stayed pending for the entire
+26,991 ms HTTP observation window. Realm startup cleared the module cache and
+queued full reindexes, while an old 12,434-file HTML job occupied the general
+worker. After the 64 normal reviewed-module lookups, the existing cancellation
+helper removed only three verified unstarted startup jobs (536/538/540). The
+existing claim-hold helper deferred bulk HTML for four hours; the verified HTML
+child was interrupted for manager-owned reservation cleanup. User source jobs
+were retained, and both stores recovered through normal publication. The timed
+trials above followed recovery. This temporary HTML hold is not a permanent
+capacity fix; startup admission, bulk-work scheduling and restart hygiene remain
+follow-ups. No database output was manually marked ready.
+
+Evidence: private infra `.cache/evidence/coalescing-burst-result.txt`,
+`coalescing-record-draft.json` (retained blocked trial),
+`coalescing-warm-{draft,done}.json`, `coalescing-browser-observations.json`,
+and recovery/deployment logs. C1 stops here. A demand registry, suppression of
+legacy source events, and changes to computation scheduling are outside this slice.
