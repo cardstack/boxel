@@ -355,6 +355,10 @@ module(
                 newFriendLink,
                 'the "friends.1" relationship names nothing while the new card is unsaved',
               );
+              assert.notOk(
+                doc.included,
+                'and the save answers with the consumer alone, side-loading none of its links',
+              );
             }
             if (consumerSaveCount === 2) {
               // as soon as the other realm assigns an id to the linked card we then
