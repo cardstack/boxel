@@ -465,12 +465,14 @@ could not have engaged. Two different questions, two different answers:
 - `boxel:search-shape` — per request: `linkMode`, `linkModeDowngraded`,
   `linkShapeLevel`, `linkShapeLoad`. Where a specific degraded response and the
   reading that degraded it can be seen together.
-- The run's own `concurrency:` summary line and its `load=` progress line: the
-  peak of the same 120-second mean, measured from the driver. It bounds what one
-  replica saw of this traffic **from above** — the fleet divides the requests
-  across replicas, and a request counts as in flight here while its body crosses
-  the network, after the server released the slot. So under a threshold is
-  evidence the run did not reach it; over one is not evidence that it did.
+- The run's own `concurrency:` summary line — the peak of the same 120-second
+  mean plus the highest count open at one moment, measured from the driver; the
+  `load=` progress line carries the mean's current value while the run is still
+  going. Both bound what one replica saw of this traffic **from above**: the
+  fleet divides the requests across replicas, and a request counts as in flight
+  here while its body crosses the network, after the server released the slot.
+  So under a threshold is evidence the run did not reach it; over one is not
+  evidence that it did.
 
 ## Reading the server side
 

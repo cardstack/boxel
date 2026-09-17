@@ -476,9 +476,9 @@ where the driver ran.
 The summary reports the concurrency this driver held, in the two forms the
 server's thresholds are written in: the peak of a 120-second time-weighted mean
 (what the link-shape policy decides on) and the highest count open at one
-moment (what the admission gate decides on). The same pair is on the progress
-line during a run as `load=`, so readers can be added while it is still
-running.
+moment (what the admission gate decides on). The progress line carries the
+current value of that same mean as `load=`, so a run can be steered while it is
+still going — readers added, or a page bound dropped.
 
 Both are **bounds from above** on what any one replica saw of this driver's
 traffic, twice over: the fleet divides these requests across its replicas, and
