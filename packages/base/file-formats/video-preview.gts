@@ -83,6 +83,7 @@ export class VideoPreview extends GlimmerComponent<ContentPreviewSignature> {
             @src={{this.mediaUrl}}
             @poster={{this.posterUrl}}
             @preload='metadata'
+            @loadAsBlob={{true}}
             data-test-video-player
           />
         {{else}}
