@@ -6,7 +6,12 @@ import type {
   IncrementalDoneResult,
   IncrementalResult,
 } from '../tasks/indexer.ts';
-import { param, query, type PgPrimitive } from '../expression.ts';
+import {
+  param,
+  query,
+  type Expression,
+  type PgPrimitive,
+} from '../expression.ts';
 import type { DBAdapter } from '../db.ts';
 import { baseRealm, baseRealmRRI } from '../constants.ts';
 import { systemInitiatedPriority, userInitiatedPriority } from '../queue.ts';
@@ -200,10 +205,26 @@ export async function unbuiltIndexFailure(
   return typeof result === 'string' ? result : JSON.stringify(result);
 }
 
+// The job types a realm's write path races against: the two that rewrite index
+// rows for files someone just wrote. `from-scratch-index` is deliberately not
+// among them — it reads files independently of realm-server writes and each row
+// write is atomic, so blocking a `PATCH` on one would park user writes behind a
+// system-wide reindex for as long as that takes. This is the cross-replica
+// spelling of the scope `RealmIndexUpdater.incrementalIndexing()` keeps in
+// memory, and the two must stay in step.
+export const WRITE_RACING_INDEX_JOB_TYPES = ['incremental-index', 'copy-index'];
+
 export async function awaitRealmIndexSettled(
   dbAdapter: DBAdapter,
   realmURL: string,
-  opts?: { timeoutMs?: number; pollIntervalMs?: number },
+  opts?: {
+    timeoutMs?: number;
+    pollIntervalMs?: number;
+    // Narrows the lane to particular job types. Absent means the whole
+    // `indexing:<realm>` lane, which is what a caller wanting "all indexing has
+    // settled" (a publish, a readiness probe) asks for.
+    jobTypes?: string[];
+  },
 ): Promise<boolean> {
   if (dbAdapter.kind !== 'pg') {
     return true;
@@ -211,13 +232,25 @@ export async function awaitRealmIndexSettled(
 
   let timeoutMs = opts?.timeoutMs ?? 10_000;
   let pollIntervalMs = opts?.pollIntervalMs ?? 1000;
+  let jobTypes = opts?.jobTypes;
 
   let hasSettled = async () => {
-    let rows = await query(dbAdapter, [
+    let expression: Expression = [
       `SELECT 1 FROM jobs WHERE status = 'unfulfilled' AND concurrency_group =`,
       param(indexingConcurrencyGroup(realmURL)),
-      'LIMIT 1',
-    ]);
+    ];
+    if (jobTypes) {
+      expression.push('AND job_type IN', '(');
+      jobTypes.forEach((jobType, index) => {
+        if (index > 0) {
+          expression.push(',');
+        }
+        expression.push(param(jobType));
+      });
+      expression.push(')');
+    }
+    expression.push('LIMIT 1');
+    let rows = await query(dbAdapter, expression);
     return rows.length === 0;
   };
 

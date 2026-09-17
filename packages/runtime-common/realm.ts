@@ -6,6 +6,7 @@ import {
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
   prerenderSpawnedPriority,
   unbuiltIndexFailure,
+  WRITE_RACING_INDEX_JOB_TYPES,
 } from './jobs/indexing.ts';
 import {
   awaitPublishedHtmlReady,
@@ -4304,7 +4305,30 @@ export class Realm {
             localPath,
           ),
         drainIndexing: async () => {
+          // Two halves, because neither sees what the other does. The
+          // in-memory deferreds cover the jobs this process enqueued and
+          // nothing else — they are a `Map` on this replica's index updater —
+          // so a write taken by a peer replica, or one deferred to a worker,
+          // is invisible here. The jobs table is shared, so a query against
+          // the realm's indexing lane sees every replica's pending work.
+          //
+          // Without the second half the gate is only as good as the realm
+          // having one replica: a `skip-index-wait` write on replica A leaves
+          // A's index job pending while replica B, seeing nothing local to
+          // drain, reads a row that still describes the pre-write card.
+          //
+          // Scoped to the job types the write path actually races. A
+          // from-scratch pass reads files independently of realm-server
+          // writes, so waiting on one would park every write behind a
+          // system-wide reindex for as long as it takes — the same exclusion
+          // `incrementalIndexing()` makes in memory, which is why the two are
+          // defined against one list.
           await this.incrementalIndexing();
+          if (this.#dbAdapter) {
+            await awaitRealmIndexSettled(this.#dbAdapter, this.url, {
+              jobTypes: WRITE_RACING_INDEX_JOB_TYPES,
+            });
+          }
         },
         isIgnored: (url) => this.isIgnored(url),
         // Narrowed to the two documents a program reads values from, each

@@ -3071,6 +3071,32 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(s.commits.length, 1, 'the write then proceeds');
     });
 
+    test('a delete carrying a precondition drains first, though it stages nothing', async function (assert) {
+      // A removal stages no content, so the batch would otherwise skip the
+      // drain — and a removal is the one verb whose precondition is answered
+      // entirely from indexed state, with no staged bytes to read instead. An
+      // undrained index still spells the pre-write validator, so a stale
+      // `If-Match` would match and the newer file would be removed.
+      let s = stub({
+        stored: {
+          'person-1.json': cardFile({ firstName: 'Original' }, PERSON),
+        },
+      });
+      let drainsWhenChecked: number | undefined;
+      await commitBatch(s.core, [{ op: 'delete', href: `${REALM}person-1` }], {
+        precondition: async () => {
+          drainsWhenChecked = s.drainCount();
+        },
+      });
+
+      assert.strictEqual(
+        drainsWhenChecked,
+        1,
+        'the drain ran before the precondition, though nothing staged',
+      );
+      assert.strictEqual(s.commits.length, 1, 'and the removal then proceeds');
+    });
+
     test('a precondition that refuses writes nothing and commits nothing', async function (assert) {
       let { core, commits } = stub({
         stored: {
