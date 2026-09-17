@@ -1345,6 +1345,11 @@ async function transform(
   // the program has said which cards it means — nothing is written either
   // way until the whole batch has staged.
   let linked = new Set<string>();
+  // Read only for a program that names one, so an ordinary transform does not
+  // wait on the realm's config document to stage a card that never asks.
+  let realmConfig = programNamesRealmConfig(program.source)
+    ? await ctx.realmConfig()
+    : undefined;
   let mutated: CardResource;
   try {
     let result = bxl.mutateBxlCardSource({ data: resource }, program.source, {
@@ -1352,7 +1357,7 @@ async function transform(
       syntax: program.syntax,
       programId: `${name}:${uuidV4()}`,
       targetId: url.href,
-      context: contextFor(params, resource, url, ctx, await ctx.realmConfig()),
+      context: contextFor(params, resource, url, ctx, realmConfig),
       overlays,
       // A relationship is stored relative to the file that holds it, and a
       // program compares and rewrites card identities, so the stored spelling
@@ -1471,6 +1476,33 @@ async function transformTargetDefinition(
   return definition;
 }
 
+// Whether a program names a realm setting, and so whether staging it has to
+// read one. The registry resolves a builtin by its exact name, so a program
+// that calls this one carries the name in its source; a name that appears only
+// inside a string costs a read the program does not use, which is the
+// direction to be wrong in — the other way round would hand a program a slot
+// the host had not filled.
+function programNamesRealmConfig(source: string): boolean {
+  return source.includes('realmConfig');
+}
+
+// The same question for a declaration's template, asked structurally because a
+// template is data rather than text. A marker may be nested inside a `card(…)`
+// wrapper or an object member, so every value is walked.
+function templateNamesRealmConfig(template: unknown): boolean {
+  if (Array.isArray(template)) {
+    return template.some(templateNamesRealmConfig);
+  }
+  if (template === null || typeof template !== 'object') {
+    return false;
+  }
+  let node = template as Record<string, unknown>;
+  if (node.$ref === 'realmConfig') {
+    return true;
+  }
+  return Object.values(node).some(templateNamesRealmConfig);
+}
+
 // The request-scoped values the program reads through `params()`, `actor()`,
 // `instance()` and `realmConfig()`.
 //
@@ -1485,17 +1517,19 @@ async function transformTargetDefinition(
 // stored value, so it is not something `instance(…)` names — the program
 // reads one with `.field`, against the document it is editing.
 //
-// `realmConfig()` is the slot that is always supplied, empty map included. A
-// realm that declares no settings is a realm whose settings are known and
-// empty, not a request that arrived without them, and the two read differently
-// to whoever has to fix the program: "this realm has no such setting" points
-// at the realm, "the host supplied no configuration" points at the caller.
+// `realmConfig()` is supplied whenever the program names it, empty map
+// included. A realm that declares no settings is a realm whose settings are
+// known and empty, not a request that arrived without them, and the two read
+// differently to whoever has to fix the program: "this realm has no such
+// setting" points at the realm, "the host supplied no configuration" points at
+// the caller. A program that never names it gets no slot and reads neither
+// message, because it asks nothing.
 function contextFor(
   params: Record<string, unknown> | undefined,
   resource: CardResource,
   url: URL,
   ctx: StagingContext,
-  realmConfig: Record<string, JsonValue>,
+  realmConfig: Record<string, JsonValue> | undefined,
 ): ProgramContext {
   return {
     ...(params ? { params } : {}),
@@ -1504,7 +1538,7 @@ function contextFor(
       id: url.href,
       ...(resource.attributes ?? {}),
     },
-    realmConfig,
+    ...(realmConfig ? { realmConfig } : {}),
   };
 }
 
@@ -2193,7 +2227,10 @@ async function resourceFromTemplate(
   }
   let anchor = entry.href ? anchorResource(entry, ctx) : undefined;
   let linkFields = await linkFieldsOf(of, entry, ctx);
-  let realmConfig = await ctx.realmConfig();
+  // Same as a transform: only a declaration that names a setting waits for one.
+  let realmConfig = templateNamesRealmConfig(definition.fill)
+    ? await ctx.realmConfig()
+    : {};
   let resource: CardResource = { type: 'card', meta: { adoptsFrom: of } };
   for (let [field, template] of Object.entries(definition.fill ?? {})) {
     let resolved = resolveTemplate(template, {

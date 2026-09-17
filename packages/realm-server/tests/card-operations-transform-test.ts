@@ -62,9 +62,14 @@ interface StubOptions {
   settings?: Record<string, JsonValue>;
 }
 
-function stub(opts: StubOptions = {}): { core: BatchCore; commits: Commit[] } {
+function stub(opts: StubOptions = {}): {
+  core: BatchCore;
+  commits: Commit[];
+  settingsReads: () => number;
+} {
   let { stored = {}, indexed = {}, settings = {} } = opts;
   let commits: Commit[] = [];
+  let settingsReads = 0;
   let definitions: Record<string, Definition> = {
     Report: reportDefinition(),
     Person: personDefinition(),
@@ -145,10 +150,11 @@ function stub(opts: StubOptions = {}): { core: BatchCore; commits: Commit[] } {
       return 'name' in codeRef ? definitions[codeRef.name] : undefined;
     },
     async realmConfig() {
+      settingsReads++;
       return settings;
     },
   };
-  return { core, commits };
+  return { core, commits, settingsReads: () => settingsReads };
 }
 
 // A card with a computed field and two links — one the author marked
@@ -779,6 +785,58 @@ module(basename(import.meta.filename), function () {
         attributesOf(commits[0], 'report-1.json').status,
         'escalated to @mae:localhost after 3',
         'the realm supplied its settings to the program, typed as it wrote them',
+      );
+    });
+
+    test('a program that names no setting never reads the realm configuration', async function (assert) {
+      // Reading it is a parse of the realm's config document, taken with the
+      // write lock held. A transform is the most common write there is, and
+      // most of them never mention a setting.
+      let { core, commits, settingsReads } = stub({
+        ...openReport(),
+        settings: { approver: '@mae:localhost' },
+      });
+
+      await commitBatch(core, [
+        {
+          op: 'transform',
+          name: 'escalate',
+          href: `${REALM}report-1`,
+          definition: transformOperation('.status="escalated";'),
+        },
+      ]);
+
+      assert.strictEqual(
+        attributesOf(commits[0], 'report-1.json').status,
+        'escalated',
+        'the program ran',
+      );
+      assert.strictEqual(
+        settingsReads(),
+        0,
+        'and the realm was never asked for its settings',
+      );
+    });
+
+    test('a program that names a setting reads the realm configuration once', async function (assert) {
+      let { core, settingsReads } = stub({
+        ...openReport(),
+        settings: { approver: '@mae:localhost' },
+      });
+
+      await commitBatch(core, [
+        {
+          op: 'transform',
+          name: 'escalate',
+          href: `${REALM}report-1`,
+          definition: transformOperation('.status = realmConfig("approver");'),
+        },
+      ]);
+
+      assert.strictEqual(
+        settingsReads(),
+        1,
+        'the read happens, and happens once',
       );
     });
 

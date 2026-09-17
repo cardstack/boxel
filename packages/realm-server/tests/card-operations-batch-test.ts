@@ -1637,7 +1637,37 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(
         plain.calls(),
         ['drain'],
-        'a batch that names no setting never asks for them',
+        'a create from a document never asks for them',
+      );
+
+      // The other shape a create takes, and the one that reaches the template
+      // resolver — a declaration whose fill names params rather than settings.
+      let declared = stub({
+        definitions: { Person: personDefinition() },
+        settings: { defaultName: 'Configured' },
+      });
+      await commitBatch(
+        declared.core,
+        [
+          {
+            op: 'create',
+            lid: 'minted',
+            definition: {
+              base: 'create',
+              deterministic: true,
+              of: PERSON,
+              params: { title: { kind: 'field', codeRef: STRING } },
+              fill: { firstName: { $ref: 'params', key: 'title' } as any },
+            },
+            params: { title: 'Declared' },
+          },
+        ],
+        {},
+      );
+      assert.deepEqual(
+        declared.calls(),
+        ['drain'],
+        'and neither does a declaration whose template names none',
       );
     });
 
