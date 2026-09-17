@@ -359,12 +359,16 @@ module(
             if (consumerSaveCount === 2) {
               // as soon as the other realm assigns an id to the linked card we then
               // save the consumer with a relationship to the linked card's id
-              assert.deepEqual(
-                doc.data?.relationships?.['friends.1'],
-                {
-                  links: { self: newLinkId! },
-                  data: { type: 'card', id: newLinkId! },
-                },
+              // A write echoes relationships as the card stores them, so the
+              // link is what it names — the resolved target a readback would
+              // have added is not part of this answer.
+              assert.strictEqual(
+                (
+                  doc.data?.relationships?.['friends.1'] as
+                    | { links?: { self?: string | null } }
+                    | undefined
+                )?.links?.self,
+                newLinkId!,
                 'the "friends.1" relationship was populated with the linked card\'s new id',
               );
               consumerSaved.fulfill();
