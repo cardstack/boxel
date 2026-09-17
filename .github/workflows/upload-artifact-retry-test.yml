@@ -1,0 +1,123 @@
+name: Upload Artifact Retry Self-Test
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/actions/upload-artifact-retry/action.yml"
+      - ".github/workflows/upload-artifact-retry-test.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  retry-behaviour:
+    name: Retry survives a transient failure and still fails a permanent one
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # upload-artifact offers no way to make the artifact service fail, so
+      # the stand-in for a transient one is an upload whose path does not
+      # resolve yet: `if-no-files-found: error` fails the attempt before any
+      # network call. This writer creates the file 25s in, which is after the
+      # first two attempts (t=0 and t~=12) and before the third (t>=40), so
+      # the upload below can only succeed by retrying.
+      - name: Arrange for the upload path to appear part-way through the retries
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/retry-probe
+          (sleep 25; mkdir -p /tmp/retry-probe; date > /tmp/retry-probe/report.txt) &
+
+      - name: Note the start time
+        id: clock
+        run: echo "started=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload an artifact whose first attempts cannot succeed
+        id: transient
+        uses: ./.github/actions/upload-artifact-retry
+        with:
+          name: retry-selftest-transient-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/retry-probe/report.txt
+          retention-days: 1
+          if-no-files-found: error
+
+      # Read the clock here rather than in the assertion below, which runs
+      # after an upload that always burns both backoffs — from there the
+      # reading is never under one backoff, whatever this step did.
+      - name: Record how long the recoverable upload took
+        id: transient-clock
+        env:
+          STARTED: ${{ steps.clock.outputs.started }}
+        run: echo "elapsed=$(( $(date +%s) - STARTED ))" >> "$GITHUB_OUTPUT"
+
+      # A path that never fills stays fatal. The call site tolerates the
+      # failure only so this job can assert on it; every real call site does
+      # not, which is what keeps a lost artifact a red job.
+      - name: Upload an artifact that can never succeed
+        id: permanent
+        continue-on-error: true
+        uses: ./.github/actions/upload-artifact-retry
+        with:
+          name: retry-selftest-permanent-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/retry-probe-never/report.txt
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Assert the outcomes
+        env:
+          TRANSIENT_OUTCOME: ${{ steps.transient.outcome }}
+          PERMANENT_OUTCOME: ${{ steps.permanent.outcome }}
+          ELAPSED: ${{ steps.transient-clock.outputs.elapsed }}
+        run: |
+          set -euo pipefail
+          failures=0
+
+          if [ "$TRANSIENT_OUTCOME" != "success" ]; then
+            echo "::error::a recoverable upload reported '$TRANSIENT_OUTCOME', expected 'success'"
+            failures=$((failures + 1))
+          fi
+
+          # Below one backoff means the first attempt succeeded, so the upload
+          # proved nothing about retrying.
+          if [ "$ELAPSED" -lt 10 ]; then
+            echo "::error::the recoverable upload finished in ${ELAPSED}s, too fast to have retried"
+            failures=$((failures + 1))
+          fi
+
+          if [ "$PERMANENT_OUTCOME" != "failure" ]; then
+            echo "::error::an unrecoverable upload reported '$PERMANENT_OUTCOME', expected 'failure'"
+            failures=$((failures + 1))
+          fi
+
+          if [ "$failures" -ne 0 ]; then
+            exit 1
+          fi
+          echo "Recovered after retrying (${ELAPSED}s), and an unrecoverable upload still failed its step."
+
+  sparse-checkout:
+    name: A job that checks out only the action can still resolve it
+    runs-on: ubuntu-latest
+    steps:
+      # The preview-comment workflow's job has no working tree of its own, so
+      # it fetches just this action rather than the whole repo. Its callers
+      # are gated on paths that do not include this action, so that
+      # arrangement would otherwise only ever be exercised by an unrelated PR.
+      - name: Check out the artifact upload action
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout: .github/actions/upload-artifact-retry
+
+      - name: Write something to upload
+        run: |
+          set -euo pipefail
+          mkdir -p slot
+          date > slot/slot.md
+
+      - name: Upload it through the action
+        uses: ./.github/actions/upload-artifact-retry
+        with:
+          name: retry-selftest-sparse-${{ github.run_id }}-${{ github.run_attempt }}
+          path: slot/
+          retention-days: 1
+          if-no-files-found: error
