@@ -88,8 +88,8 @@ class RenderScreenshotTemplate extends Component<Signature> {
     };
   }
 
-  // Inline sizing for the capture box. The dimensions and background are
-  // per-declaration data, so they can't live in scoped CSS. `position:
+  // Inline sizing for the raster capture box. The dimensions and background
+  // are per-declaration data, so they can't live in scoped CSS. `position:
   // fixed; top/left: 0` pins the box to the viewport origin so the capture
   // engine can size the viewport to the box and capture it whole,
   // independent of any body margin. `overflow: hidden` clips the component
@@ -104,19 +104,29 @@ class RenderScreenshotTemplate extends Component<Signature> {
   }
 
   <template>
-    {{! The `data-render-envelope` attribute reuses the capture engine's
-        applied-size wait (the deterministic signal that this box has laid
-        out at the declared size); `data-render-screenshot` names the slot
-        so that wait matches only this slot's envelope — the engine's guard
-        against capturing a prior slot's still-mounted box when consecutive
-        slots declare the same dimensions. }}
-    <div
-      data-render-envelope
-      data-render-screenshot={{@model.name}}
-      style={{this.boxStyle}}
-    >
+    {{#if @model.isPdf}}
+      {{! A pdf entry renders the full document flow — no capture box, no
+          clipping — so print `break-*`/`@page` rules paginate it across pages
+          under `page.pdf()`. A fixed-height, `overflow: hidden` box would
+          truncate it to one page. Readiness is still the global
+          `data-screenshot-pending` signal the component owns, so no envelope
+          attributes are needed here. }}
       <@model.Component @format='isolated' />
-    </div>
+    {{else}}
+      {{! The `data-render-envelope` attribute reuses the capture engine's
+          applied-size wait (the deterministic signal that this box has laid
+          out at the declared size); `data-render-screenshot` names the slot
+          so that wait matches only this slot's envelope — the engine's guard
+          against capturing a prior slot's still-mounted box when consecutive
+          slots declare the same dimensions. }}
+      <div
+        data-render-envelope
+        data-render-screenshot={{@model.name}}
+        style={{this.boxStyle}}
+      >
+        <@model.Component @format='isolated' />
+      </div>
+    {{/if}}
   </template>
 }
 
