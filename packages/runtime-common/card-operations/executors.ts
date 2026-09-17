@@ -166,6 +166,14 @@ export interface BatchDocument {
 }
 
 interface EntryCommon {
+  // The position this entry holds in whatever the caller composed it from,
+  // where that is not its position in the batch. A transport that stages only
+  // some of what it was sent — an envelope holding reads alongside writes —
+  // hands over a shorter list, so a refusal naming the position in this batch
+  // would name an entry the caller did not send. Every position the batch
+  // reports comes from here when it is set: the key on the error, the one
+  // beside it naming a conflicting entry, and the prose.
+  label?: number;
   // The lowered operation, when the entry invokes a named operation rather
   // than a plain base one. A named `create` stages its card from the
   // definition's `of` and `fill` instead of from a document.

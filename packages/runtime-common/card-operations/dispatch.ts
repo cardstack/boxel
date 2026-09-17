@@ -330,22 +330,45 @@ const ALLOWED_BASE_OPERATIONS: Readonly<
   // for, though, and both writes here work on them: an `update` replaces the
   // content wholesale and an `appendLine` adds one line to the end of a text
   // file without reading what is already there.
-  //
-  // Reaching either of those writes depends on a target being classified a
-  // file, and `defKindFor` classifies an instance target by its extension —
-  // which does not name every stored file. A `.log`, a `.css`, a `.yml` holds
-  // bytes and serves them, and each is classified `card-def` here, so a
-  // file-only behavior on one is refused before its executor runs. `read`
-  // survives that because a card carries a read too, and its executor falls
-  // back to the file-metadata document for exactly these paths. A write has no
-  // such overlap to fall back through, so the discrimination has to move to
-  // where it can be made: the executor, which knows whether the path holds a
-  // card's `.json` or plain bytes and already has to judge the content type.
   'file-def': carriedBy('file-def'),
   // A field's instances have no URL, so nothing is invocable on one. Field
   // data is reached through the operations of the card that contains it.
   'field-def': carriedBy('field-def'),
 };
+
+// The file-only behaviors an instance target carries whatever its URL is
+// classified as.
+//
+// `defKindFor` classifies an instance target by its extension, and the
+// registered-extension table does not name every stored file: a `.log`, a
+// `.css`, a `.yml` holds bytes and serves them, and each classifies `card-def`.
+// A `read` survives that because a card carries a read too and its executor
+// falls back to the file-metadata document for exactly those paths. A
+// file-only write has no such overlap, so it is admitted here and the
+// discrimination is made where the answer is available: the executor, which
+// reads whether the path holds a card's `.json` or plain bytes and already has
+// to judge the content type to decide whether a line may be appended at all.
+//
+// Only an instance target, and only for what a URL can under-report. A type
+// target's kind comes from its definition rather than from an extension, so
+// nothing about it is uncertain, and there is no instance behind it for a
+// stored-bytes write to reach.
+const FILE_WRITES_ON_ANY_INSTANCE: Readonly<
+  Partial<Record<BaseOperation, true>>
+> = { appendLine: true };
+
+function carries(
+  target: OperationTarget,
+  kind: DefKind,
+  base: BaseOperation,
+): boolean {
+  if (own(ALLOWED_BASE_OPERATIONS[kind], base)) {
+    return true;
+  }
+  return (
+    target.kind === 'instance' && own(FILE_WRITES_ON_ANY_INSTANCE, base) != null
+  );
+}
 
 // The base operations that resolve without consulting a definition.
 //
@@ -478,7 +501,7 @@ export async function resolveOperation(
           `serves the bytes stored at the target's URL`,
       });
     }
-    if (!own(ALLOWED_BASE_OPERATIONS[kind], declared.base)) {
+    if (!carries(target, kind, declared.base)) {
       throw notAllowed(target, name, kind, declared.base);
     }
     return declared;
@@ -492,7 +515,7 @@ export async function resolveOperation(
       detail: `there is no operation named "${name}" on ${describeTarget(target)}`,
     });
   }
-  if (!own(ALLOWED_BASE_OPERATIONS[kind], name)) {
+  if (!carries(target, kind, name)) {
     throw notAllowed(target, name, kind, name);
   }
   // The built-in behavior, undeclared. It has no program and no params, and
@@ -844,7 +867,7 @@ function notAllowed(
   // target's own terms are accurate either way.
   let because =
     target.kind === 'instance' && kind
-      ? `a ${kind} allows ${describeAllowed(kind)}`
+      ? `a ${kind} allows ${describeAllowed(kind, target)}`
       : `a "${base}" runs against an instance, and a type is not one`;
   return new OperationFailure({
     id: targetId(target),
@@ -857,8 +880,13 @@ function notAllowed(
   });
 }
 
-function describeAllowed(kind: DefKind): string {
-  let allowed = Object.keys(ALLOWED_BASE_OPERATIONS[kind] ?? {});
+function describeAllowed(kind: DefKind, target: OperationTarget): string {
+  // Asked through `carries` rather than read off the table, so a refusal lists
+  // what this target actually carries — which for an instance target includes
+  // the file writes the table admits on top of its kind.
+  let allowed = (Object.keys(ALL_BASE_OPERATIONS) as BaseOperation[]).filter(
+    (base) => carries(target, kind, base),
+  );
   return allowed.length > 0 ? allowed.join(', ') : 'no operations';
 }
 
