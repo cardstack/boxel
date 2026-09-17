@@ -162,6 +162,40 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         }
       }
     `,
+    'event-log.gts': `
+      import { contains, containsMany, field, CardDef, FieldDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+
+      export class LogEvent extends FieldDef {
+        @field label = contains(StringField);
+      }
+
+      export class EventLog extends CardDef {
+        @field title = contains(StringField);
+        @field events = containsMany(LogEvent);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template><h1><@fields.title /></h1></template>
+        }
+        static embedded = class Embedded extends Component<typeof this> {
+          <template><h1><@fields.title /></h1></template>
+        }
+        static fitted = class Fitted extends Component<typeof this> {
+          <template><h1><@fields.title /></h1></template>
+        }
+      }
+    `,
+    'deploys.json': {
+      data: {
+        type: 'card',
+        attributes: { title: 'Deploys', events: [] },
+        meta: {
+          adoptsFrom: {
+            module: rri(`${testRealmHref}event-log`),
+            name: 'EventLog',
+          },
+        },
+      },
+    },
     'reviewer.json': {
       data: {
         type: 'card',
@@ -718,6 +752,33 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           readFileSync(realmFile('telemetry.log'), 'utf8'),
           'boot\ndeployed\n',
           'the line is on the end of the file',
+        );
+      });
+
+      test('an append hands the field and its items through to the executor', async function (assert) {
+        // The one entry shape whose payload is neither a document nor params:
+        // the field and the items are named in `data` and handed to the append
+        // executor under the names it reads them by. They are also the members
+        // taken out of what an operation sees as its params, so passing them
+        // through and keeping them out of params are the same change.
+        let response = await post(
+          envelope(
+            invoke('appendContainsMany', {
+              href: '/deploys',
+              data: { field: 'events', items: [{ label: 'shipped' }] },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          response.body['atomic:results'][0].data.id,
+          `${testRealmHref}deploys`,
+        );
+        assert.deepEqual(
+          storedCard('deploys.json').data.attributes?.events,
+          [{ label: 'shipped' }],
+          'the item the entry named is on the end of the field it named',
         );
       });
 
