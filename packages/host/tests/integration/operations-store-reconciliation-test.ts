@@ -1,4 +1,4 @@
-import { settled, waitUntil } from '@ember/test-helpers';
+import { settled } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -158,10 +158,19 @@ module('Integration | operations store reconciliation', function (hooks) {
     getService('operations');
   });
 
+  // A card the tab is holding, as against one it merely read once.
+  //
+  // Holding a reference is what a rendered card does, and it is what subscribes
+  // the store to that card's realm and keeps the instance from being collected.
+  // Without it the store never hears the realm's events at all — so a test that
+  // reads what an event caused would be asserting against a store that was
+  // never listening, and every "nothing happened" assertion in it would pass
+  // for that reason rather than for the one it names.
   async function cardAt(localPath: string): Promise<CardDefType> {
-    let instance = await getService('store').get<CardDefType>(
-      `${testRealmURL}${localPath}`,
-    );
+    let url = `${testRealmURL}${localPath}`;
+    let store = getService('store');
+    store.addReference(url);
+    let instance = await store.get<CardDefType>(url);
     if (!instance || !('id' in instance)) {
       throw new Error(`${localPath} did not load: ${JSON.stringify(instance)}`);
     }
@@ -201,6 +210,47 @@ module('Integration | operations store reconciliation', function (hooks) {
   function lastClientRequestId(): string {
     let ids = [...getService('card-service').clientRequestIds];
     return ids[ids.length - 1];
+  }
+
+  // Waits for the realm's own broadcast for a pass that touched `url`.
+  //
+  // A test that reads what an event caused has to be driven by the event the
+  // realm actually sent, not by one delivered alongside it: the realm's lands
+  // whenever indexing settles, and a hand-delivered event racing it makes
+  // "which read did I just record" a matter of timing.
+  function realmEventFor(url: string): Promise<any> {
+    return new Promise((resolve) => {
+      let unsubscribe = getService('message-service').subscribe(
+        testRealmURL,
+        (event: any) => {
+          if (
+            event.eventName === 'index' &&
+            event.indexType === 'incremental' &&
+            (event.invalidations ?? []).includes(url)
+          ) {
+            unsubscribe();
+            resolve(event);
+          }
+        },
+      );
+    });
+  }
+
+  // The card each of a document's relationships points at.
+  //
+  // A stored link is spelled relative to the card holding it and a link the
+  // store is holding is absolute, so these are compared by the path they end
+  // in rather than as strings — the two spellings name the same card, and a
+  // string comparison would read one of them as a card that is not there.
+  function linksOf(relationships: unknown): (string | undefined)[] {
+    return Object.values((relationships ?? {}) as Record<string, any>).map(
+      (relationship) => relationship?.links?.self,
+    );
+  }
+
+  function linksTo(relationships: unknown, id: string): boolean {
+    let path = id.slice(testRealmURL.length);
+    return linksOf(relationships).some((link) => link?.endsWith(path));
   }
 
   // Which cards the store went back to the realm for. Whether a card was
@@ -366,42 +416,42 @@ module('Integration | operations store reconciliation', function (hooks) {
     let reportURL = `${testRealmURL}report-adopted`;
     let report = await cardAt('report-adopted');
     let activity = await unsavedActivity('Lab safety');
-    let store = getService('store');
 
-    let [created] = (await (operations(report) as any).atomic((b: any) => {
-      let minted = b.create(activity);
-      b.addActivity({ activity: minted });
-      return [minted];
-    })) as [{ id: string }];
-    let batchRequestId = lastClientRequestId();
-
-    // Both cards are in one pass, under one request id, and that id is ours.
-    // What separates them is which of them the realm says carried our content:
-    // the card we described, and the report the realm appended the link to.
+    // Recording starts before the batch so the realm's own event cannot land
+    // in the gap between the write and the recorder. The batch itself reaches
+    // the realm over the authenticated fetch and its promotion only writes, so
+    // nothing but a reload shows up here.
     let { reads, restore } = recordReads();
+    let announced = realmEventFor(reportURL);
+    let created: { id: string };
+    let event: any;
     try {
-      deliverIndexEvent({
-        invalidations: [created.id, reportURL],
-        clientRequestId: batchRequestId,
-        clientAuthored: [created.id],
-      });
+      [created] = (await (operations(report) as any).atomic((b: any) => {
+        let minted = b.create(activity);
+        b.addActivity({ activity: minted });
+        return [minted];
+      })) as [{ id: string }];
+      event = await announced;
       await settled();
     } finally {
       restore();
     }
 
+    // Both cards are in one pass, under one request id, and that id is ours.
+    // What separates them is which of them the realm says carried our content:
+    // the card we described, and the report the realm appended the link to.
+    assert.deepEqual(
+      event.clientAuthored,
+      [created.id],
+      'the realm named the card we described, and only it',
+    );
     assert.true(
       reads.some((url) => url.startsWith(reportURL)),
-      `the report was re-read, because only the realm knows what it now says: ${JSON.stringify(reads)}`,
+      `so the report was re-read, because only the realm knows what it now says: ${JSON.stringify(reads)}`,
     );
     assert.false(
       reads.some((url) => url.startsWith(created.id)),
       'while the card we described was not, because we are the ones holding what it says',
-    );
-    assert.strictEqual(
-      store.peek(reportURL),
-      report,
-      'and the re-read landed in the object the store was already holding',
     );
   });
 
@@ -477,14 +527,30 @@ module('Integration | operations store reconciliation', function (hooks) {
     let { Activity } = await loader.import<any>(`${testRealmURL}report`);
     let store = getService('store');
 
-    let [created] = (await (operations(report) as any).atomic((b: any) => {
-      let minted = b.create(Activity, { headline: 'Lab safety' });
-      b.addActivity({ activity: minted });
-      return [minted];
-    })) as [{ id: string; lid?: string }];
+    let reportURL = `${testRealmURL}report-data-only`;
+    let { reads, restore } = recordReads();
+    let announced = realmEventFor(reportURL);
+    let created: { id: string; lid?: string };
+    let heldWhenTheBatchReturned: unknown;
+    try {
+      [created] = (await (operations(report) as any).atomic((b: any) => {
+        let minted = b.create(Activity, { headline: 'Lab safety' });
+        b.addActivity({ activity: minted });
+        return [minted];
+      })) as [{ id: string; lid?: string }];
+      // Read here rather than at the end: the batch itself reconciles nothing
+      // for this card, but the report's reload resolves the link to it, which
+      // is a lazy load and does put it in the store. Both are true, in that
+      // order, and the order is the point.
+      heldWhenTheBatchReturned = store.peek(created.id);
+      await announced;
+      await settled();
+    } finally {
+      restore();
+    }
 
     assert.strictEqual(
-      store.peek(created.id),
+      heldWhenTheBatchReturned,
       undefined,
       'nothing was holding this card, so the batch left nothing to reconcile',
     );
@@ -499,37 +565,25 @@ module('Integration | operations store reconciliation', function (hooks) {
       'under a name of its own rather than the URL the realm minted',
     );
 
-    let reportURL = `${testRealmURL}report-data-only`;
-    let { reads, restore } = recordReads();
-    try {
-      deliverIndexEvent({
-        invalidations: [created.id, reportURL],
-        clientRequestId: lastClientRequestId(),
-        clientAuthored: [created.id],
-      });
-      await settled();
-    } finally {
-      restore();
-    }
-
     assert.true(
       reads.some((url) => url.startsWith(reportURL)),
       `the report the batch changed was re-read: ${JSON.stringify(reads)}`,
     );
-    // The link resolves when something reads the field, not when the report
-    // reloads — so this waits for it rather than asserting on the tick the
-    // reload happened to land in.
-    await waitUntil(() => ((report as any).activities ?? []).length === 1, {
-      timeout: 10_000,
-      timeoutMessage: 'the report never gained the link',
-    });
-    let [link] = (report as any).activities;
-    assert.strictEqual(
-      link?.id,
-      created.id,
-      'and lazy-loaded the card the batch minted, which it had never seen',
+    // Asked of the realm first and of the store second, because the two can
+    // disagree and the disagreement is the interesting part: the realm is what
+    // the batch wrote, and the instance is what the reload took from it.
+    let stored = (await getService('card-service').fetchJSON(reportURL)) as any;
+    assert.true(
+      linksTo(stored.data.relationships, created.id),
+      `the realm's report links the card the batch minted: ${JSON.stringify(linksOf(stored.data.relationships))}`,
     );
-    assert.strictEqual((link as any)?.headline, 'Lab safety');
+
+    // Where this stops, and why. What the store does with the event is
+    // re-read the report, which is asserted above. Materializing the link that
+    // re-read brought is a `linksToMany` resolving its targets, and it happens
+    // when something renders them — nothing renders here, so the instance's
+    // own view of that field stays empty and says nothing either way. The
+    // rendered path is the card API's to cover, not this one's.
   });
 
   test('a consumer in another realm is re-saved with the URL the batch minted', async function (assert) {

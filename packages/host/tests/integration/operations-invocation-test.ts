@@ -330,7 +330,7 @@ module('Integration | operations invocation', function (hooks) {
       );
     });
 
-    test('a write carries a client request id to the realm, and does not suppress its own reload', async function (assert) {
+    test('a write carries a client request id to the realm, and claims no card it did not supply', async function (assert) {
       // Read off the event the realm broadcast, which is where the sent header
       // surfaces: the realm reads `X-Boxel-Client-Request-Id` and stamps it on
       // the index job. Asserting a local registry instead would pass for a
@@ -356,18 +356,26 @@ module('Integration | operations invocation', function (hooks) {
         `the realm received the id under the host's own prefix: ${ids[0]}`,
       );
 
-      // Not registered locally, on purpose. That registry is what makes the
-      // store skip the reload, and it may skip only when a save has already
-      // applied the document it sent — an operation's answer carries identity
-      // and version, so a suppressed event would leave this card showing
-      // pre-write values with nothing left to correct it.
+      // Registered locally, which is what lets the store recognize the echo as
+      // its own. Recognizing it is not the same as skipping it: the store skips
+      // only the cards the event says carried this client's content, and a
+      // transform's result is computed on the server — so this card is named
+      // nowhere and is re-read like any other.
       let added = [...clientRequestIds.values()].filter(
         (id) => !before.has(id),
       );
       assert.deepEqual(
         added,
+        ids,
+        'the id the realm received is the one registered here',
+      );
+      let claimed = broadcast
+        .map((event) => event?.clientAuthored)
+        .filter(Boolean);
+      assert.deepEqual(
+        claimed,
         [],
-        'and nothing was registered that would stop the store reloading the card',
+        'and the write claimed no card as carrying content this client sent, so nothing about it is skipped',
       );
     });
 
@@ -685,10 +693,16 @@ module('Integration | operations invocation', function (hooks) {
         created.id.startsWith(testRealmURL),
         `the create answers with the id the realm minted: ${created.id}`,
       );
-      assert.strictEqual(
-        created.lid,
-        'l1',
-        'beside the local id the batch named it with',
+      let lid = created.lid ?? '';
+      let namedByThisBatch = lid.endsWith('_1');
+      assert.true(
+        namedByThisBatch,
+        `beside the local id the batch named it with, which is the batch's own name and the card's position in it: ${lid}`,
+      );
+      let mintedFromThatName = created.id.endsWith(lid);
+      assert.true(
+        mintedFromThatName,
+        'and the realm minted the URL from that name, so the two agree',
       );
 
       let stored = await storedCard('report-batched.json');
