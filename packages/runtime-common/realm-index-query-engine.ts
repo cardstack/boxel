@@ -352,9 +352,11 @@ export class RealmIndexQueryEngine {
     resource: LooseCardResource | FileMetaResource,
   ) {
     if (resource.type === FileMetaResourceType) return;
-    if (!resource.meta?.publication) return;
+    if (!resource.meta?.publication && !resource.meta?.indexedComputation)
+      return;
     resource.meta = { ...resource.meta };
     delete resource.meta.publication;
+    delete resource.meta.indexedComputation;
   }
 
   private async latticeReadResource(
@@ -362,6 +364,23 @@ export class RealmIndexQueryEngine {
     realmURL: URL,
     opts?: Options,
   ) {
+    const indexed = resource.meta.indexedComputation;
+    if (indexed) {
+      resource.meta = {
+        ...resource.meta,
+        publication: {
+          version: indexed.version,
+          state: 'ready',
+          computedFields: indexed.computedFields,
+          queryFields: [],
+          watches: [],
+          outputRevision: indexed.outputRevision,
+          validatedThrough: indexed.outputRevision,
+          definitionRevision: indexed.definitionRevision,
+        },
+      };
+      delete resource.meta.indexedComputation;
+    }
     if (!resource.meta.publication || !resource.id) return;
     let url =
       this.#realm.virtualNetwork
@@ -379,7 +398,7 @@ export class RealmIndexQueryEngine {
           realmURL.href,
           url,
           resource.meta.publication,
-          opts,
+          { ...opts, indexedComputation: indexed },
         ),
       },
     };

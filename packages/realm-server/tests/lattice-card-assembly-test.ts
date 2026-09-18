@@ -19,6 +19,7 @@ import {
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
 import { RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-index-query-engine';
+import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
 import { latticeStoredDocumentBody } from '@cardstack/runtime-common/lattice-materialization';
 import { setupDB } from './helpers/index.ts';
 
@@ -250,6 +251,107 @@ module(basename(import.meta.filename), function (hooks) {
         'availability does not expand the input graph',
       );
     }
+  });
+
+  test('indexed computations retain snapshot values without a secondary owner and obey code freshness', async function (assert) {
+    const [clock] = await db.execute(
+      'SELECT loader_epoch FROM realm_generations WHERE realm_url=$1',
+      { bind: [realmURL] },
+    );
+    await db.execute(
+      `UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{meta,indexedComputation}', $1::jsonb) WHERE url=$2 AND type='instance'`,
+      {
+        bind: [
+          JSON.stringify({
+            version: 1,
+            computedFields: ['name'],
+            outputRevision: 1,
+            definitionRevision: 'guarded-definition',
+            loaderEpoch: clock.loader_epoch,
+          }),
+          `${realmURL}root.json`,
+        ],
+      },
+    );
+    await db.execute(
+      'INSERT INTO lattice_pending_generations (realm_url,generation,definition_revision) VALUES($1,99,$2)',
+      { bind: [realmURL, String(clock.loader_epoch)] },
+    );
+    // The source batch's secondary matching checkpoint is still outstanding.
+    const [pending] = await db.execute(
+      'SELECT COUNT(*) AS n FROM lattice_pending_generations WHERE realm_url=$1',
+      { bind: [realmURL] },
+    );
+    assert.true(
+      Number(pending.n) > 0,
+      'real source batch has pending secondary routing',
+    );
+    let doc = await assemble();
+    assert.strictEqual(
+      doc.data.meta.publication?.state,
+      'ready',
+      'primary computation does not wait for secondary routing',
+    );
+    assert.true(doc.data.meta.publication?.hasPublishedSnapshot);
+    assert.strictEqual(doc.included, undefined);
+    assert.deepEqual(
+      calls,
+      [],
+      'no query preparation or source graph expansion',
+    );
+    assert.strictEqual(doc.data.meta.indexedComputation, undefined);
+    const [{ n }] = await db.execute(
+      'SELECT COUNT(*) AS n FROM lattice_owners WHERE realm_url=$1 AND NOT retired',
+      { bind: [realmURL] },
+    );
+    assert.strictEqual(Number(n), 0);
+    const [{ id: sourceJob }] = await db.execute(
+      `INSERT INTO jobs(job_type,concurrency_group,priority,timeout,args) VALUES('incremental-index',$1,8,10,'{}') RETURNING id`,
+      { bind: [indexingConcurrencyGroup(realmURL)] },
+    );
+    doc = await assemble();
+    assert.strictEqual(
+      doc.data.meta.publication?.state,
+      'pending',
+      'accepted source work cannot advertise the prior output as fresh',
+    );
+    await db.execute("UPDATE jobs SET status='resolved' WHERE id=$1", {
+      bind: [sourceJob],
+    });
+    await db.execute(
+      'UPDATE realm_generations SET loader_epoch=$1 WHERE realm_url=$2',
+      { bind: ['edited-code', realmURL] },
+    );
+    doc = await assemble();
+    assert.strictEqual(
+      doc.data.meta.publication?.state,
+      'pending',
+      'code movement keeps old values but cannot claim freshness',
+    );
+    assert.strictEqual(doc.data.attributes?.name, 'root');
+    assert.true(doc.data.meta.publication?.hasPublishedSnapshot);
+    const disabled = new RealmIndexQueryEngine({
+      realm: {
+        url: realmURL,
+        virtualNetwork: new VirtualNetwork(),
+        getRealmInfo: async () => ({ name: 'fixture' }),
+      } as unknown as Realm,
+      dbAdapter: db,
+      definitionLookup: {} as DefinitionLookup,
+      fetch: globalThis.fetch,
+    });
+    const ordinary = await disabled.cardDocument(new URL(`${realmURL}root`));
+    if (ordinary?.type !== 'doc') throw new Error('Expected ordinary card');
+    assert.strictEqual(
+      ordinary.doc.data.meta.publication,
+      undefined,
+      'flag off has no snapshot authority',
+    );
+    assert.strictEqual(
+      ordinary.doc.data.meta.indexedComputation,
+      undefined,
+      'flag off strips private proof',
+    );
   });
 
   async function renderedRow(

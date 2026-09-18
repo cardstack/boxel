@@ -69,6 +69,18 @@ export interface PublicationReceipt {
   hasPublishedSnapshot?: boolean;
 }
 
+// Private index-owned provenance for a derivation committed with its source.
+// Separate from `publication`: this has no secondary owner or query watches.
+// Only the enabled serving seam converts it into a client snapshot receipt.
+export interface IndexedComputationReceipt {
+  version: 1;
+  computedFields: string[];
+  outputRevision: number;
+  definitionRevision: string;
+  loaderEpoch: string;
+  codeReference?: import('./lattice-code-reference.ts').LatticeCodeReference;
+}
+
 export interface LatticeInputSnapshot {
   realmURL: string;
   generation: number;
@@ -285,11 +297,15 @@ export async function latticeReadState(
   realmURL: string,
   ownerURL: string,
   stamp: PublicationReceipt,
-  opts?: { latticeInput?: boolean },
+  opts?: {
+    latticeInput?: boolean;
+    indexedComputation?: IndexedComputationReceipt;
+  },
 ): Promise<'ready' | 'pending'> {
   // This durable checkpoint closes the source-commit/secondary-claim gap.
   // It also gates revision-pinned feeder reads until exact matching catches up.
   if (
+    !opts?.indexedComputation &&
     (
       await query(db, [
         'SELECT 1 FROM lattice_pending_generations WHERE realm_url =',
@@ -320,6 +336,27 @@ export async function latticeReadState(
         'Lattice indexing failed; retry indexing before treating this view as current',
         { status: 503 },
       );
+  }
+  if (opts?.indexedComputation) {
+    const proof = opts.indexedComputation;
+    // Primary indexing already committed the source and computed value as one
+    // guarded batch. Secondary routing/owners cannot make this output pending.
+    const [code] = await query(
+      db,
+      proof.codeReference && db.kind === 'pg'
+        ? [
+            'SELECT lattice_code_reference_current(',
+            param(JSON.stringify(proof.codeReference)),
+            '::jsonb) AS current',
+          ]
+        : [
+            'SELECT loader_epoch =',
+            param(proof.loaderEpoch),
+            'AS current FROM realm_generations WHERE realm_url =',
+            param(realmURL),
+          ],
+    );
+    return proof.version === 1 && code?.current === true ? 'ready' : 'pending';
   }
   let [row] = await query(db, [
     'SELECT o.published_generation, o.dirty_generation, o.retired, o.definition_revision,',

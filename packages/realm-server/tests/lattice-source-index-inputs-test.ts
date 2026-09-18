@@ -10,8 +10,11 @@ import {
   param,
   type DefinitionLookup,
   type Prerenderer,
+  type Realm,
 } from '@cardstack/runtime-common';
 import { IndexRunner } from '@cardstack/runtime-common/index-runner';
+import { RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-index-query-engine';
+import { latticeSnapshotFields } from '@cardstack/runtime-common/lattice-materialization';
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import { LatticeSourceIndexInputs } from '@cardstack/runtime-common/lattice-source-index-inputs';
 import type {
@@ -364,6 +367,47 @@ module(basename(import.meta.filename) + ' native batch', (hooks) => {
           (derived.pristine_doc as any).meta.publication,
           undefined,
           'no materialized owner manifest',
+        );
+        assert.deepEqual(
+          (derived.pristine_doc as any).meta.indexedComputation.computedFields,
+          ['value'],
+        );
+        assert.strictEqual(
+          (derived.pristine_doc as any).meta.indexedComputation.outputRevision,
+          Number(derived.generation),
+        );
+        const readEngine = new RealmIndexQueryEngine({
+          realm: {
+            url: realm,
+            virtualNetwork: network,
+            getRealmInfo: async () => ({ name: 'fixture' }),
+          } as unknown as Realm,
+          dbAdapter: db,
+          definitionLookup: lookup,
+          fetch: globalThis.fetch,
+          lattice: new LatticeRealmConfig([realm]),
+        });
+        const read = await readEngine.cardDocument(
+          new URL(ownerURL.replace(/\.json$/, '')),
+          { loadLinks: true },
+        );
+        if (read?.type !== 'doc')
+          throw new Error('Expected indexed derived card');
+        assert.deepEqual(
+          latticeSnapshotFields(read.doc.data, { allowPending: true })
+            ?.computedFields,
+          ['value'],
+          'client consumes computed attributes without executing the definition',
+        );
+        assert.strictEqual(
+          read.doc.included,
+          undefined,
+          'does not expand the source graph',
+        );
+        assert.strictEqual(
+          read.doc.data.meta.indexedComputation,
+          undefined,
+          'private code proof stays server-side',
         );
         assert.strictEqual(
           visits.filter((url) => url === sourceURL).length,

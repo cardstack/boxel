@@ -115,6 +115,7 @@ export type CardResourceMeta = Meta & {
   // the index (e.g. a freshly-built resource that has not been persisted).
   generation?: number;
   publication?: PublicationReceipt;
+  indexedComputation?: import('./lattice-materialization.ts').IndexedComputationReceipt;
   // The instance's declared-screenshot captures, joined at serve time from
   // the prerendered manifest (`prerendered_html.screenshots`) — never
   // persisted into the index or the source file, and stripped from incoming

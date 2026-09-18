@@ -35,7 +35,10 @@ import {
 } from './lattice-materialization-inputs.ts';
 import { LatticeDataProjector } from './lattice-data-projection.ts';
 import { createLatticeQueryInputResolver } from './lattice-query-input-plan.ts';
-import type { PublicationReceipt } from '@cardstack/runtime-common/lattice-materialization';
+import type {
+  IndexedComputationReceipt,
+  PublicationReceipt,
+} from '@cardstack/runtime-common/lattice-materialization';
 import type { LatticeCodeReference } from '@cardstack/runtime-common/lattice-code-reference';
 import type { LatticeWorkScope } from '@cardstack/runtime-common/lattice-work';
 import type { LatticePreparedJsonSource } from './lattice-json-source.ts';
@@ -387,6 +390,39 @@ export function createLatticeNativeCardIndexer({
           )
         : undefined;
       assertLatticeLivenessTier(indexMetadata?.livenessTier);
+      const computedFields = Object.entries(admission.root.definition.fields)
+        .filter(([name, key]) => {
+          const field = admission.root.definition.fieldDefs[key];
+          return (
+            name !== 'id' &&
+            field.isComputed &&
+            (field.type === 'contains' || field.type === 'containsMany')
+          );
+        })
+        .map(([name]) => name);
+      if (linkedSource) {
+        // Folding computation into indexing removes the secondary job, not
+        // the browser's right to reuse the guarded computed payload.
+        Object.assign(serialized.data.meta, {
+          indexedComputation: {
+            version: 1,
+            computedFields,
+            outputRevision: request.generation,
+            definitionRevision: createHash('sha256')
+              .update(
+                JSON.stringify([
+                  admission.runtimeRevision,
+                  result.definitionRevisions,
+                ]),
+              )
+              .digest('hex'),
+            loaderEpoch: request.loaderEpoch,
+            ...(admission.codeReference
+              ? { codeReference: admission.codeReference }
+              : {}),
+          } satisfies IndexedComputationReceipt,
+        });
+      }
       if (dataReceipt || discovery) {
         const manifest: PublicationReceipt = {
           version: 1,
@@ -493,16 +529,7 @@ export function createLatticeNativeCardIndexer({
                 ]),
               }
             : {}),
-          computedFields: Object.entries(admission.root.definition.fields)
-            .filter(([name, key]) => {
-              const field = admission.root.definition.fieldDefs[key];
-              return (
-                name !== 'id' &&
-                field.isComputed &&
-                (field.type === 'contains' || field.type === 'containsMany')
-              );
-            })
-            .map(([name]) => name),
+          computedFields,
           queryFields,
           watches: [
             ...(dataReceipt?.watches ?? []),
