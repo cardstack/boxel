@@ -471,6 +471,13 @@ export default class RenderRoute extends Route<Model> {
     // residency midway through the render that follows it.
     this.store.observeIndexingJob();
     this.cardContextStore.observeIndexingJob();
+    // Which synchronization dropped this tab's loader, for the row's
+    // diagnostics. A dropped loader is the difference between a build that
+    // evaluates the whole module graph and one that evaluates nothing, so a
+    // reader looking at `moduleEvaluationCount` needs to know whether this
+    // visit caused it.
+    let loaderResetReason: BuildModelDiagnostics['loaderResetReason'];
+
     // Loader-epoch synchronization: indexing renders thread the realm's
     // loader epoch (re-minted whenever an index pass invalidates executable
     // modules — see RealmGenerationsTable.loader_epoch). When it differs
@@ -481,12 +488,6 @@ export default class RenderRoute extends Route<Model> {
     // pass, and instance-only passes (whose epoch is unchanged) keep the
     // loader warm. Held per tab, unkeyed: the visits that thread an epoch
     // are realm-affine, so one tab only ever sees one realm's epochs.
-    // Which synchronization dropped this tab's loader, for the row's
-    // diagnostics. A dropped loader is the difference between a build that
-    // evaluates the whole module graph and one that evaluates nothing, so a
-    // reader looking at `moduleEvaluationCount` needs to know whether this
-    // visit caused it.
-    let loaderResetReason: BuildModelDiagnostics['loaderResetReason'];
     if (parsedOptions.loaderEpoch !== undefined) {
       let held = (globalThis as any).__boxelLoaderEpoch as string | undefined;
       if (held !== parsedOptions.loaderEpoch) {
