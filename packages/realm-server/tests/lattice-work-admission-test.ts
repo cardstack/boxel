@@ -274,22 +274,15 @@ module(basename(import.meta.filename), function (hooks) {
     await unchanged(assert);
   });
 
-  test('collecting writes do not block wave selection or admission, but runnable writes do', async (assert) => {
+  test('new ordinary writes immediately join source backlog and preserve admission fences', async (assert) => {
     const registry = writer.latticePublication(lookup, network).registry;
     const [job] = await db.execute(
-      `INSERT INTO jobs(job_type,concurrency_group,priority,timeout,args,created_at)
-       VALUES('incremental-index',$1,10,10,$2,clock_timestamp()+interval '1 hour') RETURNING id`,
-      {
-        bind: [
-          'indexing:' + realm,
-          JSON.stringify({ latticeBatch: { atomic: false, immediate: false } }),
-        ],
-      },
+      `INSERT INTO jobs(job_type,concurrency_group,priority,timeout,args)
+       VALUES('incremental-index',$1,10,10,'{}') RETURNING id`,
+      { bind: ['indexing:' + realm] },
     );
-    assert.false(await registry.hasSourceBacklog(realm));
-    await registry.assertWorkCurrent(receipt);
-    assert.ok(true, 'ordinary work admits during collection');
     for (const batch of [
+      { atomic: false, immediate: false },
       { atomic: false, immediate: true },
       { atomic: true },
       null,
@@ -297,41 +290,17 @@ module(basename(import.meta.filename), function (hooks) {
       await db.execute('UPDATE jobs SET args=$1 WHERE id=$2', {
         bind: [JSON.stringify({ latticeBatch: batch }), job.id],
       });
-      assert.true(
-        await registry.hasSourceBacklog(realm),
-        'immediate, atomic and legacy writes have priority',
-      );
+      assert.true(await registry.hasSourceBacklog(realm));
       await assert.rejects(
         registry.assertWorkCurrent(receipt),
         /new source work has priority/,
       );
     }
-    await db.execute(
-      `UPDATE jobs SET args=$1, created_at=clock_timestamp()-interval '6 seconds' WHERE id=$2`,
-      {
-        bind: [
-          JSON.stringify({ latticeBatch: { atomic: false, immediate: false } }),
-          job.id,
-        ],
-      },
-    );
-    assert.true(
-      await registry.hasSourceBacklog(realm),
-      'expired collection has priority',
-    );
-    await assert.rejects(
-      registry.assertWorkCurrent(receipt),
-      /new source work has priority/,
-    );
-    await db.execute(
-      "UPDATE jobs SET created_at=clock_timestamp()+interval '1 hour' WHERE id=$1",
-      { bind: [job.id] },
-    );
     await changes.generation();
     await assert.rejects(
       registry.assertWorkCurrent(receipt),
       LatticeWorkSuperseded,
-      'collection never bypasses generation fences',
+      'removing the collection delay never bypasses generation fences',
     );
   });
 

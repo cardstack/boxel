@@ -1000,9 +1000,9 @@ module(basename(import.meta.filename), function (hooks) {
     };
     try {
       assert.true(await canRun());
-      const [collecting] = await db.execute(
-        `INSERT INTO jobs(job_type,concurrency_group,priority,timeout,args,created_at)
-         VALUES('incremental-index',$1,10,10,$2,clock_timestamp()+interval '1 hour') RETURNING id`,
+      const [ordinary] = await db.execute(
+        `INSERT INTO jobs(job_type,concurrency_group,priority,timeout,args)
+         VALUES('incremental-index',$1,10,10,$2) RETURNING id`,
         {
           bind: [
             'indexing:' + realm,
@@ -1012,19 +1012,18 @@ module(basename(import.meta.filename), function (hooks) {
           ],
         },
       );
-      const duringCollection = await openLatticeNativeWork(db, request, {
-        inputActor: actor,
-        deps: [realm + 'score'],
-        resolve: (url) => url,
-        codeReference: lab.reference,
-      });
-      assert.false(
-        duringCollection.signal.aborted,
-        'native work admits while the next write collects',
+      await assert.rejects(
+        openLatticeNativeWork(db, request, {
+          inputActor: actor,
+          deps: [realm + 'score'],
+          resolve: (url) => url,
+          codeReference: lab.reference,
+        }),
+        /new source work has priority/,
+        'ordinary writes are runnable immediately',
       );
-      await duringCollection.close();
       await db.execute("UPDATE jobs SET status='resolved' WHERE id=$1", {
-        bind: [collecting.id],
+        bind: [ordinary.id],
       });
       await db.execute(
         `INSERT INTO jobs(job_type,concurrency_group,priority,timeout,args)

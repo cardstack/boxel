@@ -15,7 +15,6 @@ import type { IndexQueryEngine } from './index-query-engine.ts';
 import type { Query } from './query.ts';
 import { acquireConcurrencyGroupLock } from './queue-concurrency-lock.ts';
 import {
-  latticeSourceJobReadySQL,
   latticeOwnerAttemptsSQL,
   latticeOwnerCodeVersionSQL,
   latticeOwnerRetryReadySQL,
@@ -1008,9 +1007,7 @@ export class LatticeQueryRegistry
          EXISTS(SELECT 1 FROM jobs j WHERE j.concurrency_group=`,
       param('indexing:' + work.realmURL),
       `AND j.status='unfulfilled' AND j.job_type IN
-         ('incremental-index','from-scratch-index','copy-index') AND`,
-      dbExpression({ pg: [latticeSourceJobReadySQL('j')], sqlite: ['TRUE'] }),
-      `) AS source_pending,
+         ('incremental-index','from-scratch-index','copy-index')) AS source_pending,
          EXISTS(SELECT 1 FROM lattice_pending_generations t WHERE t.realm_url=g.realm_url) AS matching_pending,`,
       dbExpression({ pg: [latticeOwnerOverdueSQL], sqlite: ['FALSE'] }),
       'AS overdue,',
@@ -1099,15 +1096,14 @@ export class LatticeQueryRegistry
 
   // Any dirty owner past its staleness deadline: a matching backlog must not
   // keep it from a wave.
-  // Runnable source jobs have priority; collecting batches leave the lane free.
+  // All queued source jobs are runnable; ordinary work has no collection delay.
   async hasSourceBacklog(realmURL: string): Promise<boolean> {
     if (this.db.kind !== 'pg') return false;
     const [row] = await query(this.db, [
       'SELECT 1 FROM jobs j WHERE j.concurrency_group =',
       param('indexing:' + realmURL),
       `AND j.status='unfulfilled'
-       AND j.job_type IN ('incremental-index','from-scratch-index','copy-index')
-       AND ${latticeSourceJobReadySQL('j')} LIMIT 1`,
+       AND j.job_type IN ('incremental-index','from-scratch-index','copy-index') LIMIT 1`,
     ]);
     return Boolean(row);
   }

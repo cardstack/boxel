@@ -35,7 +35,6 @@ import {
 import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/indexer';
 import { latticeRenderRetryReadySQL } from '@cardstack/runtime-common/jobs/lattice-render';
 import {
-  latticeSourceJobReadySQL,
   latticeMaterializationReadySQL,
   latticeOverdueWorkSQL,
   latticeWaveTurnSQL,
@@ -465,7 +464,6 @@ export class PgQueueRunner implements QueueRunner {
   #pollInterval = 10000;
   #handlers: Map<string, Function> = new Map();
   #jobRunner: WorkLoop | undefined;
-  #nextWakeMs = 10000;
   #priority: number;
   readonly #latticeRealms: readonly string[];
 
@@ -528,9 +526,8 @@ export class PgQueueRunner implements QueueRunner {
             loop.wake.bind(loop),
             async () => {
               while (!loop.shuttingDown) {
-                this.#nextWakeMs = this.#pollInterval;
                 await this.processJobs(loop);
-                await loop.sleep(this.#nextWakeMs);
+                await loop.sleep(this.#pollInterval);
               }
             },
           );
@@ -640,29 +637,6 @@ export class PgQueueRunner implements QueueRunner {
           if (jobs.length === 0) {
             log.debug(`%s: found no work`, this.#workerId);
             await query(['ROLLBACK']);
-            if (
-              this.#latticeRealms.length &&
-              this.#handlers.has('incremental-index')
-            ) {
-              const [next] = await query([
-                `SELECT extract(epoch FROM (min(created_at + interval '5 seconds') - clock_timestamp())) * 1000 AS delay
-                 FROM jobs WHERE status='unfulfilled' AND job_type='incremental-index'
-                   AND priority >=`,
-                param(this.#priority),
-                `AND args->>'realmURL' IN (`,
-                ...this.#latticeRealms.flatMap((realm, i) =>
-                  i === 0 ? [param(realm)] : [',', param(realm)],
-                ),
-                `) AND args->'latticeBatch'->>'atomic'='false'
-                   AND args->'latticeBatch'->>'immediate' IS DISTINCT FROM 'true'
-                   AND created_at + interval '5 seconds' > clock_timestamp()`,
-              ]);
-              if (next?.delay != null)
-                this.#nextWakeMs = Math.max(
-                  1,
-                  Math.min(this.#pollInterval, Math.ceil(Number(next.delay))),
-                );
-            }
             return;
           }
           let jobToRun = jobs[0];
@@ -988,13 +962,11 @@ export class PgQueueRunner implements QueueRunner {
         i === 0 ? [param(realm)] : [',', param(realm)],
       ),
       `) THEN (
-        ${latticeSourceJobReadySQL('j')}
-        AND (j.job_type <> 'lattice-materialize' OR NOT EXISTS (
+        (j.job_type <> 'lattice-materialize' OR NOT EXISTS (
           SELECT 1 FROM jobs source
           WHERE source.concurrency_group = 'indexing:' || (j.args->>'realmURL')
             AND source.status = 'unfulfilled'
             AND source.job_type IN ('incremental-index', 'from-scratch-index', 'copy-index')
-            AND ${latticeSourceJobReadySQL('source')}
         ) OR EXISTS (SELECT 1 FROM lattice_pending_generations p
           WHERE p.realm_url=j.args->>'realmURL') OR ${latticeOverdueWorkSQL})
         AND ${latticeRenderRetryReadySQL}

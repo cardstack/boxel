@@ -248,7 +248,7 @@ module(basename(import.meta.filename), function (hooks) {
     }
   });
 
-  test('ordinary secondary work runs while primary work is collecting', async (assert) => {
+  test('new ordinary source work runs immediately, then secondary work gets its turn', async (assert) => {
     assert.timeout(15_000);
     const realm = 'https://lattice-collection-lane.example/';
     const adapter = new PgAdapter();
@@ -275,8 +275,8 @@ module(basename(import.meta.filename), function (hooks) {
         { bind: [realm, realm + 'Board/one.json'] },
       );
       const [source] = await db.execute(
-        `INSERT INTO jobs(job_type,concurrency_group,priority,timeout,args,created_at)
-        VALUES('incremental-index',$1,10,10,$2,clock_timestamp()+interval '1 hour') RETURNING id`,
+        `INSERT INTO jobs(job_type,concurrency_group,priority,timeout,args)
+        VALUES('incremental-index',$1,10,10,$2) RETURNING id`,
         {
           bind: [
             'indexing:' + realm,
@@ -306,8 +306,8 @@ module(basename(import.meta.filename), function (hooks) {
       ]);
       assert.deepEqual(
         order,
-        ['wave'],
-        'ordinary, not overdue, wave runs before collection ends',
+        ['source', 'wave'],
+        'source and then ordinary wave run without a fixed collection delay',
       );
       const reservations = await db.execute(
         'SELECT id FROM job_reservations WHERE job_id=$1',
@@ -315,8 +315,8 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.strictEqual(
         reservations.length,
-        0,
-        'the primary collection window remains intact',
+        1,
+        'source work claimed without waiting five seconds',
       );
     } finally {
       clearTimeout(timer);
@@ -326,7 +326,7 @@ module(basename(import.meta.filename), function (hooks) {
     }
   });
 
-  test('a background collection window wakes at its deadline without another write', async function (assert) {
+  test('a fresh ordinary write wakes an idle worker without a collection timer', async function (assert) {
     assert.timeout(15_000);
     const realm = 'https://lattice-window.example/';
     const adapter = new ClaimObservingAdapter();
@@ -337,7 +337,10 @@ module(basename(import.meta.filename), function (hooks) {
       lattice: new LatticeRealmConfig([realm]),
     });
     runner.register('incremental-index', async () => ({}));
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
+      await runner.start();
+      await adapter.blockedClaim.promise;
       const job = await publisher.publish({
         jobType: 'incremental-index',
         concurrencyGroup: `indexing:${realm}`,
@@ -352,48 +355,31 @@ module(basename(import.meta.filename), function (hooks) {
           },
         },
       });
-      await runner.start();
-      await adapter.blockedClaim.promise;
-      const reservations = await db.execute(
-        'SELECT id FROM job_reservations WHERE job_id=$1',
-        { bind: [job.id] },
-      );
-      assert.strictEqual(
-        reservations.length,
-        0,
-        'collection does not reserve a worker',
-      );
-      await db.execute(
-        "UPDATE jobs SET created_at=clock_timestamp()-interval '4.5 seconds' WHERE id=$1",
-        { bind: [job.id] },
-      );
-      await db.execute('NOTIFY jobs');
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      try {
-        await Promise.race([
-          job.done,
-          new Promise((_, reject) => {
-            timer = setTimeout(
-              () => reject(new Error('deadline did not wake the worker')),
-              3000,
-            );
-          }),
-        ]);
-      } finally {
-        clearTimeout(timer);
-      }
+      await Promise.race([
+        job.done,
+        new Promise((_, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                new Error('ordinary write waited for collection or polling'),
+              ),
+            3000,
+          );
+        }),
+      ]);
       assert.ok(
         true,
-        'deadline runs the batch without waiting for the normal ten-second poll',
+        'NOTIFY starts fresh ordinary work before five seconds, without another write',
       );
     } finally {
+      clearTimeout(timer);
       await runner.destroy();
       await publisher.destroy();
       await adapter.close();
     }
   });
 
-  test('an immediate waiter releases its existing collection window', async function (assert) {
+  test('an immediate waiter promotes its existing unclaimed ordinary batch', async function (assert) {
     assert.timeout(15_000);
     const realm = 'https://lattice-immediate.example/';
     const adapter = new ClaimObservingAdapter();
@@ -422,18 +408,13 @@ module(basename(import.meta.filename), function (hooks) {
       });
     try {
       const first = await enqueue(false);
-      await db.execute(
-        "UPDATE jobs SET created_at=clock_timestamp()+interval '1 hour' WHERE id=$1",
-        { bind: [first.id] },
-      );
-      await runner.start();
-      await adapter.blockedClaim.promise;
       const urgent = await enqueue(true);
       assert.strictEqual(
         urgent.id,
         first.id,
         'urgency promotes the existing job',
       );
+      await runner.start();
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
         await Promise.race([
@@ -448,7 +429,7 @@ module(basename(import.meta.filename), function (hooks) {
       } finally {
         clearTimeout(timer);
       }
-      assert.ok(true, 'urgency bypasses the remaining collection delay');
+      assert.ok(true, 'the promoted pending batch runs immediately');
     } finally {
       await runner.destroy();
       await publisher.destroy();
