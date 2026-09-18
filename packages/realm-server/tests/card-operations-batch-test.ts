@@ -14,6 +14,7 @@ import {
   computeContentHash,
   isSplicedSource,
   maybeRelativeReference,
+  RequestTimings,
   streamSpliced,
   type SplicedSource,
 } from '@cardstack/runtime-common';
@@ -2315,6 +2316,98 @@ module(basename(import.meta.filename), function () {
         'and the commit is still told not to wait for its own',
       );
     });
+    // A caller reporting where its write's time went reads one timeline. The
+    // stages the coordinator owns end where the commit's begin, and the commit
+    // is several frames away — so what is under test is that they meet: the
+    // commit is handed the same timeline, and what it does not name is still
+    // accounted for rather than lost.
+    test('the commit stamps its stages on the write timeline', async function (assert) {
+      let { core } = stub();
+      let timings = new RequestTimings();
+      let reported: unknown;
+      let reporting: BatchCore = {
+        ...core,
+        async commitUnlocked(batch, options) {
+          reported = options?.stageCursor;
+          options?.stageCursor?.mark('persist');
+          return core.commitUnlocked(batch, options);
+        },
+      };
+      await commitBatch(
+        reporting,
+        [
+          {
+            op: 'create',
+            lid: 'one',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'One' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        { timings },
+      );
+
+      assert.ok(reported, 'the commit is handed somewhere to stamp its stages');
+      let stages = timings.stages();
+      // `commit` is reached twice — once for the file list assembled before
+      // the realm is called, once for the residual after it answers — so it
+      // takes its place at the first of the two and the realm's own stages
+      // follow it.
+      assert.deepEqual(
+        Object.keys(stages),
+        ['lock', 'drain', 'stage', 'commit', 'persist'],
+        'and the timeline reads in the order the write passed through them',
+      );
+    });
+
+    test('a commit that throws still reports the stages it reached', async function (assert) {
+      let { core } = stub();
+      let timings = new RequestTimings();
+      let failing: BatchCore = {
+        ...core,
+        async commitUnlocked() {
+          throw new Error('the realm could not carry the commit out');
+        },
+      };
+      try {
+        await commitBatch(
+          failing,
+          [
+            {
+              op: 'create',
+              lid: 'one',
+              document: {
+                data: {
+                  type: 'card',
+                  attributes: { firstName: 'One' },
+                  meta: { adoptsFrom: PERSON },
+                },
+              },
+            },
+          ],
+          { timings },
+        );
+        assert.ok(false, 'the batch throws');
+      } catch (err: unknown) {
+        assert.strictEqual(
+          (err as Error).message,
+          'the realm could not carry the commit out',
+        );
+      }
+      // The write someone is most likely trying to account for is the one that
+      // failed, so a stage that was reached is reported whether or not the
+      // work inside it finished.
+      assert.deepEqual(
+        Object.keys(timings.stages()),
+        ['lock', 'drain', 'stage', 'commit'],
+        'the stages up to and including the failed commit are attributed',
+      );
+    });
+
     test('an update rewrites a side-loaded card that is already stored', async function (assert) {
       let { core, commits } = stub({
         stored: {
