@@ -1,6 +1,6 @@
 ---
 name: realm-load-harness
-description: Run and interpret the realm load harness (`packages/realm-server/scripts/load-harness/`) — a dependency-free driver that authenticates N real Matrix users against a non-production realm server, holds unbounded `_federated-search` queries open from `--readers` sessions while `--writers` sessions POST cards into the same realm, and reports per-query-shape payload bytes, split headers-vs-body latency, write latency, and (under `--subscribe`) realm-event re-run counts. Covers (1) reproducing a saturation incident — many concurrent dashboards plus a steady write rate — so the realm server's own `inFlightSearch` / `heapMB` / `eventLoopLagMs` health-sampler signals can be read under load; (2) A/B-ing a payload, throttle, or admission-control change across a deploy, where the trustworthy signal is the per-shape KB column and NOT wall-clock, because a driver outside the realm server's AWS region measures its own connection (an out-of-region run read 6,101 ms p50 end-to-end against 225 ms of actual server time; the same run in-region reads 521 ms — itself about one handshake above the server's own number, since `fetch` resolves only after any TCP+TLS setup, which is why the driver primes each batch's connections outside the timed window and why `--prime-connections=false` relabels `headers` as including setup); (3) confirming a deploy actually finished before comparing two runs — matching image tags prove nothing, `aws ecs describe-services … deployments[0].rolloutState` must read `COMPLETED` with `updatedAt` earlier than the test start, and skipping this check has produced a confidently-wrong conclusion; (4) measuring rather than modelling the live-search fan-out with `--subscribe`, which reads `app.boxel.realm-event` over Matrix `/sync` and applies the host's `#indexEventCannotMatch` skip test — with the caveat that the harness compares type keys literally where the host resolves them through its module loader, so its re-run counts are indicative and quoting them as the host's behaviour produces a wrong bug report; (5) adding a second authenticated round trip per write with `--model-calls`, which forwards through `_request-forward` to a refused destination so no tokens are spent — reaching JWT verification, body parsing, and the `AllowedProxyDestinations` / `proxy_endpoints` lookup, but stopping in front of `withUserCostLock`, so it does not reproduce per-user cost-lock contention (a `400` in the response tally is expected); (6) choosing which of the two documents `_federated-search` returns a run measures, via `--fieldset` or a workload's `fieldset` member — `item` sends `fields: { entry: ['item'] }` and is the card-data-only path `store.search` takes for a query-backed field, while the default `entries` sends no fieldset and gets the prerendered renderings a grid or the search panel displays, four to six times the bytes for the same filter (94 KB against 405–537 KB measured on a deployed realm), so a figure quoted without its path is not interpretable and every run prints the path it modelled; (7) choosing the spread a run asks over via a query's `variants` — filter fragments cycled per re-run and offset per reader, because a shape with a fixed filter asks one question that the realm's live-search cache answers after the first miss (the same query six times reads miss/miss/miss/miss/hit-48ms/hit-50ms on a deployed realm), whose signature is latency falling as the request rate rises, so a variant-less run reports cache-hit cost rather than what answering costs and the `spread:` summary line states which it was; and (8) choosing where the queries come from, in three modes of increasing specificity — the committed `workload.experiments.json` targeting the experiments realm that ships in the repo as `packages/experiments-realm` and exists in every deployed environment (the recommended starting point: zero setup, and numbers comparable to anyone else's run **against the same target**, since the repo realm and a deployed one are not kept in step); `--derive-workload`, which reads the realm's own `GET <realm>/_types` card-type summary, ranks its `kind: 'instance'` entries by `attributes.total`, splits each `id` at the last `/` into an `item.on` module/name anchor, and queries the top `--derive-top` (default 8) — so two people testing one realm need no shared config, and `--emit-workload` turns the result into a committable file; and a hand-written workload file transcribed from a specific card's `load()` / `loadData()` bodies into the `_federated-search` entry wire grammar where the type anchor is `item.on` and field paths carry an `item.` prefix. Also covers the credential CSV (`username`, `initial_password`; never commit one, never log a password) and the requirement that each reader join its invited Matrix session room or it receives no events at all. Use when asked to load-test, stress, or saturate a realm server, to reproduce a search-saturation or heap incident on staging, to measure the payload cost of a dashboard's query set, to get a load number comparable to a teammate's, or to check whether a search/payload change moved the numbers. The AWS session, ECS/CloudWatch reads, and log pulls this skill depends on come from `aws-access` (a prerequisite for anything deployed) and `tail-logs`; the browser-side half of a slowness complaint — what the client did with the bytes once they arrived — is `client-perf-diagnosis`, which this harness deliberately cannot see.
+description: Run and interpret the realm load harness (`packages/realm-server/scripts/load-harness/`) — a dependency-free driver that authenticates N real Matrix users against a non-production realm server, holds unbounded `_federated-search` queries open from `--readers` sessions while `--writers` sessions POST cards into the same realm, and reports per-query-shape payload bytes, split headers-vs-body latency, write latency, and (under `--subscribe`) realm-event re-run counts. Covers (1) reproducing a saturation incident — many concurrent dashboards plus a steady write rate — so the realm server's own `heapMB` / `eventLoopLagMs` health-sampler signals can be read under load, alongside the concurrency the run itself reports (the sampler's `inFlightSearch` is a five-second point sample and answers neither threshold question); (2) A/B-ing a payload, throttle, or admission-control change across a deploy, where the trustworthy signal is the per-shape KB column and NOT wall-clock, because a driver outside the realm server's AWS region measures its own connection (an out-of-region run read 6,101 ms p50 end-to-end against 225 ms of actual server time; the same run in-region reads 521 ms — itself about one handshake above the server's own number, since `fetch` resolves only after any TCP+TLS setup, which is why the driver primes each batch's connections outside the timed window and why `--prime-connections=false` relabels `headers` as including setup); (3) confirming a deploy actually finished before comparing two runs — matching image tags prove nothing, `aws ecs describe-services … deployments[0].rolloutState` must read `COMPLETED` with `updatedAt` earlier than the test start, and skipping this check has produced a confidently-wrong conclusion; (4) measuring rather than modelling the live-search fan-out with `--subscribe`, which reads `app.boxel.realm-event` over Matrix `/sync` and applies the host's `#indexEventCannotMatch` skip test — with the caveat that the harness compares type keys literally where the host resolves them through its module loader, so its re-run counts are indicative and quoting them as the host's behaviour produces a wrong bug report; (5) adding a second authenticated round trip per write with `--model-calls`, which forwards through `_request-forward` to a refused destination so no tokens are spent — reaching JWT verification, body parsing, and the `AllowedProxyDestinations` / `proxy_endpoints` lookup, but stopping in front of `withUserCostLock`, so it does not reproduce per-user cost-lock contention (a `400` in the response tally is expected); (6) choosing which of the two documents `_federated-search` returns a run measures, via `--fieldset` or a workload's `fieldset` member — `item` sends `fields: { entry: ['item'] }` and is the card-data-only path `store.search` takes for a query-backed field, while the default `entries` sends no fieldset and gets the prerendered renderings a grid or the search panel displays, four to six times the bytes for the same filter (94 KB against 405–537 KB measured on a deployed realm), so a figure quoted without its path is not interpretable and every run prints the path it modelled; (7) choosing the spread a run asks over via a query's `variants` — filter fragments cycled per re-run and offset per reader, because a shape with a fixed filter asks one question that the realm's live-search cache answers after the first miss (the same query six times reads miss/miss/miss/miss/hit-48ms/hit-50ms on a deployed realm), whose signature is latency falling as the request rate rises, so a variant-less run reports cache-hit cost rather than what answering costs and the `spread:` summary line states which it was; and (8) choosing where the queries come from, in three modes of increasing specificity — the committed `workload.experiments.json` targeting the experiments realm that ships in the repo as `packages/experiments-realm` and exists in every deployed environment (the recommended starting point: zero setup, and numbers comparable to anyone else's run **against the same target**, since the repo realm and a deployed one are not kept in step); `--derive-workload`, which reads the realm's own `GET <realm>/_types` card-type summary, ranks its `kind: 'instance'` entries by `attributes.total`, splits each `id` at the last `/` into an `item.on` module/name anchor, and queries the top `--derive-top` (default 8) — so two people testing one realm need no shared config, and `--emit-workload` turns the result into a committable file; and a hand-written workload file transcribed from a specific card's `load()` / `loadData()` bodies into the `_federated-search` entry wire grammar where the type anchor is `item.on` and field paths carry an `item.` prefix. Also covers the credential CSV (`username`, `initial_password`; never commit one, never log a password) and the requirement that each reader join its invited Matrix session room or it receives no events at all. Use when asked to load-test, stress, or saturate a realm server, to reproduce a search-saturation or heap incident on staging, to measure the payload cost of a dashboard's query set, to get a load number comparable to a teammate's, or to check whether a search/payload change moved the numbers. The AWS session, ECS/CloudWatch reads, and log pulls this skill depends on come from `aws-access` (a prerequisite for anything deployed) and `tail-logs`; the browser-side half of a slowness complaint — what the client did with the bytes once they arrived — is `client-perf-diagnosis`, which this harness deliberately cannot see.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -142,6 +142,25 @@ Both id spellings in circulation split correctly: the prefix form
 `--derive-page-size` (default 20) bounds every derived query; `0` leaves them
 unbounded. The standard workload is unbounded, so **a derived run and a standard
 run are not comparable to each other**.
+
+**Leave the default page in place and the run loads almost nothing.** Measured
+against a deployed realm of roughly 2,650 instances at `--fieldset item`, the
+same derived workload:
+
+| page               | readers |      rate | concurrency |
+| ------------------ | ------: | --------: | ----------: |
+| `page: {size: 20}` |      10 |   602/min |         1.2 |
+| `page: {size: 20}` |      19 | 1,850/min |         1.2 |
+| unbounded          |      19 |   298/min |         5.3 |
+
+Six times the request rate produced a quarter of the load, because in-flight is
+rate multiplied by service time and service time is the term that moves.
+**Request rate on its own is not a load signal.** Per search the gap is wider
+than the rows suggest — dividing each row's load by its rate, an unbounded
+search costs about nine times a page-bounded one, which is why 19 readers on
+the bounded workload sit at the load 10 readers produced. Pass
+`--derive-page-size 0` whenever the question is about load rather than about a
+bounded screen.
 
 **A derived workload is the unmitigated shape by construction**, and that bounds
 what it can be used for. The type summary carries names and counts, so every
@@ -373,10 +392,12 @@ one dashboard render   ≈ 5.4 MB across its query set
   remaining shapes       133–544 KB each
 ```
 
-Server side over the same window, from the realm-server health sampler:
+Server side over the same window, from the realm-server health sampler —
+`inFlightSearch` shown as the raw sample range it is, which is not the mean the
+link-shape policy reads:
 
 ```
-inFlightSearch   0–30
+inFlightSearch   0–30 (instantaneous samples)
 heapMB           peak 1180
 eventLoopLagMs   max ~500
 ```
@@ -411,15 +432,76 @@ per-render total:
 - **A 20-card page costs 300–566 KB.** Page size bounds the row count, not the
   payload: each row carries its `included[]` closure.
 
+## Getting a run to a threshold, and telling whether it did
+
+Two realm-server mechanisms engage at a level of concurrency: the admission gate
+bounds in-flight searches at a cap, and the link-shape policy degrades a live
+read's link closure one rung earlier, at a time-weighted mean of the same count
+(120-second half-life by default, `LINK_SHAPE_LOAD_HALF_LIFE_MS` per
+deployment). Both are **per replica**, so a fleet of N tasks needs N times the
+load one process would.
+
+The gate does not shed at the cap: an arrival above it queues and is answered
+`429` only if no slot frees within the admission wait. So a process can sit
+pinned at its ceiling with no shedding at all, and a `429` count measures how
+long the queue stayed full rather than whether the cap was reached.
+
+A run that reaches neither has measured neither — and "the policy never
+degraded" is compatible with a policy that correctly declined and with one that
+could not have engaged. Two different questions, two different answers:
+
+- **Is the threshold where real traffic can reach it?** That needs load, and
+  the credential pool is the ceiling: one session per CSV row, so a 20-row file
+  caps a run at 19 readers. At `--derive-page-size 0` that held a peak
+  120-second mean of **6.3** searches in flight. Read it against the rungs and
+  the cap in `packages/runtime-common/search-bounds.ts`: that run cost about
+  three readers per unit of mean, so a rung of 8 wants roughly 25 readers and
+  one of 12 roughly 36, **per replica**. Those are a floor, not an estimate —
+  the scaling is linear only while service time holds, and service time is what
+  rises first as a realm saturates. Growing the pool is the only fix, and it is
+  what puts the admission queue under enough pressure to shed.
+- **Does the mechanism work?** That does not need the load. The thresholds are
+  environment-readable — `LINK_SHAPE_MULTI_ROW_ENGAGE`, `LINK_SHAPE_ALL_ENGAGE`
+  and the matching `_RELEASE` pair. Set them low on a non-production fleet for
+  the duration of a run and a real deployment goes through both transitions, the
+  dwell, the hysteresis band and the validator and cache-variant fragmentation
+  each transition causes, at a load the existing pool produces.
+
+**How to tell**, in order of authority:
+
+- `boxel:link-shape-policy` — one record per transition plus a 60-second
+  heartbeat. The heartbeat is the only line that separates a policy that
+  declined from one that is not running, so read it before drawing anything from
+  an absence of transitions.
+- `boxel:search-shape` — per request: `linkMode`, `linkModeDowngraded`,
+  `linkShapeLevel`, `linkShapeLoad`. Where a specific degraded response and the
+  reading that degraded it can be seen together.
+- The run's own `concurrency:` summary line — the peak of the same mean plus the
+  highest count open at one moment, measured from the driver over the window the
+  line names (pass `--load-half-life-ms` to match a target that overrides
+  `LINK_SHAPE_LOAD_HALF_LIFE_MS`, or the two are not one measurement); the
+  `load=` progress line carries the mean's current value while the run is still
+  going. Both bound what one replica saw of this traffic **from above**: the
+  fleet divides the requests across replicas, and a request counts as in flight
+  here while its body crosses the network, after the server released the slot.
+  So under a threshold is evidence the run did not reach it; over one is not
+  evidence that it did.
+
 ## Reading the server side
 
 The harness's own numbers are the client's view. The ones that decide whether a
 change landed come from the realm server:
 
-- `inFlightSearch` — what admission control has to bound
 - `heapMB` — a single in-flight search costs tens of megabytes
 - `eventLoopLagMs` — saturation shows here long before any response stops being
   a 200
+
+Its `inFlightSearch` is a point sample taken every five seconds, so it swings
+across the whole range a run touches — the evidence block above shows 0-30 over
+one window — and no single value answers either question the thresholds pose:
+the policy acts on a two-minute mean rather than on any sample, and the cap is
+about the peak rather than the typical. Take concurrency from the two log
+channels and the run's own summary line above.
 
 Every search the harness issues carries an `x-boxel-logging-correlation-id`,
 which the realm server logs as `corr=<id>`, so an individual slow request joins
