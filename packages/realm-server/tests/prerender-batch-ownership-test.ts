@@ -229,7 +229,13 @@ module(basename(import.meta.filename), function () {
         assert.notOk(decision.log, 'claiming an unowned affinity is not news');
       });
 
-      test('stranger batchId + clearCache:false does not take ownership', function (assert) {
+      test('a different batchId + no clearCache takes ownership over', function (assert) {
+        // `releaseBatch` is best-effort and a worker can die mid-pass, so an
+        // entry can outlive the batch that made it. Nothing expires it —
+        // `since` is never read as a deadline — so the next batch to render
+        // on the affinity has to be able to reclaim it, and after the change
+        // above most batches never clear. The entry answers "is a batch
+        // rendering here", which this visit answers for itself.
         let existing: BatchOwner = { batchId: 'job-1-abcd', since: NOW - 1000 };
         let decision = computeBatchClearCacheGate(
           args({
@@ -245,9 +251,10 @@ module(basename(import.meta.filename), function () {
           undefined,
           'unchanged',
         );
-        assert.notOk(
+        assert.deepEqual(
           decision.newOwner,
-          'no ownership change — only owner-matching batches or successors with clearCache can move the owner',
+          { batchId: 'job-99-unrelated', since: NOW },
+          'the rendering batch owns the affinity',
         );
       });
 

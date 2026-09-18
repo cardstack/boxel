@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from '@lukeed/uuid';
 
 import {
   logger,
-  hasExecutableExtension,
+  passInvalidatesExecutables,
   isCardResource,
   jobIdentity,
   Deferred,
@@ -207,6 +207,13 @@ export class IndexRunner {
   // amortized across a large pass and is the whole of a one-row pass, which is
   // what a single card save produces.
   #shouldClearCacheForNextRender = false;
+  // Unconditional, unlike the loader drop above: every pass sends this on its
+  // first render. Dropping the store is what stops a pass being handed an
+  // instance, a cached document, or a local-id pairing another pass left on
+  // the tab, and that is true whether or not any module changed. It is also
+  // cheap — the instances are rebuilt from documents the pass is fetching
+  // anyway — so there is nothing here to trade away.
+  #shouldResetStoreForNextRender = true;
   // Identifier for this runner's indexing batch (CS-10758 step 3).
   // Threaded into PrerenderVisitArgs and released from the fromScratch /
   // incremental finally blocks. One runner = one batch: if fromScratch
@@ -781,6 +788,7 @@ export class IndexRunner {
         prerenderer: this.#prerenderer,
         virtualNetwork: this.#virtualNetwork,
         consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
+        consumeResetStoreForRender: () => this.#consumeResetStoreForRender(),
         logDebug: (message) => this.#log.debug(message),
         logWarn: (message) => this.#log.warn(message),
       });
@@ -1157,6 +1165,14 @@ export class IndexRunner {
     return true;
   }
 
+  #consumeResetStoreForRender(): boolean {
+    if (!this.#shouldResetStoreForNextRender) {
+      return false;
+    }
+    this.#shouldResetStoreForNextRender = false;
+    return true;
+  }
+
   private get ignoreMap() {
     if (this.#ignoreMap) {
       return this.#ignoreMap;
@@ -1360,26 +1376,6 @@ export class IndexRunner {
   async #writeEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
     await this.batch.bufferEntry(url, entry);
   }
-}
-
-// Whether a pass over `urls` has to ask the prerender tab it lands on to drop
-// its loader. Only a change to an executable can make an evaluated module
-// graph describe something other than what is on disk, so only an executable
-// in the set answers yes.
-//
-// The tab-local drop is not the whole of the mechanism, and is not what makes
-// a module change safe: the realm's loader epoch is re-minted by the same
-// condition and threaded on every render, which resets every tab holding a
-// superseded graph rather than only the one this pass's first visit reaches.
-// This stays as the reset for that one tab, decided from the same set so the
-// two can never disagree about whether the pass changed a module.
-export function passInvalidatesExecutables(urls: Iterable<string>): boolean {
-  for (let url of urls) {
-    if (hasExecutableExtension(url)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 function assertURLEndsWithJSON(url: URL): URL {

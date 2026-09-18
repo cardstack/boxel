@@ -1,7 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { passInvalidatesExecutables } from '@cardstack/runtime-common/index-runner';
+import { passInvalidatesExecutables } from '@cardstack/runtime-common';
 
 const realmURL = 'https://realm.example/catalog/';
 let urls = (...paths: string[]) => paths.map((path) => `${realmURL}${path}`);

@@ -2001,6 +2001,39 @@ module(basename(import.meta.filename), function () {
           0,
           `and still evaluates no module, got: ${JSON.stringify(second?.moduleEvaluationCount)}`,
         );
+
+        // The mirror: a pass that rewrites the module the card adopts from
+        // must still drop the graph, and the row must say so. Without this
+        // the assertions above would hold just as well for a version that
+        // never asks for the drop at all.
+        //
+        // The drop that reaches this row is the epoch's, not the pass's
+        // one-shot: modules are visited before the instances that adopt from
+        // them, so `pet.gts` consumes the one-shot, and what re-synchronizes
+        // the tab for `ringo.json` is the fresh epoch the module write minted.
+        // That is the mechanism the narrowing leans on, so it is the one worth
+        // pinning.
+        await realm.write(
+          'pet.gts',
+          `
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
+
+          export class Pet extends CardDef {
+            @field firstName = contains(StringField);
+            @field nickName = contains(StringField);
+          }
+        `,
+        );
+        let afterModule = await diagnosticsFor('ringo.json');
+        assert.ok(
+          afterModule?.loaderResetReason,
+          `a pass carrying an executable records a loader reset, got: ${JSON.stringify(afterModule?.loaderResetReason)}`,
+        );
+        assert.ok(
+          (afterModule?.moduleEvaluationCount ?? 0) > 0,
+          `and re-evaluates the graph it dropped, got: ${JSON.stringify(afterModule?.moduleEvaluationCount)}`,
+        );
       });
 
       test('a write that changes what a card adopts from stamps the type it left', async function (assert) {
