@@ -24,9 +24,16 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 import { SOFT_POP_VARS } from '../helpers/theme-fixtures';
 
-// A themed card whose template stamps `data-theme` on elements inside its own
-// container, and nests another themed card. Covers the theme-scoped-css
-// island rules and the theme.css chrome-knob reset on those islands.
+// A themed card whose template stamps `data-theme` / `.dark` on elements
+// inside its own container, and nests another themed card that does the same.
+// Covers the theme-scoped-css island rules, their stop at a nested themed
+// card, and the theme.css chrome-knob reset on islands. The fixture renders
+// more than the tests read (swatches, sample buttons, expectation labels): it
+// doubles as a visual playground when a test is paused.
+
+// theme.css `--canvas` defaults, which the themes here leave undefined
+const BOXEL_CANVAS_LIGHT = '#f8f7fa';
+const BOXEL_CANVAS_DARK = '#1e1b26';
 
 // The `:root` / `.dark` blocks of a pasted stylesheet as ThemeVarField
 // attributes, so a fixture can carry the full theme without a paste step
@@ -54,6 +61,17 @@ function computedProperty(selector: string, property: string): string {
     throw new Error(`expected to find element: ${selector}`);
   }
   return window.getComputedStyle(el).getPropertyValue(property).trim();
+}
+
+// theme.css declares the boxel-ui chrome knobs in both scheme blocks, so an
+// island would carry them unless the boundary reset repeats there; a knob
+// reset to `initial` reads back as an empty computed value
+function assertChromeKnobsReset(assert: Assert, selector: string) {
+  assert.strictEqual(
+    computedProperty(selector, '--boxel-button-primary-active-background'),
+    '',
+    `chrome knobs stay reset inside ${selector.split(' ').pop()}`,
+  );
 }
 
 // Nested theme of the scheme-island card: a plainly light root palette and a
@@ -229,7 +247,12 @@ module('Acceptance | theme scheme islands', function (hooks) {
               </header>
               <@fields.nested @format='embedded' />
 
-              <BoxelContainer class='island' @display='grid' data-theme='light'>
+              <BoxelContainer
+                class='island'
+                @display='grid'
+                data-theme='light'
+                data-test-light-island-in-dark
+              >
                 <header aria-label='Nested section'>
                   <Pill @variant='primary'>Light Island</Pill>
                   <p>Expected: Soft Pop theme, light mode</p>
@@ -250,10 +273,14 @@ module('Acceptance | theme scheme islands', function (hooks) {
                 <VarSwatches />
               </header>
               <@fields.nested @format='embedded' />
-              <BoxelContainer class='island' @display='grid' data-theme='dark'>
+              <BoxelContainer
+                class='island dark'
+                @display='grid'
+                data-test-dark-island-in-light
+              >
                 <header aria-label='Nested dark section'>
-                  <Pill @variant='primary'>Dark Island</Pill>
-                  <p>Expected: Soft Pop theme, dark mode</p>
+                  <Pill @variant='primary'>Dark Island (class)</Pill>
+                  <p>Expected: Soft Pop theme, dark mode via the `dark` class</p>
                 </header>
                 <@fields.nested @format='embedded' />
               </BoxelContainer>
@@ -296,11 +323,27 @@ module('Acceptance | theme scheme islands', function (hooks) {
             <Pill @variant='primary'>Embedded</Pill>
             <p>Expected: Meadow theme, mode of the surrounding island</p>
             <VarSwatches />
+            <div
+              class='nested-stamped'
+              data-theme='dark'
+              data-test-nested-stamped-island
+            >
+              <p>Expected: Meadow theme, dark mode (stamped here)</p>
+              <VarSwatches />
+            </div>
           </BoxelContainer>
           <style scoped>
             .nested-embedded {
               --boxel-container-gap: var(--boxel-sp-xs);
               justify-items: start;
+            }
+            .nested-stamped {
+              display: grid;
+              gap: var(--boxel-sp-xs);
+              padding: var(--boxel-sp-xs);
+              background-color: var(--background);
+              color: var(--foreground);
+              border-radius: var(--radius);
             }
             p {
               margin: 0;
@@ -424,12 +467,12 @@ module('Acceptance | theme scheme islands', function (hooks) {
     await visitOperatorMode({
       stacks: [[{ id: cardId, format: 'isolated' }]],
     });
-    let cardSelector = `[data-test-card="${cardId}"]`;
-    let islandSelector = `${cardSelector} [data-test-dark-island]`;
+    let rootSelector = `[data-test-card="${cardId}"] [data-test-scheme-island-root]`;
+    let islandSelector = `${rootSelector} [data-test-dark-island]`;
     assert.strictEqual(
-      computedProperty(cardSelector, '--primary'),
+      computedProperty(rootSelector, '--primary'),
       SOFT_POP_ROOT_VARS.primary,
-      'the card root keeps the root variables under the light ambient scheme',
+      'the light mode card root resolves the root variables',
     );
     assert.strictEqual(
       computedProperty(islandSelector, '--primary'),
@@ -448,17 +491,10 @@ module('Acceptance | theme scheme islands', function (hooks) {
     );
     assert.strictEqual(
       computedProperty(islandSelector, '--canvas'),
-      '#1e1b26',
+      BOXEL_CANVAS_DARK,
       'a token the theme omits resolves to the boxel dark default inside the island',
     );
-    assert.strictEqual(
-      computedProperty(
-        islandSelector,
-        '--boxel-button-primary-active-background',
-      ),
-      '',
-      'the chrome button knobs stay reset inside the island, as on the card root',
-    );
+    assertChromeKnobsReset(assert, islandSelector);
   });
 
   test('root variables apply inside a light island of a dark mode card', async function (assert) {
@@ -468,7 +504,6 @@ module('Acceptance | theme scheme islands', function (hooks) {
     });
     let rootSelector = `[data-test-card="${cardId}"] [data-test-scheme-island-root]`;
     let islandSelector = `${rootSelector} [data-test-light-island]`;
-
     assert.strictEqual(
       computedProperty(rootSelector, '--primary'),
       SOFT_POP_DARK_VARS.primary,
@@ -486,17 +521,42 @@ module('Acceptance | theme scheme islands', function (hooks) {
     );
     assert.strictEqual(
       computedProperty(islandSelector, '--canvas'),
-      '#f8f7fa',
+      BOXEL_CANVAS_LIGHT,
       'a token the theme omits resolves to the boxel light default inside the island',
     );
+    assertChromeKnobsReset(assert, islandSelector);
+  });
+
+  test('islands nest and switch back, by attribute or by the dark class', async function (assert) {
+    let cardId = `${testRealmURL}scheme-island-light`;
+    await visitOperatorMode({
+      stacks: [[{ id: cardId, format: 'isolated' }]],
+    });
+    let rootSelector = `[data-test-card="${cardId}"] [data-test-scheme-island-root]`;
+    let lightInDark = `${rootSelector} [data-test-dark-island] [data-test-light-island-in-dark]`;
+    let darkInLight = `${rootSelector} [data-test-light-island] [data-test-dark-island-in-light]`;
     assert.strictEqual(
-      computedProperty(
-        islandSelector,
-        '--boxel-button-primary-active-background',
-      ),
-      '',
-      'the chrome button knobs stay reset inside the island, as on the card root',
+      computedProperty(lightInDark, '--primary'),
+      SOFT_POP_ROOT_VARS.primary,
+      'a light island inside a dark island resolves the root variables',
     );
+    assert.strictEqual(
+      computedProperty(lightInDark, '--canvas'),
+      BOXEL_CANVAS_LIGHT,
+      'a token the theme omits resolves to the light default there',
+    );
+    assertChromeKnobsReset(assert, lightInDark);
+    assert.strictEqual(
+      computedProperty(darkInLight, '--primary'),
+      SOFT_POP_DARK_VARS.primary,
+      'a `dark` class island inside a light island resolves the dark variables',
+    );
+    assert.strictEqual(
+      computedProperty(darkInLight, '--canvas'),
+      BOXEL_CANVAS_DARK,
+      'a token the theme omits resolves to the dark default there',
+    );
+    assertChromeKnobsReset(assert, darkInLight);
   });
 
   test('a nested themed card follows the surrounding island with its own palette', async function (assert) {
@@ -505,10 +565,9 @@ module('Acceptance | theme scheme islands', function (hooks) {
     await visitOperatorMode({
       stacks: [[{ id: cardId, format: 'isolated' }]],
     });
-    let cardSelector = `[data-test-card="${cardId}"]`;
-    let inDark = `${cardSelector} [data-test-dark-island] [data-test-card="${nestedId}"] [data-test-nested-embedded]`;
-    let inLight = `${cardSelector} [data-test-light-island] [data-test-card="${nestedId}"] [data-test-nested-embedded]`;
-
+    let rootSelector = `[data-test-card="${cardId}"] [data-test-scheme-island-root]`;
+    let inDark = `${rootSelector} [data-test-dark-island] [data-test-card="${nestedId}"] [data-test-nested-embedded]`;
+    let inLight = `${rootSelector} [data-test-light-island] [data-test-card="${nestedId}"] [data-test-nested-embedded]`;
     assert.strictEqual(
       computedProperty(inDark, '--primary'),
       MEADOW_DARK_VARS.primary,
@@ -518,11 +577,6 @@ module('Acceptance | theme scheme islands', function (hooks) {
       computedProperty(inDark, '--background'),
       MEADOW_DARK_VARS.background,
       'the nested dark background comes from the nested theme',
-    );
-    assert.notStrictEqual(
-      computedProperty(inDark, '--primary'),
-      SOFT_POP_DARK_VARS.primary,
-      'the outer theme does not leak into the nested card',
     );
     assert.strictEqual(
       computedProperty(inLight, '--primary'),
@@ -534,5 +588,34 @@ module('Acceptance | theme scheme islands', function (hooks) {
       MEADOW_THEME_VARS.background,
       'the nested light background comes from the nested theme',
     );
+  });
+
+  test('an island stamped by a nested themed card gets the nested theme, not the outer one', async function (assert) {
+    let cardId = `${testRealmURL}scheme-island-light`;
+    let nestedId = `${testRealmURL}scheme-island-nested`;
+    await visitOperatorMode({
+      stacks: [[{ id: cardId, format: 'isolated' }]],
+    });
+    let rootSelector = `[data-test-card="${cardId}"] [data-test-scheme-island-root]`;
+    // the light island is the interesting position: the outer theme's dark
+    // island rule would repaint this element if it reached past the nested
+    // card's boundary
+    let stamped = `${rootSelector} [data-test-light-island] [data-test-card="${nestedId}"] [data-test-nested-stamped-island]`;
+    assert.strictEqual(
+      computedProperty(stamped, '--primary'),
+      MEADOW_DARK_VARS.primary,
+      'the stamped island resolves the nested theme dark palette',
+    );
+    assert.strictEqual(
+      computedProperty(stamped, '--background'),
+      MEADOW_DARK_VARS.background,
+      'the stamped island background comes from the nested theme',
+    );
+    assert.notStrictEqual(
+      MEADOW_DARK_VARS.primary,
+      SOFT_POP_DARK_VARS.primary,
+      'the two dark palettes differ, so the assertion above rules out a leak',
+    );
+    assertChromeKnobsReset(assert, stamped);
   });
 });
