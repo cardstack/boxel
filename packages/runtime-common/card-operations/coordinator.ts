@@ -119,12 +119,15 @@ export interface BatchCore {
   // coordinator carries through to the caller. Described content is held to
   // the same ceiling by its byte length, which it reports without being read.
   assertWriteSize(localPath: LocalPath, content: StagedContent): void;
-  // Waits for indexing already in flight. A card's serialization resolves the
-  // definitions its type is built from, and a module written moments earlier
-  // may still be indexing, so a batch drains before it stages rather than
-  // failing to resolve a type the realm already holds. A batch that opts out
-  // of waiting for its own indexing skips this too — see
-  // `CommitBatchOptions.waitForIndex`, which owns that trade.
+  // Waits for the indexing already in flight that can move what this batch
+  // resolves. A card's serialization resolves the definitions its type is
+  // built from, and a module written moments earlier may still be indexing,
+  // so a batch drains before it stages rather than failing to resolve a type
+  // the realm already holds. Passes that touched no module are not waited
+  // for: they rewrite index rows, which staging resolves nothing from, so a
+  // batch that waited for one would be paying another card's fan-out for
+  // nothing. A batch that opts out of waiting for its own indexing skips this
+  // too — see `CommitBatchOptions.waitForIndex`, which owns that trade.
   drainIndexing(): Promise<void>;
   // Whether the realm's ignore rules exclude this URL. An ignored file is
   // never visited by indexing, so it never gets an index row.
@@ -138,9 +141,12 @@ export interface BatchCore {
   //
   // This is the one read a batch makes of the index, and it is not a network
   // capability: the engine is the realm's own, handed down narrowed to the
-  // single row a program's reads are layered from. Called only inside the
-  // lock, after the drain, so what it reports is the realm as the batch is
-  // about to change it.
+  // single row a program's reads are layered from. Called inside the lock, so
+  // no other writer of these files can move the row underneath the batch —
+  // but the row is the index as it stands, not as some other card's pending
+  // fan-out will leave it. A program reads indexed values eventually
+  // consistently, and a row that is absent or not yet caught up is reported
+  // as such rather than waited for.
   indexedCardValues(url: URL): Promise<IndexedCardValues | undefined>;
 
   // The realm's unlocked commit: writes, additions to the end of a file, and
@@ -221,9 +227,10 @@ export interface CommitBatchOptions {
   // It is not a choice about definition freshness, which is the tempting
   // reading: a definition resolves off disk rather than out of the index, so
   // an entry still serializes against a module written moments earlier
-  // whichever way this is set. See the drain in `commitBatch` for what the
-  // wait actually buys, and the realm's own card-write gate for the case
-  // stated at length.
+  // whichever way this is set. Nor is the drain it governs realm-wide: it
+  // waits only for passes that touched a module. See the drain in
+  // `commitBatch` for what the wait actually buys, and the realm's own
+  // card-write gate for the case stated at length.
   //
   // A write made from inside a render must skip both, and there it is a
   // requirement rather than a preference: the job it would wait on needs the
@@ -394,6 +401,12 @@ export async function commitBatch(
       // realm states the case at its own card-write gate, which is the place to
       // read before widening or removing either copy.
       //
+      // The set it waits on is narrower too: only passes that touched an
+      // executable module. An instance-only fan-out changes no definition and
+      // no module's bytes, so no batch has a reason to wait for one — which is
+      // what keeps a hub card's fan-out from gating every other writer in the
+      // realm.
+      //
       // So this is not reserved for entries that serialize nothing. A caller
       // whose response does not read indexed state can take it, and a
       // prerender-originated write *must*: the job it would wait on needs the
@@ -405,10 +418,9 @@ export async function commitBatch(
       // removals would wait for indexing it has no use for. That matters
       // because this wait happens with the batch's file locks held — a removal
       // issued while a bulk import drains would park here holding them, with
-      // every other writer of those files queued behind. The scope is narrower
-      // than it was, but the wait is not: the drain is for the realm's
-      // indexing, so a batch that parks here parks for work that has nothing
-      // to do with the files it holds.
+      // every other writer of those files queued behind. What is left to park
+      // for is another writer's module landing, and that one is realm-wide by
+      // nature: a definition is not any one file's to hold.
       if (opts.waitForIndex !== false && entries.some(stagesContent)) {
         await timed('drain', () => core.drainIndexing());
       }

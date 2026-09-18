@@ -567,11 +567,11 @@ function maskLoggedURL(urlString: string): string {
 // ordinary interactive save can take it safely.
 //
 // Motivation: the default synchronous-indexing contract makes a single-card
-// save await `incrementalIndexing()`, which resolves only once EVERY in-flight
-// incremental/copy job for the realm settles — so an unrelated reindex
-// draining in the worker pool can stall (and time out) the save. A caller that
-// consumes the returned instance directly (e.g. SaveCardCommand) doesn't need
-// the freshly-indexed read-back and can opt out.
+// save wait twice on the realm's indexing — once before it stages and once for
+// its own pass — and the second of those is the whole fan-out of the card
+// being written. A caller that consumes the returned instance directly (e.g.
+// SaveCardCommand) doesn't need the freshly-indexed read-back and can opt out
+// of both.
 //
 // The tradeoff is narrower than full read-your-write loss. The writer's own
 // next card read still waits: the deferred job is tagged with the writer
@@ -1445,7 +1445,10 @@ export interface WriteOptions {
   // Note: in a mixed-batch `writeMany` call where a module is followed by
   // an instance, the *intermediate* index flush that fileSerialization
   // depends on is still awaited inline regardless of this flag — without
-  // it, the next instance's serialization would fail. This flag governs
+  // it, the next instance's serialization would fail. That flush is the
+  // batch's own module landing, not another writer's, which is why the
+  // pre-staging gate can ignore instance-only passes and this one cannot be
+  // skipped. This flag governs
   // only the final indexing await. `/_atomic` does write mixed batches and
   // so does reach that intermediate flush; the per-file `+source` POST and
   // the JSON-API card handlers do not, writing a single file and instances
@@ -2402,6 +2405,15 @@ export class Realm {
   // synchronously check whether indexing is pending.
   incrementalIndexing(): Promise<void> | undefined {
     return this.#realmIndexUpdater.incrementalIndexing();
+  }
+
+  // The write path's gate: the in-flight passes that touched an executable
+  // module. Same contract as `incrementalIndexing()` — undefined when nothing
+  // qualifying is pending, so a caller can check synchronously — over a
+  // narrower set. See `RealmIndexUpdater.incrementalIndexingOfExecutables`
+  // for why an instance-only pass is not in it.
+  incrementalIndexingOfExecutables(): Promise<void> | undefined {
+    return this.#realmIndexUpdater.incrementalIndexingOfExecutables();
   }
 
   private startReindex(opts?: {
@@ -3397,14 +3409,20 @@ export class Realm {
     // Callers that DO read indexed state after the write (the JSON-API
     // postCardInstance / patchCardInstance handlers) keep the original
     // deadlock-prevention semantics by omitting waitForIndex.
+    //
+    // What they wait for is narrower than all of it. Only a pass that
+    // touched an executable module can move what the write below resolves,
+    // so an instance-only fan-out — however many cards it invalidates —
+    // is not waited for here. That is what keeps one card's fan-out from
+    // gating every other card's write in the realm.
     let stageCursor = options?.stageCursor;
     if (options?.waitForIndex !== false) {
-      await this.incrementalIndexing();
+      await this.incrementalIndexingOfExecutables();
       // A batch coordinator drains before it stages, and this gate drains
-      // again. Both wait on the same realm-wide indexing, so they are one
-      // stage reached twice rather than two stages, and they accumulate
-      // together — a write that queued behind indexing it did not ask for
-      // spent that time here however many gates it passed through.
+      // again. Both wait on the same set of passes, so they are one stage
+      // reached twice rather than two stages, and they accumulate together —
+      // a write that queued behind indexing it did not ask for spent that
+      // time here however many gates it passed through.
       stageCursor?.mark('drain');
     }
     let urls: URL[] = [];
@@ -4998,7 +5016,7 @@ export class Realm {
             localPath,
           ),
         drainIndexing: async () => {
-          await this.incrementalIndexing();
+          await this.incrementalIndexingOfExecutables();
         },
         isIgnored: (url) => this.isIgnored(url),
         // Narrowed to the two documents a program reads values from, each

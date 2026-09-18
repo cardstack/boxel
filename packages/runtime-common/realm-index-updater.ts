@@ -2,6 +2,7 @@ import {
   IndexWriter,
   Deferred,
   type Job,
+  hasExecutableExtension,
   logger,
   systemInitiatedPriority,
   userInitiatedPriority,
@@ -103,8 +104,8 @@ export class RealmIndexUpdater {
   // from-scratch lands between snapshot and incremental completion, the
   // incremental's stale result is dropped on the floor instead of clobbering
   // the fresher data. This is reachable now that incrementals can be queued
-  // alongside an in-flight from-scratch (the write-path gate only awaits
-  // incremental + copy jobs, not from-scratch).
+  // alongside an in-flight from-scratch (no gate a write waits on covers
+  // from-scratch jobs).
   #ignoreDataVersion = 0;
   #stats: Stats = {
     instancesIndexed: 0,
@@ -116,10 +117,10 @@ export class RealmIndexUpdater {
   #indexWriter: IndexWriter;
   #dbAdapter: DBAdapter;
   #queue: QueuePublisher;
-  // Tracked separately so the realm write-path can wait only for incremental
-  // (and copy) jobs — the ones whose race against concurrent file writes the
-  // gate exists to serialize. From-scratch jobs are tracked too, but only so
-  // that callers wanting "all indexing has settled" semantics (e.g. publish)
+  // Tracked separately so a gate can be built over the incremental (and copy)
+  // jobs alone — the ones whose race against concurrent file writes a waiting
+  // caller cares about. From-scratch jobs are tracked too, but only so that
+  // callers wanting "all indexing has settled" semantics (e.g. publish)
   // continue to see them via `indexing()`.
   //
   // These deferreds are quiescence signals, not success signals: they are
@@ -131,15 +132,23 @@ export class RealmIndexUpdater {
   // unrelated request happens to be awaiting the write-path gate, and
   // (b) become an unhandled promise rejection whenever a deferred-indexing
   // job fails while nothing is draining the gate.
-  // Each incremental/copy deferred is tagged with the matrix user whose HTTP
-  // write produced the job, when known. Read endpoints use the tag to scope
-  // their read-your-writes drain to the requesting user's own writes
-  // (`incrementalIndexingInitiatedBy`) instead of parking every reader behind
-  // whatever indexing happens to be in flight. System-originated jobs (file
-  // watcher, realm copy) carry no tag.
+  // Each incremental/copy deferred is tagged with what a narrower gate needs
+  // to decide whether it is one of the passes that caller must wait for.
+  //
+  // `initiatedBy` is the matrix user whose HTTP write produced the job, when
+  // known. Read endpoints use it to scope their read-your-writes drain to the
+  // requesting user's own writes (`incrementalIndexingInitiatedBy`) instead of
+  // parking every reader behind whatever indexing happens to be in flight.
+  // System-originated jobs (file watcher, realm copy) carry no tag.
+  //
+  // `touchesExecutable` is whether the pass's change set includes a module.
+  // The write path uses it (`incrementalIndexingOfExecutables`) to wait only
+  // for the passes that can move what a staging write resolves — an
+  // instance-only fan-out, however wide, changes no module and so gates no
+  // writer.
   #incrementalIndexingDeferreds = new Map<
     Deferred<void>,
-    { initiatedBy?: string }
+    { initiatedBy?: string; touchesExecutable?: boolean }
   >();
   #fullIndexingDeferreds = new Set<Deferred<void>>();
 
@@ -185,10 +194,10 @@ export class RealmIndexUpdater {
 
   // Awaits every queued/in-flight indexing job — incremental, copy, and
   // from-scratch. Use this when you genuinely need all indexing to settle
-  // (e.g. before publishing a realm). For the realm write-path gate use
-  // `incrementalIndexing()` instead: blocking writes on from-scratch is
-  // unsafe under reindex storms (a queued from-scratch can sit behind
-  // hundreds of jobs and stall every PATCH for hours).
+  // (e.g. before publishing a realm). No gate a request waits on is this
+  // wide: blocking one on from-scratch is unsafe under reindex storms, where
+  // a queued from-scratch can sit behind hundreds of jobs and stall every
+  // PATCH for hours.
   indexing() {
     let pending = [
       ...this.#incrementalIndexingDeferreds.keys(),
@@ -202,11 +211,17 @@ export class RealmIndexUpdater {
     );
   }
 
-  // Awaits only incremental and copy jobs — the ones whose file/index race
-  // the write-path gate exists to serialize. From-scratch jobs are excluded
-  // because workers read files independently of realm-server writes and each
-  // row write is atomic; a from-scratch sitting queued behind a system-wide
-  // reindex must not block user PATCHes.
+  // Awaits every in-flight incremental and copy job, whatever it touched.
+  // From-scratch jobs are excluded because workers read files independently
+  // of realm-server writes and each row write is atomic; a from-scratch
+  // sitting queued behind a system-wide reindex must not block user PATCHes.
+  //
+  // This is the widest gate a request waits on, and it is for readers of the
+  // index as a whole — the publishability report, the indexing-error report,
+  // and the cheap "is anything pending at all" check the read-your-writes
+  // drain starts from. A write about to stage wants
+  // `incrementalIndexingOfExecutables()` instead; waiting here would make one
+  // card's fan-out gate every other card's write.
   incrementalIndexing() {
     if (this.#incrementalIndexingDeferreds.size === 0) {
       return undefined;
@@ -227,6 +242,34 @@ export class RealmIndexUpdater {
   incrementalIndexingInitiatedBy(user: string): Promise<void> | undefined {
     let pending = [...this.#incrementalIndexingDeferreds.entries()]
       .filter(([, { initiatedBy }]) => initiatedBy === user)
+      .map(([deferred]) => deferred.promise);
+    if (pending.length === 0) {
+      return undefined;
+    }
+    return Promise.all(pending).then(() => undefined);
+  }
+
+  // Awaits only the incremental/copy passes whose change set includes an
+  // executable module — the slice of `incrementalIndexing()` that a write
+  // about to stage can be affected by. Returns undefined when nothing
+  // module-touching is in flight, even while instance-only passes are still
+  // draining: those rewrite index rows, and a card's serialization does not
+  // read index rows, so waiting for one buys a staging write nothing and
+  // costs it however long the other card's fan-out takes.
+  //
+  // From-scratch passes are outside this gate for the same reason they are
+  // outside `incrementalIndexing()`, but the reason has to be re-derived from
+  // the question being asked here rather than inherited: the same job-type
+  // membership answers "should I wait for this" and "can I trust what this
+  // produced" differently. For the wait, a from-scratch re-derives index rows
+  // from bytes already on disk and its production rows stay live and
+  // consistent until the working-table swap, so it moves nothing a staging
+  // write reads — while waiting for one would park every writer in the realm
+  // for as long as a full reindex takes. Excluded, and not because the other
+  // gate excludes it.
+  incrementalIndexingOfExecutables(): Promise<void> | undefined {
+    let pending = [...this.#incrementalIndexingDeferreds.entries()]
+      .filter(([, { touchesExecutable }]) => touchesExecutable)
       .map(([deferred]) => deferred.promise);
     if (pending.length === 0) {
       return undefined;
@@ -337,6 +380,11 @@ export class RealmIndexUpdater {
     let indexingDeferred = new Deferred<void>();
     this.#incrementalIndexingDeferreds.set(indexingDeferred, {
       initiatedBy: opts?.initiatedBy ?? undefined,
+      // A removal counts the same as a write: a module that is gone changes
+      // what resolves just as surely as one whose bytes moved.
+      touchesExecutable: changes.some(({ url }) =>
+        hasExecutableExtension(url.href),
+      ),
     });
     let snapshotVersion = this.#ignoreDataVersion;
     let job: Job<IncrementalDoneResult>;
@@ -464,7 +512,12 @@ export class RealmIndexUpdater {
     onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>,
   ): Promise<{ generation?: number }> {
     let indexingDeferred = new Deferred<void>();
-    this.#incrementalIndexingDeferreds.set(indexingDeferred, {});
+    // A copy indexes the whole source realm, so its change set is everything
+    // the realm holds — modules included. It is named here rather than
+    // computed because a copy never enumerates its changes up front.
+    this.#incrementalIndexingDeferreds.set(indexingDeferred, {
+      touchesExecutable: true,
+    });
     try {
       let args: CopyArgs = {
         realmURL: this.#realm.url,
