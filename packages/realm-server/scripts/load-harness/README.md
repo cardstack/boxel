@@ -294,7 +294,7 @@ node run-load.ts --csv ./accounts.csv \
 | `--prime-connections` |      on | Open each batch's connections before timing it. `=false` disables.              |
 | `--model-calls`       |     off | A forwarded request before each write (see below).                              |
 | `--subscribe`         |     off | React to real realm events instead of modelling them (see below).               |
-| `--load-half-life-ms` | 120000  | The window the target smooths its in-flight reading over.                       |
+| `--load-half-life-ms` |  120000 | The window the target smooths its in-flight reading over.                       |
 
 `--model-calls` puts a `_request-forward` call before each write, the position a
 card that generates before saving occupies. The destination is one the realm
@@ -439,12 +439,14 @@ user, one per CSV row, so a 20-row file caps a run at 19 readers. Against a
 deployed realm at `--derive-page-size 0`, 19 readers held a peak 120-second
 mean of **6.3** searches in flight. Read that against the rungs and the cap in
 `packages/runtime-common/search-bounds.ts`: this run cost about three readers
-per unit of mean, so a rung of 8 wants roughly 25 readers and one of 12 roughly
-36, **per replica**. Treat those as a floor rather than an estimate — the
-scaling is only linear while service time holds, and service time is what rises
-first as a realm saturates. Growing the pool is what makes a load number
-realistic, and it is what puts the admission queue under enough pressure to
-shed.
+per unit of mean, so the lower rung at 4 wants roughly 13 readers and the upper
+one at 12 roughly 36, **per replica**. A pool that reaches the lower rung is
+therefore within easy reach, while driving a fleet to the upper rung or to the
+admission cap still needs a pool several times larger. Treat those as a floor
+rather than an estimate — the scaling is only linear while service time holds,
+and service time is what rises first as a realm saturates. Growing the pool is
+what makes a load number realistic, and it is what puts the admission queue
+under enough pressure to shed.
 
 **Exercising the mechanism is a different question, and much cheaper.** The
 rungs are thresholds on the load reading, settable per environment —

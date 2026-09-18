@@ -289,17 +289,76 @@ const DEFAULT_LINK_SHAPE_MIN_DWELL_MS = 60_000;
 // upper one degrades every live read. The gap between each engage and its
 // release is the hysteresis band.
 //
-// Measured against two 12-hour production windows — one containing a genuine
-// 2.5-hour saturation episode (30-minute means of 21-23 in-flight), one
-// containing only transient spikes (30-minute means of 1-5, raw samples
-// reaching the cap). At these values the policy spent 14.8% of the saturation
-// window fully degraded and 0.2% of the control window, changing level 0.93
-// times per replica-hour in the first and 0.25 in the second. Lowering the
-// upper rung's engage to 8 raised the control window's degraded time from
-// 0.3% to 3.8% — degrading a fleet whose half-hour means never left single
-// digits — which is what fixes the upper rung at 12 rather than lower.
-const DEFAULT_LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD = 8;
-const DEFAULT_LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD = 4;
+// # Each value is per replica, and the fleet size is part of the number
+//
+// The reading is fed only by the admissions one process served, and the ladder
+// is a `Map` in that process's memory with no shared store. So the fleet-wide
+// load a rung corresponds to is the threshold multiplied by the number of
+// tasks. These are fitted against a **two-task** realm-server fleet, which is
+// what production ran across every window below. Doubling the fleet halves
+// each replica's share of the same traffic, so it does not make the rungs more
+// sensitive — it makes them take twice the fleet-wide load to reach. A
+// threshold carried to a fleet of a different size is a different policy, and
+// the count to read is distinct containers *concurrently*, not distinct
+// container ids seen over a window, which a deployment inflates.
+//
+// # Where the lower rung sits, and why
+//
+// Event-loop lag is the mechanism by which searches on one realm slow requests
+// on every other one, so it is the signal the rung is placed against. Pairing
+// each health sample's lag with the sustained reading from that same sample on
+// that same process, lag p99 climbs off the 20 ms histogram floor as the
+// reading leaves idle, reaches roughly 55-80 ms by a reading of about 3, and
+// then stops climbing: it is flat from there through 4, 5, 8, 12 and beyond
+// 20. So the rung is placed where the loop's cost *begins*, which is where the
+// association exists, rather than where it is worst, which this says nothing
+// about.
+//
+// Two things that observation does not establish, both worth holding onto
+// before it gets quoted for more than it says. Lag and the reading are both
+// downstream of the traffic, so a rung moving does not follow as a way to
+// reduce lag — only as a way to act before the loop has finished slowing.
+// And a curve that is flat from 3 through 20 means the reading barely
+// discriminates across the whole range both rungs live in, so it is a weak
+// control signal exactly where the ladder leans on it. That is the same
+// conclusion the count-versus-cost point below reaches by another route, and
+// the reason a cost-aware signal would beat retuning this one again.
+//
+// 4 rather than 3 is bought by the quiet side. Replaying the production
+// reading through this ladder over 71 covered replica-hours of ordinary
+// traffic, the sustained reading peaks at 2.06 — so 4 leaves about a factor of
+// two of headroom over the busiest quiet window, where 3 would leave under
+// one, and 3 buys only another 1-2 points of degraded time on the busy
+// windows.
+//
+// The cost of coming down is nil where it was feared. Degraded time on quiet
+// production traffic is 0.0% at 3, 4, 5 and 8 alike: the reading never reaches
+// any of them. Flapping does not increase either — across the candidates the
+// level-change rate *peaks* around 6-7 (2-3 per replica-hour) and falls away
+// on both sides, because a rung below where the reading dwells during a busy
+// stretch engages once and stays rather than oscillating across it. Inside the
+// busy windows 4 is the steadiest of the candidates; over all replayed time it
+// runs at 0.28 level changes per replica-hour against 0.19 at 8, both far
+// below the one-per-hour the dwell floor would permit.
+//
+// What this rung is not is a defence against the cost of any one search. The
+// reading counts admitted searches and says nothing about what each is doing,
+// so the same number covers very different amounts of work — an expensive
+// derived workload reaches a given reading with far fewer requests than
+// ordinary traffic does. Two readings are comparable only within a similar
+// mix.
+const DEFAULT_LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD = 4;
+const DEFAULT_LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD = 2;
+
+// The upper rung sheds the closure from single-row reads too, which is the
+// last thing a live read has left to give up, so it is placed against the
+// process falling over rather than against the loop slowing down. It stays
+// well clear of the lower rung and below the admission cap: a reading of 12
+// against a cap of 30 leaves the ladder a band to act in before shedding
+// starts, which is the ordering the policy exists to create. Lowering it to 8
+// degrades a fleet whose half-hour means never leave single digits — measured
+// at the time it was set, that cost a quiet window 3.8% of its time degraded
+// against 0.3% — so it is held above the range ordinary busy traffic reaches.
 const DEFAULT_LINK_SHAPE_ALL_ENGAGE_THRESHOLD = 12;
 const DEFAULT_LINK_SHAPE_ALL_RELEASE_THRESHOLD = 6;
 

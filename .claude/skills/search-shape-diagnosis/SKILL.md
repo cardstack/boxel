@@ -239,12 +239,12 @@ the ladder; these only decide when a realm arrives at that rung. The
 `_THRESHOLD` suffix is there because a bare `…_ENGAGE` reads as a switch that
 turns a shape on, which is the one thing it does not do.
 
-| Parameter | Ships as | Crossing it |
-| -- | --: | -- |
-| `LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD` | 8 | reads that may return more than one row start shedding their link closure |
-| `LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD` | 4 | those reads carry it again |
-| `LINK_SHAPE_ALL_ENGAGE_THRESHOLD` | 12 | every live read sheds it, including a single-card read |
-| `LINK_SHAPE_ALL_RELEASE_THRESHOLD` | 6 | single-row reads carry it again |
+| Parameter                                | Ships as | Crossing it                                                               |
+| ---------------------------------------- | -------: | ------------------------------------------------------------------------- |
+| `LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD`  |        4 | reads that may return more than one row start shedding their link closure |
+| `LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD` |        2 | those reads carry it again                                                |
+| `LINK_SHAPE_ALL_ENGAGE_THRESHOLD`        |       12 | every live read sheds it, including a single-card read                    |
+| `LINK_SHAPE_ALL_RELEASE_THRESHOLD`       |        6 | single-row reads carry it again                                           |
 
 Three more shape the same mechanism without being rungs:
 `LINK_SHAPE_LOAD_HALF_LIFE_MS` (120000, how far back the mean reaches),
@@ -274,6 +274,15 @@ Four properties decide whether a change to any of these does what you expect:
    landing exactly when the server is busiest. That trade is the reason the
    upper rung sits at 12: lowering it to 8 raised a quiet control window's
    degraded time from 0.3% to 3.8%.
+
+   The fragmentation *rate*, though, is not monotonic in the engage, so "lower
+   engage, more flapping" is the wrong intuition to tune by. Measured across
+   candidate values, the level-change rate peaks where the rung sits near the
+   reading a busy stretch dwells at, and falls away on either side — a rung
+   below that band engages once and stays rather than oscillating across it.
+   What a lower engage buys reliably is more time spent degraded, not more
+   transitions. Judge a candidate on the `dwellMs` distribution its transitions
+   report.
 4. **Anything that is not a number is the shipped default.** Each is parsed
    with a fallback, so an absent, empty or non-numeric value leaves the
    application's default in force rather than disabling the policy. That is
