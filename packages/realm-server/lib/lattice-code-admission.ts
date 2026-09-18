@@ -16,8 +16,12 @@ export type LatticeCodeAdmission = ((tx: Querier) => Promise<void>) & {
   moduleHashes: Map<string, string>;
 };
 
+// The linker revision is part of the key: receipts from an older linker are
+// refused at admission, so a linker upgrade must also relink every file.
 export function latticeCodePolicyRevision(policy: LatticeNativeRealmPolicy) {
-  return createHash('sha256').update(stringify(policy)!).digest('hex');
+  return createHash('sha256')
+    .update(stringify({ policy, linker: LATTICE_GTS_LINKER_REVISION })!)
+    .digest('hex');
 }
 
 // Explicit worker configuration enables file-owned linking for BOTH producers.

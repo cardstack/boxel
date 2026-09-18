@@ -1284,6 +1284,54 @@ module('lattice-query-registry-test.ts | registry', function (hooks) {
     assert.strictEqual(empty.size, 0, 'an empty change set compiles nothing');
   });
 
+  test('a removed field in a stored watch invalidates its owner without blocking other publications', async function (assert) {
+    const ownerURL = `${realmURL}old-summary.json`;
+    const watch = {
+      fieldPath: 'records',
+      query: { filter: { on, eq: { name: 'A' } } },
+    };
+    const watches = await registry.prepare([watch]);
+    watches[0].readPaths = ['score'];
+    await db.withWriteLock(`lattice:${realmURL}`, async (tx) => {
+      await registry.publish(tx!, {
+        realmURL,
+        ownerURL,
+        generation: 1,
+        inputGeneration: 1,
+        definitionRevision: 'old-definition',
+        watches,
+      });
+    });
+    const fields = { ...definition.fields };
+    delete fields.name;
+    const updated = new LatticeQueryRegistry(
+      db,
+      new IndexQueryEngine(
+        db,
+        {
+          lookupDefinition: async () => ({ ...definition, fields }),
+        } as unknown as DefinitionLookup,
+        network,
+      ),
+    );
+    const matchers = await updated.prepareMatchers(realmURL, []);
+    assert.deepEqual(
+      await updated.affected(
+        realmURL,
+        record('A'),
+        record('A'),
+        undefined,
+        matchers,
+      ),
+      [ownerURL],
+      'a stale schema cannot be skipped because its old read paths are unchanged',
+    );
+    await assert.rejects(
+      updated.prepareMatchers(realmURL, [watch]),
+      'a newly supplied invalid watch still fails rather than publishing an invalid query',
+    );
+  });
+
   test('Lattice publication reuses compiled watches without definition lookups inside the commit', async function (assert) {
     let preparing = true;
     let lookups = new Map<string, number>();

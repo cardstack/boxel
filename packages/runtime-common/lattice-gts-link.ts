@@ -7,7 +7,8 @@ import {
 } from './lattice-gts-analysis-contract.ts';
 import type { ClassReference } from './schema-analysis-plugin.ts';
 
-export const LATTICE_GTS_LINKER_REVISION = 'lattice-gts-link-v2';
+// v3: query targets are part of a definition's closure.
+export const LATTICE_GTS_LINKER_REVISION = 'lattice-gts-link-v3';
 
 export type LatticeGtsLinkInput =
   | {
@@ -236,7 +237,17 @@ export async function linkLatticeGtsDefinition({
     for (const input of pending) {
       if (input.kind !== 'source') continue;
       const id = identity(input);
-      for (const dependency of input.analysis.imports) {
+      // A literal query can name a card type by module specifier without
+      // importing it. Its data model decides what the query matches, so it
+      // belongs in the closure as much as an imported field type does.
+      const dependencies = [
+        ...input.analysis.imports,
+        ...queryTargetModules(input.analysis).map((module) => ({
+          module,
+          typeOnly: false,
+        })),
+      ];
+      for (const dependency of dependencies) {
         signal?.throwIfAborted();
         if (dependency.typeOnly || imports.has(edge(id, dependency.module)))
           continue;
@@ -312,6 +323,16 @@ export async function linkLatticeGtsDefinition({
             referenced(ref.fileId, reference),
             `${ref.name}: ${JSON.stringify(reference)}`,
           );
+        // Types a field's query targets (filter `on`/`type`, sort `on`).
+        // Without them, a change to a queried type's fields would leave this
+        // definition's fingerprint, and every cache keyed on it, unchanged.
+        for (const field of declaration.fields)
+          for (const target of queryTargets(field.query))
+            schedule(
+              ref.fileId,
+              referenced(ref.fileId, { type: 'external', ...target }),
+              `${ref.name}.${field.name} query: ${JSON.stringify(target)}`,
+            );
       }
     }
   } catch (error) {
@@ -378,4 +399,44 @@ function inputStamp(input: LatticeGtsLinkInput): string {
 
 function compare(a: string, b: string) {
   return a < b ? -1 : a > b ? 1 : 0;
+}
+
+// Card type references in a literal query: `on` and `type` values anywhere in
+// its filter, and each sort entry's `on`. Queries are admitted only as literals
+// (see analyzeLatticeGtsSource), so these are plain { module, name } objects.
+function queryTargets(query: unknown): Array<{ module: string; name: string }> {
+  const targets = new Map<string, { module: string; name: string }>();
+  const visit = (node: unknown, key?: string): void => {
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item, key);
+      return;
+    }
+    if (!node || typeof node !== 'object') return;
+    const record = node as Record<string, unknown>;
+    if (
+      (key === 'on' || key === 'type') &&
+      typeof record.module === 'string' &&
+      typeof record.name === 'string'
+    ) {
+      const target = { module: record.module, name: record.name };
+      targets.set(JSON.stringify([target.module, target.name]), target);
+      return;
+    }
+    for (const [child, value] of Object.entries(record)) visit(value, child);
+  };
+  visit(query);
+  return [...targets.values()];
+}
+
+function queryTargetModules(analysis: LatticeGtsAnalysis): string[] {
+  return [
+    ...new Set(
+      [...analysis.exports, ...analysis.localDefinitions].flatMap(
+        (declaration) =>
+          declaration.fields.flatMap((field) =>
+            queryTargets(field.query).map((target) => target.module),
+          ),
+      ),
+    ),
+  ];
 }

@@ -831,7 +831,12 @@ export class RealmIndexQueryEngine {
       let omit = itemResources.map((r) => r.id).filter(Boolean) as string[];
       let runLoadLinks = () =>
         this.loadLinks(
-          { realmURL: this.realmURL, rootResources: fullItemRoots, omit },
+          {
+            realmURL: this.realmURL,
+            rootResources: fullItemRoots,
+            omit,
+            rootsValidated: true,
+          },
           opts,
         );
       let linked = opts?.timings
@@ -1952,11 +1957,16 @@ export class RealmIndexQueryEngine {
     {
       realmURL,
       rootResources,
+      rootsValidated = false,
       omit = [],
       included = [],
     }: {
       realmURL: URL;
       rootResources: (LooseCardResource | FileMetaResource)[];
+      // Entry roots have already passed the serving gate. In particular, an
+      // indexed computation's private receipt has become a client publication;
+      // passing it through the secondary-owner gate again would lose freshness.
+      rootsValidated?: boolean;
       omit?: string[];
       included?: (CardResource<Saved> | FileMetaResource)[];
     },
@@ -2028,6 +2038,11 @@ export class RealmIndexQueryEngine {
         stack: [],
         applyLinkFields: !!opts?.linkFields,
         isRoot: true,
+        materialized:
+          this.#latticeEnabled &&
+          rootsValidated &&
+          resource.type !== FileMetaResourceType &&
+          Boolean(resource.meta.publication),
       });
     }
 
@@ -2087,7 +2102,7 @@ export class RealmIndexQueryEngine {
             if (
               this.#latticeEnabled &&
               resource.type !== FileMetaResourceType &&
-              resource.meta.publication &&
+              (resource.meta.publication || resource.meta.indexedComputation) &&
               resource.id &&
               realmPath.inRealm(this.#realm.virtualNetwork.toURL(resource.id))
             ) {
@@ -2214,6 +2229,10 @@ export class RealmIndexQueryEngine {
       let crossRealmFieldNames = new Map<string, { fieldName: string }>();
 
       for (let item of layer) {
+        // A served snapshot is a card identity boundary, including when it
+        // arrives as an included/search item. Keep link identities for lazy
+        // presentation reads; do not expand its computation inputs again.
+        if (item.materialized) continue;
         let { resource, applyLinkFields } = item;
         let activeOpts = applyLinkFields
           ? opts
@@ -2224,13 +2243,6 @@ export class RealmIndexQueryEngine {
 
         for (let entry of relationshipEntries(resource.relationships)) {
           let { relationship, key, fieldName } = entry;
-          if (
-            item.materialized &&
-            (
-              resource as LooseCardResource
-            ).meta.publication?.queryFields.includes(fieldName)
-          )
-            continue;
           if (processed.has(key)) {
             continue;
           }

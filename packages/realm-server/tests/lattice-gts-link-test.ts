@@ -31,7 +31,14 @@ function fixture(entries: Record<string, string>) {
         kind: 'trusted',
         fileId: `${origin}base/card-api.gts`,
         revision: 'reviewed-base-v1',
-        exports: ['CardDef', 'FieldDef', 'contains', 'field', 'NumberField'],
+        exports: [
+          'CardDef',
+          'FieldDef',
+          'contains',
+          'field',
+          'NumberField',
+          'linksToMany',
+        ],
       },
     ],
     [
@@ -60,9 +67,14 @@ function fixture(entries: Record<string, string>) {
         name,
         runtimeRevision,
         read: async (specifier, relativeTo) => {
-          const id = specifier.startsWith('@')
+          // Like the code worker: an extensionless module is its .gts file.
+          const resolved = specifier.startsWith('@')
             ? specifier
             : new URL(specifier, relativeTo).href;
+          const id =
+            resolved.startsWith('@') || /\.(gts|ts|js|gjs)$/.test(resolved)
+              ? resolved
+              : `${resolved}.gts`;
           reads.push(id);
           return files.get(id);
         },
@@ -405,6 +417,56 @@ export class Custom extends CardDef { @field amount = contains(NumberField, {com
     assert.strictEqual(result.state, 'blocked');
     assert.true(
       result.diagnostics.some((item) => item.code === 'conflicting-receipts'),
+    );
+  });
+  test('a type named only by a literal query is part of the closure and its fingerprint', async function (assert) {
+    const post = `import { CardDef, contains, field, NumberField } from '${base}';
+export class Post extends CardDef {
+  @field likes = contains(NumberField);
+  static isolated = <template><div>{{@model.likes}}</div></template>;
+}`;
+    const board = `import { CardDef, field, linksToMany } from '${base}';
+export class Board extends CardDef {
+  @field top = linksToMany(CardDef, {
+    query: {
+      filter: { type: { module: './post', name: 'Post' } },
+      sort: [{ by: 'likes', on: { module: './post', name: 'Post' }, direction: 'desc' }],
+    },
+  });
+}`;
+    const lab = fixture({ 'post.gts': post, 'board.gts': board });
+    const before = await lab.link('Board', 'board.gts');
+    assert.strictEqual(
+      before.state,
+      'requires-admission',
+      JSON.stringify(before.diagnostics),
+    );
+    assert.true(
+      before.definitions.some(
+        (d) => d.name === 'Post' && d.fileId === `${origin}post.gts`,
+      ),
+      'the queried type is linked even though board.gts never imports it',
+    );
+    lab.files.set(
+      `${origin}post.gts`,
+      source(
+        'post.gts',
+        post.replace('<div>', '<h1>').replace('</div>', '</h1>'),
+      ),
+    );
+    assert.strictEqual(
+      (await lab.link('Board', 'board.gts')).fingerprint,
+      before.fingerprint,
+      'a template edit to the queried type keeps the querying definition current',
+    );
+    lab.files.set(
+      `${origin}post.gts`,
+      source('post.gts', post.replace('@field likes', '@field hearts')),
+    );
+    assert.notStrictEqual(
+      (await lab.link('Board', 'board.gts')).fingerprint,
+      before.fingerprint,
+      'a data-model change to the queried type changes the querying fingerprint',
     );
   });
 });

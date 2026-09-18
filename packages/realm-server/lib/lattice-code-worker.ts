@@ -7,6 +7,7 @@ import {
 import {
   param,
   query,
+  textArrayParam,
   type Querier,
 } from '@cardstack/runtime-common/expression';
 import {
@@ -387,6 +388,18 @@ export function createLatticeCodeWorker({
             param(fileURL),
             'AND NOT lattice_code_reference_current(b.reference) RETURNING o.owner_url',
           ]);
+          // Their query watches were derived from the superseded definition,
+          // and may name fields it no longer has. Drop them with the value;
+          // each owner re-registers from current code when it publishes, and
+          // needs no routing meanwhile because it is already dirty.
+          if (affected.length)
+            await tx([
+              'DELETE FROM lattice_query_watches WHERE realm_url=',
+              param(realmURL),
+              'AND owner_url = ANY(',
+              textArrayParam(affected.map((row) => String(row.owner_url))),
+              '::text[])',
+            ]);
           const waiting = affected.length
             ? affected
             : await tx([

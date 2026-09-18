@@ -7,6 +7,7 @@ import {
   IndexWriter,
   IndexQueryEngine,
   VirtualNetwork,
+  isCardResource,
   baseRealmRRI,
   ri,
   rri,
@@ -20,6 +21,7 @@ import {
 } from '@cardstack/runtime-common';
 import { RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-index-query-engine';
 import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
+import { DEFAULT_HTML_QUERY } from '@cardstack/runtime-common/search-entry';
 import { latticeStoredDocumentBody } from '@cardstack/runtime-common/lattice-materialization';
 import { setupDB } from './helpers/index.ts';
 
@@ -352,6 +354,71 @@ module(basename(import.meta.filename), function (hooks) {
       undefined,
       'flag off strips private proof',
     );
+  });
+
+  test('linked indexed computations retain their receipt and stop source expansion', async function (assert) {
+    const [clock] = await db.execute(
+      'SELECT loader_epoch FROM realm_generations WHERE realm_url=$1',
+      { bind: [realmURL] },
+    );
+    await db.execute(
+      `UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{meta,indexedComputation}', $1::jsonb)
+       WHERE url = ANY($2) AND type='instance'`,
+      {
+        bind: [
+          JSON.stringify({
+            version: 1,
+            computedFields: ['name'],
+            outputRevision: 1,
+            definitionRevision: 'guarded-definition',
+            loaderEpoch: clock.loader_epoch,
+          }),
+          [`${realmURL}sibling-1.json`, `${realmURL}sibling-2.json`],
+        ],
+      },
+    );
+    const doc = await assemble();
+    assert.deepEqual(
+      doc.included?.map((r) => r.id).sort(),
+      ['sibling-1', 'sibling-2', 'sibling-3'].map((id) =>
+        rri(`${realmURL}${id}`),
+      ),
+      'linked snapshots do not expand their leaf input',
+    );
+    for (const name of ['sibling-1', 'sibling-2']) {
+      const sibling = doc.included?.find((r) => r.id === `${realmURL}${name}`);
+      if (!isCardResource(sibling)) throw new Error('Expected linked card');
+      assert.strictEqual(sibling?.meta?.publication?.state, 'ready');
+      assert.true(sibling?.meta?.publication?.hasPublishedSnapshot);
+      assert.strictEqual(
+        sibling?.meta?.indexedComputation,
+        undefined,
+        'private proof stays on the server',
+      );
+    }
+    // Full item search validates before linked assembly. Do not reclassify
+    // its converted receipt as belonging to a missing secondary owner.
+    const entry = await engine.searchEntry(
+      new URL(`${realmURL}sibling-1.json`),
+      {
+        kind: 'instance',
+        htmlQuery: DEFAULT_HTML_QUERY,
+        fieldset: {
+          item: { kind: 'full' },
+          html: false,
+          itemAsFallback: false,
+        },
+      },
+      { loadLinks: true },
+    );
+    const item = entry?.included?.find((r) => r.id === `${realmURL}sibling-1`);
+    if (!isCardResource(item)) throw new Error('Expected full search card');
+    assert.strictEqual(
+      item?.meta?.publication?.state,
+      'ready',
+      'full search item retains primary freshness',
+    );
+    assert.false(entry?.included?.some((r) => r.id === `${realmURL}leaf`));
   });
 
   async function renderedRow(

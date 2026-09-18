@@ -167,6 +167,10 @@ export type LatticeDocument = Parameters<
   IndexQueryEngine['reverseMatchesDocument']
 >[1];
 
+// Matches every document it is routed; stands in for a persisted watch whose
+// filter no longer compiles under current code (see prepareMatchers).
+const STALE_WATCH_MATCHER: Expression = ['SELECT 1'];
+
 // All mutations take the caller's pinned transaction. Index publication and
 // watch replacement must commit together. A notification is never the queue:
 // dirty_generation survives disconnects and worker restarts.
@@ -344,10 +348,7 @@ export class LatticeQueryRegistry
           query: row.query as Query,
         }));
     let matchers = new Map<string, Expression>();
-    for (let watch of [
-      ...existing.filter((row) => !retiringOwners.has(row.ownerURL)),
-      ...watches,
-    ]) {
+    for (let watch of watches) {
       let filter = (watch.query as Query).filter;
       let key = stringify(filter) ?? '';
       if (!matchers.has(key)) {
@@ -356,6 +357,27 @@ export class LatticeQueryRegistry
           nativeMatchers?.get(key) ??
             (await compiler.reverseCompileFilter(filter)),
         );
+      }
+    }
+    for (let watch of existing) {
+      if (retiringOwners.has(watch.ownerURL)) continue;
+      let filter = (watch.query as Query).filter;
+      let key = stringify(filter) ?? '';
+      if (matchers.has(key)) continue;
+      // A persisted watch was compiled against the definitions current when
+      // its owner last published. A code change since then can make it
+      // uncompilable (a field it filters on is gone). That is one owner's
+      // stale registration, not a reason to refuse every publication in the
+      // realm: match it conservatively so its owner re-derives and
+      // re-registers from current code.
+      try {
+        matchers.set(
+          key,
+          nativeMatchers?.get(key) ??
+            (await compiler.reverseCompileFilter(filter)),
+        );
+      } catch {
+        matchers.set(key, STALE_WATCH_MATCHER);
       }
     }
     return matchers;
@@ -830,6 +852,7 @@ export class LatticeQueryRegistry
       if (
         was &&
         is &&
+        watch.compiled !== STALE_WATCH_MATCHER &&
         watch.readPaths &&
         !latticeReadPathsChanged(
           watch.readPaths,

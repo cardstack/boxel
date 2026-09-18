@@ -2,6 +2,7 @@ import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import { basename } from 'node:path';
 import QUnit from 'qunit';
 import { createHash } from 'node:crypto';
+import stringify from 'safe-stable-stringify';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
@@ -368,6 +369,14 @@ module(basename(import.meta.filename), function (hooks) {
     const owners = () =>
       query(db, ['SELECT * FROM lattice_owners ORDER BY owner_url']);
     const before = await owners();
+    await db.execute(
+      `INSERT INTO lattice_query_watches (realm_url,owner_url,field_path,query)
+       VALUES ($1,$2,'records','{"filter":{}}')`,
+      { bind: [realm, owner] },
+    );
+    const watches = () =>
+      query(db, ['SELECT * FROM lattice_query_watches ORDER BY owner_url']);
+    const originalWatches = await watches();
     const current = async () => {
       const single = (
         await db.execute(
@@ -413,6 +422,11 @@ module(basename(import.meta.filename), function (hooks) {
       before,
       'no value, output revision, obligation or deadline changed',
     );
+    assert.deepEqual(
+      await watches(),
+      originalWatches,
+      'template edits preserve query routing',
+    );
     assert.strictEqual(
       (
         await query(db, [
@@ -452,6 +466,11 @@ module(basename(import.meta.filename), function (hooks) {
     assert.ok(
       (await owners())[0].dirty_generation,
       'changed computation schedules the affected owner',
+    );
+    assert.deepEqual(
+      await watches(),
+      [],
+      'obsolete query watches retire with their code binding',
     );
     assert.strictEqual(
       (await owners())[0].attributes_json,
@@ -678,6 +697,54 @@ module(basename(import.meta.filename), function (hooks) {
         realm + 'counter.gts',
         'Counter',
       ),
+    );
+  });
+
+  test('upgrading the linker invalidates artifacts under the previous policy hash', async function (assert) {
+    await publish('counter.gts', code);
+    await run();
+    const before = await artifacts();
+    const legacyRevision = createHash('sha256')
+      .update(stringify(policy)!)
+      .digest('hex');
+    await db.execute(
+      'UPDATE lattice_code_realms SET policy_revision=$1 WHERE realm_url=$2',
+      {
+        bind: [legacyRevision, realm],
+      },
+    );
+    assert.strictEqual(
+      await readLatticeCodeAdmission(
+        db,
+        policy,
+        realm + 'counter.gts',
+        'Counter',
+      ),
+      undefined,
+      'the new linker refuses an artifact under the old policy identity',
+    );
+    await registerLatticeCodePolicies(db, [policy]);
+    const after = await artifacts();
+    assert.true(after[0].dirty);
+    assert.strictEqual(
+      Number(after[0].work_version),
+      Number(before[0].work_version) + 1,
+    );
+    await run();
+    assert.ok(
+      await readLatticeCodeAdmission(
+        db,
+        policy,
+        realm + 'counter.gts',
+        'Counter',
+      ),
+    );
+    const refreshed = await artifacts();
+    await registerLatticeCodePolicies(db, [policy]);
+    assert.deepEqual(
+      await artifacts(),
+      refreshed,
+      'reinstalling the new linker does not relink again',
     );
   });
 
