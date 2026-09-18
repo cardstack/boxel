@@ -177,11 +177,11 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('a removal holds the card against a recreate until its pass has run', async function (assert) {
+    test('a removal holds the card against the next writer until its pass has run', async function (assert) {
       assert.timeout(30000);
       // The carve-out, and the contrast with the save above is what gives it
       // its meaning: the same harness, the same window, a different answer.
-      // A recreate that reached its own pass while the removal's was still
+      // A writer that reached its own pass while the removal's was still
       // pending would have that pass fold its write into the removal.
       let passes = stubIndexPasses(realm);
       try {
@@ -212,24 +212,37 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(
           passes.reached(),
           1,
-          'the recreate is queued on the files rather than reaching a pass ' +
-            'the removal could absorb it into',
+          'the next writer is queued on the files rather than reaching a ' +
+            'pass the removal could absorb it into',
         );
         assert.false(recreateSettled, 'so it has answered nothing either');
 
-        // Letting the removal's pass finish frees the files, and the recreate
-        // then runs a pass of its own rather than sharing the removal's.
+        // Letting the removal's pass finish frees the files, and the writer
+        // behind it proceeds — which is what says it was queued rather than
+        // wedged.
         passes.releaseAll();
         await removalDone;
         await resolveAfter(WAIT_OBSERVATION_MS);
-        assert.strictEqual(
-          passes.reached(),
-          2,
-          'the recreate takes the files once the removal has been indexed',
+        assert.true(
+          recreateSettled,
+          'the writer behind the removal proceeds once it has been indexed',
         );
 
-        passes.releaseAll();
-        await recreateDone;
+        // And it is ordered after the removal rather than racing it: by the
+        // time it holds the files the card is gone, so it refuses instead of
+        // writing a row back for a card the realm no longer stores. That
+        // refusal is the ordering, stated from the other end — it is only
+        // possible because the removal went first and completely.
+        let recreate = await recreateDone;
+        assert.true(
+          recreate.status >= 400,
+          `the write behind a removal finds the card gone — status ${recreate.status}`,
+        );
+        assert.strictEqual(
+          passes.reached(),
+          1,
+          'and never reached an index pass, having nothing to index',
+        );
       } finally {
         passes.releaseAll();
         passes.restore();
