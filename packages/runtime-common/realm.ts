@@ -5007,6 +5007,7 @@ export class Realm {
         openStoredFile: (localPath) => this.#operationStoredFile(localPath),
         storedFileMeta: (localPath, file, opts) =>
           this.#operationStoredFileMeta(localPath, file, opts),
+        realmConfig: () => this.getRealmConfig(),
         isIgnored: (url) => this.isIgnored(url),
         fileMetaDocument: (localPath) =>
           this.#operationFileMetaDocument(localPath),

@@ -338,21 +338,19 @@ export const BXL_MUTATION_DENIED_CALLS = names([
 ]);
 
 /**
- * `transform` bans side effects and runtime metadata, and keeps the rest.
+ * `transform` bans side effects and runtime metadata, and keeps the rest —
+ * the request-context builtins included, since shaping a payload or projecting
+ * a result is exactly the work that reads what the request carries.
  *
- * Two differences from `mutation`, and each follows from where a transform
- * sits. A volatile call is allowed: a transform shapes one request's payload
- * or projects one request's result, so nothing it computes is stored or
- * replayed, and the operation that carries it records the volatility as
- * `deterministic: false` rather than refusing it. `realmConfig` is denied
- * because a transform is handed the payload, the caller and the target's
- * stored document, and nothing else — a program naming a realm setting is
- * told so where it is written rather than at the invocation that runs it.
+ * One difference from `mutation`: a volatile call is allowed. A mutation plan
+ * is replayed by the client's optimistic path and so must be repeatable, while
+ * a transform shapes one request's payload or projects one request's result
+ * and is never stored or replayed. The operation that carries it records the
+ * volatility as `deterministic: false` rather than refusing it.
  */
 export const BXL_TRANSFORM_DENIED_CALLS = names([
   ...BXL_DERIVE_CONTROL_DENIED_CALLS,
   ...BXL_METADATA_CALLS,
-  'realmConfig',
 ]);
 
 /**
@@ -492,9 +490,6 @@ export const BXL_PROFILE_FUNCTION_POLICIES: Record<
       metadata:
         'runtime metadata calls are not payload or result expressions, and a ' +
         'transform reads the values it is handed rather than the runtime',
-      requestContext:
-        'a transform is handed the payload, the caller and the stored ' +
-        'document, and no other request-scoped value',
     },
   },
 };

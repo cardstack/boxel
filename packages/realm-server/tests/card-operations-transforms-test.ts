@@ -116,6 +116,9 @@ function stub(operations?: Definition['operations']): OperationCore {
     async storedFileMeta() {
       return {};
     },
+    async realmConfig() {
+      return { timezone: 'UTC' };
+    },
     async isIgnored() {
       return false;
     },
@@ -286,6 +289,28 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(error.status, 401, 'credentials would change this');
       assert.strictEqual(error.code, 'actor-required');
+    });
+
+    test('a projection may read a realm setting', async function (assert) {
+      let result = documentOf(
+        await read(
+          stub({
+            read: {
+              base: 'read',
+              deterministic: true,
+              output: {
+                syntax: 'solidified',
+                source: '{data: {type: "card", at: realmConfig("timezone")}}',
+              },
+            },
+          }),
+        ),
+      );
+      assert.strictEqual(
+        (result.document.data as { at?: string }).at,
+        'UTC',
+        'the settings the realm holds reach the stage',
+      );
     });
 
     test('a program that fails is the author’s 400, and names the stage', async function (assert) {

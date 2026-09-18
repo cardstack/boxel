@@ -13,8 +13,9 @@
  * SQL compiler.
  *
  * A transform is an *expression*, not a plan. It reads `.` — the value it was
- * handed — plus the request context (`params()`, `actor()`, `instance()`),
- * and yields one value. It writes nothing: the `transform` profile refuses
+ * handed — plus whichever request-context values the host supplies
+ * (`params()`, `actor()`, `instance()`, `realmConfig()`), and yields one
+ * value. It writes nothing: the `transform` profile refuses
  * jq's assignment operators, user-defined helpers, loops, recursive descent,
  * `try`, `label`/`break`, format filters, and every call that touches the
  * runtime or has a side effect.
@@ -41,6 +42,7 @@ export interface BxlTransformContext extends NativeRequestContext {
   readonly params?: Record<string, unknown>;
   readonly actor?: string;
   readonly instance?: Record<string, unknown>;
+  readonly realmConfig?: Record<string, unknown>;
 }
 
 export interface BxlTransformOptions {

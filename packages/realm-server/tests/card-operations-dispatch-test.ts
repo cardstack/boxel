@@ -301,6 +301,10 @@ function stub(opts: StubOptions = {}): Stub {
       });
       return { version: fromRanges, createdAt };
     },
+    async realmConfig() {
+      calls.push('realmConfig');
+      return {};
+    },
     async isIgnored() {
       return false;
     },

@@ -23,6 +23,7 @@ import {
 } from './types.ts';
 import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import type { Definition } from '../definitions.ts';
+import type { JsonValue } from '../json-validation.ts';
 import type {
   SingleCardDocument,
   SingleFileMetaDocument,
@@ -98,6 +99,11 @@ export interface OperationCore {
     file: OperationStoredFile,
     opts?: { skipContentFingerprint?: boolean },
   ): Promise<OperationStoredFileMeta>;
+  // The realm's own settings, as `realmConfig()` answers with them. Reached
+  // only by an operation's transform stages, and only when a stage's program
+  // names a setting — the coordinator has its own reader for the write path,
+  // for the same value read at a different moment.
+  realmConfig(): Promise<Record<string, JsonValue>>;
   // Whether the realm's ignore rules exclude this URL. An ignored path is
   // never visited, so no amount of waiting produces an index row for it.
   isIgnored(url: URL): Promise<boolean>;
@@ -624,13 +630,13 @@ export async function runOperation(
       params: await runInputTransform(
         definition,
         canonical.params ?? {},
-        transformContext(canonical),
+        transformContext(core, canonical),
       ),
     };
   }
   validateParams(canonical, definition);
   let result = await runBaseOperation(core, canonical, definition, opts, scope);
-  return await projectResult(canonical, definition, result);
+  return await projectResult(core, canonical, definition, result);
 }
 
 // A stage that reads `actor()` cannot run for a request that authenticated
@@ -657,9 +663,13 @@ function refuseAnonymousActor(
   });
 }
 
-function transformContext(request: OperationRequest): TransformContext {
+function transformContext(
+  core: OperationCore,
+  request: OperationRequest,
+): TransformContext {
   return {
     name: request.name,
+    realmConfig: () => core.realmConfig(),
     ...(request.actor ? { actor: request.actor } : {}),
     ...(request.params ? { params: request.params } : {}),
     ...(request.target.kind === 'instance' ? { id: request.target.url } : {}),
@@ -675,6 +685,7 @@ function transformContext(request: OperationRequest): TransformContext {
 // would, because a `HEAD` states the headers a `GET` would send and a
 // projected body is not cacheable the way an unprojected one is.
 async function projectResult(
+  core: OperationCore,
   request: OperationRequest,
   definition: OperationDefinition,
   result: OperationResult,
@@ -689,7 +700,7 @@ async function projectResult(
     let projection = await runOutputTransform(
       definition,
       result.document,
-      transformContext(request),
+      transformContext(core, request),
     );
     return {
       ...result,

@@ -96,13 +96,26 @@ const cases: Case[] = [
     },
   },
   {
-    name: 'a realm setting is refused by the profile, not at evaluation',
+    name: 'a realm setting is readable where the host supplies one',
     run: () => {
-      let error = caught(() => runBxlTransform('{r: realmConfig("x")}', null));
-      strictEqual(error.phase, 'profile');
+      deepStrictEqual(
+        runBxlTransform('{at: realmConfig("timezone")}', null, {
+          realmConfig: { timezone: 'UTC' },
+        }),
+        { at: 'UTC' },
+      );
+    },
+  },
+  {
+    name: 'a realm setting the host did not supply is refused at evaluation',
+    run: () => {
+      let error = caught(() =>
+        runBxlTransform('{at: realmConfig("timezone")}', null),
+      );
+      strictEqual(error.phase, 'evaluate');
       ok(
-        error.message.includes('transform-call-banned'),
-        `the refusal names the profile finding: ${error.message}`,
+        error.message.includes('realmConfig(key)'),
+        `the refusal names the call: ${error.message}`,
       );
     },
   },

@@ -1,4 +1,5 @@
 import { OperationFailure, type OperationDefinition } from './types.ts';
+import type { JsonValue } from '../json-validation.ts';
 
 // ============================================================================
 // The two transform stages around an operation.
@@ -37,13 +38,14 @@ import { OperationFailure, type OperationDefinition } from './types.ts';
 //
 // **What a transform is handed.** `.` is the value the stage was given: the
 // payload for an `input`, the result document for an `output`. Alongside it
-// the request context carries `params()` and `actor()`. `instance()` is a slot
-// on the context and no transport fills it today — an operation's stored
-// document is read under the write lock by the behavior itself, and neither a
-// read nor the envelope has one in hand at the moment a stage runs — so a
-// program naming it is told the host supplied none. `realmConfig()` is refused
-// by the BXL profile, where an author sees it as they write rather than at the
-// invocation that would have run it.
+// the request context carries `params()`, `actor()` and `realmConfig()`. The
+// settings are read at most once per stage and only when the program names
+// one, since a cold read of them is a parse of the realm's config document and
+// most programs name none. `instance()` is a slot on the context that no
+// transport fills today — an operation's stored document is read under the
+// write lock by the behavior itself, and neither a read nor the envelope has
+// one in hand at the moment a stage runs — so a program naming it is told the
+// host supplied none.
 // ============================================================================
 
 // BXL, and the shape of what this module asks of it.
@@ -71,6 +73,7 @@ export interface BxlTransformModule {
       params?: Record<string, unknown>;
       actor?: string;
       instance?: Record<string, unknown>;
+      realmConfig?: Record<string, unknown>;
     },
     options?: { syntax?: 'readable' | 'solidified' },
   ): unknown;
@@ -100,6 +103,11 @@ export interface TransformContext {
   actor?: string;
   params?: Record<string, unknown>;
   instance?: Record<string, unknown>;
+  // The realm's own settings, as `realmConfig()` answers with them. A thunk
+  // rather than a value, and reached only when the program names one: a cold
+  // read is a parse of the realm's config document, and the stages that name
+  // no setting are most of them.
+  realmConfig?: () => Promise<Record<string, JsonValue>>;
   // The target this operation runs against, for the refusal's `id`.
   id?: string;
   // The name the operation was invoked under, for the refusal's `meta`.
@@ -162,6 +170,12 @@ async function runStage(
   ctx: TransformContext,
 ): Promise<unknown> {
   let bxl = await loadBxlTransform();
+  // Read before the evaluation rather than from inside it: the program runs
+  // synchronously, so a value it may ask for has to be in hand first.
+  let realmConfig =
+    ctx.realmConfig && namesRealmConfig(source)
+      ? await ctx.realmConfig()
+      : undefined;
   try {
     return bxl.runBxlTransform(
       source,
@@ -170,6 +184,7 @@ async function runStage(
         ...(ctx.actor === undefined ? {} : { actor: ctx.actor }),
         ...(ctx.params === undefined ? {} : { params: ctx.params }),
         ...(ctx.instance === undefined ? {} : { instance: ctx.instance }),
+        ...(realmConfig === undefined ? {} : { realmConfig }),
       },
       // A stored program is already canonical: lowering canonicalizes whichever
       // spelling the author wrote, so one program shape reaches the realm.
@@ -217,6 +232,14 @@ function refusal(
       ...(phase ? { phase } : {}),
     },
   });
+}
+
+// Whether the program mentions the settings builtin at all. A substring test
+// on purpose: it is read to decide whether to pay for a read, so a false
+// positive costs one cheap cached lookup and a false negative would hand the
+// program nothing to answer with. The same test the mutation path uses.
+function namesRealmConfig(source: string): boolean {
+  return source.includes('realmConfig');
 }
 
 function describe(value: unknown): string {
