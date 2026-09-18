@@ -244,16 +244,21 @@ export async function awaitRealmIndexSettled(
     // by, where one naming nobody waits for the lane — which is what a
     // readiness probe or a publish means.
     //
-    // A pass no HTTP write produced records no user, and reads as
-    // `realmOwner` rather than as nobody: a row written before the column
-    // existed, a file-watcher echo, a GC sweep still gate somebody, and the
-    // owner is the identity such a pass is closest to. The consequence is
-    // that the owner pays for those passes and no other writer does, which is
-    // the intended reading — it fails closed for exactly one identity.
-    // Naming `initiatedBy` without `realmOwner` therefore lets every
-    // untagged pass through, so the two travel together.
-    initiatedBy?: string;
-    realmOwner?: string;
+    // A pass no HTTP write produced records no user, and reads as the realm
+    // owner rather than as nobody: a row written before the column existed, a
+    // file-watcher echo, a GC sweep still gate somebody, and the owner is the
+    // identity such a pass is closest to. The consequence is that the owner
+    // pays for those passes and no other writer does, which is the intended
+    // reading — it fails closed for exactly one identity.
+    //
+    // One option rather than two, because the owner is what decides an
+    // untagged pass and a scope missing it would silently let every one of
+    // them through — the gate would then report settled for exactly the
+    // passes this arm exists to cover. Both are full matrix ids, as
+    // `initiated_by` records them: `Realm` answers with one from
+    // `getRealmOwnerUserId()`, while `getRealmOwnerUsername()` strips the
+    // sigil and the server and can never match an entry.
+    initiatedBy?: { user: string; realmOwner: string };
   },
 ): Promise<boolean> {
   if (dbAdapter.kind !== 'pg') {
@@ -265,7 +270,6 @@ export async function awaitRealmIndexSettled(
 
   let jobTypes = opts?.jobTypes;
   let initiatedBy = opts?.initiatedBy;
-  let realmOwner = opts?.realmOwner;
 
   let hasSettled = async () => {
     let expression: Expression = [
@@ -278,11 +282,11 @@ export async function awaitRealmIndexSettled(
       // which gates the realm owner alone.
       expression.push(
         `AND (initiated_by @> to_jsonb(`,
-        param(initiatedBy),
+        param(initiatedBy.user),
         `::text) OR (initiated_by IS NULL AND`,
-        param(initiatedBy),
+        param(initiatedBy.user),
         `=`,
-        param(realmOwner ?? null),
+        param(initiatedBy.realmOwner),
         `))`,
       );
     }

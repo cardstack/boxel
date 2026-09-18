@@ -169,8 +169,7 @@ module(basename(import.meta.filename), function (hooks) {
         assert.true(
           await awaitRealmIndexSettled(dbAdapter, realmURL, {
             timeoutMs: 200,
-            initiatedBy: writer,
-            realmOwner: owner,
+            initiatedBy: { user: writer, realmOwner: owner },
           }),
           'the lane is occupied, but by work this writer has no stake in',
         );
@@ -189,8 +188,7 @@ module(basename(import.meta.filename), function (hooks) {
           await awaitRealmIndexSettled(dbAdapter, realmURL, {
             timeoutMs: 200,
             pollIntervalMs: 50,
-            initiatedBy: writer,
-            realmOwner: owner,
+            initiatedBy: { user: writer, realmOwner: owner },
           }),
           'a pass indexing bytes this writer wrote is one it must wait for',
         );
@@ -209,8 +207,7 @@ module(basename(import.meta.filename), function (hooks) {
           await awaitRealmIndexSettled(dbAdapter, realmURL, {
             timeoutMs: 200,
             pollIntervalMs: 50,
-            initiatedBy: writer,
-            realmOwner: owner,
+            initiatedBy: { user: writer, realmOwner: owner },
           }),
           'the writer that merged in waits for the merged pass',
         );
@@ -218,8 +215,7 @@ module(basename(import.meta.filename), function (hooks) {
           await awaitRealmIndexSettled(dbAdapter, realmURL, {
             timeoutMs: 200,
             pollIntervalMs: 50,
-            initiatedBy: someoneElse,
-            realmOwner: owner,
+            initiatedBy: { user: someoneElse, realmOwner: owner },
           }),
           'and so does the one that started it',
         );
@@ -235,16 +231,14 @@ module(basename(import.meta.filename), function (hooks) {
           await awaitRealmIndexSettled(dbAdapter, realmURL, {
             timeoutMs: 200,
             pollIntervalMs: 50,
-            initiatedBy: owner,
-            realmOwner: owner,
+            initiatedBy: { user: owner, realmOwner: owner },
           }),
           'the owner waits for a pass with no writer recorded',
         );
         assert.true(
           await awaitRealmIndexSettled(dbAdapter, realmURL, {
             timeoutMs: 200,
-            initiatedBy: writer,
-            realmOwner: owner,
+            initiatedBy: { user: writer, realmOwner: owner },
           }),
           'and no other writer does',
         );
@@ -258,8 +252,7 @@ module(basename(import.meta.filename), function (hooks) {
         assert.true(
           await awaitRealmIndexSettled(dbAdapter, realmURL, {
             timeoutMs: 200,
-            initiatedBy: writer,
-            realmOwner: owner,
+            initiatedBy: { user: writer, realmOwner: owner },
             jobTypes: ['incremental-index'],
           }),
           'this writer has a pass in the lane, but not one of these types',
@@ -268,8 +261,7 @@ module(basename(import.meta.filename), function (hooks) {
           await awaitRealmIndexSettled(dbAdapter, realmURL, {
             timeoutMs: 200,
             pollIntervalMs: 50,
-            initiatedBy: writer,
-            realmOwner: owner,
+            initiatedBy: { user: writer, realmOwner: owner },
             jobTypes: ['from-scratch-index'],
           }),
           'and it does hold when the type is one the caller asked about',

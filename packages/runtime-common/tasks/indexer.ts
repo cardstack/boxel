@@ -351,7 +351,7 @@ function chooseIncrementalCoalesceDecision(
   // running one — which is what keeps a burst of saves to one card at the two
   // passes read-your-writes actually costs, rather than one per save.
   let incomingArgs = parseIncrementalArgsForCoalesce(incoming.args);
-  if (incomingArgs && !argsReadOwnWrite(incoming.args)) {
+  if (incomingArgs && !incomingArgs.readsOwnWrite) {
     for (let candidate of inFlightCandidates) {
       if (candidate.jobType !== incoming.jobType) {
         continue;
@@ -369,14 +369,18 @@ function chooseIncrementalCoalesceDecision(
   return { type: 'insert' };
 }
 
-// Whether this publish's caller reads the index for its own changes once the
-// pass lands. Read loosely, off the raw args rather than the parsed shape: a
-// job enqueued by a worker predating the field carries none, and reading that
-// as "reads its own write" would turn off the in-flight join everywhere.
 // The callers a merged job carries, deduped. Order is not meaningful — the
 // gate asks about membership — so the existing set keeps its order and new
 // names go on the end, which keeps a row stable when the same caller
 // publishes twice.
+//
+// Reachable only from a join onto a PENDING candidate. A join onto one already
+// claimed carries no update at all, because the worker holds its args in
+// memory and would never see the write — so a publish that attaches there
+// leaves the row naming whoever enqueued it and not itself. Nothing gates on
+// the column yet; a gate that does has to decide whether a publish naming a
+// writer may take that branch, since this is the one join where the row cannot
+// be made to describe every writer waiting on the pass.
 function mergeInitiators(
   existing: QueueCoalesceCandidate,
   incoming: { initiatedBy?: string[] },
@@ -387,10 +391,6 @@ function mergeInitiators(
       ...(incoming.initiatedBy ?? []),
     ]),
   ];
-}
-
-function argsReadOwnWrite(args: unknown): boolean {
-  return isObjectLike(args) && args.readsOwnWrite === true;
 }
 
 function chooseFromScratchCoalesceDecision(

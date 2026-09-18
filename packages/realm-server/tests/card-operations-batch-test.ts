@@ -1664,6 +1664,49 @@ module(basename(import.meta.filename), function () {
         'nothing is locked for a card whose path no other writer can know',
       );
     });
+    test('a batch that removes a card keeps its locks past the durable write', async function (assert) {
+      // A removal's place in the order is not settled when its bytes are gone.
+      // An index pass resolves a removal and a write of one url as the
+      // removal, whichever reached it first, and then skips the visit without
+      // asking whether the file came back — so a writer that recreated the
+      // path while the removal's pass was still pending would be folded into
+      // it and the row dropped for a file that is on disk. The realm's commit
+      // is what withholds the boundary; this pins the coordinator carrying
+      // whatever it decides rather than announcing one of its own.
+      let s = stub({
+        stored: {
+          'person-1.json': cardFile({ firstName: 'Original' }, PERSON),
+        },
+      });
+      let observed: string[] = [];
+      let core: BatchCore = {
+        ...s.core,
+        async commitUnlocked(batch, options) {
+          let committed = await s.core.commitUnlocked(batch, {
+            ...options,
+            // What the realm does for a change set carrying a removal: the
+            // boundary is not announced, so the section runs to its end still
+            // holding the files.
+            onDurable: undefined,
+          });
+          observed.push(`indexWait:held=${s.heldNow()}`);
+          return committed;
+        },
+      };
+
+      await commitBatch(core, [{ op: 'delete', href: `${REALM}person-1` }], {});
+
+      assert.deepEqual(
+        observed,
+        ['indexWait:held=1'],
+        'the files stay shut while the removal is indexed',
+      );
+      assert.strictEqual(
+        s.heldNow(),
+        0,
+        'and are open again once the batch returns',
+      );
+    });
     test('the lock ends where the write becomes durable, not where the batch does', async function (assert) {
       // The locks order writers of one file against each other, and by the
       // time the bytes are durable this batch's place in that order is

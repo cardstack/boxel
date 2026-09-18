@@ -642,6 +642,13 @@ export class PgAdapter implements DBAdapter {
   // concurrent writer of one card wait N index passes; releasing at the
   // durable boundary makes it wait for one. A section that never calls it
   // behaves exactly as before, releasing when it returns.
+  //
+  // It releases the realm's shared guard along with the file keys, since one
+  // transaction holds them all and ends as a unit. So a section that releases
+  // early excludes a realm-lifecycle caller up to its durable write rather
+  // than to its own end, and a realm destroyed in that window takes out the
+  // job rows a released section may still be waiting on. A section whose
+  // remaining work depends on the realm surviving it should hold to the end.
   async withFileWriteLocks<T>(
     realmUrl: string,
     localPaths: readonly string[],
@@ -693,8 +700,10 @@ export class PgAdapter implements DBAdapter {
           // Shared on the realm, so file writers do not exclude each other
           // through it, but a realm-lifecycle caller taking the realm key
           // exclusively — destroying, publishing or unpublishing the realm —
-          // still excludes every one of them. Without this the two lock spaces
-          // are disjoint and a realm could be torn down under a live write.
+          // is held out for as long as each of them holds. Without this the
+          // two lock spaces are disjoint and a realm could be torn down under
+          // a live write. How long each holds is the section's to decide; see
+          // the early release above.
           { key: realmKey, mode: 'shared' as const },
           ...fileKeys.map((key) => ({ key, mode: 'exclusive' as const })),
         ];
