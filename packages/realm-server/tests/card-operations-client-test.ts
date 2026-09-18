@@ -4,6 +4,7 @@ import { basename } from 'path';
 
 import {
   buildOperations,
+  rri,
   type CarriedOperationInfo,
   type OperationsAnswer,
   type OperationsEnvelope,
@@ -35,8 +36,8 @@ import type { CodeRef } from '@cardstack/runtime-common/code-ref';
 // ============================================================================
 
 const REALM = 'http://example.com/test/';
-const REPORT: CodeRef = { module: `${REALM}report`, name: 'Report' };
-const ACTIVITY: CodeRef = { module: `${REALM}report`, name: 'Activity' };
+const REPORT: CodeRef = { module: rri(`${REALM}report`), name: 'Report' };
+const ACTIVITY: CodeRef = { module: rri(`${REALM}report`), name: 'Activity' };
 
 // A stand-in for a class, for the one place the core asks its caller to read
 // one: a filter names types with the classes themselves.
