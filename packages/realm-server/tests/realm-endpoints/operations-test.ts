@@ -353,6 +353,7 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         'report-canonical',
         'report-query',
         'report-restated',
+        'report-restated-explicit',
         'report-projected',
         'report-broken-output',
         'report-retired',
@@ -1587,7 +1588,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         let response = await post(
           envelope(
             invoke('restate', {
-              href: '/report-projected',
+              href: '/report-restated-explicit',
               data: { headline: 'Revised' },
             }),
           ),
@@ -1595,7 +1596,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         assert.strictEqual(
-          storedCard('report-projected.json').data.attributes?.headline,
+          storedCard('report-restated-explicit.json').data.attributes?.headline,
           'Revised',
         );
       });
