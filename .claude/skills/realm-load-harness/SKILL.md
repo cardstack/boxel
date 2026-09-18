@@ -312,10 +312,13 @@ deploy rolls, because each replica caches the boot document for the life of its
 process.
 
 A reading that could not be taken is reported rather than treated as a deploy:
-nothing answering at the start reads `build: not pinned`, nothing answering at
-the close reads `NOT CONFIRMED`, and the summary still prints. The likeliest
-server to go quiet at the close is the one this harness has just spent an hour
-saturating, and that is not evidence its deployment moved.
+no build named at the start reads `build: not pinned`, no boot document at the
+close reads `NOT CONFIRMED`, and the summary still prints. The likeliest server
+to go quiet at the close — or to answer it with errors — is the one this
+harness has just spent an hour saturating, and that is not evidence its
+deployment moved. For the same reason an erroring replica keeps its identity
+and loses only its document, so a transient `502` is not read as a task that
+left.
 
 It reads this over plain HTTP, so it needs no AWS session and works against any
 target. It cannot name the task-definition revision, so the `rolloutState`

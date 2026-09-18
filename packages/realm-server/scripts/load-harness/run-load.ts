@@ -619,6 +619,12 @@ async function readerLoop(session: Session, index: number): Promise<void> {
       }
       pass++;
       await primeConnections(specs.length);
+      // Priming opens a connection per query and can outlast the run's own
+      // clock. Dispatching afterwards would put a whole batch of searches into
+      // the summary that the closing deploy pin no longer covers.
+      if (!running) {
+        break;
+      }
       await Promise.all(
         specs.map((spec) => search(session, spec, index, pass)),
       );
@@ -651,6 +657,9 @@ async function readerLoop(session: Session, index: number): Promise<void> {
       stats.eventsMatched += batch.length * due.length;
       if (due.length) {
         await primeConnections(due.length);
+        if (!running) {
+          break;
+        }
         pass++;
         await Promise.all(
           due.map((spec) => search(session, spec, index, pass)),
@@ -677,6 +686,12 @@ async function writerLoop(
     // goes first and its latency lands between this writer's writes.
     if (args.modelCalls) {
       await modelCall(session);
+      // The forwarded call is a round trip of its own, and the run can end
+      // inside it. A write issued afterwards lands outside the window the
+      // closing deploy pin covers.
+      if (!running) {
+        break;
+      }
     }
     if (await writeCard(session, write, n++)) {
       announceInvalidation();

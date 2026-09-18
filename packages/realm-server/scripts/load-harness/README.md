@@ -371,14 +371,20 @@ Two outcomes end a run early rather than late:
 Two more outcomes leave the run intact and say what is not known about it,
 because neither is evidence that anything moved:
 
-- **Nothing answered at the start** — `build: not pinned`. A run cannot be
+- **Nothing named a build at the start** — `build: not pinned`. A run cannot be
   refused for failing a check it never passed.
-- **Nothing answered at the close** — `build: … NOT CONFIRMED at the close`.
-  Silence says the pin is unknown, not that the deployment moved, and the
-  likeliest target to go quiet at the close is the one the harness has just
-  spent an hour saturating. Throwing that hour away over a question the probe
-  could not ask is the wrong trade; quoting the numbers as one build's without
-  saying so would be worse.
+- **Nothing brought back a boot document at the close** — `build: … NOT
+CONFIRMED at the close`. Silence, or a fleet answering only errors, says the
+  pin is unknown rather than that the deployment moved — and the likeliest
+  target to go quiet at the close is the one the harness has just spent an hour
+  saturating. Throwing that hour away over a question the probe could not ask
+  is the wrong trade; quoting the numbers as one build's without saying so
+  would be worse.
+
+An answer that identifies its replica but carries no usable document — a
+transient `502` from a replica that is still there — keeps the replica and
+drops only the build. Discarding the id with the document would report that
+replica as departed and refuse the run over an error it recovered from.
 
 Nothing here replaces checking that a deploy has finished before a comparison —
 `aws ecs describe-services … deployments[0].rolloutState` must read `COMPLETED`

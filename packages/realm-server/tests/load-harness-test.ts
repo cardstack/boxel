@@ -1280,24 +1280,26 @@ module(basename(import.meta.filename), function () {
       hostVersion: string | undefined,
     ): ServedBuild => ({ bundle, hostVersion });
 
+    // A reading, written as what each replica answered with: a build, or
+    // `undefined` for a replica that answered without a usable document.
     function reading(
-      replicas: Record<string, ServedBuild>,
+      replicas: Record<string, ServedBuild | undefined>,
       {
         probes = 8,
         responses = Object.keys(replicas).length,
-        builds = Object.values(replicas),
-      }: { probes?: number; responses?: number; builds?: ServedBuild[] } = {},
+      }: { probes?: number; responses?: number } = {},
     ): FleetReading {
+      let served = Object.values(replicas).filter(Boolean) as ServedBuild[];
       return {
-        replicas: new Map(Object.entries(replicas)),
-        builds: new Map(builds.map((b) => [buildLabel(b), b])),
+        replicas: new Set(Object.keys(replicas)),
+        builds: new Map(served.map((b) => [buildLabel(b), b])),
         probes,
         responses,
       };
     }
 
     const EMPTY_READING: FleetReading = {
-      replicas: new Map(),
+      replicas: new Set(),
       builds: new Map(),
       probes: 8,
       responses: 0,
@@ -1437,7 +1439,7 @@ module(basename(import.meta.filename), function () {
         waveSize: 4,
         maxWaves: 4,
       });
-      assert.deepEqual([...fleet.replicas.keys()], ['task-a', 'task-b']);
+      assert.deepEqual([...fleet.replicas], ['task-a', 'task-b']);
       assert.strictEqual(
         fleet.probes,
         8,
@@ -1463,7 +1465,7 @@ module(basename(import.meta.filename), function () {
         maxWaves: 4,
       });
       assert.deepEqual(
-        [...unaware.replicas.keys()],
+        [...unaware.replicas],
         ['task-a'],
         'a reading with nothing to look for stops as soon as a wave adds nobody',
       );
@@ -1475,10 +1477,7 @@ module(basename(import.meta.filename), function () {
         maxWaves: 4,
         expect: ['task-a', 'task-b'],
       });
-      assert.deepEqual([...expecting.replicas.keys()].sort(), [
-        'task-a',
-        'task-b',
-      ]);
+      assert.deepEqual([...expecting.replicas].sort(), ['task-a', 'task-b']);
     });
 
     test('probing is capped however much each wave keeps finding', async function (assert) {
@@ -1518,15 +1517,41 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('an error page is not counted as a replica that answered', async function (assert) {
+    test('an error keeps the replica that sent it and drops only its document', async function (assert) {
+      // A replica answering 502 has still said it is there. Discarding its id
+      // with the unusable document would report it as departed at the close
+      // and refuse a run over a transient error.
       let fetchImpl = roundRobin([{ replicaId: 'task-a', status: 502 }]);
       let fleet = await readFleet('https://realms.example.test/_standby', {
         fetchImpl,
         waveSize: 2,
         maxWaves: 2,
       });
-      assert.strictEqual(fleet.responses, 0);
-      assert.strictEqual(fleet.replicas.size, 0);
+      assert.deepEqual([...fleet.replicas], ['task-a']);
+      assert.strictEqual(fleet.builds.size, 0, 'and names no build');
+      assert.false(pinIsReadable(fleet));
+    });
+
+    test('a replica erroring at the close is not a replica that left', function (assert) {
+      let good = build('main-CThYvmXC.js', '0.0.0+38d67f96');
+      let drift = fleetDrift(
+        reading({ 'task-a': good, 'task-b': good }),
+        reading({ 'task-a': good, 'task-b': undefined }),
+      );
+      assert.deepEqual(drift, []);
+    });
+
+    test('a close that answered only errors is unconfirmed, not unchanged', function (assert) {
+      // Every answer identifying a replica and none carrying a document would
+      // otherwise compare an empty build set against the opening one, find
+      // nothing missing, and report the pin as held.
+      let before = reading({
+        'task-a': build('main-CThYvmXC.js', '0.0.0+38d67f96'),
+      });
+      let after = reading({ 'task-a': undefined });
+      assert.false(pinIsConfirmable(after));
+      assert.deepEqual(fleetDrift(before, after), []);
+      assert.true(describePin(before, after).includes('NOT CONFIRMED'));
     });
 
     test('a fleet already serving two builds is caught before the run, not after', async function (assert) {

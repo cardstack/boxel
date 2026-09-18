@@ -51,14 +51,16 @@ export interface ServedBuild {
 }
 
 export interface FleetReading {
-  // Which replicas answered, keyed by container id, each with the last build
-  // it served. A replica that answered no probe is absent, so this is what was
-  // SEEN and never the whole fleet.
-  replicas: Map<string, ServedBuild>;
-  // Every distinct build observed, keyed by label — held apart from replica
-  // identity because a target that identifies no replicas files every response
-  // under one key, and the builds would otherwise overwrite one another until
-  // only the last probe's survived.
+  // Which replicas answered at all, by container id — including the ones whose
+  // answer was unusable, because a replica that says "502" has still said it is
+  // there, and dropping it would report it as departed. A replica that answered
+  // no probe is absent, so this is what was SEEN and never the whole fleet.
+  replicas: Set<string>;
+  // Every distinct build observed, keyed by label, and held apart from replica
+  // identity for two reasons: a target that identifies no replicas files every
+  // response under one key, where builds would overwrite one another until only
+  // the last probe's survived; and an answer can identify its replica without
+  // carrying a usable document.
   builds: Map<string, ServedBuild>;
   probes: number;
   responses: number;
@@ -169,7 +171,7 @@ export async function readFleet(
   }: ReadFleetOptions = {},
 ): Promise<FleetReading> {
   let expected = [...expect].filter((id) => id !== UNIDENTIFIED_REPLICA);
-  let replicas = new Map<string, ServedBuild>();
+  let replicas = new Set<string>();
   let builds = new Map<string, ServedBuild>();
   for (let wave = 0, probes = 0, responses = 0; ; ) {
     let knownReplicas = replicas.size;
@@ -185,8 +187,10 @@ export async function readFleet(
         continue;
       }
       responses++;
-      replicas.set(result.replicaId ?? UNIDENTIFIED_REPLICA, result.build);
-      builds.set(buildLabel(result.build), result.build);
+      replicas.add(result.replicaId ?? UNIDENTIFIED_REPLICA);
+      if (result.build) {
+        builds.set(buildLabel(result.build), result.build);
+      }
     }
     wave++;
     let stillLooking = expected.some((id) => !replicas.has(id));
@@ -206,19 +210,21 @@ async function probeOnce(
   url: string,
   fetchImpl: typeof fetch,
   timeoutMs: number,
-): Promise<{ replicaId: string | undefined; build: ServedBuild } | undefined> {
+): Promise<
+  { replicaId: string | undefined; build: ServedBuild | undefined } | undefined
+> {
   try {
     let response = await fetchImpl(url, {
       headers: BOOT_HEADERS,
       signal: AbortSignal.timeout(timeoutMs),
     });
     let html = await response.text();
-    if (!response.ok) {
-      return undefined;
-    }
+    // A replica that answers with an error has still said it is there, and its
+    // id is the whole of what the fleet comparison needs from it. Only the
+    // document is unusable, so only the build is dropped.
     return {
       replicaId: replicaIdFromHeaders(response.headers),
-      build: parseServedBuild(html),
+      build: response.ok ? parseServedBuild(html) : undefined,
     };
   } catch {
     // An unreachable target is a reading with no responses, which the caller
@@ -285,11 +291,14 @@ export function fleetStraddle(reading: FleetReading): string[] {
   ];
 }
 
-// Whether the closing reading can speak for the fleet at all. Silence is not
-// agreement, but it is not evidence of a deploy either: it says the pin is
-// unknown, which the summary reports rather than the run being thrown away.
+// Whether the closing reading can speak for the build at all. A reading whose
+// every answer was an error identifies replicas without naming a build, and a
+// comparison over no builds would report "unchanged" having read nothing.
+// Silence is not agreement, but it is not evidence of a deploy either: it says
+// the pin is unknown, which the summary reports rather than the run being
+// thrown away.
 export function pinIsConfirmable(after: FleetReading): boolean {
-  return after.responses > 0;
+  return pinIsReadable(after);
 }
 
 // Checked at the close, against a reading that answered. Each finding is a
@@ -299,7 +308,7 @@ export function fleetDrift(
   before: FleetReading,
   after: FleetReading,
 ): string[] {
-  if (!pinIsConfirmable(after) || before.responses === 0) {
+  if (!pinIsConfirmable(after) || !pinIsReadable(before)) {
     // Nothing to compare: the caller reports an unconfirmed or unpinned run.
     return [];
   }
@@ -315,7 +324,7 @@ export function fleetDrift(
     );
   }
   let identified = (reading: FleetReading) =>
-    [...reading.replicas.keys()].filter((id) => id !== UNIDENTIFIED_REPLICA);
+    [...reading.replicas].filter((id) => id !== UNIDENTIFIED_REPLICA);
   let arrived = identified(after).filter((id) => !before.replicas.has(id));
   let departed = identified(before).filter((id) => !after.replicas.has(id));
   if (arrived.length || departed.length) {
@@ -351,8 +360,9 @@ export function describePin(before: FleetReading, after: FleetReading): string {
   let build = distinctBuilds(before).join(' and ');
   if (!pinIsConfirmable(after)) {
     return (
-      `build:    ${build} at the start, NOT CONFIRMED at the close — nothing ` +
-      `answered ${after.probes} closing probes, so a deploy inside this window ` +
+      `build:    ${build} at the start, NOT CONFIRMED at the close — ` +
+      `${after.probes} closing probes brought back no boot document ` +
+      `(${countOf(after.responses, 'answer')}), so a deploy inside this window ` +
       `would not have been seen`
     );
   }
