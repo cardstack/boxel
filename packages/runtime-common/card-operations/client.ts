@@ -1,8 +1,22 @@
-import type { CodeRef } from '../code-ref.ts';
+import { moduleFrom } from '../code-ref.ts';
+import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
+import type { EntryCollectionDocument } from '../document-types.ts';
+import type { ErrorEntry } from '../error.ts';
 import type { Filter, Query } from '../query.ts';
+import type {
+  CardResource,
+  FileMetaResource,
+  Saved,
+} from '../resource-types.ts';
 import { searchEntryWireQueryFromQuery } from '../search-entry.ts';
-import type { SearchEntryWireFilter } from '../search-entry.ts';
-import { isWrite, type BaseOperation } from './types.ts';
+import type {
+  SearchEntryWireFilter,
+  SearchEntryWireQuery,
+} from '../search-entry.ts';
+import type { SearchEntryRendering } from '../search-results-component.ts';
+import { lowerQueryOperation, lowerQueryTemplate } from './query.ts';
+import type { QueryDefinition } from './query.ts';
+import { isOperationFailure, isWrite, type BaseOperation } from './types.ts';
 
 // ============================================================================
 // The client side of the operations envelope: what a caller says, and the
@@ -94,6 +108,11 @@ export interface OperationsAnswer {
 // `defaultWritableRealm` sits here rather than arriving separately because a
 // class-scoped create has no instance to take a realm from, and the realm one
 // defaults to is a property of the session the transport already speaks for.
+//
+// `search` is the other way an operation is carried out, and it is optional
+// because it is the one an environment can genuinely lack: a saved search runs
+// on the search engine and answers with a live resource, which is a host's to
+// build. Where nothing registers one, a query says so rather than half-working.
 export interface OperationsTransport {
   send(
     realmURL: string,
@@ -102,6 +121,62 @@ export interface OperationsTransport {
     opts?: { clientRequestId?: string },
   ): Promise<OperationsAnswer>;
   defaultWritableRealm(): string | undefined;
+  search?: OperationsSearch;
+}
+
+// What a saved search needs from the session it runs in.
+//
+// A query never reaches `_operations`: it is planned and run on the search
+// engine, so what this supplies is the caller's identity (what `actor()`
+// compares against), the realm a type's own module sits in (a query's default
+// scope), and the live resource a search answers with.
+export interface OperationsSearch {
+  // Who the realm authenticates the caller as. Absent when nobody is signed
+  // in, which refuses only a query that compares against the caller.
+  actor(): string | undefined;
+  // The realm holding a module, for the scope a declaration and a call both
+  // left to the session.
+  realmFor(identifier: string): string | undefined;
+  // The live entries resource for a wire query, read through the thunk so the
+  // search re-runs when the query it resolves to changes. A thunk that answers
+  // `undefined` parks the search — what the session stops being able to
+  // resolve a query against, it stops searching for.
+  entries(
+    getQuery: () => SearchEntryWireQuery | undefined,
+    opts?: { owner?: object },
+  ): SearchEntries;
+}
+
+// What a search answers with, as its consumers read it: the rows, whether a
+// run is in flight, the paging metadata, and whatever the run could not
+// deliver. A duck type of the host's live search resource, so this module
+// names what a query resolves to without reaching into the host for it.
+//
+// A row is heterogeneous by design — the engine prefers prerendered HTML and
+// falls back to a live serialization — and a consumer renders it without
+// branching on which kind it got.
+export interface SearchEntries {
+  entries: SearchEntry[];
+  isLoading: boolean;
+  meta: EntryCollectionDocument['meta'];
+  errors: ErrorEntry[] | undefined;
+}
+
+export interface SearchEntry {
+  id: string;
+  realmUrl: string;
+  // The renderings the search chose for this row. An empty list does not mean
+  // the row has none: it means no rendering satisfies the query's html terms
+  // *yet*, and the re-run that follows the rendering landing fills it in.
+  html: SearchEntryRendering[];
+  // The row's live serialization, as it came off the wire — sparse when it
+  // carries `meta.sparseFields`, and never a card the store is holding.
+  item?: CardResource<Saved> | FileMetaResource;
+  iconHtml?: string;
+  displayName?: string;
+  codeRef?: ResolvedCodeRef;
+  indexGeneration?: number;
+  htmlGeneration?: number;
 }
 
 // A refusal, as the caller sees it.
@@ -192,6 +267,19 @@ export interface CarriedOperationInfo {
   // there, while the base create it builds on targets a type and has no
   // instance to read.
   declared: boolean;
+  // A declared query's own declaration, as its author wrote it. It travels
+  // whole rather than as a result computed from it because a saved search is
+  // resolved when it is invoked: the caller's identity and payload are what
+  // fill the markers it holds, and neither is known until then.
+  query?: CarriedQueryDeclaration;
+}
+
+// What a query declaration says, in the terms this module reads it: the query
+// itself — where a class still stands for a type and a marker for a value an
+// invocation supplies — and the names its payload declares.
+export interface CarriedQueryDeclaration {
+  query?: Record<string, unknown>;
+  params?: Record<string, unknown>;
 }
 
 // A def, or an instance of one, in the terms this module works in. Produced by
@@ -266,19 +354,22 @@ const SCOPE: Readonly<Record<BaseOperation, 'instance' | 'type'>> = {
 };
 
 // The behaviors reached somewhere other than a batch, which therefore have no
-// member at all: stored bytes are served by the card source and byte routes,
-// and a query is planned and run on the search engine, reached through the
-// entry search API. Their absence is the API — a member that only ever threw
-// would be a name TypeScript has to hide and a caller can only reach through a
-// cast, which says less than not being there.
-const REACHED_ELSEWHERE: readonly BaseOperation[] = ['readSource', 'query'];
+// member at all: stored bytes are served by the card source and byte routes.
+// Their absence is the API — a member that only ever threw would be a name
+// TypeScript has to hide and a caller can only reach through a cast, which
+// says less than not being there.
+const REACHED_ELSEWHERE: readonly BaseOperation[] = ['readSource'];
 
 // A base behavior with no declaration on it runs whatever the realm's own
 // executor does, and a transform's executor runs a program — which a batch
 // entry has no member to carry. So the behavior is reachable only under the
 // name a declaration gives it, and a bucket leaves the bare name out rather
 // than offering a call the realm can only refuse.
-const NEEDS_DECLARATION: readonly BaseOperation[] = ['transform'];
+//
+// A query is here for the same shape of reason: what it runs is a saved
+// search, and a base `query` with no declaration saves none. An ad-hoc search
+// is the entry search API's, not an operation's.
+const NEEDS_DECLARATION: readonly BaseOperation[] = ['transform', 'query'];
 
 // Whether a name is invocable on a bucket built for this subject.
 //
@@ -305,6 +396,10 @@ function carriesMember(
 // realm under one lock, so it carries neither of the behaviors reached
 // elsewhere, and a card the batch mints is registered with `create(Type, …)`
 // rather than through the bucket of the card the batch is anchored on.
+//
+// A saved search is kept out by the scope rule rather than by a rule of its
+// own: a batch is anchored on a card, a query runs against a type, and what
+// runs against a type is not invocable on one card.
 function carriesEntry(
   subject: OperationsSubject,
   info: CarriedOperationInfo,
@@ -332,8 +427,11 @@ export function buildOperations(
     if (!carriesMember(subject, info)) {
       continue;
     }
-    bucket[name] = (payload?: unknown, opts?: unknown) =>
-      invokeOne(subject, env, name, info, payload, opts);
+    bucket[name] =
+      info.base === 'query'
+        ? queryMember(subject, env, name, info)
+        : (payload?: unknown, opts?: unknown) =>
+            invokeOne(subject, env, name, info, payload, opts);
   }
   if (subject.scope === 'instance' && subject.family === 'card') {
     bucket.atomic = (build: unknown) => runAtomic(subject, env, build);
@@ -441,6 +539,256 @@ function entryData(
     data.meta = { adoptsFrom: typeRef(subject, name) };
   }
   return Object.keys(data).length === 0 ? {} : { data };
+}
+
+// ---------------------------------------------------------------------------
+// A declared query
+// ---------------------------------------------------------------------------
+
+export interface SearchInvokeOptions {
+  // The realms the search fans out over, for a saved search whose declaration
+  // left its scope to the caller. A declaration that named realms has already
+  // decided, and this is not read.
+  realms?: (string | URL)[];
+  // What the returned resource's life is tied to. A search subscribes to every
+  // realm it covers and re-runs while it lives, so it is torn down with the
+  // thing that wanted it — a component, a controller. Left out, it is tied to
+  // whatever the session registered as its transport, which in a browser lives
+  // for the life of the tab: right for a search the session keeps reading,
+  // and worth naming an owner to avoid for a search one view wants. A card
+  // instance is not an owner the application knows, so a card that holds the
+  // resource in a field takes the tab-lived one; a card that wants the search
+  // to end with a view hands `query()` to the search component instead.
+  owner?: object;
+}
+
+// The callable form of a saved search: called, it answers the live entries
+// resource; `.query()` answers the wire query it resolves to, for handing to
+// the component a card renders results with.
+export interface QueryMember {
+  (
+    payload?: Record<string, unknown>,
+    opts?: SearchInvokeOptions,
+  ): SearchEntries;
+  // Answers no query when the session cannot say who the caller is — see the
+  // note on the member below. The search component reads an absent query as an
+  // idle search, so a card hands this straight over either way.
+  query(
+    payload?: Record<string, unknown>,
+    opts?: SearchInvokeOptions,
+  ): SearchEntryWireQuery | undefined;
+}
+
+// A query is the one operation that answers with a resource rather than a
+// value, because it is the one carried out by the search engine: results are a
+// live collection that re-runs as realms index, not a document a request
+// returns once.
+//
+// The resource reads its query back through a thunk, so one call can stand for
+// a search that changes: the payload object the call was handed is re-read
+// every time the resource recomputes, and a payload whose values are tracked
+// therefore moves the search without a second call. A plain object entangles
+// nothing, so a payload of literals is a fixed search — which is the common
+// case, and the reason the call itself is the thing to make once: a field, a
+// one-time assignment, never inside a getter or during render, exactly as the
+// underlying resource documents, since every call builds an independent search
+// with its own realm subscriptions.
+//
+// **When the session cannot say who the caller is, a search that compares
+// against them answers nothing** — no query, which the resource reads as an
+// idle search and the search component renders as no rows. One rule, three
+// situations: nobody is signed in, a sign-out withdrew an actor the search
+// had, and the search is running inside a render, where the app authenticates
+// as itself rather than as a viewer. The last is why this is silence rather
+// than a refusal: a render must be a pure function of the document it was
+// handed, and an actor-scoped search that resolved there would bake one
+// identity's rows into HTML every viewer is then served. The live render that
+// follows fills them in.
+//
+// A standing search also stops resolving when the realms it covers go out of
+// the session's view, which is what a sign-out does to them. It parks for the
+// same reason rather than throwing into a render. At the call that same state
+// is raised, because there it means the query names a realm this session
+// cannot see — as does everything a declaration or a payload can get wrong.
+//
+// What it answers with is index freshness. A search reads the index, which
+// lags a write until that write is indexed, so a card just written is read
+// directly (`read`, or the store) rather than queried for; the resource
+// refreshes itself as index events arrive.
+function queryMember(
+  subject: OperationsSubject,
+  env: OperationsEnvironment,
+  name: string,
+  info: CarriedOperationInfo,
+): QueryMember {
+  let wireQuery = (
+    payload?: Record<string, unknown>,
+    opts?: SearchInvokeOptions,
+  ) => resolvedOrIdle(subject, env, name, info, payload, opts);
+  let member = ((
+    payload?: Record<string, unknown>,
+    opts?: SearchInvokeOptions,
+  ) => {
+    let search = searchBridge(env, name);
+    // Resolved once here, where the caller is, so a payload the declaration
+    // cannot resolve is raised at the call rather than at the first render.
+    wireQuery(payload, opts);
+    return search.entries(
+      () =>
+        resolvedOrIdle(subject, env, name, info, payload, opts, {
+          parkWhenUnscoped: true,
+        }),
+      opts?.owner === undefined ? undefined : { owner: opts.owner },
+    );
+  }) as QueryMember;
+  member.query = wireQuery;
+  return member;
+}
+
+// The query this invocation resolves to, or nothing when the session cannot
+// supply the caller it compares against.
+//
+// Only that one condition is silent wherever it is asked, and only because it
+// is the session's to answer rather than the caller's. Everything else — a
+// declaration that does not translate, a payload that leaves a marker
+// unfilled — is raised, since a recompute cannot have introduced it; a scope
+// that resolves to no realm is raised at the call and parked on a recompute,
+// where it means the session's view of its realms went away.
+function resolvedOrIdle(
+  subject: OperationsSubject,
+  env: OperationsEnvironment,
+  name: string,
+  info: CarriedOperationInfo,
+  payload: Record<string, unknown> | undefined,
+  opts: SearchInvokeOptions | undefined,
+  mode?: { parkWhenUnscoped: true },
+): SearchEntryWireQuery | undefined {
+  try {
+    return resolveQuery(subject, env, name, info, payload, opts, mode);
+  } catch (err: unknown) {
+    if (isOperationFailure(err) && err.error.code === 'actor-required') {
+      return undefined;
+    }
+    throw err;
+  }
+}
+
+// The wire query one invocation of a saved search resolves to.
+//
+// The declaration is lowered the same way the realm lowers it when it captures
+// the type's definition — one translation, so the saved search means the same
+// thing wherever it is read — and the markers it leaves standing are filled
+// from this invocation: the caller's identity for `actor()`, the payload for
+// `params()`.
+function resolveQuery(
+  subject: OperationsSubject,
+  env: OperationsEnvironment,
+  name: string,
+  info: CarriedOperationInfo,
+  payload: Record<string, unknown> | undefined,
+  opts: SearchInvokeOptions | undefined,
+  // Set by a standing search, whose session may have stopped being able to
+  // name the realms it covers. At the call an unresolvable scope is the
+  // caller's to hear about; on a recompute it means the search has nothing to
+  // cover and parks.
+  mode?: { parkWhenUnscoped: true },
+): SearchEntryWireQuery | undefined {
+  let search = searchBridge(env, name);
+  let declaration = info.query;
+  if (!declaration?.query) {
+    throw new Error(
+      `operation "${name}" on ${subject.displayName} is a query that declares no query to run`,
+    );
+  }
+  if (payload !== undefined && !isPlainRecord(payload)) {
+    throw new Error(
+      `operation "${name}" on ${subject.displayName} takes its payload as an object`,
+    );
+  }
+  let definition: QueryDefinition = {
+    base: 'query',
+    query: lowerQueryTemplate(declaration.query, refusingSink(subject, name), {
+      codeRef: env.codeRef,
+    }),
+    ...(declaration.params === undefined ? {} : { params: declaration.params }),
+  };
+  let query = lowerQueryOperation(definition, {
+    actor: search.actor(),
+    ...(payload === undefined ? {} : { params: payload }),
+    ...(queryScope(subject, search, opts) ?? {}),
+  });
+  if (!query.realms?.length) {
+    // A search with no realms fans out across every realm the session can
+    // read, which is never what a saved search meant to say. Refused rather
+    // than sent, so a scope nobody chose is not answered with results from
+    // everywhere — including when a declaration wrote the empty list itself,
+    // since what reads the query cannot tell "these and no others" from "any
+    // of them".
+    if (mode?.parkWhenUnscoped) {
+      return undefined;
+    }
+    throw new Error(
+      `operation "${name}" on ${subject.displayName} names no realm to search: ${
+        declaration.query?.realms === undefined
+          ? `the declaration names none, the call named none, and the realm holding the type could not be resolved`
+          : `its declaration names an empty list of realms, which is not a scope the search can be given`
+      } — a query with no realms searches every realm this session can read`,
+    );
+  }
+  return query;
+}
+
+// The realms an invocation supplies, when it supplies any. A declaration that
+// named its own scope is left alone by the resolution this feeds, so what is
+// decided here is only what a declaration left open: the realms the caller
+// named, or the one the type's own module sits in — which is the realm a card
+// invoking its own type's saved search means.
+function queryScope(
+  subject: OperationsSubject,
+  search: OperationsSearch,
+  opts: SearchInvokeOptions | undefined,
+): { realms: string[] } | undefined {
+  if (opts?.realms?.length) {
+    return { realms: opts.realms.map(realmHref) };
+  }
+  // Read through `moduleFrom` rather than off the ref: a class reached as a
+  // superclass rather than as its own export is named by a ref that wraps the
+  // one carrying the module, and the module is what says which realm the type
+  // sits in either way.
+  let realm =
+    subject.codeRef === undefined
+      ? undefined
+      : search.realmFor(moduleFrom(subject.codeRef));
+  return realm === undefined ? undefined : { realms: [realm] };
+}
+
+function searchBridge(
+  env: OperationsEnvironment,
+  name: string,
+): OperationsSearch {
+  let { search } = env.transport;
+  if (!search) {
+    throw new Error(
+      `operation "${name}" is a saved search, which is carried out by the search engine — and nothing in this environment registered a search to reach it through`,
+    );
+  }
+  return search;
+}
+
+// Lowering a declaration reports what it cannot translate rather than
+// throwing, because the realm stores an operation it could not lower and flags
+// it. A caller holds the declaration itself and has nothing to flag, so the
+// first finding is raised where the call was made.
+function refusingSink(subject: OperationsSubject, name: string) {
+  return {
+    add(_code: string, _path: string, message: string): never {
+      // The message opens with the path it is about, so naming it again here
+      // would say it twice.
+      throw new Error(
+        `operation "${name}" on ${subject.displayName} declares a query that cannot be run: ${message}`,
+      );
+    },
+  };
 }
 
 function typeRef(type: OperationsSubject, name: string): CodeRef {

@@ -7,6 +7,7 @@ import type {
   OperationsMethod,
   OperationsTransport,
   OperationWriteResult,
+  SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 import { isCardErrorJSONAPI } from '@cardstack/runtime-common/error';
 import type { CardErrorJSONAPI } from '@cardstack/runtime-common/error';
@@ -547,7 +548,7 @@ module('Integration | operations invocation', function (hooks) {
       );
     });
 
-    test('stored bytes and queries are reached somewhere other than a batch', async function (assert) {
+    test('stored bytes are reached somewhere other than a batch', async function (assert) {
       let report = await cardAt('report-read');
       let bucket = operations(report) as any;
 
@@ -566,12 +567,23 @@ module('Integration | operations invocation', function (hooks) {
         undefined,
         'a create targets a type, so it is invoked on the class',
       );
+      assert.strictEqual(
+        bucket.openReports,
+        undefined,
+        'a saved search reads a collection of a type, so it is invoked on the class as well',
+      );
 
       let { Report } = await loader.import<any>(`${testRealmURL}report`);
+      let savedSearch = (operations(Report) as any).openReports;
       assert.strictEqual(
-        (operations(Report) as any).openReports,
-        undefined,
-        'a declared query has no member either: a query runs on the search engine, and its absence says so rather than a member the types have to hide',
+        typeof savedSearch,
+        'function',
+        'a declared query is invocable on the class that declares it',
+      );
+      assert.strictEqual(
+        typeof savedSearch.query,
+        'function',
+        'and answers the wire query it resolves to, for a card that renders the rows itself',
       );
     });
   });
@@ -885,6 +897,37 @@ module('Integration | operations invocation types', function (hooks) {
       ) => Promise<OperationWriteResult>,
       OperationsModule.CardTypeOperations<typeof Activities>['createActivity']
     >();
+    // A declared query is the one member that is not awaited: the search
+    // engine carries it out, so it answers the live entries resource — and
+    // `.query()` answers the wire query behind it, for a card that renders the
+    // rows itself.
+    class Reports extends CardDef {
+      @operation static openReports = {
+        base: 'query',
+        query: { filter: { on: () => Reports, eq: { status: 'open' } } },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    type SavedSearch = OperationsModule.CardTypeOperations<
+      typeof Reports
+    >['openReports'];
+    expectTypeEquals<
+      (
+        payload?: Record<string, unknown>,
+        opts?: OperationsModule.SearchInvokeOptions,
+      ) => OperationsModule.SearchEntries,
+      (...args: Parameters<SavedSearch>) => ReturnType<SavedSearch>
+    >();
+    // The wire query, or none — a search that compares against the caller has
+    // nothing to resolve when the session cannot say who that is.
+    expectTypeEquals<
+      SearchEntryWireQuery | undefined,
+      ReturnType<SavedSearch['query']>
+    >();
+    assert.deepEqual(
+      Object.keys(getDeclaredOperations(Reports)),
+      ['openReports'],
+      'and the reader agrees with the type about the declared query',
+    );
     assert.deepEqual(
       Object.keys(getDeclaredOperations(Activities)),
       ['createActivity'],
