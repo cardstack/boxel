@@ -48,6 +48,7 @@ import {
   LatticeInputsPending,
   LatticeWorkSuperseded,
   LatticeWorkFailed,
+  latticeWorkReasons,
   type LatticeReadScope,
   type LatticeScheduledWork,
 } from './lattice-work.ts';
@@ -1003,6 +1004,7 @@ export class IndexRunner {
         // the render half of a visit overlaps.
         let finishing: Promise<void> = Promise.resolve();
         let superseded: LatticeWorkSuperseded | undefined;
+        let yielded: LatticeWorkSuperseded | undefined;
         const renderStartedAt = Date.now();
         const queue = [...pending];
         const budget = followup
@@ -1035,19 +1037,28 @@ export class IndexRunner {
                 }
               : {}),
           };
+          // Priority can prevent admission; it must not discard work already
+          // admitted if its captured source/input/code receipts still hold.
+          const admit = followup
+            ? () =>
+                publication.registry.assertWorkCurrent(work, undefined, {
+                  lockGroup: false,
+                })
+            : undefined;
           const check = followup
             ? (tx?: Querier) =>
                 publication.registry.assertWorkCurrent(work, tx, {
                   lockGroup: false,
+                  phase: 'continuation',
                 })
             : undefined;
-          if (check) await check();
+          if (admit) await admit();
           let warmMs = 0;
           let outcome = await this.#renderVisit(
             new URL(ownerURL),
-            check
+            admit
               ? async (runtime) => {
-                  await check();
+                  await admit();
                   if (runtime !== 'browser') return;
                   let warmStartedAt = Date.now();
                   await publication.registry.warmOwnerQueries(
@@ -1056,7 +1067,7 @@ export class IndexRunner {
                   );
                   warmMs = Date.now() - warmStartedAt;
                   this.#latticeTimings.latticeQueryWarmMs += warmMs;
-                  await check();
+                  await admit();
                 }
               : undefined,
             { stale },
@@ -1123,7 +1134,12 @@ export class IndexRunner {
         const lanes = this.#nativeCardIndexer ? LATTICE_WAVE_CONCURRENCY : 1;
         await Promise.all(
           Array.from({ length: Math.min(lanes, queue.length) }, async () => {
-            while (queue.length && !superseded && (!budget || budget.take())) {
+            while (
+              queue.length &&
+              !superseded &&
+              !yielded &&
+              (!budget || budget.take())
+            ) {
               const next = queue.shift()!;
               try {
                 await materializeOwner(next);
@@ -1133,6 +1149,13 @@ export class IndexRunner {
                   continue;
                 }
                 if (error instanceof LatticeWorkSuperseded) {
+                  if (error.reason === latticeWorkReasons['source-pending']) {
+                    // Yield at an owner boundary. Completed owners still go
+                    // through all publication checks; the rest remain dirty.
+                    yielded ??= error;
+                    this.#latticeTimings.latticeOwnersDeferred++;
+                    return;
+                  }
                   superseded ??= error;
                   return;
                 }
@@ -1148,6 +1171,7 @@ export class IndexRunner {
           renderStartedAt -
           this.#latticeTimings.latticeQueryWarmMs;
         if (!succeeded) {
+          if (yielded) throw yielded;
           if (withheld && !failures.length)
             throw new LatticeInputsPending('waiting for input publications');
           const message = `Lattice could not materialize pending owners: ${failures.join(', ')}`;

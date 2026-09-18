@@ -2140,25 +2140,31 @@ module(basename(import.meta.filename), function (hooks) {
     await assert.rejects(candidate(), /must stay in its authorized realm/);
   });
 
-  test('a queued source change after computation supersedes publication', async (assert) => {
+  test('a queued source change does not discard a valid completed publication', async (assert) => {
     const { publish } = await candidate();
     await db.execute(
       `INSERT INTO jobs(job_type,concurrency_group,priority,timeout,args)
       VALUES('incremental-index',$1,10,10,'{}')`,
       { bind: ['indexing:' + realm] },
     );
-    await assert.rejects(
-      publish(),
-      (error: unknown) => error instanceof LatticeWorkSuperseded,
+    await publish();
+    const [row] = await db.execute(
+      "SELECT pristine_doc->'attributes'->>'total' AS total FROM boxel_index WHERE url=$1",
+      { bind: [owner] },
+    );
+    assert.strictEqual(
+      Number(row.total),
+      5,
+      'the captured complete value publishes',
     );
     assert.strictEqual(
       (
         await db.execute(
-          'SELECT owner_url FROM lattice_owners WHERE owner_url=$1',
-          { bind: [owner] },
+          "SELECT id FROM jobs WHERE job_type='incremental-index' AND status='unfulfilled'",
         )
       ).length,
-      0,
+      1,
+      'the queued source work remains to index and route its later changes',
     );
   });
 
@@ -2291,119 +2297,160 @@ module(basename(import.meta.filename), function (hooks) {
     });
   }
 
-  test('bounded native waves publish completed owners and leave a durable successor for the remainder', async (assert) => {
-    assert.timeout(30_000);
-    const owners = Array.from(
-      { length: 9 },
-      (_, i) => realm + `Dashboard/budget-${i}.json`,
-    );
-    for (const ownerURL of owners) {
-      await (await candidate('A', undefined, false, { ownerURL })).publish();
-    }
-    while (await publication.matchPending(realm, 'reader')) {
-      /* settle fixture routing */
-    }
-    await db.execute(
-      "UPDATE jobs SET status='resolved',finished_at=now() WHERE status='unfulfilled'",
-    );
-    await db.execute(
-      `UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{attributes,amount}','6'),search_doc=jsonb_set(search_doc,'{amount}','6') WHERE url=$1`,
-      { bind: [realm + 'Person/one.json'] },
-    );
-    await db.execute(
-      'UPDATE lattice_owners SET dirty_generation=(SELECT current_generation FROM realm_generations WHERE realm_url=$1) WHERE realm_url=$1',
-      { bind: [realm] },
-    );
-    const unexpected = async (): Promise<never> => {
-      throw new Error('Unexpected Chrome/module execution');
-    };
-    const prerenderer: Prerenderer = {
-      prerenderModule: unexpected,
-      prerenderVisit: unexpected,
-      runCommand: unexpected,
-    };
-    const definitionLookup = {
-      forRealm() {
-        return this;
-      },
-      lookupDefinition: lookup.lookupDefinition.bind(lookup),
-    } as unknown as DefinitionLookup;
-    const content = JSON.stringify({
-      data: {
-        type: 'card',
-        attributes: { group: 'A' },
-        meta: { adoptsFrom: rootRef },
-      },
-    });
-    const run = (wave: number) =>
-      IndexRunner.materialize(
-        new IndexRunner({
-          realmURL: new URL(realm),
-          indexWriter: writer,
-          definitionLookup,
-          virtualNetwork: network,
-          nativeCardIndexer: createIndexer(),
-          prerenderer,
-          auth: '',
-          fetch: unexpected,
-          realmOwnerUserId: actor,
-          reader: {
-            readFile: async (url) => ({
-              content,
-              path: url.pathname,
-              lastModified: 1,
-              created: 1,
-            }),
-            readStream: unexpected,
-            mtimes: unexpected,
-          },
-        }),
-        'reader',
-        wave,
+  for (const queueSource of [false, true])
+    test(`bounded native waves preserve completed owners with queued source=${queueSource}`, async (assert) => {
+      assert.timeout(30_000);
+      const owners = Array.from(
+        { length: 9 },
+        (_, i) => realm + `Dashboard/budget-${i}.json`,
       );
-    const first = await run(0);
-    const completed = first.phaseTimings.latticeOwnersRendered;
-    assert.true(completed > 0, 'the first wave made progress');
-    assert.true(
-      completed <= 8,
-      `published ${completed} owners within the wave cap`,
-    );
-    const remaining = async () =>
-      (await publication.registry.pending(realm)).length;
-    assert.strictEqual(
-      await remaining(),
-      owners.length - completed,
-      'unstarted owners retain their obligations',
-    );
-    assert.true(
-      (
+      for (const ownerURL of owners) {
+        await (await candidate('A', undefined, false, { ownerURL })).publish();
+      }
+      while (await publication.matchPending(realm, 'reader')) {
+        /* settle fixture routing */
+      }
+      await db.execute(
+        "UPDATE jobs SET status='resolved',finished_at=now() WHERE status='unfulfilled'",
+      );
+      await db.execute(
+        `UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{attributes,amount}','6'),search_doc=jsonb_set(search_doc,'{amount}','6') WHERE url=$1`,
+        { bind: [realm + 'Person/one.json'] },
+      );
+      await db.execute(
+        'UPDATE lattice_owners SET dirty_generation=(SELECT current_generation FROM realm_generations WHERE realm_url=$1) WHERE realm_url=$1',
+        { bind: [realm] },
+      );
+      const unexpected = async (): Promise<never> => {
+        throw new Error('Unexpected Chrome/module execution');
+      };
+      const prerenderer: Prerenderer = {
+        prerenderModule: unexpected,
+        prerenderVisit: unexpected,
+        runCommand: unexpected,
+      };
+      const definitionLookup = {
+        forRealm() {
+          return this;
+        },
+        lookupDefinition: lookup.lookupDefinition.bind(lookup),
+      } as unknown as DefinitionLookup;
+      const content = JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: { group: 'A' },
+          meta: { adoptsFrom: rootRef },
+        },
+      });
+      let sourceQueued = false;
+      const native = createIndexer((request, admission) =>
+        openLatticeNativeWork(db, request, admission),
+      );
+      const run = (wave: number) =>
+        IndexRunner.materialize(
+          new IndexRunner({
+            realmURL: new URL(realm),
+            indexWriter: writer,
+            definitionLookup,
+            virtualNetwork: network,
+            nativeCardIndexer: async (request) => {
+              const result = await native(request);
+              if (queueSource && !sourceQueued) {
+                sourceQueued = true;
+                await db.execute(
+                  `INSERT INTO jobs(job_type,concurrency_group,priority,timeout,args)
+                 VALUES('incremental-index',$1,10,10,$2)`,
+                  {
+                    bind: [
+                      'indexing:' + realm,
+                      JSON.stringify({ realmURL: realm }),
+                    ],
+                  },
+                );
+              }
+              return result;
+            },
+            prerenderer,
+            auth: '',
+            fetch: unexpected,
+            realmOwnerUserId: actor,
+            reader: {
+              readFile: async (url) => ({
+                content,
+                path: url.pathname,
+                lastModified: 1,
+                created: 1,
+              }),
+              readStream: unexpected,
+              mtimes: unexpected,
+            },
+          }),
+          'reader',
+          wave,
+        );
+      const first = await run(0);
+      const completed = first.phaseTimings.latticeOwnersRendered;
+      assert.true(completed > 0, 'the first wave made progress');
+      assert.true(
+        completed <= 8,
+        `published ${completed} owners within the wave cap`,
+      );
+      const remaining = async () =>
+        (await publication.registry.pending(realm)).length;
+      assert.strictEqual(
+        await remaining(),
+        owners.length - completed,
+        'unstarted owners retain their obligations',
+      );
+      assert.true(
+        (
+          await db.execute(
+            "SELECT id FROM jobs WHERE status='unfulfilled' AND job_type='lattice-materialize'",
+          )
+        ).length > 0,
+        'publication committed a durable successor',
+      );
+      if (queueSource) {
+        assert.true(
+          sourceQueued,
+          'new source arrived after native computation',
+        );
+        assert.true(
+          (await remaining()) > 0,
+          'the wave stopped admitting owners',
+        );
+        assert.strictEqual(
+          first.superseded,
+          undefined,
+          'completed work was not discarded',
+        );
         await db.execute(
-          "SELECT id FROM jobs WHERE status='unfulfilled' AND job_type='lattice-materialize'",
-        )
-      ).length > 0,
-      'publication committed a durable successor',
-    );
-    for (let wave = 1; wave <= 20 && (await remaining()); wave++)
-      await run(wave);
-    assert.strictEqual(
-      await remaining(),
-      0,
-      'successor waves settle every owner',
-    );
-    const rows = await db.execute(
-      "SELECT pristine_doc->'attributes'->>'total' AS total FROM boxel_index WHERE url = ANY($1::text[])",
-      { bind: ['{' + owners.join(',') + '}'] },
-    );
-    assert.deepEqual(
-      rows.map((row) => Number(row.total)),
-      owners.map(() => 6),
-      'all outputs use the changed input; no partial value was published',
-    );
-    assert.strictEqual(
-      (await db.execute('SELECT owner_url FROM lattice_work_failures')).length,
-      0,
-    );
-  });
+          "UPDATE jobs SET status='resolved',finished_at=now() WHERE job_type='incremental-index' AND concurrency_group=$1",
+          { bind: ['indexing:' + realm] },
+        );
+      }
+      for (let wave = 1; wave <= 20 && (await remaining()); wave++)
+        await run(wave);
+      assert.strictEqual(
+        await remaining(),
+        0,
+        'successor waves settle every owner',
+      );
+      const rows = await db.execute(
+        "SELECT pristine_doc->'attributes'->>'total' AS total FROM boxel_index WHERE url = ANY($1::text[])",
+        { bind: ['{' + owners.join(',') + '}'] },
+      );
+      assert.deepEqual(
+        rows.map((row) => Number(row.total)),
+        owners.map(() => 6),
+        'all outputs use the changed input; no partial value was published',
+      );
+      assert.strictEqual(
+        (await db.execute('SELECT owner_url FROM lattice_work_failures'))
+          .length,
+        0,
+      );
+    });
 
   for (const retired of [false, true])
     test(`an obsolete wake-up does no work after an owner is ${retired ? 'retired' : 'already fresh'}`, async (assert) => {

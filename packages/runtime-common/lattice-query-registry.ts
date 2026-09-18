@@ -924,7 +924,7 @@ export class LatticeQueryRegistry
   async assertWorkCurrent(
     work: LatticeScheduledWork,
     tx?: Querier,
-    opts?: { lockGroup?: boolean },
+    opts?: { lockGroup?: boolean; phase?: 'admission' | 'continuation' },
   ) {
     const execute =
       tx ?? ((expression: Expression) => query(this.db, expression));
@@ -997,7 +997,10 @@ export class LatticeQueryRegistry
           row?.dirty_generation == null ? null : Number(row.dirty_generation),
         authorized: Boolean(row?.read) && row?.archived_at == null,
         active: row?.retired === false || row?.retired === 0,
-        sourcePending: Boolean(row?.source_pending),
+        // Queuing is an admission priority signal, not a new input revision.
+        // Already admitted work keeps every generation/code/obligation fence.
+        sourcePending:
+          opts?.phase !== 'continuation' && Boolean(row?.source_pending),
         inputsCurrent:
           Number(row?.current_generation) === work.inputGeneration &&
           !row?.matching_pending,

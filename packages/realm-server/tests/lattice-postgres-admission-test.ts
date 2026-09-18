@@ -1000,6 +1000,32 @@ module(basename(import.meta.filename), function (hooks) {
     };
     try {
       assert.true(await canRun());
+      await db.execute(
+        `INSERT INTO jobs(job_type,concurrency_group,priority,timeout,args)
+         VALUES('incremental-index',$1,10,10,$2)`,
+        { bind: ['indexing:' + realm, JSON.stringify({ realmURL: realm })] },
+      );
+      await db.execute("SELECT pg_notify('jobs','')");
+      // Allow both NOTIFY and the recovery inspection to see the queued write.
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      assert.false(
+        work.signal.aborted,
+        'a queued write does not cancel admitted native work',
+      );
+      await assert.rejects(
+        openLatticeNativeWork(db, request, {
+          inputActor: actor,
+          deps: [realm + 'score'],
+          resolve: (url) => url,
+          codeReference: lab.reference,
+        }),
+        /new source work has priority/,
+        'new ordinary work still yields at admission',
+      );
+      await db.execute(
+        "UPDATE jobs SET status='resolved',finished_at=now() WHERE job_type='incremental-index' AND concurrency_group=$1",
+        { bind: ['indexing:' + realm] },
+      );
       const edited = linkedSource + '\n';
       await persistFileMeta(
         db,

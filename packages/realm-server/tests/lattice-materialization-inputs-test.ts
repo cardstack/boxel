@@ -936,6 +936,79 @@ module(basename(import.meta.filename), function (hooks) {
     );
   }
 
+  test('settled consumers share the broad proof and fall back to partitions after an input becomes dirty', async (assert) => {
+    const a = await materializedCard('a', 2);
+    await sourceProof(a);
+    await card('b', 3, 'B');
+    const scans = () =>
+      statements.filter((sql) =>
+        sql.includes('SELECT 1 FROM lattice_owners o LEFT JOIN boxel_index i'),
+      ).length;
+    const read = async (group: string) => {
+      const input = await open();
+      const result = await input.query('records', {
+        filter: { on: codeRef, eq: { group } },
+        page: { size: 10 },
+      });
+      return { input, result };
+    };
+    const first = await read('A');
+    assert.deepEqual(
+      first.result.cards.map((c) => c.resource.attributes?.amount),
+      [2],
+    );
+    const afterFirst = scans();
+    const second = await read('B');
+    assert.deepEqual(
+      second.result.cards.map((c) => c.resource.attributes?.amount),
+      [3],
+    );
+    assert.strictEqual(
+      scans(),
+      afterFirst,
+      'another partition reuses the successful broad proof',
+    );
+    const commit = (input: LatticeMaterializationInputs) => {
+      const receipt = input.seal();
+      return publish((tx) =>
+        receipt.assertCurrent((expression) => {
+          // Transaction queries use their pinned connection, not db.execute.
+          statements.push(
+            expression.filter((part) => typeof part === 'string').join(' '),
+          );
+          return tx(expression);
+        }),
+      );
+    };
+    await commit(first.input);
+    const afterCommit = scans();
+    assert.true(afterCommit > afterFirst, 'commit obtains a separate proof');
+    await commit(second.input);
+    assert.strictEqual(
+      scans(),
+      afterCommit,
+      'commit shares its own current proof',
+    );
+    await db.execute(
+      'UPDATE lattice_owners SET dirty_generation=5 WHERE owner_url=$1',
+      { bind: [a] },
+    );
+    const unaffected = await read('B');
+    assert.deepEqual(
+      unaffected.result.cards.map((c) => c.resource.attributes?.amount),
+      [3],
+    );
+    assert.true(
+      scans() > afterCommit,
+      'changed owner state invalidates the broader proof',
+    );
+    await assert.rejects(
+      read('A'),
+      /unsettled materialized inputs/,
+      'the relevant partition still waits',
+    );
+  });
+
   test('source partitions release a consumer while another partition remains dirty', async (assert) => {
     const unrelated = await materializedCard('other', 2);
     await sourceProof(unrelated);

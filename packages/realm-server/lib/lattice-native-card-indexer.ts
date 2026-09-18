@@ -2,7 +2,7 @@ import type { LatticeProjectionWhere } from '@cardstack/runtime-common/definitio
 import { createHash } from 'node:crypto';
 import type { CodeRef, RenderResponse } from '@cardstack/runtime-common';
 import { isSingleCardDocument } from '@cardstack/runtime-common/card-document-shape';
-import { param, type Querier } from '@cardstack/runtime-common/expression';
+import type { Querier } from '@cardstack/runtime-common/expression';
 import type {
   LatticeNativeCardIndexer,
   LatticeNativeCardIndexRequest,
@@ -26,10 +26,7 @@ import { LatticeDataProjector } from './lattice-data-projection.ts';
 import { createLatticeQueryInputResolver } from './lattice-query-input-plan.ts';
 import type { PublicationReceipt } from '@cardstack/runtime-common/lattice-materialization';
 import type { LatticeCodeReference } from '@cardstack/runtime-common/lattice-code-reference';
-import {
-  LatticeWorkSuperseded,
-  type LatticeWorkScope,
-} from '@cardstack/runtime-common/lattice-work';
+import type { LatticeWorkScope } from '@cardstack/runtime-common/lattice-work';
 
 export interface LatticeNativeCardAdmission {
   // Issued only after validating constructor/default/input semantics and the
@@ -544,17 +541,8 @@ export function createLatticeNativeCardIndexer({
           : {}),
         ...(result.computed ? { compute: result.computed } : {}),
         assertCurrent: async (tx) => {
-          // A stale attempt is the one that must land while source work is
-          // still arriving; everything else yields to it.
-          if (dataReceipt && !request.inputSnapshot?.stale) {
-            const queued = await tx([
-              `SELECT 1 FROM jobs WHERE concurrency_group=`,
-              param('indexing:' + receipt.request.realmURL),
-              `AND status='unfulfilled' AND job_type IN ('incremental-index','from-scratch-index','copy-index') LIMIT 1`,
-            ]);
-            if (queued.length)
-              throw new LatticeWorkSuperseded('new source work has priority');
-          }
+          // Admission handles queued-work priority. Publication depends on
+          // actual source/code/input receipts, not the presence of another job.
           await assertCurrent(tx, receipt);
           await dataReceipt?.assertCurrent(tx);
         },

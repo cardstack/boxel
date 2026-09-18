@@ -231,6 +231,46 @@ export class LatticeMaterializationInputs {
     if (passed.size >= 256) passed.delete(passed.keys().next().value!);
     passed.set(key, version);
   }
+  static async guardQueryInputs(
+    db: DBAdapter,
+    run: Querier,
+    frame: Frame,
+    scopes: QueryReadiness,
+    phase: 'read' | 'commit',
+  ) {
+    // A successful broader proof implies every source partition is ready.
+    // Share that proof among consumers instead of scanning all owner bodies
+    // for every different predicate. A failed broad proof says nothing about
+    // a partition: only then pay for the narrower check. Both proofs use the
+    // existing owner/generation/code fingerprint and separate commit namespace.
+    try {
+      await this.guardOnce(
+        db,
+        run,
+        frame,
+        `${phase}|type|${JSON.stringify(scopes.typeScope)}`,
+        () =>
+          checkQueryInputs(run, frame, {
+            typeScope: scopes.typeScope,
+            sourceScope: scopes.typeScope,
+          }),
+      );
+      return;
+    } catch (error) {
+      if (!(error instanceof LatticeInputsPending)) throw error;
+      if (
+        JSON.stringify(scopes.typeScope) === JSON.stringify(scopes.sourceScope)
+      )
+        throw error;
+    }
+    await this.guardOnce(
+      db,
+      run,
+      frame,
+      `${phase}|partition|${JSON.stringify(scopes)}`,
+      () => checkQueryInputs(run, frame, scopes),
+    );
+  }
   #db: DBAdapter;
   #frame: Frame;
   #engine: IndexQueryEngine;
@@ -391,17 +431,12 @@ export class LatticeMaterializationInputs {
       const scopes = { typeScope, sourceScope };
       const scopeKey = JSON.stringify(scopes);
       if (!this.#queryScopes.has(scopeKey)) {
-        await LatticeMaterializationInputs.guardOnce(
+        await LatticeMaterializationInputs.guardQueryInputs(
           this.#db,
           (expression) => query(this.#db, expression),
           this.#frame,
-          scopeKey,
-          () =>
-            checkQueryInputs(
-              (expression) => query(this.#db, expression),
-              this.#frame,
-              scopes,
-            ),
+          scopes,
+          'read',
         );
         this.#queryScopes.set(scopeKey, scopes);
       }
@@ -858,12 +893,12 @@ export class LatticeMaterializationInputs {
         // Ordinary publications still require current membership. Both paths
         // keep the read-row, code, authority and reservation fences below.
         for (const scope of frame.stale ? [] : queryScopes)
-          await LatticeMaterializationInputs.guardOnce(
+          await LatticeMaterializationInputs.guardQueryInputs(
             db,
             tx,
             frame,
-            'commit|' + JSON.stringify(scope),
-            () => checkQueryInputs(tx, frame, scope),
+            scope,
+            'commit',
           );
         if (!receipts.length) return;
         let rows = await tx([

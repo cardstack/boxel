@@ -304,6 +304,39 @@ module(basename(import.meta.filename), function (hooks) {
     inputGeneration: 5,
     definitionRevision: 'epoch',
   };
+  test('continuation ignores queued priority but not changed inputs or authority', async (assert) => {
+    const registry = writer.latticePublication(lookup, network).registry;
+    await registry.assertWorkCurrent(receipt);
+    await db.execute(
+      `INSERT INTO jobs(job_type,concurrency_group,priority,timeout,args)
+       VALUES('incremental-index',$1,10,10,'{}')`,
+      { bind: ['indexing:' + realm] },
+    );
+    await assert.rejects(
+      registry.assertWorkCurrent(receipt),
+      /new source work has priority/,
+    );
+    await registry.assertWorkCurrent(receipt, undefined, {
+      phase: 'continuation',
+    });
+    await changes.obligation();
+    await assert.rejects(
+      registry.assertWorkCurrent(receipt, undefined, { phase: 'continuation' }),
+      /newer owner obligation/,
+    );
+    await db.execute('UPDATE lattice_owners SET dirty_generation=5');
+    await db.execute('UPDATE realm_generations SET current_generation=6');
+    await assert.rejects(
+      registry.assertWorkCurrent(receipt, undefined, { phase: 'continuation' }),
+      /input or module revision changed/,
+    );
+    await db.execute('UPDATE realm_generations SET current_generation=5');
+    await db.execute('UPDATE realm_user_permissions SET read=FALSE');
+    await assert.rejects(
+      registry.assertWorkCurrent(receipt, undefined, { phase: 'continuation' }),
+      /read authority changed/,
+    );
+  });
   for (const [reason, change] of Object.entries(changes))
     test(`failure recording fences ${reason} without consuming the current budget`, async (assert) => {
       await change();

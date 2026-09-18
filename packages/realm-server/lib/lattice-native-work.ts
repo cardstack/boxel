@@ -72,7 +72,10 @@ export async function openLatticeNativeWork(
           row?.read === true &&
           row.metadata_url === request.realmURL &&
           row.archived_at == null,
-        sourcePending: Boolean(row?.source_pending),
+        // A successful first inspection admits this attempt. A later queued
+        // write stops new admissions, but only changed input/code/authority
+        // evidence can cancel work already running over captured inputs.
+        sourcePending: !claim && Boolean(row?.source_pending),
         active: row?.retired === false,
         obligation:
           row?.dirty_generation == null ? null : Number(row.dirty_generation),
