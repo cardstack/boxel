@@ -261,8 +261,13 @@ export function widenFencesAroundCodePatches(markdown: string): string {
     // become one and the file after this one is written into it. Leave the
     // block as written; the parser reports it as malformed, bounded by its
     // fence, and the patch after it stays its own block.
-    let ownClose = indexOfPatchClosingFence(lines, i + 1, fenceLength);
-    if (ownClose !== -1 && (replaceIndex === -1 || replaceIndex > ownClose)) {
+    let ownClose = indexOfPatchClosingFence(
+      lines,
+      i + 1,
+      fenceLength,
+      replaceIndex,
+    );
+    if (ownClose !== -1) {
       i = ownClose + 1;
       continue;
     }
@@ -323,30 +328,68 @@ function indexOfLine(
   return -1;
 }
 
-// The bare fence that closes a patch, with the fenced blocks inside its
-// content skipped over. Inner fences come in pairs, an opener and its closer,
-// so a bare fence met after an odd number of inner fence lines is closing an
-// inner block and a bare fence met after an even number is the patch's own.
-// -1 when the text ends first, which is what a patch still streaming looks
-// like.
+// The bare fence that closes a patch before its REPLACE marker, or -1 when
+// the patch runs on to the marker (or to the end of a message still
+// streaming). Fenced blocks inside the patch's content are skipped: an opener
+// with an info string is unmistakably inner, and the next bare fence closes
+// it. A bare fence met while no inner block is open is either the patch's own
+// close or a bare inner opener, and what follows it tells them apart: the
+// patch's own close is followed by no fenced text at all, or by another
+// patch's opener before any REPLACE marker; a bare inner opener is followed
+// by its closer and then the rest of the patch.
 function indexOfPatchClosingFence(
   lines: string[],
   from: number,
   fenceLength: number,
+  replaceIndex: number,
 ): number {
-  let innerFences = 0;
+  let end = replaceIndex === -1 ? lines.length : replaceIndex;
+  let openInnerBlocks = 0;
   for (let j = from; j < lines.length; j++) {
     let m = lines[j].match(CODE_FENCE_PATTERN);
     if (!m || m[2][0] !== '`') {
       continue;
     }
+    if (j >= end) {
+      return -1;
+    }
     let bare = m[3].trim() === '' && m[2].length >= fenceLength;
-    if (bare && innerFences % 2 === 0) {
+    if (!bare) {
+      openInnerBlocks++;
+      continue;
+    }
+    if (openInnerBlocks > 0) {
+      openInnerBlocks--;
+      continue;
+    }
+    if (
+      hasPatchOpener(lines, j + 1, end) ||
+      indexOfLine(lines, j + 1, (line) => CODE_FENCE_PATTERN.test(line)) === -1
+    ) {
       return j;
     }
-    innerFences++;
+    openInnerBlocks++;
   }
   return -1;
+}
+
+// Whether a patch opens between `from` and `to`: a fence line followed by a
+// file url line and the SEARCH marker.
+function hasPatchOpener(lines: string[], from: number, to: number): boolean {
+  for (let j = from; j + 2 < Math.min(to, lines.length); j++) {
+    let open =
+      lines[j].match(CODE_FENCE_PATTERN) ??
+      lines[j].match(LIST_PREFIXED_CODE_FENCE_PATTERN);
+    if (
+      open &&
+      open[2][0] === '`' &&
+      FILE_URL_LINE_PATTERN.test(lines[j + 1]) &&
+      SEARCH_MARKER_PATTERN.test(lines[j + 2])
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function indexOfClosingFence(

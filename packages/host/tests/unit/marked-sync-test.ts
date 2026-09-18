@@ -386,21 +386,40 @@ ${REPLACE_MARKER}
     );
   });
 
-  test('widenFencesAroundCodePatches still widens a streaming patch whose inner fence has closed', function (assert) {
-    let streaming = `\`\`\`md
+  test('a patch whose inner fence has no info string is still widened', function (assert) {
+    // A bare ``` inside the content opens an inner block just as ```text
+    // does; it must not be read as the patch closing early.
+    let bareInner = `\`\`\`md
 https://example.com/realm/plan.md (new)
 ${SEARCH_MARKER}
 ${SEPARATOR_MARKER}
 # Plan
 
-\`\`\`text
+\`\`\`
 box
 \`\`\`
 
-more plan te`;
+more plan text
+${REPLACE_MARKER}
+\`\`\`
+`;
+    let widened = widenFencesAroundCodePatches(bareInner);
+    assert.true(widened.startsWith('````md\n'), 'the opener is widened');
+    assert.true(
+      widened.endsWith('````\n'),
+      'the closer after the REPLACE marker is widened to match',
+    );
+    let blocks = renderBodyToCodeData(bareInner);
+    assert.strictEqual(blocks.length, 1, 'one code block');
+    assert.true(
+      blocks[0].searchReplaceBlock!.includes('```\nbox\n```'),
+      'the inner fences stay inside the patch as file content',
+    );
+
+    let streaming = bareInner.slice(0, bareInner.indexOf('more plan te') + 12);
     assert.true(
       widenFencesAroundCodePatches(streaming).startsWith('````md\n'),
-      'an inner opener and closer pair does not read as the patch closing',
+      'and while the REPLACE marker has not arrived the opener is still widened',
     );
   });
 
