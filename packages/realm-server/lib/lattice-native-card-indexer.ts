@@ -320,6 +320,7 @@ export function createLatticeNativeCardIndexer({
         worker,
         trace,
         deferComputation: discovery,
+        ...(linkedSource ? { normalizeAbsentScalars: true } : {}),
         signal: work?.signal,
         ...linkInputs,
         ...(inputFrame

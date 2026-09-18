@@ -98,6 +98,7 @@ export async function assembleLatticeCardData({
   resolveLinkInputs,
   signal,
   deferComputation = false,
+  normalizeAbsentScalars = Boolean(resolveQueryInputs),
   trace,
 }: {
   id: string;
@@ -127,6 +128,9 @@ export async function assembleLatticeCardData({
   // Source discovery only: normalize authored values and register a pending
   // owner. Do not invent empty query results or evaluate against old inputs.
   deferComputation?: boolean;
+  // Preserve indexed-card null defaults when folding a formerly materialized
+  // derivation into source indexing, without changing ordinary source defaults.
+  normalizeAbsentScalars?: boolean;
 }) {
   const started = performance.now();
   signal?.throwIfAborted();
@@ -381,7 +385,7 @@ export async function assembleLatticeCardData({
         // Normalize before computation (including trusted base computeds), so
         // Node produces the same values and search doc from the authored file.
         // Source indexing/discovery still preserves its original empty values.
-        if (resolveQueryInputs && node.values[name] === undefined) {
+        if (normalizeAbsentScalars && node.values[name] === undefined) {
           node.values[name] = null;
         }
         // Date objects are kept for the official serializer/search codec;

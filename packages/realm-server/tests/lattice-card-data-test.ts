@@ -317,6 +317,34 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('folded derivations preserve the indexed null defaults of materialized inputs', async function (assert) {
+    const options = {
+      id,
+      sourceRevision: 's1',
+      sourceJSON: source({}),
+      ...fixtures(),
+      resolve,
+      worker,
+    };
+    const ordinary = await assembleLatticeCardData(options);
+    const folded = await assembleLatticeCardData({
+      ...options,
+      normalizeAbsentScalars: true,
+    });
+    assert.false(
+      Object.hasOwn(json(ordinary.searchDoc), 'note'),
+      'ordinary source indexing is unchanged',
+    );
+    assert.strictEqual(folded.searchDoc.note, null);
+    assert.strictEqual(folded.searchDoc.cardDescription, null);
+    assert.deepEqual(folded.searchDoc.cardInfo, { name: null, summary: null });
+    assert.deepEqual(
+      json(folded.serialized),
+      json(ordinary.serialized),
+      'wire attributes agree',
+    );
+  });
+
   test('JSON fields preserve authored and computed data without copying it into search', async function (assert) {
     const options = fixtures();
     const jsonField: FieldDefinition = {
