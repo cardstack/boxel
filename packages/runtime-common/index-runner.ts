@@ -1,3 +1,4 @@
+import { LatticeCommitTick } from './lattice-commit-tick.ts';
 import {
   startLatticeTrace,
   latticeAttemptId,
@@ -1057,6 +1058,49 @@ export class IndexRunner {
         let finishing: Promise<void> = Promise.resolve();
         let superseded: LatticeWorkSuperseded | undefined;
         let yielded: LatticeWorkSuperseded | undefined;
+        let committedOwners = 0;
+        const commitTick = streamPublications
+          ? new LatticeCommitTick<{
+              batch: Batch;
+              inputGeneration: number;
+              ownerURL: string;
+              trace?: LatticeTrace;
+            }>(async (items) => {
+              for (const item of items) {
+                item.trace?.stage('input-barrier');
+                await reading.beforePublish(item.ownerURL);
+                item.trace?.stage('publication');
+              }
+              const batch = items[0].batch;
+              const swapStartedAt = Date.now();
+              try {
+                await batch.publishLatticeTick(items, {
+                  lattice: publication,
+                  latticeFollowup: followup,
+                });
+                committedOwners +=
+                  items.length - batch.latticeSkippedOutputs.size;
+                for (const { ownerURL, trace } of items) {
+                  const skipped = batch.latticeSkippedOutputs.has(ownerURL);
+                  const retained = batch.latticeRetainedOutputs.has(ownerURL);
+                  if (!skipped && !retained) published.add(ownerURL);
+                  trace?.finish(
+                    skipped
+                      ? 'superseded'
+                      : retained
+                        ? 'retained'
+                        : 'published',
+                  );
+                }
+              } finally {
+                this.#latticeTimings.latticeSwapMs +=
+                  Date.now() - swapStartedAt;
+                this.#latticeTimings.latticeWriteMs += batch.writeMs;
+                for (const item of items)
+                  await item.batch.discardLatticeCandidates();
+              }
+            }, serviceState?.governor?.commitTickMs ?? 400)
+          : undefined;
         const renderStartedAt = Date.now();
         const queue = [...pending];
         const scheduler = followup
@@ -1133,6 +1177,7 @@ export class IndexRunner {
             ? () =>
                 publication.registry.assertWorkCurrent(work, undefined, {
                   lockGroup: false,
+                  deferSourceYield: committedOwners === 0,
                 })
             : undefined;
           const check = followup
@@ -1219,42 +1264,20 @@ export class IndexRunner {
                 publication.registry.assertReservationCurrent(work, tx),
               );
             }
-            try {
-              let finishStartedAt = Date.now();
-              await this.#finishVisit(rendered);
-              this.#latticeTimings.latticeFinishVisitMs +=
-                Date.now() - finishStartedAt;
-              if (streamPublications) {
-                trace?.stage('input-barrier');
-                await reading.beforePublish(ownerURL);
-                trace?.stage('publication');
-                const swapStartedAt = Date.now();
-                await this.batch.done({
-                  lattice: publication,
-                  latticeInputGeneration: ownerSnapshot.generation,
-                  latticeFollowup: followup,
-                  countIndexEntries: false,
-                });
-                this.#latticeTimings.latticeSwapMs +=
-                  Date.now() - swapStartedAt;
-                this.#latticeTimings.latticeWriteMs += this.batch.writeMs;
-                if (!this.batch.latticeRetainedOutputs.has(ownerURL))
-                  published.add(ownerURL);
-              }
-              trace?.stage('batch-publication-wait');
-              if (streamPublications)
-                trace?.finish(
-                  this.batch.latticeRetainedOutputs.has(ownerURL)
-                    ? 'retained'
-                    : 'published',
-                );
-              completedOwners.push(ownerURL);
-              succeeded++;
-              this.#latticeTimings.latticeOwnersRendered++;
-            } finally {
-              if (streamPublications)
-                await this.batch.discardLatticeCandidates();
-            }
+            let finishStartedAt = Date.now();
+            await this.#finishVisit(rendered);
+            this.#latticeTimings.latticeFinishVisitMs +=
+              Date.now() - finishStartedAt;
+            trace?.stage('batch-publication-wait');
+            commitTick?.add({
+              batch: ownerBatch,
+              inputGeneration: ownerSnapshot.generation,
+              ownerURL,
+              trace,
+            });
+            completedOwners.push(ownerURL);
+            succeeded++;
+            this.#latticeTimings.latticeOwnersRendered++;
           });
           // A failed identity cannot poison completed peers' finish slots.
           finishing = finish.catch(() => {});
@@ -1321,6 +1344,9 @@ export class IndexRunner {
             }
           }),
         );
+        // Flush completed peers even when another owner was superseded. Their
+        // own publication/savepoint checks still decide whether they can land.
+        await commitTick?.finish();
         latestServiceState = scheduler?.state;
         for (const outcome of outcomes)
           if (outcome.status === 'rejected') throw outcome.reason;

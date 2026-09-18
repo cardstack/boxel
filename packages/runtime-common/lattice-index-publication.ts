@@ -458,6 +458,8 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
       replayPrevious?: Map<string, BoxelIndexTable | undefined>;
       changedCode?: ReadonlySet<string>;
       candidateBatch?: string;
+      // The enclosing tick records one notice after its accepted savepoints.
+      publishedOwners?: Set<string>;
     },
   ): Promise<Set<string>> {
     let {
@@ -845,7 +847,9 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
     );
     timings.dirtyMs = Date.now() - tailAt;
     tailAt = Date.now();
-    if (this.db.kind === 'pg') {
+    if (args.publishedOwners) {
+      for (let ownerURL of published) args.publishedOwners.add(ownerURL);
+    } else if (this.db.kind === 'pg') {
       for (let ownerURL of published) {
         await recordLatticePublication(
           tx,

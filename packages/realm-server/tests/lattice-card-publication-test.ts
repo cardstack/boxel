@@ -1,3 +1,4 @@
+import { LatticeWorkSuperseded } from '@cardstack/runtime-common/lattice-work';
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import { basename } from 'node:path';
 import QUnit from 'qunit';
@@ -116,6 +117,161 @@ module(basename(import.meta.filename), function (hooks) {
     );
     return row as unknown as Pick<RealmMetaTable, 'value' | 'generation'>;
   }
+
+  async function candidate(url: URL, count: number) {
+    const batch = await writer.createBatch(new URL(realm), network, undefined, {
+      latticeMaterialization: true,
+    });
+    const inputGeneration = batch.currentGeneration - 1;
+    const value = entry(url, count, inputGeneration);
+    value.resource.meta.publication!.stale = true;
+    await batch.updateEntry(url, value);
+    return { batch, inputGeneration };
+  }
+
+  async function tickState() {
+    return {
+      cards: await db.execute(
+        `SELECT url, generation, pristine_doc->'attributes'->>'count' AS count, pristine_doc->'meta'->'publication'->>'validatedThrough' AS input FROM boxel_index WHERE realm_url=$1 AND type='instance' ORDER BY url`,
+        { bind: [realm] },
+      ),
+      notices: await db.execute(
+        `SELECT payload FROM lattice_publication_events WHERE realm_url=$1`,
+        { bind: [realm] },
+      ),
+      clock: (await readCatalogue()).generation,
+    };
+  }
+
+  test('a tick publishes peers with one generation and one complete notice', async function (assert) {
+    await seed();
+    const a = await candidate(owner, 13);
+    const other = new URL('other.json', realm);
+    const b = await candidate(other, 6);
+    await a.batch.publishLatticeTick([a, b], { lattice: publication });
+    const state = await tickState();
+    assert.deepEqual(
+      state.cards.map((row) => Number(row.count)),
+      [13, 6],
+    );
+    assert.deepEqual(
+      state.cards.map((row) => Number(row.generation)),
+      [2, 2],
+    );
+    assert.strictEqual(Number(state.clock), 2);
+    assert.strictEqual(state.notices.length, 1);
+    assert.deepEqual(
+      (state.notices[0].payload as any).invalidations.sort(),
+      [owner.href, other.href].sort(),
+    );
+    assert.strictEqual(catalogueScans, 0);
+  });
+
+  test('a tick keeps each original input revision across intervening publications', async function (assert) {
+    await seed();
+    const a = await candidate(owner, 13);
+    const bridge = await writer.createBatch(new URL(realm), network);
+    await bridge.updateEntry(
+      new URL('bridge.json', realm),
+      entry(new URL('bridge.json', realm), 8, 0),
+    );
+    await bridge.done({ lattice: publication });
+    const b = await candidate(new URL('other.json', realm), 6);
+    assert.notEqual(a.inputGeneration, b.inputGeneration);
+    await a.batch.publishLatticeTick([a, b], { lattice: publication });
+    const state = await tickState();
+    assert.deepEqual(
+      state.cards
+        .filter((row) => row.url !== new URL('bridge.json', realm).href)
+        .map((row) => Number(row.input)),
+      [a.inputGeneration, b.inputGeneration],
+    );
+    assert.strictEqual(Number(state.clock), 3);
+  });
+
+  for (const phase of ['opening', 'commit'] as const) {
+    test(`a superseded ${phase} check rolls back just its owner, including registry writes`, async function (assert) {
+      await seed();
+      const a = await candidate(owner, 13);
+      const b = await candidate(new URL('other.json', realm), 6);
+      const register =
+        phase === 'opening'
+          ? a.batch.registerLatticePublicationCheck.bind(a.batch)
+          : a.batch.registerLatticeCommitCheck.bind(a.batch);
+      register(owner.href, async () => {
+        throw new LatticeWorkSuperseded('newer source');
+      });
+      await a.batch.publishLatticeTick([a, b], { lattice: publication });
+      const state = await tickState();
+      assert.deepEqual(
+        state.cards.map((row) => Number(row.count)),
+        [12, 6],
+      );
+      assert.deepEqual([...a.batch.latticeSkippedOutputs], [owner.href]);
+      assert.deepEqual((state.notices[0].payload as any).invalidations, [
+        new URL('other.json', realm).href,
+      ]);
+      const [pending] = await db.execute(
+        'SELECT dirty_generation,input_generation FROM lattice_owners WHERE realm_url=$1 AND owner_url=$2',
+        { bind: [realm, owner.href] },
+      );
+      assert.true(
+        Number(pending.dirty_generation) > Number(pending.input_generation),
+        'failed peer stays dirty',
+      );
+    });
+  }
+
+  test('an unexpected peer failure rolls back the whole tick and its outbox', async function (assert) {
+    await seed();
+    const a = await candidate(owner, 13);
+    const b = await candidate(new URL('other.json', realm), 6);
+    b.batch.registerLatticeCommitCheck(
+      new URL('other.json', realm).href,
+      async () => {
+        throw new Error('database failure');
+      },
+    );
+    await assert.rejects(
+      a.batch.publishLatticeTick([a, b], { lattice: publication }),
+      /database failure/,
+    );
+    const state = await tickState();
+    assert.deepEqual(
+      state.cards.map((row) => Number(row.count)),
+      [12, 5],
+    );
+    assert.strictEqual(state.notices.length, 0);
+    assert.strictEqual(Number(state.clock), 1);
+  });
+
+  test('expiry at the transaction tail rolls back even peers that passed earlier checks', async function (assert) {
+    await seed();
+    const a = await candidate(owner, 13);
+    let checks = 0;
+    a.batch.registerLatticeCommitCheck(owner.href, async () => {
+      if (++checks > 1) throw new LatticeWorkSuperseded('expired lease');
+    });
+    await assert.rejects(
+      a.batch.publishLatticeTick([a], { lattice: publication }),
+      /expired lease/,
+    );
+    const state = await tickState();
+    assert.strictEqual(state.notices.length, 0);
+    assert.strictEqual(Number(state.clock), 1);
+  });
+
+  test('an entirely superseded tick makes no clock advance or notice', async function (assert) {
+    await seed();
+    const a = await candidate(owner, 13);
+    a.batch.registerLatticePublicationCheck(owner.href, async () => {
+      throw new LatticeWorkSuperseded('newer source');
+    });
+    await a.batch.publishLatticeTick([a], { lattice: publication });
+    const state = await tickState();
+    assert.strictEqual(state.notices.length, 0);
+    assert.strictEqual(Number(state.clock), 1);
+  });
 
   test('a source value edit reuses the catalogue, while added and deleted members rebuild its counts', async function (assert) {
     await seed();

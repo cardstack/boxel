@@ -1,3 +1,5 @@
+import { LatticeWorkSuperseded } from './lattice-work.ts';
+import { recordLatticePublications } from './lattice-publication-outbox.ts';
 import {
   latticeWorkingTable,
   latticeWorkingScope,
@@ -406,6 +408,11 @@ export class Batch {
   >();
   #latticeCodeReferences = new Map<string, LatticeCodeReference>();
   #latticeRetainedOutputs = new Set<string>();
+  #latticeTickInputs?: Map<string, number>;
+  #latticeSkippedOutputs = new Set<string>();
+  get latticeSkippedOutputs(): ReadonlySet<string> {
+    return this.#latticeSkippedOutputs;
+  }
   get latticeRetainedOutputs(): ReadonlySet<string> {
     return this.#latticeRetainedOutputs;
   }
@@ -1694,6 +1701,71 @@ export class Batch {
       : row;
   }
 
+  async publishLatticeTick(
+    completed: Array<{ batch: Batch; inputGeneration: number }>,
+    opts: {
+      lattice: LatticeIndexPublication;
+      latticeFollowup?: BatchDoneOptions['latticeFollowup'];
+    },
+  ): Promise<void> {
+    if (
+      !completed.length ||
+      completed[0].batch !== this ||
+      !this.#candidateBatch
+    )
+      throw new Error('A Lattice tick requires isolated candidate batches');
+    const inputs = new Map<string, number>();
+    for (const { batch, inputGeneration } of completed) {
+      if (
+        !batch.#candidateBatch ||
+        batch.#dbAdapter !== this.#dbAdapter ||
+        batch.realmURL.href !== this.realmURL.href ||
+        batch.loaderEpoch !== this.loaderEpoch ||
+        batch.#latticeTickInputs ||
+        inputGeneration !== batch.generation - 1
+      )
+        throw new Error('Incompatible Lattice tick candidates');
+      for (const url of batch.#invalidations) {
+        if (inputs.has(url)) throw new Error('Duplicate Lattice tick owner');
+        inputs.set(url, inputGeneration);
+      }
+    }
+    for (const { batch } of completed) {
+      await batch.flushWriteBuffer();
+      if (batch === this) continue;
+      // Moving candidate rows does not alter their manifest or captured input
+      // receipts. Each owner's original input revision is checked at publication.
+      await query(this.#dbAdapter, [
+        'UPDATE lattice_index_candidates SET batch_id=',
+        param(this.#candidateBatch),
+        ', generation=',
+        param(this.generation),
+        'WHERE batch_id=',
+        param(batch.#candidateBatch!),
+      ]);
+      for (const url of batch.#invalidations) this.#invalidations.add(url);
+      for (const type of batch.#touchedTypes) this.#touchedTypes.add(type);
+      for (const url of batch.#preReadURLs) this.#preReadURLs.add(url);
+      for (const [url, value] of batch.#latticePublicationChecks)
+        this.#latticePublicationChecks.set(url, value);
+      for (const [url, value] of batch.#latticeCommitChecks)
+        this.#latticeCommitChecks.set(url, value);
+      for (const [url, value] of batch.#latticeCodeReferences)
+        this.#latticeCodeReferences.set(url, value);
+      for (const [url, value] of batch.#latticeQueryPreparations)
+        this.#latticeQueryPreparations.set(url, value);
+      for (const [url, value] of batch.#retainedInputs)
+        this.#retainedInputs.set(url, value);
+      this.#writeMs += batch.writeMs;
+    }
+    this.#latticeTickInputs = inputs;
+    await this.done({
+      ...opts,
+      latticeInputGeneration: completed[0].inputGeneration,
+      countIndexEntries: false,
+    });
+  }
+
   async discardLatticeCandidates(): Promise<void> {
     if (!this.#candidateBatch) return;
     await query(this.#dbAdapter, [
@@ -2511,7 +2583,9 @@ export class Batch {
       this.#latticeTransaction = tx;
       if (!tx) await this.#query(['BEGIN']);
       try {
-        for (let checks of this.#latticePublicationChecks.values()) {
+        for (let checks of this.#latticeTickInputs
+          ? []
+          : this.#latticePublicationChecks.values()) {
           if (!tx)
             throw new Error('Lattice publication requires a transaction');
           for (let check of checks) await check(tx);
@@ -2533,68 +2607,17 @@ export class Batch {
           ]))
             retainedOwners.add(String(row.url));
         }
-        const changedCode = new Set<string>();
-        if (this.latticeEnabled && tx) {
-          if (opts?.latticeInputGeneration !== undefined) {
-            for (const row of latticePrepared?.rows ?? []) {
-              if (row.type !== 'instance') continue;
-              const reference = this.#latticeCodeReferences.get(row.url);
-              const [same] = await tx([
-                'SELECT NOT EXISTS (SELECT 1 FROM lattice_owner_code WHERE realm_url=',
-                param(this.realmURL.href),
-                'AND owner_url=',
-                param(row.url),
-                ') AS unbound, EXISTS (SELECT 1 FROM lattice_owner_code WHERE realm_url=',
-                param(this.realmURL.href),
-                'AND owner_url=',
-                param(row.url),
-                'AND reference=',
-                param(JSON.stringify(reference ?? null)),
-                '::jsonb) AS matches',
-              ]);
-              if (reference ? !same?.matches : !same?.unbound)
-                changedCode.add(row.url);
-            }
-          }
-          // A new output must acquire its own authority, even after an index
-          // reset reuses a generation number. Compatibility/error outputs
-          // cannot inherit a previous native binding from the same URL.
-          await tx([
-            `DELETE FROM lattice_owner_code b USING ${latticeWorkingTable(this.#candidateBatch)} w
-               WHERE b.realm_url=w.realm_url AND b.owner_url=w.url AND w.type='instance'
-                 AND w.realm_url=`,
-            param(this.realmURL.href),
-            'AND w.generation=',
-            param(this.generation),
-            ...latticeWorkingScope(this.#candidateBatch, 'w'),
-          ]);
-          // Only native capability registration supplies these bindings.
-          // Never recover one from authored JSON or a previous working row.
-          for (const [url, reference] of this.#latticeCodeReferences) {
-            if (reference.realmURL !== this.realmURL.href)
-              throw new Error('Code reference belongs to another realm');
-            const [valid] = await tx([
-              'SELECT lattice_lock_code_reference(',
-              param(JSON.stringify(reference)),
-              '::jsonb) AS current',
-            ]);
-            if (!valid?.current)
-              throw new Error(
-                'Native code reference changed before publication',
-              );
-            await tx([
-              'INSERT INTO lattice_owner_code (realm_url,owner_url,generation,reference) VALUES (',
-              param(this.realmURL.href),
-              ',',
-              param(url.endsWith('.json') ? url : `${url}.json`),
-              ',',
-              param(this.generation),
-              ',',
-              param(JSON.stringify(reference)),
-              '::jsonb) ON CONFLICT (realm_url,owner_url) DO UPDATE SET generation=EXCLUDED.generation,reference=EXCLUDED.reference',
-            ]);
-          }
-        }
+        const isolatedTick = Boolean(
+          this.#latticeTickInputs && tx && opts?.lattice && latticePrepared,
+        );
+        const changedCode =
+          this.latticeEnabled && tx && !isolatedTick
+            ? await this.#bindLatticeCode(
+                tx,
+                latticePrepared?.rows ?? [],
+                opts?.latticeInputGeneration !== undefined,
+              )
+            : new Set<string>();
         if (tx && opts?.latticeRealmUsername) {
           await captureLatticeCodeChanges(
             tx,
@@ -2618,6 +2641,71 @@ export class Batch {
             },
             { deferWake: true },
           );
+        } else if (isolatedTick && tx && opts?.lattice && latticePrepared) {
+          const notices = new Set<string>();
+          for (const row of latticePrepared.rows) {
+            if (row.type !== 'instance')
+              throw new Error('Lattice ticks only publish card data');
+            await tx(['SAVEPOINT lattice_tick_owner']);
+            const ownerNotices = new Set<string>();
+            try {
+              for (const check of this.#latticePublicationChecks.get(row.url) ??
+                [])
+                await check(tx);
+              const ownerCode = await this.#bindLatticeCode(
+                tx,
+                [row],
+                true,
+                row.url,
+              );
+              const retained = await opts.lattice.commit(tx, {
+                realmURL: this.realmURL.href,
+                generation: this.generation,
+                definitionRevision: this.loaderEpoch,
+                prepared: {
+                  ...latticePrepared,
+                  rows: [row],
+                  retiringOwners: new Set(),
+                },
+                inputGeneration: this.#latticeTickInputs!.get(row.url),
+                changedCode: ownerCode,
+                candidateBatch: this.#candidateBatch,
+                publishedOwners: ownerNotices,
+              });
+              if (!ownerNotices.has(row.url))
+                throw new LatticeWorkSuperseded('candidate was not accepted');
+              const capture = this.#retainedInputs.get(row.url);
+              if (capture && ownerNotices.has(row.url))
+                await this.#retainedSnapshots!.recordChange(tx, capture);
+              for (const check of this.#latticeCommitChecks.get(row.url) ?? [])
+                await check(tx);
+              await tx(['RELEASE SAVEPOINT lattice_tick_owner']);
+              for (const url of retained) this.#latticeRetainedOutputs.add(url);
+              for (const url of ownerNotices) notices.add(url);
+              if (!ownerNotices.has(row.url))
+                this.#latticeSkippedOutputs.add(row.url);
+            } catch (error) {
+              await tx(['ROLLBACK TO SAVEPOINT lattice_tick_owner']);
+              await tx(['RELEASE SAVEPOINT lattice_tick_owner']);
+              if (!(error instanceof LatticeWorkSuperseded)) throw error;
+              this.#latticeSkippedOutputs.add(row.url);
+            }
+            if (this.#latticeSkippedOutputs.has(row.url)) {
+              await tx([
+                'DELETE FROM lattice_index_candidates WHERE batch_id=',
+                param(this.#candidateBatch!),
+                'AND url=',
+                param(row.url),
+              ]);
+              this.#invalidations.delete(row.url);
+            }
+          }
+          if (!notices.size) return;
+          await recordLatticePublications(tx, {
+            realmURL: this.realmURL.href,
+            ownerURLs: [...notices],
+            realmGeneration: this.generation,
+          });
         } else if (opts?.lattice && latticePrepared) {
           this.#latticeRetainedOutputs = await opts.lattice.commit(
             tx ?? ((expr) => this.#query(expr)),
@@ -2650,7 +2738,7 @@ export class Batch {
         phaseStartedAt = Date.now();
         // Copy only the exact inputs checked above, before promotion can replace
         // their source rows. Any subsequent failure rolls back both copies and owner.
-        if (tx)
+        if (tx && !isolatedTick)
           for (const [url, change] of this.#retainedInputs)
             if (retainedOwners.has(url))
               await this.#retainedSnapshots!.recordChange(tx, change);
@@ -2670,7 +2758,10 @@ export class Batch {
         });
         publicationTimings.pruneMs = Date.now() - phaseStartedAt;
         phaseStartedAt = Date.now();
-        for (let checks of this.#latticeCommitChecks.values()) {
+        // Recheck the lease at the transaction tail as well: a lease that
+        // expires while publishing peers invalidates the entire transaction.
+        for (let [url, checks] of this.#latticeCommitChecks) {
+          if (isolatedTick && this.#latticeSkippedOutputs.has(url)) continue;
           if (!tx)
             throw new Error('Lattice publication requires a transaction');
           for (let check of checks) await check(tx);
@@ -2733,6 +2824,75 @@ export class Batch {
       );
     }
     if (totalIndexEntries !== undefined) return { totalIndexEntries };
+  }
+
+  async #bindLatticeCode(
+    tx: Querier,
+    rows: Awaited<ReturnType<LatticeIndexPublication['prepare']>>['rows'],
+    materialization: boolean,
+    ownerURL?: string,
+  ): Promise<Set<string>> {
+    const changedCode = new Set<string>();
+    if (materialization) {
+      for (const row of rows) {
+        if (row.type !== 'instance') continue;
+        const reference = this.#latticeCodeReferences.get(row.url);
+        const [same] = await tx([
+          'SELECT NOT EXISTS (SELECT 1 FROM lattice_owner_code WHERE realm_url=',
+          param(this.realmURL.href),
+          'AND owner_url=',
+          param(row.url),
+          ') AS unbound, EXISTS (SELECT 1 FROM lattice_owner_code WHERE realm_url=',
+          param(this.realmURL.href),
+          'AND owner_url=',
+          param(row.url),
+          'AND reference=',
+          param(JSON.stringify(reference ?? null)),
+          '::jsonb) AS matches',
+        ]);
+        if (reference ? !same?.matches : !same?.unbound)
+          changedCode.add(row.url);
+      }
+    }
+    // A new output must acquire its own authority, even after an index
+    // reset reuses a generation number. Compatibility/error outputs
+    // cannot inherit a previous native binding from the same URL.
+    await tx([
+      `DELETE FROM lattice_owner_code b USING ${latticeWorkingTable(this.#candidateBatch)} w
+               WHERE b.realm_url=w.realm_url AND b.owner_url=w.url AND w.type='instance'
+                 AND w.realm_url=`,
+      param(this.realmURL.href),
+      'AND w.generation=',
+      param(this.generation),
+      ...latticeWorkingScope(this.#candidateBatch, 'w'),
+      ...(ownerURL ? ['AND w.url=', param(ownerURL)] : []),
+    ]);
+    // Only native capability registration supplies these bindings.
+    // Never recover one from authored JSON or a previous working row.
+    for (const [url, reference] of this.#latticeCodeReferences) {
+      if (ownerURL && url !== ownerURL) continue;
+      if (reference.realmURL !== this.realmURL.href)
+        throw new Error('Code reference belongs to another realm');
+      const [valid] = await tx([
+        'SELECT lattice_lock_code_reference(',
+        param(JSON.stringify(reference)),
+        '::jsonb) AS current',
+      ]);
+      if (!valid?.current)
+        throw new Error('Native code reference changed before publication');
+      await tx([
+        'INSERT INTO lattice_owner_code (realm_url,owner_url,generation,reference) VALUES (',
+        param(this.realmURL.href),
+        ',',
+        param(url.endsWith('.json') ? url : `${url}.json`),
+        ',',
+        param(this.generation),
+        ',',
+        param(JSON.stringify(reference)),
+        '::jsonb) ON CONFLICT (realm_url,owner_url) DO UPDATE SET generation=EXCLUDED.generation,reference=EXCLUDED.reference',
+      ]);
+    }
+    return changedCode;
   }
 
   // Re-stamp the current committed generation's realm_meta value at this

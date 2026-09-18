@@ -24,12 +24,32 @@ export async function recordLatticePublication(
   >,
   eventName: LatticePublicationEvent['eventName'] = 'prerender_html',
 ): Promise<string> {
+  return recordLatticePublications(
+    tx,
+    {
+      realmURL: authority.realmURL,
+      ownerURLs: [authority.ownerURL],
+      realmGeneration: authority.realmGeneration,
+    },
+    eventName,
+  );
+}
+
+// One commit produces one durable notice, regardless of its number of owners.
+// owner_url remains a representative identity for diagnostics; payload contains
+// the complete audience-visible set.
+export async function recordLatticePublications(
+  tx: Querier,
+  authority: { realmURL: string; ownerURLs: string[]; realmGeneration: number },
+  eventName: LatticePublicationEvent['eventName'] = 'index',
+): Promise<string> {
+  if (!authority.ownerURLs.length) throw new Error('Empty Lattice publication');
   let id = uuidv4();
   let event: LatticePublicationEvent = {
     eventName,
     ...(eventName === 'index' ? { indexType: 'incremental' as const } : {}),
     realmURL: authority.realmURL,
-    invalidations: [authority.ownerURL],
+    invalidations: [...new Set(authority.ownerURLs)],
     generation: authority.realmGeneration,
     publicationId: id,
   };
@@ -39,7 +59,7 @@ export async function recordLatticePublication(
     ',',
     param(authority.realmURL),
     ',',
-    param(authority.ownerURL),
+    param(authority.ownerURLs[0]),
     ',',
     param(JSON.stringify(event)),
     ')',
