@@ -167,6 +167,26 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(catalogueScans, 0);
   });
 
+  test('an ordinary final wave sends one union notice for its shared generation', async function (assert) {
+    await seed();
+    const batch = await writer.createBatch(new URL(realm), network);
+    const other = new URL('other.json', realm);
+    await batch.updateEntry(owner, entry(owner, 13, 1));
+    await batch.updateEntry(other, entry(other, 6, 1));
+    await batch.done({ lattice: publication, latticeInputGeneration: 1 });
+    const state = await tickState();
+    assert.deepEqual(
+      state.cards.map((row) => Number(row.count)),
+      [13, 6],
+    );
+    assert.strictEqual(state.notices.length, 1);
+    assert.deepEqual(
+      (state.notices[0].payload as any).invalidations.sort(),
+      [owner.href, other.href].sort(),
+    );
+    assert.strictEqual((state.notices[0].payload as any).generation, 2);
+  });
+
   test('a tick keeps each original input revision across intervening publications', async function (assert) {
     await seed();
     const a = await candidate(owner, 13);

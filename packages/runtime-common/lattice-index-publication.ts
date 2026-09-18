@@ -5,7 +5,7 @@ import {
 import type { LatticeProjectionWhere } from './definitions.ts';
 import stringify from 'safe-stable-stringify';
 import { enqueueLattice, latticeOwnerRetryReadySQL } from './jobs/lattice.ts';
-import { recordLatticePublication } from './lattice-publication-outbox.ts';
+import { recordLatticePublications } from './lattice-publication-outbox.ts';
 import type { LatticeReadScope, LatticeScheduledWork } from './lattice-work.ts';
 import type { LatticeChangeCapture } from './lattice-adapters.ts';
 import type { DBAdapter } from './db.ts';
@@ -849,18 +849,12 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
     tailAt = Date.now();
     if (args.publishedOwners) {
       for (let ownerURL of published) args.publishedOwners.add(ownerURL);
-    } else if (this.db.kind === 'pg') {
-      for (let ownerURL of published) {
-        await recordLatticePublication(
-          tx,
-          {
-            realmURL,
-            ownerURL,
-            realmGeneration: generation,
-          },
-          'index',
-        );
-      }
+    } else if (this.db.kind === 'pg' && published.size) {
+      await recordLatticePublications(tx, {
+        realmURL,
+        ownerURLs: [...published],
+        realmGeneration: generation,
+      });
     }
     timings.outboxMs = Date.now() - tailAt;
     if (envelope)
