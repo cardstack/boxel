@@ -79,6 +79,7 @@ module(basename(import.meta.filename), function () {
       args: IncrementalIndexEnqueueArgs;
       clientRequestId: string | null;
       priority?: number;
+      initiatedBy?: string[];
     }) {
       let priority = args.priority ?? userInitiatedPriority;
       return await publisher.publish<IncrementalDoneResult>({
@@ -90,6 +91,7 @@ module(basename(import.meta.filename), function () {
           args.args,
           args.clientRequestId,
         ),
+        ...(args.initiatedBy ? { initiatedBy: args.initiatedBy } : {}),
         mapResult: mapIncrementalDoneResult(args.clientRequestId),
       });
     }
@@ -1328,6 +1330,220 @@ module(basename(import.meta.filename), function () {
           { bind: [`indexing:${realmURL}`] },
         )) as { id: number }[];
         assert.strictEqual(rows.length, 2);
+      } finally {
+        release.fulfill();
+        await worker.destroy();
+      }
+    });
+
+    test('the row records every writer whose work a coalesced pass carries', async function (assert) {
+      // What a gate in another replica reads to decide whether anything of its
+      // own writer's is outstanding. A pass that merged two publishes is
+      // indexing both writers' bytes, so recording only whoever got there
+      // first would let the absorbed writer past a pass that has not indexed
+      // its write yet.
+      await runner.destroy();
+      let realmURL = 'http://example.com/initiated-by-union/';
+      let writer = '@writer:localhost';
+      let someoneElse = '@someone-else:localhost';
+
+      let first = await publishIncrementalIndexJob({
+        clientRequestId: 'request-1',
+        initiatedBy: [writer],
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [{ url: `${realmURL}a`, operation: 'update' }],
+        },
+      });
+      let second = await publishIncrementalIndexJob({
+        clientRequestId: 'request-2',
+        initiatedBy: [someoneElse],
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [{ url: `${realmURL}b`, operation: 'update' }],
+        },
+      });
+      assert.strictEqual(
+        first.id,
+        second.id,
+        'the two publishes coalesced onto one pending job',
+      );
+
+      let [row] = (await adapter.execute(
+        `SELECT initiated_by FROM jobs WHERE id = $1`,
+        { bind: [first.id] },
+      )) as { initiated_by: string[] | null }[];
+      assert.deepEqual(
+        [...(row.initiated_by ?? [])].sort(),
+        [someoneElse, writer].sort(),
+        'both writers are on the row',
+      );
+
+      // A publish naming nobody adds nobody rather than emptying the set: an
+      // untagged pass reads as the realm owner's, and a set emptied by one
+      // would stop gating the writers already on it.
+      let untagged = await publishIncrementalIndexJob({
+        clientRequestId: 'request-3',
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [{ url: `${realmURL}c`, operation: 'update' }],
+        },
+      });
+      assert.strictEqual(untagged.id, first.id);
+      let [after] = (await adapter.execute(
+        `SELECT initiated_by FROM jobs WHERE id = $1`,
+        { bind: [first.id] },
+      )) as { initiated_by: string[] | null }[];
+      assert.deepEqual(
+        [...(after.initiated_by ?? [])].sort(),
+        [someoneElse, writer].sort(),
+        'and the publish that named nobody left them there',
+      );
+    });
+
+    test('a publish naming no writer leaves the row untagged', async function (assert) {
+      // Null, not an empty set: the gate reads null as the realm owner's, and
+      // an empty set would gate nobody at all.
+      await runner.destroy();
+      let realmURL = 'http://example.com/initiated-by-absent/';
+      let job = await publishIncrementalIndexJob({
+        clientRequestId: 'request-1',
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [{ url: `${realmURL}a`, operation: 'update' }],
+        },
+      });
+      let [row] = (await adapter.execute(
+        `SELECT initiated_by FROM jobs WHERE id = $1`,
+        { bind: [job.id] },
+      )) as { initiated_by: string[] | null }[];
+      assert.strictEqual(row.initiated_by, null);
+    });
+
+    test('incremental dedup: a publish that reads its own write does not attach to a running pass', async function (assert) {
+      // A running pass reads each file it visits once, and it was claimed
+      // before this publish existed — so it may have already read the bytes
+      // this publish supersedes. Attaching a caller that is going to read the
+      // index for these URLs would settle it against a version of its own card
+      // that predates the write it just made. The echo this branch was built
+      // for reads nothing afterwards and is unaffected; a card write does.
+      //
+      // The second publish is a bystander with the same change set and no
+      // stake, which is what makes this about `readsOwnWrite` rather than
+      // about the change sets: it attaches where the third one does not.
+      await runner.destroy();
+      let realmURL = 'http://example.com/in-flight-reads-own-write/';
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+
+      let worker = new PgQueueRunner({
+        adapter,
+        workerId: 'in-flight-reads-own-write-worker',
+      });
+      worker.register(
+        'incremental-index',
+        async (args: { changes: { url: string }[] }) => {
+          started.fulfill();
+          await release.promise;
+          return {
+            invalidations: args.changes.map((change) => change.url),
+            ignoreData: {},
+            stats: {
+              instancesIndexed: 0,
+              filesIndexed: 0,
+              instanceErrors: 0,
+              fileErrors: 0,
+              totalIndexEntries: 0,
+            },
+          };
+        },
+      );
+
+      try {
+        await worker.start();
+
+        let running = await publishIncrementalIndexJob({
+          clientRequestId: 'request-1',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'update' }],
+          },
+        });
+        await started.promise;
+
+        let echo = await publishIncrementalIndexJob({
+          clientRequestId: 'request-2',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'update' }],
+          },
+        });
+        assert.strictEqual(
+          echo.id,
+          running.id,
+          'a publish with no stake in the result still attaches to the running pass',
+        );
+
+        let writer = await publishIncrementalIndexJob({
+          clientRequestId: 'request-3',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'update' }],
+            readsOwnWrite: true,
+          },
+        });
+        assert.notStrictEqual(
+          writer.id,
+          running.id,
+          'a publish that will read the index for these urls waits for a pass ' +
+            'that started after its bytes landed',
+        );
+
+        // And the one behind it merges into that pending job rather than
+        // inserting a second — which is what keeps a burst of saves to one
+        // card at the two passes read-your-writes costs, not one per save.
+        let nextWriter = await publishIncrementalIndexJob({
+          clientRequestId: 'request-4',
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            ignoreData: {},
+            changes: [{ url: `${realmURL}a`, operation: 'update' }],
+            readsOwnWrite: true,
+          },
+        });
+        assert.strictEqual(
+          nextWriter.id,
+          writer.id,
+          'the next writer merges into the pending job the first one inserted',
+        );
+
+        let rows = (await adapter.execute(
+          `SELECT id
+             FROM jobs
+             WHERE concurrency_group = $1
+               AND status = 'unfulfilled'`,
+          { bind: [`indexing:${realmURL}`] },
+        )) as { id: number }[];
+        assert.strictEqual(
+          rows.length,
+          2,
+          'one running pass and one pending pass, however many writers arrive',
+        );
       } finally {
         release.fulfill();
         await worker.destroy();

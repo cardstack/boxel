@@ -91,6 +91,12 @@ export interface IncrementalIndexOptions {
   onDeferredPrerenderHtml?: (
     deferred: DeferredPrerenderHtml,
   ) => Promise<void> | void;
+  // See IncrementalArgs. Named by the caller rather than inferred from which
+  // form it used: awaiting a pass and reading the index for its urls are
+  // separate things, and the callers that await without reading back — the
+  // file watcher announcing a change somebody else made, a reindex answering
+  // 204 — are the ones the in-flight join exists to serve.
+  readsOwnWrite?: boolean;
 }
 
 export class RealmIndexUpdater {
@@ -353,6 +359,7 @@ export class RealmIndexUpdater {
         ...(opts?.carriedPrerenderHtmlChanges?.length
           ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
           : {}),
+        ...(opts?.readsOwnWrite ? { readsOwnWrite: true } : {}),
       };
       let clientRequestId = opts?.clientRequestId ?? null;
       job = await this.#queue.publish<IncrementalDoneResult>({
@@ -361,6 +368,10 @@ export class RealmIndexUpdater {
         timeout: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
         priority: userInitiatedPriority,
         args: makeIncrementalArgsWithCallerMetadata(args, clientRequestId),
+        // Onto the row, so a gate in another replica can see whose pass this
+        // is. The in-memory deferred below records the same thing for this
+        // replica's own gates, and the two have to agree.
+        ...(opts?.initiatedBy ? { initiatedBy: [opts.initiatedBy] } : {}),
         mapResult: mapIncrementalDoneResult(clientRequestId),
       });
     } catch (e: any) {
@@ -453,6 +464,7 @@ export class RealmIndexUpdater {
       | 'deferPrerenderHtml'
       | 'carriedPrerenderHtmlChanges'
       | 'onDeferredPrerenderHtml'
+      | 'readsOwnWrite'
     >,
   ): Promise<void> {
     let { settled } = await this.enqueueChanges(changes, opts);
