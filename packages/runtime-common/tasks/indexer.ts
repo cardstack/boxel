@@ -74,6 +74,14 @@ export interface IncrementalArgs extends WorkerArgs {
   // Empty on every other index path; see `deferPrerenderHtml` for why it is
   // not optional.
   carriedPrerenderHtmlChanges: IncrementalChange[];
+  // Whether the caller that published this will read the index for these same
+  // URLs once the pass lands — the read-your-writes contract a card write
+  // answers its response from. Read only by the coalesce handler, never by the
+  // pass itself: what it governs is which existing pass this publish is
+  // allowed to be satisfied by, not what the pass does. See
+  // `chooseIncrementalCoalesceDecision`. Non-optional for the same reason
+  // `deferPrerenderHtml` is.
+  readsOwnWrite: boolean;
 }
 
 // An invalidation set an index pass computed but deliberately did not enqueue
@@ -214,6 +222,7 @@ function parseIncrementalArgsForCoalesce(
     coalescedCallers,
     deferPrerenderHtml,
     carriedPrerenderHtmlChanges,
+    readsOwnWrite,
   } = args;
   if (
     typeof realmURL !== 'string' ||
@@ -237,6 +246,7 @@ function parseIncrementalArgsForCoalesce(
     carriedPrerenderHtmlChanges: Array.isArray(carriedPrerenderHtmlChanges)
       ? (carriedPrerenderHtmlChanges as IncrementalChange[])
       : [],
+    readsOwnWrite: readsOwnWrite === true,
   };
 }
 
@@ -304,6 +314,11 @@ function chooseIncrementalCoalesceDecision(
             existingArgs.carriedPrerenderHtmlChanges,
             incomingArgs.carriedPrerenderHtmlChanges,
           ),
+          // OR, because the field says whether anyone waiting on this job
+          // will read the index for its changes, and one such caller is
+          // enough to make that true of the merged job.
+          readsOwnWrite:
+            existingArgs.readsOwnWrite || incomingArgs.readsOwnWrite,
         },
       },
     };
@@ -316,8 +331,20 @@ function chooseIncrementalCoalesceDecision(
   // already cover every (url, operation) we need — operation mismatch
   // (update vs delete) means different work, so we must enqueue a new
   // job in that case.
+  //
+  // Covering the URL is not enough for a caller that will read the index for
+  // its own write. A claimed pass reads each file it visits once, and it was
+  // claimed before this publish existed — so it may have already read the
+  // bytes this publish supersedes, and attaching would settle the caller
+  // against a version of its card that predates the write it just made. The
+  // file-watcher echo this branch was built for has no such stake: it
+  // announces bytes some other write already put on disk and reads nothing
+  // afterwards. A publish that does have the stake inserts instead, and the
+  // next one behind it merges into that pending job rather than into the
+  // running one — which is what keeps a burst of saves to one card at the two
+  // passes read-your-writes actually costs, rather than one per save.
   let incomingArgs = parseIncrementalArgsForCoalesce(incoming.args);
-  if (incomingArgs) {
+  if (incomingArgs && !argsReadOwnWrite(incoming.args)) {
     for (let candidate of inFlightCandidates) {
       if (candidate.jobType !== incoming.jobType) {
         continue;
@@ -333,6 +360,14 @@ function chooseIncrementalCoalesceDecision(
   }
 
   return { type: 'insert' };
+}
+
+// Whether this publish's caller reads the index for its own changes once the
+// pass lands. Read loosely, off the raw args rather than the parsed shape: a
+// job enqueued by a worker predating the field carries none, and reading that
+// as "reads its own write" would turn off the in-flight join everywhere.
+function argsReadOwnWrite(args: unknown): boolean {
+  return isObjectLike(args) && args.readsOwnWrite === true;
 }
 
 function chooseFromScratchCoalesceDecision(

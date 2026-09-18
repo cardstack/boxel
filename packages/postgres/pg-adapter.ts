@@ -4,6 +4,7 @@ import {
   type ExecuteOptions,
   type Expression,
   type Querier,
+  Deferred,
   expressionToSql,
   logger,
   param,
@@ -606,14 +607,15 @@ export class PgAdapter implements DBAdapter {
   // What that queue does not bound is writers of *different* files, and
   // nothing else does either — the realm key is taken shared, so it no longer
   // holds a replica to one critical section per realm the way an exclusive
-  // realm lock did. Each section pins its client for its whole duration and
-  // its inner work draws further clients from the same pool, so per-realm peak
-  // demand is the number of concurrent writers rather than one.
+  // realm lock did. Each section pins its client for as long as it holds the
+  // locks, and its inner work draws further clients from the same pool, so
+  // per-realm peak demand is the number of concurrent writers rather than one.
+  // A section that releases early gives its client back there rather than at
+  // its own end, so the work it does afterwards costs the pool nothing.
   //
   // Left unbounded deliberately. The number of sections in flight is arrival
   // rate times hold time, and the hold is what this scope shortens: a writer
-  // no longer waits out another card's indexing, so the case that built up a
-  // long queue of writers is the one that stops happening. A realm taking a
+  // no longer waits out another card's indexing, nor its own. A realm taking a
   // few hundred writes an hour against a hold measured in seconds keeps well
   // under one concurrent section on average. Adding a cap would reintroduce,
   // at a fixed width, the queueing this removes.
@@ -631,10 +633,19 @@ export class PgAdapter implements DBAdapter {
   // Re-entrancy: a caller holding any of these keys must not ask for them
   // again. A second `pg_advisory_xact_lock` on a held key runs on a different
   // pooled connection and waits on the first's transaction forever.
+  // Ending the section early: `fn` is handed a `releaseLocks` it may call once
+  // it is done with the files, and everything it does after that call runs
+  // with the locks already gone. What that is for is the write path, where the
+  // work after the bytes are durable — queueing an index job and waiting for a
+  // worker to run it — needs no exclusivity over the files at all, while being
+  // by far the longest part of the section. Holding across it makes the Nth
+  // concurrent writer of one card wait N index passes; releasing at the
+  // durable boundary makes it wait for one. A section that never calls it
+  // behaves exactly as before, releasing when it returns.
   async withFileWriteLocks<T>(
     realmUrl: string,
     localPaths: readonly string[],
-    fn: () => Promise<T>,
+    fn: (releaseLocks: () => void) => Promise<T>,
   ): Promise<T> {
     // Before anything waits, so the wait this call reports covers the in-
     // process queue below as well as the lock itself. A writer that spent its
@@ -659,11 +670,12 @@ export class PgAdapter implements DBAdapter {
       //
       // No in-process chaining: a shared holder conflicts with no other shared
       // holder, so there is nothing for a queue in front of it to bound.
-      return await this.#runWithAdvisoryXactLocks(
+      let { work } = await this.#runWithAdvisoryXactLocks(
         [{ key: realmKey, mode: 'shared' }],
         { realmUrl, fileCount: 0, enqueuedAt },
         fn,
       );
+      return await work;
     }
     // Past the ceiling the file keys are dropped for the realm's own key, held
     // exclusively. Every advisory lock a transaction takes occupies a slot in
@@ -688,7 +700,12 @@ export class PgAdapter implements DBAdapter {
         ];
     const queueKey = bulk ? `bulk:${realmKey}` : fileKeys.join(',');
     const previous = this.#fileWriteQueue.get(queueKey) ?? Promise.resolve();
-    const myWork = (async (): Promise<T> => {
+    // Resolves when this caller's locks are gone, carrying whatever of its
+    // section is still running. The two moments are the same for a section
+    // that holds to the end and different for one that releases early, and the
+    // queue below has to chain on the first of them while the caller waits on
+    // the second.
+    const myTurn = (async (): Promise<{ work: Promise<T> }> => {
       try {
         await previous;
       } catch {
@@ -702,9 +719,13 @@ export class PgAdapter implements DBAdapter {
       );
     })();
     // What the next caller for this same file set waits on: outcome-erased so
-    // its own try/catch is not sensitive to ours, and tee'd off `myWork` to
-    // keep one source of truth for completion timing.
-    const myCompletion: Promise<void> = myWork.then(
+    // its own try/catch is not sensitive to ours, and tee'd off `myTurn` to
+    // keep one source of truth for when the files came free. Chaining on the
+    // whole section instead would put back in memory exactly the queueing the
+    // early release removes in postgres — the next writer would sit here for
+    // the duration of this one's index wait, on this replica, having been let
+    // through by every other replica.
+    const myCompletion: Promise<void> = myTurn.then(
       () => undefined,
       () => undefined,
     );
@@ -717,7 +738,8 @@ export class PgAdapter implements DBAdapter {
         this.#fileWriteQueue.delete(queueKey);
       }
     });
-    return await myWork;
+    const { work } = await myTurn;
+    return await work;
   }
 
   // Per-matrix-user serialization barrier for billable upstream proxy calls.
@@ -808,13 +830,22 @@ export class PgAdapter implements DBAdapter {
   // the writer queued behind other writers of these same files, `holdMs` how
   // long it kept them from running. A write that spent a minute working and
   // one that spent it queued look identical from request latency alone; they
-  // differ here.
+  // differ here. A section that releases early holds for less than it runs
+  // for, and `holdMs` is the shorter of the two — which is the whole point of
+  // the field: it is what this caller cost the next one.
+  //
+  // Resolves when the locks are gone rather than when the section finishes,
+  // handing back the section's remaining work so the caller can wait on it
+  // afterwards. Those are the same moment unless the section released early,
+  // and separating them is what lets the in-process queue advance on the lock
+  // rather than on the work.
   async #runWithAdvisoryXactLocks<T>(
     lockPlan: readonly { key: string; mode: 'shared' | 'exclusive' }[],
     context: { realmUrl: string; fileCount: number; enqueuedAt: number },
-    fn: () => Promise<T>,
-  ): Promise<T> {
-    return await this.withConnection(async (queryFn) => {
+    fn: (releaseLocks: () => void) => Promise<T>,
+  ): Promise<{ work: Promise<T> }> {
+    let work: Promise<T> | undefined;
+    await this.withConnection(async (queryFn) => {
       await queryFn(['BEGIN']);
       let holdStart: number | undefined;
       try {
@@ -828,9 +859,25 @@ export class PgAdapter implements DBAdapter {
           ]);
         }
         holdStart = Date.now();
-        const result = await fn();
+        const releasedEarly = new Deferred<void>();
+        work = fn(() => releasedEarly.fulfill());
+        // Whichever comes first. The rejection arm exists so a section that
+        // fails before releasing still rolls back here, the way it always
+        // has, rather than committing and reporting the failure from a
+        // transaction that already ended — and attaching it is also what
+        // keeps a rejection that nobody has awaited yet from surfacing as an
+        // unhandled one in the window between the commit and the caller.
+        const failure = await Promise.race([
+          work.then(
+            () => undefined,
+            (error: unknown) => ({ error }),
+          ),
+          releasedEarly.promise.then(() => undefined),
+        ]);
+        if (failure) {
+          throw failure.error;
+        }
         await queryFn(['COMMIT']);
-        return result;
       } catch (err: unknown) {
         try {
           await queryFn(['ROLLBACK']);
@@ -874,6 +921,9 @@ export class PgAdapter implements DBAdapter {
         );
       }
     });
+    // Only reachable once the transaction ended without the section having
+    // failed inside it, which is where `work` is assigned.
+    return { work: work! };
   }
 
   async #runWithAdvisoryXactLock<T>(

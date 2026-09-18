@@ -1466,6 +1466,13 @@ export interface WriteOptions {
   // any of them can be the whole of a slow write. Absent, and so a no-op, for
   // every caller that is not reporting.
   stageCursor?: StageCursor;
+  // Announced once everything this write was asked for is durable — the bytes,
+  // the removals, and the rows describing them — and before the index pass
+  // that follows. What comes after needs no exclusivity over the files, so a
+  // caller holding their write locks releases them here rather than across an
+  // index wait no other writer of those files has any stake in. Called at most
+  // once, and not at all by a write that failed before reaching durability.
+  onDurable?: () => void;
 }
 
 export interface RealmAdapter {
@@ -3206,7 +3213,11 @@ export class Realm {
     let results = await this.#dbAdapter.withFileWriteLocks(
       this.url,
       [path],
-      () => this._batchWriteUnlocked(new Map([[path, contents]]), options),
+      (releaseLocks) =>
+        this._batchWriteUnlocked(new Map([[path, contents]]), {
+          ...options,
+          onDurable: releaseLocks,
+        }),
     );
     return results[0];
   }
@@ -3215,8 +3226,14 @@ export class Realm {
     files: Map<LocalPath, string | Uint8Array>,
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
-    return this.#dbAdapter.withFileWriteLocks(this.url, [...files.keys()], () =>
-      this._batchWriteUnlocked(files, options),
+    return this.#dbAdapter.withFileWriteLocks(
+      this.url,
+      [...files.keys()],
+      (releaseLocks) =>
+        this._batchWriteUnlocked(files, {
+          ...options,
+          onDurable: releaseLocks,
+        }),
     );
   }
 
@@ -3831,6 +3848,14 @@ export class Realm {
     // the caller may or may not be waiting for — so this is the boundary that
     // says how much of a slow write was the write.
     stageCursor?.mark('persist');
+    // And the boundary the write locks end at. Indexing reads the files back
+    // off disk rather than from anything this commit is holding, so the pass
+    // below is correct whatever another writer does to them meanwhile — it
+    // indexes whatever the last write left, which is what the realm should
+    // hold. Announced before the branch because both arms are indexing: one
+    // waits for the pass, the other only queues it, and neither is a reason to
+    // keep other writers of these files out.
+    options?.onDurable?.();
     let waitForIndex = options?.waitForIndex !== false;
     let changes: IndexChange[] = [
       ...asUpdates(urls),
@@ -4778,14 +4803,18 @@ export class Realm {
     path: LocalPath,
     options?: { waitForIndex?: boolean; initiatingUser?: string | null },
   ): Promise<void> {
-    await this.#dbAdapter.withFileWriteLocks(this.url, [path], () =>
-      this._deleteUnlocked(path, options),
+    await this.#dbAdapter.withFileWriteLocks(this.url, [path], (releaseLocks) =>
+      this._deleteUnlocked(path, { ...options, onDurable: releaseLocks }),
     );
   }
 
   private async _deleteUnlocked(
     path: LocalPath,
-    options?: { waitForIndex?: boolean; initiatingUser?: string | null },
+    options?: {
+      waitForIndex?: boolean;
+      initiatingUser?: string | null;
+      onDurable?: () => void;
+    },
   ): Promise<void> {
     let url = this.paths.fileURL(path);
     this.sendIndexInitiationEvent(url.href);
@@ -4800,6 +4829,9 @@ export class Realm {
     await this.#notifyFileChange(path);
     // Remove file meta for this path
     await this.removeFileMeta([path]);
+    // The removal is durable, so the file's write locks have nothing left to
+    // protect — the commit path states the case at its own durable boundary.
+    options?.onDurable?.();
     let waitForIndex = options?.waitForIndex !== false;
     if (waitForIndex) {
       let { invalidations, generation, invalidatedTypes } =
@@ -4846,12 +4878,15 @@ export class Realm {
   }
 
   async deleteAll(paths: LocalPath[]): Promise<void> {
-    await this.#dbAdapter.withFileWriteLocks(this.url, paths, () =>
-      this._deleteAllUnlocked(paths),
+    await this.#dbAdapter.withFileWriteLocks(this.url, paths, (releaseLocks) =>
+      this._deleteAllUnlocked(paths, releaseLocks),
     );
   }
 
-  private async _deleteAllUnlocked(paths: LocalPath[]): Promise<void> {
+  private async _deleteAllUnlocked(
+    paths: LocalPath[],
+    onDurable?: () => void,
+  ): Promise<void> {
     let urls: URL[] = [];
     let trackPromises: Promise<void>[] = [];
     let removePromises: Promise<void>[] = [];
@@ -4875,6 +4910,9 @@ export class Realm {
     });
     // Remove file meta for all deleted paths
     await this.removeFileMeta(paths);
+    // Durable, so the locks end here rather than across the index pass — the
+    // commit path states the case at its own durable boundary.
+    onDurable?.();
     let { invalidations, generation, invalidatedTypes } =
       await this.updateIndexAndCollectInvalidations(
         urls.map((url) => ({ url, operation: 'delete' as const })),

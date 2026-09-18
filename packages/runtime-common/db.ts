@@ -44,10 +44,16 @@ export interface DBAdapter {
   // across replicas while writers of different cards run in parallel. SQLite
   // is a passthrough, as above. See PgAdapter.withFileWriteLocks for the
   // design notes (deadlock ordering, pool footprint, re-entrancy).
+  //
+  // `fn` is handed a `releaseLocks` it may call to end the critical section
+  // ahead of its own return, for work that no longer needs the files — a
+  // write's index wait, which is most of its duration and needs no exclusivity
+  // at all. Calling it is optional; a section that does not behaves as though
+  // this parameter did not exist.
   withFileWriteLocks: <T>(
     realmUrl: string,
     localPaths: readonly string[],
-    fn: () => Promise<T>,
+    fn: (releaseLocks: () => void) => Promise<T>,
   ) => Promise<T>;
   // Per-matrix-user cost-barrier primitive: serializes concurrent billable
   // upstream proxy calls for the same user across replicas so the next

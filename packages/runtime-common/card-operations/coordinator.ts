@@ -99,9 +99,15 @@ export interface BatchCore {
   // merge needs, and holding the realm would charge every other writer in it —
   // including the writers of cards this batch never reads — for a guarantee
   // only these files require.
+  //
+  // And scoped in time to the read-merge-write, which is what `releaseLocks`
+  // is for: the commit announces the moment its bytes are durable, and the
+  // batch lets the locks go there rather than across the index wait that
+  // follows. Ordering is what the locks are for, and by then this batch's
+  // place in the order is settled.
   withWriteLocks<T>(
     localPaths: readonly LocalPath[],
-    fn: () => Promise<T>,
+    fn: (releaseLocks: () => void) => Promise<T>,
   ): Promise<T>;
   // A stored file's bytes and modification time. Called only inside the lock.
   readSourceFile(
@@ -162,6 +168,10 @@ export interface BatchCore {
       // a slow write — so the commit marks them on the caller's timeline
       // rather than leaving the caller one bucket it cannot read.
       stageCursor?: StageCursor;
+      // Called once the commit's bytes are durable and before it indexes
+      // them, so a caller holding write locks over those files can end its
+      // critical section at the boundary the locks are actually for.
+      onDurable?: () => void;
     },
   ): Promise<{
     writes: {
@@ -370,7 +380,7 @@ export async function commitBatch(
   let realmConfig = () => (settings ??= core.realmConfig());
   return await core.withWriteLocks(
     lockPaths(entries, paths, lids),
-    async () => {
+    async (releaseLocks) => {
       timings?.add('lock', Date.now() - lockRequestedAt);
       // Drained inside the lock, before anything is staged. Staging serializes
       // each card against its type's definition, and a module written moments
@@ -497,6 +507,7 @@ export async function commitBatch(
           positions,
           opts,
           cursor,
+          releaseLocks,
         );
       } finally {
         cursor?.mark('commit');
@@ -1678,6 +1689,12 @@ async function commitStaged(
   positions: readonly EntryPosition[],
   opts: CommitBatchOptions,
   stageCursor: StageCursor | undefined,
+  // Handed straight to the commit, which calls it the moment the batch's bytes
+  // are durable. Everything from there on — the index pass, the results built
+  // from what it reported — runs with the files open to other writers again,
+  // and reads nothing off them: the results are assembled from what this batch
+  // staged and what the commit returned.
+  releaseLocks: () => void,
 ): Promise<BatchEntryResult[]> {
   // One entry per file, in batch order. Two entries may name one card, and
   // the second built on the first rather than racing it — it merged over the
@@ -1825,6 +1842,7 @@ async function commitStaged(
       // writes waits for this job rather than returning ahead of it.
       initiatingUser: opts.actor ?? null,
       ...(stageCursor ? { stageCursor } : {}),
+      onDurable: releaseLocks,
     },
   );
   // Emitted here rather than where the record was built: a staged entry is not

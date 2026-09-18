@@ -32,7 +32,7 @@ function makeRecordingAdapter(): {
       },
       async notify() {},
       async withFileWriteLocks(_url, _paths, fn) {
-        return await fn();
+        return await fn(() => {});
       },
       async withWriteLock(_url, fn) {
         return await fn(undefined);
@@ -474,7 +474,7 @@ module(basename(import.meta.filename), function () {
         },
         async notify() {},
         async withFileWriteLocks(_url, _paths, fn) {
-          return await fn();
+          return await fn(() => {});
         },
         async withWriteLock(_url, fn) {
           return await fn(undefined);

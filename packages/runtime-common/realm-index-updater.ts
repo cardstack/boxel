@@ -91,6 +91,11 @@ export interface IncrementalIndexOptions {
   onDeferredPrerenderHtml?: (
     deferred: DeferredPrerenderHtml,
   ) => Promise<void> | void;
+  // See IncrementalArgs. Set by `updateChanges` on its caller's behalf rather
+  // than passed in: awaiting the pass and then reading what it produced is
+  // what that method IS, so a caller of it always has the stake, and a caller
+  // of the two-phase form never does.
+  readsOwnWrite?: boolean;
 }
 
 export class RealmIndexUpdater {
@@ -353,6 +358,7 @@ export class RealmIndexUpdater {
         ...(opts?.carriedPrerenderHtmlChanges?.length
           ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
           : {}),
+        ...(opts?.readsOwnWrite ? { readsOwnWrite: true } : {}),
       };
       let clientRequestId = opts?.clientRequestId ?? null;
       job = await this.#queue.publish<IncrementalDoneResult>({
@@ -455,7 +461,15 @@ export class RealmIndexUpdater {
       | 'onDeferredPrerenderHtml'
     >,
   ): Promise<void> {
-    let { settled } = await this.enqueueChanges(changes, opts);
+    // The read-your-writes stake is this method's defining property, so it is
+    // stated here rather than left to each caller to remember: whoever awaits
+    // this is going to read the index for these URLs, and must therefore be
+    // settled by a pass that started after their bytes landed. See
+    // `IncrementalArgs.readsOwnWrite`.
+    let { settled } = await this.enqueueChanges(changes, {
+      ...opts,
+      readsOwnWrite: true,
+    });
     await settled;
   }
 
