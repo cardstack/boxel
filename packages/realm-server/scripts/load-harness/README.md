@@ -315,6 +315,55 @@ tally is the expected shape.
 shapes, so a single run measures the same question asked both ways — the
 cheapest available demonstration that moving a filter server-side is worth doing.
 
+## The deploy pin
+
+A run's numbers describe one build of one fleet. A non-production deployment
+moves on its own schedule, and a window long enough to measure anything is long
+enough for a deploy to land inside it — during one 55-minute session the
+staging host bundle changed twice. A window that straddles a deploy holds two
+runs averaged together, and a moved number cannot be told from a moved
+deployment.
+
+So the driver reads the deployment before and after the run, and **refuses to
+print a summary if it moved**. Both readings come from the host app's boot
+document at `<realm server>/_standby`, over plain HTTP, with no AWS session:
+
+- **The host build** — the entry bundle the document loads
+  (`assets/main-<hash>.js`) and the host's own build version from its config
+  meta (`0.0.0+<sha>`). Either moving means the client half of a measurement
+  changed underneath it.
+- **Which replica answered** — the container id in
+  `X-ECS-Container-Metadata-URI-v4`. A fleet that turned over is visible even
+  when the task definition did not change, and a replaced task is a cold one.
+
+Each reading probes in concurrent waves until a wave meets nobody new, because
+sequential probes reuse one keep-alive socket and so reach one replica however
+often they are repeated. A run opens with the reading printed:
+
+```
+Deploy pin: host build main-CowsK790.js (0.0.0+969ffde0), 2 replicas over 8 probes.
+```
+
+Three outcomes end a run early rather than late:
+
+- **The fleet is already serving two builds.** Each replica fetches the boot
+  document once and caches it for the life of its process, so replicas that
+  started either side of a host deploy serve different builds at the same
+  moment and a browser gets whichever answers. This is refused before
+  authentication, so it costs a probe rather than the window.
+- **The build moved, or a replica arrived, by the close.** The summary is
+  replaced by what moved. Both probes sample the fleet, so a replica that
+  answered neither is invisible to the check — it reports what it saw.
+- **Nothing answered the closing probe.** Silence is not agreement: a fleet
+  that cannot be read cannot be confirmed to have held still.
+
+A target that answers with something other than a built boot document leaves
+the run unpinned, and the summary says `build: not pinned` rather than claiming
+one. Nothing here replaces checking that a deploy has finished before a
+comparison — `aws ecs describe-services … deployments[0].rolloutState` must
+read `COMPLETED` with `updatedAt` earlier than the run — but a revision that
+lands mid-run always replaces tasks, and that is what the pin sees.
+
 ## Measuring invalidation rather than modelling it
 
 By default a reader re-runs its queries whenever this driver makes a write. That
@@ -571,8 +620,9 @@ purpose; doing that to production is an outage for real users.
 - `lib/workload.ts` — workload loading, the wire grammar, substitution
 - `lib/realm-events.ts` — Matrix `/sync` subscription and the host's skip test
 - `lib/in-flight.ts` — the concurrency this driver holds, as a mean and a peak
+- `lib/deploy-pin.ts` — what the fleet is serving, and whether it held still
 - `lib/common.ts` — credential reading, the production guard, arg parsing, stats
 
 `tests/load-harness-test.ts` in this package covers the pure logic: credential
 parsing, the production guard, argument parsing, workload validation and
-derivation, and the skip test.
+derivation, the skip test, and the deploy pin's parsing and drift rules.
