@@ -79,6 +79,8 @@ concrete, 1–3 sentences. Never work silently for more than a few minutes.
   null/absent for the failing instance.
 - `read_skill` only the skills the fix actually touches (the failing
   template/format, the field type involved) — skip the general design skills.
+  `catalog-reuse` is not one of those: this turn can delete a reuse decision,
+  so keep it.
 
 ## 2. Diagnose the root cause
 
@@ -93,6 +95,15 @@ concrete, 1–3 sentences. Never work silently for more than a few minutes.
 - If the bug is that a sample instance is missing data the card needs, fix the
   instance — but do not restyle the card.
 - Only add a Spec or new instance if the issue explicitly calls for one.
+- **A failing gate is never resolved by deleting a catalog import.** If the
+  defect is that a reused module does not type-check, resolve, or render,
+  the fix is the wiring — not replacing the module with a hand-written
+  equivalent. When you genuinely cannot make it work, record
+  `REUSE-BLOCKED` in the card's design notes naming the gate and its exact
+  error and `post_update` the same, so the block is visible as a decision.
+  Swapping a working reuse for a local copy is a regression even when it
+  turns the gate green, and it is how a reuse decision disappears without
+  anyone choosing to drop it.
 
 ## 4. Verify
 

@@ -1,3 +1,6 @@
+import { readdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 
@@ -915,5 +918,37 @@ module('factory-prompt-loader > bug-fix routing', function () {
       /DESIGN — HTML mockup before any schema/i.test(prompt),
       'feature build keeps the design round',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Every template renders
+// ---------------------------------------------------------------------------
+
+// Prompt templates are exempt from prettier because the markdown formatter
+// indents block closers and shifts the rendered output. The exemption lives in
+// this package's .prettierignore and holds only because the pre-commit autofix
+// runs prettier from the owning package directory — so this asserts the
+// property that exemption protects, rather than the exemption itself.
+module('factory-prompt-loader > every template', function () {
+  test('renders with nothing left unsubstituted', async function (assert) {
+    let promptsDir = join(import.meta.dirname, '..', 'prompts');
+    let templates = (await readdir(promptsDir)).filter((f) =>
+      f.endsWith('.md'),
+    );
+
+    assert.true(templates.length > 0, 'there are templates to check');
+
+    for (let file of templates) {
+      let source = await readFile(join(promptsDir, file), 'utf8');
+      // Empty variables: every {{#if}} is falsy and every {{var}} resolves to
+      // the empty string, so anything still bearing {{ is an unclosed or
+      // malformed block rather than a missing value.
+      let rendered = interpolate(source, {});
+      assert.false(
+        rendered.includes('{{'),
+        `${file} leaves no unrendered template syntax`,
+      );
+    }
   });
 });
