@@ -449,6 +449,58 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(stubbed.queries[0].itemQuery.page, undefined);
     });
 
+    test('a marker in the filter is refused rather than compared as a value', async function (assert) {
+      // The search grammar accepts `{ "$ref": "actor" }` as a well-formed
+      // operand, so without this it would be compared against a stored value
+      // as a literal object: no match, and therefore `[]` under `many` or a
+      // refusal blaming the data under `one`. A marker is how a *declared*
+      // query stands in for a value supplied at invocation; a caller writing a
+      // `boxel:target` holds the value already.
+      for (let [wrote, filter] of [
+        [
+          'actor()',
+          { 'item.on': ACTIVITY, eq: { 'item.owner': { $ref: 'actor' } } },
+        ],
+        [
+          'params("status")',
+          {
+            'item.on': ACTIVITY,
+            eq: { 'item.status': { $ref: 'params', key: 'status' } },
+          },
+        ],
+        // Nested, because the resolver that does resolve markers finds them
+        // structurally wherever they sit — a check looking in fewer places
+        // than the thing it guards would pass the payloads worth refusing.
+        [
+          'actor()',
+          {
+            any: [
+              { 'item.on': ACTIVITY, eq: { 'item.status': 'open' } },
+              {
+                'item.on': ACTIVITY,
+                in: { 'item.owner': [{ $ref: 'actor' }] },
+              },
+            ],
+          },
+        ],
+      ] as [string, Record<string, unknown>][]) {
+        let stubbed = stub({ matches: [`${REALM}activities/a`] });
+        let error = await refusal(() =>
+          resolve(
+            stubbed,
+            invoke({ 'boxel:target': { query: filter, expect: 'many' } }),
+          ),
+        );
+        assert.strictEqual(error.status, 400);
+        assert.true(
+          error.detail?.includes(wrote),
+          `names what the caller wrote (${wrote}): ${error.detail}`,
+        );
+        // Refused before the search runs, not after it matched nothing.
+        assert.deepEqual(stubbed.queries, []);
+      }
+    });
+
     test('a query the realm does not accept is refused against the entry', async function (assert) {
       let stubbed = stub({ matches: [] });
       let error = await refusal(() =>

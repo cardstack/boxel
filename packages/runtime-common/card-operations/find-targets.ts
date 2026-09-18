@@ -314,6 +314,28 @@ async function runFilter(
     // and asks for no page at all.
     ...(find.expect === 'one' ? { page: { size: 2 } } : {}),
   };
+  let marker = markerIn(find.query);
+  if (marker) {
+    // A marker is how a *declared* query stands in for a value only known when
+    // someone invokes the operation, and lowering resolves it against the
+    // invocation. This filter is not a declaration — the caller wrote it and
+    // holds every value in it — so nothing resolves one here.
+    //
+    // Refused rather than passed through, because the search grammar accepts
+    // it: `{ "$ref": "actor" }` is a well-formed operand, so it would be
+    // compared against a stored value as a literal object, match nothing, and
+    // answer `[]` under `many` or blame the data under `one`. An author coming
+    // from declared `query` syntax, or from a client that offers `actor()`,
+    // would have no way to tell that from a filter that genuinely matched
+    // nothing.
+    throw refuse(
+      `entry ${entry.position} describes the card it runs against with a ` +
+        `query containing ${marker}, which stands for a value a declared ` +
+        `operation supplies when it is invoked; a "boxel:target" is written ` +
+        `by the caller, so it carries the value itself`,
+      entry.position,
+    );
+  }
   let query;
   try {
     query = parseSearchEntryQueryFromPayload(wire);
@@ -329,6 +351,41 @@ async function runFilter(
     urls: doc.data.map((match) => match.id),
     total: doc.meta.page.total,
   };
+}
+
+// The first marker anywhere in a filter, named the way an author writes it, or
+// undefined when the filter carries none.
+//
+// Structural, wherever it sits — a filter operand, a member of an `in` list, a
+// branch of an `any` — because that is how the resolver that *does* resolve
+// markers recognizes one, and a check that looked in fewer places than the
+// thing it guards would pass exactly the payloads worth refusing.
+function markerIn(node: unknown): string | undefined {
+  if (Array.isArray(node)) {
+    for (let member of node) {
+      let found = markerIn(member);
+      if (found) {
+        return found;
+      }
+    }
+    return undefined;
+  }
+  if (typeof node !== 'object' || node === null) {
+    return undefined;
+  }
+  let record = node as Record<string, unknown>;
+  if (typeof record.$ref === 'string') {
+    return typeof record.key === 'string'
+      ? `${record.$ref}("${record.key}")`
+      : `${record.$ref}()`;
+  }
+  for (let value of Object.values(record)) {
+    let found = markerIn(value);
+    if (found) {
+      return found;
+    }
+  }
+  return undefined;
 }
 
 // The one member of the sparse fieldset, which selects nothing.
