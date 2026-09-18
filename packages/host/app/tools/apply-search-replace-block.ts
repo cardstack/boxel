@@ -16,27 +16,29 @@ export const APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES = {
   EMPTY_SEARCH_PATTERN_ON_NONEMPTY_FILE: `${standardErrorMessage} (empty search pattern for non-empty file)`,
 } as const;
 
-// Search lines are compared to file lines under these normalizations, tried
-// in order. Indentation never has to match. The second pass also ignores a
-// trailing comma: a model writing a JSON or object-literal search block from
-// memory routinely ends the last line with `}` where the file has `},`, and
-// that single character is the most common reason an otherwise correct block
-// fails to apply. When only that pass matches, the replacement's last line is
-// given the file's trailing comma (or relieved of one), but only when the
-// model wrote search and replace with the same comma state, which says it
-// did not mean to change it. Writing the replacement verbatim there would
-// turn the file's `},` into `}` and break the JSON the patch set out to fix.
-const LINE_NORMALIZERS: {
-  normalize: (line: string) => string;
-  reconcileTrailingComma: boolean;
-}[] = [
-  { normalize: (line) => line.trim(), reconcileTrailingComma: false },
-  {
-    normalize: (line) => line.trim().replace(/,$/, ''),
-    reconcileTrailingComma: true,
-  },
-];
+type LineNormalizer = (line: string) => string;
 
+const trimLine: LineNormalizer = (line) => line.trim();
+const trimLineAndTrailingComma: LineNormalizer = (line) =>
+  line.trim().replace(/,$/, '');
+
+// Search lines are compared to file lines under a normalization per line,
+// and matching is tried in two passes. Indentation never has to match. The
+// first pass compares every line trimmed. The second pass also ignores a
+// trailing comma, on the block's last non-empty line only: a model writing
+// a JSON or object-literal search block from memory routinely ends it with
+// `}` where the file has `},` because another key follows, and that single
+// character is the most common reason an otherwise correct block fails to
+// apply. Lines before the last keep the exact comparison. Relaxing them too
+// would let a block whose internal commas are wrong match the file, and the
+// replacement, written with the same wrong commas, would break the file
+// silently where a reported failure was the safe outcome.
+//
+// When only the second pass matches, the replacement's last line is given
+// the file's trailing comma (or relieved of one), but only when the model
+// wrote search and replace with the same comma state, which says it did not
+// mean to change it. Writing the replacement verbatim there would turn the
+// file's `},` into `}` and break the JSON the patch set out to fix.
 function lastNonEmptyLineIndex(lines: string[]): number {
   for (let i = lines.length - 1; i >= 0; i--) {
     if (lines[i].trim() !== '') {
@@ -46,6 +48,25 @@ function lastNonEmptyLineIndex(lines: string[]): number {
   return -1;
 }
 
+function exactNormalizers(searchLines: string[]): LineNormalizer[] {
+  return searchLines.map(() => trimLine);
+}
+
+function trailingCommaNormalizers(searchLines: string[]): LineNormalizer[] {
+  let lastIndex = lastNonEmptyLineIndex(searchLines);
+  return searchLines.map((_line, index) =>
+    index === lastIndex ? trimLineAndTrailingComma : trimLine,
+  );
+}
+
+const MATCHING_PASSES: {
+  normalizersFor: (searchLines: string[]) => LineNormalizer[];
+  reconcileTrailingComma: boolean;
+}[] = [
+  { normalizersFor: exactNormalizers, reconcileTrailingComma: false },
+  { normalizersFor: trailingCommaNormalizers, reconcileTrailingComma: true },
+];
+
 function endsWithComma(line: string | undefined): boolean {
   return line !== undefined && line.trim().endsWith(',');
 }
@@ -53,18 +74,26 @@ function endsWithComma(line: string | undefined): boolean {
 // The bare "not found" message gives the model nothing to correct, so it
 // tends to resend the same block. Naming the first search line that occurs
 // nowhere in the file points at the line to fix; when every line occurs
-// somewhere, the lines exist but not in this order or adjacency.
+// somewhere, the lines exist but not in this order or adjacency. Each line
+// is looked up under the loosest normalization the matcher applies to it, so
+// the message never names a line the matcher would have accepted.
 export function describeSearchPatternNotFound(
   fileContent: string,
   searchPattern: string,
 ): string {
-  let fileLines = new Set(fileContent.split('\n').map((line) => line.trim()));
-  let missingLine = searchPattern
-    .split('\n')
-    .map((line) => line.trim())
-    .find((line) => line !== '' && !fileLines.has(line));
+  let fileLines = fileContent.split('\n');
+  let searchLines = searchPattern.split('\n');
+  let normalizers = trailingCommaNormalizers(searchLines);
+  let missingLine = searchLines.find((line, index) => {
+    let normalize = normalizers[index];
+    let normalizedLine = normalize(line);
+    return (
+      normalizedLine !== '' &&
+      !fileLines.some((fileLine) => normalize(fileLine) === normalizedLine)
+    );
+  });
   if (missingLine !== undefined) {
-    return `${APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.SEARCH_PATTERN_NOT_FOUND}. The first search line that does not appear anywhere in the file: ${missingLine}`;
+    return `${APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.SEARCH_PATTERN_NOT_FOUND}. The first search line that does not appear anywhere in the file: ${missingLine.trim()}`;
   }
   return `${APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.SEARCH_PATTERN_NOT_FOUND}. Every search line appears somewhere in the file, but not as one contiguous run in this order.`;
 }
@@ -190,12 +219,12 @@ export default class ApplySearchReplaceBlockTool extends HostBaseTool<
     // Each pass compares lines under a looser normalization than the one
     // before it, and the first pass that matches wins, so a block that
     // matches exactly is never redirected to a looser match elsewhere.
-    for (const { normalize, reconcileTrailingComma } of LINE_NORMALIZERS) {
+    for (const { normalizersFor, reconcileTrailingComma } of MATCHING_PASSES) {
       const result = this.applySearchReplaceWith(
         content,
         searchPattern,
         replacePattern,
-        normalize,
+        normalizersFor,
         reconcileTrailingComma,
       );
       if (result !== undefined) {
@@ -209,11 +238,14 @@ export default class ApplySearchReplaceBlockTool extends HostBaseTool<
     content: string,
     searchPattern: string,
     replacePattern: string,
-    normalize: (line: string) => string,
+    normalizersFor: (searchLines: string[]) => LineNormalizer[],
     reconcileTrailingComma: boolean,
   ): string | undefined {
     const searchLines = searchPattern.split('\n');
-    const normalizedSearchLines = searchLines.map(normalize);
+    const normalizers = normalizersFor(searchLines);
+    const normalizedSearchLines = searchLines.map((line, index) =>
+      normalizers[index](line),
+    );
 
     // Split content into lines for line-by-line processing
     const contentLines = content.split('\n');
@@ -227,7 +259,7 @@ export default class ApplySearchReplaceBlockTool extends HostBaseTool<
         contentLines,
         i,
         normalizedSearchLines,
-        normalize,
+        normalizers,
       );
 
       if (matchResult.matched) {
@@ -284,7 +316,7 @@ export default class ApplySearchReplaceBlockTool extends HostBaseTool<
     contentLines: string[],
     startIndex: number,
     normalizedSearchLines: string[],
-    normalize: (line: string) => string,
+    normalizers: LineNormalizer[],
   ): { matched: boolean; matchLength: number } {
     // Make sure we have enough lines to match
     if (startIndex + normalizedSearchLines.length > contentLines.length) {
@@ -295,7 +327,11 @@ export default class ApplySearchReplaceBlockTool extends HostBaseTool<
     let searchLineIndex = 0;
     let contentLineIndex = startIndex;
     while (searchLineIndex < normalizedSearchLines.length) {
-      const contentLine = normalize(contentLines[contentLineIndex]);
+      // A file line is normalized the same way as the search line it is
+      // compared to, so the relaxed pass only relaxes where it means to.
+      const contentLine = normalizers[searchLineIndex](
+        contentLines[contentLineIndex],
+      );
       const searchLine = normalizedSearchLines[searchLineIndex];
 
       // Skip empty lines in the search pattern

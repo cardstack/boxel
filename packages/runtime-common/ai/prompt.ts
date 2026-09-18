@@ -275,22 +275,19 @@ export async function getPromptParts(
 // therefore reports indexes that never line up with 0..n-1, so matching by
 // position waited forever on a patch the host had long applied. Match by
 // count instead: a result per distinct block index, at least one per patch.
+//
+// A failed result counts: the host offers no way to re-apply a failed block,
+// so the block's outcome is final and its reply is resolved. The blocks that
+// did apply are checked for correctness on their own; the failed ones are
+// retried in a new reply that gets its own check.
 function allCodePatchesHaveAResult(
   codePatchBlocks: string[],
   results: CodePatchResultEvent[],
-  onlyApplied = false,
 ): boolean {
   if (codePatchBlocks.length === 0) {
     return true;
   }
-  let indexes = new Set(
-    results
-      .filter(
-        (result) =>
-          !onlyApplied || result.content['m.relates_to']?.key === 'applied',
-      )
-      .map((result) => result.content.codeBlockIndex),
-  );
+  let indexes = new Set(results.map((result) => result.content.codeBlockIndex));
   return indexes.size >= codePatchBlocks.length;
 }
 
@@ -1124,7 +1121,7 @@ function getCodePatchResults(
 //
 // Only a block whose latest result is a failure is reported: a block that
 // failed once and then applied on a retry is an applied block.
-function failedCodePatchResults(
+function latestCodePatchResults(
   cardMessageEvent: CardMessageEvent,
   history: DiscreteMatrixEvent[],
 ): CodePatchResultEvent[] {
@@ -1132,9 +1129,27 @@ function failedCodePatchResults(
   for (let result of getCodePatchResults(cardMessageEvent, history)) {
     latestResultByBlock.set(result.content.codeBlockIndex, result);
   }
-  return [...latestResultByBlock.values()]
-    .filter((result) => result.content['m.relates_to']?.key === 'failed')
-    .sort((a, b) => a.content.codeBlockIndex - b.content.codeBlockIndex);
+  return [...latestResultByBlock.values()].sort(
+    (a, b) => a.content.codeBlockIndex - b.content.codeBlockIndex,
+  );
+}
+
+function failedCodePatchResults(
+  cardMessageEvent: CardMessageEvent,
+  history: DiscreteMatrixEvent[],
+): CodePatchResultEvent[] {
+  return latestCodePatchResults(cardMessageEvent, history).filter(
+    (result) => result.content['m.relates_to']?.key === 'failed',
+  );
+}
+
+function appliedAnyCodePatch(
+  cardMessageEvent: CardMessageEvent,
+  history: DiscreteMatrixEvent[],
+): boolean {
+  return latestCodePatchResults(cardMessageEvent, history).some(
+    (result) => result.content['m.relates_to']?.key === 'applied',
+  );
 }
 
 function buildFailedCodePatchMessage(
@@ -1160,11 +1175,14 @@ function buildFailedCodePatchMessage(
 // applies while the bot's most recent reply that carried patches has a
 // failed block and nothing has replaced it: a re-read turn in between keeps
 // it, a later reply with new patches ends it, and a new message from the
-// user ends it too. Consecutive failed replies since the user's message are
-// counted, and at the same cap the correctness check uses the retrying stops
-// and the model is told to report to the user instead — otherwise a model
-// that cannot get the SEARCH block right would loop, fail, and pay for it
-// until someone noticed.
+// user ends it too. Consecutive replies since the user's message whose
+// every block failed are counted, and at the same cap the correctness check
+// uses the retrying stops and the model is told to report to the user
+// instead — otherwise a model that cannot get the SEARCH block right would
+// loop, fail, and pay for it until someone noticed. A reply that landed some
+// of its blocks is progress, not another failed attempt at the same thing:
+// it ends the count, so three replies that each finish part of the job are
+// never mistaken for three failures in a row.
 function buildFailedCodePatchFollowUp(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
@@ -1190,16 +1208,26 @@ function buildFailedCodePatchFollowUp(
     }
     return extractCodePatchBlocks(content.body ?? '').length > 0;
   }) as CardMessageEvent[];
+  let latestReply = patchReplies[patchReplies.length - 1];
+  if (
+    !latestReply ||
+    failedCodePatchResults(latestReply, history).length === 0
+  ) {
+    return undefined;
+  }
   let failedAttempts = 0;
   for (let i = patchReplies.length - 1; i >= 0; i--) {
-    if (failedCodePatchResults(patchReplies[i], history).length === 0) {
+    if (
+      failedCodePatchResults(patchReplies[i], history).length === 0 ||
+      appliedAnyCodePatch(patchReplies[i], history)
+    ) {
       break;
     }
     failedAttempts++;
   }
-  if (failedAttempts === 0) {
-    return undefined;
-  }
+  // The latest reply has a failed block, so a retry is due even when the
+  // same reply also made progress; that counts as the first attempt.
+  failedAttempts = Math.max(failedAttempts, 1);
   if (failedAttempts >= MAX_CORRECTNESS_FIX_ATTEMPTS) {
     return FAILED_CODE_PATCH_LIMIT_INSTRUCTION;
   }
@@ -1923,12 +1951,9 @@ function collectPendingCodePatchCorrectnessCheck(
       continue;
     }
 
-    let appliedCodePatchResults = codePatchResults.filter(
-      (result) => result.content['m.relates_to']?.key === 'applied',
-    );
     let allCodePatchesResolved = allCodePatchesHaveAResult(
       codePatchBlocks,
-      appliedCodePatchResults,
+      codePatchResults,
     );
     let allRelevantToolsResolved =
       relevantTools.length === 0 ||
@@ -2002,7 +2027,6 @@ function hasUnresolvedCodePatches(
     let allCodePatchesResolved = allCodePatchesHaveAResult(
       codePatchBlocks,
       codePatchResults,
-      true,
     );
     let allRelevantToolsResolved =
       relevantTools.length === 0 ||
@@ -2055,12 +2079,9 @@ function buildCodePatchCorrectnessMessage(
     return undefined;
   }
 
-  let appliedCodePatchResults = codePatchResults.filter(
-    (result) => result.content['m.relates_to']?.key === 'applied',
-  );
   let allCodePatchesResolved = allCodePatchesHaveAResult(
     codePatchBlocks,
-    appliedCodePatchResults,
+    codePatchResults,
   );
   let allRelevantToolsResolved =
     relevantTools.length === 0 ||

@@ -4108,12 +4108,13 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
   });
 
-  // Append another bot reply with a patch block and its result to a fixture
-  // history, so retry rounds can be stacked without a fixture per round.
+  // Append another bot reply with one patch block per status, and a result
+  // for each, to a fixture history, so retry rounds can be stacked without a
+  // fixture per round.
   function appendPatchReply(
     eventList: DiscreteMatrixEvent[],
     round: number,
-    status: 'applied' | 'failed',
+    ...statuses: ('applied' | 'failed')[]
   ) {
     let last = eventList[eventList.length - 1];
     let ts = (last.origin_server_ts ?? 0) + 1000;
@@ -4129,30 +4130,38 @@ Current date and time: 2025-06-11T11:43:00.533Z
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
         body:
-          `Trying again (${round})...\nhttp://test.com/spaghetti-recipe.gts\n` +
-          `${SEARCH_MARKER}\nriveting ${round}\n${SEPARATOR_MARKER}\nengaging ${round}\n${REPLACE_MARKER}\n`,
+          `Trying again (${round})...\n` +
+          statuses
+            .map(
+              (_status, index) =>
+                `http://test.com/file-${index}.gts\n` +
+                `${SEARCH_MARKER}\nriveting ${round}\n${SEPARATOR_MARKER}\nengaging ${round}\n${REPLACE_MARKER}\n`,
+            )
+            .join('\n'),
       },
     } as unknown as DiscreteMatrixEvent);
-    eventList.push({
-      type: 'app.boxel.codePatchResult',
-      sender: '@user:localhost',
-      room_id: last.room_id,
-      origin_server_ts: ts + 500,
-      event_id: `$retry-${round}-result`,
-      content: {
-        msgtype: 'app.boxel.codePatchResult',
-        'm.relates_to': {
-          event_id: replyId,
-          key: status,
-          rel_type: 'app.boxel.codePatchAnnotation',
+    statuses.forEach((status, index) => {
+      eventList.push({
+        type: 'app.boxel.codePatchResult',
+        sender: '@user:localhost',
+        room_id: last.room_id,
+        origin_server_ts: ts + 500 + index,
+        event_id: `$retry-${round}-result-${index}`,
+        content: {
+          msgtype: 'app.boxel.codePatchResult',
+          'm.relates_to': {
+            event_id: replyId,
+            key: status,
+            rel_type: 'app.boxel.codePatchAnnotation',
+          },
+          codeBlockIndex: index,
+          ...(status === 'failed'
+            ? { failureReason: 'The patch did not apply cleanly.' }
+            : {}),
+          data: { context: { tools: [], functions: [], submode: 'code' } },
         },
-        codeBlockIndex: 0,
-        ...(status === 'failed'
-          ? { failureReason: 'The patch did not apply cleanly.' }
-          : {}),
-        data: { context: { tools: [], functions: [], submode: 'code' } },
-      },
-    } as unknown as DiscreteMatrixEvent);
+      } as unknown as DiscreteMatrixEvent);
+    });
   }
 
   test('Stops asking for a retry once patches have failed as many times as the correctness cap', async function () {
@@ -4192,6 +4201,68 @@ Current date and time: 2025-06-11T11:43:00.533Z
       records.length,
       3,
       'each failed reply keeps its record in history',
+    );
+  });
+
+  test('A reply that applied some blocks ends the failure streak', async function () {
+    // Round 1 failed, round 2 landed one block and lost one, rounds 3 and 4
+    // failed. Only the two failures after the partial success count, so the
+    // cap is not reached and the model is still asked to retry.
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          import.meta.dirname,
+          'resources/chats/one-code-block-one-failure.json',
+        ),
+        'utf-8',
+      ),
+    );
+    appendPatchReply(eventList, 2, 'applied', 'failed');
+    appendPatchReply(eventList, 3, 'failed');
+    appendPatchReply(eventList, 4, 'failed');
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    let trailing = messageText(messages![messages!.length - 1]);
+    assert.true(
+      trailing.includes('Re-read the file and send a new block'),
+      'the retry instruction is still given',
+    );
+    assert.true(
+      trailing.includes('Attempt 2 of 3.'),
+      'the partial success and the failure before it are not counted',
+    );
+  });
+
+  test('A latest reply with a failed block and an applied block counts as one attempt', async function () {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          import.meta.dirname,
+          'resources/chats/one-code-block-one-failure.json',
+        ),
+        'utf-8',
+      ),
+    );
+    appendPatchReply(eventList, 2, 'failed');
+    appendPatchReply(eventList, 3, 'applied', 'failed');
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    let trailing = messageText(messages![messages!.length - 1]);
+    assert.true(
+      trailing.includes('Attempt 1 of 3.'),
+      'progress in the latest reply restarts the count',
+    );
+    assert.false(
+      trailing.includes('Do not send another patch'),
+      'three replies with a failure are not three failures in a row',
     );
   });
 
@@ -5074,6 +5145,153 @@ new content
         },
       ],
       'Patched files should be surfaced',
+    );
+  });
+
+  test('a reply with one applied and one failed block is checked for the applied file', async function () {
+    // The failed block has no way to be re-applied, so its reply is settled:
+    // the applied file gets its correctness check now, and the retry that
+    // the failure prompts is a new reply with a check of its own. Without
+    // this the applied file would never be checked at all.
+    const roomId = 'room-mixed';
+    const aiMessageId = 'ai-mixed-message';
+    const appliedFileSource = 'http://localhost/realm/button.gts';
+    const failedFileSource = 'http://localhost/realm/card.gts';
+
+    const eventList: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: 'user-message',
+        origin_server_ts: 1,
+        room_id: roomId,
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Please update both files.',
+          format: 'org.matrix.custom.html',
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/test',
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: { age: 0, transaction_id: 'user-message' },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: aiMessageId,
+        origin_server_ts: 2,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: `Updating both files...
+${appliedFileSource}
+${SEARCH_MARKER}
+old button
+${SEPARATOR_MARKER}
+new button
+${REPLACE_MARKER}
+
+${failedFileSource}
+${SEARCH_MARKER}
+old card
+${SEPARATOR_MARKER}
+new card
+${REPLACE_MARKER}
+`,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/test',
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: { age: 0, transaction_id: aiMessageId },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+        event_id: 'patch-result-applied',
+        origin_server_ts: 3,
+        room_id: roomId,
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+          },
+          codeBlockIndex: 0,
+          data: {
+            context: { tools: [], functions: [] },
+            attachedFiles: [
+              {
+                sourceUrl: appliedFileSource,
+                url: appliedFileSource,
+                name: 'button.gts',
+                contentType: 'text/plain',
+              },
+            ],
+          },
+        },
+        unsigned: { age: 0, transaction_id: 'patch-result-applied' },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+        event_id: 'patch-result-failed',
+        origin_server_ts: 4,
+        room_id: roomId,
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'failed',
+            rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+          },
+          codeBlockIndex: 1,
+          failureReason: 'The patch did not apply cleanly.',
+          data: {
+            context: { tools: [], functions: [] },
+            attachedFiles: [
+              {
+                sourceUrl: failedFileSource,
+                url: failedFileSource,
+                name: 'card.gts',
+                contentType: 'text/plain',
+              },
+            ],
+          },
+        },
+        unsigned: { age: 0, transaction_id: 'patch-result-failed' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const { pendingCodePatchCorrectnessChecks } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.strictEqual(
+      pendingCodePatchCorrectnessChecks?.targetEventId,
+      aiMessageId,
+      'the reply is settled once every block has a result',
+    );
+    assert.deepEqual(
+      pendingCodePatchCorrectnessChecks?.files,
+      [{ sourceUrl: appliedFileSource, displayName: 'realm/button.gts' }],
+      'only the applied file is checked; the failed one is retried instead',
     );
   });
 

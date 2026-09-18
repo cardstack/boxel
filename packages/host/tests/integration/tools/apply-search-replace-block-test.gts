@@ -930,6 +930,69 @@ last`,
     );
   });
 
+  test('does not relax a trailing comma on a search line before the last', async function (assert) {
+    // The model wrote two adjacent JSON properties without either comma. The
+    // last line may differ from the file by its comma, the first may not:
+    // matching it anyway would write the replacement's missing comma into
+    // the file and break the JSON silently, where a reported failure lets
+    // the model correct the block.
+    let toolService = getService('tool-service');
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
+
+    const fileContent = `{
+  "name": "pkg",
+  "version": "1.0.0",
+  "private": true
+}`;
+    const codeBlock = `${SEARCH_MARKER}
+  "name": "pkg"
+  "version": "1.0.0"
+${SEPARATOR_MARKER}
+  "name": "pkg-renamed"
+  "version": "2.0.0"
+${REPLACE_MARKER}`;
+
+    try {
+      await applyCommand.execute({ fileContent, codeBlock });
+      assert.ok(false, 'expected the patch to be rejected');
+    } catch (error: any) {
+      assert.strictEqual(
+        error.message,
+        `${APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.SEARCH_PATTERN_NOT_FOUND}. The first search line that does not appear anywhere in the file: "name": "pkg"`,
+        'the line whose comma the matcher does not forgive is the one named',
+      );
+    }
+  });
+
+  test('does not name a last line the matcher would accept without its comma', async function (assert) {
+    // Every search line exists in the file, the last one only up to its
+    // trailing comma, which the matcher forgives. The block fails because
+    // the lines are not adjacent, and the message must say that rather than
+    // point at the comma the model is allowed to get wrong.
+    let toolService = getService('tool-service');
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
+
+    const fileContent = `alpha
+beta
+gamma,`;
+    const codeBlock = `${SEARCH_MARKER}
+alpha
+gamma
+${SEPARATOR_MARKER}
+x
+${REPLACE_MARKER}`;
+
+    try {
+      await applyCommand.execute({ fileContent, codeBlock });
+      assert.ok(false, 'expected the patch to be rejected');
+    } catch (error: any) {
+      assert.strictEqual(
+        error.message,
+        `${APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.SEARCH_PATTERN_NOT_FOUND}. Every search line appears somewhere in the file, but not as one contiguous run in this order.`,
+      );
+    }
+  });
+
   test('names the first search line that is missing from the file', async function (assert) {
     let toolService = getService('tool-service');
     let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
