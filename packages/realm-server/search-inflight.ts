@@ -1,5 +1,6 @@
 import {
   LINK_SHAPE_LOAD_HALF_LIFE_MS,
+  LinkShapePolicy,
   SEARCH_ADMISSION_WAIT_MS,
   SERVER_MAX_IN_FLIGHT_SEARCHES,
 } from '@cardstack/runtime-common';
@@ -273,4 +274,34 @@ export function setSearchAdmissionForTests(opts: {
 
 export function resetSearchAdmissionForTests(): void {
   setSearchAdmissionForTests({});
+}
+
+// The link-shape policy this process serves live reads under: how much of a
+// card's link graph each one carries, chosen per realm from the load the
+// process is under. It reads the same in-flight count admission control
+// computes — in its sustained form, since a shape that flapped per request
+// would fragment every validator it is folded into — and degrades a response
+// one rung before admission control would refuse the request outright.
+//
+// This is the process's only control over the shape. There is deliberately no
+// environment variable beside it: an operator-set flag cannot express "depends
+// on concurrency", and two mechanisms deciding one thing is how they come to
+// disagree.
+//
+// It lives here, beside the gate, rather than at the one call site that builds
+// it, so that a test can exercise this construction instead of reproducing it.
+// A test that rebuilt the wiring could not see the wiring break: dropping
+// `readLoad` here would leave a suite that passed its own `readLoad` green.
+//
+// `now` is the one seam. The reading is a two-minute mean and the dwell a
+// minute, so a test that drives either has to supply the clock; nothing else
+// about the policy is a parameter.
+export function buildLinkShapePolicy(opts?: {
+  now?: () => number;
+}): LinkShapePolicy {
+  return new LinkShapePolicy({
+    readLoad: getSearchSustainedInFlight,
+    limit: getSearchAdmissionLimit(),
+    ...(opts?.now ? { now: opts.now } : {}),
+  });
 }

@@ -333,7 +333,7 @@ import {
   sanitizeLoggingCorrelationId,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
 } from './prerender-headers.ts';
-import { RequestTimings } from './request-timings.ts';
+import { RequestTimings, type StageCursor } from './request-timings.ts';
 import { emitWriteTiming } from './write-timing.ts';
 import {
   type MatrixClient,
@@ -1478,6 +1478,13 @@ export interface WriteOptions {
   // writes, whose jobs no reader waits on (anonymous writes are unsupported;
   // see `drainRequestersOwnIndexing`).
   initiatingUser?: string | null;
+  // Where a caller reporting where its write's time went wants this commit's
+  // stages stamped. The commit drains prior indexing, makes the bytes
+  // durable, queues an index job, waits for a worker to run it and then
+  // invalidates what the pass touched; from outside they are one number, and
+  // any of them can be the whole of a slow write. Absent, and so a no-op, for
+  // every caller that is not reporting.
+  stageCursor?: StageCursor;
 }
 
 export interface RealmAdapter {
@@ -2576,6 +2583,12 @@ export class Realm {
       // Invalidation sets earlier passes of this same write deferred, folded
       // into the prerender_html job this pass spawns.
       carriedPrerenderHtmlChanges?: IncrementalChange[];
+      // Where a caller reporting where its write's time went wants this pass's
+      // two halves stamped: queueing the job, and waiting for a worker to run
+      // it. They answer different questions — a queue that is slow to accept
+      // work, against a worker pool that is slow to reach it — and the second
+      // is the one a card write spends its seconds in.
+      stageCursor?: StageCursor;
     },
   ): Promise<
     IndexPassResult & { deferredPrerenderHtml?: DeferredPrerenderHtml }
@@ -2590,6 +2603,7 @@ export class Realm {
     let invalidatedTypes = makeInvalidatedTypeAccumulator();
     let generation: number | undefined;
     let deferredPrerenderHtml: DeferredPrerenderHtml | undefined;
+    let stageCursor = opts?.stageCursor;
     await this.#realmIndexUpdater.updateChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
       initiatedBy: opts?.initiatedBy ?? null,
@@ -2597,10 +2611,17 @@ export class Realm {
       ...(opts?.carriedPrerenderHtmlChanges?.length
         ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
         : {}),
+      onEnqueued: () => stageCursor?.mark('enqueue'),
       onDeferredPrerenderHtml: (deferred) => {
         deferredPrerenderHtml = deferred;
       },
       onInvalidation: async (invalidatedURLs: URL[], meta) => {
+        // Reached the moment the worker's job resolves, so the window that
+        // closes here is the wait for it — queue time plus the pass itself.
+        // A pass that fails never reaches this, so its wait stays in the
+        // residual rather than being reported as a wait that completed. The
+        // line's `status` is what tells those apart.
+        stageCursor?.mark('awaitIndex');
         // Drop the searchCards in-flight map: the worker's batch.done()
         // swap landed in this realm's boxel_index, so any pending
         // pre-update promises must not be coalesced into by post-update
@@ -3395,8 +3416,15 @@ export class Realm {
     // Callers that DO read indexed state after the write (the JSON-API
     // postCardInstance / patchCardInstance handlers) keep the original
     // deadlock-prevention semantics by omitting waitForIndex.
+    let stageCursor = options?.stageCursor;
     if (options?.waitForIndex !== false) {
       await this.incrementalIndexing();
+      // A batch coordinator drains before it stages, and this gate drains
+      // again. Both wait on the same realm-wide indexing, so they are one
+      // stage reached twice rather than two stages, and they accumulate
+      // together — a write that queued behind indexing it did not ask for
+      // spent that time here however many gates it passed through.
+      stageCursor?.mark('drain');
     }
     let urls: URL[] = [];
     // Collect write results for all files we wrote
@@ -3447,6 +3475,7 @@ export class Realm {
       } = await this.updateIndexAndCollectInvalidations(changes, {
         clientRequestId,
         initiatedBy: initiatingUser,
+        ...(stageCursor ? { stageCursor } : {}),
         ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
         // Handed over either way: a pass that renders folds this into the job
         // it spawns, and a pass that defers folds it into the set it returns.
@@ -3459,6 +3488,11 @@ export class Realm {
       // running pass that was itself deferring, in which case no job was
       // spawned and the set is ours again.
       deferredPrerenderHtml = deferred;
+      // Whatever the pass did not attribute to the enqueue or the wait is the
+      // invalidation that followed it: dropping the realm's index caches,
+      // touching the realm's updated-at, and re-resolving the executables the
+      // pass invalidated.
+      stageCursor?.mark('invalidate');
       invalidations = new Set([...invalidations, ...workingInvalidations]);
       invalidatedTypes.add({ invalidatedTypes: workingTypes });
       indexGeneration = generation ?? indexGeneration;
@@ -3513,6 +3547,11 @@ export class Realm {
       // modules the instances depend on and only flush when an instance
       // depends on a module that is part of this operation.
       if (lastWriteType === 'module' && currentWriteType === 'instance') {
+        // The bytes written so far belong to this batch's durable write, not
+        // to the index pass about to run. Closed here so each pass's files
+        // are reported ahead of the queue insert that follows them, the same
+        // order the single-pass case reports them in.
+        stageCursor?.mark('persist');
         await performIndex(asUpdates(urls), { deferPrerenderHtml: true });
         urls = [];
       }
@@ -3806,6 +3845,11 @@ export class Realm {
     // persist file meta (created_at) to DB independent of index and retrieve created
     let createdMap = await this.persistFileMeta(fileMetaRows);
     await this.removeFileMeta(removedFiles);
+    // Everything the caller asked for is durable at this point: the bytes, the
+    // removals, and the rows describing them. What follows is indexing, which
+    // the caller may or may not be waiting for — so this is the boundary that
+    // says how much of a slow write was the write.
+    stageCursor?.mark('persist');
     let waitForIndex = options?.waitForIndex !== false;
     let changes: IndexChange[] = [
       ...asUpdates(urls),
@@ -3819,6 +3863,10 @@ export class Realm {
           generation: indexGeneration,
           invalidatedTypes: invalidatedTypes.value,
         });
+        // Announcing what the pass invalidated is the last of the
+        // invalidation, so it accumulates into the same stage as the hooks
+        // that ran before it.
+        stageCursor?.mark('invalidate');
       } else {
         // Two-phase: await the durable queue insert inline so pre-enqueue
         // failures (DB partial outage) propagate back to this method's
@@ -3871,6 +3919,11 @@ export class Realm {
             },
           },
         );
+        // The durable queue insert is all of the indexing this path waits
+        // for; the worker, the invalidation and the broadcast run after the
+        // caller has its answer, so they are nobody's latency and this write
+        // reports no wait for them.
+        stageCursor?.mark('enqueue');
         settled.catch((err: unknown) => {
           // Covers worker job rejection AND post-worker realm-side work
           // (onInvalidation / handleExecutableInvalidations / broadcast).
@@ -8510,11 +8563,20 @@ export class Realm {
   // stamped no stage, and a line for it would say only how long it took to
   // say no. Those are skipped, so every line on this channel describes a
   // request that tried to write.
+  //
+  // `status` is the answer the write gave: the response's own code, or
+  // `failed` where it threw instead of answering. A write that did not finish
+  // leaves the stage it was in unclosed, and its elapsed time lands in the
+  // residual rather than in the stage that was running — which is the honest
+  // reading, since a `persist` that threw partway is not a persist. That only
+  // works if the line says the write did not succeed, so this is what makes
+  // the residual legible rather than misleading.
   #emitWriteTiming(
     method: string,
     request: Request,
     startedAt: number,
     timings: RequestTimings,
+    status: string,
   ): void {
     let stages = timings.toLogFragment();
     if (!stages) {
@@ -8526,6 +8588,7 @@ export class Realm {
     emitWriteTiming(
       `${method} ${request.url}` +
         (correlationId ? ` corr=${correlationId}` : '') +
+        ` status=${status}` +
         ` handler=${Date.now() - startedAt}ms ` +
         stages,
     );
@@ -8537,10 +8600,15 @@ export class Realm {
   ): Promise<Response> {
     let timings = new RequestTimings();
     let startedAt = Date.now();
+    // Set from the response, so a refusal the handler answers with is reported
+    // as the code it sent; left as `failed` when it threw and sent nothing.
+    let status = 'failed';
     try {
-      return await this.#createCard(request, requestContext, timings);
+      let response = await this.#createCard(request, requestContext, timings);
+      status = String(response.status);
+      return response;
     } finally {
-      this.#emitWriteTiming('POST', request, startedAt, timings);
+      this.#emitWriteTiming('POST', request, startedAt, timings, status);
     }
   }
 
@@ -8916,10 +8984,19 @@ export class Realm {
   ): Promise<Response> {
     let timings = new RequestTimings();
     let startedAt = Date.now();
+    // Set from the response, so a refusal the handler answers with is reported
+    // as the code it sent; left as `failed` when it threw and sent nothing.
+    let status = 'failed';
     try {
-      return await this.#patchCardInstance(request, requestContext, timings);
+      let response = await this.#patchCardInstance(
+        request,
+        requestContext,
+        timings,
+      );
+      status = String(response.status);
+      return response;
     } finally {
-      this.#emitWriteTiming('PATCH', request, startedAt, timings);
+      this.#emitWriteTiming('PATCH', request, startedAt, timings, status);
     }
   }
 
@@ -9105,19 +9182,27 @@ export class Realm {
           id: instanceURL,
         });
       }
-      doc = await this.serializedInstanceEcho(
-        stored,
-        instanceURL,
-        lastModified,
-      );
-      this.#serveInstanceIdsAsRRI(doc);
+      // Timed as `stringify`, the stage the indexed answer reports for the
+      // same work — building the response document and serializing it. The
+      // echo reaches for the realm's info to build it, which on a cold cache
+      // parses the realm's own file, so leaving it outside the stages would
+      // put a read of unbounded cost after the last one this line reports.
+      let echo = await timings.time('stringify', async () => {
+        let built = await this.serializedInstanceEcho(
+          stored,
+          instanceURL,
+          lastModified,
+        );
+        this.#serveInstanceIdsAsRRI(built);
+        return { doc: built, body: JSON.stringify(built, null, 2) };
+      });
       return createResponse({
-        body: JSON.stringify(doc, null, 2),
+        body: echo.body,
         init: {
           headers: {
             'content-type': SupportedMimeType.CardJson,
             'cache-control': this.cardJsonCacheControl(requestContext),
-            ...lastModifiedHeader(doc),
+            ...lastModifiedHeader(echo.doc),
             ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
           },
         },

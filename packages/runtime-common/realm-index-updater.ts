@@ -49,6 +49,13 @@ export interface IncrementalIndexMeta {
 }
 
 export interface IncrementalIndexOptions {
+  // Runs once the job is durably enqueued, before anything waits on the
+  // worker. `enqueueChanges` returns at that boundary, so its own callers can
+  // see it without a hook; a caller of the awaited form cannot, and for one
+  // reporting where a write's time went the difference matters — queueing the
+  // job and waiting for a worker to run it are different problems with
+  // different fixes.
+  onEnqueued?: () => void;
   onInvalidation?: (
     invalidatedURLs: URL[],
     meta: IncrementalIndexMeta,
@@ -361,6 +368,7 @@ export class RealmIndexUpdater {
       this.#incrementalIndexingDeferreds.delete(indexingDeferred);
       throw e;
     }
+    opts?.onEnqueued?.();
     // Past the durable-enqueue boundary. Build the settle promise that the
     // caller can either await (synchronous-indexing path) or fire-and-forget
     // (deferred-indexing path). Failures reject `settled` only — the
@@ -438,6 +446,7 @@ export class RealmIndexUpdater {
     changes: IndexChange[],
     opts?: Pick<
       IncrementalIndexOptions,
+      | 'onEnqueued'
       | 'onInvalidation'
       | 'clientRequestId'
       | 'initiatedBy'
