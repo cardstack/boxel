@@ -338,6 +338,7 @@ const REFUSALS_NOT_WORTH_NAMING = new Map<string, string>([
   ['ACTOR', 'requestContext'],
   ['INSTANCE', 'requestContext'],
   ['PARAMS', 'requestContext'],
+  ['REALMCONFIG', 'requestContext'],
 ]);
 
 check('the skill accounts for every call the derive profile bans', () => {
