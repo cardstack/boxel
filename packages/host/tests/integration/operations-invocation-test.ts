@@ -10,6 +10,8 @@ import type {
   WireGroup,
   WireInvocation,
 } from '@cardstack/runtime-common';
+import { isCardErrorJSONAPI } from '@cardstack/runtime-common/error';
+import type { CardErrorJSONAPI } from '@cardstack/runtime-common/error';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
@@ -113,6 +115,13 @@ const REPORT_MODULE = `
       append: { to: 'activities', value: card(params('activity')) },
     };
 
+    @operation static createActivity = {
+      base: 'create',
+      of: Activity,
+      params: { headline: StringField },
+      fill: { headline: params('headline') },
+    };
+
     @operation static openReports = {
       base: 'query',
       query: { filter: { on: () => Report, eq: { status: 'open' } } },
@@ -156,6 +165,7 @@ function realmContents() {
     'report-appended.json': reportFile('Appended To'),
     'report-batched.json': reportFile('Batched'),
     'report-refused.json': reportFile('Refused'),
+    'report-created-from.json': reportFile('Creator'),
     'notes.md': '# Notes\n',
   };
 }
@@ -214,9 +224,8 @@ module('Integration | operations invocation', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await loader.import('@cardstack/base/card-api'),
+  setupCardLogs(hooks, async () =>
+    getService('loader-service').loader.import('@cardstack/base/card-api'),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -229,14 +238,18 @@ module('Integration | operations invocation', function (hooks) {
   let hostTransport: unknown;
 
   hooks.beforeEach(async function () {
-    loader = getService('loader-service').loader;
-    ({ operations } = await loader.import<typeof OperationsModule>(
-      '@cardstack/base/operations',
-    ));
     ({ adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: realmContents(),
     }));
+    // Imported after the realm is up, and through the loader the realm's own
+    // instances were built by: `operations()` reads a def's declarations and
+    // asks what a value is an instance of, so a copy of the module from an
+    // earlier loader would not recognize the very cards the store hands back.
+    loader = getService('loader-service').loader;
+    ({ operations } = await loader.import<typeof OperationsModule>(
+      '@cardstack/base/operations',
+    ));
     // Looking the service up is what arms the bridge a card reads the
     // transport back through, the same as the app's own boot does.
     getService('operations');
@@ -248,26 +261,34 @@ module('Integration | operations invocation', function (hooks) {
     delete (globalThis as any).__boxelPrerenderApp;
   });
 
+  // A card whose own fields include one named `status` is why this asks the
+  // error predicate rather than testing for a `status` member: the card under
+  // test declares that field, and a member test would read every instance of it
+  // as an error.
   async function cardAt(localPath: string): Promise<CardDefType> {
-    let instance = await getService('store').get<CardDefType>(
-      `${testRealmURL}${localPath}`,
+    return loaded(
+      await getService('store').get<CardDefType>(`${testRealmURL}${localPath}`),
+      localPath,
     );
-    if (!instance || 'status' in instance) {
-      throw new Error(
-        `expected ${localPath} to load as a card, got ${JSON.stringify(instance)}`,
-      );
-    }
-    return instance;
   }
 
   async function fileAt(localPath: string): Promise<FileDefType> {
-    let instance = await getService('store').get<FileDefType>(
-      `${testRealmURL}${localPath}`,
-      { type: 'file-meta' },
+    return loaded(
+      await getService('store').get<FileDefType>(
+        `${testRealmURL}${localPath}`,
+        { type: 'file-meta' },
+      ),
+      localPath,
     );
-    if (!instance || 'status' in instance) {
+  }
+
+  function loaded<T>(
+    instance: T | CardErrorJSONAPI | undefined,
+    at: string,
+  ): T {
+    if (!instance || isCardErrorJSONAPI(instance)) {
       throw new Error(
-        `expected ${localPath} to load as file metadata, got ${JSON.stringify(instance)}`,
+        `expected ${at} to load, got ${JSON.stringify(instance)}`,
       );
     }
     return instance;
@@ -463,6 +484,54 @@ module('Integration | operations invocation', function (hooks) {
       );
     });
 
+    test('a declared create mints its own type, anchored on the card it was invoked on', async function (assert) {
+      let report = await cardAt('report-created-from');
+      let result = (await (operations(report) as any).createActivity({
+        headline: 'Lab safety',
+      })) as OperationWriteResult;
+
+      let stored = await storedCard(
+        `${result.id.slice(testRealmURL.length)}.json`,
+      );
+      assert.strictEqual(
+        stored.data.attributes.headline,
+        'Lab safety',
+        "the declaration's fill wrote the new card's values",
+      );
+      assert.strictEqual(
+        stored.data.meta.adoptsFrom.name,
+        'Activity',
+        'and what it minted is the type its declaration names, not the card it was invoked on',
+      );
+    });
+
+    test('a type-scoped entry names the type whose operations it invokes', async function (assert) {
+      let { Report } = await loader.import<any>(`${testRealmURL}report`);
+      let { sent } = recordingTransport({
+        answer: writeAnswer(`${testRealmURL}Activity/1`),
+        defaultRealm: testRealmURL,
+      });
+
+      await (operations(Report) as any).createActivity({ headline: 'Named' });
+
+      let [entry] = invocations(sent[0].envelope);
+      assert.strictEqual(
+        entry.href,
+        undefined,
+        'a call on the class names no resource',
+      );
+      assert.strictEqual(
+        (entry.data as any).meta.adoptsFrom.name,
+        'Report',
+        "so the type it invokes travels in the entry's own meta",
+      );
+      assert.strictEqual(
+        (entry.data as any).headline,
+        'Named',
+        'beside the payload the operation declared',
+      );
+    });
+
     test('an operation on a card that was never saved is refused before any request', async function (assert) {
       let { Report } = await loader.import<any>(`${testRealmURL}report`);
       let unsaved = new Report({ headline: 'Unsaved' });
@@ -503,6 +572,17 @@ module('Integration | operations invocation', function (hooks) {
         'a read from the same render is carried out',
       );
       assert.strictEqual(sent.length, 1, 'and it did reach the transport');
+    });
+
+    test('an environment with no transport says so rather than half-working', async function (assert) {
+      let report = await cardAt('report-read');
+      delete (globalThis as any)._CARDSTACK_OPERATIONS_TRANSPORT;
+
+      assert.throws(
+        () => operations(report),
+        /no operations transport is available/,
+        'an operation is carried out over HTTP, which the host supplies — in node there is nothing to register',
+      );
     });
 
     test('stored bytes and queries are reached somewhere other than a batch', async function (assert) {
@@ -643,8 +723,9 @@ module('Integration | operations invocation', function (hooks) {
           },
         },
       });
-      let elsewhere = await getService('store').get<CardDefType>(
-        `${testRealm2URL}elsewhere`,
+      let elsewhere = loaded(
+        await getService('store').get<CardDefType>(`${testRealm2URL}elsewhere`),
+        'test2/elsewhere',
       );
       let report = await cardAt('report-refused');
       let { sent } = recordingTransport();
@@ -837,7 +918,7 @@ module('Integration | operations invocation', function (hooks) {
       assert.strictEqual(
         (matched as unknown[]).length,
         2,
-        'an entry that expects many is answered once per match',
+        'an entry that expects many is answered once per card the search reached',
       );
     });
 

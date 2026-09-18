@@ -768,8 +768,11 @@ function defConstructorFor(
       ? classOrInstance
       : classOrInstance?.constructor;
   if (typeof owner !== 'function' || !isDefConstructor(owner)) {
+    // Names what arrived, because the commonest way to reach this is a def
+    // built by a different copy of the card API — a value that is a def by
+    // every appearance and is not an instance of *this* module's `BaseDef`.
     throw new Error(
-      `${reader}() takes a class that extends BaseDef, or an instance of one`,
+      `${reader}() takes a class that extends BaseDef, or an instance of one; got ${describeTarget(classOrInstance)}`,
     );
   }
   return owner;
@@ -805,6 +808,25 @@ function recordDeclaration(
     });
   }
   declarations[key] = declaration;
+}
+
+// What arrived, in the terms a reader can act on: the class's own name when
+// there is one, and otherwise enough of the value to tell a plain object from
+// a def from nothing at all.
+function describeTarget(value: unknown): string {
+  if (value === null || value === undefined) {
+    return String(value);
+  }
+  if (typeof value === 'function') {
+    return `the class ${value.name || '(anonymous)'}, which does not extend BaseDef`;
+  }
+  if (typeof value !== 'object') {
+    return typeof value;
+  }
+  let owner = (value as { constructor?: { name?: string } }).constructor;
+  return owner
+    ? `an instance of ${owner.name || '(anonymous)'}`
+    : 'an object with no constructor';
 }
 
 function hasOwn(target: object, key: string | symbol): boolean {
@@ -2015,11 +2037,14 @@ export type BatchOperations<Type> =
         UncheckedBatchOperations
     : WithDeclared<CardBatchBaseOperations, BatchMembers<Type>>;
 
-// The operations of whatever a search matched. Which ones those cards carry is
+// The operations of whatever a search reached. Which ones those cards carry is
 // their own types' to say and the realm resolves each name against the card it
-// matched, so a name is not knowable here — and for the same reason the result
+// reached, so a name is not knowable here — and for the same reason the result
 // is the realm's answer as it reported it: whether an identity or a document
-// comes back is the matched card's to decide.
+// comes back is that card's to decide. Under `expect: 'many'` the array holds
+// one result per card the search reached — one per match when the target names
+// no `field`, and one per distinct card the hop reached when it does, which is
+// fewer when several matches link to the same card.
 export type QueriedOperations<Expect extends 'one' | 'many'> = Record<
   string,
   (

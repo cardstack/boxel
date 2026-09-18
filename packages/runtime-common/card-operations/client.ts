@@ -73,8 +73,8 @@ export interface OperationsEnvelope {
 }
 
 // One positional element of the answer: a write reports an identity, a read
-// reports a document, a delete reports `null`, and a group — or an entry
-// resolved to several targets — reports its members' results in request order.
+// reports a document, a delete reports `null`, and a group — or an entry that
+// reached several cards — reports its members' results in request order.
 export type WireResult =
   | { data: Record<string, unknown> | null }
   | Record<string, unknown>;
@@ -174,7 +174,7 @@ export type OperationValueResult =
 
 // A batch's answers, shaped like the batch: an entry's result sits where the
 // entry did, a group's position holds its members' results, and an entry that
-// resolved to several targets holds one result per target.
+// reached several cards holds one result per card it reached.
 export type OperationResultTree = (
   | OperationValueResult
   | OperationResultTree
@@ -365,6 +365,13 @@ async function invokeOne(
       : {}),
     ...entryData(subject, name, info, payload, options),
   };
+  if (entry.data) {
+    // A handle stands for a position in a batch, so it means nothing to a call
+    // that is not one — it would reach the wire as an empty object and be
+    // refused as a malformed param, which describes the payload rather than
+    // what the caller did.
+    assertNoHandles(entry.data, name);
+  }
   let answer = await env.transport.send(
     realmURL,
     isWrite(info.base) ? 'POST' : 'QUERY',
@@ -398,15 +405,34 @@ function entryData(
       data: createResource(subject, name, payload, opts.relationships, lid),
     };
   }
-  if (payload === undefined) {
-    return lid === undefined ? {} : { data: { lid } };
-  }
-  if (!isPlainRecord(payload)) {
+  if (payload !== undefined && !isPlainRecord(payload)) {
     throw new Error(
       `operation "${name}" on ${subject.displayName} takes its payload as an object`,
     );
   }
-  return { data: { ...(lid === undefined ? {} : { lid }), ...payload } };
+  let data: Record<string, unknown> = {
+    ...(lid === undefined ? {} : { lid }),
+    ...(payload as Record<string, unknown> | undefined),
+  };
+  if (subject.scope === 'type') {
+    // A type-scoped entry names no existing resource, so the type whose
+    // operations it invokes travels in `meta.adoptsFrom` — the same member a
+    // card's stored JSON names its own type in, and the one the realm reads to
+    // resolve the name against a definition. The envelope reads it as its own
+    // member rather than as a param, so it never reaches the operation's
+    // payload.
+    data.meta = { adoptsFrom: typeRef(subject, name) };
+  }
+  return Object.keys(data).length === 0 ? {} : { data };
+}
+
+function typeRef(type: OperationsSubject, name: string): CodeRef {
+  if (!type.codeRef) {
+    throw new Error(
+      `operation "${name}" runs against the ${type.displayName} type, and no module exports that class, so there is no type to name it by`,
+    );
+  }
+  return type.codeRef;
 }
 
 // The resource a base create mints a card from: the field values the caller
@@ -420,11 +446,7 @@ function createResource(
   relationships: Record<string, unknown> | undefined,
   lid: string | undefined,
 ): Record<string, unknown> {
-  if (!type.codeRef) {
-    throw new Error(
-      `operation "${name}" mints a ${type.displayName}, and no module exports that class, so there is no type to record on the new card`,
-    );
-  }
+  let codeRef = typeRef(type, name);
   if (attributes !== undefined && !isPlainRecord(attributes)) {
     throw new Error(
       `operation "${name}" takes the new ${type.displayName}'s field values as an object`,
@@ -434,7 +456,7 @@ function createResource(
     ...(lid === undefined ? {} : { lid }),
     ...(attributes ? { attributes } : {}),
     ...(relationships ? { relationships } : {}),
-    meta: { adoptsFrom: type.codeRef },
+    meta: { adoptsFrom: codeRef },
   };
 }
 
@@ -565,7 +587,7 @@ interface HandleState {
   // inside it. Absent on an invocation.
   members?: BatchMember[];
   // An entry whose target is a search for several cards is answered with one
-  // result per card.
+  // result per card the search reached.
   many?: true;
   lid?: string;
 }
@@ -900,8 +922,14 @@ export interface FindOptions {
   // entry runs against is what that field points at rather than the match
   // itself.
   field?: string;
-  // `one` — the default — names a single card; `many` runs the entry against
-  // every match, and the entry's result is one per match.
+  // How many cards the target names. `one` is the default, and an entry under
+  // it names exactly one card.
+  //
+  // Under `many` the entry runs against every card the search reached and its
+  // result holds one per card. Without a `field` that is one per match. With
+  // one it is one per *distinct* card the hop reached, which is fewer when
+  // several matches link to the same card — the count is of cards run against,
+  // not of matches.
   expect?: 'one' | 'many';
 }
 
@@ -1069,15 +1097,30 @@ function linkHandles(
   data: Record<string, unknown>,
   name: string,
 ): Record<string, unknown> {
-  return substituteHandles(data, name, new Set()) as Record<string, unknown>;
+  return substituteHandles(data, name, new Set(), true) as Record<
+    string,
+    unknown
+  >;
+}
+
+// Reads the payload for a handle without substituting one, for the calls that
+// are not batches and so have no entry a handle could stand for.
+function assertNoHandles(data: Record<string, unknown>, name: string): void {
+  substituteHandles(data, name, new Set(), false);
 }
 
 function substituteHandles(
   value: unknown,
   name: string,
   seen: Set<object>,
+  inBatch: boolean,
 ): unknown {
   if (isOperationHandle(value)) {
+    if (!inBatch) {
+      throw new Error(
+        `operation "${name}" was handed the handle of a batch entry; a handle stands for a card the batch mints, so it is passed inside the same atomic() call rather than to a single operation`,
+      );
+    }
     let { lid } = value[HANDLE];
     if (!lid) {
       throw new Error(
@@ -1093,14 +1136,16 @@ function substituteHandles(
   }
   if (Array.isArray(value)) {
     guardCycle(value, name, seen);
-    return value.map((member) => substituteHandles(member, name, seen));
+    return value.map((member) =>
+      substituteHandles(member, name, seen, inBatch),
+    );
   }
   if (isPlainRecord(value)) {
     guardCycle(value, name, seen);
     return Object.fromEntries(
       Object.entries(value).map(([key, member]) => [
         key,
-        substituteHandles(member, name, seen),
+        substituteHandles(member, name, seen, inBatch),
       ]),
     );
   }
