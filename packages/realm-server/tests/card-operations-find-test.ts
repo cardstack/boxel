@@ -1435,6 +1435,124 @@ module(basename(import.meta.filename), function () {
     );
   });
 
+  test('a hop that fans out past the ceiling is refused, even from few matches', async function (assert) {
+    // The ceiling has to bind what the entry runs against, and after a hop
+    // that is not what the filter matched. One matched card carrying a
+    // collection larger than the whole bound is the sharpest case: the search
+    // returned a single row, so a bound checked only on the matches passes it.
+    let attendees: Record<string, Relationship> = {};
+    for (let index = 0; index < SERVER_ABSOLUTE_MAX_PAGE_SIZE + 1; index++) {
+      attendees[`attendees.${index}`] = {
+        links: { self: `${REALM}people/${index}` },
+      };
+    }
+    let stubbed = stub({
+      matches: [`${REALM}activities/a`],
+      cards: {
+        [`${REALM}activities/a`]: {
+          adoptsFrom: ACTIVITY,
+          relationships: attendees,
+        },
+      },
+      fields: { attendees: { type: 'linksToMany' } },
+    });
+    let error = await refusal(() =>
+      resolve(
+        stubbed,
+        invoke({
+          'boxel:target': {
+            query: openActivities(),
+            field: 'attendees',
+            expect: 'many',
+          },
+        }),
+      ),
+    );
+    assert.strictEqual(error.status, 400);
+    assert.true(
+      error.detail?.includes(`${SERVER_ABSOLUTE_MAX_PAGE_SIZE} cards`),
+      `names the bound: ${error.detail}`,
+    );
+    assert.strictEqual(error.meta?.entry, 0);
+  });
+
+  test('a hop landing exactly on the ceiling is carried out', async function (assert) {
+    // The control, so the bound is a ceiling rather than an off-by-one that
+    // refuses the largest hop the realm does allow.
+    let attendees: Record<string, Relationship> = {};
+    for (let index = 0; index < SERVER_ABSOLUTE_MAX_PAGE_SIZE; index++) {
+      attendees[`attendees.${index}`] = {
+        links: { self: `${REALM}people/${index}` },
+      };
+    }
+    let stubbed = stub({
+      matches: [`${REALM}activities/a`],
+      cards: {
+        [`${REALM}activities/a`]: {
+          adoptsFrom: ACTIVITY,
+          relationships: attendees,
+        },
+      },
+      fields: { attendees: { type: 'linksToMany' } },
+    });
+    let tree = await resolve(
+      stubbed,
+      invoke({
+        'boxel:target': {
+          query: openActivities(),
+          field: 'attendees',
+          expect: 'many',
+        },
+      }),
+    );
+    assert.strictEqual(
+      membersOf(tree[0]).length,
+      SERVER_ABSOLUTE_MAX_PAGE_SIZE,
+    );
+  });
+
+  test('cards reached down several matches count once against the ceiling', async function (assert) {
+    // Dedupe happens before the bound, so a convergent hop is not refused for
+    // reaching the same card repeatedly.
+    let shared = `${REALM}classrooms/maths`;
+    let cards: Record<
+      string,
+      {
+        adoptsFrom: typeof ACTIVITY;
+        relationships: Record<string, Relationship>;
+      }
+    > = {};
+    let matches: string[] = [];
+    for (let index = 0; index < 50; index++) {
+      let url = `${REALM}activities/${index}`;
+      matches.push(url);
+      cards[url] = {
+        adoptsFrom: ACTIVITY,
+        relationships: { classroom: { links: { self: shared } } },
+      };
+    }
+    let stubbed = stub({
+      matches,
+      cards,
+      fields: { classroom: { type: 'linksTo' } },
+    });
+    let tree = await resolve(
+      stubbed,
+      invoke({
+        'boxel:target': {
+          query: openActivities(),
+          field: 'classroom',
+          expect: 'many',
+        },
+      }),
+    );
+    assert.deepEqual(
+      membersOf(tree[0]).map((entry) => entry.href),
+      [shared],
+      'fifty matches over one classroom is one target',
+    );
+  });
+
   module('a batch with more than one query target', function () {
     test('the earliest entry the caller got wrong is the one reported', async function (assert) {
       // Both query entries are wrong, and the earliest one is the answer — so

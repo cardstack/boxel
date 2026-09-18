@@ -744,6 +744,36 @@ interface StagingRun {
 // bundle is not.
 const DEFAULT_STAGING_WIDTH = 8;
 
+// Every item's outcome, with at most `width` of them in flight at a time.
+//
+// `Promise.allSettled` over a mapped array is the shape this replaces, and the
+// two differ only in how many run at once: results still sit at their item's
+// index, and a rejection is still carried rather than thrown, so the earliest
+// refusal in request order is the one the caller is told about however the
+// work interleaved.
+export async function settledWithin<T, R>(
+  width: number,
+  items: readonly T[],
+  run: (item: T) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  let outcomes: PromiseSettledResult<R>[] = new Array(items.length);
+  let next = 0;
+  let worker = async () => {
+    while (next < items.length) {
+      let at = next++;
+      try {
+        outcomes[at] = { status: 'fulfilled', value: await run(items[at]) };
+      } catch (reason: unknown) {
+        outcomes[at] = { status: 'rejected', reason };
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(width, items.length) }, worker),
+  );
+  return outcomes;
+}
+
 export const STAGING_WIDTH = ((): number => {
   let raw =
     typeof process !== 'undefined'

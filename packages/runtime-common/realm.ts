@@ -228,6 +228,7 @@ import {
   type ResolvedEnvelopeEntry,
 } from './card-operations/envelope.ts';
 import { resolveQueryTargets } from './card-operations/find-targets.ts';
+import { settledWithin, STAGING_WIDTH } from './card-operations/coordinator.ts';
 import {
   OperationFailure,
   isDocumentResult,
@@ -4490,8 +4491,16 @@ export class Realm {
     // one the caller got wrong rather than whichever index read came back
     // first. A batch with two bad entries would otherwise report a different
     // one run to run.
-    let outcomes = await Promise.allSettled(
-      entries.map((entry) => this.#resolveEnvelopeEntry(entry, scope)),
+    //
+    // Bounded at the width staging is bounded at. Resolving an entry reads the
+    // target's index row, and how many entries a batch holds is the caller's
+    // number — a query target makes it one a small envelope can choose, since
+    // one entry expanding into its ceiling of targets arrives here as that many
+    // entries, each a distinct card and so each its own read. Unbounded, a
+    // batch would put that many point reads on the pool at once and reach the
+    // staging limiter only after the pool was already spent.
+    let outcomes = await settledWithin(STAGING_WIDTH, entries, (entry) =>
+      this.#resolveEnvelopeEntry(entry, scope),
     );
     let refused = outcomes.find((outcome) => outcome.status === 'rejected');
     if (refused) {

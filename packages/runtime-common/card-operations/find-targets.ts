@@ -12,7 +12,7 @@ import {
 import type { EntryCollectionDocument } from '../document-types.ts';
 import type { CardResource, Relationship } from '../resource-types.ts';
 import { OperationFailure, type EntryPosition } from './types.ts';
-import { STAGING_WIDTH } from './coordinator.ts';
+import { settledWithin, STAGING_WIDTH } from './coordinator.ts';
 import type { OperationCore, OperationScope } from './dispatch.ts';
 import {
   invocationsIn,
@@ -151,36 +151,6 @@ function foundPosition(parent: EntryPosition, index: number): EntryPosition {
   return `${prefix}.boxel:target[${index}]`;
 }
 
-// Every item's outcome, with at most `width` of them in flight at a time.
-//
-// `Promise.allSettled` over a mapped array is the shape this replaces, and the
-// two differ only in how many run at once: results still sit at their item's
-// index, and a rejection is still carried rather than thrown, so the earliest
-// refusal in request order is the one the caller is told about however the
-// work interleaved.
-async function settledWithin<T, R>(
-  width: number,
-  items: readonly T[],
-  run: (item: T) => Promise<R>,
-): Promise<PromiseSettledResult<R>[]> {
-  let outcomes: PromiseSettledResult<R>[] = new Array(items.length);
-  let next = 0;
-  let worker = async () => {
-    while (next < items.length) {
-      let at = next++;
-      try {
-        outcomes[at] = { status: 'fulfilled', value: await run(items[at]) };
-      } catch (reason: unknown) {
-        outcomes[at] = { status: 'rejected', reason };
-      }
-    }
-  };
-  await Promise.all(
-    Array.from({ length: Math.min(width, items.length) }, worker),
-  );
-  return outcomes;
-}
-
 // The tree with each query target replaced by what it resolved to.
 function substitute(
   nodes: readonly EnvelopeNode[],
@@ -233,9 +203,26 @@ async function resolveOne(
   let reached = new Set<string>();
   for (let match of urls) {
     for (let target of await hop(entry, find, match, context)) {
-      if (!reached.has(target)) {
-        reached.add(target);
-        targets.push(target);
+      if (reached.has(target)) {
+        continue;
+      }
+      reached.add(target);
+      targets.push(target);
+      // The ceiling has to bind what the entry runs against, which after a
+      // hop is not what the filter matched. A `linksToMany` multiplies: one
+      // matched card can carry more members than the whole bound, and a full
+      // page of matches can fan out to many times it — so a bound checked
+      // only on the matches is not a bound on the batch at all. Checked as
+      // the set grows rather than after it is built, so an expansion that
+      // cannot be carried out is refused before the memory for it is spent.
+      if (targets.length > EXPANSION_CEILING) {
+        throw refuse(
+          `entry ${entry.position} follows "${find.field}" from the cards ` +
+            `its query matched, and reaches more than the ` +
+            `${EXPANSION_CEILING} cards this endpoint expands into one ` +
+            `batch; narrow the filter, or follow the link from fewer cards`,
+          entry.position,
+        );
       }
     }
   }
@@ -335,12 +322,11 @@ async function runFilter(
   // that bound is the right one to borrow rather than a number invented here,
   // and it is already an operator's to tune. One row beyond it is requested so
   // that going over is visible in the rows themselves.
-  let ceiling = SERVER_ABSOLUTE_MAX_PAGE_SIZE;
   let wire: SearchEntryWireQuery = {
     filter: find.query,
     scope: 'cards',
     fields: { entry: [IDENTITY_FIELDSET] },
-    page: { size: find.expect === 'one' ? 2 : ceiling + 1 },
+    page: { size: find.expect === 'one' ? 2 : EXPANSION_CEILING + 1 },
   };
   let marker = markerIn(find.query);
   if (marker) {
@@ -402,21 +388,29 @@ async function runFilter(
     throw err;
   }
   let urls = doc.data.map((match) => match.id);
-  if (urls.length > ceiling) {
+  if (urls.length > EXPANSION_CEILING) {
     // Refused rather than truncated. A caller that asked to run against every
     // card answering a filter, and is silently given the first few hundred,
     // is told its batch succeeded — so the entries it thinks it wrote are the
     // ones it will not go looking for.
     throw refuse(
       `entry ${entry.position} describes the card it runs against with a ` +
-        `query, and more than the ${ceiling} cards this endpoint expands ` +
-        `into one batch answer to it; narrow the filter, or send the ` +
-        `targets as entries of their own`,
+        `query, and more than the ${EXPANSION_CEILING} cards this ` +
+        `endpoint expands into one batch answer to it; narrow the filter, ` +
+        `or send the targets as entries of their own`,
       entry.position,
     );
   }
   return { urls, total: doc.meta.page.total };
 }
+
+// How many cards one entry may expand into.
+//
+// Borrowed rather than invented: it is the size no item-leg search may exceed
+// however deliberately it asks — the realm's own statement of the most rows
+// one request may materialize — and an expansion is one staged entry per row.
+// Already an operator's to tune, through the same env var.
+const EXPANSION_CEILING = SERVER_ABSOLUTE_MAX_PAGE_SIZE;
 
 // The names a declared query's markers are written under, and the members one
 // carries besides `$ref`. Read off the resolver those markers go through, so
