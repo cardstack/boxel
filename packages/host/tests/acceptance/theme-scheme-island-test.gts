@@ -149,10 +149,7 @@ module('Acceptance | theme scheme islands', function (hooks) {
     let loader = getService('loader-service').loader;
     let cardApi: typeof import('@cardstack/base/card-api') =
       await loader.import('@cardstack/base/card-api');
-    let stringMod: typeof import('@cardstack/base/string') =
-      await loader.import('@cardstack/base/string');
-    let { field, contains, linksTo, CardDef, Component } = cardApi;
-    let { default: StringField } = stringMod;
+    let { field, linksTo, CardDef, Component } = cardApi;
 
     // Shows the variables each palette defines, painted with themselves, so the
     // scheme in effect can be read off the rendered card.
@@ -192,27 +189,17 @@ module('Acceptance | theme scheme islands', function (hooks) {
 
     class SchemeIslandCard extends CardDef {
       static displayName = 'Scheme Island Card';
-      // 'light' or 'dark': stamped on the card's own root, so one instance
-      // renders as a light-mode card and another as a dark-mode card
-      @field mode = contains(StringField);
       @field nested = linksTo(CardDef);
 
       static isolated = class Isolated extends Component<typeof this> {
         <template>
-          <BoxelContainer
-            @display='grid'
-            data-theme={{@model.mode}}
-            data-test-scheme-island-root
-          >
+          {{! The card root follows the ambient scheme: a card cannot switch
+              the scheme of its own container, only of islands inside it }}
+          <BoxelContainer @display='grid' data-test-scheme-island-root>
             <header aria-label='Card'>
-              <Pill class='mode-pill' @variant='primary'>
-                <@fields.mode />
-                Mode
-              </Pill>
+              <Pill @variant='primary'>Ambient</Pill>
               <h2>Scheme Island Card</h2>
-              <p>Expected: Soft Pop theme,
-                <@fields.mode />
-                mode (stamped on the card root)</p>
+              <p>Expected: Soft Pop theme, the page's scheme (light in tests)</p>
               <div
                 role='group'
                 aria-label='Sample buttons'
@@ -291,9 +278,6 @@ module('Acceptance | theme scheme islands', function (hooks) {
               background-color: var(--card);
               color: var(--card-foreground);
               border-radius: var(--radius);
-            }
-            .mode-pill {
-              text-transform: capitalize;
             }
             header {
               display: grid;
@@ -391,7 +375,7 @@ module('Acceptance | theme scheme islands', function (hooks) {
               },
             },
           },
-          'scheme-island-light.json': {
+          'scheme-island.json': {
             data: {
               meta: {
                 adoptsFrom: {
@@ -401,31 +385,7 @@ module('Acceptance | theme scheme islands', function (hooks) {
               },
               type: 'card',
               attributes: {
-                cardInfo: { name: 'Scheme Island (light)' },
-                mode: 'light',
-              },
-              relationships: {
-                'cardInfo.theme': {
-                  links: { self: `${testRealmURL}soft-pop-theme` },
-                },
-                nested: {
-                  links: { self: `${testRealmURL}scheme-island-nested` },
-                },
-              },
-            },
-          },
-          'scheme-island-dark.json': {
-            data: {
-              meta: {
-                adoptsFrom: {
-                  name: 'SchemeIslandCard',
-                  module: `${testRealmURL}scheme-island-card`,
-                },
-              },
-              type: 'card',
-              attributes: {
-                cardInfo: { name: 'Scheme Island (dark)' },
-                mode: 'dark',
+                cardInfo: { name: 'Scheme Island' },
               },
               relationships: {
                 'cardInfo.theme': {
@@ -463,7 +423,7 @@ module('Acceptance | theme scheme islands', function (hooks) {
   });
 
   test('dark mode variables apply inside a dark island the card template stamps', async function (assert) {
-    let cardId = `${testRealmURL}scheme-island-light`;
+    let cardId = `${testRealmURL}scheme-island`;
     await visitOperatorMode({
       stacks: [[{ id: cardId, format: 'isolated' }]],
     });
@@ -472,7 +432,7 @@ module('Acceptance | theme scheme islands', function (hooks) {
     assert.strictEqual(
       computedProperty(rootSelector, '--primary'),
       SOFT_POP_ROOT_VARS.primary,
-      'the light mode card root resolves the root variables',
+      'the card root follows the ambient light scheme',
     );
     assert.strictEqual(
       computedProperty(islandSelector, '--primary'),
@@ -497,38 +457,8 @@ module('Acceptance | theme scheme islands', function (hooks) {
     assertChromeKnobsReset(assert, islandSelector);
   });
 
-  test('root variables apply inside a light island of a dark mode card', async function (assert) {
-    let cardId = `${testRealmURL}scheme-island-dark`;
-    await visitOperatorMode({
-      stacks: [[{ id: cardId, format: 'isolated' }]],
-    });
-    let rootSelector = `[data-test-card="${cardId}"] [data-test-scheme-island-root]`;
-    let islandSelector = `${rootSelector} [data-test-light-island]`;
-    assert.strictEqual(
-      computedProperty(rootSelector, '--primary'),
-      SOFT_POP_DARK_VARS.primary,
-      'the dark mode card root resolves the dark variables',
-    );
-    assert.strictEqual(
-      computedProperty(islandSelector, '--primary'),
-      SOFT_POP_ROOT_VARS.primary,
-      'the root --primary applies inside the light island',
-    );
-    assert.strictEqual(
-      computedProperty(islandSelector, '--card'),
-      SOFT_POP_ROOT_VARS.card,
-      'the root --card applies inside the light island',
-    );
-    assert.strictEqual(
-      computedProperty(islandSelector, '--canvas'),
-      BOXEL_CANVAS_LIGHT,
-      'a token the theme omits resolves to the boxel light default inside the island',
-    );
-    assertChromeKnobsReset(assert, islandSelector);
-  });
-
   test('islands nest and switch back, by attribute or by the dark class', async function (assert) {
-    let cardId = `${testRealmURL}scheme-island-light`;
+    let cardId = `${testRealmURL}scheme-island`;
     await visitOperatorMode({
       stacks: [[{ id: cardId, format: 'isolated' }]],
     });
@@ -560,7 +490,7 @@ module('Acceptance | theme scheme islands', function (hooks) {
   });
 
   test('a nested themed card follows the surrounding island with its own palette', async function (assert) {
-    let cardId = `${testRealmURL}scheme-island-light`;
+    let cardId = `${testRealmURL}scheme-island`;
     let nestedId = `${testRealmURL}scheme-island-nested`;
     await visitOperatorMode({
       stacks: [[{ id: cardId, format: 'isolated' }]],
@@ -591,7 +521,7 @@ module('Acceptance | theme scheme islands', function (hooks) {
   });
 
   test('an island stamped by a nested themed card gets the nested theme, not the outer one', async function (assert) {
-    let cardId = `${testRealmURL}scheme-island-light`;
+    let cardId = `${testRealmURL}scheme-island`;
     let nestedId = `${testRealmURL}scheme-island-nested`;
     await visitOperatorMode({
       stacks: [[{ id: cardId, format: 'isolated' }]],
