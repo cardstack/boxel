@@ -1,3 +1,4 @@
+import { configureLatticeTrace } from '@cardstack/runtime-common/lattice-trace';
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import { basename } from 'node:path';
 import QUnit from 'qunit';
@@ -124,6 +125,7 @@ module(basename(import.meta.filename), function (hooks) {
     },
   });
   hooks.afterEach(async () => {
+    configureLatticeTrace();
     await worker.close();
   });
 
@@ -302,6 +304,40 @@ module(basename(import.meta.filename), function (hooks) {
       });
     return result;
   }
+
+  test('tracing a real native visit preserves its card and emits only fingerprints of values', async (assert) => {
+    const first = await visit(
+      await writer.createBatch(new URL(realm), network),
+    );
+    const events: Record<string, any>[] = [];
+    configureLatticeTrace({
+      identity: 'test',
+      hash,
+      write: (e) => events.push(e),
+    });
+    const second = await visit(
+      await writer.createBatch(new URL(realm), network),
+    );
+    assert.deepEqual(second.card?.searchDoc, first.card?.searchDoc);
+    assert.deepEqual(second.card?.serialized, first.card?.serialized);
+    assert.true(
+      events.some(
+        (e) => e.event === 'evaluation-input' && e.inputHash?.length === 64,
+      ),
+    );
+    assert.true(
+      events.some(
+        (e) => e.event === 'native-result' && e.outputHash?.length === 64,
+      ),
+    );
+    assert.true(
+      events.some((e) => e.event === 'finish' && e.outcome === 'computed'),
+    );
+    assert.false(
+      JSON.stringify(events).includes('"amount":3'),
+      'source values are absent',
+    );
+  });
 
   test('a reviewed source publishes card and file together without entering the browser', async (assert) => {
     nativeFile = true;

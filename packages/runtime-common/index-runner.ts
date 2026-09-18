@@ -1,3 +1,8 @@
+import {
+  startLatticeTrace,
+  latticeAttemptId,
+  type LatticeTrace,
+} from './lattice-trace.ts';
 import { ignore, type Ignore } from './ignore.ts';
 import type { LatticeIndexPublication } from './lattice-index-publication.ts';
 import type { LatticeInputSnapshot } from './lattice-materialization.ts';
@@ -932,8 +937,19 @@ export class IndexRunner {
     let publication = this.#lattice;
     if (!publication) return [];
     let startedAt = Date.now();
+    const waveTrace = startLatticeTrace(
+      `wave:${this.#jobInfo.jobId}:${this.#jobInfo.reservationId}`,
+      'wave',
+      {
+        realmURL: this.realmURL.href,
+        job: this.#jobInfo.jobId,
+        reservation: this.#jobInfo.reservationId,
+      },
+    );
+    waveTrace?.stage('readiness');
     let published = new Set<string>();
     const ownerBatches = new Set<Batch>();
+    const attemptTraces = new Set<LatticeTrace>();
     const serviceState = followup
       ? ((await publication.registry.schedulingState(this.realmURL.href)) ?? {
           version: 1 as const,
@@ -944,8 +960,10 @@ export class IndexRunner {
       ? await publication.registry.ready(this.realmURL.href, {
           overdueOnly: followup.overdueOnly,
           candidates: { limit: 24, state: serviceState! },
+          trace: waveTrace,
         })
       : await publication.registry.pending(this.realmURL.href);
+    waveTrace?.stage('execute-wave');
     if (followup)
       this.#log.debug(
         `${jobIdentity(this.#jobInfo)} Lattice ready frontier: ${Date.now() - startedAt}ms, ${pending.length} eligible owners`,
@@ -1014,6 +1032,7 @@ export class IndexRunner {
         let withheld = 0;
         const completedOwners: string[] = [];
         const reading = new LatticeReadBarrier();
+        const traces = new Map<string, LatticeTrace>();
         let failures: string[] = [];
         // Bookkeeping and row writes are serialized in completion order; only
         // the render half of a visit overlaps.
@@ -1051,6 +1070,24 @@ export class IndexRunner {
                 generation: ownerBatch.currentGeneration - 1,
               }
             : inputSnapshot;
+          const trace = startLatticeTrace(
+            latticeAttemptId(ownerURL, ownerBatch.currentGeneration),
+            'owner',
+            {
+              ownerURL,
+              wave: waveTrace?.id,
+              obligation: generation,
+              codeVersion,
+              stale: Boolean(stale),
+              inputGeneration: ownerSnapshot.generation,
+            },
+          );
+          if (trace) {
+            traces.set(ownerURL, trace);
+            attemptTraces.add(trace);
+          }
+          trace?.entries('pending-inputs', pendingInputURLs ?? []);
+          trace?.stage('admission');
           const work: LatticeScheduledWork = {
             realmURL: this.realmURL.href,
             actor: this.#realmOwnerUserId,
@@ -1088,6 +1125,7 @@ export class IndexRunner {
                 })
             : undefined;
           if (admit) await admit();
+          trace?.stage('render');
           let warmMs = 0;
           let outcome = await this.#renderVisit(
             new URL(ownerURL),
@@ -1108,6 +1146,7 @@ export class IndexRunner {
             { stale, batch: ownerBatch, inputSnapshot: ownerSnapshot },
           );
           reading.end(ownerURL);
+          trace?.stage('continuation-check');
           if (check) await check();
           if (
             outcome.status === 'error' &&
@@ -1145,10 +1184,13 @@ export class IndexRunner {
               );
               if (recorded) recordedFailures++;
             }
+            trace?.finish('failed');
             return;
           }
           const rendered = outcome.result;
+          trace?.stage('finish-queue');
           const finish = finishing.then(async () => {
+            trace?.stage('finish-visit');
             if (streamPublications) {
               this.#batch = ownerBatch;
               this.#dependencyResolver.reset();
@@ -1165,7 +1207,9 @@ export class IndexRunner {
               this.#latticeTimings.latticeFinishVisitMs +=
                 Date.now() - finishStartedAt;
               if (streamPublications) {
+                trace?.stage('input-barrier');
                 await reading.beforePublish(ownerURL);
+                trace?.stage('publication');
                 const swapStartedAt = Date.now();
                 await this.batch.done({
                   lattice: publication,
@@ -1179,6 +1223,13 @@ export class IndexRunner {
                 if (!this.batch.latticeRetainedOutputs.has(ownerURL))
                   published.add(ownerURL);
               }
+              trace?.stage('batch-publication-wait');
+              if (streamPublications)
+                trace?.finish(
+                  this.batch.latticeRetainedOutputs.has(ownerURL)
+                    ? 'retained'
+                    : 'published',
+                );
               completedOwners.push(ownerURL);
               succeeded++;
               this.#latticeTimings.latticeOwnersRendered++;
@@ -1206,6 +1257,21 @@ export class IndexRunner {
               try {
                 await materializeOwner(next);
               } catch (error) {
+                traces
+                  .get(next.ownerURL)
+                  ?.finish(
+                    error instanceof LatticeInputsPending
+                      ? 'withheld'
+                      : error instanceof LatticeWorkSuperseded
+                        ? 'superseded'
+                        : 'error',
+                    {
+                      reason:
+                        error instanceof LatticeWorkSuperseded
+                          ? error.reason
+                          : undefined,
+                    },
+                  );
                 if (error instanceof LatticeInputsPending) {
                   withheld++;
                   continue;
@@ -1250,7 +1316,18 @@ export class IndexRunner {
         this.#latticeTimings.latticeOwnersDeferred += scheduler
           ? scheduler.remaining
           : queue.length;
-        if (superseded) throw superseded;
+        if (waveTrace)
+          waveTrace.entries(
+            'deferred',
+            pending
+              .filter((row) => !traces.has(row.ownerURL))
+              .map((row) => row.ownerURL),
+          );
+        if (superseded) {
+          for (const trace of traces.values())
+            trace.finish('superseded', { reason: superseded.reason });
+          throw superseded;
+        }
         this.#latticeTimings.latticeRenderMs +=
           Date.now() -
           renderStartedAt -
@@ -1266,13 +1343,34 @@ export class IndexRunner {
         }
         if (!streamPublications) {
           let swapStartedAt = Date.now();
-          await this.batch.done({
-            lattice: publication,
-            latticeInputGeneration: this.#inputSnapshot.generation,
-            latticeFollowup: followup,
-            countIndexEntries: false,
-          });
+          for (const trace of traces.values())
+            trace.stage('publication-shared');
+          try {
+            await this.batch.done({
+              lattice: publication,
+              latticeInputGeneration: this.#inputSnapshot.generation,
+              latticeFollowup: followup,
+              countIndexEntries: false,
+            });
+          } catch (error) {
+            for (const trace of traces.values())
+              trace.finish('publication-rejected', {
+                reason:
+                  error instanceof LatticeWorkSuperseded
+                    ? error.reason
+                    : undefined,
+              });
+            throw error;
+          }
           await this.batch.discardLatticeCandidates();
+          for (const ownerURL of completedOwners)
+            traces
+              .get(ownerURL)
+              ?.finish(
+                this.batch.latticeRetainedOutputs.has(ownerURL)
+                  ? 'retained'
+                  : 'published',
+              );
           for (const ownerURL of completedOwners)
             if (!this.batch.latticeRetainedOutputs.has(ownerURL))
               published.add(ownerURL);
@@ -1289,12 +1387,16 @@ export class IndexRunner {
         throw new Error(
           'Lattice feeder graph did not converge; owners remain pending',
         );
+      waveTrace?.event('published', { owners: [...published] });
       return [...published].map((url) => new URL(url));
     } finally {
       await this.#batch?.discardLatticeCandidates();
       for (const batch of ownerBatches) await batch.discardLatticeCandidates();
       this.#inputSnapshot = undefined;
       this.#latticeTimings.latticeMaterializationMs += Date.now() - startedAt;
+      for (const trace of attemptTraces)
+        trace.finish('wave-ended-without-publication');
+      waveTrace?.finish('closed', { published: published.size });
     }
   }
 

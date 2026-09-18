@@ -1,4 +1,6 @@
 import { readFile, stat } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { configureLatticeTrace } from '@cardstack/runtime-common/lattice-trace';
 import type { DBAdapter, VirtualNetwork } from '@cardstack/runtime-common';
 import { LatticeBxlWorker } from './lattice-bxl-derivation.ts';
 import { LatticeMaterializationInputs } from './lattice-materialization-inputs.ts';
@@ -27,6 +29,26 @@ export async function createLatticeNativeWorker({
   reviewFile: string;
   runtimeRevision: string | undefined;
 }) {
+  if (process.env.LATTICE_TRACE === '1') {
+    let events = 0;
+    configureLatticeTrace({
+      identity: `pid-${process.pid}`,
+      hash: (text) => createHash('sha256').update(text).digest('hex'),
+      write: (event) => {
+        // Bound diagnostic volume per process. A dropped marker invalidates
+        // complete accounting; the report must not silently extrapolate.
+        if (++events > 100_000) {
+          if (events === 100_001)
+            console.warn(
+              'LATTICE_TRACE ' +
+                JSON.stringify({ event: 'dropped', pid: process.pid }),
+            );
+          return;
+        }
+        console.warn('LATTICE_TRACE ' + JSON.stringify(event));
+      },
+    });
+  }
   if (!runtimeRevision)
     throw new Error('Native worker requires a runtime revision');
   const info = await stat(reviewFile);

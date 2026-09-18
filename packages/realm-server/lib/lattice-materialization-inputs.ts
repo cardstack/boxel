@@ -1,3 +1,4 @@
+import type { LatticeTrace } from '@cardstack/runtime-common/lattice-trace';
 import {
   LATTICE_RETAINED_LINK_LIMIT,
   type LatticeIndexedSnapshotInput,
@@ -272,6 +273,7 @@ export class LatticeMaterializationInputs {
     );
   }
   #db: DBAdapter;
+  trace?: LatticeTrace;
   #frame: Frame;
   #engine: IndexQueryEngine;
   #cards = new Map<string, LatticeLinkInput>();
@@ -377,10 +379,12 @@ export class LatticeMaterializationInputs {
     }
     this.#busy = true;
     try {
+      const guardStart = performance.now();
       await checkFrame(
         (expression) => query(this.#db, expression),
         this.#frame,
       );
+      this.trace?.event('frame-guard', { ms: performance.now() - guardStart });
       this.#signal?.throwIfAborted();
       const result = await work();
       this.#signal?.throwIfAborted();
@@ -388,6 +392,11 @@ export class LatticeMaterializationInputs {
     } catch (error) {
       // Catching a missing/oversize input must never turn it into a published
       // zero or empty list. The whole computation loses publication eligibility.
+      this.trace?.event('input-failed', {
+        reason:
+          error instanceof LatticeInputsPending ? error.reason : undefined,
+        errorClass: error instanceof Error ? error.name : 'unknown',
+      });
       this.#failed = true;
       throw error;
     } finally {
@@ -418,6 +427,7 @@ export class LatticeMaterializationInputs {
         this.#watches.size >= LatticeMaterializationInputs.MAX_QUERIES
       )
         throw new Error('Lattice query paths must be unique and bounded');
+      const guardStart = performance.now();
       const typeScope = await this.#engine.latticeQueryTypeScope(input.filter);
       const sourceScope = await latticeQueryReadinessScope(
         input.filter,
@@ -440,11 +450,22 @@ export class LatticeMaterializationInputs {
         );
         this.#queryScopes.set(scopeKey, scopes);
       }
+      this.trace?.event('query-guard', {
+        field: fieldPath,
+        ms: performance.now() - guardStart,
+      });
       const membershipStart = performance.now();
       let result = await this.#engine.latticeQueryIdentities(
         new URL(this.#frame.realmURL),
         input,
       );
+      this.trace?.event('membership', {
+        field: fieldPath,
+        queryHash: this.trace.hash(JSON.stringify([input, policy?.where])),
+        membershipHash: this.trace.hash(JSON.stringify(result.urls)),
+        cards: result.urls.length,
+        ms: performance.now() - membershipStart,
+      });
       const readStart = performance.now();
       let cards = await this.#read(result.urls, false, policy?.where);
       const phases = {
@@ -586,6 +607,12 @@ export class LatticeMaterializationInputs {
     if (!allowMissing && urls.some((url) => store.get(url)?.resource === null))
       throw new Error('Lattice card input is failed, future or oversized');
     let missing = [...new Set(urls)].filter((url) => !store.has(url));
+    this.trace?.event('input-cache', {
+      requested: urls.length,
+      unique: new Set(urls).size,
+      missing: missing.length,
+      representation: this.trace.hash(JSON.stringify(where ?? null)),
+    });
     if (
       this.#readCount + missing.length >
       LatticeMaterializationInputs.MAX_CARDS
@@ -593,6 +620,7 @@ export class LatticeMaterializationInputs {
       throw new Error('Lattice input frame exceeds card bound');
     if (missing.length) {
       // Inspect lengths and freshness before the pg driver receives any body.
+      const headerStart = performance.now();
       let headers = await query(this.#db, [
         `SELECT i.url,i.xmin::text AS version,i.generation,
           i.xmin::text || ':' || i.cmin::text || ':' || i.ctid::text AS row_version,
@@ -621,6 +649,10 @@ export class LatticeMaterializationInputs {
         textArrayParam(missing),
         '::text[])',
       ]);
+      this.trace?.event('input-headers', {
+        ms: performance.now() - headerStart,
+        cards: headers.length,
+      });
       let receipts: InputReceipt[] = headers.map((row) => {
         let generation = Number(row.generation),
           bytes = Number(row.bytes);
@@ -712,6 +744,7 @@ export class LatticeMaterializationInputs {
       }
       this.#signal?.throwIfAborted();
       const present = receipts.filter((receipt) => !receipt.missing);
+      const bodyStart = performance.now();
       let rows = present.length
         ? await query(this.#db, [
             `SELECT i.url,CASE WHEN i.xmin::text=e.version THEN (`,
@@ -728,12 +761,18 @@ export class LatticeMaterializationInputs {
             "AND i.type='instance'",
           ])
         : [];
+      this.trace?.event('input-bodies', {
+        ms: performance.now() - bodyStart,
+        cards: rows.length,
+        bytes,
+      });
       this.#signal?.throwIfAborted();
       if (
         rows.length !== present.length ||
         rows.some((row) => typeof row.body !== 'string')
       )
         throw new LatticeInputsPending('Lattice input changed during read');
+      const parseStart = performance.now();
       let bodies = new Map(rows.map((row) => [row.url, row.body as string]));
       for (let receipt of receipts) {
         // One frame, one version of a card: a card read whole by one root
@@ -767,6 +806,24 @@ export class LatticeMaterializationInputs {
         });
         this.#receipts.set(receipt.url, receipt);
       }
+      this.trace?.event('input-parse', {
+        ms: performance.now() - parseStart,
+        cards: receipts.length,
+        bytes,
+      });
+      if (this.trace)
+        this.trace.entries(
+          'input-receipts',
+          receipts.map((r) => ({
+            url: r.url,
+            version: r.version,
+            rowVersion: r.rowVersion,
+            definition: r.definitionSeal,
+            bytes: r.bytes,
+            missing: r.missing,
+            representation: this.trace!.hash(JSON.stringify(where ?? null)),
+          })),
+        );
       this.#bytes += bytes;
     }
     return urls.map((url) => structuredClone(store.get(url)!));

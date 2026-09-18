@@ -1,3 +1,8 @@
+import {
+  startLatticeTrace,
+  latticeAttemptId,
+  type LatticeTrace,
+} from '@cardstack/runtime-common/lattice-trace';
 import type { LatticeProjectionWhere } from '@cardstack/runtime-common/definitions';
 import { createHash } from 'node:crypto';
 import type { CodeRef, RenderResponse } from '@cardstack/runtime-common';
@@ -6,6 +11,7 @@ import type { Querier } from '@cardstack/runtime-common/expression';
 import type {
   LatticeNativeCardIndexer,
   LatticeNativeCardIndexRequest,
+  LatticeNativeCardIndexResult,
   LatticeInputStageTiming,
 } from '@cardstack/runtime-common/lattice-native-index';
 import { latticeSourceFields } from '@cardstack/runtime-common/lattice-query-readiness';
@@ -85,19 +91,49 @@ export function createLatticeNativeCardIndexer({
   ): Promise<LatticeLinkInput[]>;
 }): LatticeNativeCardIndexer {
   return async (request) => {
+    const trace = startLatticeTrace(
+      latticeAttemptId(request.url, request.generation),
+      'native',
+      {
+        ownerURL: request.url,
+        generation: request.generation,
+        stale: Boolean(request.inputSnapshot?.stale),
+        materializing: Boolean(request.inputSnapshot),
+      },
+    );
+    try {
+      return await execute(request, trace);
+    } catch (error) {
+      trace?.finish('rejected', {
+        errorClass: error instanceof Error ? error.name : 'unknown',
+      });
+      throw error;
+    } finally {
+      trace?.finish('closed');
+    }
+  };
+  async function execute(
+    request: LatticeNativeCardIndexRequest,
+    trace?: LatticeTrace,
+  ): Promise<LatticeNativeCardIndexResult | undefined> {
     const debug = Boolean(process.env.LATTICE_NATIVE_ADMISSION_DEBUG);
     const bail = (why: string) => {
+      trace?.finish('declined', { why });
       if (debug)
         console.warn(
           `native indexer: ${request.url} left the native path: ${why}`,
         );
       return undefined;
     };
+    trace?.stage('admission');
     const admissionStart = performance.now();
-    const admission = await admit(request);
+    const admission = await (trace
+      ? trace.measure('admit', () => admit(request))
+      : admit(request));
     if (!admission) {
       if (debug)
         console.warn(`native indexer: no admission for ${request.url}`);
+      trace?.finish('not-admitted');
       return undefined;
     }
     if (debug) console.warn(`native indexer: admitted ${request.url}`);
@@ -130,6 +166,12 @@ export function createLatticeNativeCardIndexer({
       throw new Error(
         'Native owner input revision does not match its publication',
       );
+    trace?.event('code', {
+      sourceHash,
+      definition: admission.root.revision,
+      runtimeRevision: admission.runtimeRevision,
+    });
+    trace?.stage('open-work');
     const workStart = performance.now();
     const work = request.inputSnapshot
       ? await openWork?.(request, admission)
@@ -137,9 +179,12 @@ export function createLatticeNativeCardIndexer({
     const workOpenedAt = performance.now();
     try {
       work?.signal.throwIfAborted();
+      trace?.stage('open-inputs');
       const inputFrame = request.inputSnapshot
         ? await openInputs!(request, admission, work?.signal)
         : undefined;
+      if (inputFrame) inputFrame.trace = trace;
+      trace?.stage('assembly');
       const inputsOpenedAt = performance.now();
       const inputStages: LatticeInputStageTiming[] = [];
       const inputDefinitions = new Map<
@@ -205,6 +250,7 @@ export function createLatticeNativeCardIndexer({
         lookup: admission.lookup,
         resolve: admission.resolve,
         worker,
+        trace,
         deferComputation: discovery,
         signal: work?.signal,
         ...linkInputs,
@@ -246,9 +292,11 @@ export function createLatticeNativeCardIndexer({
           : undefined;
       const serialized = result.serialized;
       work?.signal.throwIfAborted();
+      trace?.stage('query-preparation');
       const queryPreparationStart = performance.now();
       const dataReceipt = await inputFrame?.sealWithQueries();
       const queryPreparationMs = performance.now() - queryPreparationStart;
+      trace?.stage('output-assembly');
       const queryFields =
         dataReceipt?.watches.map((watch) => watch.fieldPath) ??
         (discovery
@@ -475,6 +523,21 @@ export function createLatticeNativeCardIndexer({
             : []),
         ],
       };
+      trace?.event('native-result', {
+        assembly: result.timings,
+        stages: inputStages,
+        omittedInputStages,
+        compute: result.computed,
+        outputHash: trace.hash(
+          JSON.stringify([
+            serialized.data.attributes,
+            serialized.data.relationships,
+          ]),
+        ),
+        validUntil: result.validUntil,
+        definitions: trace.hash(JSON.stringify(result.definitionRevisions)),
+      });
+      trace?.finish('computed');
       return {
         card,
         ...(dataReceipt?.retainedInputs.length
@@ -543,11 +606,23 @@ export function createLatticeNativeCardIndexer({
         assertCurrent: async (tx) => {
           // Admission handles queued-work priority. Publication depends on
           // actual source/code/input receipts, not the presence of another job.
-          await assertCurrent(tx, receipt);
-          await dataReceipt?.assertCurrent(tx);
+          if (trace) {
+            await trace.measure('publication-code-check', () =>
+              assertCurrent(tx, receipt),
+            );
+            await trace.measure('publication-input-check', async () => {
+              await dataReceipt?.assertCurrent(tx);
+            });
+          } else {
+            await assertCurrent(tx, receipt);
+            await dataReceipt?.assertCurrent(tx);
+          }
         },
       };
     } catch (error) {
+      trace?.finish('rejected', {
+        errorClass: error instanceof Error ? error.name : 'unknown',
+      });
       // An unknown declared target needs source authority, which the existing
       // browser producer can obtain. Never turn a cancelled work scope into a
       // fallback, and never return the native attempt's partial data/receipts.
@@ -561,5 +636,5 @@ export function createLatticeNativeCardIndexer({
     } finally {
       await work?.close();
     }
-  };
+  }
 }

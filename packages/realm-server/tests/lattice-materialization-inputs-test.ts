@@ -1,3 +1,8 @@
+import { createHash } from 'node:crypto';
+import {
+  configureLatticeTrace,
+  startLatticeTrace,
+} from '@cardstack/runtime-common/lattice-trace';
 import { LatticeRetainedSnapshots } from '@cardstack/runtime-common/lattice-retained-snapshots';
 import { basename } from 'node:path';
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
@@ -169,6 +174,47 @@ module(basename(import.meta.filename), function (hooks) {
         return execute(sql, opts);
       };
     },
+  });
+
+  test('input tracing distinguishes body fetch from same-frame reuse without changing data', async (assert) => {
+    await card('one', 11);
+    const input = await open();
+    const events: Record<string, any>[] = [];
+    configureLatticeTrace({
+      identity: 'test',
+      hash: (s) => createHash('sha256').update(s).digest('hex'),
+      write: (e) => events.push(e),
+    });
+    try {
+      input.trace = startLatticeTrace('input', 'native');
+      const query = {
+        filter: { on: codeRef, eq: { group: 'A' } },
+        page: { size: 10 },
+      };
+      const one = await input.query('first', query);
+      const two = await input.query('second', query);
+      assert.deepEqual(two.cards, one.cards);
+      assert.deepEqual(
+        events.filter((e) => e.event === 'input-cache').map((e) => e.missing),
+        [1, 0],
+      );
+      assert.strictEqual(
+        events.filter((e) => e.event === 'input-bodies').length,
+        1,
+      );
+      const memberships = events.filter((e) => e.event === 'membership');
+      assert.strictEqual(memberships.length, 2);
+      assert.strictEqual(
+        memberships[0].membershipHash,
+        memberships[1].membershipHash,
+      );
+      assert.true(
+        events.some((e) => e.event === 'input-receipts' && e.items[0].version),
+      );
+      assert.false(JSON.stringify(events).includes('"amount":11'));
+    } finally {
+      configureLatticeTrace();
+    }
   });
 
   test('query fields read published data with ordinary filtering, sorting and paging', async (assert) => {

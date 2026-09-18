@@ -1,3 +1,4 @@
+import type { LatticeTrace } from './lattice-trace.ts';
 import { LatticeStride, type LatticeServiceState } from './lattice-stride.ts';
 import { latticeConcurrencyGroup } from './jobs/lattice.ts';
 import { latticeDemandFor } from './lattice-demand.ts';
@@ -1133,12 +1134,26 @@ export class LatticeQueryRegistry
       // A queued wave only needs a bounded set of exact readiness proofs.
       // Full callers retain the complete graph (including cycle diagnosis).
       candidates?: { limit: number; state: LatticeServiceState };
+      trace?: LatticeTrace;
     },
   ) {
+    let phaseStarted = performance.now();
+    const phase = (name: string) => {
+      const now = performance.now();
+      opts?.trace?.event('readiness-phase', {
+        phase: name,
+        start: phaseStarted,
+        end: now,
+        ms: now - phaseStarted,
+      });
+      phaseStarted = now;
+    };
     const pending = await this.pending(realmURL);
+    phase('pending');
     if (!pending.length) return [];
     const runnableOwners = await this.pending(realmURL, { runnableOnly: true });
     const runnable = new Set(runnableOwners.map((owner) => owner.ownerURL));
+    phase('runnable');
     // Past its deadline an owner reads its dirty inputs' last published
     // bodies rather than waiting for them, so a dirty input does not block
     // it. An input that has never published has no last body to read: a
@@ -1179,6 +1194,7 @@ export class LatticeQueryRegistry
            AND (i.url IS NULL OR NOT codes.current)`,
           ])
         : [];
+    phase('unpublished-code');
     const neverPublished = new Set(
       unpublishedRows.map((row) => String(row.owner_url)),
     );
@@ -1220,6 +1236,7 @@ export class LatticeQueryRegistry
       param(realmURL),
       `AND i.type='instance' AND o.retired=FALSE AND o.dirty_generation IS NOT NULL`,
     ]);
+    phase('concrete-edges');
     for (const edge of edges)
       inputs.get(String(edge.owner_url))?.add(String(edge.input_url));
 
@@ -1234,6 +1251,7 @@ export class LatticeQueryRegistry
       ],
       { query: 'JSON' },
     );
+    phase('watches');
     for (const watch of watches) {
       const ids = latticeInputIdTerms({
         fieldPath: String(watch.field_path),
@@ -1288,6 +1306,7 @@ export class LatticeQueryRegistry
         }
         candidates.state.frontier = scanner.state;
       }
+      phase('candidate-selection');
       const scopes = new Map<
         string,
         { scope: Expression; owners: Set<string> }
@@ -1336,6 +1355,7 @@ export class LatticeQueryRegistry
       // A precise source partition gives each consumer its own scope. Batch them
       // so this does not turn one coarse type query into N database round trips.
       // This is a local pending frontier, not a global order of card definitions.
+      phase('compile-scopes');
       const groups = [...scopes.values()];
       for (let offset = 0; offset < groups.length; offset += 64) {
         const batch = groups.slice(offset, offset + 64);
@@ -1392,6 +1412,7 @@ export class LatticeQueryRegistry
             inputs.get(owner)?.add(String(row.owner_url));
         }
       }
+      phase('match-pending-inputs');
       if (!scanner || !scanner.remaining) break;
       // Expand only if this window found no useful work. Newly seen edges can
       // block a candidate but never hide all progress behind the probe cursor.
@@ -1454,6 +1475,35 @@ export class LatticeQueryRegistry
       const order = new Map([...inspected].map((id, i) => [id, i]));
       result.sort((a, b) => order.get(a.ownerURL)! - order.get(b.ownerURL)!);
       candidates.state.frontierReady = result.map((row) => row.ownerURL);
+    }
+    phase('frontier-assembly');
+    if (opts?.trace) {
+      opts.trace.event('frontier-counts', {
+        pending: pending.length,
+        runnable: runnable.size,
+        inspected: inspected.size,
+        ready: result.length,
+        watches: watches.length,
+        concreteEdges: edges.length,
+      });
+      const available = new Set(result.map((row) => row.ownerURL));
+      for (const owner of inspected) {
+        opts.trace.event('candidate', {
+          owner,
+          ready: available.has(owner),
+          overdue: overdue.has(owner),
+          demand: priorities.get(owner),
+          blockers: inputs.get(owner)?.size ?? 0,
+        });
+        opts.trace.entries(
+          'candidate-inputs',
+          [...(inputs.get(owner) ?? [])].map((input) => ({
+            owner,
+            input,
+            unpublished: neverPublished.has(input),
+          })),
+        );
+      }
     }
     return result;
   }

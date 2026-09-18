@@ -21,6 +21,7 @@ import {
 import { assertLatticeGeneration } from './lattice-materialization.ts';
 import { latticeOwnerDefinitionCurrent } from './lattice-code-reference.ts';
 import { logger } from './log.ts';
+import { latticeAttemptId, startLatticeTrace } from './lattice-trace.ts';
 import type {
   LatticeQueryRegistry,
   LatticeDocument,
@@ -667,6 +668,16 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
           retainsOutput = false;
           accepted = await publishOwner(false);
         }
+        // This is the transaction's candidate decision, not a committed
+        // publication. Trace consumers must also observe Batch.done succeeding.
+        startLatticeTrace(
+          latticeAttemptId(row.url, generation),
+          'publication',
+          { ownerURL: row.url, generation },
+        )?.finish(accepted ? 'accepted' : 'skipped', {
+          ready,
+          retainsOutput,
+        });
         if (!accepted) {
           {
             // An obsolete member must not discard a materialization wave --

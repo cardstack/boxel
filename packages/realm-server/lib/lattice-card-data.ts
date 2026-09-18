@@ -1,3 +1,4 @@
+import type { LatticeTrace } from '@cardstack/runtime-common/lattice-trace';
 import type { CodeRef } from '@cardstack/runtime-common';
 import type { LatticeCardAssemblyTimings } from '@cardstack/runtime-common/lattice-native-index';
 import type {
@@ -97,10 +98,12 @@ export async function assembleLatticeCardData({
   resolveLinkInputs,
   signal,
   deferComputation = false,
+  trace,
 }: {
   id: string;
   sourceRevision: string;
   sourceJSON: string;
+  trace?: LatticeTrace;
   root: LatticeDefinitionSnapshot;
   lookup: (codeRef: CodeRef) => Promise<LatticeDefinitionSnapshot>;
   resolve: (reference: string, relativeTo: string) => string;
@@ -605,6 +608,19 @@ export async function assembleLatticeCardData({
   const plannedAt = performance.now();
   const encodedInputs = plan ? JSON.stringify(inputs) : undefined;
   const encodedAt = performance.now();
+  trace?.event('evaluation-input', {
+    planHash: trace.hash(JSON.stringify(plan)),
+    inputHash:
+      encodedInputs === undefined ? undefined : trace.hash(encodedInputs),
+    dataHash: trace.hash(
+      JSON.stringify(inputs, (key, value) =>
+        key === '__clock' ? undefined : value,
+      ),
+    ),
+    clockHash: trace.hash(JSON.stringify(rootClock)),
+    sourceRevision,
+    bytes: encodedInputs ? Buffer.byteLength(encodedInputs) : 0,
+  });
   const computed = plan
     ? await worker.evaluateCard(
         plan,
