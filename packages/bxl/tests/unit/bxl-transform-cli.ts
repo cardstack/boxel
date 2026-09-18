@@ -179,6 +179,25 @@ const cases: Case[] = [
     },
   },
   {
+    name: 'the one way to write a zero-output program is refused by the profile',
+    run: () => {
+      // `empty` is the deliberate spelling of "yield nothing", so it is
+      // refused where it is written; a filter that happens to match nothing is
+      // what the runtime check above is left holding.
+      for (let source of ['empty', 'if .a then empty else . end']) {
+        strictEqual(
+          caught(() => runBxlTransform(source, { a: true })).phase,
+          'profile',
+          `refused: ${source}`,
+        );
+      }
+      ok(
+        checkBxlTransform('empty')[0]?.startsWith('transform-call-banned'),
+        'and the check reports it without running the program',
+      );
+    },
+  },
+  {
     name: 'checking a program reports the profile findings without running it',
     run: () => {
       deepStrictEqual(checkBxlTransform('.a'), []);

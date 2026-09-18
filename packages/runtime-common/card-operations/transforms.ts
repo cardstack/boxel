@@ -31,10 +31,14 @@ import type { JsonValue } from '../json-validation.ts';
 // written. An `output` projects the result, and a write's result does not
 // exist until the write has committed — so a program that fails there answers
 // 400 over a card that has already changed. The refusal says the caller cannot
-// be told what happened, not that nothing did. What it cannot be is a
-// surprise: a program that does not parse, or that reaches outside the
-// dialect, is refused when the declaration is lowered, so the only way to
-// reach this is a program that ran on values it could not handle.
+// be told what happened, not that nothing did.
+//
+// Lowering narrows what reaches that point without closing it. It refuses a
+// program that does not parse or reaches outside the dialect, and it is worth
+// knowing what it does not ask: how many values a program yields, what shape
+// they are, or whether it names a context slot the transport running it fills.
+// A declaration can therefore be shipped whose write commits and whose
+// projection refuses every time.
 //
 // **What a transform is handed.** `.` is the value the stage was given: the
 // payload for an `input`, the result document for an `output`. Alongside it

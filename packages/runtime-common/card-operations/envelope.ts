@@ -697,8 +697,12 @@ export function paramsFor(
 // for itself — and produces the payload the entry is staged from, so every arm
 // of `batchEntryFor` reads the transformed values wherever it reads `data`.
 // The envelope's own members are carried through rather than passed to the
-// program: a `lid` is how a later entry links to the card this one mints, and
-// an author reshaping their payload has no business dropping it.
+// program, and they win over what it produced: a `lid` is how a later entry
+// links to the card this one mints, and it is read off `data` into the entry
+// before a stage runs — so a program emitting one would leave the staged
+// resource and the key the coordinator is given naming different cards. The
+// program is handed neither member, so anything it emits under those names is
+// overwriting a value it could not read.
 export function entryWithPayload(
   entry: EnvelopeEntry,
   payload: Record<string, unknown>,
@@ -709,7 +713,7 @@ export function entryWithPayload(
       carried[member] = entry.data[member];
     }
   }
-  return { ...entry, data: { ...carried, ...payload } };
+  return { ...entry, data: { ...payload, ...carried } };
 }
 
 function own(

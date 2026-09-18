@@ -108,6 +108,21 @@ export type BxlTransformContextReachesLocal = Assignable<
   BxlTransformContext
 >;
 
+// The slot NAMES, held separately from their types, because the pair above
+// cannot see a rename: every slot is optional, so one side gaining a key and
+// losing another is assignable in both directions. A retyped slot the pair
+// catches; a renamed one only this does — and a renamed one is the drift that
+// fails silently, since a slot the host fills under a name the builtin does
+// not read reaches the program as "the host supplied none".
+export type LocalTransformSlotsReachBxl = Assignable<
+  Record<keyof BxlTransformContext, unknown>,
+  Record<keyof LocalTransformProgramContext, unknown>
+>;
+export type BxlTransformSlotsReachLocal = Assignable<
+  Record<keyof LocalTransformProgramContext, unknown>,
+  Record<keyof BxlTransformContext, unknown>
+>;
+
 // The context shape as `transforms.ts` hands it over, named here because the
 // runner builds it inline rather than exporting a type for it.
 type LocalTransformProgramContext = NonNullable<

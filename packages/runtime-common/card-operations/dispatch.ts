@@ -580,6 +580,30 @@ export async function readShape(
   core: OperationCore,
   url: URL,
   scope: OperationScope = newOperationScope(core),
+  // Answers already reached, held by the caller across requests. The
+  // definition lookup behind this is a database read, and it lands on the two
+  // paths that exist to answer without one — so a caller that can say when the
+  // answer may have changed should hand one in. See `#readShapeByURL`.
+  memo?: Map<string, ReadShape>,
+): Promise<ReadShape> {
+  let remembered = memo?.get(url.href);
+  if (remembered) {
+    return remembered;
+  }
+  let shape = await resolveReadShape(core, url, scope);
+  // An unresolved read is not remembered: it is a declaration with findings
+  // against it, which the author is presumably mid-way through fixing, and
+  // the answer costs the same to reach again.
+  if (shape !== 'unresolved') {
+    memo?.set(url.href, shape);
+  }
+  return shape;
+}
+
+async function resolveReadShape(
+  core: OperationCore,
+  url: URL,
+  scope: OperationScope,
 ): Promise<ReadShape> {
   let definition: OperationDefinition;
   try {

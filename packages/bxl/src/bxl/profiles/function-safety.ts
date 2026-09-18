@@ -351,6 +351,11 @@ export const BXL_MUTATION_DENIED_CALLS = names([
 export const BXL_TRANSFORM_DENIED_CALLS = names([
   ...BXL_DERIVE_CONTROL_DENIED_CALLS,
   ...BXL_METADATA_CALLS,
+  // Not in the derive set, and denied here for a reason of this dialect's
+  // own: a transform answers with exactly one value, so a program that can
+  // yield none is refused where it is written rather than at the invocation
+  // that would have produced nothing to serve.
+  'empty',
 ]);
 
 /**

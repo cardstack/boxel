@@ -218,6 +218,7 @@ import {
   resolveOperation,
   runOperation,
 } from './card-operations/dispatch.ts';
+import type { ReadShape } from './card-operations/dispatch.ts';
 import {
   runInputTransform,
   runOutputTransform,
@@ -1852,6 +1853,22 @@ export class Realm {
   // computed"; an empty array is a valid cached result (no routing rules).
   #cachedHostRoutingMap: HostRoutingRule[] | null = null;
 
+  // Whether a card's `read` carries a transform stage, by card URL. Asked by
+  // the card+json `GET` before it takes either path that answers without
+  // running the read, and the lookup behind it is a database read — so on a
+  // realm serving conditional requests it would be a round trip added to
+  // exactly the requests that exist to avoid one.
+  //
+  // Cleared by `clearRealmIndexCaches()` alongside the entries above, which is
+  // sound because the answer is a function of the card's `adoptsFrom` and its
+  // type's declarations, and neither moves without an index swap — a card's
+  // stored type is changed by a write, and a module's declarations by
+  // reindexing it. A foreign realm's module could change without this realm
+  // swapping, and does not reach this: a card with foreign-realm dependencies
+  // is served no validator at all, so neither fast path is taken and this is
+  // never asked.
+  #readShapeByURL = new Map<string, ReadShape>();
+
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
   readonly __fetchForTesting: typeof globalThis.fetch;
@@ -2965,6 +2982,7 @@ export class Realm {
   clearRealmIndexCaches(): void {
     this.invalidateCachedRealmInfo();
     this.#cachedHostRoutingMap = null;
+    this.#readShapeByURL.clear();
   }
 
   // Drop local realm-index caches AND broadcast the same wipe to peer
@@ -4445,9 +4463,14 @@ export class Realm {
       if (!isOperationFailure(err)) {
         throw err;
       }
-      // A batch is all-or-nothing, so the first refusal is the whole answer:
-      // nothing was written, no index job was enqueued and no event was
-      // broadcast, whichever stage produced it.
+      // A batch is all-or-nothing, so the first refusal is the whole answer,
+      // and for every stage up to the commit it means nothing was written, no
+      // index job was enqueued and no event was broadcast.
+      //
+      // One refusal reaches here from past that point: an `output` projects a
+      // write's result, which does not exist until the write has committed, so
+      // a program failing there answers 400 over a batch that landed. The
+      // status is the same and what it says about the realm is not.
       return this.#operationsResponse(
         errorsDocument(err.error),
         err.error.status,
@@ -4660,10 +4683,15 @@ export class Realm {
         // would otherwise carry. It projects what the caller is told about the
         // write and cannot unmake one: a program that fails here answers 400
         // over a card that has already changed, which is the one place the
-        // batch's all-or-nothing does not reach. A program that does not parse
-        // or reaches outside the transform dialect is refused when the
-        // declaration is lowered, so what gets here is a program that ran on
-        // values it could not handle.
+        // batch's all-or-nothing does not reach.
+        //
+        // Lowering narrows what can get here but does not close it. It refuses
+        // a program that does not parse or reaches outside the dialect; it
+        // does not ask how many values one yields, what shape they are, or
+        // whether it names a context slot this transport fills. So a
+        // declaration can be shipped whose write commits and whose projection
+        // refuses on every call, and the author learns it at the first
+        // invocation rather than at the edit.
         try {
           results.set(
             entry.position,
@@ -4700,6 +4728,11 @@ export class Realm {
     return {
       name: entry.name,
       params: paramsFor(entry),
+      // The same reader a read's stages reach through the operation core. One
+      // declaration's `output` runs on both transports, so a setting it names
+      // has to be answerable on both — otherwise the same program projects a
+      // read and refuses a write.
+      realmConfig: () => this.getRealmConfig(),
       ...(entry.href ? { id: entry.href } : {}),
       ...(caller.actor ? { actor: caller.actor } : {}),
     };
@@ -9975,7 +10008,12 @@ export class Realm {
             : undefined;
         if (matchedEtag || (documentCache && peekEtag)) {
           assembles =
-            (await readShape(this.operationCore, url, scope)) !== 'plain';
+            (await readShape(
+              this.operationCore,
+              url,
+              scope,
+              this.#readShapeByURL,
+            )) !== 'plain';
         }
         if (matchedEtag && !assembles) {
           return createResponse({

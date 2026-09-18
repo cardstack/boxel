@@ -25,6 +25,7 @@ import type {
 import type { RealmHttpServer as Server } from '../../server.ts';
 import {
   createJWT,
+  realmConfigCardJSON,
   setupMatrixRoom,
   setupPermissionedRealmCached,
   waitUntil,
@@ -163,7 +164,7 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         @operation static restate = {
           base: 'transform',
           params: { headline: StringField },
-          input: bxl\`{headline: params("headline")}\`,
+          input: bxl\`. + {headline: (.headline // "Restated by default")}\`,
           set: { headline: params('headline') },
         };
 
@@ -189,6 +190,12 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
           base: 'delete',
           params: { confirm: StringField },
           input: bxl\`.\`,
+        };
+
+        @operation static settled = {
+          base: 'transform',
+          set: { status: 'escalated' },
+          output: bxl\`{data: {escalatedIn: realmConfig("timezone")}}\`,
         };
 
         @operation static broken = {
@@ -235,6 +242,12 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         }
       }
     `,
+    // The realm's own config document, carrying the settings a transform reads
+    // with `realmConfig(…)`.
+    'realm.json': realmConfigCardJSON({
+      name: 'Card Operations Envelope Test Realm',
+      config: { timezone: 'UTC' },
+    }),
     'staged.gts': `
       import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
       import StringField from "@cardstack/base/string";
@@ -343,6 +356,7 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         'report-projected',
         'report-broken-output',
         'report-retired',
+        'report-settled',
         'report-position',
         // One per group test, for the same reason.
         'report-parallel-1',
@@ -1554,10 +1568,26 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     // served response.
     module('transforms', function () {
       test('an input fills a value the params check would have refused', async function (assert) {
+        // No headline is sent, so the value the write stores is one only the
+        // program could have produced — and without the stage the entry does
+        // not reach the write at all, since `headline` is a declared param.
+        let response = await post(
+          envelope(invoke('restate', { href: '/report-restated' })),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          storedCard('report-restated.json').data.attributes?.headline,
+          'Restated by default',
+          'the write ran on the payload the input produced',
+        );
+      });
+
+      test("a caller's own value still wins over the input's default", async function (assert) {
         let response = await post(
           envelope(
             invoke('restate', {
-              href: '/report-restated',
+              href: '/report-projected',
               data: { headline: 'Revised' },
             }),
           ),
@@ -1565,9 +1595,30 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         assert.strictEqual(
-          storedCard('report-restated.json').data.attributes?.headline,
+          storedCard('report-projected.json').data.attributes?.headline,
           'Revised',
-          'the write ran on the payload the input produced',
+        );
+      });
+
+      test("a write's output projects the result, and reads the realm's settings", async function (assert) {
+        // The same stage on the other transport: a read's `output` reaches the
+        // realm's settings through the operation core, and a write's reaches
+        // them through the batch handler, so one declaration cannot answer on
+        // one transport and refuse on the other.
+        let response = await post(
+          envelope(invoke('settled', { href: '/report-settled' })),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          response.body['atomic:results'][0],
+          { data: { escalatedIn: 'UTC' } },
+          'the projection is the whole of what the write answers with',
+        );
+        assert.strictEqual(
+          storedCard('report-settled.json').data.attributes?.status,
+          'escalated',
+          'and the write it projected landed',
         );
       });
 
