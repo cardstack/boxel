@@ -1,7 +1,7 @@
 import type { ReadableSchema } from '../../../../src/index.ts';
 import {
   DEFAULT_BUILTIN_LIBRARIES,
-  mutationBuiltinLibraries,
+  requestContextBuiltinLibraries,
   type BuiltinLibraryName,
 } from '../../../../src/bxl/registry/index.ts';
 import type { NativeRequestContext } from '../../../../src/jqtools/evaluate/runtimeState.ts';
@@ -172,7 +172,7 @@ export function inAuthorizationLibraries(entry: CoverageCase): CoverageCase {
  * financial and statistical families. Every caller here runs after the load.
  */
 export function mutationLibraries(): BuiltinLibraryName[] {
-  return mutationBuiltinLibraries(CARD_LIBRARIES);
+  return requestContextBuiltinLibraries(CARD_LIBRARIES);
 }
 
 /**

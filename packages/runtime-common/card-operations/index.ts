@@ -1,11 +1,13 @@
 export { lowerOperationDeclarations } from './lowering.ts';
 export type { LoweringContext } from './lowering.ts';
 export {
+  assertParamsSupplied,
   canonicalizeTarget,
   localPathFor,
   instanceTargetURL,
   newOperationScope,
   pathsFor,
+  readShape,
   resolveOperation,
   runOperation,
 } from './dispatch.ts';
@@ -17,6 +19,7 @@ export type {
   OperationScope,
   OperationStoredFile,
   OperationStoredFileMeta,
+  ReadShape,
   RunOperationOptions,
 } from './dispatch.ts';
 export { readOperation, erroredTargetRow } from './read.ts';
@@ -86,6 +89,7 @@ export {
   atEntry,
   batchEntryFor,
   carriesOperationsExt,
+  entryWithPayload,
   errorsDocument,
   invocationsIn,
   isGroup,
@@ -93,6 +97,7 @@ export {
   needsActor,
   paramsFor,
   parseOperationsEnvelope,
+  projectedResult,
   readResult,
   resultsTree,
   stagedTree,
@@ -107,6 +112,16 @@ export type {
   EnvelopeResults,
   ResolvedEnvelopeEntry,
 } from './envelope.ts';
+export {
+  hasTransforms,
+  runInputTransform,
+  runOutputTransform,
+} from './transforms.ts';
+export type {
+  BxlTransformModule,
+  TransformContext,
+  TransformProgramError,
+} from './transforms.ts';
 export { lowerQueryOperation } from './query.ts';
 export type { QueryInvocation } from './query.ts';
 export {
@@ -135,6 +150,7 @@ export type {
   OperationProgram,
   OperationRequest,
   OperationResult,
+  OperationRowHeaders,
   OperationSourceBody,
   OperationSourceResult,
   OperationTarget,
