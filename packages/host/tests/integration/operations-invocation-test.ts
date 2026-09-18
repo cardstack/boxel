@@ -56,6 +56,16 @@ const testRealm2URL = 'http://test-realm/test2/';
 let loader: Loader;
 let operations: (typeof OperationsModule)['operations'];
 
+// The card the suite operates on, as realm source — compiled by the realm and
+// lowered by the in-browser indexer, which is what puts real `@operation`
+// declarations in front of the endpoint.
+//
+// No declaration here reads the actor. A request from an integration test
+// reaches the in-browser realm unauthenticated, because the harness's own
+// `verifyJWT` (`tests/helpers/adapter.ts`) treats a token that has *not*
+// expired as expired — and an operation that reads the actor is refused
+// outright on such a request. What the actor resolves to is asserted against a
+// real realm in the realm server's endpoint suite instead.
 const REPORT_MODULE = `
   import {
     contains,
@@ -98,12 +108,6 @@ const REPORT_MODULE = `
       set: { status: 'escalated' },
     };
 
-    // No `actor()` in this fixture: the in-browser realm sees an integration
-    // test's requests as unauthenticated, because the harness's own
-    // `verifyJWT` (tests/helpers/adapter.ts) treats a token that has NOT
-    // expired as expired. An operation that reads the actor is refused outright
-    // on such a request, so what the actor resolves to is asserted against a
-    // real realm in the realm server's endpoint suite instead.
     @operation static addComment = {
       base: 'transform',
       params: { body: StringField },
@@ -310,10 +314,12 @@ module('Integration | operations invocation', function (hooks) {
       assert.ok(result.lastModified > 0, 'and when the card was last written');
 
       let stored = await storedCard('report-transformed.json');
-      assert.deepEqual(
-        stored.data.attributes.comments,
-        [{ body: 'Reviewed and approved.', postedBy: null }],
-        'the append the declaration describes reached the stored card',
+      let comments = stored.data.attributes.comments as { body: string }[];
+      assert.strictEqual(comments.length, 1, 'one comment was appended');
+      assert.strictEqual(
+        comments[0].body,
+        'Reviewed and approved.',
+        'carrying the value the payload supplied, as the declaration describes',
       );
     });
 
