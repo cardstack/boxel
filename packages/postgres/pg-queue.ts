@@ -35,6 +35,7 @@ import {
 import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/indexer';
 import { latticeRenderRetryReadySQL } from '@cardstack/runtime-common/jobs/lattice-render';
 import {
+  latticeSourceJobReadySQL,
   latticeMaterializationReadySQL,
   latticeOverdueWorkSQL,
   latticeWaveTurnSQL,
@@ -987,15 +988,13 @@ export class PgQueueRunner implements QueueRunner {
         i === 0 ? [param(realm)] : [',', param(realm)],
       ),
       `) THEN (
-        (j.job_type <> 'incremental-index'
-          OR j.args->'latticeBatch'->>'atomic' IS DISTINCT FROM 'false'
-          OR j.args->'latticeBatch'->>'immediate' = 'true'
-          OR j.created_at + interval '5 seconds' <= clock_timestamp())
+        ${latticeSourceJobReadySQL('j')}
         AND (j.job_type <> 'lattice-materialize' OR NOT EXISTS (
           SELECT 1 FROM jobs source
           WHERE source.concurrency_group = 'indexing:' || (j.args->>'realmURL')
             AND source.status = 'unfulfilled'
             AND source.job_type IN ('incremental-index', 'from-scratch-index', 'copy-index')
+            AND ${latticeSourceJobReadySQL('source')}
         ) OR EXISTS (SELECT 1 FROM lattice_pending_generations p
           WHERE p.realm_url=j.args->>'realmURL') OR ${latticeOverdueWorkSQL})
         AND ${latticeRenderRetryReadySQL}

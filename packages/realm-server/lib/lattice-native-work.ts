@@ -6,7 +6,10 @@ import {
   type LatticeReadScope,
 } from '@cardstack/runtime-common/lattice-work';
 import type { LatticeNativeCardIndexRequest } from '@cardstack/runtime-common/lattice-native-index';
-import { latticeOwnerStaleAttemptSQL } from '@cardstack/runtime-common/jobs/lattice';
+import {
+  latticeOwnerStaleAttemptSQL,
+  latticeSourceJobReadySQL,
+} from '@cardstack/runtime-common/jobs/lattice';
 import type { LatticeNativeCardAdmission } from './lattice-native-card-indexer.ts';
 import {
   latticeWorkDecision,
@@ -45,7 +48,8 @@ export async function openLatticeNativeWork(
          CASE WHEN $5::jsonb IS NULL THEN TRUE ELSE lattice_code_reference_current($5::jsonb) END AS code_current,
          EXISTS(SELECT 1 FROM jobs j WHERE j.concurrency_group=$4
            AND j.status='unfulfilled'
-           AND j.job_type IN ('incremental-index','from-scratch-index','copy-index')) AS source_pending,
+           AND j.job_type IN ('incremental-index','from-scratch-index','copy-index')
+           AND ${latticeSourceJobReadySQL('j')}) AS source_pending,
          EXISTS(SELECT 1 FROM lattice_pending_generations t WHERE t.realm_url=$1) AS matching_pending,
          ${latticeOwnerStaleAttemptSQL} AS overdue
        FROM realm_generations g LEFT JOIN lattice_owners o ON o.realm_url=g.realm_url AND o.owner_url=$2

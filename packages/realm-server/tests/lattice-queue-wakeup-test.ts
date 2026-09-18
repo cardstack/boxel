@@ -248,6 +248,84 @@ module(basename(import.meta.filename), function (hooks) {
     }
   });
 
+  test('ordinary secondary work runs while primary work is collecting', async (assert) => {
+    assert.timeout(15_000);
+    const realm = 'https://lattice-collection-lane.example/';
+    const adapter = new PgAdapter();
+    const publisher = new PgQueuePublisher(db);
+    const runner = new PgQueueRunner({
+      adapter,
+      workerId: 'collection-lane',
+      lattice: new LatticeRealmConfig([realm]),
+    });
+    const order: string[] = [];
+    runner.register('incremental-index', async () => {
+      order.push('source');
+      return {};
+    });
+    runner.register('lattice-materialize', async () => {
+      order.push('wave');
+      return {};
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await db.execute(
+        `INSERT INTO lattice_owners(realm_url,owner_url,published_generation,input_generation,dirty_generation,definition_revision,retired,stale_after)
+        VALUES($1,$2,1,1,2,'epoch',FALSE,now()+interval '1 hour')`,
+        { bind: [realm, realm + 'Board/one.json'] },
+      );
+      const [source] = await db.execute(
+        `INSERT INTO jobs(job_type,concurrency_group,priority,timeout,args,created_at)
+        VALUES('incremental-index',$1,10,10,$2,clock_timestamp()+interval '1 hour') RETURNING id`,
+        {
+          bind: [
+            'indexing:' + realm,
+            JSON.stringify({
+              realmURL: realm,
+              latticeBatch: { atomic: false, immediate: false },
+            }),
+          ],
+        },
+      );
+      const wave = await publisher.publish({
+        jobType: 'lattice-materialize',
+        concurrencyGroup: latticeConcurrencyGroup(realm),
+        priority: 8,
+        timeout: 10,
+        args: { realmURL: realm },
+      });
+      await runner.start();
+      await Promise.race([
+        wave.done,
+        new Promise((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error('secondary waited for primary collection')),
+            3000,
+          );
+        }),
+      ]);
+      assert.deepEqual(
+        order,
+        ['wave'],
+        'ordinary, not overdue, wave runs before collection ends',
+      );
+      const reservations = await db.execute(
+        'SELECT id FROM job_reservations WHERE job_id=$1',
+        { bind: [source.id] },
+      );
+      assert.strictEqual(
+        reservations.length,
+        0,
+        'the primary collection window remains intact',
+      );
+    } finally {
+      clearTimeout(timer);
+      await runner.destroy();
+      await publisher.destroy();
+      await adapter.close();
+    }
+  });
+
   test('a background collection window wakes at its deadline without another write', async function (assert) {
     assert.timeout(15_000);
     const realm = 'https://lattice-window.example/';

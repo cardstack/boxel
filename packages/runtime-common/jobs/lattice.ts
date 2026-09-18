@@ -8,6 +8,17 @@ export const LATTICE_JOB_TYPE = 'lattice-materialize';
 // The dedicated worker's type filter, not this number, reserves capacity.
 export const LATTICE_PRIORITY = 8;
 
+// Shared scheduling predicate for opted-in realms. A collecting primary batch
+// cannot run yet, so it must not prevent useful work in the secondary lane.
+// Legacy, atomic and immediate jobs have no collection delay. This is only
+// admission advice: freshness/read-own-write barriers still count ALL writes.
+export function latticeSourceJobReadySQL(alias: 'j' | 'source'): string {
+  return `(${alias}.job_type <> 'incremental-index'
+    OR ${alias}.args->'latticeBatch'->>'atomic' IS DISTINCT FROM 'false'
+    OR ${alias}.args->'latticeBatch'->>'immediate' = 'true'
+    OR ${alias}.created_at + interval '5 seconds' <= clock_timestamp())`;
+}
+
 export function latticeConcurrencyGroup(realmURL: string): string {
   return `lattice:${realmURL}`;
 }

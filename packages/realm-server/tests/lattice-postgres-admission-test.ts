@@ -1000,6 +1000,32 @@ module(basename(import.meta.filename), function (hooks) {
     };
     try {
       assert.true(await canRun());
+      const [collecting] = await db.execute(
+        `INSERT INTO jobs(job_type,concurrency_group,priority,timeout,args,created_at)
+         VALUES('incremental-index',$1,10,10,$2,clock_timestamp()+interval '1 hour') RETURNING id`,
+        {
+          bind: [
+            'indexing:' + realm,
+            JSON.stringify({
+              latticeBatch: { atomic: false, immediate: false },
+            }),
+          ],
+        },
+      );
+      const duringCollection = await openLatticeNativeWork(db, request, {
+        inputActor: actor,
+        deps: [realm + 'score'],
+        resolve: (url) => url,
+        codeReference: lab.reference,
+      });
+      assert.false(
+        duringCollection.signal.aborted,
+        'native work admits while the next write collects',
+      );
+      await duringCollection.close();
+      await db.execute("UPDATE jobs SET status='resolved' WHERE id=$1", {
+        bind: [collecting.id],
+      });
       await db.execute(
         `INSERT INTO jobs(job_type,concurrency_group,priority,timeout,args)
          VALUES('incremental-index',$1,10,10,$2)`,
