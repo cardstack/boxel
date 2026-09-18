@@ -9,9 +9,11 @@ import { bxl, getBxlComputeDefinition } from '@cardstack/bxl';
 import { PgAdapter } from '@cardstack/postgres';
 import {
   Deferred,
+  CachingDefinitionLookup,
   IndexWriter,
   RealmPaths,
   type Prerenderer,
+  type ModuleRenderResponse,
   type Reader,
   type DefinitionLookup,
   VirtualNetwork,
@@ -228,6 +230,194 @@ module(basename(import.meta.filename), function (hooks) {
       await result.assertCurrent(tx!);
     });
   }
+
+  async function recoveringIndexer(
+    options: {
+      beforePopulate?: () => Promise<void>;
+      changedDefinition?: boolean;
+    } = {},
+  ) {
+    // Use the same canonical extension-bearing cache keys as the real loader.
+    for (const item of policy.modules) {
+      const oldURL = item.url;
+      item.url += '.gts';
+      for (const def of policy.definitions) {
+        if (def.moduleURL === oldURL) def.moduleURL = item.url;
+      }
+      await db.execute('UPDATE modules SET url=$1 WHERE url=$2', {
+        bind: [item.url, oldURL],
+      });
+    }
+    const calls: string[] = [];
+    const lookup = new CachingDefinitionLookup(
+      db,
+      {
+        async prerenderVisit() {
+          throw new Error('Cache recovery must not render a card');
+        },
+        async runCommand() {
+          throw new Error('Cache recovery must not execute a command');
+        },
+        async prerenderModule(args): Promise<ModuleRenderResponse> {
+          calls.push(args.url);
+          await options.beforePopulate?.();
+          return {
+            id: args.url,
+            status: 'ready',
+            nonce: 'cache-recovery',
+            isShimmed: false,
+            lastModified: 1,
+            createdAt: 1,
+            deps: [],
+            definitions: args.url.startsWith(realm)
+              ? {
+                  Score: {
+                    type: 'definition',
+                    moduleURL: rri(realm + 'score'),
+                    types: [],
+                    definition: {
+                      ...definition,
+                      ...(options.changedDefinition
+                        ? { displayName: 'Changed' }
+                        : {}),
+                    },
+                  },
+                }
+              : {},
+          };
+        },
+      } as Prerenderer,
+      network,
+      () => '',
+    );
+    return {
+      calls,
+      lookup,
+      index: createLatticeNativeCardIndexer({
+        worker,
+        admit: createPostgresLatticeAdmission({
+          db,
+          network,
+          policies: [policy],
+          runtimeRevision: () => runtime,
+          definitionLookup: lookup,
+        }),
+      }),
+    };
+  }
+
+  test('a native producer recovers a cleared definition cache through the ordinary loader', async (assert) => {
+    const { index, lookup, calls } = await recoveringIndexer();
+    const first = await index(request);
+    assert.strictEqual(first?.card.searchDoc?.doubled, 6, 'positive control');
+    assert.strictEqual(
+      calls.length,
+      0,
+      'warm admission does no cache population',
+    );
+    await lookup.clearAllDefinitions();
+    const [recovered, concurrent] = await Promise.all([
+      index(request),
+      index(request),
+    ]);
+    assert.strictEqual(recovered?.card.searchDoc?.doubled, 6);
+    assert.strictEqual(concurrent?.card.searchDoc?.doubled, 6);
+    assert.deepEqual(
+      calls,
+      policy.modules.map((m) => m.url),
+    );
+    await validate(recovered!);
+    await lookup.clearRealmDefinitions(realm);
+    const again = await index(request);
+    assert.strictEqual(again?.card.searchDoc?.doubled, 6);
+    assert.strictEqual(
+      calls.length,
+      3,
+      'only the missing realm module is rebuilt',
+    );
+    await validate(again!);
+  });
+
+  test('invalidation during cache recovery refuses without retrying forever', async (assert) => {
+    const recovering = await recoveringIndexer({
+      beforePopulate: () => recovering.lookup.clearRealmDefinitions(realm),
+    });
+    assert.strictEqual(
+      (await recovering.index(request))?.card.searchDoc?.doubled,
+      6,
+    );
+    await recovering.lookup.clearRealmDefinitions(realm);
+    assert.strictEqual(await recovering.index(request), undefined);
+    assert.strictEqual(recovering.calls.length, 1);
+  });
+
+  for (const change of ['source', 'permission', 'runtime'] as const) {
+    test(`cache recovery rechecks ${change} after population`, async (assert) => {
+      const { index, calls } = await recoveringIndexer({
+        beforePopulate: async () => {
+          if (change === 'source') {
+            await db.execute(
+              'UPDATE realm_file_meta SET content_hash=$1 WHERE realm_url=$2 AND file_path=$3',
+              {
+                bind: [md5('changed source'), realm, 'score.gts'],
+              },
+            );
+          } else if (change === 'permission') {
+            await db.execute(
+              'UPDATE realm_user_permissions SET read=FALSE WHERE realm_url=$1',
+              { bind: [realm] },
+            );
+          } else {
+            runtime = 'unreviewed-runtime';
+          }
+        },
+      });
+      assert.strictEqual(
+        (await index(request))?.card.searchDoc?.doubled,
+        6,
+        'positive control',
+      );
+      await db.execute('DELETE FROM modules WHERE url=$1', {
+        bind: [realm + 'score.gts'],
+      });
+      assert.strictEqual(await index(request), undefined);
+      assert.strictEqual(
+        calls.length,
+        1,
+        'one recovery attempt, no retry loop',
+      );
+    });
+  }
+
+  test('cache recovery does not renew the reviewed definition digest', async (assert) => {
+    const { index, calls } = await recoveringIndexer({
+      changedDefinition: true,
+    });
+    assert.strictEqual(
+      (await index(request))?.card.searchDoc?.doubled,
+      6,
+      'positive control',
+    );
+    await db.execute('DELETE FROM modules WHERE url=$1', {
+      bind: [realm + 'score.gts'],
+    });
+    assert.strictEqual(await index(request), undefined);
+    assert.strictEqual(calls.length, 1);
+  });
+
+  test('a missing cache never causes recovery under already-revoked authority', async (assert) => {
+    const { index, calls } = await recoveringIndexer();
+    assert.strictEqual((await index(request))?.card.searchDoc?.doubled, 6);
+    await db.execute('DELETE FROM modules WHERE url=$1', {
+      bind: [realm + 'score.gts'],
+    });
+    await db.execute(
+      'UPDATE realm_user_permissions SET read=FALSE WHERE realm_url=$1',
+      { bind: [realm] },
+    );
+    assert.strictEqual(await index(request), undefined);
+    assert.strictEqual(calls.length, 0);
+  });
 
   test('primary native admission tolerates an intervening data publication but still fences its source', async (assert) => {
     const prepared = await candidate();
@@ -1891,6 +2081,8 @@ export class Counter extends CardDef { @field count = contains(NumberField); @fi
   for (const [name, error, change] of publicationChanges) {
     test(`a changed ${name} prevents publication`, async (assert) => {
       const result = await candidate();
+      await validate(result);
+      assert.ok(result, 'the unchanged receipt can publish before revocation');
       await change();
       await assert.rejects(validate(result), new RegExp(error));
     });
@@ -1906,8 +2098,43 @@ export class Counter extends CardDef { @field count = contains(NumberField); @fi
       'UPDATE modules SET resolved_realm_url=$1,cache_scope=$2,auth_user_id=$3 WHERE url=$4',
       { bind: [realm, 'realm-auth', actor, base + 'number'] },
     );
-    await validate(await candidate());
-    assert.ok(true, 'the shared file is validated once');
+    const result = await candidate();
+    const fileChecks: unknown[][] = [];
+    await db.withConnection(async (tx) => {
+      await result.assertCurrent(async (expression) => {
+        if (
+          expression.some(
+            (part) =>
+              typeof part === 'string' &&
+              part.includes('FROM realm_file_meta f JOIN jsonb_to_recordset'),
+          )
+        ) {
+          for (const part of expression) {
+            if (
+              typeof part === 'object' &&
+              part &&
+              'param' in part &&
+              typeof part.param === 'string'
+            ) {
+              const rows = JSON.parse(part.param);
+              if (Array.isArray(rows)) fileChecks.push(rows);
+            }
+          }
+        }
+        return tx(expression);
+      });
+    });
+    assert.true(
+      fileChecks.length > 0,
+      'publication checked source file receipts',
+    );
+    for (const rows of fileChecks) {
+      assert.strictEqual(
+        new Set(rows.map((row) => JSON.stringify(row))).size,
+        rows.length,
+        'no duplicate file receipts reach the commit query',
+      );
+    }
   });
 
   test('publication locks prevent archive from racing the final checks', async (assert) => {

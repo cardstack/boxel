@@ -1,7 +1,11 @@
 import { readFile, stat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { configureLatticeTrace } from '@cardstack/runtime-common/lattice-trace';
-import type { DBAdapter, VirtualNetwork } from '@cardstack/runtime-common';
+import type {
+  DBAdapter,
+  DefinitionLookup,
+  VirtualNetwork,
+} from '@cardstack/runtime-common';
 import { LatticeBxlWorker } from './lattice-bxl-derivation.ts';
 import { LatticeMaterializationInputs } from './lattice-materialization-inputs.ts';
 import { openLatticeNativeWork } from './lattice-native-work.ts';
@@ -23,11 +27,13 @@ export async function createLatticeNativeWorker({
   network,
   reviewFile,
   runtimeRevision,
+  definitionLookup,
 }: {
   db: DBAdapter;
   network: VirtualNetwork;
   reviewFile: string;
   runtimeRevision: string | undefined;
+  definitionLookup?: Pick<DefinitionLookup, 'populateDefinitionCacheEntry'>;
 }) {
   if (process.env.LATTICE_TRACE === '1') {
     let events = 0;
@@ -80,6 +86,7 @@ export async function createLatticeNativeWorker({
     network,
     policies,
     runtimeRevision: () => runtimeRevision,
+    definitionLookup,
   });
   const worker = new LatticeBxlWorker();
   return {
@@ -95,6 +102,7 @@ export async function createLatticeNativeWorker({
         network,
         policies,
         runtimeRevision: () => runtimeRevision,
+        definitionLookup,
       }),
     }),
     indexer: createLatticeNativeCardIndexer({

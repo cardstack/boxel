@@ -9,6 +9,7 @@ import {
   RealmPaths,
   type CodeRef,
   type DBAdapter,
+  type DefinitionLookup,
   type ResolvedCodeRef,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
@@ -118,14 +119,15 @@ interface PermissionReceipt {
   bootstrap_version: string | null;
 }
 
-// No browser, GTS evaluation, remote visibility probe or cache populate. The
-// caller installs scopes it is authorized to read. A missing/unreviewed cache
-// entry declines native indexing; a changed admitted receipt rejects commit.
+// The caller installs scopes it is authorized to read. Cache recovery may
+// repopulate reviewed modules through the ordinary loader, but never renews a
+// review. All admission checks run again after recovery, including digests.
 interface LatticeAdmissionOptions {
   db: DBAdapter;
   network: VirtualNetwork;
   policies: LatticeNativeRealmPolicy[];
   runtimeRevision(): string;
+  definitionLookup?: Pick<DefinitionLookup, 'populateDefinitionCacheEntry'>;
 }
 
 export function createPostgresLatticeAdmission(
@@ -145,7 +147,13 @@ export function createPostgresLatticeFileAdmission(
 }
 
 function createPostgresAdmission(
-  { db, network, policies, runtimeRevision }: LatticeAdmissionOptions,
+  {
+    db,
+    network,
+    policies,
+    runtimeRevision,
+    definitionLookup,
+  }: LatticeAdmissionOptions,
   mode: 'card' | 'file',
 ): (
   request: LatticeNativeCardIndexRequest,
@@ -453,7 +461,10 @@ function createPostgresAdmission(
     };
   }
 
-  return async (request) => {
+  const admit = async (
+    request: LatticeNativeCardIndexRequest,
+    recoverCache = true,
+  ): Promise<LatticeNativeCardAdmission | undefined> => {
     // Every gate below refuses silently (Chrome fallback). With
     // LATTICE_NATIVE_ADMISSION_DEBUG set, name the gate that refused.
     const refuse = (gate: string) => {
@@ -613,8 +624,9 @@ function createPostgresAdmission(
     // Read all reviewed code receipts together, without selecting any JSON
     // columns. A per-module round trip dominated the warm BATS admission cost.
     const moduleRows = await query(db, [
-      `SELECT m.url,m.resolved_realm_url AS realm_url,m.cache_scope,m.auth_user_id,
-         m.xmin::text AS version,f.file_path,f.xmin::text AS file_version,
+      `SELECT e.url,e.realm_url,e.cache_scope,e.auth_user_id,
+         m.xmin::text AS version,m.error_doc IS NOT NULL AS module_error,
+         f.file_path,f.xmin::text AS file_version,
          f.content_hash,f.content_size,p.username,p.xmin::text AS permission_version,
          r.xmin::text AS metadata_version,b.xmin::text AS bootstrap_version
        FROM jsonb_to_recordset(`,
@@ -634,20 +646,49 @@ function createPostgresAdmission(
       ),
       `::jsonb) AS e(url text,realm_url text,cache_scope text,auth_user_id text,
          file_path text,content_hash text,username text)
-       JOIN modules m ON m.url_hash=md5(e.url) AND m.url=e.url
+       LEFT JOIN modules m ON m.url_hash=md5(e.url) AND m.url=e.url
          AND m.resolved_realm_url=e.realm_url AND m.cache_scope=e.cache_scope AND m.auth_user_id=e.auth_user_id
        JOIN realm_file_meta f ON f.realm_url=e.realm_url AND f.file_path=e.file_path
          AND f.content_hash=e.content_hash AND f.content_size IS NOT NULL
        JOIN realm_user_permissions p ON p.realm_url=e.realm_url AND p.username=e.username AND p.read=TRUE
        LEFT JOIN realm_metadata r ON r.url=e.realm_url
        LEFT JOIN realm_registry b ON b.url=e.realm_url AND b.kind='bootstrap' AND r.url IS NULL
-       WHERE m.error_doc IS NULL AND r.archived_at IS NULL
+       WHERE r.archived_at IS NULL
          AND (r.url IS NOT NULL OR b.url IS NOT NULL)`,
     ]);
     if (moduleRows.length !== policy.modules.length)
       return refuse(
-        'reviewed module source, cache, read grant or realm authority is missing or changed',
+        'reviewed module source, read grant or realm authority is missing or changed',
       );
+    if (moduleRows.some((row) => row.module_error))
+      return refuse('reviewed module cache contains an error');
+    const missing = moduleRows.filter((row) => row.version == null);
+    if (missing.length) {
+      if (!recoverCache || !definitionLookup)
+        return refuse('reviewed module cache is incomplete');
+      // The cache is disposable: startup, full reindex and module invalidation
+      // all clear it. Only rebuild entries whose source and authority passed
+      // above. The existing loader coalesces concurrent misses by cache key;
+      // serial module recovery bounds pressure on the prerender service.
+      try {
+        for (const row of missing) {
+          await definitionLookup.populateDefinitionCacheEntry({
+            moduleURL: String(row.url),
+            realmURL: String(row.realm_url),
+            resolvedRealmURL: String(row.realm_url),
+            cacheScope: row.cache_scope as 'public' | 'realm-auth',
+            cacheUserId: String(row.auth_user_id),
+            prerenderUserId: policy.actorUserId,
+          });
+        }
+      } catch {
+        return refuse('reviewed module cache recovery failed');
+      }
+      // Do not keep receipts from before an asynchronous populate. A concurrent
+      // edit, revocation or runtime change must refuse; repeated invalidation
+      // gets one recovery attempt, never an unbounded loop.
+      return admit(request, false);
+    }
     for (const module of policy.modules) {
       const row = moduleRows.find(
         (row) =>
@@ -902,4 +943,5 @@ function createPostgresAdmission(
       }),
     };
   };
+  return (request) => admit(request);
 }

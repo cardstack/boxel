@@ -34,6 +34,7 @@ import {
   isUrlLike,
   logger,
   IndexWriter,
+  CachingDefinitionLookup,
   type StatusArgs,
   type IndexingProgressEvent,
 } from '@cardstack/runtime-common';
@@ -245,6 +246,12 @@ let autoMigrate = migrateDB || undefined;
       network: virtualNetwork,
       reviewFile: process.env.LATTICE_NATIVE_REVIEW_FILE,
       runtimeRevision: process.env.LATTICE_NATIVE_RUNTIME_REVISION,
+      definitionLookup: new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        createPrerenderAuth,
+      ),
     });
   }
   let worker = new Worker({
