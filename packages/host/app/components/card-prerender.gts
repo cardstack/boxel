@@ -266,6 +266,20 @@ export default class CardPrerender extends Component {
         // documents and local-id pairings of the last one: nothing tags an
         // in-browser visit with a render scope, so the store cannot observe
         // the job boundary on its own here.
+        //
+        // The loader goes with it, which is what the out-of-process driver
+        // does NOT do. There an index pass owns its tab, so its loader holds
+        // nothing but what indexing put there, and a pass that changed no
+        // module has no reason to drop it. Here one `loader-service` is shared
+        // with the application being rendered, so the same loader backs both
+        // the pass and the app's own store — and the app drops its references
+        // in response to the loader being replaced. Separating the two would
+        // leave the app holding instances resolved against a graph the pass
+        // has moved on from.
+        this.loaderService.resetLoader({
+          clearFetchCache: true,
+          reason: 'card-prerender visit resetStore',
+        });
         this.store.resetCache();
       }
       let clearCacheConsumed = !shouldClearCache;

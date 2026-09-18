@@ -2003,16 +2003,16 @@ module(basename(import.meta.filename), function () {
         );
 
         // The mirror: a pass that rewrites the module the card adopts from
-        // must still drop the graph, and the row must say so. Without this
-        // the assertions above would hold just as well for a version that
-        // never asks for the drop at all.
+        // must still drop the graph. Without this, the assertions above would
+        // hold just as well for a version that never asks for the drop at all.
         //
-        // The drop that reaches this row is the epoch's, not the pass's
-        // one-shot: modules are visited before the instances that adopt from
-        // them, so `pet.gts` consumes the one-shot, and what re-synchronizes
-        // the tab for `ringo.json` is the fresh epoch the module write minted.
-        // That is the mechanism the narrowing leans on, so it is the one worth
-        // pinning.
+        // Read as the re-evaluation rather than as a recorded reason: modules
+        // are visited before the instances that adopt from them, so `pet.gts`
+        // consumes the pass's one-shot and drops the graph, and by the time
+        // `ringo.json` renders there is no reset left for its own row to name.
+        // What its row can say is that the graph it rendered against had to be
+        // rebuilt, which is the thing a pass that never armed the drop could
+        // not produce.
         await realm.write(
           'pet.gts',
           `
@@ -2027,12 +2027,8 @@ module(basename(import.meta.filename), function () {
         );
         let afterModule = await diagnosticsFor('ringo.json');
         assert.ok(
-          afterModule?.loaderResetReason,
-          `a pass carrying an executable records a loader reset, got: ${JSON.stringify(afterModule?.loaderResetReason)}`,
-        );
-        assert.ok(
           (afterModule?.moduleEvaluationCount ?? 0) > 0,
-          `and re-evaluates the graph it dropped, got: ${JSON.stringify(afterModule?.moduleEvaluationCount)}`,
+          `a pass carrying an executable drops the graph, so the card that adopts from it re-evaluates, got: ${JSON.stringify(afterModule?.moduleEvaluationCount)}`,
         );
       });
 
