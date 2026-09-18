@@ -255,10 +255,13 @@ All seven are settable the same way.
 Four properties decide whether a change to any of these does what you expect:
 
 1. **Per replica, no shared store.** Each process reads only its own
-   admissions, so fleet-wide in-flight of 12 across four tasks is ~3 per
-   replica and engages nothing. A threshold is only meaningful stated together
-   with the fleet size it was chosen against, and adding tasks raises the
-   fleet-wide load needed to engage roughly linearly.
+   admissions, so a fleet-wide in-flight of 12 spread over N tasks is ~12/N
+   per replica. A threshold is only meaningful stated together with the fleet
+   size it was chosen against, and adding tasks raises the fleet-wide load
+   needed to engage roughly linearly. Read the current count rather than
+   assuming it: distinct containers per 30-minute bucket, not distinct
+   container ids over a short probe, which counts a deployment rollover as
+   concurrency.
 2. **The gap between an engage and its release is the hysteresis band**, and
    the band is what keeps a realm from flapping. A release at or above its own
    engage is self-cancelling; the parser clamps that case rather than
@@ -279,6 +282,16 @@ Four properties decide whether a change to any of these does what you expect:
    Careful with `0`: it is a number, and each knob clamps up to its own
    minimum rather than reading as unset. For an engage threshold that minimum
    is 1, so `0` means *permanently engaged*, not *off*.
+
+5. **The reading counts searches, not work.** `inFlight` is incremented once
+   per admitted search regardless of what that search costs, so a reading of 5
+   made of unbounded whole-table queries and a reading of 5 made of typical
+   production traffic are the same number over very different quantities of
+   work. A threshold fitted against one population does not transfer to the
+   other, and a reading measured under a synthetic load is not evidence about
+   the load a comparable production reading represents. This is the reason a
+   rung chosen from a saturation run wants checking against production traffic
+   before it ships.
 
 **Setting one.** These reach the container as ECS `secrets` resolved from SSM
 Parameter Store at `/<env>/boxel/<NAME>`, so a change takes three steps and the

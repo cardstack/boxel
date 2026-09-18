@@ -503,6 +503,13 @@ because it is a per-deployment setting rather than a constant — pass
 current value of that same mean as `load=`, so a run can be steered while it is
 still going — readers added, or a page bound dropped.
 
+One thing the figure does not carry: `inFlight` counts searches, not work. A
+search is one admission whatever it costs, so a reading of 5 on the unbounded
+workload this harness drives stands for far more work than a reading of 5 on a
+realm's ordinary traffic. The number is comparable to a server-side threshold
+because it is the same quantity the server counts — it is not comparable
+between two workloads as a measure of load.
+
 Both are **bounds from above** on what any one replica saw of this driver's
 traffic, twice over: the fleet divides these requests across its replicas, and
 a request counts as in flight here for as long as its body is crossing the
