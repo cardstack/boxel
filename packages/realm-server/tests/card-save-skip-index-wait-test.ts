@@ -15,10 +15,11 @@ import {
 } from './helpers/index.ts';
 
 // A JSON-API card POST / PATCH normally blocks before responding on the
-// in-flight indexing that can move what it resolves — `incrementalIndexing-
-// OfExecutables()`, the passes that touched an executable module. A caller can
-// opt out with the `x-boxel-skip-index-wait` header: the write indexes deferred
-// and answers from the serialized document.
+// in-flight indexing that can move what it resolves: the passes that touched
+// an executable module, which the updater exposes as
+// `incrementalIndexingOfExecutables()`. A caller can opt out with the
+// `x-boxel-skip-index-wait` header: the write indexes deferred and answers
+// from the serialized document.
 //
 // The updater's gates are stubbed per test rather than raced against a real
 // job: a real incremental settles as fast as the worker runs it, so "the write
