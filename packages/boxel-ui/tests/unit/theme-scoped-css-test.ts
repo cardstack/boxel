@@ -56,12 +56,12 @@ module('Unit | theme-scoped-css', function () {
       'the island rules are scoped to this theme and stop at a nested themed card',
     );
     assert.true(
-      islands.includes(lightIsland('--primary: #112233; --accent: #abcdef')),
+      islands.includes(lightIsland('--accent: #abcdef; --primary: #112233')),
       'a light island gets the root palette',
     );
     assert.true(
       islands.includes(
-        darkIsland('--primary: #112233; --accent: #abcdef; --primary: #445566'),
+        darkIsland('--accent: #abcdef; --primary: #112233; --primary: #445566'),
       ),
       'a dark island gets the root palette with the dark declarations on top, so a root-only token survives there',
     );
