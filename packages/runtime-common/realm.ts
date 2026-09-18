@@ -208,17 +208,19 @@ import type {
   OperationStoredFileMeta,
 } from './card-operations/dispatch.ts';
 import {
-  answered,
   assertTravelsInEnvelope,
   atEntry,
   batchEntryFor,
   carriesOperationsExt,
   errorsDocument,
+  invocationsIn,
   isWrite,
   needsActor,
   paramsFor,
   parseOperationsEnvelope,
   readResult,
+  resultsTree,
+  stagedTree,
   targetFor,
   writeResult,
   type EnvelopeEntry,
@@ -231,6 +233,7 @@ import {
   isHeadResult,
   isOperationFailure,
   isSourceResult,
+  type EntryPosition,
   type OperationRequest,
   type OperationResult,
   type OperationSourceResult,
@@ -241,6 +244,7 @@ import type {
   BatchCore,
   BatchEntryResult,
 } from './card-operations/coordinator.ts';
+import type { BatchEntry } from './card-operations/executors.ts';
 import type {
   DeferredPrerenderHtml,
   FromScratchResult,
@@ -310,7 +314,7 @@ import {
   sanitizeLoggingCorrelationId,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
 } from './prerender-headers.ts';
-import { RequestTimings } from './request-timings.ts';
+import { RequestTimings, type StageCursor } from './request-timings.ts';
 import { emitWriteTiming } from './write-timing.ts';
 import {
   type MatrixClient,
@@ -346,6 +350,7 @@ import {
   validateWriteSize,
 } from './write-size-validation.ts';
 import { isSplicedSource, type SplicedSource } from './spliced-content.ts';
+import type { JsonValue } from './json-validation.ts';
 import {
   computeContentHash,
   computeContentHashFromRanges,
@@ -392,6 +397,49 @@ import {
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
+// The realm's settings, as they arrive from the RealmConfig card at
+// `realm.json` — from its stored bytes on one overlay and from its indexed
+// document on the next.
+//
+// Called only where the attribute is present, so that the second overlay can
+// clear what the first assigned, the way every other field in these two
+// overlays is applied. Without that, a realm whose settings are removed would
+// keep serving them from whichever overlay still carried them.
+//
+// A settings map is whatever JSON the realm owner wrote, so this is where the
+// shape is held to the one a program can read a key out of: an object, and not
+// an array or a scalar. Anything else — including an explicit null, which is
+// how an owner writes "no settings" — leaves the realm with none, whichever
+// overlay meets it, and a value that is not a map says so in the log rather
+// than reaching `realmConfig("x")` as something that cannot be indexed by
+// name.
+function assignRealmConfig(
+  realmInfo: RealmInfo,
+  config: unknown,
+  log: { warn: (message: string) => void },
+): void {
+  if (config === null) {
+    delete realmInfo.config;
+    return;
+  }
+  if (typeof config !== 'object' || Array.isArray(config)) {
+    log.warn(
+      `ignoring the RealmConfig card's \`config\`, which is ${
+        Array.isArray(config) ? 'an array' : typeof config
+      } rather than a map of settings`,
+    );
+    delete realmInfo.config;
+    return;
+  }
+  // Copied whole rather than shallowly, because the object this is given
+  // belongs to whoever produced it — the index row the overlay read, which the
+  // query engine is free to hold onto — while the map made here is memoized
+  // until the next index swap. Sharing a structured value between the two ties
+  // their lifetimes together for no gain; a settings map is small enough that
+  // copying it costs nothing.
+  realmInfo.config = structuredClone(config) as Record<string, JsonValue>;
+}
+
 export interface RealmSession {
   canRead: boolean;
   canWrite: boolean;
@@ -419,6 +467,14 @@ export type RealmInfo = {
   // `RealmIndexCounts` and `Realm#getIndexCounts`.
   createdAt?: string | null;
   updatedAt?: string | null;
+  // The realm's own settings, which a card operation reads with
+  // `realmConfig("key")`. It is on this type because the overlays that read
+  // the config document assign it here alongside the realm's name — but
+  // `parseRealmInfo` hands it back apart from the info it serves, so nothing
+  // the realm puts on the wire carries it: not the `meta.realmInfo` stamped on
+  // card and file-meta documents, and not `/_info`. `getRealmConfig()` is
+  // where the operation runtime reads it.
+  config?: Record<string, JsonValue>;
   // Opt-in to producing the full prerendered isolated HTML for the
   // realm's default index card (CardsGrid or Workspace). When
   // undefined / null / false the host's render route substitutes a
@@ -1414,6 +1470,13 @@ export interface WriteOptions {
   // writes, whose jobs no reader waits on (anonymous writes are unsupported;
   // see `drainRequestersOwnIndexing`).
   initiatingUser?: string | null;
+  // Where a caller reporting where its write's time went wants this commit's
+  // stages stamped. The commit drains prior indexing, makes the bytes
+  // durable, queues an index job, waits for a worker to run it and then
+  // invalidates what the pass touched; from outside they are one number, and
+  // any of them can be the whole of a slow write. Absent, and so a no-op, for
+  // every caller that is not reporting.
+  stageCursor?: StageCursor;
 }
 
 export interface RealmAdapter {
@@ -1718,6 +1781,20 @@ export class Realm {
   #screenshotSyncWaitMs: number;
   #readIndexDrainBudgetMs: number;
   #cachedRealmInfo: RealmInfo | null = null;
+  // The `config` half of the same parse, held apart from `#cachedRealmInfo`
+  // for the reason the lifecycle timestamps below are: that object is what the
+  // realm serves and what the card+json ETag hashes, and these settings are
+  // neither. `null` means "not yet parsed"; an empty map is a realm that
+  // carries no settings, which is what an operation naming one is told.
+  #cachedRealmConfig: Record<string, JsonValue> | null = null;
+  // Bumped by every invalidation, and captured by a parse before it starts.
+  // A parse that reads the realm's state and then has an index swap land
+  // underneath it is holding values the realm has already moved past, so it
+  // answers the caller who is waiting on it and stops there rather than
+  // writing them into the cache — where they would be read by every later
+  // operation until the next swap, and staged into cards by the ones that
+  // read a setting.
+  #realmInfoGeneration = 0;
   // md5 of the JSON-stringified `#cachedRealmInfo`. Folded into the
   // card+json ETag so any path that nulls `#cachedRealmInfo` (e.g.
   // invalidateCachedRealmInfo on publish/unpublish) invalidates cached
@@ -1728,7 +1805,9 @@ export class Realm {
   // The in-flight `parseRealmInfo()` promise, so concurrent callers on a cold
   // cache share one read instead of each running their own. Nulled once it
   // settles (see getRealmInfo).
-  #realmInfoPromise: Promise<RealmInfo> | undefined;
+  #realmInfoPromise:
+    | Promise<{ info: RealmInfo; config: Record<string, JsonValue> }>
+    | undefined;
   // Realm lifecycle timestamps, served by `getDetailedRealmInfo` on top of the
   // plain info. Cached separately from `#cachedRealmInfo` rather than folded
   // into it, because that object is hashed into the card+json ETag and
@@ -2496,6 +2575,12 @@ export class Realm {
       // Invalidation sets earlier passes of this same write deferred, folded
       // into the prerender_html job this pass spawns.
       carriedPrerenderHtmlChanges?: IncrementalChange[];
+      // Where a caller reporting where its write's time went wants this pass's
+      // two halves stamped: queueing the job, and waiting for a worker to run
+      // it. They answer different questions — a queue that is slow to accept
+      // work, against a worker pool that is slow to reach it — and the second
+      // is the one a card write spends its seconds in.
+      stageCursor?: StageCursor;
     },
   ): Promise<
     IndexPassResult & { deferredPrerenderHtml?: DeferredPrerenderHtml }
@@ -2510,6 +2595,7 @@ export class Realm {
     let invalidatedTypes = makeInvalidatedTypeAccumulator();
     let generation: number | undefined;
     let deferredPrerenderHtml: DeferredPrerenderHtml | undefined;
+    let stageCursor = opts?.stageCursor;
     await this.#realmIndexUpdater.updateChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
       initiatedBy: opts?.initiatedBy ?? null,
@@ -2517,10 +2603,17 @@ export class Realm {
       ...(opts?.carriedPrerenderHtmlChanges?.length
         ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
         : {}),
+      onEnqueued: () => stageCursor?.mark('enqueue'),
       onDeferredPrerenderHtml: (deferred) => {
         deferredPrerenderHtml = deferred;
       },
       onInvalidation: async (invalidatedURLs: URL[], meta) => {
+        // Reached the moment the worker's job resolves, so the window that
+        // closes here is the wait for it — queue time plus the pass itself.
+        // A pass that fails never reaches this, so its wait stays in the
+        // residual rather than being reported as a wait that completed. The
+        // line's `status` is what tells those apart.
+        stageCursor?.mark('awaitIndex');
         // Drop the searchCards in-flight map: the worker's batch.done()
         // swap landed in this realm's boxel_index, so any pending
         // pre-update promises must not be coalesced into by post-update
@@ -3315,8 +3408,15 @@ export class Realm {
     // Callers that DO read indexed state after the write (the JSON-API
     // postCardInstance / patchCardInstance handlers) keep the original
     // deadlock-prevention semantics by omitting waitForIndex.
+    let stageCursor = options?.stageCursor;
     if (options?.waitForIndex !== false) {
       await this.incrementalIndexing();
+      // A batch coordinator drains before it stages, and this gate drains
+      // again. Both wait on the same realm-wide indexing, so they are one
+      // stage reached twice rather than two stages, and they accumulate
+      // together — a write that queued behind indexing it did not ask for
+      // spent that time here however many gates it passed through.
+      stageCursor?.mark('drain');
     }
     let urls: URL[] = [];
     // Collect write results for all files we wrote
@@ -3367,6 +3467,7 @@ export class Realm {
       } = await this.updateIndexAndCollectInvalidations(changes, {
         clientRequestId,
         initiatedBy: initiatingUser,
+        ...(stageCursor ? { stageCursor } : {}),
         ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
         // Handed over either way: a pass that renders folds this into the job
         // it spawns, and a pass that defers folds it into the set it returns.
@@ -3379,6 +3480,11 @@ export class Realm {
       // running pass that was itself deferring, in which case no job was
       // spawned and the set is ours again.
       deferredPrerenderHtml = deferred;
+      // Whatever the pass did not attribute to the enqueue or the wait is the
+      // invalidation that followed it: dropping the realm's index caches,
+      // touching the realm's updated-at, and re-resolving the executables the
+      // pass invalidated.
+      stageCursor?.mark('invalidate');
       invalidations = new Set([...invalidations, ...workingInvalidations]);
       invalidatedTypes.add({ invalidatedTypes: workingTypes });
       indexGeneration = generation ?? indexGeneration;
@@ -3433,6 +3539,11 @@ export class Realm {
       // modules the instances depend on and only flush when an instance
       // depends on a module that is part of this operation.
       if (lastWriteType === 'module' && currentWriteType === 'instance') {
+        // The bytes written so far belong to this batch's durable write, not
+        // to the index pass about to run. Closed here so each pass's files
+        // are reported ahead of the queue insert that follows them, the same
+        // order the single-pass case reports them in.
+        stageCursor?.mark('persist');
         await performIndex(asUpdates(urls), { deferPrerenderHtml: true });
         urls = [];
       }
@@ -3726,6 +3837,11 @@ export class Realm {
     // persist file meta (created_at) to DB independent of index and retrieve created
     let createdMap = await this.persistFileMeta(fileMetaRows);
     await this.removeFileMeta(removedFiles);
+    // Everything the caller asked for is durable at this point: the bytes, the
+    // removals, and the rows describing them. What follows is indexing, which
+    // the caller may or may not be waiting for — so this is the boundary that
+    // says how much of a slow write was the write.
+    stageCursor?.mark('persist');
     let waitForIndex = options?.waitForIndex !== false;
     let changes: IndexChange[] = [
       ...asUpdates(urls),
@@ -3739,6 +3855,10 @@ export class Realm {
           generation: indexGeneration,
           invalidatedTypes: invalidatedTypes.value,
         });
+        // Announcing what the pass invalidated is the last of the
+        // invalidation, so it accumulates into the same stage as the hooks
+        // that ran before it.
+        stageCursor?.mark('invalidate');
       } else {
         // Two-phase: await the durable queue insert inline so pre-enqueue
         // failures (DB partial outage) propagate back to this method's
@@ -3791,6 +3911,11 @@ export class Realm {
             },
           },
         );
+        // The durable queue insert is all of the indexing this path waits
+        // for; the worker, the invalidation and the broadcast run after the
+        // caller has its answer, so they are nobody's latency and this write
+        // reports no wait for them.
+        stageCursor?.mark('enqueue');
         settled.catch((err: unknown) => {
           // Covers worker job rejection AND post-worker realm-side work
           // (onInvalidation / handleExecutableInvalidations / broadcast).
@@ -4344,9 +4469,14 @@ export class Realm {
         detail: `the request body is not valid JSON`,
       });
     }
-    let entries = parseOperationsEnvelope(body, this.url, {
+    // A batch is a tree: the top level is a serial run, and an entry in it may
+    // be a group whose members are entries in their own right. The tree is
+    // what the answer mirrors and what the coordinator schedules staging by;
+    // everything between reads the entries in it, in the order they were sent.
+    let tree = parseOperationsEnvelope(body, this.url, {
       resolveIdentifier: (href) => this.#resolveAtomicHref(href),
     });
+    let entries = invocationsIn(tree);
     let caller = this.#callerOf(request, requestContext);
     // One row peek per target for the whole resolution pass: entries often
     // name the same card, and which behavior a name resolves to is read off
@@ -4384,7 +4514,7 @@ export class Realm {
           detail:
             `operation "${write.entry.name}" writes, and a QUERY batch is ` +
             `authorized to read; send a batch that writes as a POST`,
-          meta: { entry: write.entry.index },
+          meta: { entry: write.entry.position },
         });
       }
     }
@@ -4407,7 +4537,7 @@ export class Realm {
           detail:
             `operation "${needing.entry.name}" reads the invoking actor, and ` +
             `this request authenticated nobody`,
-          meta: { entry: needing.entry.index },
+          meta: { entry: needing.entry.position },
         });
       }
     }
@@ -4417,7 +4547,18 @@ export class Realm {
     // entry never observes what a write entry in the same batch stages, and
     // reading before the coordinator takes the write lock is what keeps a read
     // from waiting on one.
-    let results: (EnvelopeResult | undefined)[] = new Array(entries.length);
+    //
+    // In request order, whatever the tree says. A group is a staging
+    // schedule, and a read stages nothing: it reads the state the batch
+    // started from wherever in the tree it sits, so which group holds it
+    // cannot change its answer. What it would change is how many reads this
+    // realm has in flight for one request, which is a decision about the
+    // realm's own load rather than about what the caller asked for.
+    //
+    // Keyed by position rather than by index, because a position is a path
+    // through the tree for an entry inside a group and there is no array for
+    // one to be an index into.
+    let results = new Map<EntryPosition, EnvelopeResult>();
     for (let { entry, target, definition } of resolved) {
       if (isWrite(definition.base)) {
         continue;
@@ -4431,44 +4572,51 @@ export class Realm {
           ...caller,
         });
       } catch (err: unknown) {
-        throw atEntry(err, entry.index);
+        throw atEntry(err, entry.position);
       }
-      results[entry.index] = readResult(entry, result);
+      results.set(entry.position, readResult(entry, result));
     }
 
     let writes = resolved.filter(({ definition }) => isWrite(definition.base));
     if (writes.length > 0) {
-      let staged = writes.map(({ entry, definition }) => {
+      let staged = new Map<EntryPosition, BatchEntry>();
+      for (let { entry, definition } of writes) {
         try {
-          return batchEntryFor(entry, definition);
+          staged.set(entry.position, batchEntryFor(entry, definition));
         } catch (err: unknown) {
-          throw atEntry(err, entry.index);
+          throw atEntry(err, entry.position);
         }
-      });
-      // Every staged entry carries the position the caller sent it under, so
-      // a refusal from the coordinator names that one rather than the position
+      }
+      // The tree the caller sent, with the entries that only read taken out of
+      // it: the groups are the batch's staging schedule, so the coordinator is
+      // handed the shape rather than a flat list of what writes.
+      //
+      // Every staged entry carries the position the caller sent it under, so a
+      // refusal from the coordinator names that one rather than the position
       // it took among the entries that write — in the key, in the key beside
       // it naming a conflicting entry, and in the prose.
-      let committed = await commitBatch(this.batchCore, staged, {
-        clientRequestId: caller.clientRequestId || null,
-        actor: caller.actor || undefined,
-      });
+      let committed = await commitBatch(
+        this.batchCore,
+        stagedTree(tree, staged),
+        {
+          clientRequestId: caller.clientRequestId || null,
+          actor: caller.actor || undefined,
+        },
+      );
+      // The coordinator answers in the flat order of the entries it staged,
+      // which is the order they were sent in.
       for (let [index, { entry }] of writes.entries()) {
-        results[entry.index] = writeResult(committed[index], (url) =>
-          this.#virtualNetwork.unresolveURL(url),
+        results.set(
+          entry.position,
+          writeResult(committed[index], (url) =>
+            this.#virtualNetwork.unresolveURL(url),
+          ),
         );
       }
     }
 
     return this.#operationsResponse(
-      {
-        // Built by index rather than by mapping the array: an unassigned
-        // position is a hole, `map` skips one, and the hole then serializes
-        // as `null` — which is what a delete reports.
-        'atomic:results': Array.from({ length: entries.length }, (_, index) =>
-          answered(results[index], index),
-        ),
-      },
+      { 'atomic:results': resultsTree(tree, results) },
       200,
       requestContext,
     );
@@ -4509,7 +4657,7 @@ export class Realm {
       assertTravelsInEnvelope(canonical, definition);
       return { entry: canonical, target, definition };
     } catch (err: unknown) {
-      throw atEntry(err, entry.index);
+      throw atEntry(err, entry.position);
     }
   }
 
@@ -4912,6 +5060,10 @@ export class Realm {
           }
           return await this.#definitionLookup.lookupDefinition(absolute);
         },
+        // The same parse every card response reads its realm info from, minus
+        // the half that response carries. An executor never opens the realm's
+        // config document itself, for the reason it opens nothing else.
+        realmConfig: () => this.getRealmConfig(),
       };
     }
     return this.#batchCore;
@@ -8085,7 +8237,7 @@ export class Realm {
     let name = localPath.split('/').pop() ?? localPath;
     let inferredContentType = inferContentType(name);
     let createdAt = await this.getCreatedTime(localPath);
-    let realmInfo = await this.parseRealmInfo();
+    let { info: realmInfo } = await this.parseRealmInfo();
     let persistedMeta = this.#dbAdapter
       ? await getContentMeta(this.#dbAdapter, this.url, localPath)
       : { contentHash: undefined, contentSize: undefined };
@@ -8134,7 +8286,7 @@ export class Realm {
     let name = localPath.split('/').pop() ?? localPath;
     let inferredContentType = inferContentType(name);
     let createdAt = fileEntry.resourceCreatedAt ?? fileEntry.lastModified;
-    let realmInfo = await this.parseRealmInfo();
+    let { info: realmInfo } = await this.parseRealmInfo();
     let searchDoc = fileEntry.searchDoc ?? {};
     let searchHash =
       typeof searchDoc.contentHash === 'string'
@@ -8363,11 +8515,20 @@ export class Realm {
   // stamped no stage, and a line for it would say only how long it took to
   // say no. Those are skipped, so every line on this channel describes a
   // request that tried to write.
+  //
+  // `status` is the answer the write gave: the response's own code, or
+  // `failed` where it threw instead of answering. A write that did not finish
+  // leaves the stage it was in unclosed, and its elapsed time lands in the
+  // residual rather than in the stage that was running — which is the honest
+  // reading, since a `persist` that threw partway is not a persist. That only
+  // works if the line says the write did not succeed, so this is what makes
+  // the residual legible rather than misleading.
   #emitWriteTiming(
     method: string,
     request: Request,
     startedAt: number,
     timings: RequestTimings,
+    status: string,
   ): void {
     let stages = timings.toLogFragment();
     if (!stages) {
@@ -8379,6 +8540,7 @@ export class Realm {
     emitWriteTiming(
       `${method} ${request.url}` +
         (correlationId ? ` corr=${correlationId}` : '') +
+        ` status=${status}` +
         ` handler=${Date.now() - startedAt}ms ` +
         stages,
     );
@@ -8390,10 +8552,15 @@ export class Realm {
   ): Promise<Response> {
     let timings = new RequestTimings();
     let startedAt = Date.now();
+    // Set from the response, so a refusal the handler answers with is reported
+    // as the code it sent; left as `failed` when it threw and sent nothing.
+    let status = 'failed';
     try {
-      return await this.#createCard(request, requestContext, timings);
+      let response = await this.#createCard(request, requestContext, timings);
+      status = String(response.status);
+      return response;
     } finally {
-      this.#emitWriteTiming('POST', request, startedAt, timings);
+      this.#emitWriteTiming('POST', request, startedAt, timings, status);
     }
   }
 
@@ -8812,10 +8979,19 @@ export class Realm {
   ): Promise<Response> {
     let timings = new RequestTimings();
     let startedAt = Date.now();
+    // Set from the response, so a refusal the handler answers with is reported
+    // as the code it sent; left as `failed` when it threw and sent nothing.
+    let status = 'failed';
     try {
-      return await this.#patchCardInstance(request, requestContext, timings);
+      let response = await this.#patchCardInstance(
+        request,
+        requestContext,
+        timings,
+      );
+      status = String(response.status);
+      return response;
     } finally {
-      this.#emitWriteTiming('PATCH', request, startedAt, timings);
+      this.#emitWriteTiming('PATCH', request, startedAt, timings, status);
     }
   }
 
@@ -9001,19 +9177,27 @@ export class Realm {
           id: instanceURL,
         });
       }
-      doc = await this.serializedInstanceEcho(
-        stored,
-        instanceURL,
-        lastModified,
-      );
-      this.#serveInstanceIdsAsRRI(doc);
+      // Timed as `stringify`, the stage the indexed answer reports for the
+      // same work — building the response document and serializing it. The
+      // echo reaches for the realm's info to build it, which on a cold cache
+      // parses the realm's own file, so leaving it outside the stages would
+      // put a read of unbounded cost after the last one this line reports.
+      let echo = await timings.time('stringify', async () => {
+        let built = await this.serializedInstanceEcho(
+          stored,
+          instanceURL,
+          lastModified,
+        );
+        this.#serveInstanceIdsAsRRI(built);
+        return { doc: built, body: JSON.stringify(built, null, 2) };
+      });
       return createResponse({
-        body: JSON.stringify(doc, null, 2),
+        body: echo.body,
         init: {
           headers: {
             'content-type': SupportedMimeType.CardJson,
             'cache-control': this.cardJsonCacheControl(requestContext),
-            ...lastModifiedHeader(doc),
+            ...lastModifiedHeader(echo.doc),
             ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
           },
         },
@@ -11759,18 +11943,70 @@ export class Realm {
   // each index swap, and the card+json read path consults this on every
   // request. Cleared on rejection so a transient failure isn't pinned.
   async getRealmInfo(): Promise<RealmInfo> {
-    if (this.#cachedRealmInfo) {
-      return this.#cachedRealmInfo;
+    return (await this.#parsedRealmInfo()).info;
+  }
+
+  // The realm's settings, as `realmConfig()` answers with them. A realm that
+  // declares none has an empty map rather than nothing, so a program naming a
+  // setting is told this realm has no such setting rather than that the host
+  // supplied no configuration at all — two different defects with two
+  // different fixes.
+  //
+  // A copy per caller, for the reason the builtins copy a value on its way
+  // into a program: what comes back is put into a card resource and carried
+  // through a serializer, and one in-place write anywhere along there would
+  // change what every later operation in this process reads. The map is small
+  // and this is once per batch.
+  async getRealmConfig(): Promise<Record<string, JsonValue>> {
+    return structuredClone((await this.#parsedRealmInfo()).config);
+  }
+
+  // Both halves of one parse, which is why they are read together rather than
+  // each through its own accessor: `clearRealmIndexCaches()` nulls the cache
+  // on every index swap, so a settings read that primed the cache and then
+  // reached for the field would answer an empty map for a realm that has
+  // settings whenever a swap landed in between.
+  async #parsedRealmInfo(): Promise<{
+    info: RealmInfo;
+    config: Record<string, JsonValue>;
+  }> {
+    if (this.#cachedRealmInfo && this.#cachedRealmConfig) {
+      return { info: this.#cachedRealmInfo, config: this.#cachedRealmConfig };
     }
     if (!this.#realmInfoPromise) {
-      this.#realmInfoPromise = (async () => {
-        let info = await this.parseRealmInfo();
-        this.#cachedRealmInfo = info;
-        this.#cachedRealmInfoHash = computeContentHash(JSON.stringify(info));
-        return info;
-      })().finally(() => {
-        this.#realmInfoPromise = undefined;
-      });
+      let parse = (async () => {
+        // Captured before the read begins, so an invalidation that lands while
+        // it is in flight is visible when it finishes.
+        let generation = this.#realmInfoGeneration;
+        // The parse hands back the two halves already apart; this only
+        // memoizes them. The hash covers the served half alone, which is
+        // exactly the bytes a response carries — so editing a setting does not
+        // invalidate every card's cached representation in the realm.
+        let { info, config } = await this.parseRealmInfo();
+        let settings = config ?? {};
+        if (generation === this.#realmInfoGeneration) {
+          this.#cachedRealmInfo = info;
+          this.#cachedRealmConfig = settings;
+          this.#cachedRealmInfoHash = computeContentHash(JSON.stringify(info));
+        }
+        // Answered either way: this is the realm as the caller asking for it
+        // found it, which is what every reader of a memoized parse gets. What
+        // the check above prevents is that reading outliving the request, by
+        // becoming the answer given to everyone after it.
+        return { info, config: settings };
+      })();
+      this.#realmInfoPromise = parse;
+      // Clears the slot only while this parse still owns it. An invalidation
+      // replaces the slot with nothing and a later caller puts its own parse
+      // there; a bare clear here would drop that one instead, costing a
+      // redundant read of the config document.
+      void parse
+        .catch(() => {})
+        .finally(() => {
+          if (this.#realmInfoPromise === parse) {
+            this.#realmInfoPromise = undefined;
+          }
+        });
     }
     return await this.#realmInfoPromise;
   }
@@ -11792,16 +12028,33 @@ export class Realm {
   // RealmConfig card or `realm_metadata`, so without this hook a 304
   // would be served against the *pre-publish* hash forever.
   invalidateCachedRealmInfo(): void {
+    this.#realmInfoGeneration++;
     this.#cachedRealmInfo = null;
+    this.#cachedRealmConfig = null;
     this.#cachedRealmInfoHash = null;
     this.#cachedRegistryTimestamps = null;
     this.#cachedIndexCounts = null;
     // Drop any in-flight aggregate too, so a request that overlapped the swap
     // doesn't repopulate the cache with pre-swap counts.
     this.#indexCountsPromise = null;
+    // And the in-flight parse, for the same reason and one more: a caller
+    // arriving after this point would otherwise be handed the reading that
+    // parse is already holding, from before the swap. A stale realm name
+    // corrects itself on the next read; a stale setting is staged into a card
+    // file by whichever operation read it, and does not.
+    this.#realmInfoPromise = undefined;
   }
 
-  private async parseRealmInfo(): Promise<RealmInfo> {
+  // The realm's config document, read as the two things it holds: the info
+  // every realm-info route serves, and the settings only the operation runtime
+  // reads. They are returned apart rather than as one object a caller narrows,
+  // because three of this class's own routes stamp what comes back straight
+  // into a response — so a settings map that arrived inside `info` would be on
+  // the wire by default and stay off it only by each caller remembering.
+  private async parseRealmInfo(): Promise<{
+    info: RealmInfo;
+    config: Record<string, JsonValue> | undefined;
+  }> {
     let [lastPublishedAt, metadata] = await Promise.all([
       this.getLastPublishedAt(),
       this.getRealmMetadata(),
@@ -11871,6 +12124,9 @@ export class Realm {
         if (attrs.includePrerenderedDefaultRealmIndex === true) {
           realmInfo.includePrerenderedDefaultRealmIndex = true;
         }
+        if ('config' in attrs) {
+          assignRealmConfig(realmInfo, attrs.config, this.#log);
+        }
       }
     } catch (e) {
       this.#log.warn(`failed to read RealmConfig card from disk: ${e}`);
@@ -11908,12 +12164,16 @@ export class Realm {
         if (attrs.includePrerenderedDefaultRealmIndex === true) {
           realmInfo.includePrerenderedDefaultRealmIndex = true;
         }
+        if ('config' in attrs) {
+          assignRealmConfig(realmInfo, attrs.config, this.#log);
+        }
       }
     } catch (e) {
       this.#log.warn(`failed to read RealmConfig card from index: ${e}`);
     }
 
-    return realmInfo;
+    let { config, ...info } = realmInfo;
+    return { info, config };
   }
 
   // RealmInfo plus the realm-lifecycle timestamps, for the realm server's batch
@@ -11987,7 +12247,7 @@ export class Realm {
     _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let realmInfo = await this.parseRealmInfo();
+    let { info: realmInfo } = await this.parseRealmInfo();
 
     let doc = {
       data: {

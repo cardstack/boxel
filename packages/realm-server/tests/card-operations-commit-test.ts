@@ -37,6 +37,7 @@ import type {
 } from '@cardstack/base/matrix-event';
 import type { RealmHttpServer as Server } from '../server.ts';
 import {
+  realmConfigCardJSON,
   setupPermissionedRealmCached,
   setupMatrixRoom,
   waitUntil,
@@ -144,7 +145,7 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
     'report.gts': `
       import { contains, containsMany, field, linksTo, linksToMany, CardDef, FieldDef, Component } from "@cardstack/base/card-api";
       import StringField from "@cardstack/base/string";
-      import { operation, params, actor, instance, bxl, linkTo } from "@cardstack/base/operations";
+      import { operation, params, actor, instance, realmConfig, bxl, linkTo } from "@cardstack/base/operations";
       import { Person } from "./person";
 
       export class ReportComment extends FieldDef {
@@ -214,6 +215,18 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
           transformations: bxl\`.headline = .auditor.firstName;\`,
         };
 
+        // The two ways a realm setting reaches a write: a declared value the
+        // executor resolves from the marker, and the builtin a program calls.
+        @operation static assignApprover = {
+          base: 'transform',
+          set: { status: realmConfig('approver') },
+        };
+
+        @operation static escalateToApprover = {
+          base: 'transform',
+          transformations: bxl\`.headline = "escalated to " + realmConfig("approver");\`,
+        };
+
         static isolated = class Isolated extends Component<typeof this> {
           <template><h1><@fields.headline /></h1></template>
         }
@@ -232,6 +245,13 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         meta: { adoptsFrom: PERSON },
       },
     },
+    // The realm's own config document, carrying the settings an operation
+    // reads with `realmConfig(…)`. They are a declared field on the
+    // RealmConfig card, so they survive a write to it the way its name does.
+    'realm.json': realmConfigCardJSON({
+      name: 'Card Operations Test Realm',
+      config: { approver: '@mae:localhost', escalateAfterDays: 3 },
+    }),
     ...Object.fromEntries(
       [
         // One report per test that changes one, so the file's tests do not
@@ -249,6 +269,8 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         'report-dangling',
         'report-unchanged',
         'report-version',
+        'report-realm-marker',
+        'report-realm-program',
       ].map((name) => [
         `${name}.json`,
         {
@@ -1429,6 +1451,135 @@ module(basename(import.meta.filename), function (hooks) {
     assert.false(
       moved!.meta.baseMatched,
       'the file has moved past the base the caller named',
+    );
+  });
+
+  // A `set` clause lowers its reference to the builtin, so this is the same
+  // path a hand-written program takes — and the one a declaration reaches it
+  // by is the case below.
+  test('a declared set reads a setting the realm holds', async function (assert) {
+    await invoke('assignApprover', 'report-realm-marker');
+
+    assert.strictEqual(
+      storedCard('report-realm-marker').attributes?.status,
+      '@mae:localhost',
+      'the program read this realm configuration',
+    );
+  });
+
+  test('a program reads a setting the realm holds', async function (assert) {
+    await invoke('escalateToApprover', 'report-realm-program');
+
+    assert.strictEqual(
+      storedCard('report-realm-program').attributes?.headline,
+      'escalated to @mae:localhost',
+      'the builtin read the same configuration a declared value does',
+    );
+  });
+
+  test('a realm setting is not carried on a card response', async function (assert) {
+    // The premise, asserted here rather than left to the fixture: a leak test
+    // against a realm that turned out to carry no settings would pass for the
+    // wrong reason, and nothing in the response can tell the two apart.
+    assert.deepEqual(
+      await realm.getRealmConfig(),
+      { approver: '@mae:localhost', escalateAfterDays: 3 },
+      'the realm under test does configure settings',
+    );
+
+    // A card no operation here writes a setting into, so the blanket check
+    // below reads as a leak rather than as the value an operation deliberately
+    // stored. The realm this suite runs against does configure settings, so a
+    // response that omitted them because there were none would pass for the
+    // wrong reason.
+    let response = await request
+      .get('/reviewer')
+      .set('Accept', 'application/vnd.card+json');
+    assert.strictEqual(response.status, 200, 'the card is served');
+
+    let realmInfo = response.body.data.meta.realmInfo;
+    assert.strictEqual(
+      realmInfo.name,
+      'Card Operations Test Realm',
+      'the response carries the realm info it always did',
+    );
+    assert.strictEqual(
+      realmInfo.config,
+      undefined,
+      'and not the settings, which are the operation runtime’s alone',
+    );
+    assert.false(
+      JSON.stringify(response.body).includes('@mae:localhost'),
+      'no setting reaches the response by any other route',
+    );
+  });
+
+  // The other two routes that stamp the realm's info into what they serve.
+  // They are named separately because each reaches the parse by a different
+  // path than a card response does, and a split that held only for card+json
+  // would leave both of these carrying the settings.
+  test('a realm setting is not carried on a file document', async function (assert) {
+    // The premise, asserted here rather than left to the fixture: a leak test
+    // against a realm that turned out to carry no settings would pass for the
+    // wrong reason, and nothing in the response can tell the two apart.
+    assert.deepEqual(
+      await realm.getRealmConfig(),
+      { approver: '@mae:localhost', escalateAfterDays: 3 },
+      'the realm under test does configure settings',
+    );
+
+    let response = await request
+      .get('/release-notes.md')
+      .set('Accept', 'application/vnd.card.file-meta+json');
+    assert.strictEqual(response.status, 200, 'the file document is served');
+
+    assert.strictEqual(
+      response.body.data.meta.realmInfo.name,
+      'Card Operations Test Realm',
+      'the document carries the realm info it always did',
+    );
+    assert.strictEqual(
+      response.body.data.meta.realmInfo.config,
+      undefined,
+      'and not the settings',
+    );
+    assert.false(
+      JSON.stringify(response.body).includes('@mae:localhost'),
+      'no setting reaches the file document by any other route',
+    );
+  });
+
+  test('a realm setting is not carried on the realm info endpoint', async function (assert) {
+    // The premise, asserted here rather than left to the fixture: a leak test
+    // against a realm that turned out to carry no settings would pass for the
+    // wrong reason, and nothing in the response can tell the two apart.
+    assert.deepEqual(
+      await realm.getRealmConfig(),
+      { approver: '@mae:localhost', escalateAfterDays: 3 },
+      'the realm under test does configure settings',
+    );
+
+    // The route `/_catalog-realms` fans out to for every publicly readable
+    // realm, with no session — so a setting served here is one anyone can
+    // read.
+    let response = await request
+      .get('/_info')
+      .set('Accept', 'application/vnd.api+json');
+    assert.strictEqual(response.status, 200, 'the realm info is served');
+
+    assert.strictEqual(
+      response.body.data.attributes.name,
+      'Card Operations Test Realm',
+      'the response carries the realm info it always did',
+    );
+    assert.strictEqual(
+      response.body.data.attributes.config,
+      undefined,
+      'and not the settings',
+    );
+    assert.false(
+      JSON.stringify(response.body).includes('@mae:localhost'),
+      'no setting reaches the realm info by any other route',
     );
   });
 

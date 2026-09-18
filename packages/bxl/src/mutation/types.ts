@@ -237,6 +237,13 @@ export interface BxlMutationContext {
   actor?: string;
   /** The stored document the program is editing. */
   instance?: BxlMutationJsonObject;
+  /**
+   * The settings of the realm the edit lands in — the one slot that describes
+   * where the program runs rather than who asked for it. A realm that carries
+   * no settings supplies an empty object, which is what tells a program that
+   * names one that the realm has none rather than that the host forgot it.
+   */
+  realmConfig?: BxlMutationJsonObject;
 }
 
 export interface BxlMutationPlanOptions {
@@ -249,9 +256,9 @@ export interface BxlMutationPlanOptions {
   currentRevision?: string;
   returning?: ReadonlyArray<'old' | 'new' | 'changes' | 'affected' | 'paths'>;
   /**
-   * Request-scoped values for the `params`, `actor` and `instance` builtins.
-   * Omit it and a program naming one of them fails; a program that names none
-   * of them behaves the same either way.
+   * Request-scoped values for the `params`, `actor`, `instance` and
+   * `realmConfig` builtins. Omit it and a program naming one of them fails; a
+   * program that names none of them behaves the same either way.
    */
   context?: BxlMutationContext;
   /** Loaded Card projections addressable by the `card(id)` constructor. */

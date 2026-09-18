@@ -560,10 +560,25 @@ export type OperationErrorCode =
   // it is planned and run on the search engine, so reaching the operation core
   // with one means the caller used the wrong entry point.
   | 'wrong-entry-point'
+  // Two entries of one parallel group stage a change to the same file. The
+  // members of a parallel group are evaluated against the state the group
+  // started from, so neither of the two composes over the other and only one
+  // of them could land. Serial order is how a batch says that two entries
+  // touch the same target.
+  | 'conflicting-targets'
   // The operation could not be carried out for a reason that is not the
   // caller's — an unreadable definition, an errored index row, a failure
   // inside the executor.
   | 'internal-error';
+
+// Where an entry sits in the batch the caller composed.
+//
+// A batch is a tree: the top-level list is a serial group, and an entry in it
+// may be a group whose members are entries in their own right. A top-level
+// entry is named by its index, which is what a caller that sent a flat list
+// means by "the third one"; a nested one is named by the path down to it —
+// `[2].boxel:operations[0]` — since no single number reaches it.
+export type EntryPosition = number | string;
 
 // A refusal, shaped like a JSON:API error object so an HTTP surface can put it
 // straight into an `errors` array. `status` is the number the realm's own

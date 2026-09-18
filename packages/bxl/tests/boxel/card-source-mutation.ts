@@ -1210,6 +1210,7 @@ const requestContext = {
   params: { tag: 'typed', expectedStatus: 'language', caption: 'from Ada' },
   actor: 'user:ada',
   instance: { id: 'https://example.test/TierItem/typescript', revision: 7 },
+  realmConfig: { curator: 'user:mae', minimumTags: 2 },
 };
 
 const contextSource = sourceFixture();
@@ -1352,6 +1353,83 @@ throws(
     /params\(key\) asks for "undeclared"/.test(error.message) &&
     /"caption", "expectedStatus", "tag"/.test(error.message),
   'an undeclared payload key fails and the error lists the declared ones',
+);
+
+// `realmConfig` is the realm the program runs in rather than the request that
+// reached it, which is what lets one card type read a value that differs per
+// realm. A present setting is a value like any other, keyed or whole.
+const realmSettingResult = mutateBxlCardSource(
+  sourceFixture(),
+  'assert((.tags | length) >= realmConfig("minimumTags"), "a tier item needs its tags");\n' +
+    '.image = realmConfig("curator") + " · " + (realmConfig() | keys | length | tostring);',
+  {
+    schema,
+    syntax: 'solidified',
+    programId: 'request-context-realm-config',
+    context: requestContext,
+    ...projectionOptions,
+  },
+);
+strictEqual(
+  realmSettingResult.document.data.attributes?.image,
+  'user:mae · 2',
+  'realmConfig reads one setting by name and the whole map without one',
+);
+
+// A realm that carries no such setting is told so by name. This is the state a
+// program authored against another realm lands in, so the message names the
+// settings the realm does have.
+throws(
+  () =>
+    mutateBxlCardSource(sourceFixture(), '.image = realmConfig("curator");', {
+      schema,
+      syntax: 'solidified',
+      programId: 'request-context-realm-config-absent',
+      context: { ...requestContext, realmConfig: { minimumTags: 2 } },
+      ...projectionOptions,
+    }),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    /realmConfig\(key\) asks for "curator", which is not in the realm configuration/.test(
+      error.message,
+    ) &&
+    /it has "minimumTags"/.test(error.message),
+  'an absent realm setting fails and the error lists the ones the realm has',
+);
+
+// A realm that configures nothing at all is a different answer from a host
+// that supplied no settings, and the two say so differently: the first is the
+// realm's to fix, the second the caller's.
+throws(
+  () =>
+    mutateBxlCardSource(sourceFixture(), '.image = realmConfig("curator");', {
+      schema,
+      syntax: 'solidified',
+      programId: 'request-context-realm-config-empty',
+      context: { ...requestContext, realmConfig: {} },
+      ...projectionOptions,
+    }),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    /not in the realm configuration — it has no readable keys/.test(
+      error.message,
+    ),
+  'a realm with no settings names the realm rather than the request',
+);
+
+throws(
+  () =>
+    mutateBxlCardSource(sourceFixture(), '.image = realmConfig("curator");', {
+      schema,
+      syntax: 'solidified',
+      programId: 'request-context-realm-config-missing-slot',
+      context: { params: requestContext.params },
+      ...projectionOptions,
+    }),
+  (error: unknown) =>
+    error instanceof BxlMutationError &&
+    /realmConfig\(key\) needs the realm configuration/.test(error.message),
+  'a program naming realmConfig without one in the context fails',
 );
 
 // A plan never shares structure with the host's context object, and a host
@@ -1744,9 +1822,9 @@ deepStrictEqual(withContext.document, withoutContext.document);
 deepStrictEqual(withContext.plan, withoutContext.plan);
 
 // Readable syntax reaches the same builtins. The call name passes through as
-// written, `params`' quoted key is held literal by the compiler — which is
-// what the colliding-label case below relies on — and `actor()` carries no
-// key to hold.
+// written, the quoted key of `params`, `instance` and `realmConfig` is held
+// literal by the compiler — which is what the colliding-label case below
+// relies on — and `actor()` carries no key to hold.
 const readableResult = mutateBxlCardSource(
   sourceFixture(),
   'append(Tags, params("tag"));\nImage = actor();',
@@ -1763,6 +1841,25 @@ deepStrictEqual(readableResult.document.data.attributes?.tags, [
   'typed',
 ]);
 strictEqual(readableResult.document.data.attributes?.image, 'user:ada');
+
+// The same holds for a realm setting, which is why the readable compiler has
+// to know the name: a realm whose settings happen to be named after the card's
+// own labels would otherwise have each one read as that field.
+const readableRealmSetting = mutateBxlCardSource(
+  sourceFixture(),
+  'Image = realmConfig("curator");',
+  {
+    schema,
+    programId: 'request-context-readable-realm-config',
+    context: requestContext,
+    ...projectionOptions,
+  },
+);
+strictEqual(
+  readableRealmSetting.document.data.attributes?.image,
+  'user:mae',
+  'a quoted realmConfig key is a setting name, not a field label',
+);
 
 // How a key is read, and how the diagnostic lists keys. Both are properties
 // of the accessor protocol rather than of any value, so they need host

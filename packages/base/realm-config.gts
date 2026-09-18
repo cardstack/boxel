@@ -12,6 +12,7 @@ import {
 import BooleanField from './boolean';
 import NumberField from './number';
 import StringField from './string';
+import { JsonField } from './json-field';
 import CardInfoTemplates from './default-templates/card-info';
 import {
   cardDefComputedFields,
@@ -28,15 +29,21 @@ import {
   BoxelInput,
   BoxelInputGroup,
   BoxelSelect,
+  Button,
   FieldContainer,
   Header,
+  IconButton,
   RadioInput,
 } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, not } from '@cardstack/boxel-ui/helpers';
+import { IconPlus, IconTrash } from '@cardstack/boxel-ui/icons';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import LinkIcon from '@cardstack/boxel-icons/link';
+import SettingsIcon from '@cardstack/boxel-icons/settings';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { tracked } from '@glimmer/tracking';
 import type Owner from '@ember/owner';
 import { startCase } from 'lodash-es';
 import type { FieldsTypeFor } from './card-api';
@@ -365,6 +372,471 @@ export class RoutingRuleField extends FieldDef {
   static edit = RoutingRuleEdit;
 }
 
+// The JSON spelling of one setting's value, which is what the table shows and
+// what the editor reads back. A string is shown bare so an id or a path reads
+// as itself, and quoted wherever reading the bare form back would produce
+// something else — the setting whose value is the text "3" comes back as that
+// text rather than as the number. Asking `settingValue` is what makes that the
+// round-trip itself rather than a rule that has to track it.
+function settingText(value: unknown): string {
+  if (typeof value === 'string' && settingValue(value) === value) {
+    return value;
+  }
+  return JSON.stringify(value) ?? '';
+}
+
+// Text as JSON, or undefined when it is not JSON at all.
+function parseSetting(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+// The inverse of settingText. Text that parses as JSON is that value; text
+// that does not is the string it already is, so an author writing a Matrix id
+// or a path never has to quote it.
+//
+// A number JSON can parse but cannot hold is treated as text it could not
+// parse, because the file is where the value ends up: `1e400` parses as
+// `Infinity` and would be written as `null`, and `-0` would be written as `0`.
+// Keeping those as the characters the author typed is what stops the row from
+// naming a type the stored setting does not have.
+function settingValue(text: string): unknown {
+  let parsed = parseSetting(text.trim());
+  if (parsed === undefined) {
+    return text;
+  }
+  if (typeof parsed === 'number' && !Number.isFinite(parsed)) {
+    return text;
+  }
+  if (Object.is(parsed, -0)) {
+    return text;
+  }
+  return parsed;
+}
+
+// What a value will be stored as, named for the author, and only where that
+// differs from the text in front of them. Typing 3 stores a number and typing
+// true stores a flag — the two cases where the table would otherwise read as
+// though it held the characters.
+function settingTypeNote(text: string): string | undefined {
+  let value = settingValue(text);
+  if (typeof value === 'string') {
+    return undefined;
+  }
+  if (value === null) {
+    return 'null';
+  }
+  return Array.isArray(value) ? 'list' : typeof value;
+}
+
+// A row that is not a setting yet: one the author added and has not named. A
+// row the realm already holds is never this, however it is named, so an
+// unrelated edit cannot drop it.
+function isUnnamed(row: SettingRow): boolean {
+  return row.key === '' && !row.stored;
+}
+
+// One row of the settings editor while the author is in it. The map is built
+// from the rows on every keystroke rather than edited in place: a key renamed
+// a character at a time would otherwise walk the value across a new map entry
+// per keystroke and lose it at the first collision.
+interface SettingRow {
+  id: number;
+  key: string;
+  text: string;
+  // Whether the realm already holds a setting under this row. It is what tells
+  // a row the author has not named yet from one whose name is genuinely the
+  // empty string — a key JSON can hold and `realmConfig("")` looks up — so the
+  // second survives an edit to some other row.
+  stored: boolean;
+}
+
+class RealmSettingsEdit extends Component<typeof RealmSettingsField> {
+  @tracked private rows: SettingRow[] = Object.entries(
+    this.args.model ?? {},
+  ).map(([key, value], index) => ({
+    id: index,
+    key,
+    text: settingText(value),
+    stored: true,
+  }));
+
+  private nextId = this.rows.length;
+
+  // Bound rather than written inline: a Matrix id in an attribute string reads
+  // to the template linter as a path it should have been given as a binding.
+  private valuePlaceholder = '@alice:boxel.ai';
+
+  private get displayRows() {
+    return this.rows.map((row, index) => ({
+      ...row,
+      index,
+      typeNote: settingTypeNote(row.text),
+    }));
+  }
+
+  // Settings the map cannot hold as written, named so the author can see why
+  // the row in front of them is not in the realm's configuration. A row with
+  // no name is not a setting yet — the ordinary state of one just added — so
+  // it is reported as a count rather than as a fault.
+  private get unnamedRowCount(): number {
+    return this.rows.filter(isUnnamed).length;
+  }
+
+  private get duplicateKeyList(): string {
+    return this.duplicateKeys.join(', ');
+  }
+
+  private get duplicateKeys(): string[] {
+    let seen = new Set<string>();
+    let duplicates = new Set<string>();
+    for (let row of this.rows) {
+      if (isUnnamed(row)) {
+        continue;
+      }
+      if (seen.has(row.key)) {
+        duplicates.add(row.key);
+      }
+      seen.add(row.key);
+    }
+    return [...duplicates];
+  }
+
+  @action private setKey(index: number, key: string) {
+    this.replace(index, { key });
+  }
+
+  @action private setText(index: number, text: string) {
+    this.replace(index, { text });
+  }
+
+  @action private add() {
+    this.rows = [
+      ...this.rows,
+      { id: this.nextId++, key: '', text: '', stored: false },
+    ];
+    this.commit();
+  }
+
+  @action private remove(index: number) {
+    this.rows = this.rows.filter((_row, at) => at !== index);
+    this.commit();
+  }
+
+  private replace(index: number, patch: Partial<SettingRow>) {
+    this.rows = this.rows.map((row, at) =>
+      at === index ? { ...row, ...patch } : row,
+    );
+    this.commit();
+  }
+
+  // A named row wins over an earlier one with the same name, which is what the
+  // stored JSON would do with the duplicate anyway; the advisory above the
+  // table is what tells the author the shadowed row is not being read.
+  private commit() {
+    // Built on a null prototype so every name is an own key. A plain object
+    // would answer a setting named `__proto__` by invoking the prototype
+    // setter — the setting would vanish, and a structured value would become
+    // this map's prototype. `JSON.parse` makes that name an own property, so a
+    // realm really can hold one, and it renders here until the first edit.
+    // The read sides are careful about the same name, and this matches them.
+    let settings: Record<string, unknown> = Object.create(null);
+    for (let row of this.rows) {
+      if (isUnnamed(row)) {
+        continue;
+      }
+      // Written under the name as typed, never a tidied version of it. JSON
+      // holds `" approver "` and `""` as keys distinct from `"approver"`, and
+      // a program looks one up by the characters it was given — so trimming
+      // here would rename a realm's setting out from under a program that
+      // reads it, on an edit to some unrelated row.
+      settings[row.key] = settingValue(row.text);
+    }
+    this.args.set(settings);
+  }
+
+  <template>
+    <div class='realm-settings-edit' data-test-realm-settings-edit>
+      {{#if this.displayRows.length}}
+        <table class='settings'>
+          <thead>
+            <tr>
+              <th scope='col'>Setting</th>
+              <th scope='col'>Value</th>
+              {{#if @canEdit}}
+                <th scope='col'><span class='visually-hidden'>Remove</span></th>
+              {{/if}}
+            </tr>
+          </thead>
+          <tbody>
+            {{#each this.displayRows key='id' as |row|}}
+              <tr data-test-realm-setting-row={{row.index}}>
+                <td class='key-cell'>
+                  <BoxelInput
+                    @value={{row.key}}
+                    @onInput={{fn this.setKey row.index}}
+                    @disabled={{not @canEdit}}
+                    @placeholder='approver'
+                    data-test-setting-key={{row.index}}
+                  />
+                </td>
+                <td class='value-cell'>
+                  <BoxelInput
+                    @value={{row.text}}
+                    @onInput={{fn this.setText row.index}}
+                    @disabled={{not @canEdit}}
+                    @placeholder={{this.valuePlaceholder}}
+                    data-test-setting-value={{row.index}}
+                  />
+                  {{#if row.typeNote}}
+                    <span
+                      class='type-note'
+                      data-test-setting-type={{row.index}}
+                    >
+                      stored as
+                      {{row.typeNote}}
+                    </span>
+                  {{/if}}
+                </td>
+                {{#if @canEdit}}
+                  <td class='remove-cell'>
+                    <IconButton
+                      @icon={{IconTrash}}
+                      @width='18px'
+                      @height='18px'
+                      {{on 'click' (fn this.remove row.index)}}
+                      aria-label='Remove setting'
+                      data-test-remove-setting={{row.index}}
+                    />
+                  </td>
+                {{/if}}
+              </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      {{else}}
+        <p class='empty' data-test-realm-settings-empty>
+          No settings. An operation that reads one fails, naming the realm.
+        </p>
+      {{/if}}
+      {{#if this.duplicateKeys.length}}
+        <div
+          class='settings-warning'
+          role='status'
+          data-test-duplicate-settings
+        >
+          Repeated
+          {{if (eq this.duplicateKeys.length 1) 'setting' 'settings'}}
+          {{this.duplicateKeyList}}
+          — the last row with a given name is the one the realm reads.
+        </div>
+      {{/if}}
+      {{#if this.unnamedRowCount}}
+        <div class='settings-warning' role='status' data-test-unnamed-settings>
+          {{this.unnamedRowCount}}
+          unnamed
+          {{if (eq this.unnamedRowCount 1) 'row is' 'rows are'}}
+          not stored until given a name.
+        </div>
+      {{/if}}
+      {{#if @canEdit}}
+        <Button
+          @kind='secondary'
+          @size='small'
+          {{on 'click' this.add}}
+          data-test-add-setting
+        >
+          <IconPlus width='12px' height='12px' role='presentation' />
+          Add setting
+        </Button>
+      {{/if}}
+    </div>
+    <style scoped>
+      .realm-settings-edit {
+        display: grid;
+        justify-items: start;
+        gap: var(--boxel-sp-xs);
+      }
+      .settings {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+      }
+      th {
+        text-align: left;
+        font-weight: 600;
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+        padding-bottom: var(--boxel-sp-xxs);
+      }
+      td {
+        vertical-align: top;
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xxs) var(--boxel-sp-xxs) 0;
+      }
+      .key-cell {
+        width: 34%;
+      }
+      .remove-cell {
+        width: var(--boxel-icon-med);
+        padding-right: 0;
+      }
+      .settings :deep(input) {
+        font-family: var(--boxel-font-family-mono, monospace);
+        min-width: 0;
+      }
+      .type-note {
+        display: block;
+        padding-top: var(--boxel-sp-5xs);
+        padding-left: var(--boxel-sp-xxs);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        color: var(--muted-foreground);
+      }
+      .settings-warning {
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        color: var(--boxel-warning-foreground, var(--muted-foreground));
+        padding-left: var(--boxel-sp-xxs);
+      }
+      .empty {
+        margin: 0;
+        color: var(--muted-foreground);
+      }
+      .visually-hidden {
+        position: absolute;
+        width: 0.0625rem;
+        height: 0.0625rem;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+    </style>
+  </template>
+}
+
+class RealmSettingsEmbedded extends Component<typeof RealmSettingsField> {
+  private get entries() {
+    return Object.entries(this.args.model ?? {}).map(([key, value]) => ({
+      key,
+      text: settingText(value),
+    }));
+  }
+
+  <template>
+    {{#if this.entries.length}}
+      <table class='settings' data-test-realm-settings>
+        <thead>
+          <tr>
+            <th scope='col'>Setting</th>
+            <th scope='col'>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each this.entries key='key' as |entry|}}
+            <tr data-test-realm-setting={{entry.key}}>
+              <td class='key' data-test-setting-name>{{entry.key}}</td>
+              <td class='value' data-test-setting-text>{{entry.text}}</td>
+            </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    {{else}}
+      <p class='empty' data-test-realm-settings-empty>No settings configured.</p>
+    {{/if}}
+    <style scoped>
+      .settings {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+      }
+      th {
+        text-align: left;
+        font-weight: 600;
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+        padding-bottom: var(--boxel-sp-xxs);
+        border-bottom: 1px solid var(--muted);
+      }
+      td {
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs) var(--boxel-sp-xxs) 0;
+        border-bottom: 1px solid var(--muted);
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+        overflow-wrap: anywhere;
+      }
+      .key {
+        width: 34%;
+        font-weight: 600;
+      }
+      .value {
+        font-family: var(--boxel-font-family-mono, monospace);
+      }
+      .empty {
+        margin: 0;
+        color: var(--muted-foreground);
+      }
+    </style>
+  </template>
+}
+
+class RealmSettingsAtom extends Component<typeof RealmSettingsField> {
+  private get count(): number {
+    return Object.keys(this.args.model ?? {}).length;
+  }
+
+  <template>
+    <span class='realm-settings-atom' data-test-realm-settings-atom>
+      {{#if this.count}}
+        {{this.count}}
+        {{if (eq this.count 1) 'setting' 'settings'}}
+      {{else}}
+        No settings
+      {{/if}}
+    </span>
+    <style scoped>
+      .realm-settings-atom {
+        color: var(--muted-foreground);
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+      }
+    </style>
+  </template>
+}
+
+// The realm's own settings, as an operation reads them. A named operation is
+// declared once on a card type whose cards live in many realms, so a value
+// that differs per realm — who approves an escalation here, what this realm's
+// threshold is, which assignee it defaults to — cannot sit in the type. It
+// sits here, and a program reads it with realmConfig("approver").
+//
+// Values are JSON, so a setting can be a string, a number, a flag or a
+// structure. Nothing indexes them: JsonField stays out of the search index,
+// and the realm keeps the map out of the realmInfo it stamps on card,
+// file-meta and realm-info responses — which is about not carrying settings
+// on every response, not about who may see them.
+//
+// They are not secret. This is an ordinary card at the realm's `realm.json`,
+// and that file is ordinary source, so anyone with read permission on the
+// realm can read every setting here. A credential belongs somewhere the realm
+// does not serve.
+export class RealmSettingsField extends JsonField {
+  static displayName = 'Realm Settings';
+  static icon = SettingsIcon;
+
+  static atom = RealmSettingsAtom;
+  static embedded = RealmSettingsEmbedded;
+  static edit = RealmSettingsEdit;
+}
+
 class RealmConfigEmbedded extends Component<typeof RealmConfig> {
   <template>
     <div class='realm-config-embedded' data-test-realm-config-embedded>
@@ -623,6 +1095,11 @@ class RealmConfigIsolated extends Component<typeof RealmConfig> {
           </p>
         {{/if}}
       </section>
+
+      <section class='section'>
+        <h2 class='section-title'>Settings</h2>
+        <@fields.config @format='embedded' />
+      </section>
     </article>
     <style scoped>
       .realm-config-isolated {
@@ -695,6 +1172,11 @@ export class RealmConfig extends CardDef {
   // request time, so editing this takes effect with the index update, no
   // restart.
   @field allowArbitraryScreenshots = contains(BooleanField);
+
+  @field config = contains(RealmSettingsField, {
+    description:
+      "Realm-level settings a card operation reads with realmConfig('key') — an approver's user id, a threshold, a default assignee. Values are JSON. They are not indexed for search and are not included in the realmInfo carried on card responses",
+  });
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: RealmConfig) {

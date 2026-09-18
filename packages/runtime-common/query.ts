@@ -1,7 +1,11 @@
 import { isEqual } from 'lodash-es';
 import qs from 'qs';
 
-import { assertJSONValue, assertJSONPrimitive } from './json-validation.ts';
+import {
+  assertJSONValue,
+  assertJSONPrimitive,
+  type JsonValue,
+} from './json-validation.ts';
 import { InvalidQueryError } from './invalid-query-error.ts';
 import {
   type CodeRef,
@@ -14,13 +18,9 @@ import {
 // exported from here even though the class itself lives one module down.
 export { InvalidQueryError };
 
-type JSONValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JSONValue[]
-  | { [key: string]: JSONValue };
+// The same type `assertJSONValue` below holds a value to at run time, named
+// here as the query grammar spells it.
+type JSONValue = JsonValue;
 
 export type SparseFieldsets = Record<string, string[]>;
 
