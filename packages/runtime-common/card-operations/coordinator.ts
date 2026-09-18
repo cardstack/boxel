@@ -42,6 +42,7 @@ import {
   type OperationIdentityResult,
 } from './types.ts';
 import type { CodeRef } from '../code-ref.ts';
+import type { JsonValue } from '../json-validation.ts';
 import type { RequestTimings, StageCursor } from '../request-timings.ts';
 import type { Definition } from '../definitions.ts';
 import type { LooseSingleCardDocument } from '../index.ts';
@@ -187,6 +188,10 @@ export interface BatchCore {
     codeRef: CodeRef,
     relativeTo: URL,
   ): Promise<Definition | undefined>;
+  // The realm's own settings, as `realmConfig()` answers with them. A realm
+  // that declares none answers with an empty map, which is what tells a
+  // program naming a setting that this realm has none.
+  realmConfig(): Promise<Record<string, JsonValue>>;
 }
 
 export interface CommitBatchOptions {
@@ -218,6 +223,18 @@ export interface CommitBatchOptions {
   // requirement rather than a preference: the job it would wait on needs the
   // render slot that caller is holding, so waiting deadlocks.
   waitForIndex?: boolean;
+  // A caller's own precondition, run inside the write lock and before
+  // anything is staged. It exists because a precondition evaluated before
+  // `commitBatch` is not binding: the lock is acquired here, so a request
+  // whose check passed can then queue behind another writer's whole write and
+  // proceed against state that moved. Throwing from here refuses the batch
+  // with nothing staged, nothing enqueued and no event broadcast, and the
+  // thrown failure's status is what the caller answers with.
+  //
+  // The realm keeps the *content* of the check — an `If-Match` compares a
+  // card's `ETag`, which is built from index and realm-info state the
+  // coordinator has no business assembling. This owns only when it runs.
+  precondition?: () => Promise<void>;
   // Report the bytes each entry's primary file now holds, on the entry's
   // `meta.storedContent`. Off by default: a batch's results say what a card
   // is and what version it holds, and a caller wanting its document reads it
@@ -284,6 +301,33 @@ export async function commitBatch(
   let timings = opts.timings;
   let timed = <T>(stage: string, fn: () => Promise<T>): Promise<T> =>
     timings ? timings.time(stage, fn) : fn();
+  // The realm's settings, read at most once for the whole batch and only if
+  // something in it asks — a thunk rather than a value, for two reasons that
+  // pull in opposite directions.
+  //
+  // Not eagerly, because a cold read is a parse of the realm's config document
+  // — several queries and a file read — and the batches that name no setting
+  // are most of them. Deferring it means they pay nothing.
+  //
+  // And not before the lock, which is the other way to avoid charging them:
+  // everything a batch stages against is read after the pre-staging drain, so
+  // a settings map read before it would be from a different moment than the
+  // files beside it. A `realm.json` write still indexing when this batch
+  // arrives is exactly the case — the drain waits for it, and a snapshot taken
+  // earlier would stage `realmConfig()` values the realm has already replaced.
+  // Nothing runs this until staging, which is inside the lock and past the
+  // drain, so the settings and the stored bytes describe one pre-state.
+  //
+  // Once because a batch commits to one realm. What it does not do is move as
+  // the batch stages: `stored` composes so a later entry sees an earlier one's
+  // bytes, while a batch that rewrites `realm.json` does not change its own
+  // settings. Nothing would be gained by making it — the settings a realm
+  // serves come from its indexed config card, so they lag a write to it until
+  // the index swap drops the cache. A request issued straight after this batch
+  // reads the old values too, and a batch that refreshed mid-flight would be
+  // the only reader in the system that did not.
+  let settings: Promise<Record<string, JsonValue>> | undefined;
+  let realmConfig = () => (settings ??= core.realmConfig());
   return await core.withWriteLocks(
     lockPaths(entries, paths, lids),
     async () => {
@@ -328,6 +372,10 @@ export async function commitBatch(
       if (opts.waitForIndex !== false && entries.some(stagesContent)) {
         await timed('drain', () => core.drainIndexing());
       }
+      // After the drain, so the state a precondition reads is the realm as this
+      // batch is about to change it, and before staging, so a refusal costs
+      // nothing but the locks it already holds.
+      await opts.precondition?.();
       let staged: StagedChange[] = [];
       // The version each entry's merge was computed over, captured as it stages
       // rather than read back at the end: `stored` moves underneath the batch
@@ -358,6 +406,7 @@ export async function commitBatch(
             fileExists: core.fileExists,
             indexedCardValues: core.indexedCardValues,
             actor: opts.actor ?? '',
+            realmConfig,
             serializeCard: core.serializeCard,
             codeRefKey: core.codeRefKey,
             resolveModuleId: core.resolveModuleId,

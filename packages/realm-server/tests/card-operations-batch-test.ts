@@ -5,6 +5,7 @@ import { basename } from 'path';
 import {
   commitBatch,
   isOperationFailure,
+  OperationFailure,
   type BatchCore,
   type BatchEntry,
   type OperationDefinition,
@@ -21,6 +22,7 @@ import { CardError } from '@cardstack/runtime-common/error';
 import type { CodeRef } from '@cardstack/runtime-common/code-ref';
 import type { RealmIdentifier } from '@cardstack/runtime-common/realm-identifiers';
 import type { Definition } from '@cardstack/runtime-common/definitions';
+import type { JsonValue } from '@cardstack/runtime-common';
 
 // ============================================================================
 // What the coordinator stages, and what it refuses.
@@ -61,6 +63,16 @@ interface Stub {
   lockDepth: () => number;
   drainCount: () => number;
   readsOutsideLock: () => number;
+  // What the batch asked the realm for, in order. Two entries a batch's
+  // correctness depends on the order of: the pre-staging drain, and the read
+  // of the realm's settings that must describe the state the drain left.
+  calls: () => string[];
+  // Every read of a stored file, in or out of the lock. `readsOutsideLock`
+  // answers where a read happened; this answers whether one has happened at
+  // all, which is what distinguishes "before anything was staged" from
+  // "before the commit" — staging reads the pre-state, and a hook that had
+  // slipped past it would still see no commits.
+  sourceReads: () => number;
   // The files the batch asked to be serialized over, sorted. What the lock
   // covers is not visible in any response, so a test that cares which writers
   // a batch excludes has to read it here.
@@ -81,6 +93,9 @@ interface StubOptions {
   // is the identity, which keeps a test's expected bytes readable; a test that
   // cares about a serializer refusal supplies its own.
   serialize?: (doc: any) => any;
+  // The realm's own settings, as `realmConfig()` resolves them. Absent is a
+  // realm that configures none.
+  settings?: Record<string, unknown>;
 }
 
 // The bytes a described content stands for. A realm streams these to disk;
@@ -115,12 +130,19 @@ function cardFile(attributes: Record<string, unknown>, adoptsFrom: unknown) {
 }
 
 function stub(opts: StubOptions = {}): Stub {
-  let { stored = {}, definitions = {}, serialize = (doc: any) => doc } = opts;
+  let {
+    stored = {},
+    definitions = {},
+    serialize = (doc: any) => doc,
+    settings = {},
+  } = opts;
   let commits: Commit[] = [];
   let held = 0;
   let maxHeld = 0;
   let drains = 0;
   let readsOutsideLock = 0;
+  let calls: string[] = [];
+  let sourceReads = 0;
   let lockedPaths: string[] = [];
 
   let core: BatchCore = {
@@ -137,10 +159,12 @@ function stub(opts: StubOptions = {}): Stub {
     },
     async fileExists(localPath) {
       readsOutsideLock += held > 0 ? 0 : 1;
+      sourceReads++;
       return stored[localPath] !== undefined;
     },
     async readSourceFile(localPath) {
       readsOutsideLock += held > 0 ? 0 : 1;
+      sourceReads++;
       let content = stored[localPath];
       return content === undefined
         ? undefined
@@ -148,6 +172,7 @@ function stub(opts: StubOptions = {}): Stub {
     },
     async openSourceBytes(localPath) {
       readsOutsideLock += held > 0 ? 0 : 1;
+      sourceReads++;
       let content = stored[localPath];
       if (content === undefined) {
         return undefined;
@@ -180,6 +205,7 @@ function stub(opts: StubOptions = {}): Stub {
     },
     async drainIndexing() {
       drains++;
+      calls.push('drain');
     },
     async isIgnored(url) {
       return (opts.ignored ?? []).some((p) => url.href === `${REALM}${p}`);
@@ -243,6 +269,10 @@ function stub(opts: StubOptions = {}): Stub {
     async lookupDefinition(codeRef) {
       return 'name' in codeRef ? definitions[codeRef.name] : undefined;
     },
+    async realmConfig() {
+      calls.push('settings');
+      return settings as Record<string, JsonValue>;
+    },
   };
   return {
     core,
@@ -250,6 +280,8 @@ function stub(opts: StubOptions = {}): Stub {
     lockDepth: () => maxHeld,
     drainCount: () => drains,
     readsOutsideLock: () => readsOutsideLock,
+    calls: () => [...calls],
+    sourceReads: () => sourceReads,
     lockedPaths: () => lockedPaths,
   };
 }
@@ -1649,6 +1681,142 @@ module(basename(import.meta.filename), function () {
         'a link-typed param becomes a relationship',
       );
     });
+    test('a named create fills a value from the realm configuration', async function (assert) {
+      let definition: OperationDefinition = {
+        base: 'create',
+        deterministic: true,
+        of: PERSON,
+        fill: { firstName: { $ref: 'realmConfig', key: 'defaultName' } as any },
+      };
+      let { core, commits } = stub({
+        definitions: { Person: personDefinition() },
+        settings: { defaultName: 'Configured' },
+      });
+
+      await commitBatch(
+        core,
+        [{ op: 'create', lid: 'minted', definition }],
+        {},
+      );
+
+      let { data } = JSON.parse(commits[0].writes['Person/minted.json']);
+      assert.strictEqual(
+        data.attributes.firstName,
+        'Configured',
+        'the marker resolved against the settings the realm supplied',
+      );
+    });
+
+    test('the realm is asked for its settings only when the batch reads one', async function (assert) {
+      // Reading them is a parse of the realm's config document, and most
+      // batches name no setting. One that does not must not pay for it.
+      let plain = stub({ definitions: { Person: personDefinition() } });
+      await commitBatch(
+        plain.core,
+        [
+          {
+            op: 'create',
+            lid: 'minted',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Plain' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        {},
+      );
+      assert.deepEqual(
+        plain.calls(),
+        ['drain'],
+        'a create from a document never asks for them',
+      );
+
+      // The other shape a create takes, and the one that reaches the template
+      // resolver — a declaration whose fill names params rather than settings.
+      let declared = stub({
+        definitions: { Person: personDefinition() },
+        settings: { defaultName: 'Configured' },
+      });
+      await commitBatch(
+        declared.core,
+        [
+          {
+            op: 'create',
+            lid: 'minted',
+            definition: {
+              base: 'create',
+              deterministic: true,
+              of: PERSON,
+              params: { title: { kind: 'field', codeRef: STRING } },
+              fill: { firstName: { $ref: 'params', key: 'title' } as any },
+            },
+            params: { title: 'Declared' },
+          },
+        ],
+        {},
+      );
+      assert.deepEqual(
+        declared.calls(),
+        ['drain'],
+        'and neither does a declaration whose template names none',
+      );
+    });
+
+    test('the settings a batch stages from describe the state its drain left', async function (assert) {
+      // The drain waits for indexing already in flight — which may be a write
+      // to the realm's own config card. Settings read before it would stage
+      // values the realm has already replaced, from a different moment than
+      // the files staged beside them.
+      let definition: OperationDefinition = {
+        base: 'create',
+        deterministic: true,
+        of: PERSON,
+        fill: { firstName: { $ref: 'realmConfig', key: 'defaultName' } as any },
+      };
+      let { core, calls } = stub({
+        definitions: { Person: personDefinition() },
+        settings: { defaultName: 'Configured' },
+      });
+
+      await commitBatch(
+        core,
+        [{ op: 'create', lid: 'minted', definition }],
+        {},
+      );
+
+      assert.deepEqual(
+        calls(),
+        ['drain', 'settings'],
+        'the settings are read after the drain, not before it',
+      );
+    });
+
+    test('a named create naming a setting the realm does not configure is refused', async function (assert) {
+      let definition: OperationDefinition = {
+        base: 'create',
+        deterministic: true,
+        of: PERSON,
+        fill: { firstName: { $ref: 'realmConfig', key: 'defaultName' } as any },
+      };
+      let { core, commits } = stub({
+        definitions: { Person: personDefinition() },
+        settings: { somethingElse: 'x' },
+      });
+
+      // Refused rather than left out: a template that silently wrote nothing
+      // where a setting belongs would store the absence as the value, and a
+      // card missing a field reads as the author's choice.
+      let failure = await refusal(core, [
+        { op: 'create', lid: 'minted', definition },
+      ]);
+      assert.strictEqual(failure?.status, 400);
+      assert.strictEqual(failure?.code, 'invalid-params');
+      assert.deepEqual(commits, [], 'nothing was written');
+    });
+
     test('a named create resolves the actor and the card it is anchored on', async function (assert) {
       let definition: OperationDefinition = {
         base: 'create',
@@ -3181,6 +3349,155 @@ module(basename(import.meta.filename), function () {
         entry: 0,
       });
       assert.strictEqual(commits.length, 0, 'nothing is committed');
+    });
+
+    // A caller's precondition is only binding where it runs. Evaluated before
+    // `commitBatch`, a check can pass and the request then queue behind
+    // another writer's whole write, so it holds only while the realm is
+    // uncontended — which inverts what a conditional write is for. These pin
+    // the placement rather than the outcome: a response asserts the same
+    // status and body whether the check ran inside the lock, outside it, or
+    // not at all, so no endpoint test can tell the three apart.
+    test('a precondition runs inside the lock, after the drain, before anything is staged', async function (assert) {
+      let s = stub({
+        stored: {
+          'person-1.json': cardFile({ firstName: 'Original' }, PERSON),
+        },
+      });
+      let observed:
+        | { lockDepth: number; drains: number; sourceReads: number }
+        | undefined;
+      await commitBatch(
+        s.core,
+        [
+          {
+            op: 'update',
+            href: `${REALM}person-1`,
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Updated' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        {
+          precondition: async () => {
+            observed = {
+              lockDepth: s.lockDepth(),
+              drains: s.drainCount(),
+              sourceReads: s.sourceReads(),
+            };
+          },
+        },
+      );
+
+      assert.ok(observed, 'the precondition was called');
+      assert.strictEqual(
+        observed?.lockDepth,
+        1,
+        "with the batch's file locks held, so what it reads cannot move under it",
+      );
+      assert.strictEqual(
+        observed?.drains,
+        1,
+        'after the drain, so the index it reads is current with the bytes',
+      );
+      // Not `commits.length`: everything between the hook and the commit —
+      // the pre-state read, each entry's staging, the compose — leaves that at
+      // zero, so a hook that had slipped past staging would still satisfy it.
+      // A source read is the first thing staging does.
+      assert.strictEqual(
+        observed?.sourceReads,
+        0,
+        'and before anything had been read to stage from',
+      );
+      assert.strictEqual(s.commits.length, 1, 'the write then proceeds');
+    });
+
+    test('a removal runs its precondition inside the lock too', async function (assert) {
+      // A removal stages nothing, so it takes neither the drain nor a staging
+      // read — which leaves the lock as the only thing its precondition can
+      // rest on, and the only thing a test can check it against.
+      let s = stub({
+        stored: {
+          'person-1.json': cardFile({ firstName: 'Original' }, PERSON),
+        },
+      });
+      let observed: { lockDepth: number; commits: number } | undefined;
+      await commitBatch(s.core, [{ op: 'delete', href: `${REALM}person-1` }], {
+        precondition: async () => {
+          observed = { lockDepth: s.lockDepth(), commits: s.commits.length };
+        },
+      });
+
+      assert.strictEqual(
+        observed?.lockDepth,
+        1,
+        'the removal held the write lock when its precondition ran',
+      );
+      // A removal reads nothing to stage from, so the commit count is the only
+      // thing that places it ahead of the removal itself. Without this the
+      // test is satisfied by a hook anywhere inside the lock, including after
+      // the file is gone.
+      assert.strictEqual(
+        observed?.commits,
+        0,
+        'and before the removal was committed',
+      );
+      assert.strictEqual(s.commits.length, 1, 'and the removal then proceeds');
+    });
+
+    test('a precondition that refuses writes nothing and commits nothing', async function (assert) {
+      let { core, commits } = stub({
+        stored: {
+          'person-1.json': cardFile({ firstName: 'Original' }, PERSON),
+        },
+      });
+      let failure = await commitBatch(
+        core,
+        [
+          {
+            op: 'update',
+            href: `${REALM}person-1`,
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Updated' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        {
+          precondition: async () => {
+            throw new OperationFailure({
+              id: `${REALM}person-1`,
+              status: 412,
+              code: 'version-conflict',
+              title: 'Precondition Failed',
+              detail: 'the card is not the one the caller saw',
+            });
+          },
+        },
+      ).then(
+        () => undefined,
+        (err: unknown) => (isOperationFailure(err) ? err.error : err),
+      );
+
+      assert.deepEqual(
+        failure,
+        {
+          id: `${REALM}person-1`,
+          status: 412,
+          code: 'version-conflict',
+          title: 'Precondition Failed',
+          detail: 'the card is not the one the caller saw',
+        },
+        "the caller's own refusal is what the batch fails with, status included",
+      );
+      assert.strictEqual(commits.length, 0, 'and nothing is committed');
     });
   });
 });
