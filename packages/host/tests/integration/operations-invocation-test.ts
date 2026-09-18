@@ -176,6 +176,8 @@ function realmContents() {
     'report-batched.json': reportFile('Batched'),
     'report-refused.json': reportFile('Refused'),
     'report-created-from.json': reportFile('Creator'),
+    'report-grouped.json': reportFile('Grouped'),
+    'report-typed.json': reportFile('Typed'),
     'notes.md': '# Notes\n',
   };
 }
@@ -566,10 +568,10 @@ module('Integration | operations invocation', function (hooks) {
       );
 
       let { Report } = await loader.import<any>(`${testRealmURL}report`);
-      await assert.rejects(
-        (operations(Report) as any).openReports(),
-        /runs on the search engine/,
-        'a declared query says where a query is reached instead of sending a batch',
+      assert.strictEqual(
+        (operations(Report) as any).openReports,
+        undefined,
+        'a declared query has no member either: a query runs on the search engine, and its absence says so rather than a member the types have to hide',
       );
     });
   });
@@ -706,6 +708,47 @@ module('Integration | operations invocation', function (hooks) {
         activity.data.attributes.headline,
         'Lab safety',
         'and the minted card holds what the batch described',
+      );
+    });
+
+    test('a parallel group commits its members together', async function (assert) {
+      // Run against the realm rather than recorded: this realm reads groups,
+      // so what a group means — both members committed, or neither — is
+      // available here rather than only in what the builder emitted.
+      let report = await cardAt('report-grouped');
+      let { Activity } = await loader.import<any>(`${testRealmURL}report`);
+
+      let [group] = (await (operations(report) as any).atomic((b: any) => {
+        let members = b.parallel((p: any) => {
+          let activity = p.create(Activity, { headline: 'Lab safety' });
+          let comment = p.addComment({ body: 'Both or neither.' });
+          return [activity, comment];
+        });
+        return [members];
+      })) as [[OperationWriteResult, OperationWriteResult]];
+      let [created, appended] = group;
+
+      assert.ok(
+        created.id.startsWith(testRealmURL),
+        `the group's create minted a card: ${created.id}`,
+      );
+      assert.strictEqual(
+        appended.id,
+        `${testRealmURL}report-grouped`,
+        "and its sibling wrote the group's anchor card",
+      );
+
+      let stored = await storedCard('report-grouped.json');
+      let comments = stored.data.attributes.comments as { body: string }[];
+      assert.strictEqual(comments.length, 1, 'the append landed');
+      assert.strictEqual(comments[0].body, 'Both or neither.');
+      let activity = await storedCard(
+        `${created.id.slice(testRealmURL.length)}.json`,
+      );
+      assert.strictEqual(
+        activity.data.attributes.headline,
+        'Lab safety',
+        'and so did the card the group minted, in the same commit',
       );
     });
 
