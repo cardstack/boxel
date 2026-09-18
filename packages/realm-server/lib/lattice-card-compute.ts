@@ -22,6 +22,10 @@ import type {
   LatticeBxlValue,
 } from './lattice-bxl-derivation.ts';
 
+// Static shape admission can decline source-mode execution before a value
+// exists. Ordinary runtime errors and stale authority are never this signal.
+export class LatticeUnsupportedComputation extends Error {}
+
 export interface LatticeCardComputePlan {
   version: 1;
   definition: { module: string; name: string; revision: string };
@@ -307,7 +311,9 @@ function assertRootInputs(
 ) {
   for (const name of roots) {
     if (!Object.hasOwn(input.object, name) && !Object.hasOwn(fields, name)) {
-      throw new Error(`Unadmitted computed input: ${name}`);
+      throw new LatticeUnsupportedComputation(
+        `Unadmitted computed input: ${name}`,
+      );
     }
   }
 }

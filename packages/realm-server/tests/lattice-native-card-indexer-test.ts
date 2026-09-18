@@ -533,6 +533,22 @@ module(basename(import.meta.filename), function (hooks) {
         `unadmitted computed ${kind} yields no source candidate`,
       );
     }
+    const ordinaryFailure = new Error(
+      'Unadmitted computed input: runtime failure',
+    );
+    const evaluateCard = worker.evaluateCard;
+    worker.evaluateCard = async () => {
+      throw ordinaryFailure;
+    };
+    try {
+      await assert.rejects(
+        nativeIndexer()(request),
+        (error: Error) => error === ordinaryFailure,
+        'an evaluator failure with a matching message cannot request fallback',
+      );
+    } finally {
+      worker.evaluateCard = evaluateCard;
+    }
     const snapshot = structuredClone(root);
     snapshot.definition.nativeIndex!.materialized = true;
     const ownerRequest = {

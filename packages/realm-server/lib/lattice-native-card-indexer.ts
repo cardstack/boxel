@@ -25,6 +25,7 @@ import {
   type LatticeNativeFileAdmission,
 } from './lattice-native-file.ts';
 import { assembleLatticeCardData } from './lattice-card-data.ts';
+import { LatticeUnsupportedComputation } from './lattice-card-compute.ts';
 import type { LatticeDefinitionSnapshot } from './lattice-card-data.ts';
 import type { LatticeBxlWorker } from './lattice-bxl-derivation.ts';
 import {
@@ -752,6 +753,12 @@ export function createLatticeNativeCardIndexer({
           `native indexer: ${request.url} failed: ${(error as Error)?.message}`,
         );
       if (error instanceof LatticeUnknownLinkInput) return bail('line 407');
+      if (
+        !request.inputSnapshot &&
+        sourceOnly &&
+        error instanceof LatticeUnsupportedComputation
+      )
+        return bail('unsupported source computation');
       throw error;
     } finally {
       await work?.close();

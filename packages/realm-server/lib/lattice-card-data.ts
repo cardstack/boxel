@@ -8,7 +8,10 @@ import type {
 import { getSerializer } from '@cardstack/runtime-common/serializers';
 import type { LatticeBxlShape } from './lattice-bxl-derivation.ts';
 import type { LatticeBxlWorker } from './lattice-bxl-derivation.ts';
-import { makeLatticeCardComputePlan } from './lattice-card-compute.ts';
+import {
+  makeLatticeCardComputePlan,
+  LatticeUnsupportedComputation,
+} from './lattice-card-compute.ts';
 import type { LatticeQueryInputResolver } from './lattice-query-input-plan.ts';
 import { assertLatticeDataProjection } from './lattice-data-projection.ts';
 import { latticeClock, latticeValidUntilInstant } from './lattice-clock.ts';
@@ -457,7 +460,9 @@ export async function assembleLatticeCardData({
       const field = definition.fieldDefs[key];
       if (field.isComputed) continue;
       if (field.type === 'linksTo' || field.type === 'linksToMany')
-        throw new Error(`Unadmitted computed output link: ${prefix}${name}`);
+        throw new LatticeUnsupportedComputation(
+          `Unadmitted computed output link: ${prefix}${name}`,
+        );
       shapes[name] = sample.shapes[name];
     }
     return { object: shapes };
@@ -585,7 +590,10 @@ export async function assembleLatticeCardData({
         `${name}.${plural ? '*.' : ''}`,
       );
       outputShapes[name] = plural ? { array: item } : item;
-    } else throw new Error(`Unadmitted computed output: ${name}`);
+    } else
+      throw new LatticeUnsupportedComputation(
+        `Unadmitted computed output: ${name}`,
+      );
   }
   const normalizedAt = performance.now();
   const queryInputs = await resolveQueryInputs?.({
