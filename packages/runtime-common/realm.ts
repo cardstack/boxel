@@ -211,6 +211,7 @@ import {
   type FileMetaResource,
 } from './index.ts';
 import {
+  assertParamsSupplied,
   canonicalizeTarget,
   newOperationScope,
   readShape,
@@ -229,19 +230,21 @@ import type {
   OperationStoredFileMeta,
 } from './card-operations/dispatch.ts';
 import {
-  answered,
   assertTravelsInEnvelope,
   atEntry,
   batchEntryFor,
   carriesOperationsExt,
   entryWithPayload,
   errorsDocument,
+  invocationsIn,
   isWrite,
   needsActor,
   paramsFor,
   parseOperationsEnvelope,
   projectedResult,
   readResult,
+  resultsTree,
+  stagedTree,
   targetFor,
   writeResult,
   type EnvelopeEntry,
@@ -254,6 +257,7 @@ import {
   isHeadResult,
   isOperationFailure,
   isSourceResult,
+  type EntryPosition,
   type OperationRequest,
   type OperationResult,
   type OperationSourceResult,
@@ -264,6 +268,7 @@ import type {
   BatchCore,
   BatchEntryResult,
 } from './card-operations/coordinator.ts';
+import type { BatchEntry } from './card-operations/executors.ts';
 import type {
   DeferredPrerenderHtml,
   FromScratchResult,
@@ -4477,9 +4482,14 @@ export class Realm {
         detail: `the request body is not valid JSON`,
       });
     }
-    let entries = parseOperationsEnvelope(body, this.url, {
+    // A batch is a tree: the top level is a serial run, and an entry in it may
+    // be a group whose members are entries in their own right. The tree is
+    // what the answer mirrors and what the coordinator schedules staging by;
+    // everything between reads the entries in it, in the order they were sent.
+    let tree = parseOperationsEnvelope(body, this.url, {
       resolveIdentifier: (href) => this.#resolveAtomicHref(href),
     });
+    let entries = invocationsIn(tree);
     let caller = this.#callerOf(request, requestContext);
     // One row peek per target for the whole resolution pass: entries often
     // name the same card, and which behavior a name resolves to is read off
@@ -4517,7 +4527,7 @@ export class Realm {
           detail:
             `operation "${write.entry.name}" writes, and a QUERY batch is ` +
             `authorized to read; send a batch that writes as a POST`,
-          meta: { entry: write.entry.index },
+          meta: { entry: write.entry.position },
         });
       }
     }
@@ -4540,7 +4550,7 @@ export class Realm {
           detail:
             `operation "${needing.entry.name}" reads the invoking actor, and ` +
             `this request authenticated nobody`,
-          meta: { entry: needing.entry.index },
+          meta: { entry: needing.entry.position },
         });
       }
     }
@@ -4550,7 +4560,18 @@ export class Realm {
     // entry never observes what a write entry in the same batch stages, and
     // reading before the coordinator takes the write lock is what keeps a read
     // from waiting on one.
-    let results: (EnvelopeResult | undefined)[] = new Array(entries.length);
+    //
+    // In request order, whatever the tree says. A group is a staging
+    // schedule, and a read stages nothing: it reads the state the batch
+    // started from wherever in the tree it sits, so which group holds it
+    // cannot change its answer. What it would change is how many reads this
+    // realm has in flight for one request, which is a decision about the
+    // realm's own load rather than about what the caller asked for.
+    //
+    // Keyed by position rather than by index, because a position is a path
+    // through the tree for an entry inside a group and there is no array for
+    // one to be an index into.
+    let results = new Map<EntryPosition, EnvelopeResult>();
     for (let { entry, target, definition } of resolved) {
       if (isWrite(definition.base)) {
         continue;
@@ -4564,57 +4585,75 @@ export class Realm {
           ...caller,
         });
       } catch (err: unknown) {
-        throw atEntry(err, entry.index);
+        throw atEntry(err, entry.position);
       }
-      results[entry.index] = readResult(entry, result);
+      results.set(entry.position, readResult(entry, result));
     }
 
     let writes = resolved.filter(({ definition }) => isWrite(definition.base));
     if (writes.length > 0) {
-      // The `input` stage runs before the entry is staged, so every arm of
-      // `batchEntryFor` reads the payload the author's program produced rather
-      // than the one the caller sent — which is what lets an `input` supply a
-      // value the executor would otherwise report as missing. The entry that
-      // comes back keeps its position and the envelope's own members; only the
-      // payload moves.
+      // Each entry's own two steps before it is staged, in the order
+      // `runOperation` runs them for a read: the `input` stage over the
+      // payload, then the `params` check against what it produced. A value an
+      // `input` supplies is what the check then sees, which is most of what an
+      // `input` is for.
+      //
+      // The check belongs here and not in the executors: a declared param with
+      // no value is the caller's mistake, and the behaviors read the payload
+      // differently enough that some would never notice — a `delete` reads no
+      // payload at all, so a declaration requiring one would be carried out
+      // over a card the caller had not said enough to remove.
+      //
+      // The transformed entry keeps its `position`, which is the key both the
+      // staging schedule and the results are looked up by, and the envelope's
+      // own members. Only the payload moves.
+      let staged = new Map<EntryPosition, BatchEntry>();
       for (let write of writes) {
-        if (!write.definition.input) {
-          continue;
-        }
         try {
-          write.entry = entryWithPayload(
-            write.entry,
-            await runInputTransform(
-              write.definition,
-              paramsFor(write.entry),
-              this.#transformContext(write.entry, caller),
-            ),
-          );
+          if (write.definition.input) {
+            write.entry = entryWithPayload(
+              write.entry,
+              await runInputTransform(
+                write.definition,
+                paramsFor(write.entry),
+                this.#transformContext(write.entry, caller),
+              ),
+            );
+          }
+          let { entry, definition } = write;
+          assertParamsSupplied(definition, paramsFor(entry), {
+            name: entry.name,
+            ...(entry.href ? { id: entry.href } : {}),
+          });
+          staged.set(entry.position, batchEntryFor(entry, definition));
         } catch (err: unknown) {
-          throw atEntry(err, write.entry.index);
+          throw atEntry(err, write.entry.position);
         }
       }
-      let staged = writes.map(({ entry, definition }) => {
-        try {
-          return batchEntryFor(entry, definition);
-        } catch (err: unknown) {
-          throw atEntry(err, entry.index);
-        }
-      });
-      // Every staged entry carries the position the caller sent it under, so
-      // a refusal from the coordinator names that one rather than the position
+      // The tree the caller sent, with the entries that only read taken out of
+      // it: the groups are the batch's staging schedule, so the coordinator is
+      // handed the shape rather than a flat list of what writes.
+      //
+      // Every staged entry carries the position the caller sent it under, so a
+      // refusal from the coordinator names that one rather than the position
       // it took among the entries that write — in the key, in the key beside
       // it naming a conflicting entry, and in the prose.
-      let committed = await commitBatch(this.batchCore, staged, {
-        clientRequestId: caller.clientRequestId || null,
-        actor: caller.actor || undefined,
-      });
+      let committed = await commitBatch(
+        this.batchCore,
+        stagedTree(tree, staged),
+        {
+          clientRequestId: caller.clientRequestId || null,
+          actor: caller.actor || undefined,
+        },
+      );
+      // The coordinator answers in the flat order of the entries it staged,
+      // which is the order they were sent in.
       for (let [index, { entry, definition }] of writes.entries()) {
         let result = writeResult(committed[index], (url) =>
           this.#virtualNetwork.unresolveURL(url),
         );
         if (!definition.output) {
-          results[entry.index] = result;
+          results.set(entry.position, result);
           continue;
         }
         // The `output` stage runs after the commit, over the result the wire
@@ -4626,29 +4665,25 @@ export class Realm {
         // declaration is lowered, so what gets here is a program that ran on
         // values it could not handle.
         try {
-          results[entry.index] = projectedResult(
-            entry,
-            await runOutputTransform(
-              definition,
-              result,
-              this.#transformContext(entry, caller),
+          results.set(
+            entry.position,
+            projectedResult(
+              entry,
+              await runOutputTransform(
+                definition,
+                result,
+                this.#transformContext(entry, caller),
+              ),
             ),
           );
         } catch (err: unknown) {
-          throw atEntry(err, entry.index);
+          throw atEntry(err, entry.position);
         }
       }
     }
 
     return this.#operationsResponse(
-      {
-        // Built by index rather than by mapping the array: an unassigned
-        // position is a hole, `map` skips one, and the hole then serializes
-        // as `null` — which is what a delete reports.
-        'atomic:results': Array.from({ length: entries.length }, (_, index) =>
-          answered(results[index], index),
-        ),
-      },
+      { 'atomic:results': resultsTree(tree, results) },
       200,
       requestContext,
     );
@@ -4705,7 +4740,7 @@ export class Realm {
       assertTravelsInEnvelope(canonical, definition);
       return { entry: canonical, target, definition };
     } catch (err: unknown) {
-      throw atEntry(err, entry.index);
+      throw atEntry(err, entry.position);
     }
   }
 

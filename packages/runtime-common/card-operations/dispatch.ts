@@ -535,8 +535,8 @@ export async function resolveOperation(
   return { base: name, deterministic: true };
 }
 
-// What a `read` of this target would answer with, asked before anything is
-// read.
+// Whether a `read` of this target may be answered without running it, asked
+// before anything is read.
 //
 // The card+json `GET` has to know this before it answers, because a projected
 // body is not the representation its validator describes: the ETag is built
@@ -549,14 +549,26 @@ export async function resolveOperation(
 // It costs the definition lookup the assembly would have made anyway; the row
 // peek is shared with the caller's through `scope`.
 //
-// `unresolved` is its own answer rather than being folded into `plain`. A
-// target whose read cannot be resolved — a declaration lowering flagged
-// invalid — has a refusal coming, and the paths this gates are the two that
-// answer without assembling, so reporting it as plain would hand the caller a
-// 304 built from a validator for a card the full request refuses. Saying the
-// question could not be answered sends it down the assembling path, which has
-// the whole request in hand and reports what is actually wrong.
-export type ReadShape = 'projected' | 'plain' | 'unresolved';
+// Only `plain` may be answered from the validator, and the other two answers
+// are the two ways a read stops being answerable that way.
+//
+// `staged` covers a read carrying either stage, not only a projecting one. An
+// `input` changes no byte of the document — a read serves the target's indexed
+// view and ignores its payload — but it can *refuse*: the program can fail,
+// the `params` check runs against what it produced, and a stage that reads
+// `actor()` turns an anonymous request away. A 304 answers as though none of
+// that happened.
+//
+// `unresolved` is a target whose read cannot be resolved at all — a
+// declaration lowering flagged invalid. It has a refusal coming, and reporting
+// it as plain would hand a caller holding a validator a 304 for a card the
+// full request refuses.
+//
+// Both send the request down the assembling path, which has the whole request
+// in hand and answers what is actually true of it. Neither says anything about
+// the *body*: whether it was projected is reported by the assembly, since only
+// the `output` stage decides that.
+export type ReadShape = 'plain' | 'staged' | 'unresolved';
 
 export async function readShape(
   core: OperationCore,
@@ -574,7 +586,7 @@ export async function readShape(
   } catch {
     return 'unresolved';
   }
-  return definition.output === undefined ? 'plain' : 'projected';
+  return hasTransforms(definition) ? 'staged' : 'plain';
 }
 
 export async function runOperation(
@@ -791,21 +803,43 @@ async function runBaseOperation(
 // The payload has to satisfy the schema the definition declares before any
 // behavior runs on it. A declared param with no value is the caller's mistake,
 // and finding out inside an executor means finding out after work has started.
+//
+// Exported because the behaviors that write never reach `runOperation` — a
+// batch stages them through the coordinator instead — and the check has to run
+// on that path too. It cannot be left to the executors: they read the payload
+// differently enough that some would never notice, and a `delete` reads none
+// at all, so a declaration requiring one would be carried out over a card the
+// caller had not said enough to remove.
+export function assertParamsSupplied(
+  definition: OperationDefinition,
+  params: Record<string, unknown> | undefined,
+  // What the refusal names: the operation as it was invoked, and the target
+  // where there is one. Taken as data rather than as a request, since the two
+  // callers hold the same facts in different shapes.
+  invocation: { name: string; id?: string },
+): void {
+  for (let key of Object.keys(definition.params ?? {})) {
+    if (own(params, key) === undefined) {
+      throw new OperationFailure({
+        ...(invocation.id ? { id: invocation.id } : {}),
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid params',
+        detail: `operation "${invocation.name}" requires a value for params("${key}")`,
+      });
+    }
+  }
+}
+
 function validateParams(
   request: OperationRequest,
   definition: OperationDefinition,
 ): void {
-  for (let key of Object.keys(definition.params ?? {})) {
-    if (own(request.params, key) === undefined) {
-      throw new OperationFailure({
-        id: targetId(request.target),
-        status: 400,
-        code: 'invalid-params',
-        title: 'Invalid params',
-        detail: `operation "${request.name}" requires a value for params("${key}")`,
-      });
-    }
-  }
+  let id = targetId(request.target);
+  assertParamsSupplied(definition, request.params, {
+    name: request.name,
+    ...(id ? { id } : {}),
+  });
 }
 
 // One `RealmPaths` per core. It is derived entirely from the realm URL, which

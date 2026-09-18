@@ -440,8 +440,8 @@ module(basename(import.meta.filename), function () {
     test('the projection question is answerable without assembling', async function (assert) {
       assert.strictEqual(
         await readShape(stub({ read: REDACTING_READ }), new URL(CARD)),
-        'projected',
-        'a type that declares an output projects',
+        'staged',
+        'a type that declares an output has a stage to run',
       );
       assert.strictEqual(
         await readShape(stub(), new URL(CARD)),
@@ -503,7 +503,8 @@ module(basename(import.meta.filename), function () {
 
     test('a batch entry keeps the envelope’s own members through its input', async function (assert) {
       let entry: EnvelopeEntry = {
-        index: 0,
+        op: 'invoke',
+        position: 0,
         name: 'addComment',
         href: CARD,
         data: { lid: 'draft-1', body: 'hello', meta: { x: 1 } },
@@ -520,11 +521,16 @@ module(basename(import.meta.filename), function () {
         { body: 'HELLO' },
         'the params the entry is staged from are the transformed ones',
       );
-      assert.strictEqual(transformed.index, 0, 'the position is unchanged');
+      assert.strictEqual(transformed.position, 0, 'the position is unchanged');
     });
 
     test('a batch entry’s projection has to remain a result object', async function (assert) {
-      let entry: EnvelopeEntry = { index: 2, name: 'addComment', href: CARD };
+      let entry: EnvelopeEntry = {
+        op: 'invoke',
+        position: 2,
+        name: 'addComment',
+        href: CARD,
+      };
       assert.deepEqual(projectedResult(entry, { ok: true }), { ok: true });
       let error = await refusal(async () => projectedResult(entry, 'done'));
       assert.strictEqual(error.status, 400);
