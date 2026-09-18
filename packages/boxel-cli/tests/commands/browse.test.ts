@@ -5,7 +5,11 @@ import {
   buildBrowseUrl,
   browse,
 } from '../../src/commands/browse.js';
-import { requestLoginToken, MatrixAuthError } from '../../src/lib/auth.js';
+import {
+  requestLoginToken,
+  MatrixAuthError,
+  MatrixRateLimitError,
+} from '../../src/lib/auth.js';
 import type { ProfileManager } from '../../src/lib/profile-manager.js';
 
 const MATRIX_URL = 'https://matrix.example.com';
@@ -153,6 +157,47 @@ describe('requestLoginToken', () => {
     await expect(requestLoginToken(MATRIX_AUTH, fetchFn)).rejects.toThrow(
       /login_via_existing_session enabled/,
     );
+  });
+
+  it('throws MatrixRateLimitError with the wait on a 429 M_LIMIT_EXCEEDED', async () => {
+    let fetchFn = vi.fn().mockResolvedValue(
+      fakeResponse(429, {
+        errcode: 'M_LIMIT_EXCEEDED',
+        error: 'Too Many Requests',
+        retry_after_ms: 45000,
+      }),
+    );
+
+    await expect(requestLoginToken(MATRIX_AUTH, fetchFn)).rejects.toMatchObject(
+      {
+        name: 'MatrixRateLimitError',
+        retryAfterMs: 45000,
+      },
+    );
+  });
+
+  it('throws MatrixRateLimitError with no wait when retry_after_ms is absent', async () => {
+    let fetchFn = vi
+      .fn()
+      .mockResolvedValue(
+        fakeResponse(429, { errcode: 'M_LIMIT_EXCEEDED', error: 'slow down' }),
+      );
+
+    let err = await requestLoginToken(MATRIX_AUTH, fetchFn).catch((e) => e);
+    expect(err).toBeInstanceOf(MatrixRateLimitError);
+    expect(err.retryAfterMs).toBeUndefined();
+  });
+
+  it('classifies an M_LIMIT_EXCEEDED errcode on a non-429 status as a rate limit', async () => {
+    let fetchFn = vi
+      .fn()
+      .mockResolvedValue(
+        fakeResponse(400, { errcode: 'M_LIMIT_EXCEEDED', error: 'slow down' }),
+      );
+
+    await expect(
+      requestLoginToken(MATRIX_AUTH, fetchFn),
+    ).rejects.toBeInstanceOf(MatrixRateLimitError);
   });
 
   it('reports a 400 with another errcode as a raw failure, not "not enabled"', async () => {
@@ -332,6 +377,125 @@ describe('browse', () => {
     expect(reAuthenticate).toHaveBeenCalledTimes(1);
     expect(requestLoginTokenFn).toHaveBeenCalledTimes(2);
     expect(openBrowserFn).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a clear rate-limit error and does not open a browser for a long wait', async () => {
+    let openBrowserFn = vi.fn().mockResolvedValue(true);
+    let sleep = vi.fn().mockResolvedValue(undefined);
+    let requestLoginTokenFn = vi
+      .fn()
+      .mockRejectedValue(new MatrixRateLimitError('rate limited', 45000));
+
+    await expect(
+      browse(undefined, {
+        profileManager: fakeProfileManager(),
+        requestLoginToken: requestLoginTokenFn,
+        openBrowserFn,
+        sleep,
+        log: () => {},
+      }),
+    ).rejects.toThrow(/once per minute per account/);
+
+    // No wait, no retry, no browser opened.
+    expect(sleep).not.toHaveBeenCalled();
+    expect(requestLoginTokenFn).toHaveBeenCalledTimes(1);
+    expect(openBrowserFn).not.toHaveBeenCalled();
+  });
+
+  it('auto-waits and retries once when the rate-limit wait is short', async () => {
+    let openBrowserFn = vi.fn().mockResolvedValue(true);
+    let sleep = vi.fn().mockResolvedValue(undefined);
+    let requestLoginTokenFn = vi
+      .fn()
+      .mockRejectedValueOnce(new MatrixRateLimitError('rate limited', 2000))
+      .mockResolvedValueOnce({ loginToken: 'lt_fresh', expiresInMs: 120000 });
+
+    await browse(undefined, {
+      profileManager: fakeProfileManager(),
+      requestLoginToken: requestLoginTokenFn,
+      openBrowserFn,
+      sleep,
+      log: () => {},
+    });
+
+    expect(sleep).toHaveBeenCalledWith(2000);
+    expect(requestLoginTokenFn).toHaveBeenCalledTimes(2);
+    expect(openBrowserFn).toHaveBeenCalledWith(
+      'https://localhost:4200/?loginToken=lt_fresh',
+    );
+  });
+
+  it('waits (capped at the max) and retries when --wait is set for a long window', async () => {
+    let openBrowserFn = vi.fn().mockResolvedValue(true);
+    let sleep = vi.fn().mockResolvedValue(undefined);
+    let requestLoginTokenFn = vi
+      .fn()
+      .mockRejectedValueOnce(new MatrixRateLimitError('rate limited', 120000))
+      .mockResolvedValueOnce({ loginToken: 'lt_fresh', expiresInMs: 120000 });
+
+    await browse(undefined, {
+      wait: true,
+      profileManager: fakeProfileManager(),
+      requestLoginToken: requestLoginTokenFn,
+      openBrowserFn,
+      sleep,
+      log: () => {},
+    });
+
+    // 120000 is capped to MAX_WAIT_MS (90000).
+    expect(sleep).toHaveBeenCalledWith(90000);
+    expect(openBrowserFn).toHaveBeenCalledWith(
+      'https://localhost:4200/?loginToken=lt_fresh',
+    );
+  });
+
+  it('gives up with a friendly error when the rate limit persists after the retry', async () => {
+    let openBrowserFn = vi.fn().mockResolvedValue(true);
+    let sleep = vi.fn().mockResolvedValue(undefined);
+    let requestLoginTokenFn = vi
+      .fn()
+      .mockRejectedValue(new MatrixRateLimitError('rate limited', 2000));
+
+    await expect(
+      browse(undefined, {
+        wait: true,
+        profileManager: fakeProfileManager(),
+        requestLoginToken: requestLoginTokenFn,
+        openBrowserFn,
+        sleep,
+        log: () => {},
+      }),
+    ).rejects.toThrow(/once per minute per account/);
+
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(requestLoginTokenFn).toHaveBeenCalledTimes(2);
+    expect(openBrowserFn).not.toHaveBeenCalled();
+  });
+
+  it('under --print-url, a rate limit throws and prints no URL to stdout', async () => {
+    let openBrowserFn = vi.fn().mockResolvedValue(true);
+    let sleep = vi.fn().mockResolvedValue(undefined);
+    let requestLoginTokenFn = vi
+      .fn()
+      .mockRejectedValue(new MatrixRateLimitError('rate limited', 45000));
+    let stdout = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+
+    await expect(
+      browse(undefined, {
+        printUrl: true,
+        profileManager: fakeProfileManager(),
+        requestLoginToken: requestLoginTokenFn,
+        openBrowserFn,
+        sleep,
+        log: () => {},
+      }),
+    ).rejects.toThrow(/once per minute per account/);
+
+    expect(sleep).not.toHaveBeenCalled();
+    expect(stdout).not.toHaveBeenCalled();
+    stdout.mockRestore();
   });
 
   it('uses a named --profile via getProfile', async () => {

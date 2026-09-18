@@ -18,6 +18,21 @@ export class MatrixAuthError extends Error {
   }
 }
 
+// Thrown when Matrix rate-limits login-token minting (429 / M_LIMIT_EXCEEDED).
+// Carries the server-reported wait when present. The limit is per user id and
+// deliberately not configurable upstream, so callers surface it or wait+retry
+// rather than re-authenticating — a fresh token is subject to the same limit.
+export class MatrixRateLimitError extends Error {
+  retryAfterMs?: number;
+  constructor(message: string, retryAfterMs?: number) {
+    super(message);
+    this.name = 'MatrixRateLimitError';
+    if (retryAfterMs !== undefined) {
+      this.retryAfterMs = retryAfterMs;
+    }
+  }
+}
+
 interface MatrixLoginResponse {
   access_token: string;
   device_id: string;
@@ -69,14 +84,31 @@ export interface LoginToken {
 
 // Parse a Matrix error body, which is JSON `{ errcode, error, ... }` on a
 // standard error and additionally carries `flows` when the endpoint answers a
-// User-Interactive Auth (UIA) challenge. Tolerant of a non-JSON body.
+// User-Interactive Auth (UIA) challenge, or `retry_after_ms` on a rate limit.
+// Tolerant of a non-JSON body.
 function parseMatrixError(text: string): {
   errcode?: string;
   flows?: unknown;
+  retryAfterMs?: number;
 } {
   try {
-    let parsed = JSON.parse(text) as { errcode?: string; flows?: unknown };
-    return parsed && typeof parsed === 'object' ? parsed : {};
+    let parsed = JSON.parse(text) as {
+      errcode?: string;
+      flows?: unknown;
+      retry_after_ms?: unknown;
+    };
+    if (!parsed || typeof parsed !== 'object') {
+      return {};
+    }
+    let retryAfterMs =
+      typeof parsed.retry_after_ms === 'number' && parsed.retry_after_ms >= 0
+        ? parsed.retry_after_ms
+        : undefined;
+    return {
+      errcode: parsed.errcode,
+      flows: parsed.flows,
+      ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
+    };
   } catch {
     return {};
   }
@@ -127,7 +159,7 @@ export async function requestLoginToken(
   }
 
   let text = await response.text();
-  let { errcode, flows } = parseMatrixError(text);
+  let { errcode, flows, retryAfterMs } = parseMatrixError(text);
 
   // A rejected access token — surface it as MatrixAuthError so the caller can
   // re-authenticate and retry once, matching the other Matrix calls here.
@@ -135,6 +167,18 @@ export async function requestLoginToken(
     throw new MatrixAuthError(
       response.status,
       `Matrix rejected the access token: ${response.status} ${text}`,
+    );
+  }
+
+  // Synapse rate-limits login-token minting to ~1/min per user id (hardcoded,
+  // not configurable). Surface it as a typed error carrying the server-reported
+  // wait so the caller can wait+retry or print a clear message. Deliberately
+  // NOT a MatrixAuthError: re-authenticating mints a new token, but the limit is
+  // per user, so re-auth wouldn't help.
+  if (response.status === 429 || errcode === 'M_LIMIT_EXCEEDED') {
+    throw new MatrixRateLimitError(
+      `Matrix rate-limited the login-token request: ${response.status} ${text}`,
+      retryAfterMs,
     );
   }
 

@@ -10,6 +10,7 @@ import {
 import {
   requestLoginToken as defaultRequestLoginToken,
   MatrixAuthError,
+  MatrixRateLimitError,
 } from '../lib/auth.ts';
 import { resolveAnonymousBrowseUrl as defaultResolveAnonymousBrowseUrl } from '../lib/published-realm.ts';
 import { openBrowser } from '../lib/open-browser.ts';
@@ -23,6 +24,31 @@ import { cliLog } from '../lib/cli-log.ts';
 // there the host app URL is just the realm server URL.
 const LOCAL_REALM_SERVER_URL = 'https://localhost:4201/';
 const LOCAL_HOST_APP_URL = 'https://localhost:4200/';
+
+// Login-token minting is rate-limited to ~1/min per account (see
+// MatrixRateLimitError). When the reported wait is this short or under, auto-wait
+// and retry once so genuine back-to-back opens "just work".
+const SHORT_WAIT_MS = 5000;
+// Sanity cap on any single wait: retry_after for a 1/min limit is ≤ ~60s, so this
+// only guards against a pathological server value blocking the command forever.
+const MAX_WAIT_MS = 90000;
+
+const defaultSleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+// The clear, actionable message shown when we won't (or can't) wait out a
+// login-token rate limit. Names the limit and the wait, and points at `--wait`.
+function rateLimitMessage(retryAfterMs: number | undefined): string {
+  let when =
+    retryAfterMs !== undefined
+      ? `Try again in ~${describeDuration(retryAfterMs)}`
+      : 'Try again shortly';
+  return (
+    `Login-token minting is rate-limited to about once per minute per account ` +
+    `(a Matrix anti-abuse limit that can't be raised). ${when} — or re-run with ` +
+    `\`--wait\` to block and retry automatically.`
+  );
+}
 
 /**
  * Derive the origin that serves the host app for a profile.
@@ -69,12 +95,16 @@ export interface BrowseOptions {
   profile?: string;
   hostUrl?: string;
   printUrl?: boolean;
+  // Block and retry once when login-token minting is rate-limited, even for a
+  // long wait (short waits auto-retry regardless). Capped at MAX_WAIT_MS.
+  wait?: boolean;
   // Injectable seams for testing.
   profileManager?: ProfileManager;
   requestLoginToken?: typeof defaultRequestLoginToken;
   resolveAnonymousBrowseUrl?: typeof defaultResolveAnonymousBrowseUrl;
   openBrowserFn?: (url: string) => Promise<boolean>;
   log?: (message: string) => void;
+  sleep?: (ms: number) => Promise<void>;
 }
 
 // Resolve the target profile: the named one, or the active one. A missing
@@ -108,6 +138,7 @@ export async function browse(
     options.resolveAnonymousBrowseUrl ?? defaultResolveAnonymousBrowseUrl;
   let openBrowserFn = options.openBrowserFn ?? openBrowser;
   let log = options.log ?? ((message: string) => console.log(message));
+  let sleep = options.sleep ?? defaultSleep;
 
   let resolved = resolveProfile(pm, options.profile);
 
@@ -152,15 +183,53 @@ export async function browse(
 
   // Mint the login token, recovering once from a rejected access token via the
   // profile manager's interactive re-auth (same pattern as the other commands).
+  let mintToken = async () => {
+    try {
+      return await requestLoginToken(pm.getStoredMatrixAuth(profileId));
+    } catch (err) {
+      if (!(err instanceof MatrixAuthError)) {
+        throw err;
+      }
+      let freshAuth = await pm.reAuthenticate(profileId);
+      return await requestLoginToken(freshAuth);
+    }
+  };
+
+  // A 429 rate limit is separate from the auth recovery above: re-auth wouldn't
+  // help (the limit is per account). Wait+retry once when the wait is short or
+  // `--wait` was given; otherwise surface a clear, actionable message. We never
+  // fall back to opening the app without a fresh token — the CLI can't tell which
+  // account the browser holds, so a tokenless open could land on the wrong one.
   let token;
   try {
-    token = await requestLoginToken(pm.getStoredMatrixAuth(profileId));
+    token = await mintToken();
   } catch (err) {
-    if (!(err instanceof MatrixAuthError)) {
+    if (!(err instanceof MatrixRateLimitError)) {
       throw err;
     }
-    let freshAuth = await pm.reAuthenticate(profileId);
-    token = await requestLoginToken(freshAuth);
+    let { retryAfterMs } = err;
+    let shouldWait =
+      options.wait === true ||
+      (retryAfterMs !== undefined && retryAfterMs <= SHORT_WAIT_MS);
+    if (!shouldWait) {
+      throw new Error(rateLimitMessage(retryAfterMs));
+    }
+    let waitMs = Math.min(retryAfterMs ?? SHORT_WAIT_MS, MAX_WAIT_MS);
+    // Progress on stderr so it never contaminates `--print-url` stdout.
+    cliLog.info(
+      `Login-token minting is rate-limited; waiting ${describeDuration(
+        waitMs,
+      )} and retrying…`,
+    );
+    await sleep(waitMs);
+    try {
+      token = await mintToken();
+    } catch (retryErr) {
+      if (retryErr instanceof MatrixRateLimitError) {
+        throw new Error(rateLimitMessage(retryErr.retryAfterMs));
+      }
+      throw retryErr;
+    }
   }
 
   let hostUrl = hostAppUrlForProfile(profile, options.hostUrl);
@@ -194,6 +263,7 @@ interface BrowseCliOptions {
   profile?: string;
   hostUrl?: string;
   printUrl?: boolean;
+  wait?: boolean;
 }
 
 export function registerBrowseCommand(program: Command): void {
@@ -216,6 +286,11 @@ export function registerBrowseCommand(program: Command): void {
     .option(
       '--print-url',
       'Print the authenticated URL instead of opening a browser (for remote shells / agents)',
+    )
+    .option(
+      '--wait',
+      'If login-token minting is rate-limited (~1/min per account), wait out the ' +
+        'reported delay and retry once instead of erroring',
     )
     .action(async (cardPath: string | undefined, opts: BrowseCliOptions) => {
       try {
