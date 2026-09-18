@@ -257,3 +257,77 @@ The control produced **zero** catalog imports against the same brief and corpus
 where this branch produced two. That is criterion 2 moving in the intended
 direction, but with one run per arm it is consistent-with, not evidence of, an
 effect.
+
+---
+
+## Why `design/tokens.css` is never consumed by a `.gts`
+
+Traced through history rather than inferred.
+
+`design/tokens.css` enters in **`cf3c875af5`** ("Factory v2/v3…", 2026-07-17)
+together with `issue-design-foundation.md`. The whole bridge between the file
+and the cards is one word, unchanged since:
+
+> **`design/tokens.css`** — the same decisions as CSS custom properties …
+> Every future mockup links this file; every future `.gts` template
+> **mirrors** these variables.
+
+"Mirrors" can be read as _reproduce them_. But every instruction the build
+turn actually reads says reference, not define:
+
+| file                  | says                                                                |
+| --------------------- | ------------------------------------------------------------------- |
+| `issue-build.md:83`   | "Use theme CSS variables (`var(--*)`) per the notes' token mapping" |
+| `issue-design.md:128` | notes carry "theme-token mapping for every hard-coded color/size"   |
+
+A _mapping_ says which token replaces which colour. Nothing anywhere
+instructs anyone to emit the definitions, and the mockup never needs them
+emitted because an HTML page can `<link>` the stylesheet.
+
+The ambiguity is resolved in the losing direction by the agent that writes the
+brand guide each run. This run's guide paraphrased it as _"every `.gts`
+template **references** those `var(--_)` names"\* — reference, not mirror.
+
+### It has never worked
+
+Three independent factory runs against this brief, one per code revision:
+
+| workspace                                     | var refs in the card | palette tokens defined |
+| --------------------------------------------- | -------------------- | ---------------------- |
+| `user/field-notes` (spike)                    | 100                  | 0                      |
+| `user/fieldnotes-control` (unmodified `main`) | 132                  | 0                      |
+| `user/fieldnotes-reuse` (this branch)         | 113                  | 0                      |
+
+No factory-built card has ever defined a palette token. This is not a
+regression in anything; it is a handoff that was never written, latent since
+the file was introduced, and invisible because CSS treats an undefined
+`var()` with no fallback as _invalid at computed-value time_ — the property
+silently takes its inherited or initial value, and no gate evaluates CSS.
+
+Needs its own ticket. The fix is a choice between the card emitting its own
+token block (what catalog `Author` does via `themeStyleFor`), a Theme card
+supplying them at runtime, or fallbacks on every `var()`.
+
+## `GAP` vs `REUSE-BLOCKED` — resolved
+
+The run dispositioned the hand-built Contributor card as `REUSE-BLOCKED`
+(a near-miss `Author` existed and could not be used) where the contract's
+scorer expected a `GAP`. Both readings were defensible because the prompt
+defined three dispositions without saying which wins when two apply.
+
+Now told apart by cause, one row per need:
+
+- `REFERENCE` — the catalog has it; wire it in.
+- `REUSE-BLOCKED` — a candidate exists but cannot be used; name it and the
+  blocking mechanism, then build it yourself.
+- `GAP` — the catalog has nothing; build it yourself.
+
+The last two both end in a hand-build, so criterion 3 accepts either and
+never both for one need. Re-scoring the existing run under the corrected
+rule: **1 hand-written definition, 1 row accounting for it** — clean, with no
+change in agent behaviour, which is the evidence that the mismatch was in the
+contract rather than the output.
+
+The example table already matched this rule: the card is `REUSE-BLOCKED`
+because a near-miss card is exactly what a catalog tends to have, and the
+editorial calendar is a `GAP`.

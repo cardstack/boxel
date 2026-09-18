@@ -96,10 +96,15 @@ the mockup already fixed is one you can no longer adopt.
   `design/<card-slug>-NOTES.md` — one row per need, including the card
   itself: need → decision (`REFERENCE` / `REUSE-BLOCKED` / `GAP`) → module
   and name → wiring form (`adoptsFrom`, import + `contains`, `linksTo`).
-  Wire every `REFERENCE` row in §4 rather than writing your own equivalent;
-  only `GAP` rows are yours to build. A hand-built definition with no `GAP`
-  row is an omission, not a choice — and a reasoned `GAP` or `REUSE-BLOCKED`
-  is a correct outcome, not a failure.
+  One row per need, the decisions told apart by cause: `REFERENCE` (the
+  catalog has it — wire it in), `REUSE-BLOCKED` (a candidate exists but
+  cannot be used — name it and the blocking mechanism, then build it
+  yourself), `GAP` (the catalog has nothing — build it yourself). The last
+  two both end in building it yourself; never record both for one need. Wire
+  every `REFERENCE` row in §4 rather than writing your own equivalent.
+  Every definition you hand-build carries a row — `GAP` or `REUSE-BLOCKED`,
+  either is a correct outcome with a real reason. A hand-built definition
+  with no row at all is the omission.
 - **If a gate blocks an adoption you want**, record `REUSE-BLOCKED` with the
   gate and its exact error and `post_update` the same — never quietly
   hand-build the thing instead.

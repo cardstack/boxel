@@ -138,10 +138,24 @@ rule below.
   | links out | REFERENCE | `@cardstack/catalog/…#ContactLinkField` | import + `contains` |
   | editorial calendar | GAP | — | none in catalog; build new |
 
-  `Decision` is `REFERENCE`, `REUSE-BLOCKED` or `GAP`. `Wiring` is
-  `adoptsFrom`, import + `contains`, or `linksTo`. A hand-built definition
-  with no `GAP` row is an omission, not a choice — and a `GAP` or
-  `REUSE-BLOCKED` row with a real reason is a correct outcome, not a
-  failure.
+  **One row per need, and the three decisions are told apart by cause:**
+
+  - `REFERENCE` — the catalog has it and you are wiring it in.
+  - `REUSE-BLOCKED` — the catalog has a candidate that ought to fit but
+    cannot be used. Name the candidate and the mechanism that blocks it.
+    You then build it yourself.
+  - `GAP` — the catalog has nothing for this need. You build it yourself.
+
+  `REUSE-BLOCKED` and `GAP` both end in building it yourself; what separates
+  them is whether a candidate existed. Never record both for one need — the
+  card itself is usually a `REUSE-BLOCKED`, because a near-miss card is
+  exactly what the catalog does have.
+
+  `Wiring` is `adoptsFrom`, import + `contains`, or `linksTo` for a
+  `REFERENCE`; for the other two it carries the reason — the mismatched
+  fields, or the mechanism that blocks adoption. Every definition you
+  hand-build must carry a row — a `GAP` or a `REUSE-BLOCKED`, either is a
+  correct outcome with a real reason. A hand-built definition with no row at
+  all is the omission.
 - `post_update` a `decision` summarizing the accepted design.
 - Call `signal_done`. Do NOT set issue status; do NOT write card code.
