@@ -57,9 +57,13 @@ const realmURL = testRealmURLFor('link-shape/');
 // read decides on it.
 let load = 0;
 
-// Dwell is off and the thresholds are tight so a test can step the ladder read
-// by read. The production values are asserted where they belong — on the
-// policy, not on a route.
+// Dwell is off and the rungs are close together so a test can step the ladder
+// read by read on an assigned reading. These are a fixture rather than the
+// shipped values, like the ladder in `link-shape-policy-test.ts` — what a route
+// has to show is that it follows whatever rung its realm is on, which is
+// independent of where the rungs are set. The module below is where the shipped
+// numbers appear, because reaching a rung from real load is the one thing that
+// stops being true if a rung is set past what a process can reach.
 function buildTestPolicy(): LinkShapePolicy {
   return new LinkShapePolicy({
     readLoad: () => load,

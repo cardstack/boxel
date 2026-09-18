@@ -309,10 +309,17 @@ const DEFAULT_LINK_SHAPE_MIN_DWELL_MS = 60_000;
 // each health sample's lag with the sustained reading from that same sample on
 // that same process, lag p99 climbs off the 20 ms histogram floor as the
 // reading leaves idle, reaches roughly 55-80 ms by a reading of about 3, and
-// then stops climbing: it is flat from there through 4, 5, 8, 12 and beyond
-// 20. So the rung is placed where the loop's cost *begins*, which is where the
-// association exists, rather than where it is worst, which this says nothing
-// about.
+// then stops climbing: it is flat from there through 4, 5, 8 and 12, out to a
+// reading of 20. So the rung is placed where the loop's cost *begins*, which
+// is where the association exists, rather than where it is worst, which this
+// says nothing about.
+//
+// Past 20 the association does not merely flatten, it reverses — the samples
+// above 20 sit back on the 20 ms floor. That is the range the upper rung and
+// the admission cap act in, so it is a different regime rather than a
+// continuation of this one, and it is not evidence for where this rung goes.
+// The likely reading is that a process that deep is queueing rather than
+// computing, but nothing here establishes that.
 //
 // Two things that observation does not establish, both worth holding onto
 // before it gets quoted for more than it says. Lag and the reading are both
@@ -331,15 +338,50 @@ const DEFAULT_LINK_SHAPE_MIN_DWELL_MS = 60_000;
 // one, and 3 buys only another 1-2 points of degraded time on the busy
 // windows.
 //
-// The cost of coming down is nil where it was feared. Degraded time on quiet
-// production traffic is 0.0% at 3, 4, 5 and 8 alike: the reading never reaches
-// any of them. Flapping does not increase either — across the candidates the
-// level-change rate *peaks* around 6-7 (2-3 per replica-hour) and falls away
-// on both sides, because a rung below where the reading dwells during a busy
-// stretch engages once and stays rather than oscillating across it. Inside the
-// busy windows 4 is the steadiest of the candidates; over all replayed time it
-// runs at 0.28 level changes per replica-hour against 0.19 at 8, both far
-// below the one-per-hour the dwell floor would permit.
+// On that replay's quiet windows every candidate spends 0.0% of its time
+// degraded, at 3, 4, 5 and 8 alike, because the reading never reaches any of
+// them. That is not in tension with the 3.8% the upper rung's note records
+// for an engage of 8, which came from a different and far busier window: the
+// control window fitted against there had raw samples at the cap of 30 and a
+// smoothed peak of 17, where these peak at 2.06. A quiet window is only as
+// informative as the load it actually carried, so both figures need their
+// window named, and neither is stale.
+//
+// What the busy windows buy, and pay, is the other half. Over the two busiest
+// replayed stretches, degraded time goes from 42.5% and 36.2% at 8/4 to 88.7%
+// and 88.8% at 4/2 — so this roughly doubles the time a loaded realm spends
+// shedding multi-row closures, which is the point and also the cost.
+//
+// Level changes do not follow that in either direction cleanly. Inside those
+// same stretches the rate at 4/2 is at or below 8/4 (0.81 against 1.63; 1.01
+// against 1.01), while over all replayed time it rises, 0.19 to 0.28 per
+// replica-hour. Both remain far below what the mechanism permits — the dwell
+// floor bounds a realm to one change a minute, so a ceiling of 60 per
+// realm-hour, and more than that across realms. Note this whole estimate is
+// open-loop: the replayed reading was recorded by a process on which this
+// policy never engaged, so it cannot show the feedback by which degrading
+// lowers service time and therefore lowers the reading that chose it. The
+// quiet-window figures are unaffected, since nothing engages there; these busy
+// ones are estimates awaiting a run with the rung reachable.
+//
+// The release keeps the engage/release ratio the ladder already used at both
+// rungs, which puts it at 2. Replaying the alternatives at this engage, a
+// release of 1 holds a realm degraded noticeably longer for a slightly lower
+// change rate (15.0% of all replayed time against 11.8%, at 0.23 changes per
+// replica-hour against 0.28), and a release of 3 gives most of that time back
+// at the highest change rate of the three (10.7% at 0.40). 2 is the middle of
+// that, and the one that leaves the band two wide.
+//
+// One consequence of halving both numbers together is worth being explicit
+// about, because it is easy to read as an oversight. The engage at 4 sits
+// clear of the 2.06 that quiet traffic peaks at, but the release at 2 sits
+// just *under* it — so a realm that has engaged must fall below the busiest
+// ordinary reading before it carries closures again, where at 8/4 both ends of
+// the band were clear of it. That asymmetry is deliberate: degraded is the
+// cheaper side to be wrong on, since a shed closure costs a caller extra
+// fetches while a carried one under load costs every other caller on the
+// process. It does mean a realm coming off a busy stretch lingers at
+// `multi-row` longer than the engage alone suggests.
 //
 // What this rung is not is a defence against the cost of any one search. The
 // reading counts admitted searches and says nothing about what each is doing,

@@ -275,14 +275,19 @@ Four properties decide whether a change to any of these does what you expect:
    upper rung sits at 12: lowering it to 8 raised a quiet control window's
    degraded time from 0.3% to 3.8%.
 
-   The fragmentation *rate*, though, is not monotonic in the engage, so "lower
-   engage, more flapping" is the wrong intuition to tune by. Measured across
-   candidate values, the level-change rate peaks where the rung sits near the
-   reading a busy stretch dwells at, and falls away on either side — a rung
-   below that band engages once and stays rather than oscillating across it.
-   What a lower engage buys reliably is more time spent degraded, not more
-   transitions. Judge a candidate on the `dwellMs` distribution its transitions
-   report.
+   The fragmentation _rate_, though, does not track the engage as directly as
+   that trade suggests, so "lower engage, more flapping" is not a safe thing to
+   tune by. Replaying production against candidate pairs, the rate inside a
+   busy stretch was at or below the higher engage's, while over all replayed
+   time it rose — the reliable effect of a lower engage is more time spent
+   degraded, not more transitions. Two cautions on that: a replay of a recorded
+   reading is open-loop, so it cannot show degradation lowering service time
+   and therefore lowering the reading that chose it; and it consults the ladder
+   on every health sample rather than on every read, which overstates how often
+   a quiet realm moves. Judge a candidate on the `dwellMs` distribution its
+   transitions actually report, and treat a distribution piled at
+   `LINK_SHAPE_MIN_DWELL_MS` as the band being too narrow rather than as noise.
+
 4. **Anything that is not a number is the shipped default.** Each is parsed
    with a fallback, so an absent, empty or non-numeric value leaves the
    application's default in force rather than disabling the policy. That is
@@ -290,7 +295,7 @@ Four properties decide whether a change to any of these does what you expect:
 
    Careful with `0`: it is a number, and each knob clamps up to its own
    minimum rather than reading as unset. For an engage threshold that minimum
-   is 1, so `0` means *permanently engaged*, not *off*.
+   is 1, so `0` means _permanently engaged_, not _off_.
 
 5. **The reading counts searches, not work.** `inFlight` is incremented once
    per admitted search regardless of what that search costs, so a reading of 5

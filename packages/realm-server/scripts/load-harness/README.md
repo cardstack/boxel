@@ -440,13 +440,29 @@ deployed realm at `--derive-page-size 0`, 19 readers held a peak 120-second
 mean of **6.3** searches in flight. Read that against the rungs and the cap in
 `packages/runtime-common/search-bounds.ts`: this run cost about three readers
 per unit of mean, so the lower rung at 4 wants roughly 13 readers and the upper
-one at 12 roughly 36, **per replica**. A pool that reaches the lower rung is
-therefore within easy reach, while driving a fleet to the upper rung or to the
-admission cap still needs a pool several times larger. Treat those as a floor
+one at 12 roughly 36, **per replica**. A pool of this size therefore already
+clears the lower rung, while driving a fleet to the upper rung or to the
+admission cap still needs one several times larger. Treat those as a floor
 rather than an estimate — the scaling is only linear while service time holds,
 and service time is what rises first as a realm saturates. Growing the pool is
 what makes a load number realistic, and it is what puts the admission queue
 under enough pressure to shed.
+
+**Which means a default-sized unbounded run now degrades itself partway
+through, and its numbers have to be read accordingly.** Both figures this file
+reports for unbounded runs — the 5.3 concurrency in the derived-run table above
+and the 6.3 peak here — sit above the lower rung of 4. At a 120-second
+half-life the reading crosses it after a couple of half-lives of sustained
+load, so any run longer than a few minutes against a deployment at shipped
+thresholds engages `multi-row` mid-run, and every search it answers after that
+point comes back links-only.
+
+Two consequences. Holding the reader count fixed between two runs is no longer
+enough to make them comparable, because two runs of different durations
+straddle the rung differently, and every table above was measured on the
+un-degraded side of it. And the diagnostic inverts: a run that reports no
+degradation at these readings is now a reason to check that the policy is
+wired up, rather than the expected result.
 
 **Exercising the mechanism is a different question, and much cheaper.** The
 rungs are thresholds on the load reading, settable per environment —
