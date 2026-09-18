@@ -202,7 +202,10 @@ export class VirtualNetwork {
   // alias) onto the real URL, which is the form shims for realm-mapped
   // identifiers are keyed by, so all spellings converge on one module.
   getShimmedModule(url: string): Promise<ModuleLike | undefined> {
-    return this.packageShimHandler.lookupModule(this.toRealURLHref(url));
+    return this.packageShimHandler.lookupModule(
+      this.toRealURLHref(url),
+      this.unresolveURL(url),
+    );
   }
 
   addURLMapping(from: URL, to: URL) {
