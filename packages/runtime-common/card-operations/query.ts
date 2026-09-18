@@ -91,10 +91,11 @@ export function lowerQueryOperation(
     'query',
   ) as OperationQueryTemplate;
   let query = resolved as SearchEntryWireQuery;
-  // An authored `realms` is a deliberate scope and stands, empty included —
-  // `realms: []` says "these and no others", which is not the same as saying
-  // nothing. The invocation's scope fills only the slot a declaration left
-  // alone.
+  // An authored `realms` is a deliberate scope and stands: the invocation's
+  // scope fills only the slot a declaration left alone. An empty list is left
+  // alone too, and is not thereby a scope — what runs the search reads no
+  // realms as every realm, so a caller refuses an empty list rather than
+  // widening it here, where the two cases are still distinguishable.
   if (query.realms === undefined && invocation.realms?.length) {
     query.realms = [...invocation.realms];
   }
@@ -292,10 +293,22 @@ export function lowerQueryTemplate(
     return undefined;
   }
   let filter = declaration.filter
-    ? (resolveTypes(declaration.filter, 'filter', context, sink) as Filter)
+    ? (resolveTypes(
+        declaration.filter,
+        'filter',
+        context,
+        sink,
+        'query.filter',
+      ) as Filter)
     : undefined;
   let sort = declaration.sort
-    ? (resolveTypes(declaration.sort, 'sortList', context, sink) as Sort)
+    ? (resolveTypes(
+        declaration.sort,
+        'sortList',
+        context,
+        sink,
+        'query.sort',
+      ) as Sort)
     : undefined;
   let query: Query = {
     ...(filter ? { filter } : {}),
@@ -452,10 +465,14 @@ function holdsMarker(node: unknown): boolean {
   return Object.values(node).some(holdsMarker);
 }
 
-function isMarker(value: unknown): value is Record<string, unknown> {
+// The two markers a declaration is written with, as a reader recognizes them
+// structurally. Exported because the rest of lowering reads the same two, and
+// a spelling that landed in one copy and not the other would put the realm's
+// reading of a declaration and a caller's back to differing.
+export function isMarker(value: unknown): value is Record<string, unknown> {
   return isPlainObject(value) && typeof value.$ref === 'string';
 }
 
-function isBxl(value: unknown): value is { $bxl: string } {
+export function isBxl(value: unknown): value is { $bxl: string } {
   return isPlainObject(value) && typeof value.$bxl === 'string';
 }

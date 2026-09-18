@@ -84,10 +84,18 @@ export default class OperationsService
   // freshness. It reads its query back through the thunk, so the search
   // follows what the invocation resolves to rather than being rebuilt.
   //
-  // A search with no owner is tied to this service, which lives as long as the
-  // session: right for a search whose results the session keeps, and why a
-  // caller with a shorter life — a component, a controller — names itself as
-  // the owner and has its search torn down with it.
+  // A search with no owner is tied to this service, and a service is destroyed
+  // when the application instance is — not when a session ends, since signing
+  // out resets state rather than tearing services down. So an ownerless search
+  // lives for the life of the tab: it keeps its realm subscriptions and keeps
+  // re-running across a sign-out and the next sign-in. That is the right bound
+  // for a search the whole session reads and the wrong one for a search a
+  // single view wants, which is why a caller with a shorter life — a
+  // component, a controller — names itself as the owner and has its search
+  // torn down with it. A card instance is not owned by the application, so a
+  // card that keeps a search in a field takes the tab-lived one; a card that
+  // wants the search to end with a view hands the query to the search
+  // component instead of holding the resource.
   search: OperationsSearch = {
     actor: () => this.matrixService.userId ?? undefined,
     realmFor: (identifier: string) => this.realm.realmOf(rri(identifier)),

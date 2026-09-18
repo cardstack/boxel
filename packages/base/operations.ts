@@ -1,6 +1,7 @@
 import {
   assertQuery,
   buildOperations,
+  codeRefForDef,
   getOperationsTransport,
   identifyCard,
   InvalidQueryError,
@@ -2326,24 +2327,10 @@ function familyOf(
 }
 
 // A def class, or a thunk deferring one past its own class body, as the code
-// ref that names it.
+// ref that names it — the same reading the realm gives a declaration it
+// lowers, so a class written in a query means one type on both sides.
 function identifyDef(value: unknown): CodeRef | undefined {
-  if (typeof value !== 'function') {
-    return undefined;
-  }
-  let direct = identifyCard(value as typeof BaseDef);
-  if (direct) {
-    return direct;
-  }
-  let resolved: unknown;
-  try {
-    resolved = (value as () => unknown)();
-  } catch {
-    return undefined;
-  }
-  return typeof resolved === 'function'
-    ? identifyCard(resolved as typeof BaseDef)
-    : undefined;
+  return codeRefForDef(value, identifyCard);
 }
 
 function defName(owner: typeof BaseDef): string {

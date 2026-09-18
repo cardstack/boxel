@@ -1,3 +1,4 @@
+import { moduleFrom } from '../code-ref.ts';
 import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import type { EntryCollectionDocument } from '../document-types.ts';
 import type { ErrorEntry } from '../error.ts';
@@ -15,7 +16,7 @@ import type {
 import type { SearchEntryRendering } from '../search-results-component.ts';
 import { lowerQueryOperation, lowerQueryTemplate } from './query.ts';
 import type { QueryDefinition } from './query.ts';
-import { isWrite, type BaseOperation } from './types.ts';
+import { isOperationFailure, isWrite, type BaseOperation } from './types.ts';
 
 // ============================================================================
 // The client side of the operations envelope: what a caller says, and the
@@ -137,9 +138,11 @@ export interface OperationsSearch {
   // left to the session.
   realmFor(identifier: string): string | undefined;
   // The live entries resource for a wire query, read through the thunk so the
-  // search re-runs when the query it resolves to changes.
+  // search re-runs when the query it resolves to changes. A thunk that answers
+  // `undefined` parks the search — what the session stops being able to
+  // resolve a query against, it stops searching for.
   entries(
-    getQuery: () => SearchEntryWireQuery,
+    getQuery: () => SearchEntryWireQuery | undefined,
     opts?: { owner?: object },
   ): SearchEntries;
 }
@@ -162,7 +165,12 @@ export interface SearchEntries {
 export interface SearchEntry {
   id: string;
   realmUrl: string;
+  // The renderings the search chose for this row. An empty list does not mean
+  // the row has none: it means no rendering satisfies the query's html terms
+  // *yet*, and the re-run that follows the rendering landing fills it in.
   html: SearchEntryRendering[];
+  // The row's live serialization, as it came off the wire — sparse when it
+  // carries `meta.sparseFields`, and never a card the store is holding.
   item?: CardResource<Saved> | FileMetaResource;
   iconHtml?: string;
   displayName?: string;
@@ -569,12 +577,21 @@ export interface QueryMember {
 // live collection that re-runs as realms index, not a document a request
 // returns once.
 //
-// The resource reads its query back through a thunk, so the search this call
-// stands for varies with what the payload holds rather than with how many
-// times the call is made. That makes the call itself the thing to make once —
-// a field, a one-time assignment, never inside a getter or during render —
-// exactly as the underlying resource documents: every call builds an
-// independent search with its own realm subscriptions.
+// The resource reads its query back through a thunk, so one call can stand for
+// a search that changes: the payload object the call was handed is re-read
+// every time the resource recomputes, and a payload whose values are tracked
+// therefore moves the search without a second call. A plain object entangles
+// nothing, so a payload of literals is a fixed search — which is the common
+// case, and the reason the call itself is the thing to make once: a field, a
+// one-time assignment, never inside a getter or during render, exactly as the
+// underlying resource documents, since every call builds an independent search
+// with its own realm subscriptions.
+//
+// A recompute can also find the session no longer able to resolve the query —
+// signing out withdraws the actor and empties the realm map. The thunk parks
+// the search in that case rather than throwing mid-render; a payload the
+// declaration cannot resolve is the caller's mistake and is still raised at
+// the call, where the caller is.
 //
 // What it answers with is index freshness. A search reads the index, which
 // lags a write until that write is indexed, so a card just written is read
@@ -589,23 +606,62 @@ function queryMember(
   let wireQuery = (
     payload?: Record<string, unknown>,
     opts?: SearchInvokeOptions,
-  ) => resolveQuery(subject, env, name, info, payload, opts);
+  ) =>
+    resolveQuery(
+      subject,
+      env,
+      name,
+      info,
+      payload,
+      opts,
+    ) as SearchEntryWireQuery;
   let member = ((
     payload?: Record<string, unknown>,
     opts?: SearchInvokeOptions,
   ) => {
     let search = searchBridge(env, name);
-    // Resolved once here, where the caller is: a payload the declaration
-    // cannot resolve is a mistake at the call, and left to the thunk it would
-    // first be raised inside a render instead.
+    // Resolved once here, where the caller is, so a payload the declaration
+    // cannot resolve is raised at the call rather than at the first render.
     wireQuery(payload, opts);
     return search.entries(
-      () => wireQuery(payload, opts),
+      () => standingQuery(subject, env, name, info, payload, opts),
       opts?.owner === undefined ? undefined : { owner: opts.owner },
     );
   }) as QueryMember;
   member.query = wireQuery;
   return member;
+}
+
+// What a standing search resolves to on a recompute.
+//
+// The two refusals that are about the session rather than the payload — nobody
+// signed in, and no realm to search — are answered here with no query at all,
+// which parks the resource. A signed-out session raises both, and a search
+// that threw from inside a render would take the render with it rather than
+// showing nothing, which is what a session that can no longer answer a query
+// should show.
+function standingQuery(
+  subject: OperationsSubject,
+  env: OperationsEnvironment,
+  name: string,
+  info: CarriedOperationInfo,
+  payload: Record<string, unknown> | undefined,
+  opts: SearchInvokeOptions | undefined,
+): SearchEntryWireQuery | undefined {
+  try {
+    return resolveQuery(subject, env, name, info, payload, opts, {
+      parkWhenUnscoped: true,
+    });
+  } catch (err: unknown) {
+    // Only the query's own reading of the caller is answered this way, and
+    // only because the session withdrew one it had: every other refusal is
+    // about what the declaration or the payload says, which a recompute cannot
+    // change and which the call already raised.
+    if (isOperationFailure(err) && err.error.code === 'actor-required') {
+      return undefined;
+    }
+    throw err;
+  }
 }
 
 // The wire query one invocation of a saved search resolves to.
@@ -622,7 +678,12 @@ function resolveQuery(
   info: CarriedOperationInfo,
   payload: Record<string, unknown> | undefined,
   opts: SearchInvokeOptions | undefined,
-): SearchEntryWireQuery {
+  // Set by a standing search, whose session may have stopped being able to
+  // name the realms it covers. At the call an unresolvable scope is the
+  // caller's to hear about; on a recompute it means the search has nothing to
+  // cover and parks.
+  mode?: { parkWhenUnscoped: true },
+): SearchEntryWireQuery | undefined {
   let search = searchBridge(env, name);
   let declaration = info.query;
   if (!declaration?.query) {
@@ -649,12 +710,20 @@ function resolveQuery(
   });
   if (!query.realms?.length) {
     // A search with no realms fans out across every realm the session can
-    // read, which is never what a saved search meant to say: a declaration
-    // that named none left its scope to the caller, and a caller that named
-    // none left it to the type's own realm. Refused here rather than sent, so
-    // a scope nobody chose is not answered with results from everywhere.
+    // read, which is never what a saved search meant to say. Refused rather
+    // than sent, so a scope nobody chose is not answered with results from
+    // everywhere — including when a declaration wrote the empty list itself,
+    // since what reads the query cannot tell "these and no others" from "any
+    // of them".
+    if (mode?.parkWhenUnscoped) {
+      return undefined;
+    }
     throw new Error(
-      `operation "${name}" on ${subject.displayName} names no realm to search: the declaration names none, the call named none, and the realm holding the type could not be resolved — omitting them would search every realm this session can read`,
+      `operation "${name}" on ${subject.displayName} names no realm to search: ${
+        declaration.query?.realms === undefined
+          ? `the declaration names none, the call named none, and the realm holding the type could not be resolved`
+          : `its declaration names an empty list of realms, which is not a scope the search can be given`
+      } — a query with no realms searches every realm this session can read`,
     );
   }
   return query;
@@ -673,8 +742,14 @@ function queryScope(
   if (opts?.realms?.length) {
     return { realms: opts.realms.map(realmHref) };
   }
-  let module = (subject.codeRef as { module?: string } | undefined)?.module;
-  let realm = module === undefined ? undefined : search.realmFor(module);
+  // Read through `moduleFrom` rather than off the ref: a class reached as a
+  // superclass rather than as its own export is named by a ref that wraps the
+  // one carrying the module, and the module is what says which realm the type
+  // sits in either way.
+  let realm =
+    subject.codeRef === undefined
+      ? undefined
+      : search.realmFor(moduleFrom(subject.codeRef));
   return realm === undefined ? undefined : { realms: [realm] };
 }
 
@@ -697,9 +772,11 @@ function searchBridge(
 // first finding is raised where the call was made.
 function refusingSink(subject: OperationsSubject, name: string) {
   return {
-    add(_code: string, path: string, message: string): never {
+    add(_code: string, _path: string, message: string): never {
+      // The message opens with the path it is about, so naming it again here
+      // would say it twice.
       throw new Error(
-        `operation "${name}" on ${subject.displayName} declares a query that cannot be run: ${path} ${message}`,
+        `operation "${name}" on ${subject.displayName} declares a query that cannot be run: ${message}`,
       );
     },
   };

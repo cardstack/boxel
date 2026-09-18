@@ -133,6 +133,32 @@ function reportType(
   } as OperationsSubject;
 }
 
+// A saved search whose scope the caller fills and whose filter reads a payload
+// member, for the cases about what an invocation supplies.
+function statusType(): OperationsSubject {
+  return {
+    scope: 'type',
+    family: 'card',
+    displayName: 'Report',
+    codeRef: REPORT,
+    operations: carried({
+      byStatus: [
+        'query',
+        true,
+        {
+          query: {
+            filter: {
+              on: REPORT_CLASS,
+              eq: { status: { $ref: 'params', key: 'status' } },
+            },
+          },
+          params: { status: 'the field class' },
+        },
+      ],
+    }),
+  };
+}
+
 function activityType(): OperationsSubject {
   return {
     scope: 'type',
@@ -166,15 +192,19 @@ interface Sent {
 // One search a query asked the session for: the wire query it resolved to, the
 // thunk it is read back through, and what the caller was handed.
 interface Searched {
-  query: SearchEntryWireQuery;
+  // What the search resolved to when the session was asked for it, and the
+  // thunk it is read back through — which answers nothing at all once the
+  // session can no longer resolve the query.
+  query: SearchEntryWireQuery | undefined;
   owner: object | undefined;
-  getQuery: () => SearchEntryWireQuery;
+  getQuery: () => SearchEntryWireQuery | undefined;
   resource: SearchEntries;
 }
 
 interface Harness {
   sent: Sent[];
   searched: Searched[];
+  session: { actor: string | undefined; realmsKnown: boolean };
   env: OperationsEnvironment;
 }
 
@@ -184,10 +214,14 @@ interface Harness {
 function searchOf(
   searched: Searched[],
   opts?: { actor?: string | null; realm?: string },
+  session?: { actor: string | undefined; realmsKnown: boolean },
 ): OperationsSearch {
   return {
-    actor: () => (opts?.actor === null ? undefined : (opts?.actor ?? ACTOR)),
+    actor: () => (session ? session.actor : undefined),
     realmFor: (identifier: string) => {
+      if (session && !session.realmsKnown) {
+        return undefined;
+      }
       let realm = opts?.realm ?? REALM;
       return identifier.startsWith(realm) ? realm : undefined;
     },
@@ -225,6 +259,12 @@ function harness(opts?: {
 }): Harness {
   let sent: Sent[] = [];
   let searched: Searched[] = [];
+  // What the session answers for right now. A standing search reads it again
+  // on every recompute, so a test moves the session by writing here.
+  let session = {
+    actor: opts?.actor === null ? undefined : (opts?.actor ?? ACTOR),
+    realmsKnown: true,
+  };
   let transport: OperationsTransport = {
     async send(realmURL, method, envelope) {
       sent.push({ realmURL, method, envelope });
@@ -233,11 +273,12 @@ function harness(opts?: {
     defaultWritableRealm() {
       return opts?.defaultRealm;
     },
-    ...(opts?.noSearch ? {} : { search: searchOf(searched, opts) }),
+    ...(opts?.noSearch ? {} : { search: searchOf(searched, opts, session) }),
   };
   return {
     sent,
     searched,
+    session,
     env: {
       transport,
       subject(target: unknown) {
@@ -1045,11 +1086,13 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('answers with the resource the session builds, reading the query back through the thunk', function (assert) {
-      let { searched, env } = harness();
+    test('answers with the resource the session builds, and the search follows what the thunk reads', function (assert) {
+      let { searched, session, env } = harness();
       let owner = {};
+      let payload = { status: 'open' } as Record<string, unknown>;
+      let byStatus = buildOperations(statusType(), env).byStatus as any;
 
-      let results = openReports(env)(undefined, { owner });
+      let results = byStatus(payload, { owner });
 
       assert.strictEqual(searched.length, 1, 'one search was asked for');
       assert.strictEqual(
@@ -1062,33 +1105,88 @@ module(basename(import.meta.filename), function () {
         owner,
         'tied to the life the caller named, so the search ends when that does',
       );
+
+      // The thunk is the whole affordance: one call stands for a search that
+      // moves, so re-reading it has to follow both of the things it resolves
+      // against — the payload the caller handed over, and the session.
+      payload.status = 'closed';
       assert.deepEqual(
+        (searched[0].getQuery() as any).filter.eq,
+        { 'item.status': 'closed' },
+        'a re-read follows the payload the call was given, rather than pinning what it resolved to once',
+      );
+
+      session.actor = '@someone-else:localhost';
+      assert.deepEqual(
+        (buildOperations(reportType(), env).openReports as any).query().filter
+          .eq['item.author.userId'],
+        '@someone-else:localhost',
+        'and it follows the session, which is what the actor is read from',
+      );
+    });
+
+    test('a standing search parks when the session can no longer resolve it', function (assert) {
+      let { searched, session, env } = harness();
+
+      openReports(env)();
+      assert.ok(searched[0].getQuery(), 'the search has a query to run');
+
+      session.actor = undefined;
+      assert.strictEqual(
         searched[0].getQuery(),
-        searched[0].query,
-        'the query is read back through the thunk, which is how the search follows what the invocation resolves to',
+        undefined,
+        'signing out withdraws what the query compares against, so the search parks rather than throwing inside a render',
+      );
+
+      session.actor = ACTOR;
+      session.realmsKnown = false;
+      assert.strictEqual(
+        searched[0].getQuery(),
+        undefined,
+        'and so does losing the realms it covers, which a sign-out takes with it',
+      );
+
+      session.realmsKnown = true;
+      assert.ok(
+        searched[0].getQuery(),
+        'a session that can answer again resumes the same search',
+      );
+    });
+
+    test('a payload the declaration cannot resolve is refused at the call, not in a render', function (assert) {
+      let { searched, env } = harness();
+      let byStatus = buildOperations(statusType(), env).byStatus as any;
+
+      assert.throws(
+        () => byStatus({}),
+        /requires a value for params\("status"\)/,
+        'the call raises it where the caller is',
+      );
+      assert.strictEqual(
+        searched.length,
+        0,
+        'and no search was started for a query that never resolved',
+      );
+    });
+
+    test('a type named by a nested code ref still covers its own realm', function (assert) {
+      let { env } = harness();
+      // What `identifyCard` answers for a card class reached as a superclass
+      // rather than as its own module export.
+      let nested = reportType({
+        codeRef: { type: 'ancestorOf', card: REPORT },
+      });
+
+      assert.deepEqual(
+        (buildOperations(nested, env).openReports as any).query().realms,
+        [REALM],
+        'the module the ref wraps is what says which realm the type sits in',
       );
     });
 
     test('a payload fills the markers its declaration names', function (assert) {
       let { env } = harness();
-      let subject = reportType({
-        operations: carried({
-          byStatus: [
-            'query',
-            true,
-            {
-              query: {
-                filter: {
-                  on: REPORT_CLASS,
-                  eq: { status: { $ref: 'params', key: 'status' } },
-                },
-              },
-              params: { status: 'the field class' },
-            },
-          ],
-        }),
-      });
-      let byStatus = buildOperations(subject, env).byStatus as any;
+      let byStatus = buildOperations(statusType(), env).byStatus as any;
 
       assert.deepEqual(
         byStatus.query({ status: 'escalated' }).filter,
@@ -1142,6 +1240,26 @@ module(basename(import.meta.filename), function () {
         () => openReports(env).query(),
         /names no realm to search/,
         'a saved search whose scope nobody named would fan out across the whole session, which is never what it meant',
+      );
+
+      let empty = reportType({
+        operations: carried({
+          everywhere: [
+            'query',
+            true,
+            {
+              query: {
+                filter: { on: REPORT_CLASS, eq: { status: 'open' } },
+                realms: [],
+              },
+            },
+          ],
+        }),
+      });
+      assert.throws(
+        () => (buildOperations(empty, env).everywhere as any).query(),
+        /names an empty list of realms/,
+        'and a declaration that writes the empty list is refused for what it wrote, since no realms on the wire means every realm',
       );
     });
 

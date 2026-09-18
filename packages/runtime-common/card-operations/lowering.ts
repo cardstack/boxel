@@ -1,4 +1,4 @@
-import { isResolvedCodeRef, type CodeRef } from '../code-ref.ts';
+import { codeRefForDef, isResolvedCodeRef, type CodeRef } from '../code-ref.ts';
 import { getImmediateFieldDef } from '../definitions.ts';
 import type { Definition, FieldDefinition } from '../definitions.ts';
 import {
@@ -11,7 +11,7 @@ import {
   callsActor,
   usesVolatileCall,
 } from './bxl-emit.ts';
-import { lowerQueryTemplate } from './query.ts';
+import { isBxl, isMarker, lowerQueryTemplate } from './query.ts';
 import { isDefinitionFreeBaseOperation } from './types.ts';
 import type {
   LowerOperationDeclarationsResult,
@@ -508,31 +508,11 @@ function lowerParams(
   return Object.keys(params).length > 0 ? params : undefined;
 }
 
-// A def class, or a thunk deferring one past its own class body. A thunk is
-// how an author names a class declared later in the module — including the
-// class the declaration is on.
 function identify(
   value: unknown,
   context: LoweringContext,
 ): CodeRef | undefined {
-  if (typeof value !== 'function') {
-    return undefined;
-  }
-  let direct = context.identifyCard(value as typeof BaseDef);
-  if (direct) {
-    return direct;
-  }
-  let resolved: unknown;
-  try {
-    resolved = (value as () => unknown)();
-  } catch {
-    // A thunk that throws names nothing yet; the caller reports the
-    // unresolved type.
-    return undefined;
-  }
-  return typeof resolved === 'function'
-    ? context.identifyCard(resolved as typeof BaseDef)
-    : undefined;
+  return codeRefForDef(value, context.identifyCard);
 }
 
 // ---------------------------------------------------------------------------
@@ -1703,14 +1683,6 @@ function lowerItem(
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isMarker(value: unknown): value is Record<string, unknown> {
-  return isPlainObject(value) && typeof value.$ref === 'string';
-}
-
-function isBxl(value: unknown): value is { $bxl: string } {
-  return isPlainObject(value) && typeof value.$bxl === 'string';
 }
 
 function describeDefinition(
