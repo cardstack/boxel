@@ -6,6 +6,7 @@ import {
   InvalidQueryError,
   realmURL,
   type CarriedOperationInfo,
+  type CarriedQueryDeclaration,
   type CodeRef,
   type InvokeOptions,
   type OperationDocument,
@@ -14,6 +15,9 @@ import {
   type OperationWriteResult,
   type OperationsSubject,
   type QueryTargetHandle,
+  type SearchEntries,
+  type SearchEntryWireQuery,
+  type SearchInvokeOptions,
 } from '@cardstack/runtime-common';
 
 import {
@@ -1819,6 +1823,8 @@ export type {
   OperationResultTree,
   OperationValueResult,
   OperationWriteResult,
+  SearchEntries,
+  SearchInvokeOptions,
 } from '@cardstack/runtime-common';
 export { OperationsError } from '@cardstack/runtime-common';
 
@@ -1853,16 +1859,14 @@ type InstanceScopedBase =
   | 'appendLine'
   | 'appendContainsMany'
   | 'create';
-type TypeScopedBase = 'create';
+type TypeScopedBase = 'create' | 'query';
 
 type ScopedBase<Scope extends 'instance' | 'type'> = Scope extends 'instance'
   ? InstanceScopedBase
   : TypeScopedBase;
 
 // The names a def declares that are invocable in this scope, read off the
-// class the declarations are statics of. A declared query is left out: it runs
-// on the search engine rather than in a batch, so it has no callable form here
-// yet.
+// class the declarations are statics of.
 type DeclaredNames<Type, Scope extends 'instance' | 'type'> = {
   [Name in keyof OperationsOf<Type>]: OperationsOf<Type>[Name] extends {
     base: infer Base extends BaseOperationName;
@@ -1884,10 +1888,36 @@ type ScopedArgs<
   : PayloadArgs<Declaration>;
 
 type DeclaredOperationMembers<Type, Scope extends 'instance' | 'type'> = {
-  [Name in DeclaredNames<Type, Scope>]: (
-    ...args: ScopedArgs<OperationsOf<Type>[Name], Scope>
-  ) => Promise<ResultOf<OperationsOf<Type>[Name]>>;
+  [Name in DeclaredNames<Type, Scope>]: OperationsOf<Type>[Name] extends {
+    base: 'query';
+  }
+    ? QueryOperation<OperationsOf<Type>[Name]>
+    : (
+        ...args: ScopedArgs<OperationsOf<Type>[Name], Scope>
+      ) => Promise<ResultOf<OperationsOf<Type>[Name]>>;
 };
+
+// A saved search, as the two ways one is reached.
+//
+// Called, it answers the live entries resource a search runs as — the one
+// return shape in this API that is not an awaited result, because a query is
+// carried out by the search engine rather than by the realm's operation
+// endpoint: results are a collection that re-runs as realms index, not a
+// document a request returns once. Make the call once and keep what it
+// answers — a field, a one-time assignment, never in a getter or during a
+// render — since every call builds an independent search.
+//
+// `.query()` answers the wire query the same invocation resolves to, which is
+// what a card hands to `@context.searchResultsComponent` to render the rows
+// itself.
+export interface QueryOperation<Declaration> {
+  (
+    ...args: [...PayloadArgs<Declaration>, opts?: SearchInvokeOptions]
+  ): SearchEntries;
+  query(
+    ...args: [...PayloadArgs<Declaration>, opts?: SearchInvokeOptions]
+  ): SearchEntryWireQuery;
+}
 
 // Whether the call named the class its operations are declared on. It did not
 // when the type parameter is still its own constraint, which is every call
@@ -2236,9 +2266,33 @@ function carriedOperations(
     carried[base] = { base, declared: false };
   }
   for (let [name, declaration] of Object.entries(declaredOperations(owner))) {
-    carried[name] = { base: declaration.base, declared: true };
+    carried[name] = {
+      base: declaration.base,
+      declared: true,
+      ...(declaration.base === 'query'
+        ? { query: queryDeclaration(declaration) }
+        : {}),
+    };
   }
   return carried;
+}
+
+// A declared query travels whole rather than resolved, because a saved search
+// is resolved when it is invoked: the query still names its types with the
+// classes themselves and still holds the markers an invocation fills, and what
+// fills them — the caller's identity, the payload — is known only then.
+function queryDeclaration(
+  declaration: OperationDeclaration,
+): CarriedQueryDeclaration {
+  let { query, params } = declaration as QueryOperationDeclaration;
+  return {
+    ...(query === undefined
+      ? {}
+      : { query: query as unknown as Record<string, unknown> }),
+    ...(params === undefined
+      ? {}
+      : { params: params as unknown as Record<string, unknown> }),
+  };
 }
 
 // Which def family the target belongs to, which is what decides the shape of

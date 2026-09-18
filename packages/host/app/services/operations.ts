@@ -6,13 +6,20 @@ import { v4 as uuidv4 } from 'uuid';
 
 import {
   OperationsError,
+  rri,
   SupportedMimeType,
   type OperationsAnswer,
   type OperationsEnvelope,
   type OperationsMethod,
+  type OperationsSearch,
   type OperationsTransport,
+  type SearchEntries,
+  type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
+import { getSearchEntriesResource } from '../resources/search-entries';
+
+import type MatrixService from './matrix-service';
 import type NetworkService from './network';
 import type RealmService from './realm';
 
@@ -31,12 +38,19 @@ import type RealmService from './realm';
 // comes back is handed over as the realm reported it: which entry answered
 // what, and what each answer means, belongs to the client core, which is
 // isomorphic and testable without any of this.
+//
+// A saved search is the other half of the bridge. A `query` operation is never
+// sent to `_operations` — it is carried out by the search engine, which the
+// host already reaches through its live entries resource — so what this
+// supplies for one is the session it runs in: who the caller is, which realm
+// holds a type, and the resource a search answers with.
 // ============================================================================
 
 export default class OperationsService
   extends Service
   implements OperationsTransport
 {
+  @service declare private matrixService: MatrixService;
   @service declare private network: NetworkService;
   @service declare private realm: RealmService;
 
@@ -61,6 +75,27 @@ export default class OperationsService
   defaultWritableRealm(): string | undefined {
     return this.realm.defaultWritableRealm?.path;
   }
+
+  // What a saved search needs from this session.
+  //
+  // The resource is the host's one live search: it issues the wire query
+  // through the store, subscribes to each realm it covers, and re-runs as
+  // those realms index — which is what makes a query's freshness index
+  // freshness. It reads its query back through the thunk, so the search
+  // follows what the invocation resolves to rather than being rebuilt.
+  //
+  // A search with no owner is tied to this service, which lives as long as the
+  // session: right for a search whose results the session keeps, and why a
+  // caller with a shorter life — a component, a controller — names itself as
+  // the owner and has its search torn down with it.
+  search: OperationsSearch = {
+    actor: () => this.matrixService.userId ?? undefined,
+    realmFor: (identifier: string) => this.realm.realmOf(rri(identifier)),
+    entries: (
+      getQuery: () => SearchEntryWireQuery,
+      opts?: { owner?: object },
+    ): SearchEntries => getSearchEntriesResource(opts?.owner ?? this, getQuery),
+  };
 
   async send(
     realmURL: string,

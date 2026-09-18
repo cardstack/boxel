@@ -11,6 +11,7 @@ import {
   callsActor,
   usesVolatileCall,
 } from './bxl-emit.ts';
+import { lowerQueryTemplate } from './query.ts';
 import { isDefinitionFreeBaseOperation } from './types.ts';
 import type {
   LowerOperationDeclarationsResult,
@@ -19,12 +20,8 @@ import type {
   OperationLoweringIssueCode,
   OperationParamDefinition,
   OperationProgram,
-  OperationQueryTemplate,
   OperationTemplate,
 } from './types.ts';
-import type { Query, Filter, Sort } from '../query.ts';
-import { assertQuery, InvalidQueryError } from '../query.ts';
-import { searchEntryWireQueryFromQuery } from '../search-entry.ts';
 import type { BaseDef } from '@cardstack/base/card-api';
 import type {
   BaseOperationName,
@@ -410,10 +407,10 @@ async function lowerOperation(
     );
   }
   if (base === 'query') {
-    let query = lowerQuery(
+    let query = lowerQueryTemplate(
       (declaration as { query?: Record<string, unknown> }).query,
       sink,
-      context,
+      { codeRef: (value) => identify(value, context) },
     );
     if (query) {
       operation.query = query;
@@ -1700,192 +1697,6 @@ function lowerItem(
     );
   }
   return members;
-}
-
-// ---------------------------------------------------------------------------
-// `query`
-// ---------------------------------------------------------------------------
-
-// A declared query becomes an entry-wire query template: the shape the realm's
-// `_search` and `_federated-search` endpoints take, with markers left where an
-// invocation supplies a value.
-//
-// Class references become code refs, and only where the grammar names a type —
-// a filter node's `on` or `type`, a sort entry's `on`. Under `eq` / `in` /
-// `contains` / `range` the keys are field names, so an `on` there is a field
-// called `on` and a class in that position would lower to nothing, leaving a
-// saved search that matches every card instead of one.
-//
-// The declaration is translated to the card-rooted query first and handed to
-// `searchEntryWireQueryFromQuery`, so the `item.` addressing comes from the
-// one function that defines it rather than from a second copy of the rule.
-function lowerQuery(
-  declaration: Record<string, unknown> | undefined,
-  sink: IssueSink,
-  context: LoweringContext,
-): OperationQueryTemplate | undefined {
-  if (!declaration) {
-    return undefined;
-  }
-  let filter = declaration.filter
-    ? (resolveTypes(declaration.filter, 'filter', context, sink) as Filter)
-    : undefined;
-  let sort = declaration.sort
-    ? (resolveTypes(declaration.sort, 'sortList', context, sink) as Sort)
-    : undefined;
-  let query: Query = {
-    ...(filter ? { filter } : {}),
-    ...(sort ? { sort } : {}),
-    ...(declaration.page ? { page: declaration.page as Query['page'] } : {}),
-  };
-  // The realm's own grammar, consulted as a second opinion — but only on a
-  // query it could accept as it stands. A marker stands in for a value the
-  // realm types concretely (a `matches` string, an `in` array), so a query
-  // still holding one is checked when the invocation resolves it.
-  if (!holdsMarker(query)) {
-    try {
-      assertQuery(query);
-    } catch (err: any) {
-      if (err instanceof InvalidQueryError) {
-        sink.add(
-          'invalid-query',
-          'query',
-          `\`query\` is not a query the realm accepts — ${err.message}`,
-        );
-        return undefined;
-      }
-      throw err;
-    }
-  }
-  let wire: OperationQueryTemplate;
-  try {
-    wire = searchEntryWireQueryFromQuery(query);
-  } catch (err: any) {
-    sink.add(
-      'invalid-query',
-      'query',
-      `\`query\` does not translate to a search request — ${err?.message ?? String(err)}`,
-    );
-    return undefined;
-  }
-  if (declaration.queryString !== undefined) {
-    // Full text is the wire grammar's `matches` predicate. Alongside a
-    // filter it becomes a conjunct, so both constraints hold rather than one
-    // replacing the other.
-    let matches = declaration.queryString as OperationTemplate;
-    wire.filter = wire.filter
-      ? { every: [wire.filter, { matches }] }
-      : { matches };
-  }
-  if (declaration.realms) {
-    wire.realms = [...(declaration.realms as string[])];
-  }
-  return wire;
-}
-
-// Where in a query the walk currently is. Only the positions that decide
-// whether a class belongs are named; everything else is data. Mirrors the
-// filter grammar: a filter node carries an optional `on` (or a `type`, for a
-// pure card-type filter) and one predicate, `any` / `every` hold further
-// nodes, `not` holds one, and a sort entry names the type its `by` path is
-// rooted in.
-type QueryPosition =
-  | 'query'
-  | 'filter'
-  | 'filterList'
-  | 'sortList'
-  | 'sortEntry'
-  | 'type'
-  | 'value';
-
-function positionUnder(position: QueryPosition, key: string): QueryPosition {
-  switch (position) {
-    case 'query':
-      if (key === 'filter') {
-        return 'filter';
-      }
-      return key === 'sort' ? 'sortList' : 'value';
-    case 'filter':
-      if (key === 'on' || key === 'type') {
-        return 'type';
-      }
-      if (key === 'any' || key === 'every') {
-        return 'filterList';
-      }
-      return key === 'not' ? 'filter' : 'value';
-    case 'sortEntry':
-      return key === 'on' ? 'type' : 'value';
-    default:
-      return 'value';
-  }
-}
-
-function positionInside(position: QueryPosition): QueryPosition {
-  switch (position) {
-    case 'filterList':
-      return 'filter';
-    case 'sortList':
-      return 'sortEntry';
-    default:
-      return 'value';
-  }
-}
-
-// Replace every class reference in a type position with its code ref,
-// leaving markers and plain data untouched.
-function resolveTypes(
-  node: unknown,
-  position: QueryPosition,
-  context: LoweringContext,
-  sink: IssueSink,
-  path = 'query',
-): unknown {
-  if (typeof node === 'function') {
-    let codeRef = identify(node, context);
-    if (!codeRef) {
-      sink.add(
-        'unresolved-type',
-        path,
-        `\`${path}\` names a class that no module exports, so there is no code ref to store for it`,
-      );
-      return undefined;
-    }
-    return codeRef;
-  }
-  if (Array.isArray(node)) {
-    let inside = positionInside(position);
-    return node.map((entry, index) =>
-      resolveTypes(entry, inside, context, sink, `${path}[${index}]`),
-    );
-  }
-  if (!isPlainObject(node) || isMarker(node)) {
-    return node;
-  }
-  return Object.fromEntries(
-    Object.entries(node).map(([key, value]) => [
-      key,
-      resolveTypes(
-        value,
-        positionUnder(position, key),
-        context,
-        sink,
-        `${path}.${key}`,
-      ),
-    ]),
-  );
-}
-
-function holdsMarker(node: unknown): boolean {
-  if (Array.isArray(node)) {
-    return node.some(holdsMarker);
-  }
-  if (!isPlainObject(node)) {
-    return false;
-  }
-  if (isMarker(node) || isBxl(node)) {
-    return true;
-  }
-  return Object.values(node).some(holdsMarker);
 }
 
 // ---------------------------------------------------------------------------

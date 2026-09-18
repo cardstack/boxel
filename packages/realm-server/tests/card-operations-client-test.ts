@@ -6,12 +6,16 @@ import {
   buildOperations,
   rri,
   type CarriedOperationInfo,
+  type CarriedQueryDeclaration,
   type OperationsAnswer,
   type OperationsEnvelope,
   type OperationsEnvironment,
   type OperationsMethod,
+  type OperationsSearch,
   type OperationsSubject,
   type OperationsTransport,
+  type SearchEntries,
+  type SearchEntryWireQuery,
   type WireGroup,
   type WireInvocation,
 } from '@cardstack/runtime-common';
@@ -47,16 +51,34 @@ const ACTIVITY: CodeRef = { module: rri(`${REALM}report`), name: 'Activity' };
 // one: a filter names types with the classes themselves.
 const REPORT_CLASS = () => REPORT;
 
+// Who the session this core runs in authenticates the caller as.
+const ACTOR = '@tester:localhost';
+
 function carried(
-  entries: Record<string, [base: string, declared: boolean]>,
+  entries: Record<
+    string,
+    [base: string, declared: boolean, query?: CarriedQueryDeclaration]
+  >,
 ): Record<string, CarriedOperationInfo> {
   return Object.fromEntries(
-    Object.entries(entries).map(([name, [base, declared]]) => [
+    Object.entries(entries).map(([name, [base, declared, query]]) => [
       name,
-      { base, declared } as CarriedOperationInfo,
+      { base, declared, ...(query ? { query } : {}) } as CarriedOperationInfo,
     ]),
   );
 }
+
+// A saved search as its author wrote it: the type named by the class itself,
+// and a marker where the caller's identity goes.
+const OPEN_REPORTS: CarriedQueryDeclaration = {
+  query: {
+    filter: {
+      on: REPORT_CLASS,
+      eq: { status: 'open', 'author.userId': { $ref: 'actor' } },
+    },
+    sort: [{ on: REPORT_CLASS, by: 'createdAt', direction: 'desc' }],
+  },
+};
 
 // Everything a card def carries, as the card-facing module reports it: the base
 // operations its def type implies, plus what its author declared.
@@ -73,7 +95,7 @@ const CARD_OPERATIONS = carried({
   addComment: ['transform', true],
   addActivity: ['transform', true],
   createActivity: ['create', true],
-  openReports: ['query', true],
+  openReports: ['query', true, OPEN_REPORTS],
 });
 
 const FILE_OPERATIONS = carried({
@@ -98,14 +120,17 @@ function reportInstance(
   };
 }
 
-function reportType(): OperationsSubject {
+function reportType(
+  overrides: Partial<OperationsSubject> = {},
+): OperationsSubject {
   return {
     scope: 'type',
     family: 'card',
     displayName: 'Report',
     codeRef: REPORT,
     operations: CARD_OPERATIONS,
-  };
+    ...overrides,
+  } as OperationsSubject;
 }
 
 function activityType(): OperationsSubject {
@@ -138,9 +163,50 @@ interface Sent {
   envelope: OperationsEnvelope;
 }
 
+// One search a query asked the session for: the wire query it resolved to, the
+// thunk it is read back through, and what the caller was handed.
+interface Searched {
+  query: SearchEntryWireQuery;
+  owner: object | undefined;
+  getQuery: () => SearchEntryWireQuery;
+  resource: SearchEntries;
+}
+
 interface Harness {
   sent: Sent[];
+  searched: Searched[];
   env: OperationsEnvironment;
+}
+
+// The search half of the bridge, as a record of what a query asked for. A host
+// answers with a live resource; nothing here is live, so this reads the thunk
+// once and keeps it, which is what lets a test read it again.
+function searchOf(
+  searched: Searched[],
+  opts?: { actor?: string | null; realm?: string },
+): OperationsSearch {
+  return {
+    actor: () => (opts?.actor === null ? undefined : (opts?.actor ?? ACTOR)),
+    realmFor: (identifier: string) => {
+      let realm = opts?.realm ?? REALM;
+      return identifier.startsWith(realm) ? realm : undefined;
+    },
+    entries(getQuery, entryOpts) {
+      let resource: SearchEntries = {
+        entries: [],
+        isLoading: false,
+        meta: { page: { total: 0 } },
+        errors: undefined,
+      };
+      searched.push({
+        query: getQuery(),
+        owner: entryOpts?.owner,
+        getQuery,
+        resource,
+      });
+      return resource;
+    },
+  };
 }
 
 // The transport, as a record of what a call handed it and a script for what to
@@ -150,8 +216,15 @@ function harness(opts?: {
   answer?: OperationsAnswer;
   defaultRealm?: string;
   subjects?: Record<string, OperationsSubject>;
+  actor?: string | null;
+  realm?: string;
+  // A session that carries out no searches at all, which is every session
+  // outside a host: a saved search answers with a live resource, and building
+  // one is the host's.
+  noSearch?: true;
 }): Harness {
   let sent: Sent[] = [];
+  let searched: Searched[] = [];
   let transport: OperationsTransport = {
     async send(realmURL, method, envelope) {
       sent.push({ realmURL, method, envelope });
@@ -160,9 +233,11 @@ function harness(opts?: {
     defaultWritableRealm() {
       return opts?.defaultRealm;
     },
+    ...(opts?.noSearch ? {} : { search: searchOf(searched, opts) }),
   };
   return {
     sent,
+    searched,
     env: {
       transport,
       subject(target: unknown) {
@@ -233,7 +308,12 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         bucket.query,
         undefined,
-        'and a query the author did not declare was never invoked this way',
+        'and a bare query saves no search, so there is nothing for it to run',
+      );
+      assert.strictEqual(
+        bucket.openReports,
+        undefined,
+        'a saved search reads a collection of a type, so it is invoked on the class rather than on one card',
       );
     });
 
@@ -241,13 +321,8 @@ module(basename(import.meta.filename), function () {
       let bucket = buildOperations(reportType(), harness().env);
       assert.deepEqual(
         Object.keys(bucket).sort(),
-        ['create', 'createActivity'],
-        'the base create and a declared one',
-      );
-      assert.strictEqual(
-        bucket.openReports,
-        undefined,
-        'a declared query has no member either: a query is reached through the entry search API, and its absence says so the way readSource does',
+        ['create', 'createActivity', 'openReports'],
+        'the base create, a declared one, and the saved search a collection is read through',
       );
       assert.strictEqual(
         bucket.atomic,
@@ -273,7 +348,7 @@ module(basename(import.meta.filename), function () {
       for (let subject of [reportInstance(), reportType(), fileInstance()]) {
         let bucket = buildOperations(subject, harness().env);
         for (let [name, info] of Object.entries(subject.operations)) {
-          if (info.base !== 'readSource' && info.base !== 'query') {
+          if (info.base !== 'readSource') {
             continue;
           }
           assert.strictEqual(
@@ -914,6 +989,180 @@ module(basename(import.meta.filename), function () {
         },
       );
       assert.strictEqual(sent[0].method, 'QUERY');
+    });
+
+    test('a saved search is never an entry of a batch', async function (assert) {
+      let { sent, env } = batchHarness({
+        'atomic:results': [{ data: { type: 'card', id: 'a', meta: {} } }],
+      });
+      let bucket = buildOperations(reportInstance(), env);
+      await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
+        (b: any) => {
+          assert.strictEqual(
+            b.openReports,
+            undefined,
+            'a batch commits writes under one realm lock; reading a collection is the search engine\u2019s and takes no lock',
+          );
+          b.escalate();
+        },
+      );
+      assert.strictEqual(
+        entries(sent[0]).length,
+        1,
+        'so only the operation the batch could carry was sent',
+      );
+    });
+  });
+
+  // A saved search is declared like any other operation and carried out
+  // nowhere near the others: it is planned and run by the search engine, so
+  // what a call produces is a wire query and a live resource rather than an
+  // envelope and an awaited result.
+  module('a saved search', function () {
+    function openReports(env: OperationsEnvironment) {
+      return buildOperations(reportType(), env).openReports as any;
+    }
+
+    test('resolves its markers and addresses the query for the search engine', function (assert) {
+      let { env } = harness();
+
+      assert.deepEqual(
+        openReports(env).query(),
+        {
+          filter: {
+            'item.on': REPORT,
+            eq: {
+              'item.status': 'open',
+              'item.author.userId': ACTOR,
+            },
+          },
+          sort: [
+            { by: 'item.createdAt', 'item.on': REPORT, direction: 'desc' },
+          ],
+          realms: [REALM],
+        },
+        'the class became the type it names, the actor marker became the caller, and the card-rooted query became the entry-addressed one',
+      );
+    });
+
+    test('answers with the resource the session builds, reading the query back through the thunk', function (assert) {
+      let { searched, env } = harness();
+      let owner = {};
+
+      let results = openReports(env)(undefined, { owner });
+
+      assert.strictEqual(searched.length, 1, 'one search was asked for');
+      assert.strictEqual(
+        results,
+        searched[0].resource,
+        'and what the call answers with is what the session built for it',
+      );
+      assert.strictEqual(
+        searched[0].owner,
+        owner,
+        'tied to the life the caller named, so the search ends when that does',
+      );
+      assert.deepEqual(
+        searched[0].getQuery(),
+        searched[0].query,
+        'the query is read back through the thunk, which is how the search follows what the invocation resolves to',
+      );
+    });
+
+    test('a payload fills the markers its declaration names', function (assert) {
+      let { env } = harness();
+      let subject = reportType({
+        operations: carried({
+          byStatus: [
+            'query',
+            true,
+            {
+              query: {
+                filter: {
+                  on: REPORT_CLASS,
+                  eq: { status: { $ref: 'params', key: 'status' } },
+                },
+              },
+              params: { status: 'the field class' },
+            },
+          ],
+        }),
+      });
+      let byStatus = buildOperations(subject, env).byStatus as any;
+
+      assert.deepEqual(
+        byStatus.query({ status: 'escalated' }).filter,
+        { 'item.on': REPORT, eq: { 'item.status': 'escalated' } },
+        'the payload member the declaration names is what the filter compares against',
+      );
+      assert.throws(
+        () => byStatus.query({}),
+        /requires a value for params\("status"\)/,
+        'and a payload that leaves one unsupplied is refused rather than compared against nothing',
+      );
+    });
+
+    test('the realms a search covers are the declaration\u2019s, then the call\u2019s, then the type\u2019s own', function (assert) {
+      let { env } = harness();
+      let elsewhere = 'http://example.com/other/';
+
+      assert.deepEqual(
+        openReports(env).query(undefined, { realms: [elsewhere] }).realms,
+        [elsewhere],
+        'a declaration that named no scope leaves it to the caller',
+      );
+
+      let pinned = reportType({
+        operations: carried({
+          pinnedReports: [
+            'query',
+            true,
+            {
+              query: {
+                filter: { on: REPORT_CLASS, eq: { status: 'open' } },
+                realms: [elsewhere],
+              },
+            },
+          ],
+        }),
+      });
+      assert.deepEqual(
+        (buildOperations(pinned, env).pinnedReports as any).query(undefined, {
+          realms: [REALM],
+        }).realms,
+        [elsewhere],
+        'a declaration that named its scope has decided, and a call does not widen it',
+      );
+    });
+
+    test('a search that would cover every readable realm is refused', function (assert) {
+      let { env } = harness({ realm: 'http://example.com/nowhere-near/' });
+
+      assert.throws(
+        () => openReports(env).query(),
+        /names no realm to search/,
+        'a saved search whose scope nobody named would fan out across the whole session, which is never what it meant',
+      );
+    });
+
+    test('a query that compares against the caller needs one', function (assert) {
+      let { env } = harness({ actor: null });
+
+      assert.throws(
+        () => openReports(env).query(),
+        /nobody is signed in here/,
+        'nothing the caller sent is wrong: the search would compare stored values against nobody and read as one that genuinely found none',
+      );
+    });
+
+    test('a session that carries out no searches says so', function (assert) {
+      let { env } = harness({ noSearch: true });
+
+      assert.throws(
+        () => openReports(env)(),
+        /nothing in this environment registered a search/,
+        'a query is carried out by the search engine, which is the one half of the bridge an environment can lack',
+      );
     });
   });
 });

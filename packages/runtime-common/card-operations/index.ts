@@ -106,8 +106,13 @@ export type {
   EnvelopeResults,
   ResolvedEnvelopeEntry,
 } from './envelope.ts';
-export { lowerQueryOperation } from './query.ts';
-export type { QueryInvocation } from './query.ts';
+export { lowerQueryOperation, lowerQueryTemplate } from './query.ts';
+export type {
+  QueryDefinition,
+  QueryInvocation,
+  QueryLoweringContext,
+  QueryLoweringSink,
+} from './query.ts';
 export {
   DEFINITION_FREE_BASE_OPERATIONS,
   OperationFailure,
