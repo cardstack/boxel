@@ -20,7 +20,7 @@ For first-party LLM calls, prefer `integrate-one-shot-llm` (which is built on to
 ```ts
 import SendRequestViaProxyCommand from '@cardstack/boxel-host/tools/send-request-via-proxy';
 
-const proxy = new SendRequestViaProxyCommand(this.commandContext);
+const proxy = new SendRequestViaProxyCommand(this.toolContext);
 
 const response = await proxy.execute({
   url: 'https://api.example.com/v1/something',

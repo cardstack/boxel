@@ -115,7 +115,7 @@ get searchQuery(): SearchEntryWireQuery {
 - **`overflow: hidden` on intermediate `preserve-3d` layers can flatten the 3D context.** Put any clipping on the `.stage` (perspective element) or a sibling — not a middle layer.
 - **Liveness is automatic.** Search-entry queries re-fetch on every realm change; there's no flag to disable it.
 - **Per-card vars on the wrong element.** `--card-index` must be on the *slot* (the element the transform targets), not the inner card. If the rendered card has chrome wrapping it, the var rides on the slot wrapper outside the chrome.
-- **Card chrome breaks immersion.** Entries rendered through `@context.searchResultsComponent` can carry operator-mode overlays plus `CardContainer` chrome (rounded corners, halo). Pass `@overlays={{false}}` to drop the overlay — this pattern arranges results in a fully custom layout, so it wants plain rendering. For a clean carousel look, also use `@displayContainer={{false}}` per-card OR style the chrome via `:deep(.boxel-card-container)` from scoped CSS. See `boxel-ui-guidelines/references/delegated-render-control.md`.
+- **Card chrome breaks immersion.** Entries rendered through `@context.searchResultsComponent` can carry operator-mode overlays plus `CardContainer` chrome (rounded corners, halo). Pass `@overlays={{false}}` to drop the overlay — this pattern arranges results in a fully custom layout, so it wants plain rendering. For a clean carousel look, also pass `@displayContainer={{false}}` on `@context.searchResultsComponent` to drop the container chrome from every row, OR style the chrome via `:deep(.boxel-card-container)` from scoped CSS. See `boxel-ui-guidelines/references/delegated-render-control.md`.
 - **iOS Safari + many transformed siblings = jank.** Test on real iOS hardware. Use `will-change: transform` on slots; below ~20 cards is generally smooth, above starts dropping frames on older hardware.
 
 ## Source
@@ -125,5 +125,5 @@ get searchQuery(): SearchEntryWireQuery {
 ## See also
 
 - `boxel/references/query-systems.md` — the query traps that silently return zero rows.
-- `boxel-ui-guidelines/references/delegated-render-control.md` — chrome on children + `@displayContainer={{false}}`.
+- `boxel-ui-guidelines/references/delegated-render-control.md` — chrome on children + `@displayContainer={{false}}` (on fields and on `@context.searchResultsComponent`).
 - `show-card-list-with-views` — flat-grid alternative when you don't need the 3D effect.

@@ -120,6 +120,34 @@ describe('parseFrontmatter', () => {
     expect(fm.name).toBe('first');
   });
 
+  // A description longer than a line is naturally authored as a YAML block
+  // scalar, and reading only the key's own line renders the README row as the
+  // literal `>-`.
+  it('reads a folded block scalar as its joined text', () => {
+    const fm = parseFrontmatter(
+      '---\nname: catalog-reuse\ndescription: >-\n  MANDATORY before writing any `.gts`.\n  Search the catalog first.\nboxel:\n  kind: skill\n---\n',
+    );
+    expect(fm.name).toBe('catalog-reuse');
+    expect(fm.description).toBe(
+      'MANDATORY before writing any `.gts`. Search the catalog first.',
+    );
+  });
+
+  it('reads a literal block scalar with its line breaks kept', () => {
+    const fm = parseFrontmatter(
+      '---\nname: lit\ndescription: |\n  first line\n  second line\n---\n',
+    );
+    expect(fm.description).toBe('first line\nsecond line');
+  });
+
+  it('does not read a nested key as a block scalar continuation', () => {
+    const fm = parseFrontmatter(
+      '---\ndescription: >-\n  the text\nname: after\n---\n',
+    );
+    expect(fm.description).toBe('the text');
+    expect(fm.name).toBe('after');
+  });
+
   it('returns {} for content without frontmatter', () => {
     expect(parseFrontmatter('# Just a heading\n')).toEqual({});
     expect(parseFrontmatter('---\nunterminated')).toEqual({});

@@ -4,19 +4,9 @@
 
 Do NOT use `CardContainer` as the root — the runtime (`field-component.gts`) already wraps every card format in `CardContainer`. Adding a second `CardContainer` is a redundant double-wrap.
 
-The themed `CardContainer` already applies `font-family: var(--boxel-body-font-family)` (and matching `font-size`, `font-weight`, `line-height`) on its root element. Do NOT repeat this on your template's root element — it is already inherited by all children.
+The themed `CardContainer` already applies the theme's background/foreground pair and the full `body` typography role (family, size, weight, line-height, letter-spacing) on its root, and via `@layer reset` gives `h1`/`h2`/`h3` the `heading`/`sectionHeading`/`subheading` roles, `small` the `caption` role, and zero margins to headings and `p`. Do NOT repeat any of that on your template root or on those elements; declare only where the design deviates. The exact list is in `skills/boxel-ui-guidelines/references/theme-token-contract.md` under "What CardContainer already applies".
 
-Via `@layer reset`, all heading and text elements inside a themed card automatically receive semantic typography — no need to declare font/size/weight on them unless overriding:
-
-| Element | Token set applied |
-|---|---|
-| `h1` | `--boxel-heading-*` (font-family, size, weight, line-height) |
-| `h2` | `--boxel-section-heading-*` |
-| `h3` | `--boxel-subheading-*` |
-| `p` | `--boxel-body-*` |
-| `small` | `--boxel-caption-font-size`, `--boxel-caption-line-height` |
-
-Also applied to the container root: `letter-spacing: var(--tracking-normal)` — do not redeclare it.
+**The isolated root fills and scrolls the container.** Give it `height: 100%; overflow-y: auto`. `min-height: 100%` is not equivalent: the host container has a fixed height and clips, so a taller root gets cut off instead of scrolling.
 
 **Font size defaults are appropriate for isolated templates.** Embedded and fitted templates render in much smaller spaces — override font sizes where needed, but always prioritize legibility. Depending on the font, you can go as small as 0.5rem, but ideally no smaller.
 
@@ -52,28 +42,106 @@ Fitted cards are rendered at many different container sizes — from small badge
 - Use `text-overflow: ellipsis` with `white-space: nowrap` for single-line labels, or clamp multi-line text with `-webkit-line-clamp`
 - Override inherited font sizes to fit the smaller space — but keep text legible. Depending on the font, you can go as small as 0.5rem, but ideally no smaller
 
-### All 16 fitted formats (from `fitted-formats.ts`)
+#### The `FittedCard` component — a good option for most cases
 
-The runtime defines 16 named formats. Sizes are exact spec values (width × height in px):
+`FittedCard` from `@cardstack/boxel-ui/components` handles all responsive container-query breakpoints, image column sizing, text clamping, and overflow — you only supply named content blocks. Reach for it when the design fits its slot model; hand-roll a fitted template (next section) when it does not.
 
-| Format | Width | Height |
-|---|---|---|
-| small-badge | 150 | 40 |
-| medium-badge | 150 | 65 |
-| large-badge | 150 | 105 |
-| single-strip | 250 | 40 |
-| double-strip | 250 | 65 |
-| triple-strip | 250 | 105 |
-| double-wide-strip | 400 | 65 |
-| triple-wide-strip | 400 | 105 |
-| small-tile | 150 | 170 |
-| regular-tile | 250 | 170 |
-| cardsgrid-tile | 170 | 250 |
-| tall-tile | 150 | 275 |
-| large-tile | 250 | 275 |
-| compact-card | 400 | 170 |
-| full-card | 400 | 275 |
-| expanded-card | 400 | 445 |
+```gts
+import { FittedCard, Pill } from '@cardstack/boxel-ui/components';
+import type { FittedCardLayout, FittedCardTitleTag } from '@cardstack/boxel-ui/components';
+import BookOpen from '@cardstack/boxel-icons/book-open';
+import Calendar from '@cardstack/boxel-icons/calendar';
+
+static fitted = class Fitted extends Component<typeof this> {
+  <template>
+    <FittedCard
+      @imageUrl={{@model.cardThumbnailURL}}
+      @imageAlt={{@model.cardTitle}}
+      class='my-fitted'
+    >
+      <:placeholder><BookOpen width='24' height='24' /></:placeholder>
+      <:badgeLeft><Pill>New</Pill></:badgeLeft>
+      <:badgeRight><Pill>4.8 ★</Pill></:badgeRight>
+      <:eyebrow>{{@model.category}}</:eyebrow>
+      <:title><@fields.cardTitle /></:title>
+      <:subtitle><@fields.cardDescription /></:subtitle>
+      <:meta><Calendar width='14' height='14' /><@fields.date /></:meta>
+      <:footer><strong>{{@model.author.name}}</strong></:footer>
+    </FittedCard>
+    <style scoped>
+      .my-fitted {
+        --fc-content-gap: var(--boxel-sp-xs);
+      }
+    </style>
+  </template>
+};
+```
+
+#### Named blocks
+
+| Block         | Description                                                                                                                              | Required |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `title`       | Primary heading                                                                                                                          | Yes      |
+| `placeholder` | Icon/content in the image column when `@imageUrl` is absent. Yielding empty content removes the column entirely.                         | No       |
+| `image`       | Custom image block (alternative to `@imageUrl`)                                                                                          | No       |
+| `background`  | Absolutely-positioned background graphics layer                                                                                          | No       |
+| `badgeLeft`   | Absolutely-positioned group at top-left (over the image when present)                                                                    | No       |
+| `badgeRight`  | Absolutely-positioned group at top-right                                                                                                 | No       |
+| `badgeRow`    | Inline flex row of badges/pills above the header inside the text column; controlled by `--fc-badge-row-justify` and `--fc-badge-row-gap` | No       |
+| `badge`       | Alias for `badgeLeft` (legacy — prefer `badgeLeft`)                                                                                      | No       |
+| `eyebrow`     | Tiny uppercase overline above the title                                                                                                  | No       |
+| `subtitle`    | Secondary line below the title                                                                                                           | No       |
+| `meta`        | Additional content between header and footer                                                                                             | No       |
+| `footer`      | Bottom row: date, location, price, stats, etc.                                                                                           | No       |
+
+Named blocks must be direct children of `<FittedCard>`. Glimmer rejects a `<:eyebrow>` wrapped in `{{#if}}`, so put the conditional inside the block: `<:eyebrow>{{#if @model.level}}<@fields.level />{{/if}}</:eyebrow>`. Every section is optional: to leave one out, don't write its block. When the conditional inside a block is false, the section's element still renders empty and the component's `:empty` rule collapses it. To hide a section you do provide — usually at a breakpoint — set its display switch to `none`: `--fc-image-display`, `--fc-subtitle-display`, `--fc-meta-display`, `--fc-footer-display`, `--fc-badge-left-display`, `--fc-badge-right-display`, `--fc-badge-row-display`. The title and eyebrow have no switch.
+
+#### Args
+
+| Arg             | Type                 | Description                                                                                                                                                                                                                                               |
+| --------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@imageUrl`     | `string`             | Cover image URL; triggers the image column layout                                                                                                                                                                                                         |
+| `@imageAlt`     | `string`             | Alt text for the cover image (defaults to `""`)                                                                                                                                                                                                           |
+| `@imageLoading` | `'lazy' \| 'eager'`  | Image loading hint; omit to use the browser default                                                                                                                                                                                                    |
+| `@titleTag`     | `FittedCardTitleTag` | HTML heading element for the title: `'h1'` (default), `'h2'`, `'h3'`, etc. Pass `'h2'` or `'h3'` when cards appear in a list to preserve heading hierarchy for screen readers.                                                                            |
+| `@layout`       | `FittedCardLayout`   | Force a layout direction regardless of container size: `'vertical'` — image always stacks on top; `'horizontal'` — image always sits to the left; `'auto'` (default) — direction is chosen by container-query breakpoints based on aspect-ratio and size. |
+
+`FittedCardLayout` and `FittedCardTitleTag` are exported named types from `@cardstack/boxel-ui/components`. When you need the allowed values as an array (e.g. for a dropdown), use the exported constants `FITTED_CARD_LAYOUT_OPTIONS` and `FITTED_CARD_TITLE_TAG_OPTIONS`.
+
+#### CSS custom properties
+
+Every visual metric has an `--fc-*` override, set on the `FittedCard` root; the breakpoints adjust most of them, so only set one to deviate. The ones that come up most:
+
+```css
+.my-fitted {
+  --fc-content-gap: var(--boxel-sp-xs);       /* gap between header / meta / footer */
+  --fc-content-padding: var(--boxel-sp-xs);   /* padding inside the text column */
+  --fc-image-width: 40cqh;                    /* image column in horizontal layouts */
+  --fc-image-object-fit: cover;
+  --fc-title-line-clamp: 2;
+  --fc-subtitle-line-clamp: 2;
+  --fc-footer-justify: space-between;
+  --fc-subtitle-display: none;                /* hides the subtitle; image, meta, footer, and badge slots have their own --fc-<section>-display */
+}
+```
+
+The full list, with defaults, is in the component source: `packages/boxel-ui/src/components/fitted-card/index.gts` (and its `usage.gts`). Verify there before relying on a name not shown above.
+
+#### Customising caller-owned content per breakpoint
+
+`FittedCard` handles its own layout at every size. For caller-owned content that needs show/hide per breakpoint, add `@container fitted-card` rules in your own `<style scoped>`:
+
+```css
+@container fitted-card (width < 250px) {
+  .my-detail-row {
+    display: none;
+  }
+}
+```
+
+#### Hand-rolled fitted template
+
+When the design calls for its own layout, own it yourself. Query the host's `fitted-card` container for breakpoints (see `use-container-queries-not-viewport-units.md`); never declare a container on the root.
 
 ```gts
 static fitted = class Fitted extends Component<typeof this> {
@@ -83,12 +151,12 @@ static fitted = class Fitted extends Component<typeof this> {
         <h1 class='title boxel-ellipsize'><@fields.cardTitle /></h1>
         <p class='subtitle'><@fields.cardDescription /></p>
       </header>
-     <div class='body-content'>
+      <div class='content'>
         <p>Content here...</p>
-     </div>
-    <footer>
-       <p>Footer content here...</p>
-    </footer>
+      </div>
+      <footer>
+        <p>Footer content here...</p>
+      </footer>
     </article>
     <style scoped>
       .my-fitted {
@@ -118,13 +186,36 @@ static fitted = class Fitted extends Component<typeof this> {
 };
 ```
 
+### All 16 fitted formats (from `fitted-formats.ts`)
+
+The runtime defines 16 named formats. Sizes are exact spec values (width × height in px):
+
+| Format | Width | Height |
+|---|---|---|
+| small-badge | 150 | 40 |
+| medium-badge | 150 | 65 |
+| large-badge | 150 | 105 |
+| single-strip | 250 | 40 |
+| double-strip | 250 | 65 |
+| triple-strip | 250 | 105 |
+| double-wide-strip | 400 | 65 |
+| triple-wide-strip | 400 | 105 |
+| small-tile | 150 | 170 |
+| regular-tile | 250 | 170 |
+| cardsgrid-tile | 170 | 250 |
+| tall-tile | 150 | 275 |
+| large-tile | 250 | 275 |
+| compact-card | 400 | 170 |
+| full-card | 400 | 275 |
+| expanded-card | 400 | 445 |
+
 ### Form fields
 
 Wrap inputs with `FieldContainer` for consistent label + input layout. Use component API to pass in relevant arguments instead of writing css.
 
 ```gts
 <FieldContainer @label='Title' @tag='label' @vertical={{true}}>
-  <Input @value={{@model.title}} />
+  <BoxelInput @value={{@model.title}} />
 </FieldContainer>
 ```
 
@@ -132,7 +223,9 @@ Wrap inputs with `FieldContainer` for consistent label + input layout. Use compo
 
 **Always set explicit `width` and `height` attributes on an icon component** — never size an icon through CSS (`.glyph { width: 1.5rem }`) alone. The attributes give the SVG an intrinsic size, which is required for it to render at the right dimensions during prerender where the scoped CSS may not have applied yet; CSS-only sizing collapses or mis-sizes the glyph in those passes. Use CSS on the icon only for color. This is the one place plain numeric (px-equivalent) sizing is expected — the rem-over-px preference does not apply to icon `width`/`height` attributes.
 
-Icons and SVGs must not use hardcoded hex fills — use theme color tokens via CSS:
+Icons and SVGs must not use hardcoded hex fills — use theme color tokens via CSS. "Theme token" is not the whole rule, though: **icon color obeys the same pairing rules as text.** Legal values are `--muted-foreground`, `--foreground`, or the `--*-foreground` paired with the surface the icon sits on. An action/surface token (`--primary`, `--accent`, …) is not a foreground: it names a background, and the theme guarantees no contrast for it as ink. This is a common miss precisely because "don't hardcode hex, use a token" reads as satisfied by *any* token.
+
+Best of all is often no color rule at all: an incidental mark that inherits `currentColor` tracks whatever surface it lands on for free.
 
 ```gts
 // Avoid — hardcoded hex fills
@@ -145,9 +238,13 @@ Icons and SVGs must not use hardcoded hex fills — use theme color tokens via C
 
 // Correct — explicit width/height attributes, CSS for color only
 <ChefHat width='12' height='12' class='chef-hat-icon' />
+
+// Also correct — no class; the glyph inherits currentColor from its context
+<ChefHat width='12' height='12' aria-hidden='true' />
 ```
 
 ```css
+/* Correct — a foreground token */
 .chef-hat-icon {
   color: var(--muted-foreground);
 }

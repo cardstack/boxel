@@ -5,17 +5,17 @@ import {
   contains,
 } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
-import { getCardMenuItems } from '@cardstack/runtime-common';
-import { type GetCardMenuItemParams } from '@cardstack/base/card-menu-items';
+import { getMenuItems } from '@cardstack/runtime-common';
+import { type GetMenuItemParams } from '@cardstack/base/card-api';
 import { type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 import MapPinIcon from '@cardstack/boxel-icons/map-pin';
 import BuildingIcon from '@cardstack/boxel-icons/building';
 
 // 🧩 PATTERN: expose card-scoped actions as menu items.
 //
-// The host calls `[getCardMenuItems]` on every CardDef when it composes
+// The host calls `[getMenuItems]` on every CardDef when it composes
 // the card's right-click / overflow menu. Override the symbol on your
-// class, spread `super[getCardMenuItems](params)` to keep the host's
+// class, spread `super[getMenuItems](params)` to keep the host's
 // defaults (Open, Copy, Delete, ...), and return your own entries.
 
 export class Destination extends CardDef {
@@ -23,8 +23,8 @@ export class Destination extends CardDef {
 
   @field name = contains(StringField);
 
-  [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
-    let hostItems = super[getCardMenuItems](params);
+  [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
+    let hostItems = super[getMenuItems](params);
 
     return [
       {
@@ -37,7 +37,7 @@ export class Destination extends CardDef {
             cardThumbnailURL:
               'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=400',
           });
-          await params.saveCard(this);
+          params.cardCrudFunctions.saveCard?.(this.id);
         },
       },
       {
@@ -50,7 +50,7 @@ export class Destination extends CardDef {
             cardThumbnailURL:
               'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=400',
           });
-          await params.saveCard(this);
+          params.cardCrudFunctions.saveCard?.(this.id);
         },
       },
       // Host defaults LAST so user-actions show on top.
@@ -62,9 +62,9 @@ export class Destination extends CardDef {
 // --- Notes ---
 //
 // `params` carries everything you need to write back:
-//   - params.commandContext  → pass to `new MyCommand(params.commandContext)`
-//   - params.saveCard(card)  → host-aware save (permissions, indexing)
-//   - params.realmURL        → realm scope for queries/writes
+//   - params.toolContext                  → pass to `new MyCommand(params.toolContext)`
+//   - params.cardCrudFunctions.saveCard(id) → host-aware save (permissions, indexing)
+//   - params.canEdit / params.menuContext → gate which items appear
 //
 // For a heavier action, swap the body of `action` for a Command
 // invocation:
@@ -72,10 +72,10 @@ export class Destination extends CardDef {
 //   import MyExpensiveCommand from './my-expensive-command';
 //   ...
 //   action: async () => {
-//     await new MyExpensiveCommand(params.commandContext).execute({
+//     await new MyExpensiveCommand(params.toolContext).execute({
 //       cardId: this.id,
 //     });
-//     await params.saveCard(this);
+//     params.cardCrudFunctions.saveCard?.(this.id);
 //   },
 //
 // Pair with command-typed-with-progress when the action takes more
