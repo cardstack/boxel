@@ -4,8 +4,16 @@ import { urlNamesFile } from '../file-def-code-ref.ts';
 import { readOperation } from './read.ts';
 import { readSourceOperation } from './read-source.ts';
 import {
+  hasTransforms,
+  runInputTransform,
+  runOutputTransform,
+  type TransformContext,
+} from './transforms.ts';
+import {
   DEFINITION_FREE_BASE_OPERATIONS,
   OperationFailure,
+  isDocumentResult,
+  isHeadResult,
   type BaseOperation,
   type OperationDefinition,
   type OperationResult,
@@ -15,7 +23,10 @@ import {
 } from './types.ts';
 import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import type { Definition } from '../definitions.ts';
-import type { SingleFileMetaDocument } from '../document-types.ts';
+import type {
+  SingleCardDocument,
+  SingleFileMetaDocument,
+} from '../document-types.ts';
 import type { LooseCardResource, FileMetaResource } from '../resource-types.ts';
 import type { InstanceOrError, IndexedFile } from '../index-query-engine.ts';
 import type { SearchResult } from '../realm-index-query-engine.ts';
@@ -524,6 +535,40 @@ export async function resolveOperation(
   return { base: name, deterministic: true };
 }
 
+// Whether a `read` of this target answers with an `output` projection, asked
+// before anything is read.
+//
+// The card+json `GET` has to know this before it answers, because a projected
+// body is not the representation its validator describes: the ETag is built
+// from the index row, and a row says nothing about which projection a type
+// declares — so a card whose type gains an `output` keeps the validator it had
+// and a conditional request would be answered 304 with the unprojected body
+// still in the client's cache. The handler therefore asks here, ahead of its
+// own conditional fast path, rather than learning it from the assembly.
+//
+// It costs the definition lookup the assembly would have made anyway; the row
+// peek is shared with the caller's through `scope`. A target this cannot
+// resolve an operation for is reported as unprojected rather than refused —
+// whatever is wrong with it is the read's to report, with the whole request in
+// hand.
+export async function readIsProjected(
+  core: OperationCore,
+  url: URL,
+  scope: OperationScope = newOperationScope(core),
+): Promise<boolean> {
+  try {
+    let definition = await resolveOperation(
+      core,
+      { kind: 'instance', url: url.href },
+      'read',
+      scope,
+    );
+    return definition.output !== undefined;
+  } catch {
+    return false;
+  }
+}
+
 export async function runOperation(
   core: OperationCore,
   request: OperationRequest,
@@ -542,7 +587,146 @@ export async function runOperation(
     target === request.target ? request : { ...request, target };
   let scope = newOperationScope(core);
   let definition = await resolveOperation(core, target, canonical.name, scope);
+  // The four stages of an invocation, in the one order they run: the `input`
+  // transform over the payload, the `params` check against what it produced,
+  // the behavior, and the `output` transform over its result. The check runs
+  // against the input's result rather than the caller's payload because that
+  // is what lets an `input` supply a declared param the caller left out.
+  //
+  // Both stages are here rather than inside an executor so that adding a
+  // behavior cannot quietly add one that ignores them — an operation whose
+  // `output` was skipped answers with more than its author said it would,
+  // which is the one failure a projection must not have.
+  refuseAnonymousActor(canonical, definition);
+  if (definition.input) {
+    canonical = {
+      ...canonical,
+      params: await runInputTransform(
+        definition,
+        canonical.params ?? {},
+        transformContext(canonical),
+      ),
+    };
+  }
   validateParams(canonical, definition);
+  let result = await runBaseOperation(core, canonical, definition, opts, scope);
+  return await projectResult(canonical, definition, result);
+}
+
+// A stage that reads `actor()` cannot run for a request that authenticated
+// nobody, which a realm anyone may read allows. Refused before the behavior
+// runs, and answered 401 rather than letting the program fail on the missing
+// slot: credentials would change the outcome, and that is what a 401 says and
+// a 500 does not. Read off the definition, where lowering recorded it, so the
+// answer does not depend on reaching the program text.
+function refuseAnonymousActor(
+  request: OperationRequest,
+  definition: OperationDefinition,
+): void {
+  if (!hasTransforms(definition) || !definition.readsActor || request.actor) {
+    return;
+  }
+  throw new OperationFailure({
+    id: targetId(request.target),
+    status: 401,
+    code: 'actor-required',
+    title: 'Operation needs an identity',
+    detail:
+      `operation "${request.name}" reads the invoking actor, and this ` +
+      `request authenticated nobody`,
+  });
+}
+
+function transformContext(request: OperationRequest): TransformContext {
+  return {
+    name: request.name,
+    ...(request.actor ? { actor: request.actor } : {}),
+    ...(request.params ? { params: request.params } : {}),
+    ...(request.target.kind === 'instance' ? { id: request.target.url } : {}),
+  };
+}
+
+// The `output` stage over what the behavior answered.
+//
+// A read is the only behavior that reaches this carrying a declaration today —
+// `readSource` is resolved without one, a `query` is refused before it runs,
+// and the writes are the coordinator's — so the two read shapes are the two
+// arms. A headers-only read projects nothing and says that the full read
+// would, because a `HEAD` states the headers a `GET` would send and a
+// projected body is not cacheable the way an unprojected one is.
+async function projectResult(
+  request: OperationRequest,
+  definition: OperationDefinition,
+  result: OperationResult,
+): Promise<OperationResult> {
+  if (!definition.output) {
+    return result;
+  }
+  if (isHeadResult(result)) {
+    return { ...result, projected: true };
+  }
+  if (isDocumentResult(result)) {
+    let projection = await runOutputTransform(
+      definition,
+      result.document,
+      transformContext(request),
+    );
+    return {
+      ...result,
+      projected: true,
+      document: asDocument(request, projection),
+    };
+  }
+  throw new OperationFailure({
+    id: targetId(request.target),
+    status: 500,
+    code: 'internal-error',
+    title: 'Unprojectable result',
+    detail:
+      `operation "${request.name}" declares an \`output\`, and the ` +
+      `"${definition.base}" behavior answered with something a projection ` +
+      `has no defined meaning over`,
+  });
+}
+
+// A read answers with a JSON:API document, and a projection of one has to
+// remain one: the card+json response it is served in carries a `data` member
+// and every client reads it. Held to the shape, not to the contents — what an
+// author leaves out below `data` is the whole point of projecting.
+function asDocument(
+  request: OperationRequest,
+  projection: unknown,
+): SingleCardDocument | SingleFileMetaDocument {
+  if (
+    typeof projection !== 'object' ||
+    projection === null ||
+    Array.isArray(projection) ||
+    typeof (projection as { data?: unknown }).data !== 'object' ||
+    (projection as { data?: unknown }).data === null ||
+    Array.isArray((projection as { data?: unknown }).data)
+  ) {
+    throw new OperationFailure({
+      id: targetId(request.target),
+      status: 400,
+      code: 'invalid-params',
+      title: 'Cannot run transform',
+      detail:
+        `the \`output\` stage of operation "${request.name}" projects a read, ` +
+        `which answers a JSON:API document, and this program produced ` +
+        `something with no \`data\` member`,
+      meta: { operation: request.name, stage: 'output' },
+    });
+  }
+  return projection as SingleCardDocument | SingleFileMetaDocument;
+}
+
+async function runBaseOperation(
+  core: OperationCore,
+  canonical: OperationRequest,
+  definition: OperationDefinition,
+  opts: RunOperationOptions,
+  scope: OperationScope,
+): Promise<OperationResult> {
   switch (definition.base) {
     case 'read':
       return await readOperation(core, canonical, definition, opts, scope);
@@ -564,7 +748,7 @@ export async function runOperation(
         code: 'wrong-entry-point',
         title: 'Operation not executable here',
         detail:
-          `operation "${request.name}" is a query; resolve it with ` +
+          `operation "${canonical.name}" is a query; resolve it with ` +
           `lowerQueryOperation and run it on the search engine`,
       });
     case 'create':
@@ -591,7 +775,7 @@ export async function runOperation(
         status: 500,
         code: 'internal-error',
         title: 'Unknown base operation',
-        detail: `operation "${request.name}" names a base operation the core does not implement`,
+        detail: `operation "${canonical.name}" names a base operation the core does not implement`,
       });
   }
 }

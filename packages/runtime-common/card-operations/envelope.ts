@@ -377,7 +377,6 @@ export function batchEntryFor(
   definition: OperationDefinition,
 ): BatchEntry {
   let { index, name } = entry;
-  assertStagesAreServed(entry, definition);
   // Every entry the coordinator stages carries the position the caller sent it
   // under, so a batch holding only some of an envelope's entries still reports
   // refusals against the envelope's numbering.
@@ -533,32 +532,34 @@ export function paramsFor(
   return params;
 }
 
-// A declaration may reshape its payload with an `input` program and project
-// its result with an `output` one. A batch runs neither, and carrying the
-// entry out as though the declaration said nothing answers a different
-// question well — the author's `input` was to produce the very value the
-// executor then reports as missing. So the refusal names the stage, the way
-// the read executor refuses a specialization it does not carry out.
-function assertStagesAreServed(
+// The entry as its `input` stage left it.
+//
+// The stage sees the payload — `data` without the members the envelope reads
+// for itself — and produces the payload the entry is staged from, so every arm
+// of `batchEntryFor` reads the transformed values wherever it reads `data`.
+// The envelope's own members are carried through rather than passed to the
+// program: a `lid` is how a later entry links to the card this one mints, and
+// an author reshaping their payload has no business dropping it.
+export function entryWithPayload(
   entry: EnvelopeEntry,
-  definition: OperationDefinition,
-): void {
-  let stages = (['input', 'output'] as const).filter(
-    (stage) => definition[stage] !== undefined,
-  );
-  if (stages.length === 0) {
-    return;
+  payload: Record<string, unknown>,
+): EnvelopeEntry {
+  let carried: Record<string, unknown> = {};
+  for (let member of ENVELOPE_MEMBERS) {
+    if (entry.data && own(entry.data, member) !== undefined) {
+      carried[member] = entry.data[member];
+    }
   }
-  throw new OperationFailure({
-    ...(entry.href ? { id: entry.href } : {}),
-    status: 501,
-    code: 'internal-error',
-    title: 'Operation not implemented',
-    detail:
-      `operation "${entry.name}" specializes its behavior with ` +
-      `${stages.join(' and ')}, which a batch does not run`,
-    meta: { entry: entry.index },
-  });
+  return { ...entry, data: { ...carried, ...payload } };
+}
+
+function own(
+  record: Record<string, unknown>,
+  key: string,
+): unknown | undefined {
+  return Object.prototype.hasOwnProperty.call(record, key)
+    ? record[key]
+    : undefined;
 }
 
 function hrefRequired(entry: EnvelopeEntry, base: BaseOperation): string {
@@ -620,6 +621,37 @@ export function writeResult(
       },
     },
   };
+}
+
+// One entry's result as its `output` stage left it.
+//
+// `atomic:results` is a positional list of JSON:API result objects, so a
+// projection has to remain an object: a caller reading the list by position
+// would otherwise find a bare string where the entry it sent reports its
+// outcome. What the author leaves out of the object is the whole point of
+// projecting and is not checked.
+export function projectedResult(
+  entry: EnvelopeEntry,
+  projection: unknown,
+): EnvelopeResult {
+  if (
+    typeof projection !== 'object' ||
+    projection === null ||
+    Array.isArray(projection)
+  ) {
+    throw new OperationFailure({
+      ...(entry.href ? { id: entry.href } : {}),
+      status: 400,
+      code: 'invalid-params',
+      title: 'Cannot run transform',
+      detail:
+        `the \`output\` stage of operation "${entry.name}" produced ` +
+        `something other than a result object, and entry ${entry.index} ` +
+        `answers with one`,
+      meta: { entry: entry.index, operation: entry.name, stage: 'output' },
+    });
+  }
+  return projection as Record<string, unknown>;
 }
 
 export function readResult(

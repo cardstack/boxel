@@ -1,3 +1,4 @@
+import type { BxlTransformContext } from '@cardstack/bxl/transform';
 import type {
   BxlBoxelSourceDefinition,
   BxlMutationOverlayReason,
@@ -11,6 +12,7 @@ import type {
   ProgramReadEvent,
   UnavailableOverlay,
 } from './executors.ts';
+import type { BxlTransformModule } from './transforms.ts';
 import type { OperationMissingReason } from './telemetry.ts';
 import type { DefinitionKind } from '../definitions.ts';
 
@@ -83,4 +85,31 @@ export type LocalReadEventReachesBxl = Assignable<
 export type BxlReadEventReachesLocal = Assignable<
   ProgramReadEvent,
   BxlMutationReadEvent
+>;
+
+// The same guard for the transform surface. `transforms.ts` states BXL's
+// transform entry structurally for the same reason `executors.ts` states the
+// mutation one — it says why — and the two halves of the restatement that
+// would fail silently are the request-context slot names and the error's
+// `phase`, since a slot spelled differently reaches a program as "the host
+// supplied none" and a phase spelled differently maps a refusal to the wrong
+// status rather than to nothing at all.
+export type BxlTransformEntryReachesLocal = Assignable<
+  BxlTransformModule,
+  typeof import('@cardstack/bxl/transform')
+>;
+
+export type LocalTransformContextReachesBxl = Assignable<
+  BxlTransformContext,
+  LocalTransformProgramContext
+>;
+export type BxlTransformContextReachesLocal = Assignable<
+  LocalTransformProgramContext,
+  BxlTransformContext
+>;
+
+// The context shape as `transforms.ts` hands it over, named here because the
+// runner builds it inline rather than exporting a type for it.
+type LocalTransformProgramContext = NonNullable<
+  Parameters<BxlTransformModule['runBxlTransform']>[2]
 >;

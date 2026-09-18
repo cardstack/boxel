@@ -66,6 +66,14 @@ export type CardJsonAssembly =
       // that aborted or whose realms could not be placed leaves no
       // `links.search` marker behind, yet still depends on other cards.
       queryBacked: boolean;
+      // Whether the body is an `output` projection rather than the realm's
+      // canonical document. A projected body is per-operation and may be
+      // per-actor, and the validator above describes the unprojected document,
+      // so the response carries `no-store` and the assembly is never retained.
+      // The handler decides not to retain before assembling — it cannot key a
+      // projection on a validator that does not move with it — so this reports
+      // what the assembly turned out to be rather than gating the cache.
+      projected: boolean;
       // The validator the lookup was keyed on, so retention can check that
       // the assembly agrees with it.
       keyEtag: string;

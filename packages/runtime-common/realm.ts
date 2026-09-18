@@ -47,6 +47,21 @@ import {
 // refuses every other method outright — so no HTTP cache reaches either body,
 // and the in-process caches that do hold one key on the served mode directly.
 const LINK_SHAPE_VARY = [X_BOXEL_LINK_SHAPE_HEADER];
+
+// The cache directive a card+json response carries when a declared `output`
+// projected its body.
+//
+// `no-store` rather than the ordinary `max-age=0, must-revalidate`, and for a
+// reason that holds whether or not the projection reads `actor()`: the
+// validator is built from the index row, and a row does not move when a type
+// gains, changes or loses an `output`, so a stored copy of the unprojected
+// body would keep answering as fresh. `private` says the rest — a projection
+// may be per-caller, so no shared cache may hold one either.
+//
+// The `ETag` is still emitted alongside it. It identifies the card's state for
+// a conditional *write*, which is what `If-Match` asks about, and that question
+// is about the card rather than about the representation it was read in.
+const PROJECTED_CARD_JSON_CACHE_CONTROL = 'private, no-store';
 import {
   CARD_DOCUMENT_CACHE_HEADER,
   type CardDocumentCache,
@@ -198,9 +213,15 @@ import {
 import {
   canonicalizeTarget,
   newOperationScope,
+  readIsProjected,
   resolveOperation,
   runOperation,
 } from './card-operations/dispatch.ts';
+import {
+  runInputTransform,
+  runOutputTransform,
+  type TransformContext,
+} from './card-operations/transforms.ts';
 import type {
   OperationCore,
   OperationScope,
@@ -213,11 +234,13 @@ import {
   atEntry,
   batchEntryFor,
   carriesOperationsExt,
+  entryWithPayload,
   errorsDocument,
   isWrite,
   needsActor,
   paramsFor,
   parseOperationsEnvelope,
+  projectedResult,
   readResult,
   targetFor,
   writeResult,
@@ -4495,6 +4518,29 @@ export class Realm {
 
     let writes = resolved.filter(({ definition }) => isWrite(definition.base));
     if (writes.length > 0) {
+      // The `input` stage runs before the entry is staged, so every arm of
+      // `batchEntryFor` reads the payload the author's program produced rather
+      // than the one the caller sent — which is what lets an `input` supply a
+      // value the executor would otherwise report as missing. The entry that
+      // comes back keeps its position and the envelope's own members; only the
+      // payload moves.
+      for (let write of writes) {
+        if (!write.definition.input) {
+          continue;
+        }
+        try {
+          write.entry = entryWithPayload(
+            write.entry,
+            await runInputTransform(
+              write.definition,
+              paramsFor(write.entry),
+              this.#transformContext(write.entry, caller),
+            ),
+          );
+        } catch (err: unknown) {
+          throw atEntry(err, write.entry.index);
+        }
+      }
       let staged = writes.map(({ entry, definition }) => {
         try {
           return batchEntryFor(entry, definition);
@@ -4510,10 +4556,30 @@ export class Realm {
         clientRequestId: caller.clientRequestId || null,
         actor: caller.actor || undefined,
       });
-      for (let [index, { entry }] of writes.entries()) {
-        results[entry.index] = writeResult(committed[index], (url) =>
+      for (let [index, { entry, definition }] of writes.entries()) {
+        let result = writeResult(committed[index], (url) =>
           this.#virtualNetwork.unresolveURL(url),
         );
+        if (!definition.output) {
+          results[entry.index] = result;
+          continue;
+        }
+        // The `output` stage runs after the commit, over the result the wire
+        // would otherwise carry. It projects what the caller is told about the
+        // write; it cannot unmake one, and the batch has already committed by
+        // the time it runs.
+        try {
+          results[entry.index] = projectedResult(
+            entry,
+            await runOutputTransform(
+              definition,
+              result,
+              this.#transformContext(entry, caller),
+            ),
+          );
+        } catch (err: unknown) {
+          throw atEntry(err, entry.index);
+        }
       }
     }
 
@@ -4529,6 +4595,22 @@ export class Realm {
       200,
       requestContext,
     );
+  }
+
+  // What an entry's transform stages read besides the value they are handed:
+  // the payload as it stands and the caller, named for the refusal a failed
+  // stage answers with. The target's stored document is deliberately not among
+  // them — see `card-operations/transforms.ts`.
+  #transformContext(
+    entry: EnvelopeEntry,
+    caller: { actor: string; clientRequestId: string },
+  ): TransformContext {
+    return {
+      name: entry.name,
+      params: paramsFor(entry),
+      ...(entry.href ? { id: entry.href } : {}),
+      ...(caller.actor ? { actor: caller.actor } : {}),
+    };
   }
 
   // Which behavior one entry's name means for its target, labelled with the
@@ -9553,13 +9635,24 @@ export class Realm {
             resolveLinksOnly ? 'links-only' : 'full',
             skipLinkAssemblyBudget,
           );
-      let cacheControl = this.cardJsonCacheControl(requestContext);
+      // The headers a `GET` of this card would send, which for a projected
+      // body are not the ordinary ones: the read reports whether its full mode
+      // would project, and the two answers differ in the cache directive and
+      // in whether a conditional request may be answered from the validator.
+      let cacheControl = result.projected
+        ? PROJECTED_CARD_JSON_CACHE_CONTROL
+        : this.cardJsonCacheControl(requestContext);
       let lastModified: Record<string, string> =
         result.lastModified != null
           ? { 'last-modified': formatRFC7231(result.lastModified * 1000) }
           : {};
       let ifNoneMatch = request.headers.get('if-none-match');
-      if (ifNoneMatch && etag && ifNoneMatchMatches(ifNoneMatch, etag)) {
+      if (
+        !result.projected &&
+        ifNoneMatch &&
+        etag &&
+        ifNoneMatchMatches(ifNoneMatch, etag)
+      ) {
         // A conditional request is answered the same way whichever verb asked
         // it: the validator matched, so there is nothing to send.
         return createResponse({
@@ -9696,13 +9789,21 @@ export class Realm {
       // generation. Note that today's conditional-GET traffic already pays
       // it — card+json is served `max-age=0, must-revalidate` with an ETag,
       // so a client that has seen the card once sends `If-None-Match`.
+      // One memo of the index-row peek for this request, shared with the
+      // projection question below so that asking it costs the definition
+      // lookup and not a second row read.
+      let scope = newOperationScope(this.operationCore);
       let peekEtag: string | undefined;
+      // Whether this card's type specializes `read` with an `output`. A
+      // projected body is not what this request's validator describes, so the
+      // two fast paths below — the conditional 304 and the shared response
+      // cache — are both off for one, and the question has to be settled
+      // before either is taken rather than learned from the assembly.
+      let projected = false;
       if (ifNoneMatch || documentCache) {
         await this.getRealmInfo();
         let realmInfoHash = this.getCachedRealmInfoHash();
-        let instanceEntry = await this.#realmIndexQueryEngine.instance(url, {
-          includeErrors: true,
-        });
+        let instanceEntry = await scope.peekInstance(url);
         if (instanceEntry === undefined) {
           if (await this.nonJsonFileExists(localPath)) {
             // A path that points to a non-JSON file (e.g. an uploaded
@@ -9737,11 +9838,18 @@ export class Realm {
             skipLinkAssemblyBudget,
           );
         }
-        if (
-          ifNoneMatch &&
-          peekEtag &&
-          ifNoneMatchMatches(ifNoneMatch, peekEtag)
-        ) {
+        // Asked only where an answer would be taken from it: on a conditional
+        // hit, and on a request a configured cache would serve or retain.
+        // Every other request assembles, and the assembly resolves the same
+        // definition anyway.
+        let matchedEtag =
+          ifNoneMatch && peekEtag && ifNoneMatchMatches(ifNoneMatch, peekEtag)
+            ? peekEtag
+            : undefined;
+        if (matchedEtag || (documentCache && peekEtag)) {
+          projected = await readIsProjected(this.operationCore, url, scope);
+        }
+        if (matchedEtag && !projected) {
           return createResponse({
             requestContext,
             varyOn: LINK_SHAPE_VARY,
@@ -9749,7 +9857,7 @@ export class Realm {
             init: {
               status: 304,
               headers: {
-                etag: peekEtag,
+                etag: matchedEtag,
                 'cache-control': cacheControl,
                 ...(instanceEntry.lastModified != null
                   ? {
@@ -9781,7 +9889,7 @@ export class Realm {
         );
       let assembly: CardJsonAssembly;
       let cacheOutcome: CardDocumentCacheOutcome | undefined;
-      if (documentCache && peekEtag) {
+      if (documentCache && peekEtag && !projected) {
         ({ assembly, outcome: cacheOutcome } =
           await documentCache.getOrPopulate({
             url: url.href,
@@ -9816,7 +9924,9 @@ export class Realm {
         init: {
           headers: {
             'content-type': SupportedMimeType.CardJson,
-            'cache-control': cacheControl,
+            'cache-control': assembly.projected
+              ? PROJECTED_CARD_JSON_CACHE_CONTROL
+              : cacheControl,
             ...(assembly.etag ? { etag: assembly.etag } : {}),
             ...etagSuppressedHeader(assembly.etagSuppressed),
             ...(assembly.lastModified != null
@@ -9860,12 +9970,12 @@ export class Realm {
     // response around it: the validator, the redirect, the creation time, and
     // the mapping from a refusal to a status.
     //
-    // The caller travels with the request although a plain read never consults
-    // it, so that the first read that does cannot silently read a stale one.
-    // That an assembly is shareable between callers rests on the same thing
-    // the response cache's sharing does: a plain read is the same document for
-    // everyone permitted to ask for it. A `read` an author has specialized is
-    // refused rather than served, so nothing actor-dependent reaches here.
+    // The caller travels with the request because a specialized `read` reads
+    // it: an `output` may project by `actor()`, which makes the body
+    // per-caller. That is also why such an assembly is never shared — the
+    // handler keeps a projected read out of the response cache before calling
+    // here, since the cache's sharing rests on a plain read being the same
+    // document for everyone permitted to ask for it.
     let result: OperationResult;
     try {
       // The read runs `attachRealmInfo()`, which (re)populates the realm-info
@@ -9892,8 +10002,8 @@ export class Realm {
         `the read of ${url.href} answered with something other than a document`,
       );
     }
-    let { document, headers, queryBacked } = result;
-    if (document.data.type === 'file-meta') {
+    let { document, headers, queryBacked, projected } = result;
+    if (headers.type === 'file-meta') {
       // A file's metadata is derived from its bytes, so there is no index row
       // to validate it against and nothing here to cache.
       return { kind: 'file-meta', body: JSON.stringify(document, null, 2) };
@@ -9938,8 +10048,16 @@ export class Realm {
       etag: responseEtag,
       etagSuppressed: foreignDeps,
       queryBacked,
+      projected,
       keyEtag: keyEtag ?? '',
-      lastModified: card.data.meta.lastModified,
+      // Off the row for a projected body: an `output` decides what the
+      // document holds, so a projection that drops `meta` would otherwise take
+      // the modification time with it. The row is where the value comes from
+      // either way — `data.meta.lastModified` is the read's own copy of it —
+      // so the unprojected path keeps reading the body and the two agree.
+      lastModified: projected
+        ? headers.lastModified
+        : card.data.meta.lastModified,
       created: createdAt,
     };
   }
