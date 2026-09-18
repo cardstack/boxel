@@ -198,9 +198,17 @@ export interface CarriedOperationInfo {
 // the card-facing module, which is the one that can read a class's
 // declarations and an instance's identity — reading either from here would
 // mean loading a card module, which the operation path never does.
-export interface OperationsSubject {
-  // An instance is addressed by URL; a type is named by code ref.
-  scope: 'instance' | 'type';
+//
+// Split by scope rather than carried as one record with everything optional,
+// because the two scopes need different things and a missing one is a
+// different kind of problem in each. A type-scoped entry names no resource, so
+// its code ref is the only way it can say what it runs against: required here,
+// which makes a producer that omits it fail to compile rather than fail at the
+// call. An instance's id, realm and code ref are all genuinely absent
+// sometimes — a card that was never saved has no stored state, and a class no
+// module exports has no ref — so those refusals are the product's, and stay at
+// run time where they can say which one happened.
+interface SubjectCommon {
   // Which base behaviors the def carries, which is what decides the shape of
   // its bucket: a file's writes work on its bytes, a card's reach its
   // document.
@@ -208,14 +216,25 @@ export interface OperationsSubject {
   // How the def names itself in a refusal.
   displayName: string;
   operations: Record<string, CarriedOperationInfo>;
-  // Instance scope: what the entry targets, and the realm a batch anchored on
-  // it commits to. Either being absent is a refusal rather than a default —
-  // an instance that was never saved has no stored state to operate on.
+}
+
+export interface InstanceSubject extends SubjectCommon {
+  scope: 'instance';
+  // What the entry targets, and the realm a batch anchored on it commits to.
   id?: string;
   realmURL?: string;
-  // Type scope: the type an entry names in `meta.adoptsFrom`.
+  // The instance's own type, for the one entry that names it: a patch of a
+  // card's document is a card resource, which says what the card is.
   codeRef?: CodeRef;
 }
+
+export interface TypeSubject extends SubjectCommon {
+  scope: 'type';
+  // The type an entry names in `meta.adoptsFrom`.
+  codeRef: CodeRef;
+}
+
+export type OperationsSubject = InstanceSubject | TypeSubject;
 
 export interface OperationsEnvironment {
   transport: OperationsTransport;
@@ -246,13 +265,13 @@ const SCOPE: Readonly<Record<BaseOperation, 'instance' | 'type'>> = {
   query: 'type',
 };
 
-// The behaviors a batch does not carry, and where each is reached instead.
-// Both are refusals about the entry point rather than about the operation, so
-// they say the same thing the realm's own refusal says.
-const NOT_CARRIED: Partial<Record<BaseOperation, string>> = {
-  readSource: `stored bytes are served by the card source and byte routes rather than by a batch of operations`,
-  query: `a query runs on the search engine rather than in a batch; reach it through the entry search API`,
-};
+// The behaviors reached somewhere other than a batch, which therefore have no
+// member at all: stored bytes are served by the card source and byte routes,
+// and a query is planned and run on the search engine, reached through the
+// entry search API. Their absence is the API — a member that only ever threw
+// would be a name TypeScript has to hide and a caller can only reach through a
+// cast, which says less than not being there.
+const REACHED_ELSEWHERE: readonly BaseOperation[] = ['readSource', 'query'];
 
 // A base behavior with no declaration on it runs whatever the realm's own
 // executor does, and a transform's executor runs a program — which a batch
@@ -270,17 +289,11 @@ function carriesMember(
   subject: OperationsSubject,
   info: CarriedOperationInfo,
 ): boolean {
-  if (info.base === 'readSource') {
+  if (REACHED_ELSEWHERE.includes(info.base)) {
     return false;
   }
   if (!info.declared && NEEDS_DECLARATION.includes(info.base)) {
     return false;
-  }
-  if (info.base === 'query') {
-    // Only a name an author wrote. A member that says where a query is
-    // reached is worth having for a name the author can see in their own
-    // card, and `operations(Type).query(…)` was never how one is run.
-    return info.declared && subject.scope === 'type';
   }
   if (info.base === 'create') {
     return subject.scope === 'type' || info.declared;
@@ -296,7 +309,7 @@ function carriesEntry(
   subject: OperationsSubject,
   info: CarriedOperationInfo,
 ): boolean {
-  if (!carriesMember(subject, info) || NOT_CARRIED[info.base]) {
+  if (!carriesMember(subject, info)) {
     return false;
   }
   return !(info.base === 'create' && !info.declared);
@@ -346,12 +359,6 @@ async function invokeOne(
   payload: unknown,
   opts: unknown,
 ): Promise<OperationValueResult> {
-  let notCarried = NOT_CARRIED[info.base];
-  if (notCarried) {
-    throw new Error(
-      `operation "${name}" on ${subject.displayName} is built on ${info.base}, and ${notCarried}`,
-    );
-  }
   let options = (opts ?? {}) as InvokeOptions;
   let realmURL =
     subject.scope === 'instance'
@@ -470,7 +477,7 @@ function createResource(
   };
 }
 
-function instanceHref(subject: OperationsSubject, name: string): string {
+function instanceHref(subject: InstanceSubject, name: string): string {
   if (!subject.id) {
     throw new Error(
       `operation "${name}" runs against a stored ${subject.displayName}, and this one has never been saved`,
@@ -479,7 +486,7 @@ function instanceHref(subject: OperationsSubject, name: string): string {
   return subject.id;
 }
 
-function instanceRealm(subject: OperationsSubject, name: string): string {
+function instanceRealm(subject: InstanceSubject, name: string): string {
   if (!subject.realmURL) {
     throw new Error(
       `operation "${name}" runs in the realm that holds the ${subject.displayName} it targets, and this one is in no realm yet`,
@@ -596,6 +603,10 @@ interface HandleState {
   // A group's result is its members', read through the handles registered
   // inside it. Absent on an invocation.
   members?: BatchMember[];
+  // The members its own builder asked for, when it returned handles rather
+  // than nothing. A group is a builder like the batch is, so it projects the
+  // same way.
+  projection?: HandleState[];
   // An entry whose target is a search for several cards is answered with one
   // result per card the search reached.
   many?: true;
@@ -652,7 +663,7 @@ interface BatchScope {
 // that names nothing — reaches the caller as a rejected promise rather than as
 // a throw from a call that looks like it returns one.
 async function runAtomic(
-  subject: OperationsSubject,
+  subject: InstanceSubject,
   env: OperationsEnvironment,
   build: unknown,
 ): Promise<unknown> {
@@ -685,62 +696,71 @@ async function sendBatch(
   // Read before the batch is sent: what the builder handed back says which
   // results the caller wants, and a batch that writes should not commit
   // because the caller asked for its answer in a shape nothing can read.
-  let projection = projectionOf(root, returned);
+  let projection = projectionOf(root.batch, returned, 'an atomic() builder');
   let answer = await env.transport.send(
     root.batch.realmURL,
     root.writes ? 'POST' : 'QUERY',
     { 'boxel:operations': root.members.map((member) => member.wire) },
   );
   let results = answer['atomic:results'] ?? [];
-  if (!projection) {
-    return resultsOf(root.members, results);
-  }
-  return projection.map((handle) => resultFor(handle, results));
+  return answered(projection ?? handlesOf(root.members), results);
 }
 
-// The handles whose results the caller asked for, or nothing when the builder
-// returned nothing and the answer is every entry's result in order.
+// The handles whose results a builder asked for, or nothing when it returned
+// nothing and the answer is every entry's result in the order they were
+// registered.
+//
+// Read the same way for the whole batch and for a group, which is what keeps
+// the two from drifting: a group's builder is a builder, so returning a subset
+// of its members means there as much as it means at the top level, and the
+// type that describes a group's result is the one that describes the batch's.
 function projectionOf(
-  root: BatchScope,
+  batch: BatchState,
   returned: unknown,
+  opener: string,
 ): HandleState[] | undefined {
   if (returned === undefined) {
     return undefined;
   }
   if (!Array.isArray(returned)) {
     throw new Error(
-      `an atomic() builder either returns nothing, and every entry's result comes back in the order the entries were registered, or returns the handles whose results it wants`,
+      `${opener} either returns nothing, and every entry's result comes back in the order the entries were registered, or returns the handles whose results it wants`,
     );
   }
   return returned.map((handle) => {
-    if (!isOperationHandle(handle) || handle[HANDLE].batch !== root.batch) {
+    if (!isOperationHandle(handle) || handle[HANDLE].batch !== batch) {
       throw new Error(
-        `an atomic() builder returns handles its own calls produced; this one returned something else`,
+        `${opener} returns handles its own calls produced; this one returned something else`,
       );
     }
     return handle[HANDLE];
   });
 }
 
-// Every member's result, read where the member sat. A group's position holds
-// its own members' results, which are read the same way — so the answer comes
-// back shaped like the batch that asked for it.
-function resultsOf(
-  members: BatchMember[],
-  results: WireResults,
-): OperationResultTree {
-  return members.map((member, index) =>
-    memberResult(member.handle, results[index]),
-  );
+function handlesOf(members: BatchMember[]): HandleState[] {
+  return members.map((member) => member.handle);
 }
 
-function memberResult(
+// What a list of handles resolves to, read out of the answer at the position
+// each one's entry sat in — so the results come back shaped like the batch that
+// asked for them.
+function answered(
+  handles: HandleState[],
+  results: WireResults,
+): OperationResultTree {
+  return handles.map((handle) => resultFor(handle, results));
+}
+
+// One handle's result. A group's is its members' — its own projection when its
+// builder named one, and otherwise every member it registered.
+function resultFor(
   handle: HandleState,
-  at: WireResult | WireResults | undefined,
+  results: WireResults,
 ): OperationValueResult | OperationResultTree {
   if (handle.members) {
-    return resultsOf(handle.members, asResults(at, handle));
+    return answered(handle.projection ?? handlesOf(handle.members), results);
   }
+  let at = positioned(handle, results);
   if (handle.many) {
     return asResults(at, handle).map((one) =>
       valueResult(one, handle.kind, handle.name),
@@ -749,11 +769,12 @@ function memberResult(
   return valueResult(at, handle.kind, handle.name);
 }
 
-// One handle's result, found at the position its entry sat in.
-function resultFor(
+// The answer at an entry's own position, walked from the root: an entry inside
+// a group sits inside the array its group's position holds.
+function positioned(
   handle: HandleState,
   results: WireResults,
-): OperationValueResult | OperationResultTree {
+): WireResult | WireResults | undefined {
   let at: WireResult | WireResults | undefined;
   let level: WireResults = results;
   for (let [depth, index] of handle.path.entries()) {
@@ -763,7 +784,7 @@ function resultFor(
     }
     level = asResults(at, handle);
   }
-  return memberResult(handle, at);
+  return at;
 }
 
 function asResults(
@@ -784,7 +805,7 @@ function asResults(
 
 function builderFor(
   scope: BatchScope,
-  subject: OperationsSubject,
+  subject: InstanceSubject,
   env: OperationsEnvironment,
 ): Record<string, unknown> {
   let builder: Record<string, unknown> = Object.create(null);
@@ -806,7 +827,7 @@ function builderFor(
 // One card's operations, each registering an entry in the batch.
 function entryMembers(
   scope: BatchScope,
-  subject: OperationsSubject,
+  subject: InstanceSubject,
 ): Record<string, unknown> {
   let members: Record<string, unknown> = Object.create(null);
   for (let [name, info] of Object.entries(subject.operations)) {
@@ -831,7 +852,8 @@ function entryMembers(
         kind: resultKindOf(info.base),
         writes: isWrite(info.base),
         href: instanceHref(subject, name),
-        data: data === undefined ? undefined : linkHandles(data, name),
+        data:
+          data === undefined ? undefined : linkHandles(data, name, scope.batch),
         lid,
       });
     };
@@ -902,7 +924,9 @@ function queriedMembers(
           writes: true,
           queryTarget: target.wire,
           many: target.many,
-          data: isPlainRecord(payload) ? linkHandles(payload, name) : undefined,
+          data: isPlainRecord(payload)
+            ? linkHandles(payload, name, scope.batch)
+            : undefined,
         });
     },
   });
@@ -938,6 +962,7 @@ function registerCreate(
     data: linkHandles(
       createResource(type, 'create', attributes, opts?.relationships, lid),
       'create',
+      scope.batch,
     ),
     lid,
   });
@@ -948,6 +973,8 @@ export interface FindOptions {
   // entry runs against is what that field points at rather than the match
   // itself.
   field?: string;
+  // Reaching an entry through a target is refused by the realm until its parse
+  // reads `boxel:target`; see the note on `queryTarget`.
   // How many cards the target names. `one` is the default, and an entry under
   // it names exactly one card.
   //
@@ -965,6 +992,11 @@ export interface FindOptions {
 // this API, and it is translated to the search engine's own grammar here so
 // there is one spelling to learn. The realm scopes the search to itself and
 // supplies the rest of the query, so nothing but the filter travels.
+//
+// **No realm reads `boxel:target` yet.** The envelope's parse reads an entry's
+// `href` and its `data`, so an entry carrying a target is refused as one that
+// names nothing to run against. The form here is the one the parse will read,
+// and a batch that uses it fails until it does.
 //
 // A filter that names nothing is refused: it is legal, and it matches every
 // card in the realm — which under `expect: 'many'` is a batch nobody meant to
@@ -1054,7 +1086,7 @@ function defRefs(value: unknown, env: OperationsEnvironment): unknown {
 
 function registerGroup(
   scope: BatchScope,
-  subject: OperationsSubject,
+  subject: InstanceSubject,
   env: OperationsEnvironment,
   op: 'parallel' | 'serial',
   build: unknown,
@@ -1079,6 +1111,7 @@ function registerGroup(
       `${op}() registers its members synchronously; an async builder would register them after the batch had been sent`,
     );
   }
+  let projection = projectionOf(scope.batch, returned, `a ${op}() builder`);
   scope.writes = scope.writes || inner.writes;
   let handle: HandleState = {
     batch: scope.batch,
@@ -1086,6 +1119,7 @@ function registerGroup(
     name: op,
     kind: 'opaque',
     members: inner.members,
+    ...(projection ? { projection } : {}),
   };
   scope.members.push({
     wire: {
@@ -1151,8 +1185,9 @@ function mintLid(scope: BatchScope): string {
 function linkHandles(
   data: Record<string, unknown>,
   name: string,
+  batch: BatchState,
 ): Record<string, unknown> {
-  return substituteHandles(data, name, new Set(), true) as Record<
+  return substituteHandles(data, name, new Set(), batch) as Record<
     string,
     unknown
   >;
@@ -1161,28 +1196,37 @@ function linkHandles(
 // Reads the payload for a handle without substituting one, for the calls that
 // are not batches and so have no entry a handle could stand for.
 function assertNoHandles(data: Record<string, unknown>, name: string): void {
-  substituteHandles(data, name, new Set(), false);
+  substituteHandles(data, name, new Set(), undefined);
 }
 
 function substituteHandles(
   value: unknown,
   name: string,
   seen: Set<object>,
-  inBatch: boolean,
+  batch: BatchState | undefined,
 ): unknown {
   if (isOperationHandle(value)) {
-    if (!inBatch) {
+    if (!batch) {
       throw new Error(
         `operation "${name}" was handed the handle of a batch entry; a handle stands for a card the batch mints, so it is passed inside the same atomic() call rather than to a single operation`,
       );
     }
-    let { lid } = value[HANDLE];
-    if (!lid) {
+    let handle = value[HANDLE];
+    if (handle.batch !== batch) {
+      // A local id is the batch's own sequence, so another batch's handle does
+      // not merely fail to resolve — its `l1` is this batch's `l1`, and the
+      // link would point at whatever card this batch mints first. Refused by
+      // which batch owns it rather than by whether it carries an id at all.
+      throw new Error(
+        `operation "${name}" was handed a handle from another atomic() call; a handle names a card the batch it was made in mints, and a local id means nothing outside that batch`,
+      );
+    }
+    if (!handle.lid) {
       throw new Error(
         `operation "${name}" was handed the handle of an entry that mints no card, so there is nothing for a link to point at`,
       );
     }
-    return { lid };
+    return { lid: handle.lid };
   }
   if (isQueryTargetHandle(value)) {
     throw new Error(
@@ -1191,22 +1235,30 @@ function substituteHandles(
   }
   if (Array.isArray(value)) {
     guardCycle(value, name, seen);
-    return value.map((member) =>
-      substituteHandles(member, name, seen, inBatch),
+    let members = value.map((member) =>
+      substituteHandles(member, name, seen, batch),
     );
+    seen.delete(value);
+    return members;
   }
   if (isPlainRecord(value)) {
     guardCycle(value, name, seen);
-    return Object.fromEntries(
+    let members = Object.fromEntries(
       Object.entries(value).map(([key, member]) => [
         key,
-        substituteHandles(member, name, seen, inBatch),
+        substituteHandles(member, name, seen, batch),
       ]),
     );
+    seen.delete(value);
+    return members;
   }
   return value;
 }
 
+// A value reached twice down two paths is a payload that repeats a reference,
+// which serializes as two copies and is nothing to refuse. Only a value that
+// contains *itself* cannot be sent — so the set is the path being walked, and
+// each value leaves it once its own subtree is done.
 function guardCycle(value: object, name: string, seen: Set<object>): void {
   if (seen.has(value)) {
     throw new Error(

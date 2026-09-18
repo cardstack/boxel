@@ -44,11 +44,16 @@ import type * as OperationsModule from '@cardstack/base/operations';
 // answered by the operation core rather than by a double, and what the realm
 // is left holding afterwards is what the assertions read.
 //
-// Two of the wire forms the builder emits are carried out by realms this
-// endpoint does not have yet: a `parallel`/`serial` group, and a target found
-// by search. Their coverage here is the request the builder produces and the
-// answer it reads back, driven through a recording transport — what those
-// forms mean once the realm runs them belongs where that behavior lives.
+// One wire form the builder emits has no reader: an entry whose target is a
+// search. The envelope's parse reads an entry's `href` and its `data`, so
+// `boxel:target` reaches it as an entry naming nothing to run against — that
+// form is covered as the request the builder produces, in the client core's
+// own suite, and a batch using it is refused by this realm. Groups are not in
+// that position: this realm carries them out, so a group batch here is run.
+//
+// A few cases still use a recording transport, and each is one where the realm
+// would answer in place of the thing under test: what the host mints, what it
+// refuses, and what it reads back.
 // ============================================================================
 
 const testRealm2URL = 'http://test-realm/test2/';
@@ -323,16 +328,44 @@ module('Integration | operations invocation', function (hooks) {
       );
     });
 
-    test('a write carries a client request id the store recognizes as its own echo', async function (assert) {
+    test('a write carries a client request id to the realm, and does not suppress its own reload', async function (assert) {
+      // Read off the event the realm broadcast, which is where the sent header
+      // surfaces: the realm reads `X-Boxel-Client-Request-Id` and stamps it on
+      // the index job. Asserting a local registry instead would pass for a
+      // send that registered one id and sent another, or none.
       let report = await cardAt('report-transformed');
+      let broadcast: any[] = [];
+      let realmEvent = adapter.broadcastRealmEvent.bind(adapter);
+      adapter.broadcastRealmEvent = async (...args: any[]) => {
+        broadcast.push(args[0]);
+        return (realmEvent as any)(...args);
+      };
+      let { clientRequestIds } = getService('card-service');
+      let before = new Set(clientRequestIds.values());
+
       await (operations(report) as any).escalate();
 
-      let ids = [...getService('card-service').clientRequestIds.values()];
-      let mine = ids.filter((id) => id.startsWith('instance:'));
-      assert.strictEqual(
-        mine.length,
-        1,
-        'the write registered one `instance:`-prefixed request id',
+      let ids = broadcast
+        .map((event) => event?.clientRequestId)
+        .filter(Boolean);
+      assert.strictEqual(ids.length, 1, 'one write, one request id');
+      assert.true(
+        String(ids[0]).startsWith('instance:'),
+        `the realm received the id under the host's own prefix: ${ids[0]}`,
+      );
+
+      // Not registered locally, on purpose. That registry is what makes the
+      // store skip the reload, and it may skip only when a save has already
+      // applied the document it sent — an operation's answer carries identity
+      // and version, so a suppressed event would leave this card showing
+      // pre-write values with nothing left to correct it.
+      let added = [...clientRequestIds.values()].filter(
+        (id) => !before.has(id),
+      );
+      assert.deepEqual(
+        added,
+        [],
+        'and nothing was registered that would stop the store reloading the card',
       );
     });
 
@@ -432,8 +465,8 @@ module('Integration | operations invocation', function (hooks) {
       // where that core is driven directly.
       assert.strictEqual(
         getService('operations').defaultWritableRealm(),
-        getService('realm').defaultWritableRealm?.path,
-        'the realm a class-scoped create defaults to is the one the session writes to',
+        testRealmURL,
+        'a class-scoped create with no realm lands in the realm this session writes to',
       );
     });
 
@@ -537,6 +570,46 @@ module('Integration | operations invocation', function (hooks) {
         (operations(Report) as any).openReports(),
         /runs on the search engine/,
         'a declared query says where a query is reached instead of sending a batch',
+      );
+    });
+  });
+
+  // Reached through `operations()` with no cast and no type argument, which is
+  // the one thing the hand-built bucket types in the types module cannot say
+  // anything about: every other call in this file goes through `as any`, so a
+  // typed surface that made the ordinary spelling uncallable would not show up
+  // anywhere else.
+  module("the entry point's own typing", function () {
+    test('the ordinary spelling compiles, and answers what its type says', async function (assert) {
+      let report = await cardAt('report-typed');
+      let nearby = await cardAt('report-read');
+      let { Report } = await loader.import<{ Report: typeof CardDef }>(
+        `${testRealmURL}report`,
+      );
+
+      let result = await operations(report).addComment({
+        body: 'Typed straight through.',
+      });
+      assert.strictEqual(
+        result.id,
+        `${testRealmURL}report-typed`,
+        'the lean result is typed as one, and names the card it wrote',
+      );
+
+      await operations(report).atomic((b) => {
+        b.on(nearby).escalate();
+      });
+      let stored = await storedCard('report-read.json');
+      assert.strictEqual(
+        stored.data.attributes.status,
+        'escalated',
+        'a card named through on() carries its operations by name too',
+      );
+
+      let created = await operations(Report).create({ headline: 'From class' });
+      assert.ok(
+        created.id.startsWith(testRealmURL),
+        `a class-scoped create answers with the minted id: ${created.id}`,
       );
     });
   });
@@ -710,9 +783,9 @@ module('Integration | operations invocation types', function (hooks) {
   ) {}
 
   test('an operation takes the payload its declaration types, and answers by the behavior it is built on', async function (assert) {
-    let { operation, params } = await loader.import<typeof OperationsModule>(
-      '@cardstack/base/operations',
-    );
+    let { operation, params, getDeclaredOperations } = await loader.import<
+      typeof OperationsModule
+    >('@cardstack/base/operations');
 
     class Report extends CardDef {
       @operation static addComment = {
@@ -745,12 +818,32 @@ module('Integration | operations invocation types', function (hooks) {
       (patch: OperationsModule.CardPatch) => Promise<OperationWriteResult>,
       Bucket['update']
     >();
+    // A base read takes no payload at all: the read executor reads none, and a
+    // declaration that would give one meaning is refused as a stage a batch
+    // does not run.
+    expectTypeEquals<
+      () => Promise<OperationsModule.OperationDocument>,
+      Bucket['read']
+    >();
     // The two behaviors reached elsewhere are not members at all.
     expectTypeEquals<false, 'readSource' extends keyof Bucket ? true : false>();
     expectTypeEquals<false, 'create' extends keyof Bucket ? true : false>();
     // A file carries neither a card's document writes nor a batch.
-    class _Notes extends FileDef {}
-    type FileBucket = OperationsModule.FileInstanceOperations<typeof _Notes>;
+    //
+    // The fixture declares an operation rather than extending `FileDef` bare,
+    // and that is load-bearing: the predicate that decides whether a call
+    // named its class compares the type against its own constraint, so a
+    // subclass that adds nothing at all is indistinguishable from the
+    // constraint and reads as unnamed — which mixes the unchecked fallback in
+    // and makes every name present. A def with something of its own is both
+    // the realistic case and the one that can assert an absence.
+    class Notes extends FileDef {
+      @operation static appendAudit = {
+        base: 'appendLine',
+        params: { line: StringField },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    type FileBucket = OperationsModule.FileInstanceOperations<typeof Notes>;
     expectTypeEquals<false, 'atomic' extends keyof FileBucket ? true : false>();
     expectTypeEquals<
       false,
@@ -760,6 +853,15 @@ module('Integration | operations invocation types', function (hooks) {
       (payload: { line: string }) => Promise<OperationWriteResult>,
       FileBucket['appendLine']
     >();
+    expectTypeEquals<
+      (payload: { line: string }) => Promise<OperationWriteResult>,
+      FileBucket['appendAudit']
+    >();
+    assert.deepEqual(
+      Object.keys(getDeclaredOperations(Notes)),
+      ['appendAudit'],
+      'and the reader agrees with the type about what the file def declares',
+    );
     assert.ok(Report, 'the declarations are read off the class');
   });
 

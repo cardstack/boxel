@@ -29,10 +29,14 @@ import type { CodeRef } from '@cardstack/runtime-common/code-ref';
 //
 // What the same calls do against a realm that carries them out is covered by
 // the host's integration suite, which reaches this core through
-// `@cardstack/base/operations` and real `@operation` declarations. Two of the
-// wire forms are deliberately only checked here for now: a `parallel`/`serial`
-// group and a target found by search are read by realms still landing, and
-// what the builder emits for them is a contract in its own right.
+// `@cardstack/base/operations` and real `@operation` declarations — groups
+// included, since the realm reads them.
+//
+// One form is checked only here, because no realm reads it: an entry whose
+// target is a search. The envelope's parse reads an entry's `href` and its
+// `data`, so `boxel:target` reaches it as an entry naming nothing to run
+// against. What the builder emits for it is a contract in its own right, and
+// the assertions below are that contract.
 // ============================================================================
 
 const REALM = 'http://example.com/test/';
@@ -237,8 +241,13 @@ module(basename(import.meta.filename), function () {
       let bucket = buildOperations(reportType(), harness().env);
       assert.deepEqual(
         Object.keys(bucket).sort(),
-        ['create', 'createActivity', 'openReports'],
-        'the base create, a declared one, and the declared query that says where it is reached',
+        ['create', 'createActivity'],
+        'the base create and a declared one',
+      );
+      assert.strictEqual(
+        bucket.openReports,
+        undefined,
+        'a declared query has no member either: a query is reached through the entry search API, and its absence says so the way readSource does',
       );
       assert.strictEqual(
         bucket.atomic,
@@ -256,15 +265,24 @@ module(basename(import.meta.filename), function () {
       ]);
     });
 
-    test('a declared query says where a query is reached', async function (assert) {
-      let { sent, env } = harness();
-      let bucket = buildOperations(reportType(), env);
-      await assert.rejects(
-        (bucket.openReports as () => Promise<unknown>)(),
-        /runs on the search engine/,
-        'a query is planned and run on the search engine rather than in a batch',
-      );
-      assert.strictEqual(sent.length, 0, 'and no batch was sent');
+    test('nothing a batch cannot carry reaches a batch', function (assert) {
+      // Exhaustive over the behaviors reached elsewhere, so a later one that
+      // grew a member here — and would then be sent as a batch entry the realm
+      // answers with "not carried here" — fails on this list rather than in a
+      // caller.
+      for (let subject of [reportInstance(), reportType(), fileInstance()]) {
+        let bucket = buildOperations(subject, harness().env);
+        for (let [name, info] of Object.entries(subject.operations)) {
+          if (info.base !== 'readSource' && info.base !== 'query') {
+            continue;
+          }
+          assert.strictEqual(
+            bucket[name],
+            undefined,
+            `${subject.displayName} carries no ${name} (${info.base})`,
+          );
+        }
+      }
     });
   });
 
@@ -743,6 +761,119 @@ module(basename(import.meta.filename), function () {
         'the results a builder asks for are named by its own handles',
       );
       assert.strictEqual(sent.length, 0, 'none of them reached the transport');
+    });
+
+    test("a handle from another batch is refused rather than read as this batch's", async function (assert) {
+      // A local id is the batch's own sequence, so a retained handle's `l1` is
+      // *this* batch's `l1`: substituted by id alone it would link whatever
+      // card this batch mints first, which is a wrong link that looks like a
+      // right one.
+      let first = batchHarness({
+        'atomic:results': [
+          { data: { type: 'card', id: `${REALM}Activity/1`, meta: {} } },
+        ],
+      });
+      let bucket = buildOperations(reportInstance(), first.env);
+      let escaped: unknown;
+      await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
+        (b: any) => {
+          escaped = b.create('ACTIVITY', { headline: 'From batch one' });
+        },
+      );
+
+      let second = batchHarness({ 'atomic:results': [{ data: null }] });
+      let later = buildOperations(reportInstance(), second.env);
+      await assert.rejects(
+        (later.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
+          (b: any) => {
+            b.create('ACTIVITY', { headline: 'From batch two' });
+            b.addActivity({ activity: escaped });
+          },
+        ),
+        /handle from another atomic\(\) call/,
+        'the handle names a card the batch it was made in mints',
+      );
+      assert.strictEqual(
+        second.sent.length,
+        0,
+        'and the second batch never went out',
+      );
+    });
+
+    test('a payload may name the same value twice', async function (assert) {
+      // Two references to one value serialize as two copies; only a value that
+      // contains itself cannot be sent. The guard tracks the path it is
+      // walking, so the first is carried and the second is refused.
+      let { sent, env } = batchHarness({
+        'atomic:results': [{ data: { type: 'card', id: 'a', meta: {} } }],
+      });
+      let bucket = buildOperations(reportInstance(), env);
+      let shared = { body: 'said once' };
+      await (
+        bucket.appendContainsMany as (payload: unknown) => Promise<unknown>
+      )({ field: 'comments', items: [shared, shared] });
+
+      assert.deepEqual(
+        (entries(sent[0])[0].data as any).items,
+        [{ body: 'said once' }, { body: 'said once' }],
+        'a repeated reference travels as two values',
+      );
+
+      let cyclic: Record<string, unknown> = {};
+      cyclic.self = cyclic;
+      await assert.rejects(
+        (bucket.appendContainsMany as (payload: unknown) => Promise<unknown>)({
+          field: 'comments',
+          items: [cyclic],
+        }),
+        /contains itself/,
+        'and a value that contains itself is still refused',
+      );
+    });
+
+    test("a group's builder projects its results the way the batch's does", async function (assert) {
+      let { sent, env } = batchHarness({
+        'atomic:results': [
+          [
+            { data: { type: 'card', id: 'a', meta: { version: 'a' } } },
+            { data: { type: 'card', id: 'b', meta: { version: 'b' } } },
+          ],
+        ],
+      });
+      let bucket = buildOperations(reportInstance(), env);
+      let [group] = (await (
+        bucket.atomic as (build: (b: any) => unknown) => Promise<any[]>
+      )((b: any) => {
+        let members = b.parallel((p: any) => {
+          p.escalate();
+          let second = p.addComment({ body: 'x' });
+          return [second];
+        });
+        return [members];
+      })) as any[];
+
+      assert.strictEqual(
+        (sent[0].envelope['boxel:operations'][0] as WireGroup)[
+          'boxel:operations'
+        ].length,
+        2,
+        'both members are registered and sent',
+      );
+      assert.deepEqual(
+        (group as any[]).map((one) => one.version),
+        ['b'],
+        'and the group answers with the member its own builder asked for, not with everything it registered',
+      );
+
+      await assert.rejects(
+        (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
+          (b: any) => {
+            b.parallel(() => ['not a handle']);
+          },
+        ),
+        /returns handles its own calls produced/,
+        'and a group is held to the same rule about what it may return',
+      );
     });
 
     test('a read-only batch asks only to read', async function (assert) {

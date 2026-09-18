@@ -1852,9 +1852,18 @@ type DeclaredOperationMembers<Type, Scope extends 'instance' | 'type'> = {
 };
 
 // Whether the call named the class its operations are declared on. It did not
-// when the type parameter is still the constraint, which is every call that
-// passes an instance without a type argument.
-type NamesNoClass<Type> = [BaseDefConstructor] extends [Type] ? true : false;
+// when the type parameter is still its own constraint, which is every call
+// that passes an instance without a type argument — `InstanceType<Type>` is
+// not an inference site, so nothing there narrows `Type`.
+//
+// The constraint travels in rather than being assumed: each overload
+// constrains `Type` differently, and comparing against `BaseDefConstructor`
+// answers "no" for every one of them, because a card constructor's instances
+// carry members a base def's do not. That made this fallback dead and the
+// ordinary spelling — `operations(report).addComment(…)` — uncallable.
+type NamesNoClass<Type, Constraint> = [Constraint] extends [Type]
+  ? true
+  : false;
 
 // The operations a call could not read off the class: callable by name, with a
 // payload nothing here can check. Present only on a call that named no class,
@@ -1864,8 +1873,10 @@ export interface UncheckedOperations {
   [name: string]: (payload?: any, opts?: any) => Promise<any>;
 }
 
-type Bucket<Type, Members> =
-  NamesNoClass<Type> extends true ? Members & UncheckedOperations : Members;
+type Bucket<Type, Constraint, Members> =
+  NamesNoClass<Type, Constraint> extends true
+    ? Members & UncheckedOperations
+    : Members;
 
 // A card's declarative update: the field values to merge, and the links to
 // replace. It is the same document a `PATCH` of the card carries, which is the
@@ -1888,7 +1899,11 @@ export type AppendContainsManyPayload =
 // over the card's document and a batch entry has no member to carry one, so the
 // behavior is reached under the name a declaration gives it.
 export interface CardInstanceBaseOperations {
-  read(payload?: Record<string, unknown>): Promise<OperationDocument>;
+  // No payload: the read executor reads none, and a declaration that would
+  // give one meaning — an `input`, an `output`, a program — is refused as a
+  // stage a batch does not run. A parameterized read is a declared operation,
+  // and arrives under its own name with its own payload type.
+  read(): Promise<OperationDocument>;
   update(patch: CardPatch): Promise<OperationWriteResult>;
   delete(): Promise<null>;
   appendContainsMany(
@@ -1901,14 +1916,14 @@ export interface CardInstanceBaseOperations {
 // already there. A file's metadata is derived from its bytes, so there is no
 // document to merge into and no collection to append to.
 export interface FileInstanceBaseOperations {
-  read(payload?: Record<string, unknown>): Promise<OperationDocument>;
+  read(): Promise<OperationDocument>;
   update(payload: { content: string }): Promise<OperationWriteResult>;
   appendLine(payload: { line: string }): Promise<OperationWriteResult>;
 }
 
 // Everything else addressable: the document read every def has.
 export interface BaseInstanceOperations {
-  read(payload?: Record<string, unknown>): Promise<OperationDocument>;
+  read(): Promise<OperationDocument>;
 }
 
 // What a class carries: the create that mints one of its cards. The field
@@ -1930,6 +1945,7 @@ type WithDeclared<BaseMembers, Declared> = Omit<BaseMembers, keyof Declared> &
 
 export type CardInstanceOperations<Type> = Bucket<
   Type,
+  CardDefConstructor,
   WithDeclared<
     CardInstanceBaseOperations,
     DeclaredOperationMembers<Type, 'instance'>
@@ -1939,6 +1955,7 @@ export type CardInstanceOperations<Type> = Bucket<
 
 export type FileInstanceOperations<Type> = Bucket<
   Type,
+  FileDefConstructor,
   WithDeclared<
     FileInstanceBaseOperations,
     DeclaredOperationMembers<Type, 'instance'>
@@ -2018,7 +2035,7 @@ type BatchMembers<Type> = {
 // The base operations of a card in the batch, registering an entry rather than
 // sending one.
 export interface CardBatchBaseOperations {
-  read(payload?: Record<string, unknown>): BatchHandle<OperationDocument>;
+  read(): BatchHandle<OperationDocument>;
   update(patch: CardPatch): BatchHandle<OperationWriteResult>;
   delete(): BatchHandle<null>;
   appendContainsMany(
@@ -2033,7 +2050,7 @@ export interface UncheckedBatchOperations {
 }
 
 export type BatchOperations<Type> =
-  NamesNoClass<Type> extends true
+  NamesNoClass<Type, CardDefConstructor> extends true
     ? WithDeclared<CardBatchBaseOperations, BatchMembers<Type>> &
         UncheckedBatchOperations
     : WithDeclared<CardBatchBaseOperations, BatchMembers<Type>>;
@@ -2131,12 +2148,24 @@ export function operations(target: unknown): any {
 function subjectFor(target: unknown): OperationsSubject {
   if (isDefConstructor(target)) {
     let codeRef = identifyCard(target);
+    if (!codeRef) {
+      // A type-scoped call names no resource, so the class is the only thing
+      // it can say it runs against — and a class no module exports cannot be
+      // named on the wire at all. Refused here, where the caller can see which
+      // class they passed, rather than at the entry that would have to invent
+      // a type for it.
+      throw new Error(
+        `operations() takes a class some module exports, and no module exports ${defName(
+          target,
+        )} — an operation on a type names it by its module and export`,
+      );
+    }
     return {
       scope: 'type',
       family: familyOf(target, 'operations'),
       displayName: defName(target),
       operations: carriedOperations(target),
-      ...(codeRef ? { codeRef } : {}),
+      codeRef,
     };
   }
   let owner = defConstructorFor(target as BaseDef, 'operations');
