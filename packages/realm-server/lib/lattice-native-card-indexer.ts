@@ -7,6 +7,7 @@ import {
   latticeAttemptId,
   type LatticeTrace,
 } from '@cardstack/runtime-common/lattice-trace';
+import type { Definition } from '@cardstack/runtime-common/definitions';
 import type { LatticeProjectionWhere } from '@cardstack/runtime-common/definitions';
 import { createHash } from 'node:crypto';
 import type { CodeRef, RenderResponse } from '@cardstack/runtime-common';
@@ -147,9 +148,40 @@ export function createLatticeNativeCardIndexer({
     const indexMetadata = admission.root.definition.nativeIndex;
     if (request.inputSnapshot && (!openInputs || !indexMetadata?.materialized))
       return bail('line 100');
-    if (indexMetadata?.materialized && !openInputs) return bail('line 101');
+    const definition = admission.root.definition;
+    const sourceOnly = isLatticeNativeSource(definition);
+    if (request.sourceInputOnly && !sourceOnly)
+      return bail('not a native source');
+    let linkedSource:
+      | import('@cardstack/runtime-common/lattice-native-index').LatticeNativeSourceInput
+      | undefined;
+    const sourceLink =
+      !request.inputSnapshot && request.sourceInput
+        ? singleLatticeSourceLink(definition)
+        : undefined;
+    if (sourceLink) {
+      const resource = JSON.parse(request.sourceJSON).data;
+      const reference = resource?.relationships?.[sourceLink]?.links?.self;
+      if (typeof reference === 'string') {
+        const target =
+          admission.resolve(reference, request.url).replace(/\.json$/, '') +
+          '.json';
+        if (target !== request.url && target.startsWith(request.realmURL)) {
+          linkedSource = await request.sourceInput!(target);
+          if (
+            linkedSource &&
+            (linkedSource.url !== target ||
+              linkedSource.realmURL !== request.realmURL ||
+              linkedSource.generation !== request.generation)
+          )
+            throw new Error('Linked source belongs to another indexing batch');
+        }
+      }
+    }
+    if (indexMetadata?.materialized && !openInputs && !linkedSource)
+      return bail('line 101');
     const discovery = Boolean(
-      indexMetadata?.materialized && !request.inputSnapshot,
+      indexMetadata?.materialized && !request.inputSnapshot && !linkedSource,
     );
     if (
       !indexMetadata?.types.length ||
@@ -216,7 +248,9 @@ export function createLatticeNativeCardIndexer({
       >();
       const linkDeps = new Set<string>();
       const linkInputs =
-        readLinks && !discovery && admission.root.definition.nativeLinkInputs
+        (readLinks || linkedSource) &&
+        !discovery &&
+        admission.root.definition.nativeLinkInputs
           ? {
               resolveLinkInputs: async (
                 links: Array<{
@@ -230,9 +264,20 @@ export function createLatticeNativeCardIndexer({
                   urls: string[],
                 ): Promise<LatticeLinkInput[]> => {
                   for (const url of urls) linkDeps.add(url);
+                  if (linkedSource) {
+                    if (urls.some((url) => url !== linkedSource!.url))
+                      throw new Error(
+                        'Source derivation read outside its declared input',
+                      );
+                    return urls.map((url) => ({
+                      url,
+                      generation: linkedSource!.generation,
+                      resource: linkedSource!.resource,
+                    }));
+                  }
                   return inputFrame
                     ? inputFrame.readLinks(urls)
-                    : readLinks(request, admission, urls);
+                    : readLinks!(request, admission, urls);
                 };
                 const projector = new LatticeDataProjector(
                   read,
@@ -529,7 +574,11 @@ export function createLatticeNativeCardIndexer({
       };
       // Retain compact revision facts through commit, never the authored bytes
       // or the whole definition/lookup object graph for every indexed card.
-      const { sourceJSON: _sourceJSON, ...revisionContext } = request;
+      const {
+        sourceJSON: _sourceJSON,
+        sourceInput: _sourceInput,
+        ...revisionContext
+      } = request;
       const assertCurrent = admission.assertCurrent;
       const receipt = {
         request: revisionContext,
@@ -563,7 +612,21 @@ export function createLatticeNativeCardIndexer({
         definitions: trace.hash(JSON.stringify(result.definitionRevisions)),
       });
       trace?.finish('computed');
+      const checkSource = (tx: Querier) => assertCurrent(tx, receipt);
+      // Retain only the revision guard, not the linked source body, until commit.
+      const checkLinkedSource = linkedSource?.assertCurrent;
       return {
+        ...(sourceOnly
+          ? {
+              sourceInput: {
+                url: request.url,
+                realmURL: request.realmURL,
+                generation: request.generation,
+                resource: structuredClone(serialized.data),
+                assertCurrent: checkSource,
+              },
+            }
+          : {}),
         card,
         ...(dataReceipt?.retainedInputs.length
           ? {
@@ -630,6 +693,9 @@ export function createLatticeNativeCardIndexer({
           : {}),
         ...(result.computed ? { compute: result.computed } : {}),
         assertCurrent: async (tx) => {
+          // This receipt is retained even if a later visit reindexes the same
+          // source. Overwriting a source row must not erase an earlier read.
+          await checkLinkedSource?.(tx);
           // Admission handles queued-work priority. Publication depends on
           // actual source/code/input receipts, not the presence of another job.
           if (trace) {
@@ -663,4 +729,34 @@ export function createLatticeNativeCardIndexer({
       await work?.close();
     }
   }
+}
+
+// Classification is over the admitted definition, never untrusted source flags.
+function isLatticeNativeSource(definition: Definition): boolean {
+  return (
+    !definition.nativeIndex?.materialized &&
+    !Object.keys(definition.nativeLinkInputs ?? {}).length &&
+    !Object.keys(definition.nativeQueryInputs ?? {}).length &&
+    !Object.values(definition.fieldDefs).some((field) => field.query)
+  );
+}
+
+function singleLatticeSourceLink(definition: Definition): string | undefined {
+  if (
+    !definition.nativeIndex?.materialized ||
+    Object.keys(definition.nativeQueryInputs ?? {}).length ||
+    Object.values(definition.fieldDefs).some((field) => field.query)
+  )
+    return;
+  const links = Object.entries(definition.nativeLinkInputs ?? {});
+  if (links.length !== 1) return;
+  const [name, projection] = links[0];
+  const field = definition.fieldDefs[definition.fields[name]];
+  if (
+    field?.type !== 'linksTo' ||
+    field.isComputed ||
+    Object.keys(projection.links ?? {}).length
+  )
+    return;
+  return name;
 }

@@ -26,11 +26,15 @@ import { CardError, mergeErrorsByGeneration } from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 import type {
+  LatticeNativeCardIndexRequest,
+  LatticeNativeSourceInput,
   LatticeNativeCardIndexer,
   LatticeNativeFileIndexer,
 } from '../lattice-native-index.ts';
 
 interface RenderFileForIndexingOptions {
+  sourceInput?: LatticeNativeCardIndexRequest['sourceInput'];
+  sourceInputOnly?: true;
   nativeCardIndexer?: LatticeNativeCardIndexer;
   nativeFileIndexer?: LatticeNativeFileIndexer;
   beforeIndex?: (runtime: 'native' | 'browser') => Promise<void>;
@@ -69,6 +73,7 @@ interface RenderFileForIndexingOptions {
 // writes/bookkeeping use only the worker + DB, so they ride in the shadow of a
 // render that happens anyway.
 export interface IndexVisitRenderResult {
+  nativeSourceInput?: LatticeNativeSourceInput;
   // A reactive publication updates the card value, not its source FileDef.
   // Missing file extraction in this mode is intentional, not a file error.
   latticeCardOnly?: true;
@@ -138,6 +143,8 @@ interface RouteIndexVisitCallbacks {
 // render before this one's row writes land. Returns `undefined` when the
 // file is ignored or belongs to a different realm.
 export async function renderFileForIndexing({
+  sourceInput,
+  sourceInputOnly,
   nativeCardIndexer,
   nativeFileIndexer,
   beforeIndex,
@@ -259,8 +266,11 @@ export async function renderFileForIndexing({
       lastModified,
       resourceCreatedAt,
       inputSnapshot: inputSnapshot,
+      ...(sourceInput ? { sourceInput } : {}),
+      ...(sourceInputOnly ? { sourceInputOnly } : {}),
     });
   }
+  if (sourceInputOnly && !native?.sourceInput) return undefined;
   if (native) {
     if (
       native.card.error ||
@@ -561,6 +571,7 @@ export async function renderFileForIndexing({
   );
 
   return {
+    ...(native?.sourceInput ? { nativeSourceInput: native.sourceInput } : {}),
     ...(latticeCardOnly ? { latticeCardOnly: true as const } : {}),
     localPath,
     lastModified,

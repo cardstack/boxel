@@ -1,4 +1,5 @@
 import { LatticeCommitTick } from './lattice-commit-tick.ts';
+import { LatticeSourceIndexInputs } from './lattice-source-index-inputs.ts';
 import {
   startLatticeTrace,
   latticeAttemptId,
@@ -225,6 +226,7 @@ export class IndexRunner {
   #ignoreMap: Map<string, Ignore> | undefined;
   #prerenderer: Prerenderer;
   #nativeCardIndexer?: LatticeNativeCardIndexer;
+  #sourceIndexInputs?: LatticeSourceIndexInputs;
   #nativeFileIndexer?: LatticeNativeFileIndexer;
   #auth: string;
   #realmURL: URL;
@@ -1520,11 +1522,20 @@ export class IndexRunner {
       stale?: true;
       batch?: Batch;
       inputSnapshot?: LatticeInputSnapshot;
+      sourceInputOnly?: true;
     },
   ): Promise<VisitRenderOutcome> {
     try {
       const inputSnapshot = opts?.inputSnapshot ?? this.#inputSnapshot;
       let result = await renderFileForIndexing({
+        ...(opts?.sourceInputOnly
+          ? { sourceInputOnly: true as const }
+          : this.#sourceIndexInputs && !inputSnapshot
+            ? {
+                sourceInput: (url: string) =>
+                  this.#sourceIndexInputs!.read(url),
+              }
+            : {}),
         nativeCardIndexer: this.#nativeCardIndexer,
         nativeFileIndexer: this.#nativeFileIndexer,
         beforeIndex,
@@ -1550,6 +1561,8 @@ export class IndexRunner {
         logDebug: (message) => this.#log.debug(message),
         logWarn: (message) => this.#log.warn(message),
       });
+      if (result?.nativeSourceInput)
+        this.#sourceIndexInputs?.remember(result.nativeSourceInput);
       return result ? { status: 'rendered', result } : { status: 'skipped' };
     } catch (error) {
       return { status: 'error', error };
@@ -1571,8 +1584,9 @@ export class IndexRunner {
   // dependents — but the NEXT visit's render is started before the current
   // visit's bookkeeping + row write, so the tab renders file N+1 while the
   // worker writes file N. Since a render reads only production `boxel_index`
-  // (never this pass's uncommitted `boxel_index_working` rows), rendering
-  // ahead cannot observe a write that hasn't landed yet.
+  // (never this pass's uncommitted `boxel_index_working` rows). Native primary
+  // derivations may additionally consume a reviewed source result through the
+  // batch capability: both results and revision guards commit together.
   //
   // `skipReason` suppresses the render for URLs a prior attempt already
   // resolved (`'resumed'`) or that were deleted (`'delete'`); it must be pure
@@ -1587,7 +1601,7 @@ export class IndexRunner {
       abortAfterIdleRenderTimeouts = 0,
     }: {
       skipReason: (url: URL) => 'resumed' | 'delete' | undefined;
-      onSkip: (url: URL, reason: 'resumed' | 'delete') => void;
+      onSkip: (url: URL, reason: 'resumed' | 'delete' | 'source-input') => void;
       onVisited: (url: URL) => void;
       // When set, the pass throws — abandoning the batch — once this many
       // consecutive visits time out idle (see isIdleRenderTimeout). A
@@ -1596,86 +1610,123 @@ export class IndexRunner {
       abortAfterIdleRenderTimeouts?: number;
     },
   ): Promise<void> {
-    let n = invalidations.length;
-    let renders = new Map<number, Promise<VisitRenderOutcome>>();
-    let idleTimeouts: string[] = [];
-    // Start the render for the next non-skipped URL at or after `from`,
-    // keeping exactly one render in flight ahead of the finish cursor.
-    let prefetch = (from: number) => {
-      for (let j = from; j < n; j++) {
-        if (renders.has(j)) {
-          return;
-        }
-        if (skipReason(invalidations[j])) {
-          continue;
-        }
-        renders.set(j, this.#renderVisit(invalidations[j]));
-        return;
-      }
-    };
-    prefetch(0);
-    for (let i = 0; i < n; i++) {
-      let url = invalidations[i];
-      let reason = skipReason(url);
-      if (reason) {
-        onSkip(url, reason);
-        onVisited(url);
-        prefetch(i + 1);
-        continue;
-      }
-      let outcome = await renders.get(i)!;
-      renders.delete(i);
-      // Kick off the next render now so its round-trip overlaps the finish
-      // work below.
-      prefetch(i + 1);
-      try {
-        if (outcome.status === 'error') {
-          throw outcome.error;
-        }
-        if (outcome.status === 'rendered') {
+    // This capability exists only for primary indexing. A source-only visit
+    // cannot recursively enter it or fall back to browser computation.
+    const sourceVisits = new Set<string>();
+    if (
+      this.#nativeCardIndexer &&
+      this.batch.latticeEnabled &&
+      !this.#inputSnapshot
+    ) {
+      this.#sourceIndexInputs = new LatticeSourceIndexInputs(
+        this.#realmURL.href,
+        this.batch.currentGeneration,
+        async (url) => {
+          const target = new URL(url);
+          if (skipReason(target) === 'delete') return undefined;
+          const outcome = await this.#renderVisit(target, undefined, {
+            sourceInputOnly: true,
+          });
+          if (outcome.status === 'error') throw outcome.error;
+          if (
+            outcome.status !== 'rendered' ||
+            !outcome.result.nativeSourceInput
+          )
+            return undefined;
           await this.#finishVisit(outcome.result);
-        }
-      } catch (err) {
-        await this.#handleVisitError(url, err);
-      }
-      onVisited(url);
-      if (abortAfterIdleRenderTimeouts > 0) {
-        if (
-          outcome.status === 'rendered' &&
-          isIdleRenderTimeout(outcome.result)
-        ) {
-          idleTimeouts.push(url.href);
-        } else {
-          idleTimeouts = [];
-        }
-        if (idleTimeouts.length >= abortAfterIdleRenderTimeouts) {
-          // Consecutive idle timeouts are not proof of a broken stack on their
-          // own: the visit order groups a definition's instances together, so
-          // one card type that hangs on an untracked promise produces the same
-          // run. A module the realm does not own settles it — if that cannot
-          // render either, nothing in this pass can.
-          let canary = await this.#canaryRenderFailure();
-          if (!canary) {
-            this.#log.warn(
-              `${jobIdentity(this.#jobInfo)}: ${idleTimeouts.length} consecutive renders timed out idle (${idleTimeouts.join(', ')}) ` +
-                `but ${CANARY_MODULE_URL} renders, so the stack is healthy and these are recorded as the files' own errors`,
-            );
-            idleTimeouts = [];
+          sourceVisits.add(url);
+          return outcome.result.nativeSourceInput;
+        },
+      );
+    }
+    const reasonFor = (url: URL) =>
+      skipReason(url) ??
+      (sourceVisits.has(url.href) ? ('source-input' as const) : undefined);
+    try {
+      let n = invalidations.length;
+      let renders = new Map<number, Promise<VisitRenderOutcome>>();
+      let idleTimeouts: string[] = [];
+      // Start the render for the next non-skipped URL at or after `from`,
+      // keeping exactly one render in flight ahead of the finish cursor.
+      let prefetch = (from: number) => {
+        for (let j = from; j < n; j++) {
+          if (renders.has(j)) {
+            return;
+          }
+          if (reasonFor(invalidations[j])) {
             continue;
           }
-          // Thrown past #handleVisitError on purpose: this is not one file's
-          // failure to isolate but the pass's inability to render anything,
-          // and the job's rejection is what carries that to whoever awaits
-          // it (readiness, a publish, an operator).
-          let message =
-            `${jobIdentity(this.#jobInfo)} giving up: the last ${idleTimeouts.length} renders each timed out with the page idle ` +
-            `(main thread responsive, no script running, nothing fetching, no module import in flight), and a base module ` +
-            `could not render either (${canary}), so the page is waiting on nothing and no file in this pass can render. ` +
-            `Check that the prerender's browser can reach the host, realm-server and icons origins. Files: ${idleTimeouts.join(', ')}`;
-          this.#log.error(message);
-          throw new Error(message);
+          renders.set(j, this.#renderVisit(invalidations[j]));
+          return;
+        }
+      };
+      prefetch(0);
+      for (let i = 0; i < n; i++) {
+        let url = invalidations[i];
+        let reason = reasonFor(url);
+        if (reason) {
+          onSkip(url, reason);
+          onVisited(url);
+          prefetch(i + 1);
+          continue;
+        }
+        let outcome = await renders.get(i)!;
+        renders.delete(i);
+        // Kick off the next render now so its round-trip overlaps the finish
+        // work below.
+        prefetch(i + 1);
+        try {
+          if (outcome.status === 'error') {
+            throw outcome.error;
+          }
+          if (outcome.status === 'rendered') {
+            await this.#finishVisit(outcome.result);
+          }
+        } catch (err) {
+          await this.#handleVisitError(url, err);
+        }
+        onVisited(url);
+        if (abortAfterIdleRenderTimeouts > 0) {
+          if (
+            outcome.status === 'rendered' &&
+            isIdleRenderTimeout(outcome.result)
+          ) {
+            idleTimeouts.push(url.href);
+          } else {
+            idleTimeouts = [];
+          }
+          if (idleTimeouts.length >= abortAfterIdleRenderTimeouts) {
+            // Consecutive idle timeouts are not proof of a broken stack on their
+            // own: the visit order groups a definition's instances together, so
+            // one card type that hangs on an untracked promise produces the same
+            // run. A module the realm does not own settles it — if that cannot
+            // render either, nothing in this pass can.
+            let canary = await this.#canaryRenderFailure();
+            if (!canary) {
+              this.#log.warn(
+                `${jobIdentity(this.#jobInfo)}: ${idleTimeouts.length} consecutive renders timed out idle (${idleTimeouts.join(', ')}) ` +
+                  `but ${CANARY_MODULE_URL} renders, so the stack is healthy and these are recorded as the files' own errors`,
+              );
+              idleTimeouts = [];
+              continue;
+            }
+            // Thrown past #handleVisitError on purpose: this is not one file's
+            // failure to isolate but the pass's inability to render anything,
+            // and the job's rejection is what carries that to whoever awaits
+            // it (readiness, a publish, an operator).
+            let message =
+              `${jobIdentity(this.#jobInfo)} giving up: the last ${idleTimeouts.length} renders each timed out with the page idle ` +
+              `(main thread responsive, no script running, nothing fetching, no module import in flight), and a base module ` +
+              `could not render either (${canary}), so the page is waiting on nothing and no file in this pass can render. ` +
+              `Check that the prerender's browser can reach the host, realm-server and icons origins. Files: ${idleTimeouts.join(', ')}`;
+            this.#log.error(message);
+            throw new Error(message);
+          }
         }
       }
+    } finally {
+      this.#sourceIndexInputs?.close();
+      this.#sourceIndexInputs = undefined;
     }
   }
 

@@ -21,9 +21,24 @@ export interface LatticeNativeCardIndexRequest {
   lastModified: number;
   resourceCreatedAt: number;
   inputSnapshot?: LatticeInputSnapshot;
+  // Worker-issued capability, never serialized or accepted from a client.
+  sourceInput?(url: string): Promise<LatticeNativeSourceInput | undefined>;
+  // A linked source must itself be data-only and have no materialized inputs.
+  sourceInputOnly?: true;
+}
+
+export interface LatticeNativeSourceInput {
+  url: string;
+  realmURL: string;
+  generation: number;
+  resource: import('./resource-types.ts').LooseCardResource;
+  assertCurrent(tx: Querier): Promise<void>;
 }
 
 export interface LatticeNativeCardIndexResult {
+  // Only returned for a reviewed source with no link/query/materialized input.
+  sourceInput?: LatticeNativeSourceInput;
+
   queryPreparation?: LatticeQueryPreparation;
   retainedInputs?: LatticeIndexedSnapshotCapture;
   codeReference?: LatticeCodeReference;
@@ -106,7 +121,11 @@ export type LatticeNativeCardIndexer = LatticeExecution<
 
 export interface LatticeNativeFileIndexRequest extends Omit<
   LatticeNativeCardIndexRequest,
-  'sourceJSON' | 'inputSnapshot' | 'fileDefCodeRef'
+  | 'sourceJSON'
+  | 'inputSnapshot'
+  | 'fileDefCodeRef'
+  | 'sourceInput'
+  | 'sourceInputOnly'
 > {
   source: string;
   fileDefCodeRef: ResolvedCodeRef;
