@@ -342,3 +342,16 @@ export function partialWritePath(localPath: LocalPath): LocalPath {
 export function isPartialWritePath(localPath: LocalPath): boolean {
   return localPath.endsWith(PARTIAL_WRITE_SUFFIX);
 }
+
+// The realm's own config document, as a change set spells it: the `.json` file
+// at the realm root. Built through `RealmPaths` so it cannot disagree with the
+// URLs the write path and the file watcher put in a change set, and so a base
+// URL without a trailing slash resolves the same way rather than silently
+// landing a directory up.
+//
+// Note the two spellings of this document are not interchangeable. This is the
+// file; the index row for the card it holds is keyed by the same URL with the
+// `.json` stripped. A caller matching a change set wants this one.
+export function realmConfigHrefFor(realmURL: URL): string {
+  return new RealmPaths(realmURL).fileURL('realm.json').href;
+}

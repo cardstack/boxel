@@ -27,7 +27,7 @@ import type {
   IncrementalDoneResult,
 } from './tasks/indexer.ts';
 import type { Realm } from './realm.ts';
-import { RealmPaths, isPartialWritePath } from './paths.ts';
+import { RealmPaths, isPartialWritePath, realmConfigHrefFor } from './paths.ts';
 import { ignore, type Ignore } from './ignore.ts';
 
 // One file's place in an index job's change set: whether the file is there to
@@ -271,8 +271,13 @@ export class RealmIndexUpdater {
   //     over — the settings read off disk, so a program reading a setting
   //     would otherwise see one the realm has already replaced.
   //
-  // Anything else a batch touches it reads from the stored bytes, which the
-  // write lock already makes exclusive.
+  // Everything else a batch resolves is either the stored bytes, which the
+  // write lock already makes exclusive, or the realm's ignore rules. The
+  // ignore rules are not stored bytes and not under the lock, but no pass this
+  // gate could wait for moves them: they are written only by a from-scratch
+  // pass's discovery step, and an incremental echoes back the set it was
+  // handed. A gate over incremental and copy passes is therefore the wrong
+  // place to guard them, not a place that forgot to.
   //
   // From-scratch passes are outside this gate for the same reason they are
   // outside `incrementalIndexing()`, but the reason has to be re-derived from
@@ -295,10 +300,13 @@ export class RealmIndexUpdater {
   }
 
   // The realm's own config document, whose index row the realm's settings are
-  // overlaid from. Compared by URL rather than by name so a card that merely
-  // ends in `realm.json` somewhere below the root is not mistaken for it.
+  // overlaid from. Compared by URL rather than by name, so a card that merely
+  // ends in `realm.json` somewhere below the root is not mistaken for it, and
+  // resolved through the same helper the indexer ranks its visit order with —
+  // the gate and the indexer have to agree on which document this is, and two
+  // copies of the rule would be free to drift.
   #isRealmConfigDocument(url: URL): boolean {
-    return url.href === new URL('realm.json', this.realmURL).href;
+    return url.href === realmConfigHrefFor(this.realmURL);
   }
 
   publishFullIndex(

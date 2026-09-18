@@ -24,9 +24,9 @@ const serializedWorkerError: PgPrimitive = {
   errno: -2,
 };
 
-function makeStubRealm(): Realm {
+function makeStubRealm(url: string = realmURL): Realm {
   return {
-    url: realmURL,
+    url,
     getRealmOwnerUsername: async () => 'test_user',
   } as unknown as Realm;
 }
@@ -450,6 +450,32 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test("removing the realm's config document holds the write-path gate", async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    // The settings a batch resolves come from this document's index row, so a
+    // removal moves them exactly as a write does — the row is about to go.
+    let { settled } = await updater.enqueueUpdate(
+      [new URL(`${realmURL}realm.json`)],
+      { delete: true },
+    );
+    settled.catch(() => {});
+
+    assert.notStrictEqual(
+      updater.incrementalIndexingAffectingStaging(),
+      undefined,
+      'a config removal is waited for as a config write is',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await updater.incrementalIndexing();
+  });
+
   test('a card whose path merely ends in realm.json does not hold the gate', async function (assert) {
     let { queue, waiters } = makeStubQueue();
     let updater = new RealmIndexUpdater({
@@ -474,6 +500,33 @@ module(basename(import.meta.filename), function (hooks) {
       updater.incrementalIndexingAffectingStaging(),
       undefined,
       'matching on name alone would have held the gate here',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await updater.incrementalIndexing();
+  });
+
+  test('the config document is recognized however the realm URL is spelled', async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    // A base without a trailing slash. Resolving 'realm.json' against it
+    // relatively would land a path segment up, at http://127.0.0.1:4444/,
+    // and the gate would match a URL no change set ever contains — holding
+    // for nothing, silently, with every other test still green.
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm('http://127.0.0.1:4444/test'),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    let { settled } = await updater.enqueueUpdate([
+      new URL('http://127.0.0.1:4444/test/realm.json'),
+    ]);
+    settled.catch(() => {});
+
+    assert.notStrictEqual(
+      updater.incrementalIndexingAffectingStaging(),
+      undefined,
+      'the config document is found from a base with no trailing slash',
     );
 
     waiters[0].rejectFromResult(serializedWorkerError);

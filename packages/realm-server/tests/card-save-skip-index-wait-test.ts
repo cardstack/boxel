@@ -16,10 +16,10 @@ import {
 
 // A JSON-API card POST / PATCH normally blocks before responding on the
 // in-flight indexing that can move what it resolves: the passes that touched
-// an executable module, which the updater exposes as
-// `incrementalIndexingAffectingStaging()`. A caller can opt out with the
-// `x-boxel-skip-index-wait` header: the write indexes deferred and answers
-// from the serialized document.
+// an executable module or the realm's config document, which the updater
+// exposes as `incrementalIndexingAffectingStaging()`. A caller can opt out
+// with the `x-boxel-skip-index-wait` header: the write indexes deferred and
+// answers from the serialized document.
 //
 // The updater's gates are stubbed per test rather than raced against a real
 // job: a real incremental settles as fast as the worker runs it, so "the write
@@ -29,10 +29,10 @@ import {
 // a controllable gate proves the default write does await it.
 //
 // The wide gate is stubbed here too, in the opposite direction: a write that
-// parked on every in-flight pass — rather than on the module-touching ones —
-// would hang on a never-resolving `incrementalIndexing()`, which is what makes
-// "one card's fan-out gates every other card's write" a failure rather than a
-// slowdown nobody can see.
+// parked on every in-flight pass — rather than on the ones that can move what
+// it resolves — would hang on a never-resolving `incrementalIndexing()`, which
+// is what makes "one card's fan-out gates every other card's write" a failure
+// rather than a slowdown nobody can see.
 
 const personGts = `
   import { contains, field, CardDef } from "@cardstack/base/card-api";
@@ -183,10 +183,10 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('by default a PATCH waits for an in-flight module pass before responding', async function (assert) {
+    test('by default a PATCH waits for in-flight indexing that can move what it resolves', async function (assert) {
       assert.timeout(15000);
-      // A gate the test resolves on demand, standing in for an in-flight
-      // module pass that has not drained yet.
+      // A gate the test resolves on demand, standing in for an in-flight pass
+      // that has not drained yet.
       let gate = new Deferred<void>();
       let restore = stubGate(
         realm,
@@ -234,12 +234,12 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('a PATCH does not wait for indexing that touched no module', async function (assert) {
+    test('a PATCH does not wait for indexing that cannot move what it resolves', async function (assert) {
       assert.timeout(15000);
-      // Every in-flight pass, module-touching or not, parked forever. A write
-      // that waited on this set would never answer — which is what a hub
-      // card's instance-only fan-out is to every other writer in the realm.
-      // The module-touching gate is left real, and has nothing pending.
+      // Every in-flight pass parked forever, qualifying or not. A write that
+      // waited on this set would never answer — which is what a hub card's
+      // instance-only fan-out is to every other writer in the realm. The
+      // narrower gate is left real, and has nothing pending.
       let restore = stubGate(realm, 'incrementalIndexing', () => NEVER);
       try {
         let response = await request

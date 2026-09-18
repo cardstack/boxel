@@ -11,6 +11,7 @@ import {
   jobIdentity,
   Deferred,
   RealmPaths,
+  realmConfigHrefFor,
   type IndexWriter,
   type Batch,
   type LooseCardResource,
@@ -1453,10 +1454,6 @@ function visitClassRank(url: URL, realmConfigHref: string): number {
     return 0;
   }
   return url.href.endsWith('.json') ? 2 : 1;
-}
-
-function realmConfigHrefFor(realmURL: URL): string {
-  return new RealmPaths(realmURL).fileURL('realm.json').href;
 }
 
 function sortInvalidations(urls: URL[], realmURL: URL): URL[] {
