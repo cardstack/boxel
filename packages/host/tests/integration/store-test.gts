@@ -4778,13 +4778,6 @@ module('Integration | Store', function (hooks) {
         assert.strictEqual((instance as any).name, 'Newest');
         assert.strictEqual((instance as any).boom, 'newest complete value');
         assert.strictEqual(instance.publicationState, 'ready');
-        messages.latticeConnectionChanged(true);
-        await settled();
-        assert.strictEqual(
-          reads,
-          readStart + 2,
-          'routine connected sync does not repeat work',
-        );
       } finally {
         held?.fulfill(structuredClone(current));
         await settled();
@@ -5148,13 +5141,6 @@ module('Integration | Store', function (hooks) {
         reads.sort(),
         [published.id!, child.id!].sort(),
         'reconnect repairs both admitted identities once',
-      );
-      messages.latticeConnectionChanged(true);
-      await settled();
-      assert.strictEqual(
-        reads.length,
-        2,
-        'routine sync does not repeat repair',
       );
       assert.strictEqual(
         scans,

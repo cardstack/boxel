@@ -155,7 +155,7 @@ export function latticeBrowserInputCapture(
       !edge.sourceURL.startsWith(snapshot.realmURL) ||
       !edge.ownerURL.startsWith(snapshot.realmURL)
     )
-      continue;
+      throw new Error('Lattice cannot capture cross-realm input dependencies');
     const source = scope?.rows.get(edge.sourceURL);
     const owner =
       edge.ownerURL === ownerURL ? undefined : scope?.rows.get(edge.ownerURL);

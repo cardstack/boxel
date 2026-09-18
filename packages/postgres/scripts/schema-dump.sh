@@ -6,7 +6,11 @@ dumpConnectionArgs=()
 if [ -n "${BOXEL_SCHEMA_PG_HOST:-}" ]; then
   dumpConnectionArgs=(-h "$BOXEL_SCHEMA_PG_HOST")
 fi
-docker exec "${BOXEL_SCHEMA_PG_CONTAINER:-boxel-pg}" pg_dump \
+if [ -n "${BOXEL_SCHEMA_DUMP:-}" ]; then
+  # Allow schema-only dumps from an isolated remote test database as well.
+  cp "$BOXEL_SCHEMA_DUMP" "$tmpFile"
+else
+  docker exec "${BOXEL_SCHEMA_PG_CONTAINER:-boxel-pg}" pg_dump \
   "${dumpConnectionArgs[@]}" \
   -U postgres -w --schema-only \
   --exclude-table-and-children=pgmigrations \
@@ -38,6 +42,7 @@ docker exec "${BOXEL_SCHEMA_PG_CONTAINER:-boxel-pg}" pg_dump \
   --no-owner \
   --no-acl \
   "${BOXEL_SCHEMA_PG_DATABASE:-boxel}" >$tmpFile
+fi
 
 node ./scripts/convert-to-sqlite.ts $tmpFile
 rm $tmpFile

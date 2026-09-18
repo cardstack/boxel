@@ -12,6 +12,7 @@ import {
 } from './lattice-display.ts';
 import {
   assertLatticeGeneration,
+  latticeCardCacheRevision,
   latticeRequestedGeneration,
   latticeStoredDocumentBody,
   LATTICE_INPUT_GENERATION_HEADER,
@@ -8721,14 +8722,27 @@ export class Realm {
         ? latticeStoredDocumentBody(card.data, stored.attributesJSON!)
         : JSON.stringify(card, null, 2);
     }
+    const etag =
+      !latticeInput && !stored?.reuse
+        ? `"lattice-${computeContentHash(body)}"`
+        : undefined;
+    const cacheControl = etag
+      ? this.cardJsonCacheControl(requestContext)
+      : 'no-store';
+    const unchanged = Boolean(
+      etag &&
+      ifNoneMatchMatches(request.headers.get('if-none-match') ?? '', etag),
+    );
     let createdAt = await this.getCreatedTime(this.paths.local(url) + '.json');
     return createResponse({
       requestContext,
-      body,
+      body: unchanged || request.method === 'HEAD' ? null : body,
       init: {
+        ...(unchanged ? { status: 304 } : {}),
         headers: {
           'content-type': SupportedMimeType.CardJson,
-          'cache-control': 'no-store',
+          'cache-control': cacheControl,
+          ...(etag ? { etag } : {}),
           ...lastModifiedHeader(card),
           ...(createdAt != null
             ? { 'x-created': formatRFC7231(createdAt * 1000) }
@@ -8759,6 +8773,10 @@ export class Realm {
   ): Promise<Response> {
     if (!(await this.permittedToRead(request, requestContext))) {
       return this.realmIdentityResponse(requestContext);
+    }
+    if (this.latticeEnabled) {
+      const published = await this.latticeCardResponse(request, requestContext);
+      if (published) return published;
     }
     // Read-your-writes, as on the `GET`: a validator computed off an index the
     // requester's own write has not reached yet would 304 their next `GET`
@@ -8833,18 +8851,21 @@ export class Realm {
       let foreignDeps = this.hasForeignRealmDeps(result.deps);
       // Match GET: a linked publication can change without this root's row
       // advancing, so enabled reads cannot issue a root-only validator.
+      const latticeRevision = this.latticeEnabled
+        ? await latticeCardCacheRevision(this.#dbAdapter, this.url)
+        : undefined;
       let etag =
-        foreignDeps || this.latticeEnabled
+        foreignDeps || (this.latticeEnabled && latticeRevision === undefined)
           ? undefined
           : buildCardJsonEtag(
               result.indexedAt,
-              this.getCachedRealmInfoHash(),
+              latticeRevision
+                ? `${this.getCachedRealmInfoHash()}:${computeContentHash(latticeRevision)}`
+                : this.getCachedRealmInfoHash(),
               screenshotsEtagFingerprint(result.screenshots),
               resolveLinksOnly,
             );
-      let cacheControl = this.latticeEnabled
-        ? 'no-store'
-        : this.cardJsonCacheControl(requestContext);
+      let cacheControl = this.cardJsonCacheControl(requestContext);
       let lastModified: Record<string, string> =
         result.lastModified != null
           ? { 'last-modified': formatRFC7231(result.lastModified * 1000) }
@@ -8961,17 +8982,12 @@ export class Realm {
     let url = this.paths.fileURL(localPath);
     let start = Date.now();
     try {
-      let cacheControl = this.latticeEnabled
-        ? 'no-store'
-        : this.cardJsonCacheControl(requestContext);
-      // A nested publication can change without this ordinary root's indexed_at
-      // advancing. Keep main's validator/cache only for non-enabled realms.
-      let ifNoneMatch = this.latticeEnabled
-        ? null
-        : request.headers.get('if-none-match');
-      let documentCache = this.latticeEnabled
-        ? undefined
-        : this.#cardDocumentCache;
+      const latticeRevision = this.latticeEnabled
+        ? await latticeCardCacheRevision(this.#dbAdapter, this.url)
+        : undefined;
+      let cacheControl = this.cardJsonCacheControl(requestContext);
+      let ifNoneMatch = request.headers.get('if-none-match');
+      let documentCache = this.#cardDocumentCache;
       // Decided here rather than at the assembly because the validator below
       // has to describe the shape the assembly will produce, and that
       // validator is what the conditional request and the response cache are
@@ -9025,11 +9041,14 @@ export class Realm {
         if (
           !this.hasForeignRealmDeps(instanceEntry.deps) &&
           instanceEntry.type === 'instance' &&
-          instanceEntry.indexedAt != null
+          instanceEntry.indexedAt != null &&
+          (!this.latticeEnabled || latticeRevision !== undefined)
         ) {
           peekEtag = buildCardJsonEtag(
             instanceEntry.indexedAt,
-            realmInfoHash,
+            latticeRevision
+              ? `${realmInfoHash}:${computeContentHash(latticeRevision)}`
+              : realmInfoHash,
             screenshotsEtagFingerprint(instanceEntry.screenshots),
             resolveLinksOnly,
           );
@@ -9073,6 +9092,7 @@ export class Realm {
           resolveLinksOnly,
           peekEtag,
           this.#callerOf(request, requestContext),
+          latticeRevision,
         );
       let assembly: CardJsonAssembly;
       let cacheOutcome: CardDocumentCacheOutcome | undefined;
@@ -9111,9 +9131,7 @@ export class Realm {
           headers: {
             'content-type': SupportedMimeType.CardJson,
             'cache-control': cacheControl,
-            ...(assembly.etag && !this.latticeEnabled
-              ? { etag: assembly.etag }
-              : {}),
+            ...(assembly.etag ? { etag: assembly.etag } : {}),
             ...etagSuppressedHeader(assembly.etagSuppressed),
             ...(assembly.lastModified != null
               ? {
@@ -9147,6 +9165,7 @@ export class Realm {
     resolveLinksOnly: boolean,
     keyEtag: string | undefined,
     caller: { actor: string; clientRequestId: string },
+    latticeRevision?: string,
   ): Promise<CardJsonAssembly> {
     // The document itself is the `read` operation's — link expansion, the
     // `links.self` and prefix-form ids, the freshly joined `meta.generation`
@@ -9218,14 +9237,22 @@ export class Realm {
     // so without one there is nothing that would make a superseded entry
     // unreachable.
     let foreignDeps = this.hasForeignRealmDeps(headers.deps);
-    let responseEtag = foreignDeps
-      ? undefined
-      : buildCardJsonEtag(
-          headers.indexedAt,
-          this.getCachedRealmInfoHash(),
-          screenshotsEtagFingerprint(headers.screenshots),
-          resolveLinksOnly,
-        );
+    const revisionCurrent =
+      !this.latticeEnabled ||
+      (latticeRevision !== undefined &&
+        latticeRevision ===
+          (await latticeCardCacheRevision(this.#dbAdapter, this.url)));
+    let responseEtag =
+      foreignDeps || !revisionCurrent
+        ? undefined
+        : buildCardJsonEtag(
+            headers.indexedAt,
+            latticeRevision
+              ? `${this.getCachedRealmInfoHash()}:${computeContentHash(latticeRevision)}`
+              : this.getCachedRealmInfoHash(),
+            screenshotsEtagFingerprint(headers.screenshots),
+            resolveLinksOnly,
+          );
     return {
       kind: 'document',
       body: JSON.stringify(card, null, 2),

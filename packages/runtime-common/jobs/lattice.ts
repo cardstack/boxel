@@ -22,6 +22,7 @@ export async function enqueueLattice(
   wave = 0,
   attempt = 0,
   waitForRead?: LatticeReadScope,
+  supersessions = 0,
 ) {
   const group = latticeConcurrencyGroup(realmURL);
   // Share the claim lock, not just the publication lock. Otherwise a worker
@@ -45,6 +46,10 @@ export async function enqueueLattice(
     wave,
     attempt,
     ...(waitForRead ? { latticeWaitForRead: waitForRead } : {}),
+    supersessions,
+    latticeNotBefore: supersessions
+      ? Date.now() + Math.min(2000, 250 * 2 ** Math.min(supersessions - 1, 3))
+      : 0,
   };
   if (pending) {
     // New inputs (wave/attempt zero) reset an obsolete budget. An old retry
@@ -58,7 +63,11 @@ export async function enqueueLattice(
       param(wave),
       `::int), 'attempt', LEAST(COALESCE((args->>'attempt')::int,0),`,
       param(attempt),
-      '::int)) WHERE id =',
+      "::int), 'supersessions', LEAST(COALESCE((args->>'supersessions')::int,0),",
+      param(supersessions),
+      "::int), 'latticeNotBefore', LEAST(COALESCE((args->>'latticeNotBefore')::bigint,0),",
+      param(args.latticeNotBefore),
+      '::bigint)) WHERE id =',
       param(pending.id),
     ]);
   } else {
@@ -137,6 +146,7 @@ export const latticeWaveTurnSQL = `COALESCE((SELECT f.job_type FROM jobs f
 // reserve a worker just to discover the same denial again. The native input
 // reader and publication transaction still recheck authority after admission.
 export const latticeMaterializationReadySQL = `(
+  (j.job_type <> 'lattice-materialize' OR COALESCE((j.args->>'latticeNotBefore')::bigint,0) <= EXTRACT(EPOCH FROM now())*1000) AND
   (j.job_type <> 'lattice-materialize' OR EXISTS (
     SELECT 1 FROM lattice_pending_generations p WHERE p.realm_url=j.args->>'realmURL'
   ) OR NOT EXISTS (SELECT 1 FROM lattice_owners o WHERE o.realm_url=j.args->>'realmURL'

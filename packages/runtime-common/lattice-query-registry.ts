@@ -1,3 +1,4 @@
+import { latticeDependencyAliasSQL } from './lattice-dependency-aliases.ts';
 import {
   latticeLiveness,
   latticeEarlyRefreshDue,
@@ -13,7 +14,10 @@ import {
   type LatticeDemandPriority,
 } from './lattice-scheduling.ts';
 import type { LatticeProjectionWhere } from './definitions.ts';
-import { latticeOwnerCodeStatuses } from './lattice-code-reference.ts';
+import {
+  latticeOwnerCodeStatuses,
+  assertLatticeOwnerCodes,
+} from './lattice-code-reference.ts';
 import { latticeQueryReadinessScope } from './lattice-query-readiness.ts';
 import type { DBAdapter } from './db.ts';
 import stringify from 'safe-stable-stringify';
@@ -450,6 +454,11 @@ export class LatticeQueryRegistry
     }
   }
 
+  // The caller holds lattice:index:<realm> through this read/decision/write
+  // and the matching index swap. Source publication, clock expiry, and code
+  // linking use that same lock. File invalidation can advance code work_version
+  // independently; assertWorkCurrent additionally locks/checks the code rows.
+  // Never call publish using an unpinned querier outside that transaction.
   async publish(tx: Querier, owner: LatticeOwnerPublication): Promise<boolean> {
     let { realmURL, ownerURL, generation, inputGeneration } = owner;
     let window = {
@@ -1138,6 +1147,8 @@ export class LatticeQueryRegistry
           ? { realmURL: work.realmURL, actor: work.actor }
           : undefined,
       );
+    if (tx && this.db.kind === 'pg')
+      await assertLatticeOwnerCodes(tx, work.realmURL, [work.claim.id]);
   }
 
   // The commit-time half of `assertWorkCurrent` for a publication: take the
@@ -1303,7 +1314,7 @@ export class LatticeQueryRegistry
          WHERE realm_url=`,
       param(realmURL),
       `AND retired=FALSE AND dirty_generation IS NOT NULL
-       UNION ALL SELECT realm_url,owner_url,substr(owner_url,1,length(owner_url)-5) AS input_alias
+       UNION ALL SELECT realm_url,owner_url,${latticeDependencyAliasSQL('owner_url')} AS input_alias
          FROM lattice_owners WHERE realm_url=`,
       param(realmURL),
       `AND retired=FALSE AND dirty_generation IS NOT NULL AND owner_url LIKE '%.json'

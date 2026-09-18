@@ -292,6 +292,43 @@ export function latticeSnapshotFields(
   };
 }
 
+// Request-scoped only: a later request must observe new jobs and routing work.
+export type LatticeReadContext = Map<
+  string,
+  Promise<{
+    matchingPending: boolean;
+    sourcePending: boolean;
+    sourceFailed: boolean;
+  }>
+>;
+
+async function realmReadState(
+  db: DBAdapter,
+  realmURL: string,
+  latticeInput: boolean,
+) {
+  const [row] = await query(db, [
+    'SELECT EXISTS (SELECT 1 FROM lattice_pending_generations WHERE realm_url =',
+    param(realmURL),
+    ') AS matching_pending',
+    ...(db.kind === 'pg' && !latticeInput
+      ? [
+          `, EXISTS (SELECT 1 FROM jobs WHERE status='unfulfilled' AND job_type IN ${SOURCE_INDEX_JOB_TYPES_SQL} AND concurrency_group=`,
+          param(indexingConcurrencyGroup(realmURL)),
+          ') AS source_pending,',
+          `(SELECT status FROM jobs WHERE job_type IN ${SOURCE_INDEX_JOB_TYPES_SQL} AND concurrency_group=`,
+          param(indexingConcurrencyGroup(realmURL)),
+          'ORDER BY id DESC LIMIT 1) AS latest_status',
+        ]
+      : []),
+  ]);
+  return {
+    matchingPending: Boolean(row.matching_pending),
+    sourcePending: Boolean(row.source_pending),
+    sourceFailed: row.latest_status === 'rejected',
+  };
+}
+
 export async function latticeReadState(
   db: DBAdapter,
   realmURL: string,
@@ -300,43 +337,29 @@ export async function latticeReadState(
   opts?: {
     latticeInput?: boolean;
     indexedComputation?: IndexedComputationReceipt;
+    latticeReadContext?: LatticeReadContext;
   },
 ): Promise<'ready' | 'pending'> {
-  // This durable checkpoint closes the source-commit/secondary-claim gap.
-  // It also gates revision-pinned feeder reads until exact matching catches up.
+  // Queue state is a conservative barrier before source rows are available
+  // for precise matching. Share that realm-scoped probe across this response,
+  // never across requests, rather than repeating it for each included owner.
+  const key = JSON.stringify([realmURL, Boolean(opts?.latticeInput)]);
+  let state = opts?.latticeReadContext?.get(key);
+  if (!state) {
+    state = realmReadState(db, realmURL, Boolean(opts?.latticeInput));
+    opts?.latticeReadContext?.set(key, state);
+  }
+  const realm = await state;
   if (
-    !opts?.indexedComputation &&
-    (
-      await query(db, [
-        'SELECT 1 FROM lattice_pending_generations WHERE realm_url =',
-        param(realmURL),
-        'LIMIT 1',
-      ])
-    ).length
+    (!opts?.indexedComputation && realm.matchingPending) ||
+    realm.sourcePending
   )
     return 'pending';
-  // Source endpoints durably enqueue before acknowledging. Across replicas,
-  // an unprocessed write is visible here even before its indexed old/new
-  // documents exist for precise reverse matching. A revision-pinned worker
-  // must ignore its own queue job while consuming already-ready feeders.
-  if (db.kind === 'pg' && !opts?.latticeInput) {
-    let pending = await query(db, [
-      `SELECT 1 FROM jobs WHERE status = 'unfulfilled' AND job_type IN ${SOURCE_INDEX_JOB_TYPES_SQL} AND concurrency_group =`,
-      param(indexingConcurrencyGroup(realmURL)),
-      'LIMIT 1',
-    ]);
-    if (pending.length) return 'pending';
-    let [latest] = await query(db, [
-      `SELECT status FROM jobs WHERE job_type IN ${SOURCE_INDEX_JOB_TYPES_SQL} AND concurrency_group =`,
-      param(indexingConcurrencyGroup(realmURL)),
-      'ORDER BY id DESC LIMIT 1',
-    ]);
-    if (latest?.status === 'rejected')
-      throw new CardError(
-        'Lattice indexing failed; retry indexing before treating this view as current',
-        { status: 503 },
-      );
-  }
+  if (realm.sourceFailed)
+    throw new CardError(
+      'Lattice indexing failed; retry indexing before treating this view as current',
+      { status: 503 },
+    );
   if (opts?.indexedComputation) {
     const proof = opts.indexedComputation;
     // Primary indexing already committed the source and computed value as one
@@ -380,4 +403,34 @@ export async function latticeReadState(
     stamp.state === 'ready'
     ? 'ready'
     : 'pending';
+}
+
+// A conservative response-cache boundary for ordinary roots that can embed
+// materialized cards. A settled realm revision covers nested publications;
+// during routing/recomputation we serve fresh state without retaining a body.
+export async function latticeCardCacheRevision(
+  db: DBAdapter,
+  realmURL: string,
+): Promise<string | undefined> {
+  const [row] = await query(db, [
+    'SELECT g.current_generation,g.loader_epoch FROM realm_generations g WHERE g.realm_url=',
+    param(realmURL),
+    `AND NOT EXISTS (SELECT 1 FROM lattice_pending_generations p WHERE p.realm_url=g.realm_url)
+     AND NOT EXISTS (SELECT 1 FROM lattice_owners o WHERE o.realm_url=g.realm_url AND NOT o.retired AND o.dirty_generation IS NOT NULL)`,
+    ...(db.kind === 'pg'
+      ? [
+          `AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.concurrency_group=`,
+          param(indexingConcurrencyGroup(realmURL)),
+          `AND j.job_type IN ${SOURCE_INDEX_JOB_TYPES_SQL} AND j.status='unfulfilled')
+       AND NOT EXISTS (SELECT 1 FROM lattice_code_artifacts c WHERE c.realm_url=g.realm_url AND c.dirty)
+       AND NOT EXISTS (SELECT 1 FROM lattice_owner_code b WHERE b.realm_url=g.realm_url AND NOT lattice_code_reference_current(b.reference))
+       AND COALESCE((SELECT j.status FROM jobs j WHERE j.concurrency_group=`,
+          param(indexingConcurrencyGroup(realmURL)),
+          `AND j.job_type IN ${SOURCE_INDEX_JOB_TYPES_SQL} ORDER BY j.id DESC LIMIT 1),'resolved') <> 'rejected'`,
+        ]
+      : []),
+  ]);
+  return row
+    ? JSON.stringify([row.current_generation, row.loader_epoch])
+    : undefined;
 }

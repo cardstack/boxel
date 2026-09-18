@@ -87,7 +87,10 @@ module(basename(import.meta.filename), function () {
 
   test('each dedicated lane registers only its own execution type', async (assert) => {
     for (const [role, expected] of [
-      [{ latticeJobsOnly: true }, ['lattice-materialize']],
+      [
+        { latticeJobsOnly: true },
+        ['lattice-link-code', 'lattice-materialize', 'lattice-clock-sweep'],
+      ],
       [{ prerenderJobsOnly: true }, ['prerender_html']],
     ] as const) {
       const registered: string[] = [];
@@ -118,7 +121,7 @@ module(basename(import.meta.filename), function () {
     );
   });
 
-  test('code linking needs its Node capability and does not occupy source or materialization lanes', async function (assert) {
+  test('code linking needs its Node capability and does not occupy the source lane', async function (assert) {
     const codeLinker = async () => ({ published: 0, superseded: 0 });
     for (const kind of ['background', 'source', 'materialization'] as const) {
       const registered: string[] = [];
@@ -128,13 +131,13 @@ module(basename(import.meta.filename), function () {
       }).run();
       assert.strictEqual(
         registered.includes('lattice-link-code'),
-        kind === 'background',
+        kind !== 'source',
         kind,
       );
       if (kind === 'materialization') {
         assert.deepEqual(
           registered,
-          ['lattice-materialize'],
+          ['lattice-link-code', 'lattice-materialize', 'lattice-clock-sweep'],
           'background HTML cannot occupy the dedicated materialization worker',
         );
       }

@@ -389,6 +389,43 @@ module(basename(import.meta.filename), function (hooks) {
     }
   });
 
+  test('exhausted delivery becomes an explicit terminal failure and releases retention', async (assert) => {
+    await publish();
+    await db.execute('UPDATE lattice_publication_deliveries SET attempts=19');
+    await db.execute(
+      "UPDATE lattice_publication_events SET created_at=now()-interval '2 days'",
+    );
+    let sent = 0;
+    const dispatcher = new LatticePublicationDispatcher({
+      lattice,
+      dbAdapter: db,
+      send: async () => {
+        sent++;
+        throw new Error('transport unavailable');
+      },
+    });
+    const claims = await claimPublicationDeliveries(db, 4, lattice);
+    for (const claim of claims) await dispatcher.deliver(claim);
+    assert.strictEqual(sent, 2, 'each recipient gets the final attempt');
+    const terminal = await rows();
+    assert.strictEqual(terminal.length, 2);
+    assert.true(
+      terminal.every(
+        (row) => row.terminal_reason === 'delivery retry budget exhausted',
+      ),
+    );
+    assert.true(
+      terminal.every((row) => row.delivered_at == null),
+      'failure is not an acknowledgement',
+    );
+    assert.strictEqual(await dispatcher.drain(), 0);
+    assert.deepEqual(
+      await rows(),
+      [],
+      'terminal deliveries no longer pin expired events',
+    );
+  });
+
   test('recipient failure does not acknowledge it or resend the successful recipient; retry uses the same publication ID', async function (assert) {
     let id = await publish();
     let fail = true;

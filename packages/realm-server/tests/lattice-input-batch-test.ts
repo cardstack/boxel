@@ -189,6 +189,16 @@ module('lattice-input-batch-test.ts | inputs', function (hooks) {
     );
     const capture = latticeBrowserInputCapture(retained, ownerURL, edges);
     assert.strictEqual(capture.inputs.length, 1);
+    for (const edge of [
+      { ...edges[0], sourceURL: 'https://foreign.example/person' },
+      { ...edges[0], ownerURL: 'https://foreign.example/owner' },
+    ]) {
+      assert.throws(
+        () => latticeBrowserInputCapture(retained, ownerURL, [edge]),
+        /cross-realm input/,
+        'a computed value must not silently omit an unwatched foreign dependency',
+      );
+    }
     assert.strictEqual(capture.authority?.actor, 'reader');
     assert.strictEqual(capture.inputs[0].validatedThrough, snapshot.generation);
     assert.ok(capture.inputs[0].rowVersion);
@@ -398,6 +408,57 @@ module('lattice-input-batch-test.ts | inputs', function (hooks) {
     );
     return { url, attributes };
   }
+
+  test('materialized validators cover freshness, bodies and HEAD without bypassing authorization', async (assert) => {
+    const { url } = await seedDisplayPublication();
+    const read = (etag?: string, method = 'GET') =>
+      fetch(url, {
+        method,
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+          ...(etag ? { 'If-None-Match': etag } : {}),
+        },
+      });
+    const initial = await read();
+    assert.strictEqual(initial.status, 200);
+    const etag = initial.headers.get('etag')!;
+    assert.true(/^"[^"\r\n]+"$/.test(etag), 'valid quoted validator');
+    assert.strictEqual(
+      initial.headers.get('cache-control'),
+      'private, max-age=0, must-revalidate',
+    );
+    assert.strictEqual((await read(etag)).status, 304);
+    const head = await read(undefined, 'HEAD');
+    assert.strictEqual(head.headers.get('etag'), etag);
+    assert.strictEqual(await head.text(), '');
+    await db.execute(
+      'UPDATE lattice_owners SET dirty_generation=$1 WHERE realm_url=$2',
+      {
+        bind: [snapshot.generation + 1, realm.url],
+      },
+    );
+    const pending = await read(etag);
+    assert.strictEqual(
+      pending.status,
+      200,
+      'a pending transition is not hidden by 304',
+    );
+    assert.strictEqual(
+      (await pending.json()).data.meta.publication.state,
+      'pending',
+    );
+    assert.notStrictEqual(pending.headers.get('etag'), etag);
+    const denied = await realm.handle(
+      new Request(url, {
+        headers: { Accept: SupportedMimeType.CardJson, 'If-None-Match': etag },
+      }),
+    );
+    assert.strictEqual(
+      denied?.status,
+      401,
+      'conditional reads still authorize',
+    );
+  });
 
   test('display reuse transfers freshness without a body and repairs changed inventory', async (assert) => {
     let { url, attributes } = await seedDisplayPublication();

@@ -354,18 +354,14 @@ export class Worker {
     let jobTypes = this.#prerenderJobsOnly
       ? ['prerender_html']
       : this.#latticeJobsOnly
-        ? ['lattice-materialize']
+        ? ['lattice-materialize', 'lattice-clock-sweep']
         : this.#indexJobsOnly
           ? (INDEX_JOB_TYPES as readonly string[])
           : Object.keys(registrations);
-    // Only an explicitly configured Node processor claims linking work. The
-    // source-index and materialization lanes keep their own capacity.
-    if (
-      this.#codeLinker &&
-      !this.#latticeJobsOnly &&
-      !this.#indexJobsOnly &&
-      !this.#prerenderJobsOnly
-    ) {
+    // Linking and clock work belong to the secondary lane too. Its type
+    // filter excludes HTML and source jobs regardless of the priority floor.
+    // Executing code still requires an explicitly configured Node capability.
+    if (this.#codeLinker && !this.#indexJobsOnly && !this.#prerenderJobsOnly) {
       await this.#queue.register(LATTICE_CODE_JOB_TYPE, this.#codeLinker);
     }
     await Promise.all(jobTypes.map((jobType) => registrations[jobType]()));

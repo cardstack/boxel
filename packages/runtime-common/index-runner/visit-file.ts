@@ -368,7 +368,7 @@ export async function renderFileForIndexing({
   }
   // Record the hash for a file the realm never wrote (indexed from disk) so
   // the next visit can be admitted natively; see IndexWriter.ensureContentMeta.
-  if (fileContentHash === undefined && batch.splitPrerenderHtml) {
+  if (fileContentHash === undefined && batch.latticeEnabled) {
     await batch.ensureContentMeta(localPath, content);
   }
 

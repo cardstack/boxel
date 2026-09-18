@@ -105,8 +105,9 @@ clients; transport acknowledgements do not replace publication guards.
 ## Storage and operating limits
 
 - The source generation clock is logged; derived summaries can be reconstructed.
-  Its migration changes table persistence under an exclusive table lock, so
-  migration execution needs an appropriate maintenance window.
+  Persistence changes take short, timeout-bounded exclusive locks. Clock repair
+  runs after old revisions drain; loss of the unlogged index and summary can
+  require a fleet-wide rebuild. See the [runtime contracts](lattice-runtime-contracts.md).
 - There is no Lattice trigger on ordinary file writes. Enabled metadata writes
   perform explicit code invalidation atomically; disabled writes keep the
   ordinary path.
@@ -119,6 +120,29 @@ clients; transport acknowledgements do not replace publication guards.
   promotion. Ordinary full indexing does not issue this additional `ANALYZE`.
 - Native review is manual in this draft; changing reviewed code requires renewed
   review. Existing source/code/authority fences remain mandatory on publication.
+
+## Observed limits of the draft
+
+Synthetic hosted write probes have observed about 2.8–3.1 s from PATCH dispatch
+until fresh HTTP data, and about 3.2–3.3 s until two browser stores displayed the
+value. These small warm samples used two stores of the same account and polling
+observations; they establish neither p95 nor a controlled comparison with main.
+The draft does not meet a 500–800 ms end-to-end target.
+
+Cold definition caches must recover through normal module lookup under the same
+reviewed-source, runtime and authority guards. Cache residency is not admission
+authority. The recovery regression covers missing cached definitions; it does
+not establish restart latency under load. Startup full indexes and bulk HTML
+work have previously delayed a write beyond a 27 s observation window. Dedicated
+secondary capacity prevents HTML from owning the materialization lane, but
+shared database, source and browser capacity still need bounded admission.
+
+Homeserver rate limits also affect visible freshness: one observed write took
+about 9.2 s to reach both stores after three 429 responses. Coalescing reduces
+notification volume; it does not guarantee a one-message-per-second limit or
+remove provider quotas. Exhausted delivery becomes an explicit terminal failure,
+not a successful acknowledgement. Operational limits and migration behavior are
+specified in the [runtime contracts](lattice-runtime-contracts.md).
 
 Key implementation entry points: the
 [publication adapter](../packages/runtime-common/lattice-index-publication.ts),

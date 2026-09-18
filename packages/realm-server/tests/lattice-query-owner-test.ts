@@ -341,6 +341,51 @@ module(basename(import.meta.filename), function (hooks) {
     };
   }
 
+  test('a guarded native publication schedules ordinary data consumers only after committing', async (assert) => {
+    await (await candidate()).publish();
+    await db.execute(
+      `INSERT INTO boxel_index(url,file_alias,type,realm_url,generation,is_deleted,deps,pristine_doc)
+      VALUES($1,$2,'instance',$3,1,FALSE,$4,'{"attributes":{"cachedTotal":5}}')`,
+      {
+        bind: [
+          realm + 'ordinary.json',
+          realm + 'ordinary',
+          realm,
+          JSON.stringify([owner.replace(/\.json$/, '')]),
+        ],
+      },
+    );
+    const next = await candidate('B', undefined, false, { isolated: true });
+    assert.deepEqual(
+      await db.execute(
+        "SELECT id FROM jobs WHERE job_type='incremental-index'",
+      ),
+      [],
+    );
+    await next.batch.done({
+      lattice: publication,
+      latticeInputGeneration: next.batch.currentGeneration - 1,
+      latticeFollowup: { realmUsername: 'reader', wave: 1 },
+      countIndexEntries: false,
+    });
+    const jobs = await db.execute(
+      "SELECT args FROM jobs WHERE job_type='incremental-index'",
+    );
+    assert.strictEqual(jobs.length, 1);
+    assert.deepEqual((jobs[0].args as any).changes, [
+      { url: realm + 'ordinary.json', operation: 'update' },
+    ]);
+    const [published] = await db.execute(
+      "SELECT pristine_doc->'attributes'->>'total' total FROM boxel_index WHERE url=$1 AND type='instance'",
+      { bind: [owner] },
+    );
+    assert.notStrictEqual(
+      Number(published.total),
+      5,
+      'consumer will read the committed new output',
+    );
+  });
+
   test('overlapping candidate attempts cannot replace each other or primary staging', async (assert) => {
     const older = await candidate('A', undefined, false, { isolated: true });
     const primary = await writer.createBatch(new URL(realm), network);
@@ -2304,7 +2349,11 @@ module(basename(import.meta.filename), function (hooks) {
           0,
           'supersession did not spend or inherit error retry budget',
         );
-        assert.strictEqual((pending.args as any).wave, 0);
+        assert.strictEqual(
+          (pending.args as any).wave,
+          1,
+          'supersession keeps the wave lineage',
+        );
         assert.deepEqual(
           (pending.args as any).latticeWaitForRead,
           reason === 'read authority changed'

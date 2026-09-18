@@ -5505,7 +5505,9 @@ async function _applySerialized<T extends BaseDefConstructor>({
             : undefined;
       if (
         count === undefined ||
-        relationship?.meta?.total !== count ||
+        (relationship?.meta?.returned ?? relationship?.meta?.total) !== count ||
+        typeof relationship?.meta?.total !== 'number' ||
+        relationship.meta.total < count ||
         relationship?.meta?.errors?.length
       ) {
         throw new Error(
@@ -6422,13 +6424,16 @@ export function publicationManifest(
   if (!(instance.constructor as typeof CardDef).materialized) return;
   let computedFields: string[] = [];
   let watches: PublicationReceipt['watches'] = [];
+  let supported = true;
   let collect = (
     value: BaseDef,
     prefix = '',
     ancestors = new Set<BaseDef>(),
   ) => {
-    if (ancestors.has(value))
-      throw new Error('Lattice does not support cyclic contained outputs');
+    if (ancestors.has(value)) {
+      supported = false;
+      return;
+    }
     let nextAncestors = new Set(ancestors).add(value);
     for (let [name, field] of Object.entries(
       getFields(value, { includeComputeds: true }),
@@ -6437,22 +6442,25 @@ export function publicationManifest(
       let path = `${prefix}${name}`;
       if (field.queryDefinition) {
         if (prefix || field.fieldType !== 'linksToMany') {
-          throw new Error(
-            'Lattice currently requires top-level linksToMany queries',
-          );
+          supported = false;
+          continue;
         }
         let watch = publicationQueryWatch(getStore(instance), instance, field);
         watches.push({ fieldPath: path, query: watch.query });
         if (inputGeneration === undefined) continue;
         let resource = peekQueryFieldSearchResource(instance, name);
         let membership = getRelationshipMembershipState(instance, name);
+        // A completed search supplies one page, not the entire match set.
+        // Capture its row count so client hydration can detect missing rows
+        // without guessing the server's configured default page ceiling.
         if (
           !resource ||
           resource.isLoading ||
           resource.errors?.length ||
           !membership.isLoaded ||
-          membership.isPartial ||
-          membership.totalMatchCount !== membership.membership?.length ||
+          membership.totalMatchCount === undefined ||
+          membership.membership === undefined ||
+          membership.totalMatchCount < membership.membership.length ||
           membership.membership?.some((member) => member.kind !== 'present')
         ) {
           throw new Error(
@@ -6466,7 +6474,10 @@ export function publicationManifest(
             type: 'card',
             id: member.reference!,
           })),
-          meta: { total: membership.totalMatchCount },
+          meta: {
+            total: membership.totalMatchCount,
+            returned: membership.membership!.length,
+          },
         };
         continue;
       }
@@ -6495,6 +6506,7 @@ export function publicationManifest(
     }
   };
   collect(instance);
+  if (!supported) return;
   return {
     version: 1,
     state: 'pending',

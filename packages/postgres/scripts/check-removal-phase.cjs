@@ -43,8 +43,15 @@ const DESTRUCTIVE_METHODS = new Set([
   'renameColumn',
   'renameTable',
 ]);
+// Function/procedure definitions describe future execution. Do not mistake a
+// trigger's DELETE from a newly created derived table for a migration-time
+// DELETE. DO blocks are deliberately not excluded: those execute now.
+const STORED_ROUTINE =
+  /\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:FUNCTION|PROCEDURE)\b[\s\S]*?\bAS\s+(\$[A-Za-z_0-9]*\$)[\s\S]*?\1/gi;
+
 // Raw-SQL escape hatch: pgm.sql('... DROP COLUMN ...'), etc.
-const DESTRUCTIVE_SQL = /\bdrop\s+(column|table)\b|\brename\s+(column\b|to\b)/i;
+const DESTRUCTIVE_SQL =
+  /\bdrop\s+(column|table)\b|\brename\s+(column\b|to\b)|\bset\s+unlogged\b|\bdelete\s+from\b/i;
 
 // Only guard the additive phase. migrations-removal/ is where drops belong.
 const ADDITIVE_DIR = `${path.sep}migrations${path.sep}`;
@@ -98,8 +105,8 @@ function destructiveOpsInUp(upFn, sourceFile) {
         ) {
           sqlText = arg.getText(sourceFile);
         }
-        if (DESTRUCTIVE_SQL.test(sqlText)) {
-          ops.add('sql (DROP/RENAME)');
+        if (DESTRUCTIVE_SQL.test(sqlText.replace(STORED_ROUTINE, ''))) {
+          ops.add('destructive SQL');
         }
       }
     }

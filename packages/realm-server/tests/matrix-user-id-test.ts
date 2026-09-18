@@ -26,11 +26,11 @@ module('Matrix user identity configuration', function (hooks) {
   });
 
   test('uses the configured identity for the matching hosted endpoint', function (assert) {
-    process.env.MATRIX_URL = 'https://matrix-demo.up.railway.app';
-    process.env.MATRIX_SERVER_NAME = 'matrix-demo.up.railway.app';
+    process.env.MATRIX_URL = 'https://matrix.example.net';
+    process.env.MATRIX_SERVER_NAME = 'matrix.example.net';
     assert.strictEqual(
-      userIdFromUsername('lattice_realm', `${process.env.MATRIX_URL}/`),
-      '@lattice_realm:matrix-demo.up.railway.app',
+      userIdFromUsername('realm_service', `${process.env.MATRIX_URL}/`),
+      '@realm_service:matrix.example.net',
     );
   });
 

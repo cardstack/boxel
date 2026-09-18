@@ -337,6 +337,38 @@ module('lattice-query-registry-test.ts | registry', function (hooks) {
       2,
       'bytes and provenance publish atomically',
     );
+    const execute = db.execute.bind(db);
+    let realmProbes = 0;
+    db.execute = async (sql, opts) => {
+      if (sql.includes('AS matching_pending')) realmProbes++;
+      return execute(sql, opts);
+    };
+    try {
+      const latticeReadContext = new Map();
+      for (let i = 0; i < 3; i++) {
+        assert.strictEqual(
+          await latticeReadState(db, realmURL, ownerURL, stamp, {
+            latticeReadContext,
+          }),
+          'ready',
+        );
+      }
+      assert.strictEqual(
+        realmProbes,
+        1,
+        'one realm probe per response, not per owner',
+      );
+      await latticeReadState(db, realmURL, ownerURL, stamp, {
+        latticeReadContext: new Map(),
+      });
+      assert.strictEqual(
+        realmProbes,
+        2,
+        'a new request probes current freshness again',
+      );
+    } finally {
+      db.execute = execute;
+    }
     assert.true(await latticeHasOwner(db, realmURL, ownerURL));
     assert.false(await latticeHasOwner(db, realmURL, inputURL));
     assert.false(await latticeHasOwner(db, 'https://other.example/', ownerURL));
@@ -432,7 +464,7 @@ module('lattice-query-registry-test.ts | registry', function (hooks) {
     await change.done({ lattice: publication });
     assert.deepEqual(
       await registry.pending(realmURL),
-      [{ ownerURL, generation: 3 }],
+      [{ ownerURL, generation: 3, stale: true }],
       'a membership exit invalidates without an existing concrete dependency',
     );
     assert.strictEqual(
@@ -725,7 +757,7 @@ module('lattice-query-registry-test.ts | registry', function (hooks) {
     assert.false(await publication.hasUnmatched(realmURL));
     assert.deepEqual(
       await registry.pending(realmURL),
-      [{ ownerURL, generation: 3 }],
+      [{ ownerURL, generation: 3, stale: true }],
       'old document identifies the departed match',
     );
     assert.strictEqual(
@@ -782,7 +814,7 @@ module('lattice-query-registry-test.ts | registry', function (hooks) {
     await publication.matchPending(realmURL, 'test');
     assert.deepEqual(
       await registry.pending(realmURL),
-      [{ ownerURL, generation: 6 }],
+      [{ ownerURL, generation: 6, stale: true }],
       'both enter and leave transitions advance dirty provenance',
     );
 
@@ -1123,7 +1155,7 @@ module('lattice-query-registry-test.ts | registry', function (hooks) {
     let initial = await writer.createBatch(new URL(realmURL), network);
     await initial.updateEntry(
       new URL(matchingOwner),
-      entry(matchingOwner, [inputB]),
+      entry(matchingOwner, [inputB.replace(/\.json$/, '')]),
     );
     await initial.updateEntry(
       new URL(unrelatedOwner),
@@ -1460,6 +1492,7 @@ module('lattice-query-registry-test.ts | registry', function (hooks) {
     reads.clear();
     let recovered = await prepare();
     assert.deepEqual(recovered.watches, prepared.watches);
+    assert.true(reads.size > 0, 'recovery actually reloads the definitions');
     assert.true(
       [...reads.values()].every((count) => count === 1),
       'recovery creates a new preparation scope, including registered watches',

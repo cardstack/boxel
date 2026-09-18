@@ -267,15 +267,13 @@ exports.up = (pgm) => {
 
     ALTER TABLE boxel_index ADD COLUMN valid_until timestamptz;
     ALTER TABLE boxel_index_working ADD COLUMN valid_until timestamptz;
-    CREATE INDEX boxel_index_valid_until ON boxel_index (realm_url, valid_until)
-      WHERE valid_until IS NOT NULL;
 
   `);
 };
 
 exports.down = (pgm) => {
   pgm.sql(`
-    DROP INDEX boxel_index_valid_until;
+    DROP INDEX IF EXISTS boxel_index_valid_until;
     ALTER TABLE boxel_index_working DROP COLUMN valid_until;
     ALTER TABLE boxel_index DROP COLUMN valid_until;
     DROP TABLE lattice_retained_snapshots;

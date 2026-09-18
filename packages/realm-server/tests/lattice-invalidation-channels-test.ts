@@ -1,3 +1,9 @@
+import { enqueueLatticeDataDependents } from '@cardstack/runtime-common/jobs/lattice-dependents';
+import {
+  enqueueLattice,
+  latticeMaterializationReadySQL,
+} from '@cardstack/runtime-common/jobs/lattice';
+import { latticeCardCacheRevision } from '@cardstack/runtime-common/lattice-materialization';
 import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import { basename } from 'node:path';
 import QUnit from 'qunit';
@@ -57,6 +63,114 @@ module(basename(import.meta.filename), function (hooks) {
       }
     }
   }
+
+  test('publication resumes ordinary data consumers once and coalesces before claim', async (assert) => {
+    await seed();
+    await db.execute('UPDATE boxel_index SET deps=$1 WHERE url=$2', {
+      bind: [JSON.stringify([realm + 'owner']), realm + 'calendar.json'],
+    });
+    await db.withWriteLock('lattice:index:' + realm, async (tx) => {
+      if (!tx) throw new Error('Expected transaction');
+      await enqueueLatticeDataDependents(tx, realm, 'reader', [
+        realm + 'owner.json',
+      ]);
+      await enqueueLatticeDataDependents(tx, realm, 'reader', [
+        realm + 'owner.json',
+      ]);
+    });
+    const jobs = await db.execute(
+      "SELECT job_type,args FROM jobs WHERE status='unfulfilled'",
+    );
+    assert.strictEqual(jobs.length, 1);
+    assert.strictEqual(jobs[0].job_type, 'incremental-index');
+    assert.deepEqual((jobs[0].args as any).changes, [
+      { url: realm + 'calendar.json', operation: 'update' },
+    ]);
+    const consumer = await new IndexWriter(db, {
+      lattice: new LatticeRealmConfig([realm]),
+    }).createBatch(new URL(realm), new VirtualNetwork());
+    await consumer.invalidate([new URL(realm + 'calendar.json')], {
+      latticeDeferOwners: true,
+    });
+    assert.deepEqual(
+      consumer.invalidations.sort(),
+      ['calendar', 'navigation'].map((name) => realm + name + '.json'),
+      'ordinary data traversal continues transitively after publication',
+    );
+  });
+
+  test('supersession backs off, and a new source change clears the obsolete delay', async (assert) => {
+    const enqueue = (supersessions: number) =>
+      db.withWriteLock('lattice:index:' + realm, async (tx) => {
+        if (!tx) throw new Error('Expected transaction');
+        await enqueueLattice(
+          tx,
+          realm,
+          'reader',
+          0,
+          0,
+          undefined,
+          supersessions,
+        );
+      });
+    await enqueue(8);
+    let [row] = await db.execute(
+      `SELECT args, ${latticeMaterializationReadySQL} AS eligible FROM jobs j`,
+    );
+    assert.false(row.eligible);
+    assert.true(
+      Number((row.args as any).latticeNotBefore) - Date.now() <= 2000,
+      'delay is bounded',
+    );
+    await enqueue(0);
+    const jobs = await db.execute(
+      `SELECT args, ${latticeMaterializationReadySQL} AS eligible FROM jobs j`,
+    );
+    assert.strictEqual(jobs.length, 1, 'new work joins the unreserved wake-up');
+    assert.true(jobs[0].eligible);
+    assert.strictEqual((jobs[0].args as any).supersessions, 0);
+  });
+
+  test('ordinary card cache revisions are reusable only across a settled realm snapshot', async (assert) => {
+    await db.execute(
+      "INSERT INTO realm_generations(realm_url,current_generation,loader_epoch) VALUES($1,1,'code')",
+      { bind: [realm] },
+    );
+    const first = await latticeCardCacheRevision(db, realm);
+    assert.ok(first);
+    assert.strictEqual(await latticeCardCacheRevision(db, realm), first);
+    await db.execute(
+      "INSERT INTO lattice_pending_generations(realm_url,generation,definition_revision) VALUES($1,2,'code')",
+      { bind: [realm] },
+    );
+    assert.strictEqual(
+      await latticeCardCacheRevision(db, realm),
+      undefined,
+      'routing suppresses validators',
+    );
+    await db.execute(
+      'DELETE FROM lattice_pending_generations WHERE realm_url=$1',
+      { bind: [realm] },
+    );
+    await db.execute(
+      'UPDATE realm_generations SET current_generation=2 WHERE realm_url=$1',
+      { bind: [realm] },
+    );
+    assert.notStrictEqual(
+      await latticeCardCacheRevision(db, realm),
+      first,
+      'nested publications advance the validator',
+    );
+    await db.execute(
+      "INSERT INTO lattice_owner_code(realm_url,owner_url,generation,reference) VALUES($1,$2,2,'{}')",
+      { bind: [realm, `${realm}Summary/1.json`] },
+    );
+    assert.strictEqual(
+      await latticeCardCacheRevision(db, realm),
+      undefined,
+      'an invalid nested code binding suppresses reuse even without a dirty artifact',
+    );
+  });
 
   test('render-only fan-out stays out of data indexing and publishes on the HTML channel', async function (assert) {
     await seed();

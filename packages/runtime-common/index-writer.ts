@@ -1,3 +1,4 @@
+import { enqueueLatticeDataDependents } from './jobs/lattice-dependents.ts';
 import { LatticeWorkSuperseded } from './lattice-work.ts';
 import { recordLatticePublications } from './lattice-publication-outbox.ts';
 import {
@@ -2742,6 +2743,18 @@ export class Batch {
           for (const [url, change] of this.#retainedInputs)
             if (retainedOwners.has(url))
               await this.#retainedSnapshots!.recordChange(tx, change);
+        if (this.latticeEnabled) {
+          // Candidate waves do not tombstone. Capture the old adoption chains
+          // under the publication lock before promotion can replace them.
+          const unread = [...this.#invalidations].filter(
+            (url) => !this.#preReadURLs.has(url),
+          );
+          const prior = await this.existingIndexTypes(unread);
+          for (const entries of prior.values())
+            for (const { cardTypes } of entries)
+              this.#recordTouchedTypes(cardTypes);
+          for (const url of unread) this.#preReadURLs.add(url);
+        }
         await this.applyBatchUpdates({ latticeCardOnly });
         if (this.latticeEnabled && this.#dbAdapter.kind === 'pg' && tx) {
           await captureLatticeInputArtifacts(tx, this.realmURL.href, [
@@ -2767,6 +2780,20 @@ export class Batch {
           for (let check of checks) await check(tx);
         }
         if (opts?.lattice && opts.latticeFollowup) {
+          if (tx)
+            await enqueueLatticeDataDependents(
+              tx,
+              this.realmURL.href,
+              opts.latticeFollowup.realmUsername,
+              (latticePrepared?.rows ?? [])
+                .filter(
+                  (row) =>
+                    row.pristine_doc?.meta.publication &&
+                    !this.#latticeRetainedOutputs.has(row.url) &&
+                    !this.#latticeSkippedOutputs.has(row.url),
+                )
+                .map((row) => row.url),
+            );
           await opts.lattice.enqueuePending(
             tx ?? ((expr) => this.#query(expr)),
             this.realmURL.href,

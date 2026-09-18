@@ -200,6 +200,7 @@ export class IndexRunner {
   #lattice?: LatticeIndexPublication;
   #latticeRealmUsername?: string;
   #inputSnapshot: LatticeInputSnapshot | undefined;
+  #latticeTouchedTypes = new Set<string>();
   #latticeTimings = {
     latticeMatchingMs: 0,
     latticeMaterializationMs: 0,
@@ -826,7 +827,12 @@ export class IndexRunner {
     );
     return {
       invalidations: [...invalidations].map((url) => url.href),
-      invalidatedTypes: current.batch.touchedTypes,
+      invalidatedTypes: [
+        ...new Set([
+          ...current.#latticeTouchedTypes,
+          ...current.batch.touchedTypes,
+        ]),
+      ],
       ignoreData: current.#ignoreData,
       stats: current.stats,
       generation: current.batch.currentGeneration,
@@ -910,7 +916,9 @@ export class IndexRunner {
       if (!(error instanceof LatticeWorkSuperseded)) throw error;
       return {
         invalidations: [],
-        matchingComplete: false,
+        matchingComplete:
+          matched &&
+          !(await current.#lattice.hasUnmatched(current.realmURL.href)),
         generation: undefined,
         loaderEpoch: undefined,
         phaseTimings: {
@@ -973,7 +981,7 @@ export class IndexRunner {
           candidates: { limit: 24, state: serviceState! },
           trace: waveTrace,
         })
-      : await publication.registry.pending(this.realmURL.href);
+      : await publication.registry.ready(this.realmURL.href);
     waveTrace?.stage('execute-wave');
     if (followup)
       this.#log.debug(
@@ -982,13 +990,8 @@ export class IndexRunner {
     // A queued wake-up is an obligation to inspect current work, not a frozen
     // owner list. Publication or retirement may already have satisfied it.
     // An old wave number must not reject an empty current work set.
-    if (followup && pending.length) {
-      let owners = await publication.registry.activeOwnerCount(
-        this.realmURL.href,
-      );
-      if (followup.wave - 1 > owners * (owners + 1))
-        throw new Error('Lattice feeder graph did not converge');
-    }
+    // Retry budgets belong to an owner obligation, not a realm-wide wave
+    // counter. New inputs can extend a feed indefinitely without being a cycle.
     // A leaf write can activate one new downstream owner per wave. Bound an
     // acyclic chain by all owners, not only the initially dirty subset.
     // Every owner `ready` returns has settled inputs and reads no other
@@ -1028,11 +1031,16 @@ export class IndexRunner {
         // No job resume seed: previous source-pass working rows have the same
         // job id, but must never be re-promoted by a materialization wave.
         let setupStartedAt = Date.now();
+        for (const type of this.#batch?.touchedTypes ?? [])
+          this.#latticeTouchedTypes.add(type);
         this.#batch = await this.#indexWriter.createBatch(
           this.realmURL,
           this.#virtualNetwork,
           undefined,
-          { latticeMaterialization: Boolean(followup) },
+          {
+            latticeMaterialization:
+              this.#batch?.splitPrerenderHtml ?? Boolean(followup),
+          },
         );
         this.#latticeTimings.latticeBatchSetupMs += Date.now() - setupStartedAt;
         this.#inputSnapshot = {
@@ -1418,11 +1426,16 @@ export class IndexRunner {
         } else {
           await renderBatch.discardLatticeCandidates();
         }
-        pending = await publication.registry.pending(this.realmURL.href, {
-          runnableOnly: Boolean(followup),
-        });
+        pending = followup
+          ? await publication.registry.pending(this.realmURL.href, {
+              runnableOnly: true,
+            })
+          : await publication.registry.ready(this.realmURL.href);
       }
-      if (pending.length && !followup)
+      if (
+        !followup &&
+        (await publication.registry.pending(this.realmURL.href)).length
+      )
         throw new Error(
           'Lattice feeder graph did not converge; owners remain pending',
         );

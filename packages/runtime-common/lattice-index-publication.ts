@@ -1,3 +1,4 @@
+import { latticeDependencyAliases } from './lattice-dependency-aliases.ts';
 import {
   latticeWorkingTable,
   latticeWorkingScope,
@@ -148,10 +149,8 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
     // secondary job has registered a new owner. Existing clients retain data.
     await tx([
       `UPDATE boxel_index_working SET pristine_doc = jsonb_set(pristine_doc,
-        '{meta,publication}', (pristine_doc->'meta'->'publication') || jsonb_build_object(
-          'state', 'pending', 'inputGeneration', 0, 'publishedGeneration',`,
-      param(generation),
-      "::bigint, 'definitionRevision',",
+        '{meta,publication}', ((pristine_doc->'meta'->'publication') - 'inputGeneration' - 'publishedGeneration') || jsonb_build_object(
+          'state', 'pending', 'validatedThrough', 0, 'definitionRevision',`,
       param(definitionRevision),
       `::text))
        WHERE realm_url =`,
@@ -287,6 +286,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
     realmUsername: string,
     wave = 0,
     waitForRead?: LatticeReadScope,
+    supersessions = 0,
   ) {
     let [pending] = await tx([
       'SELECT 1 WHERE EXISTS (SELECT 1 FROM lattice_pending_generations WHERE realm_url =',
@@ -296,7 +296,15 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
       `AND NOT o.retired AND o.dirty_generation IS NOT NULL AND ${latticeOwnerRetryReadySQL})`,
     ]);
     if (pending)
-      await enqueueLattice(tx, realmURL, realmUsername, wave, 0, waitForRead);
+      await enqueueLattice(
+        tx,
+        realmURL,
+        realmUsername,
+        wave,
+        0,
+        waitForRead,
+        supersessions,
+      );
   }
 
   async hasUnmatched(realmURL: string): Promise<boolean> {
@@ -814,7 +822,9 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
     // handles a newly published feeder's outputs in a Lattice follow-up wave.
     let tailAt = Date.now();
     if (changed.size) {
-      let changedURLs = [...changed];
+      let changedURLs = [
+        ...new Set([...changed].flatMap(latticeDependencyAliases)),
+      ];
       let owners = await tx([
         'SELECT o.owner_url FROM lattice_owners o JOIN boxel_index i ON i.realm_url = o.realm_url AND i.url = o.owner_url',
         "AND i.type = 'instance' WHERE o.realm_url =",

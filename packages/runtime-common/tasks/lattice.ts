@@ -93,23 +93,6 @@ export const latticeMaterialize: Task<
       }
       throw error;
     }
-    if (result.superseded) {
-      // A cancelled derived attempt is not a broken card. Preserve the current
-      // dirty obligation, yield the writer slot to newer source work, and let
-      // its successor capture current inputs with a fresh budget. A revoked
-      // read scope waits durably without occupying a worker until restored.
-      await dbAdapter.withWriteLock(`lattice:index:${realmURL}`, async (tx) => {
-        if (!tx) throw new Error('Lattice supersession requires a transaction');
-        await indexWriter
-          .latticePublication(definitionLookup, virtualNetwork)
-          .enqueuePending(tx, realmURL, realmUsername, 0, result.waitForRead);
-      });
-      log.info(
-        `Lattice materialization yielded for ${realmURL}: ${result.superseded}`,
-      );
-      reportStatus(jobInfo, 'finish');
-      return result;
-    }
     // Materialized cards already committed durable per-owner notices. The
     // empty matching barrier retains the existing realm-level revalidation.
     if (
@@ -124,6 +107,30 @@ export const latticeMaterialize: Task<
         invalidations: result.invalidations,
         generation: result.generation,
       });
+    }
+    if (result.superseded) {
+      // A cancelled derived attempt is not a broken card. Preserve the current
+      // dirty obligation, yield the writer slot to newer source work, and let
+      // its successor capture current inputs with a fresh budget. A revoked
+      // read scope waits durably without occupying a worker until restored.
+      await dbAdapter.withWriteLock(`lattice:index:${realmURL}`, async (tx) => {
+        if (!tx) throw new Error('Lattice supersession requires a transaction');
+        await indexWriter
+          .latticePublication(definitionLookup, virtualNetwork)
+          .enqueuePending(
+            tx,
+            realmURL,
+            realmUsername,
+            args.wave,
+            result.waitForRead,
+            Number(args.supersessions ?? 0) + 1,
+          );
+      });
+      log.info(
+        `Lattice materialization yielded for ${realmURL}: ${result.superseded}`,
+      );
+      reportStatus(jobInfo, 'finish');
+      return result;
     }
     if (
       result.invalidations.length &&

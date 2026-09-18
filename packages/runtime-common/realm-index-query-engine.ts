@@ -1,5 +1,8 @@
 import type { LatticeRead } from './lattice-adapters.ts';
-import { latticeReadState } from './lattice-materialization.ts';
+import {
+  latticeReadState,
+  type LatticeReadContext,
+} from './lattice-materialization.ts';
 import { LatticeRealmConfig } from './lattice-config.ts';
 import { isScopedCSSRequest, scopedCSSServingHref } from './scoped-css.ts';
 import { cloneDeep } from 'lodash-es';
@@ -121,6 +124,7 @@ type AssemblyDefinitions = Map<
 >;
 
 type Options = {
+  latticeReadContext?: LatticeReadContext;
   [latticeAssemblyDefinitions]?: AssemblyDefinitions;
   latticeInput?: boolean;
   loadLinks?: true;
@@ -436,6 +440,7 @@ export class RealmIndexQueryEngine {
     // 'instance', 'files' -> 'file', 'all'/absent -> 'all'.
     entryTypeScopeOverride?: 'instance' | 'file' | 'all',
   ): Promise<EntryCollectionDocument> {
+    if (this.#latticeEnabled) opts = { ...opts, latticeReadContext: new Map() };
     if (!this.#latticeEnabled && opts?.latticeInput) {
       opts = { ...opts, latticeInput: false };
     }
@@ -936,6 +941,7 @@ export class RealmIndexQueryEngine {
     url: URL,
     opts?: Options,
   ): Promise<SearchResult | undefined> {
+    if (this.#latticeEnabled) opts = { ...opts, latticeReadContext: new Map() };
     let instance = await this.instance(url, {
       ...opts,
       latticeData: this.#latticeEnabled,
@@ -955,7 +961,7 @@ export class RealmIndexQueryEngine {
       throw new CardError('Lattice is disabled for this realm', {
         status: 404,
       });
-    let opts = { latticeInput: true };
+    let opts = { latticeInput: true, latticeReadContext: new Map() };
     let realmInfo = await this.#realm.getRealmInfo();
     let instances = await this.#indexQueryEngine.getLatticeInputs(
       urls,
@@ -1977,6 +1983,7 @@ export class RealmIndexQueryEngine {
         ...opts,
         [latticeAssemblyDefinitions]:
           opts?.[latticeAssemblyDefinitions] ?? new Map(),
+        latticeReadContext: opts?.latticeReadContext ?? new Map(),
       };
     }
     // Diagnostic correlation id — lets us match log lines from the same

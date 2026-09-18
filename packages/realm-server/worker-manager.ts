@@ -1,4 +1,4 @@
-import { LATTICE_PRIORITY } from '@cardstack/runtime-common/jobs/lattice';
+import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import './instrument.ts';
 import './setup-logger.ts'; // This should be first
 import './lib/wtfnode-on-signal.ts';
@@ -134,7 +134,10 @@ let {
   allPriorityCount = 1,
   highPriorityCount = 0,
   userIndexCount = 0,
-  latticeCount = 0,
+  latticeCount = LatticeRealmConfig.parse(process.env.LATTICE_ENABLED_REALMS)
+    .enabledRealms.length
+    ? 1
+    : 0,
   indexCount = 0,
   prerenderCount = 0,
   fromUrl: fromUrls,
@@ -169,7 +172,8 @@ let {
       type: 'number',
     },
     latticeCount: {
-      description: 'Number of dedicated Lattice secondary workers (default 0)',
+      description:
+        'Number of dedicated Lattice secondary workers (default 1 with enabled realms, otherwise 0)',
       type: 'number',
     },
     userIndexCount: {
@@ -745,7 +749,7 @@ let adapter: PgAdapter;
     });
   }
   for (let i = 0; i < latticeCount; i++) {
-    await startWorker(LATTICE_PRIORITY, urlMappings, { latticeJobsOnly: true });
+    await startWorker(0, urlMappings, { latticeJobsOnly: true });
   }
   for (let i = 0; i < highPriorityCount; i++) {
     await startWorker(userInitiatedPrerenderHtmlPriority, urlMappings);

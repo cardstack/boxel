@@ -912,9 +912,22 @@ module('Integration | Lattice snapshot', function (hooks) {
       /missing, partial or errored/,
       'partial membership cannot be accepted as a complete materialization',
     );
+    Object.assign(doc.data.relationships.inputs.meta, { returned: 1 });
+    await api.updateFromSerialized(summary, doc, store, opts);
+    assert.strictEqual(
+      api.getRelationshipMembershipState(summary, 'inputs').membership?.length,
+      1,
+      'an explicitly complete page hydrates without re-querying its inputs',
+    );
+    Object.assign(doc.data.relationships.inputs.meta, { returned: 2 });
+    await assert.rejects(
+      api.updateFromSerialized(summary, doc, store, opts),
+      /missing, partial or errored/,
+      'a truncated page is still refused',
+    );
   });
 
-  test('publication registers empty queries and refuses incomplete membership', async function (assert) {
+  test('publication registers returned pages and refuses unresolved membership', async function (assert) {
     class LatticeInput extends CardDef {
       @field name = contains(StringField);
     }
@@ -949,7 +962,7 @@ module('Integration | Lattice snapshot', function (hooks) {
     };
     let store = api.getStore(summary);
     let result = {
-      instances: [],
+      instances: [] as LatticeInput[],
       instancesByRealm: [],
       isLoading: false,
       meta: { page: { total: 0 } },
@@ -996,6 +1009,21 @@ module('Integration | Lattice snapshot', function (hooks) {
       'watch parameters are resolved',
     );
     assert.true(JSON.stringify(discovery?.watches).includes('Lattice'));
+    class NestedField extends FieldDef {
+      @field inputs = linksToMany(LatticeInput, { query: {} });
+    }
+    class NestedSummary extends CardDef {
+      static materialized = true;
+      @field child = contains(NestedField);
+    }
+    assert.strictEqual(
+      api.publicationManifest(
+        new NestedSummary({ child: new NestedField() }),
+        doc,
+      ),
+      undefined,
+      'unsupported nested queries decline materialization without failing ordinary indexing',
+    );
     let snapshot = api.publicationManifest(summary, doc, 7);
     assert.true(
       isSingleCardDocument(doc),
@@ -1013,8 +1041,20 @@ module('Integration | Lattice snapshot', function (hooks) {
     assert.strictEqual(snapshot?.validatedThrough, 7);
     assert.true(snapshot?.computedFields.includes('count'));
     assert.notOk(doc.included, 'the input graph is never serialized');
+    const pageMember = new LatticeInput({ name: 'First' });
+    pageMember.id = rri(`${testRealmURL}LatticeInput/first`);
+    result.instances = [pageMember];
     result.totalMatchCount = 2;
     result.isPartial = true;
+    assert.ok(
+      api.publicationManifest(summary, doc, 7),
+      'a complete bounded page can publish despite a larger total',
+    );
+    assert.strictEqual(
+      (doc.data.relationships!.inputs as any).meta.returned,
+      1,
+    );
+    result.isLoading = true;
     assert.throws(
       () => api.publicationManifest(summary, doc, 7),
       /unresolved, partial or errored/,

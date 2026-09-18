@@ -1,3 +1,4 @@
+import { LatticeRealmConfig } from '@cardstack/runtime-common/lattice-config';
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
@@ -414,6 +415,33 @@ module(basename(import.meta.filename), function () {
       });
       await batch.done();
     }
+
+    test('a candidate wave stamps old and new types without invalidating unrelated searches', async (assert) => {
+      await indexPass();
+      const batch = await new IndexWriter(dbAdapter, {
+        lattice: new LatticeRealmConfig([realm().href]),
+      }).createBatch(realm(), virtualNetwork, undefined, {
+        latticeMaterialization: true,
+      });
+      await batch.updateEntry(new URL(`${realm().href}pet-1.json`), {
+        type: 'file',
+        deps: new Set(),
+        lastModified: 2,
+        resourceCreatedAt: 1,
+        types: [`${realmA}person/Person`],
+      });
+      await batch.done();
+      const stamps = await stampedRows();
+      assert.false(stamps.some((row) => row.typeKey === ALL_TYPES_KEY));
+      assert.strictEqual(
+        stamps.find((row) => row.typeKey === `${realmA}pet/Pet`)?.index,
+        2,
+      );
+      assert.strictEqual(
+        stamps.find((row) => row.typeKey === `${realmA}person/Person`)?.index,
+        2,
+      );
+    });
 
     test('an index pass stamps every chain member it wrote', async function (assert) {
       await indexPass();
