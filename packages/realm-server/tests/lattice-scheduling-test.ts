@@ -18,6 +18,7 @@ import {
   latticePropagateDemand,
   latticeOrderWave,
   LatticeWaveBudget,
+  LatticeReadBarrier,
 } from '@cardstack/runtime-common/lattice-scheduling';
 import { setupDB } from './helpers/index.ts';
 
@@ -365,6 +366,59 @@ module(basename(import.meta.filename), (hooks) => {
       [...visited].filter((id) => id.includes('/Leaderboard/')).length,
       5,
     );
+  });
+
+  test('view deadlines choose inside a service share without starving donated inputs', (assert) => {
+    let now = 10_000;
+    const rows = [
+      ...Array.from({ length: 50 }, (_, i) => ({
+        ownerURL: realm + `A/${i}.json`,
+        demand: 1 as const,
+      })),
+      {
+        ownerURL: realm + 'A/viewed.json',
+        demand: 1 as const,
+        visible: true as const,
+      },
+      { ownerURL: realm + 'Other/background.json' },
+    ];
+    let state: LatticeServiceState | undefined;
+    const served: string[] = [];
+    for (let i = 0; i < 100; i++) {
+      const scheduler = new LatticeStride(rows, state, () => now);
+      const work = scheduler.take()!;
+      served.push(work.row.ownerURL);
+      work.complete(100);
+      state = scheduler.state;
+      now += 100;
+    }
+    assert.strictEqual(served[0], realm + 'A/viewed.json');
+    assert.true(served.filter((id) => id.endsWith('/viewed.json')).length >= 5);
+    assert.true(
+      served.some((id) => id.includes('/A/')),
+      'donated prerequisites still run',
+    );
+    assert.true(
+      served.filter((id) => id.endsWith('/background.json')).length >= 25,
+      'deadline does not steal background service',
+    );
+  });
+
+  test('completion waits for an active reader of that identity, never an unrelated slow peer', async (assert) => {
+    const reading = new LatticeReadBarrier();
+    reading.begin('consumer', ['input']);
+    reading.begin('unrelated', ['other']);
+    let inputPublished = false;
+    const input = reading.beforePublish('input').then(() => {
+      inputPublished = true;
+    });
+    await reading.beforePublish('free');
+    assert.false(inputPublished);
+    reading.end('consumer');
+    await input;
+    assert.true(inputPublished, 'unrelated producer is still active');
+    reading.end('unrelated');
+    reading.end('consumer'); // error cleanup may repeat the release
   });
 
   test('service survives a worker change; an expired claim cannot replace the newer ledger', async (assert) => {

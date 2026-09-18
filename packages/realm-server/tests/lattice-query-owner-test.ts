@@ -2297,6 +2297,134 @@ module(basename(import.meta.filename), function (hooks) {
     });
   }
 
+  test('a completed intermediate card publishes while a slow peer is still computing', async (assert) => {
+    assert.timeout(30_000);
+    staleTotal();
+    const fast = realm + 'Dashboard/fast.json';
+    const slow = realm + 'Dashboard/slow.json';
+    for (const ownerURL of [fast, slow])
+      await (await candidate('A', undefined, false, { ownerURL })).publish();
+    while (await publication.matchPending(realm, 'reader')) {
+      /* fixture routing */
+    }
+    await db.execute(
+      "UPDATE jobs SET status='resolved',finished_at=now() WHERE status='unfulfilled'",
+    );
+    await db.execute(
+      `UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{attributes,amount}','6'),search_doc=jsonb_set(search_doc,'{amount}','6') WHERE url=$1`,
+      { bind: [realm + 'Person/one.json'] },
+    );
+    await db.execute(
+      "UPDATE lattice_owners SET dirty_generation=(SELECT current_generation FROM realm_generations WHERE realm_url=$1),stale_after=now()-interval '1 second' WHERE realm_url=$1",
+      { bind: [realm] },
+    );
+    await db.execute(
+      `INSERT INTO jobs(job_type,concurrency_group,priority,timeout,args) VALUES('incremental-index',$1,10,10,$2)`,
+      { bind: ['indexing:' + realm, JSON.stringify({ realmURL: realm })] },
+    );
+    const unexpected = async (): Promise<never> => {
+      throw new Error('Unexpected Chrome/module execution');
+    };
+    const native = createIndexer((request, admission) =>
+      openLatticeNativeWork(db, request, admission),
+    );
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let slowStarted = false;
+    const running = IndexRunner.materialize(
+      new IndexRunner({
+        realmURL: new URL(realm),
+        indexWriter: writer,
+        virtualNetwork: network,
+        definitionLookup: {
+          forRealm() {
+            return this;
+          },
+          lookupDefinition: lookup.lookupDefinition.bind(lookup),
+        } as unknown as DefinitionLookup,
+        nativeCardIndexer: async (request) => {
+          const result = await native(request);
+          if (request.url === slow) {
+            slowStarted = true;
+            await gate;
+          }
+          return result;
+        },
+        prerenderer: {
+          prerenderModule: unexpected,
+          prerenderVisit: unexpected,
+          runCommand: unexpected,
+        },
+        auth: '',
+        fetch: unexpected,
+        realmOwnerUserId: actor,
+        reader: {
+          readFile: async (url) => ({
+            content: JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: { group: 'A' },
+                meta: { adoptsFrom: rootRef },
+              },
+            }),
+            path: url.pathname,
+            lastModified: 1,
+            created: 1,
+          }),
+          readStream: unexpected,
+          mtimes: unexpected,
+        },
+      }),
+      'reader',
+      0,
+    );
+    let failure: unknown;
+    void running.catch((error) => {
+      failure = error;
+    });
+    let total = 0;
+    try {
+      const deadline = Date.now() + 10_000;
+      do {
+        const [row] = await db.execute(
+          "SELECT pristine_doc->'attributes'->>'total' AS total FROM boxel_index WHERE url=$1",
+          { bind: [fast] },
+        );
+        total = Number(row?.total);
+        if ((total === 6 && slowStarted) || failure) break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      } while (Date.now() < deadline);
+      assert.true(
+        slowStarted,
+        'the slow peer is still holding its producer result',
+      );
+      assert.strictEqual(
+        total,
+        6,
+        'fast card is durably visible before slow computation finishes',
+      );
+    } finally {
+      release();
+    }
+    const result = await running;
+    assert.strictEqual(result.superseded, undefined);
+    assert.strictEqual(result.invalidations.length, 2);
+    const values = await db.execute(
+      "SELECT pristine_doc->'attributes'->>'total' AS total FROM boxel_index WHERE url=ANY($1::text[])",
+      { bind: ['{' + [fast, slow].join(',') + '}'] },
+    );
+    assert.deepEqual(
+      values.map((row) => Number(row.total)),
+      [6, 6],
+    );
+    assert.strictEqual(
+      (await db.execute('SELECT * FROM lattice_index_candidates')).length,
+      0,
+    );
+  });
+
   for (const queueSource of [false, true])
     test(`bounded native waves preserve completed owners with queued source=${queueSource}`, async (assert) => {
       assert.timeout(30_000);

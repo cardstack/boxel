@@ -52,7 +52,7 @@ import {
   type LatticeReadScope,
   type LatticeScheduledWork,
 } from './lattice-work.ts';
-import { LatticeWaveBudget } from './lattice-scheduling.ts';
+import { LatticeWaveBudget, LatticeReadBarrier } from './lattice-scheduling.ts';
 import { LatticeStride } from './lattice-stride.ts';
 import type { Querier } from './expression.ts';
 import { resolveModuleCacheContext } from './index-runner/prewarm-modules.ts';
@@ -179,7 +179,8 @@ const LATTICE_WAVE_BUDGET_MS = Math.max(
 // has settled inputs and reads no other pending owner, so a wave's members
 // are independent of each other; running several at once overlaps their
 // input reads and, with a BXL worker pool (LATTICE_BXL_WORKERS), their
-// evaluation. Publication is still one swap. Only the native path renders
+// evaluation. Intermediate cards publish on completion; ordinary owners keep
+// their shared generation-fenced swap. Only the native path renders
 // concurrently; browser visits keep the prerenderer's own scheduling.
 const LATTICE_WAVE_CONCURRENCY = Math.max(
   1,
@@ -932,9 +933,17 @@ export class IndexRunner {
     if (!publication) return [];
     let startedAt = Date.now();
     let published = new Set<string>();
+    const ownerBatches = new Set<Batch>();
+    const serviceState = followup
+      ? ((await publication.registry.schedulingState(this.realmURL.href)) ?? {
+          version: 1 as const,
+          pools: {},
+        })
+      : undefined;
     let pending = followup
       ? await publication.registry.ready(this.realmURL.href, {
           overdueOnly: followup.overdueOnly,
+          candidates: { limit: 24, state: serviceState! },
         })
       : await publication.registry.pending(this.realmURL.href);
     if (followup)
@@ -991,12 +1000,20 @@ export class IndexRunner {
           realmURL: this.realmURL.href,
           generation: this.batch.currentGeneration - 1,
         };
+        const renderBatch = this.batch;
+        const inputSnapshot = this.#inputSnapshot;
+        // Intermediate cards already tolerate a moved realm generation. Give
+        // each completed identity its own guarded swap; ordinary waves retain
+        // their shared generation fence and publication transaction.
+        const streamPublications =
+          Boolean(followup) && pending.every((row) => row.stale);
         this.#dependencyResolver.reset();
         this.#indexingInstances.clear();
         let succeeded = 0;
         let recordedFailures = 0;
         let withheld = 0;
         const completedOwners: string[] = [];
+        const reading = new LatticeReadBarrier();
         let failures: string[] = [];
         // Bookkeeping and row writes are serialized in completion order; only
         // the render half of a visit overlaps.
@@ -1006,10 +1023,7 @@ export class IndexRunner {
         const renderStartedAt = Date.now();
         const queue = [...pending];
         const scheduler = followup
-          ? new LatticeStride(
-              pending,
-              await publication.registry.schedulingState(this.realmURL.href),
-            )
+          ? new LatticeStride(pending, serviceState)
           : undefined;
         const budget = followup
           ? new LatticeWaveBudget(LATTICE_WAVE_BATCH, LATTICE_WAVE_BUDGET_MS)
@@ -1019,7 +1033,24 @@ export class IndexRunner {
           generation,
           codeVersion,
           stale,
+          pendingInputURLs,
         }: (typeof pending)[number]) => {
+          reading.begin(ownerURL, pendingInputURLs ?? []);
+          const ownerBatch = streamPublications
+            ? await this.#indexWriter.createBatch(
+                this.realmURL,
+                this.#virtualNetwork,
+                undefined,
+                { latticeMaterialization: true },
+              )
+            : renderBatch;
+          if (streamPublications) ownerBatches.add(ownerBatch);
+          const ownerSnapshot = streamPublications
+            ? {
+                realmURL: this.realmURL.href,
+                generation: ownerBatch.currentGeneration - 1,
+              }
+            : inputSnapshot;
           const work: LatticeScheduledWork = {
             realmURL: this.realmURL.href,
             actor: this.#realmOwnerUserId,
@@ -1028,8 +1059,8 @@ export class IndexRunner {
               obligation: generation,
               ...(stale ? { stale: true as const } : {}),
             },
-            inputGeneration: this.#inputSnapshot!.generation,
-            definitionRevision: this.batch.loaderEpoch,
+            inputGeneration: ownerSnapshot.generation,
+            definitionRevision: ownerBatch.loaderEpoch,
             codeVersion,
             // Non-queued calls use the existing negative job-ID sentinel.
             ...(this.#jobInfo.jobId > 0
@@ -1074,8 +1105,9 @@ export class IndexRunner {
                   await admit();
                 }
               : undefined,
-            { stale },
+            { stale, batch: ownerBatch, inputSnapshot: ownerSnapshot },
           );
+          reading.end(ownerURL);
           if (check) await check();
           if (
             outcome.status === 'error' &&
@@ -1115,25 +1147,49 @@ export class IndexRunner {
             }
             return;
           }
-          if (check) {
-            // Owner-state validation opens the publication transaction; the
-            // reservation is re-read under the queue group lock at its tail.
-            this.batch.registerLatticePublicationCheck(ownerURL, check);
-            this.batch.registerLatticeCommitCheck(ownerURL, (tx) =>
-              publication.registry.assertReservationCurrent(work, tx),
-            );
-          }
           const rendered = outcome.result;
-          finishing = finishing.then(async () => {
-            let finishStartedAt = Date.now();
-            await this.#finishVisit(rendered);
-            this.#latticeTimings.latticeFinishVisitMs +=
-              Date.now() - finishStartedAt;
-            completedOwners.push(ownerURL);
-            succeeded++;
-            this.#latticeTimings.latticeOwnersRendered++;
+          const finish = finishing.then(async () => {
+            if (streamPublications) {
+              this.#batch = ownerBatch;
+              this.#dependencyResolver.reset();
+            }
+            if (check) {
+              this.batch.registerLatticePublicationCheck(ownerURL, check);
+              this.batch.registerLatticeCommitCheck(ownerURL, (tx) =>
+                publication.registry.assertReservationCurrent(work, tx),
+              );
+            }
+            try {
+              let finishStartedAt = Date.now();
+              await this.#finishVisit(rendered);
+              this.#latticeTimings.latticeFinishVisitMs +=
+                Date.now() - finishStartedAt;
+              if (streamPublications) {
+                await reading.beforePublish(ownerURL);
+                const swapStartedAt = Date.now();
+                await this.batch.done({
+                  lattice: publication,
+                  latticeInputGeneration: ownerSnapshot.generation,
+                  latticeFollowup: followup,
+                  countIndexEntries: false,
+                });
+                this.#latticeTimings.latticeSwapMs +=
+                  Date.now() - swapStartedAt;
+                this.#latticeTimings.latticeWriteMs += this.batch.writeMs;
+                if (!this.batch.latticeRetainedOutputs.has(ownerURL))
+                  published.add(ownerURL);
+              }
+              completedOwners.push(ownerURL);
+              succeeded++;
+              this.#latticeTimings.latticeOwnersRendered++;
+            } finally {
+              if (streamPublications)
+                await this.batch.discardLatticeCandidates();
+            }
           });
-          await finishing;
+          // A failed identity cannot poison completed peers' finish slots.
+          finishing = finish.catch(() => {});
+          await finish;
         };
         const lanes = this.#nativeCardIndexer ? LATTICE_WAVE_CONCURRENCY : 1;
         const outcomes = await Promise.allSettled(
@@ -1167,6 +1223,7 @@ export class IndexRunner {
                 }
                 throw error;
               } finally {
+                reading.end(next.ownerURL);
                 service?.complete(performance.now() - ownerStartedAt);
               }
             }
@@ -1207,19 +1264,23 @@ export class IndexRunner {
             ? new LatticeWorkFailed(message)
             : new Error(message);
         }
-        let swapStartedAt = Date.now();
-        await this.batch.done({
-          lattice: publication,
-          latticeInputGeneration: this.#inputSnapshot.generation,
-          latticeFollowup: followup,
-          countIndexEntries: false,
-        });
-        await this.batch.discardLatticeCandidates();
-        for (const ownerURL of completedOwners)
-          if (!this.batch.latticeRetainedOutputs.has(ownerURL))
-            published.add(ownerURL);
-        this.#latticeTimings.latticeSwapMs += Date.now() - swapStartedAt;
-        this.#latticeTimings.latticeWriteMs += this.batch.writeMs;
+        if (!streamPublications) {
+          let swapStartedAt = Date.now();
+          await this.batch.done({
+            lattice: publication,
+            latticeInputGeneration: this.#inputSnapshot.generation,
+            latticeFollowup: followup,
+            countIndexEntries: false,
+          });
+          await this.batch.discardLatticeCandidates();
+          for (const ownerURL of completedOwners)
+            if (!this.batch.latticeRetainedOutputs.has(ownerURL))
+              published.add(ownerURL);
+          this.#latticeTimings.latticeSwapMs += Date.now() - swapStartedAt;
+          this.#latticeTimings.latticeWriteMs += this.batch.writeMs;
+        } else {
+          await renderBatch.discardLatticeCandidates();
+        }
         pending = await publication.registry.pending(this.realmURL.href, {
           runnableOnly: Boolean(followup),
         });
@@ -1231,6 +1292,7 @@ export class IndexRunner {
       return [...published].map((url) => new URL(url));
     } finally {
       await this.#batch?.discardLatticeCandidates();
+      for (const batch of ownerBatches) await batch.discardLatticeCandidates();
       this.#inputSnapshot = undefined;
       this.#latticeTimings.latticeMaterializationMs += Date.now() - startedAt;
     }
@@ -1292,9 +1354,14 @@ export class IndexRunner {
   async #renderVisit(
     url: URL,
     beforeIndex?: (runtime: 'native' | 'browser') => Promise<void>,
-    opts?: { stale?: true },
+    opts?: {
+      stale?: true;
+      batch?: Batch;
+      inputSnapshot?: LatticeInputSnapshot;
+    },
   ): Promise<VisitRenderOutcome> {
     try {
+      const inputSnapshot = opts?.inputSnapshot ?? this.#inputSnapshot;
       let result = await renderFileForIndexing({
         nativeCardIndexer: this.#nativeCardIndexer,
         nativeFileIndexer: this.#nativeFileIndexer,
@@ -1302,15 +1369,15 @@ export class IndexRunner {
         // A stale attempt carries its own snapshot object: the input batch
         // keyed on it must not be shared with ordinary visits of the wave.
         inputSnapshot:
-          opts?.stale && this.#inputSnapshot
-            ? { ...this.#inputSnapshot, stale: true }
-            : this.#inputSnapshot,
+          opts?.stale && inputSnapshot
+            ? { ...inputSnapshot, stale: true }
+            : inputSnapshot,
         url,
         realmURL: this.#realmURL,
         ignoreMap: this.ignoreMap,
         realmPaths: this.#realmPaths,
         reader: this.#reader,
-        batch: this.batch,
+        batch: opts?.batch ?? this.batch,
         jobInfo: this.#jobInfo,
         jobPriority: this.#jobPriority,
         auth: this.#auth,

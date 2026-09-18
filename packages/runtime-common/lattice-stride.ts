@@ -20,12 +20,17 @@ interface Pool {
 export interface LatticeServiceState {
   version: 1;
   pools: Record<string, Pool>;
+  // Readiness probes rotate independently; they are not execution service.
+  frontier?: LatticeServiceState;
+  visibleServed?: Array<[string, number]>;
+  frontierReady?: string[];
 }
 interface Candidate {
   ownerURL: string;
   stale?: true;
   demand?: LatticeDemandPriority;
   pendingInputCount?: number;
+  visible?: true;
 }
 const phase = (row: Candidate) =>
   row.stale && (row.pendingInputCount ?? 0) > 0 ? 'refresh' : 'progress';
@@ -49,8 +54,14 @@ export class LatticeStride<T extends Candidate> {
   #queues = new Map<string, T[]>();
   #reserved = new Map<string, number>();
   #remaining: number;
+  private now: () => number;
 
-  constructor(rows: readonly T[], state?: LatticeServiceState) {
+  constructor(
+    rows: readonly T[],
+    state?: LatticeServiceState,
+    now: () => number = Date.now,
+  ) {
+    this.now = now;
     this.state = state ? structuredClone(state) : { version: 1, pools: {} };
     this.#remaining = rows.length;
     // Existing type/age ordering is only the tie order within a service class.
@@ -119,15 +130,30 @@ export class LatticeStride<T extends Candidate> {
     const types = [...new Set(queue.map(ownerType))].sort();
     const type =
       types[(types.indexOf(account.typeCursor ?? '') + 1) % types.length];
+    // Deadlines choose within the earned service share, never bypass it.
+    // A directly viewed aggregate must not sit behind all its donated inputs.
+    const served = new Map(this.state.visibleServed);
+    const due = queue
+      .filter(
+        (row) =>
+          ownerType(row) === type &&
+          row.visible &&
+          this.now() - (served.get(row.ownerURL) ?? 0) >= 2000,
+      )
+      .sort(
+        (a, b) => (served.get(a.ownerURL) ?? 0) - (served.get(b.ownerURL) ?? 0),
+      )[0];
     const [row] = queue.splice(
-      queue.findIndex((candidate) => ownerType(candidate) === type),
+      due
+        ? queue.indexOf(due)
+        : queue.findIndex((candidate) => ownerType(candidate) === type),
       1,
     );
     const cursors = new Map(account.cursors);
-    cursors.delete(type);
-    cursors.set(type, row.ownerURL);
+    cursors.delete(ownerType(row));
+    cursors.set(ownerType(row), row.ownerURL);
     account.cursors = [...cursors].slice(-64);
-    account.typeCursor = type;
+    account.typeCursor = ownerType(row);
     this.#remaining--;
     const estimate = account.estimateMs;
     const keys = [
@@ -146,6 +172,17 @@ export class LatticeStride<T extends Candidate> {
         completed = true;
         if (!Number.isFinite(elapsedMs) || elapsedMs < 0)
           throw new Error('Invalid Lattice service duration');
+        if (this.state.frontierReady) {
+          this.state.frontierReady = this.state.frontierReady.filter(
+            (id) => id !== row.ownerURL,
+          );
+        }
+        if (row.visible) {
+          const served = new Map(this.state.visibleServed);
+          served.delete(row.ownerURL);
+          served.set(row.ownerURL, this.now());
+          this.state.visibleServed = [...served].slice(-512);
+        }
         const actual = Math.max(1, elapsedMs);
         for (const [pool, key] of keys) {
           const id = `${pool}/${key}`;

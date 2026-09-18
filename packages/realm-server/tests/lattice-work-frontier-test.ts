@@ -8,6 +8,7 @@ import {
   type DefinitionLookup,
   type Query,
 } from '@cardstack/runtime-common';
+import { LatticeStride } from '@cardstack/runtime-common/lattice-stride';
 import { latticeWorkFrontier } from '@cardstack/runtime-common/lattice-kernel';
 import { LatticeQueryRegistry } from '@cardstack/runtime-common/lattice-query-registry';
 import { setupDB } from './helpers/index.ts';
@@ -145,6 +146,65 @@ module('lattice-work-frontier-test.ts | postgres', function (hooks) {
     });
     return url;
   }
+
+  test('bounded probes rotate across dirty identities and still discover blocked inputs', async (assert) => {
+    const all = [];
+    for (let i = 0; i < 25; i++)
+      all.push(await owner(`Input/${i}`, 'PatientDaySummary'));
+    let state = { version: 1 as const, pools: {} };
+    const seen = new Set<string>();
+    for (let wave = 0; wave < 25; wave++) {
+      const ready = await registry.ready(realm, {
+        candidates: { limit: 4, state },
+      });
+      assert.strictEqual(
+        ready.length,
+        4,
+        'exact query work stays within the useful window',
+      );
+      const execution = new LatticeStride(ready, state);
+      const attempt = execution.take()!;
+      seen.add(attempt.row.ownerURL);
+      attempt.complete(100);
+      state = execution.state;
+    }
+    assert.strictEqual(
+      seen.size,
+      25,
+      'one-owner execution does not lose inspected siblings between waves',
+    );
+    const board = await owner('A-board', 'WardBoard', {
+      query: {
+        filter: {
+          on: clinicalModuleRef(realm, 'PatientDaySummary'),
+          eq: { critical: true },
+        },
+      },
+    });
+    const ready = await registry.ready(realm, {
+      candidates: { limit: 1, state },
+    });
+    assert.true(
+      ready.length > 0,
+      'a blocked first probe cannot hide runnable inputs',
+    );
+    assert.false(
+      ready.some((row) => row.ownerURL === board),
+      'stale nonmatches still block ordinary publication',
+    );
+    await db.execute(
+      'UPDATE lattice_owners SET dirty_generation=NULL WHERE owner_url=ANY($1::text[])',
+      {
+        bind: ['{' + all.join(',') + '}'],
+      },
+    );
+    assert.deepEqual(
+      (await registry.ready(realm, { candidates: { limit: 1, state } })).map(
+        (row) => row.ownerURL,
+      ),
+      [board],
+    );
+  });
 
   test('query type readiness includes stale nonmatches; concrete aliases order the next level', async (assert) => {
     const census = await owner('A-census', 'FacilityCensus', {

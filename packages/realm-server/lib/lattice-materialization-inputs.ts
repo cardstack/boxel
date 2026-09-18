@@ -733,14 +733,14 @@ export class LatticeMaterializationInputs {
         rows.length !== present.length ||
         rows.some((row) => typeof row.body !== 'string')
       )
-        throw new Error('Lattice input changed during read');
+        throw new LatticeInputsPending('Lattice input changed during read');
       let bodies = new Map(rows.map((row) => [row.url, row.body as string]));
       for (let receipt of receipts) {
         // One frame, one version of a card: a card read whole by one root
         // and sliced by another must be the same row both times.
         const earlier = this.#receipts.get(receipt.url);
         if (earlier && earlier.version !== receipt.version)
-          throw new Error('Lattice input changed during read');
+          throw new LatticeInputsPending('Lattice input changed during read');
         this.#readCount += earlier ? 0 : 1;
         if (receipt.missing) {
           store.set(receipt.url, {

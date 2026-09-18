@@ -1,4 +1,4 @@
-import type { LatticeServiceState } from './lattice-stride.ts';
+import { LatticeStride, type LatticeServiceState } from './lattice-stride.ts';
 import { latticeConcurrencyGroup } from './jobs/lattice.ts';
 import { latticeDemandFor } from './lattice-demand.ts';
 import {
@@ -874,6 +874,8 @@ export class LatticeQueryRegistry
       demand?: LatticeDemandPriority;
       // Scheduling only: the uncut graph, including inputs with a last body.
       pendingInputCount?: number;
+      pendingInputURLs?: string[];
+      visible?: true;
     }>
   > {
     let rows = await query(this.db, [
@@ -1124,7 +1126,15 @@ export class LatticeQueryRegistry
   // `overdueOnly` composes a wave of stale attempts alone: an ordinary
   // attempt beside them would yield to the source backlog and take the wave
   // down with it.
-  async ready(realmURL: string, opts?: { overdueOnly?: boolean }) {
+  async ready(
+    realmURL: string,
+    opts?: {
+      overdueOnly?: boolean;
+      // A queued wave only needs a bounded set of exact readiness proofs.
+      // Full callers retain the complete graph (including cycle diagnosis).
+      candidates?: { limit: number; state: LatticeServiceState };
+    },
+  ) {
     const pending = await this.pending(realmURL);
     if (!pending.length) return [];
     const runnableOwners = await this.pending(realmURL, { runnableOnly: true });
@@ -1224,118 +1234,183 @@ export class LatticeQueryRegistry
       ],
       { query: 'JSON' },
     );
-    const compiler = this.engine.reverseCompilationScope();
-    const scopes = new Map<
-      string,
-      { scope: Expression; owners: Set<string> }
-    >();
     for (const watch of watches) {
-      const ownerURL = String(watch.owner_url);
-      if (!runnable.has(ownerURL)) continue;
-      const filter = (watch.query as Query).filter;
-      // Native input frames already know the concrete identities they read.
-      // This generated watch is for restoring/invalidating those inputs, not
-      // an untyped query that must wait for every dirty owner (including self).
-      // Unexpected shapes retain the conservative ordinary scope below.
-      if (
-        watch.field_path === '@lattice/inputs' &&
-        filter &&
-        Object.keys(filter).length === 1 &&
-        'in' in filter &&
-        Object.keys(filter.in).length === 1 &&
-        Array.isArray(filter.in.id) &&
-        filter.in.id.every((id) => typeof id === 'string')
-      ) {
-        const ids = new Set(filter.in.id);
-        for (const input of pendingInputs)
-          if (ids.has(input.replace(/\.json$/, '')))
-            inputs.get(ownerURL)?.add(input);
-        continue;
-      }
-      const scope =
-        this.db.kind === 'pg'
-          ? await latticeQueryReadinessScope(
-              filter,
-              (filter) => compiler.latticeQueryTypeScope(filter),
-              ['i.code_current IS TRUE'],
-              (ref) => compiler.latticeQuerySourceFields(ref),
-            )
-          : await compiler.latticeQueryTypeScope(filter);
-      const key = stringify(scope)!;
-      let group = scopes.get(key);
-      if (!group) {
-        group = { scope, owners: new Set() };
-        scopes.set(key, group);
-      }
-      group.owners.add(ownerURL);
+      const ids = latticeInputIdTerms({
+        fieldPath: String(watch.field_path),
+        query: watch.query as Query,
+      });
+      if (ids)
+        for (const { value } of ids) {
+          const input = value.endsWith('.json') ? value : value + '.json';
+          if (pendingInputs.has(input))
+            inputs.get(String(watch.owner_url))?.add(input);
+        }
     }
-    // A precise source partition gives each consumer its own scope. Batch them
-    // so this does not turn one coarse type query into N database round trips.
-    // This is a local pending frontier, not a global order of card definitions.
-    const groups = [...scopes.values()];
-    for (let offset = 0; offset < groups.length; offset += 64) {
-      const batch = groups.slice(offset, offset + 64);
-      const rows = await query(this.db, [
-        'WITH pending_inputs AS MATERIALIZED (',
-        `SELECT o.owner_url,i.url,i.realm_url,i.types,i.search_doc,i.pristine_doc`,
-        ...(this.db.kind === 'pg' ? [', codes.current AS code_current'] : []),
-        `FROM lattice_owners o LEFT JOIN boxel_index i
+    const directDemand = latticeDemandFor(this.db).cache.priorities(realmURL);
+    const knownDemand = latticePropagateDemand(directDemand, inputs);
+    const candidates = opts?.candidates;
+    const scanner = candidates
+      ? new LatticeStride(
+          runnableOwners
+            .filter((row) => !opts?.overdueOnly || row.stale)
+            .map((row) => ({
+              ...row,
+              pendingInputCount: inputs.get(row.ownerURL)!.size,
+              demand: knownDemand.get(row.ownerURL),
+              ...(directDemand.has(row.ownerURL)
+                ? { visible: true as const }
+                : {}),
+            })),
+          candidates.state.frontier,
+        )
+      : undefined;
+    const inspected = new Set<string>();
+    const compiler = this.engine.reverseCompilationScope();
+    do {
+      const selected = new Set<string>();
+      if (scanner && candidates) {
+        // Keep inspected-but-unrun candidates. Rotating the probe by 24 while
+        // executing only a few would otherwise skip most siblings each turn.
+        if (!inspected.size) {
+          for (const id of candidates.state.frontierReady ?? []) {
+            if (runnable.has(id) && (!opts?.overdueOnly || overdue.has(id))) {
+              selected.add(id);
+              inspected.add(id);
+            }
+          }
+        }
+        while (selected.size < Math.max(1, candidates.limit)) {
+          const probe = scanner.take();
+          if (!probe) break;
+          selected.add(probe.row.ownerURL);
+          inspected.add(probe.row.ownerURL);
+          probe.complete(1); // probe rotation, deliberately NOT execution service
+        }
+        candidates.state.frontier = scanner.state;
+      }
+      const scopes = new Map<
+        string,
+        { scope: Expression; owners: Set<string> }
+      >();
+      for (const watch of watches) {
+        const ownerURL = String(watch.owner_url);
+        if (!runnable.has(ownerURL) || (scanner && !selected.has(ownerURL)))
+          continue;
+        const filter = (watch.query as Query).filter;
+        // Native input frames already know the concrete identities they read.
+        // This generated watch is for restoring/invalidating those inputs, not
+        // an untyped query that must wait for every dirty owner (including self).
+        // Unexpected shapes retain the conservative ordinary scope below.
+        if (
+          watch.field_path === '@lattice/inputs' &&
+          filter &&
+          Object.keys(filter).length === 1 &&
+          'in' in filter &&
+          Object.keys(filter.in).length === 1 &&
+          Array.isArray(filter.in.id) &&
+          filter.in.id.every((id) => typeof id === 'string')
+        ) {
+          const ids = new Set(filter.in.id);
+          for (const input of pendingInputs)
+            if (ids.has(input.replace(/\.json$/, '')))
+              inputs.get(ownerURL)?.add(input);
+          continue;
+        }
+        const scope =
+          this.db.kind === 'pg'
+            ? await latticeQueryReadinessScope(
+                filter,
+                (filter) => compiler.latticeQueryTypeScope(filter),
+                ['i.code_current IS TRUE'],
+                (ref) => compiler.latticeQuerySourceFields(ref),
+              )
+            : await compiler.latticeQueryTypeScope(filter);
+        const key = stringify(scope)!;
+        let group = scopes.get(key);
+        if (!group) {
+          group = { scope, owners: new Set() };
+          scopes.set(key, group);
+        }
+        group.owners.add(ownerURL);
+      }
+      // A precise source partition gives each consumer its own scope. Batch them
+      // so this does not turn one coarse type query into N database round trips.
+      // This is a local pending frontier, not a global order of card definitions.
+      const groups = [...scopes.values()];
+      for (let offset = 0; offset < groups.length; offset += 64) {
+        const batch = groups.slice(offset, offset + 64);
+        const rows = await query(this.db, [
+          'WITH pending_inputs AS MATERIALIZED (',
+          `SELECT o.owner_url,i.url,i.realm_url,i.types,i.search_doc,i.pristine_doc`,
+          ...(this.db.kind === 'pg' ? [', codes.current AS code_current'] : []),
+          `FROM lattice_owners o LEFT JOIN boxel_index i
          ON i.realm_url=o.realm_url AND i.url=o.owner_url AND i.type='instance'`,
-        ...(this.db.kind === 'pg'
-          ? [
-              'LEFT JOIN (',
-              ...latticeOwnerCodeStatuses(
-                [param(realmURL)],
-                [
-                  '(SELECT loader_epoch FROM realm_generations WHERE realm_url=',
-                  param(realmURL),
-                  ')',
-                ],
-              ),
-              ') codes ON codes.owner_url=o.owner_url',
-            ]
-          : []),
-        'WHERE o.realm_url=',
-        param(realmURL),
-        'AND o.retired=FALSE AND o.dirty_generation IS NOT NULL',
-        ...(this.db.kind === 'pg'
-          ? [
-              `UNION SELECT i.url AS owner_url,i.url,i.realm_url,i.types,i.search_doc,i.pristine_doc,
+          ...(this.db.kind === 'pg'
+            ? [
+                'LEFT JOIN (',
+                ...latticeOwnerCodeStatuses(
+                  [param(realmURL)],
+                  [
+                    '(SELECT loader_epoch FROM realm_generations WHERE realm_url=',
+                    param(realmURL),
+                    ')',
+                  ],
+                ),
+                ') codes ON codes.owner_url=o.owner_url',
+              ]
+            : []),
+          'WHERE o.realm_url=',
+          param(realmURL),
+          'AND o.retired=FALSE AND o.dirty_generation IS NOT NULL',
+          ...(this.db.kind === 'pg'
+            ? [
+                `UNION SELECT i.url AS owner_url,i.url,i.realm_url,i.types,i.search_doc,i.pristine_doc,
                (i.pristine_doc->'meta'->'publication'->>'definitionRevision' =
                 (SELECT loader_epoch FROM realm_generations WHERE realm_url=`,
-              param(realmURL),
-              ')) AS code_current FROM boxel_index i WHERE i.realm_url=',
-              param(realmURL),
-              "AND i.type='instance' AND i.is_deleted IS NOT TRUE AND i.url = ANY(",
-              textArrayParam([...neverPublished]),
+                param(realmURL),
+                ')) AS code_current FROM boxel_index i WHERE i.realm_url=',
+                param(realmURL),
+                "AND i.type='instance' AND i.is_deleted IS NOT TRUE AND i.url = ANY(",
+                textArrayParam([...neverPublished]),
+                ')',
+              ]
+            : []),
+          ')',
+          ...batch.flatMap(
+            ({ scope }, index): Expression => [
+              ...(index ? ['UNION ALL'] : []),
+              'SELECT CAST(',
+              param(index),
+              'AS INTEGER) AS scope_id,i.owner_url FROM pending_inputs i WHERE i.url IS NULL OR (',
+              ...scope,
               ')',
-            ]
-          : []),
-        ')',
-        ...batch.flatMap(
-          ({ scope }, index): Expression => [
-            ...(index ? ['UNION ALL'] : []),
-            'SELECT CAST(',
-            param(index),
-            'AS INTEGER) AS scope_id,i.owner_url FROM pending_inputs i WHERE i.url IS NULL OR (',
-            ...scope,
-            ')',
-          ],
-        ),
-      ]);
-      for (const row of rows) {
-        for (const owner of batch[Number(row.scope_id)].owners)
-          inputs.get(owner)?.add(String(row.owner_url));
+            ],
+          ),
+        ]);
+        for (const row of rows) {
+          for (const owner of batch[Number(row.scope_id)].owners)
+            inputs.get(owner)?.add(String(row.owner_url));
+        }
       }
-    }
-    const priorities = latticePropagateDemand(
-      latticeDemandFor(this.db).cache.priorities(realmURL),
-      inputs,
-    );
+      if (!scanner || !scanner.remaining) break;
+      // Expand only if this window found no useful work. Newly seen edges can
+      // block a candidate but never hide all progress behind the probe cursor.
+      if (
+        [...selected].some((id) => {
+          const blockers = inputs.get(id)!;
+          return overdue.has(id)
+            ? ![...blockers].some((input) => neverPublished.has(input))
+            : blockers.size === 0;
+        })
+      )
+        break;
+    } while (scanner && scanner.remaining > 0);
+    const priorities = latticePropagateDemand(directDemand, inputs);
     const frontier = latticeWorkFrontier(
       pending.map(({ ownerURL }) => ({
         id: ownerURL,
-        runnable: runnable.has(ownerURL),
+        runnable:
+          runnable.has(ownerURL) && (!scanner || inspected.has(ownerURL)),
         pendingInputs: overdue.has(ownerURL)
           ? [...inputs.get(ownerURL)!].filter((input) =>
               neverPublished.has(input),
@@ -1352,10 +1427,16 @@ export class LatticeQueryRegistry
     // ordinary path cannot serve it: inside a preempting wave, or with an
     // input still dirty. Otherwise it runs the ordinary way and publishes
     // clean, so a stream that has just stopped costs one render, not two.
-    return runnableOwners
+    const result = runnableOwners
       .map((row) => ({
         ...row,
         pendingInputCount: inputs.get(row.ownerURL)!.size,
+        ...(candidates
+          ? { pendingInputURLs: [...inputs.get(row.ownerURL)!] }
+          : {}),
+        ...(candidates && directDemand.has(row.ownerURL)
+          ? { visible: true as const }
+          : {}),
         ...(priorities.has(row.ownerURL)
           ? { demand: priorities.get(row.ownerURL)! }
           : {}),
@@ -1369,6 +1450,12 @@ export class LatticeQueryRegistry
           ? { ...row, stale: true as const }
           : row,
       );
+    if (candidates) {
+      const order = new Map([...inspected].map((id, i) => [id, i]));
+      result.sort((a, b) => order.get(a.ownerURL)! - order.get(b.ownerURL)!);
+      candidates.state.frontierReady = result.map((row) => row.ownerURL);
+    }
+    return result;
   }
 
   private ownerCondition(realmURL: string, ownerURL: string) {

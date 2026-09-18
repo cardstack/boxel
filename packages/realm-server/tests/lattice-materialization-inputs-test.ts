@@ -1377,7 +1377,13 @@ module(basename(import.meta.filename), function (hooks) {
       return rows;
     };
     const input = await open();
-    await assert.rejects(input.read([url]), /changed during read/);
+    await assert.rejects(
+      input.read([url]),
+      (error: unknown) =>
+        error instanceof LatticeInputsPending &&
+        /changed during read/.test(error.message),
+      'a concurrent publication withholds the frame without charging a computation failure',
+    );
     assert.true(changed);
     assert.throws(() => input.seal(), /incomplete/);
   });

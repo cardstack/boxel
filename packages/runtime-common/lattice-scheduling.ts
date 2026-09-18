@@ -119,3 +119,31 @@ export class LatticeWaveBudget {
     return true;
   }
 }
+
+// Advisory, wave-local collision avoidance. A complete input waits only for
+// producers already reading it, not every slow producer in the wave. Unknown
+// edges and concurrent primary writes still rely on the real revision fences.
+export class LatticeReadBarrier {
+  #reading = new Map<
+    string,
+    { inputs: ReadonlySet<string>; done: Promise<void>; release(): void }
+  >();
+  begin(id: string, inputs: readonly string[]) {
+    let release!: () => void;
+    const done = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.#reading.set(id, { inputs: new Set(inputs), done, release });
+  }
+  end(id: string) {
+    this.#reading.get(id)?.release();
+    this.#reading.delete(id);
+  }
+  async beforePublish(id: string) {
+    await Promise.all(
+      [...this.#reading.values()]
+        .filter((reader) => reader.inputs.has(id))
+        .map((reader) => reader.done),
+    );
+  }
+}
