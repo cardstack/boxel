@@ -244,6 +244,64 @@ module('Integration | operations store reconciliation', function (hooks) {
     );
   });
 
+  test("the realm's own event names the card the batch carried our content for", async function (assert) {
+    let report = await cardAt('report-adopted');
+    let activity = await unsavedActivity('Lab safety');
+    let localId = activity[localIdSymbol];
+
+    // The realm's own broadcast, not one this test wrote. Which cards an event
+    // names is the one thing a hand-delivered event cannot check: the name has
+    // to be spelled the way the invalidation list spells it, and the coordinator
+    // and the indexer arrive at that spelling separately.
+    let events: any[] = [];
+    let unsubscribe = getService('message-service').subscribe(
+      testRealmURL,
+      (event: any) => {
+        if (event.eventName === 'index' && event.indexType === 'incremental') {
+          events.push(event);
+        }
+      },
+    );
+
+    let created: { id: string };
+    try {
+      [created] = (await (operations(report) as any).atomic((b: any) => {
+        let minted = b.create(activity);
+        b.addActivity({ activity: minted });
+        return [minted];
+      })) as [{ id: string }];
+      await settled();
+    } finally {
+      unsubscribe();
+    }
+
+    let batchEvent = events.find((event) =>
+      (event.invalidations ?? []).includes(created.id),
+    );
+    assert.ok(batchEvent, 'the realm announced what the batch invalidated');
+    assert.deepEqual(
+      batchEvent.clientAuthored,
+      [created.id],
+      'naming the card it minted under our name, and not the report it computed for us',
+    );
+    assert.strictEqual(
+      batchEvent.clientRequestId,
+      lastClientRequestId(),
+      "stamped with the batch's own request id, which is what makes the naming ours to read",
+    );
+    assert.true(
+      (batchEvent.invalidations ?? []).includes(
+        `${testRealmURL}report-adopted`,
+      ),
+      'while the report the batch changed is in the same pass, unnamed',
+    );
+    assert.strictEqual(
+      created.id.split('/').pop(),
+      localId,
+      'and the card it named is the one the store was holding',
+    );
+  });
+
   test("the batch's own event leaves the promoted instance alone", async function (assert) {
     let report = await cardAt('report-adopted');
     let activity = await unsavedActivity('Lab safety');
