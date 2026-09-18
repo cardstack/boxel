@@ -9,8 +9,10 @@ import { sanitizeHtml } from './sanitize-html.ts';
 // `--boxel-color-scheme` — an inherited signal the theme (theme.css) sets on
 // each `[data-theme]` element. Because that signal inherits, the query resolves
 // to the *nearest* ancestor's color scheme, so per-subtree overrides (dark
-// pages, light islands, nested) all work with no JS and no !important. A theme
-// with no `.dark` block simply keeps its light values.
+// pages, light islands, nested) all work with no JS and no !important. Scheme
+// switches stamped *inside* the card get the same palettes through descendant
+// rules instead (see below). A theme with no `.dark` block simply keeps its
+// light values.
 // Declarations are emitted inside a <style> block: sanitizeHtml strips markup
 // (e.g. a `</style>` breakout) but knows nothing about CSS, so also drop block
 // delimiters — an embedded `}` would close the scoped block and turn the rest
@@ -84,6 +86,37 @@ export function themeScopedCss(
   }
   if (dark) {
     css += `@container style(--boxel-color-scheme: dark){${selector}{${sanitizeDeclarations(dark)}}}`;
+  }
+  // Scheme islands the card's own template stamps (`data-theme` or `.dark` on
+  // an element inside the container) sit below the scope element, so the
+  // container query above — which resolves against the scope's ancestors —
+  // never sees them, while theme.css's own scheme blocks do and re-declare the
+  // whole contract there. Re-emit the palettes on those descendants so the
+  // theme wins there too: `:scope` lifts specificity above theme.css's
+  // single-selector blocks, which still fill the tokens the theme omits.
+  // A dark island gets the root declarations first and the dark ones on top,
+  // the same result the card root has under an ambient dark scheme, where a
+  // token the theme defines only at the root keeps its value. The light rule
+  // matters as well, or a light island inside a dark subtree would fall back
+  // to Boxel's light defaults. The dark rule comes last so an element carrying
+  // both markers resolves dark, as it does in theme.css. The `to` limit stops
+  // at a nested themed card's boundary so this theme never leaks into islands
+  // the nested card stamps: its own stylesheet covers those, or leaves them to
+  // the theme.css defaults.
+  let lightDeclarations = light ? sanitizeDeclarations(light) : '';
+  let darkDeclarations = [light, dark]
+    .filter(Boolean)
+    .map((declarations) => sanitizeDeclarations(declarations!))
+    .join('; ');
+  let islands = '';
+  if (lightDeclarations) {
+    islands += `:scope [data-theme="light"]{${lightDeclarations}}`;
+  }
+  if (darkDeclarations) {
+    islands += `:scope :is(.dark,[data-theme="dark"]){${darkDeclarations}}`;
+  }
+  if (islands) {
+    css += `@scope (${selector}) to ([data-boxel-theme-scope]){${islands}}`;
   }
   return htmlSafe(css);
 }
