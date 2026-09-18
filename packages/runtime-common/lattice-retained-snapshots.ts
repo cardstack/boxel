@@ -49,12 +49,23 @@ export interface LatticeIndexedSnapshotInput {
   snapshot?: false;
 }
 
+// Only the trusted producer supplies these after a bounded, authorized read.
+// Used for intermediate materialized inputs; never a substitute for publication
+// authority/code checks. A projected read must supply the complete source body.
+export interface LatticeCapturedInput {
+  url: string;
+  rowVersion: string;
+  indexGeneration: number;
+  document: string;
+}
+
 export interface LatticeIndexedSnapshotCapture {
   kind: 'capture-index';
   realmURL: string;
   ownerURL: string;
   consumerGeneration: number;
   inputs: LatticeIndexedSnapshotInput[];
+  capturedInputs?: LatticeCapturedInput[];
 }
 
 type Receipt = Pick<LatticeDataSnapshot, 'validatedThrough' | 'digest'>;
@@ -403,6 +414,18 @@ export class LatticeRetainedSnapshots
         throw new Error('Conflicting retained input receipts');
       entries.set(key, entry);
     }
+    const captured = new Map<string, LatticeCapturedInput>();
+    for (const input of change.capturedInputs ?? []) {
+      const expected = rowsToLock.get(input.url);
+      if (!expected) continue;
+      if (
+        captured.has(input.url) ||
+        expected.row_version !== input.rowVersion ||
+        expected.index_generation !== input.indexGeneration
+      )
+        throw new Error('Conflicting captured input receipt');
+      captured.set(input.url, input);
+    }
     const encoded = JSON.stringify([...entries.values()]);
     const inputRows: Expression = [
       `WITH e AS MATERIALIZED (SELECT owner_url,field_path,source_url,row_version,index_generation,
@@ -446,17 +469,46 @@ export class LatticeRetainedSnapshots
          AND jsonb_typeof(i.pristine_doc->'meta'->'adoptsFrom')='object'
        ORDER BY i.url FOR SHARE OF i`,
     ]);
-    if (rows.length !== rowsToLock.size)
+    const unchanged = new Set(
+      rows.map((r) => String(r.url).replace(/\.json$/, '')),
+    );
+    if (
+      [...rowsToLock.keys()].some(
+        (url) => !unchanged.has(url) && !captured.has(url),
+      )
+    )
       throw new Error('Retained input changed before capture');
-    // Hash each distinct source once per statement, even when several fields
-    // consume it. No source body or digest travels back through the pg driver.
+    // Most captured inputs did not move. Copy those directly from their locked
+    // index rows; send immutable bytes only for inputs that actually advanced.
+    // Keep the wide documents out of lock, metadata and cleanup statements.
+    for (const [url, input] of captured) {
+      if (unchanged.has(url)) {
+        captured.delete(url);
+        continue;
+      }
+      const resource = JSON.parse(input.document);
+      if (
+        (resource.id != null && resource.id !== input.url) ||
+        resource.type !== 'card' ||
+        !resource.meta?.adoptsFrom ||
+        resource.meta?.publication?.version !== 1 ||
+        !Number.isSafeInteger(resource.meta.publication.outputRevision)
+      )
+        throw new Error('Invalid captured materialized input');
+    }
+    // Hash each distinct source once per statement, even for several fields.
+    // Bodies copied from unchanged rows never travel through the pg driver.
     const bodies: Expression = [
       ...inputRows,
-      `, source_bodies AS MATERIALIZED (
+      `, captured AS MATERIALIZED (
+         SELECT url,document::jsonb AS resource FROM jsonb_to_recordset(`,
+      param(JSON.stringify([...captured.values()])),
+      `::jsonb) AS c(url text,document text)), source_bodies AS MATERIALIZED (
          SELECT e.source_url,jsonb_build_object('data',
-           jsonb_set(i.pristine_doc,'{id}',to_jsonb(e.source_url))) AS document
-         FROM (SELECT DISTINCT source_url FROM e) e JOIN boxel_index i
-           ON i.url=e.source_url || '.json' WHERE i.realm_url=`,
+           jsonb_set(COALESCE(c.resource,i.pristine_doc),'{id}',to_jsonb(e.source_url))) AS document
+         FROM (SELECT DISTINCT source_url FROM e) e
+         LEFT JOIN captured c ON c.url=e.source_url
+         LEFT JOIN boxel_index i ON c.url IS NULL AND i.url=e.source_url || '.json' AND i.realm_url=`,
       param(change.realmURL),
       `AND i.type='instance'), b AS MATERIALIZED (
          SELECT source_url,document,'sha256:' ||

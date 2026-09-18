@@ -729,6 +729,235 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  const openIntermediate = () =>
+    LatticeMaterializationInputs.open({
+      db,
+      network,
+      realmURL: realm,
+      actor,
+      generation: 5,
+      loaderEpoch: 'epoch-1',
+      stale: true,
+      lookup: {
+        async lookupDefinition() {
+          return definition;
+        },
+      },
+    });
+  async function advanceFeeder(url: string) {
+    await db.execute(
+      `UPDATE boxel_index SET generation=6,
+      pristine_doc=jsonb_set(jsonb_set(pristine_doc,'{attributes,amount}','9'),
+        '{meta,publication,outputRevision}','6') WHERE url=$1`,
+      { bind: [url] },
+    );
+    await db.execute(
+      'UPDATE realm_generations SET current_generation=6 WHERE realm_url=$1',
+      { bind: [realm] },
+    );
+    await db.execute(
+      'UPDATE lattice_owners SET published_generation=6,input_generation=5 WHERE owner_url=$1',
+      { bind: [url] },
+    );
+  }
+
+  test('intermediate results retain the exact captured bytes as feeders publish newer values', async (assert) => {
+    const url = await materializedCard('advancing', 2);
+    const input = await openIntermediate();
+    const values = await input.query('records', {
+      filter: { type: codeRef },
+      page: { size: 10 },
+    });
+    // Caller mutation cannot alter the immutable publication receipt.
+    values.cards[0].resource.attributes!.amount = 100;
+    const receipt = input.seal();
+    await advanceFeeder(url);
+    const snapshots = new LatticeRetainedSnapshots(
+      new LatticeRealmConfig([realm]),
+      (expr) => db.withConnection((tx) => tx(expr)),
+    );
+    const link = {
+      realmURL: realm,
+      ownerURL: realm + 'consumer',
+      fieldPath: 'records',
+      source: { realmURL: realm, url: url.slice(0, -5) },
+    };
+    await publish(async (tx) => {
+      await receipt.assertCurrent(tx);
+      await snapshots.recordChange(tx, {
+        kind: 'capture-index',
+        realmURL: realm,
+        ownerURL: link.ownerURL,
+        consumerGeneration: 7,
+        inputs: receipt.retainedInputs,
+        capturedInputs: receipt.capturedInputs,
+      });
+    });
+    const retained = (await snapshots.read({ link }))!;
+    assert.strictEqual(
+      JSON.parse(retained.document).data.attributes.amount,
+      2,
+      'neither the newer row nor the mutated caller value is retained',
+    );
+    assert.strictEqual(
+      JSON.parse(retained.document).data.meta.publication.outputRevision,
+      5,
+    );
+    assert.strictEqual(
+      retained.snapshot.validatedThrough,
+      5,
+      'no claim to have consumed the new value',
+    );
+  });
+
+  for (const mutation of [
+    'deleted',
+    'failed',
+    'retired',
+    'definition',
+    'permission',
+    'epoch',
+    'missing',
+  ] as const) {
+    test(`intermediate advancing inputs still reject ${mutation}`, async (assert) => {
+      const url = await materializedCard('advancing', 2);
+      const input = await openIntermediate();
+      await input.read([url]);
+      const receipt = input.seal();
+      await advanceFeeder(url);
+      switch (mutation) {
+        case 'deleted':
+          await db.execute(
+            'UPDATE boxel_index SET is_deleted=TRUE WHERE url=$1',
+            { bind: [url] },
+          );
+          break;
+        case 'failed':
+          await db.execute(
+            'UPDATE boxel_index SET has_error=TRUE WHERE url=$1',
+            { bind: [url] },
+          );
+          break;
+        case 'retired':
+          await db.execute(
+            'UPDATE lattice_owners SET retired=TRUE WHERE owner_url=$1',
+            { bind: [url] },
+          );
+          break;
+        case 'definition':
+          await db.execute(
+            "UPDATE lattice_owners SET definition_revision='changed' WHERE owner_url=$1",
+            { bind: [url] },
+          );
+          break;
+        case 'permission':
+          await db.execute(
+            'UPDATE realm_user_permissions SET read=FALSE WHERE realm_url=$1',
+            { bind: [realm] },
+          );
+          break;
+        case 'epoch':
+          await db.execute(
+            "UPDATE realm_generations SET loader_epoch='changed' WHERE realm_url=$1",
+            { bind: [realm] },
+          );
+          break;
+        case 'missing':
+          await db.execute('DELETE FROM boxel_index WHERE url=$1', {
+            bind: [url],
+          });
+          break;
+      }
+      await assert.rejects(publish(receipt.assertCurrent), /changed/);
+    });
+  }
+
+  test('intermediate plain sources remain exact and fresh frames still reject advancing feeders', async (assert) => {
+    const source = await card('source', 2);
+    const input = await openIntermediate();
+    await input.read([source]);
+    const receipt = input.seal();
+    await db.execute(
+      "UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{attributes,amount}','9') WHERE url=$1",
+      { bind: [source] },
+    );
+    await assert.rejects(
+      publish(receipt.assertCurrent),
+      /input changed before publication/,
+    );
+    const feeder = await materializedCard('feeder', 2);
+    const fresh = await open();
+    await fresh.read([feeder]);
+    const exact = fresh.seal();
+    await advanceFeeder(feeder);
+    await assert.rejects(publish(exact.assertCurrent), /changed/);
+  });
+
+  test('an intermediate projection retains the complete captured source and enforces its byte bound', async (assert) => {
+    const url = await materializedCard('projected', 2);
+    const lines = [
+      { player: 'me', pa: 1 },
+      { player: 'them', pa: 9 },
+    ];
+    await db.execute(
+      "UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{attributes,lines}',$2::jsonb) WHERE url=$1",
+      { bind: [url, JSON.stringify(lines)] },
+    );
+    const input = await openIntermediate();
+    const result = await input.query(
+      'records',
+      { filter: { type: codeRef }, page: { size: 10 } },
+      { where: { lines: { player: 'me' } } },
+    );
+    assert.deepEqual(
+      result.cards[0].resource.attributes!.lines,
+      [lines[0]],
+      'evaluator sees only the projection',
+    );
+    const receipt = input.seal();
+    assert.deepEqual(
+      JSON.parse(receipt.capturedInputs[0].document).attributes.lines,
+      lines,
+      'retention sees the complete original',
+    );
+    await advanceFeeder(url);
+    await publish(receipt.assertCurrent);
+    const oldLimit = LatticeMaterializationInputs.MAX_CARD_BYTES;
+    LatticeMaterializationInputs.MAX_CARD_BYTES = 1;
+    try {
+      // Read at generation six with the same original shape to reach the budget check.
+      await db.execute('UPDATE boxel_index SET generation=5 WHERE url=$1', {
+        bind: [url],
+      });
+      await assert.rejects(
+        (await openIntermediate()).query(
+          'records',
+          { filter: { type: codeRef }, page: { size: 10 } },
+          { where: { lines: { player: 'me' } } },
+        ),
+        /oversized/,
+      );
+    } finally {
+      LatticeMaterializationInputs.MAX_CARD_BYTES = oldLimit;
+    }
+  });
+
+  test('intermediate equal-output confirmation does not discard completed arithmetic', async (assert) => {
+    const url = await materializedCard('same', 2);
+    const input = await openIntermediate();
+    await input.read([url]);
+    const receipt = input.seal();
+    await db.execute(
+      "UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{meta,publication,validatedThrough}','5') WHERE url=$1",
+      { bind: [url] },
+    );
+    await publish(receipt.assertCurrent);
+    assert.ok(
+      true,
+      'same data with newer validation is still a valid intermediate input',
+    );
+  });
+
   test('an input newer than its captured frame defers rather than recording a computation failure', async (assert) => {
     const url = await card('advanced', 2);
     const input = await open();

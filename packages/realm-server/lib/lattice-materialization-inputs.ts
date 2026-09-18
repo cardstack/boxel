@@ -56,6 +56,9 @@ interface InputReceipt {
   materialized: boolean;
   missing: boolean;
   ownerVersion: string | null;
+  publicationRevision?: number;
+  dataDigest?: string;
+  document?: string;
   rowVersion?: string;
   definitionSeal?: string;
 }
@@ -533,6 +536,15 @@ export class LatticeMaterializationInputs {
     const docExpr: Expression = where
       ? latticeProjectionWhereSQL('i.pristine_doc', where)
       : ['i.pristine_doc'];
+    // Intermediate receipts retain complete immutable bytes, including when the
+    // evaluator consumes a projection. Charge those bytes to the existing bound.
+    const receiptDoc: Expression = this.#frame.stale
+      ? [
+          "CASE WHEN i.pristine_doc->'meta' ? 'publication' THEN i.pristine_doc ELSE",
+          ...docExpr,
+          'END',
+        ]
+      : docExpr;
     for (let value of urls) {
       let url = new URL(value);
       if (
@@ -564,9 +576,14 @@ export class LatticeMaterializationInputs {
       const headerStart = performance.now();
       let headers = await query(this.#db, [
         `SELECT i.url,i.xmin::text AS version,i.generation,
-          i.xmin::text || ':' || i.cmin::text || ':' || i.ctid::text AS row_version,
-          octet_length((`,
-        ...docExpr,
+          i.xmin::text || ':' || i.cmin::text || ':' || i.ctid::text AS row_version,`,
+        ...(this.#frame.stale
+          ? [
+              "encode(sha256(convert_to((i.pristine_doc #- '{meta,publication}')::text,'UTF8')),'hex') AS data_digest,",
+            ]
+          : []),
+        `octet_length((`,
+        ...receiptDoc,
         `)::text) AS bytes,i.has_error,i.is_deleted,
           COALESCE(i.pristine_doc->'meta' ? 'publication',FALSE) AS materialized,
           i.pristine_doc->'meta'->'publication'->>'version' AS stamp_version,
@@ -637,6 +654,8 @@ export class LatticeMaterializationInputs {
         if (
           row.materialized &&
           (row.stamp_version !== '1' ||
+            !Number.isSafeInteger(Number(row.published)) ||
+            Number(row.published) < 1 ||
             (row.state !== 'ready' &&
               // a stale frame reads a pending re-registration's last body
               !(
@@ -664,6 +683,10 @@ export class LatticeMaterializationInputs {
           version: String(row.version),
           generation,
           bytes,
+          dataDigest: row.data_digest as string | undefined,
+          publicationRevision: row.materialized
+            ? Number(row.published)
+            : undefined,
           rowVersion: String(row.row_version),
           definitionSeal: row.materialized
             ? String(row.revision)
@@ -689,7 +712,7 @@ export class LatticeMaterializationInputs {
       let rows = present.length
         ? await query(this.#db, [
             `SELECT i.url,CASE WHEN i.xmin::text=e.version THEN (`,
-            ...docExpr,
+            ...receiptDoc,
             `)::text END AS body
          FROM boxel_index i JOIN jsonb_to_recordset(`,
             param(
@@ -733,6 +756,17 @@ export class LatticeMaterializationInputs {
         }
         let body = bodies.get(receipt.url)!;
         let resource: LooseCardResource = JSON.parse(body);
+        if (this.#frame.stale && receipt.materialized) {
+          receipt.document = body;
+          if (where)
+            resource = {
+              ...resource,
+              attributes: applyLatticeProjectionWhere(
+                resource.attributes ?? {},
+                where,
+              ),
+            };
+        }
         if (resource.type !== 'card' || !resource.meta?.adoptsFrom)
           throw new Error('Invalid published Lattice card data');
         if (receipt.materialized)
@@ -882,6 +916,14 @@ export class LatticeMaterializationInputs {
       watches,
       ...(projections ? { projections } : {}),
       retainedInputs,
+      capturedInputs: receipts
+        .filter((r) => r.document !== undefined)
+        .map((r) => ({
+          url: r.url.replace(/\.json$/, ''),
+          rowVersion: r.rowVersion!,
+          indexGeneration: r.generation,
+          document: r.document!,
+        })),
       identities: receipts.map((row) => row.url.replace(/\.json$/, '')),
       async assertCurrent(tx: Querier) {
         await checkFrame(tx, frame, true);
@@ -889,7 +931,8 @@ export class LatticeMaterializationInputs {
         // New entrants after that read belong to its retained dirty obligation;
         // a newly indexed stub must not veto the already captured result.
         // Ordinary publications still require current membership. Both paths
-        // keep the read-row, code, authority and reservation fences below.
+        // keep code, authority and reservation fences. Intermediate materialized
+        // receipts may advance; their original bytes are retained below.
         for (const scope of frame.stale ? [] : queryScopes)
           await LatticeMaterializationInputs.guardQueryInputs(
             db,
@@ -900,14 +943,53 @@ export class LatticeMaterializationInputs {
           );
         if (!receipts.length) return;
         let rows = await tx([
-          `SELECT i.url,i.xmin::text AS version FROM boxel_index i
+          `SELECT i.url,i.xmin::text AS version,
+             CASE WHEN e.digest IS NOT NULL THEN
+               i.is_deleted IS NOT TRUE AND i.has_error IS NOT TRUE
+               AND i.pristine_doc->'meta'->'publication'->>'version' = '1'
+               AND i.pristine_doc->'meta'->'publication'->>'state' = 'ready'
+               AND i.pristine_doc->'meta'->'publication'->>'definitionRevision' =
+                   e.definition
+               AND (i.pristine_doc->'meta'->'publication'->>'outputRevision')::bigint >= e.revision
+               AND (i.pristine_doc->'meta'->'publication'->>'outputRevision')::bigint <= i.generation
+               AND ((i.pristine_doc->'meta'->'publication'->>'outputRevision')::bigint > e.revision
+                 OR encode(sha256(convert_to((i.pristine_doc #- '{meta,publication}')::text,'UTF8')),'hex') = e.digest)
+             ELSE FALSE END AS advanced
+           FROM boxel_index i
            JOIN jsonb_to_recordset(`,
-          param(JSON.stringify(receipts.map(({ url }) => ({ url })))),
-          `::jsonb) AS e(url text) ON e.url=i.url WHERE i.realm_url=`,
+          param(
+            JSON.stringify(
+              receipts.map(
+                ({
+                  url,
+                  document,
+                  dataDigest,
+                  definitionSeal,
+                  publicationRevision,
+                }) => ({
+                  url,
+                  digest: document ? dataDigest : null,
+                  definition: definitionSeal,
+                  revision: publicationRevision,
+                }),
+              ),
+            ),
+          ),
+          `::jsonb) AS e(url text,digest text,definition text,revision bigint) ON e.url=i.url WHERE i.realm_url=`,
           param(frame.realmURL),
           "AND i.type='instance' ORDER BY i.url FOR SHARE OF i",
         ]);
-        let versions = new Map(rows.map((row) => [row.url, row.version]));
+        const capturedVersions = new Map(
+          readSet.map((r) => [r.id, r.revision]),
+        );
+        let versions = new Map(
+          rows.map((row) => [
+            row.url,
+            frame.stale && row.advanced === true
+              ? capturedVersions.get(String(row.url))
+              : row.version,
+          ]),
+        );
         if (
           rows.length !== receipts.length ||
           !latticeReadSetCurrent(readSet, (id) =>
@@ -927,17 +1009,24 @@ export class LatticeMaterializationInputs {
         let owners = receipts.filter((row) => row.materialized);
         if (!owners.length) return;
         let current = await tx([
-          'SELECT owner_url,xmin::text AS version FROM lattice_owners WHERE realm_url=',
+          'SELECT owner_url,xmin::text AS version,definition_revision FROM lattice_owners WHERE retired=FALSE AND realm_url=',
           param(frame.realmURL),
           'AND owner_url = ANY(',
           textArrayParam(owners.map((row) => row.url)),
           '::text[]) ORDER BY owner_url FOR SHARE',
         ]);
+        const ownerDefinitions = new Map(
+          current.map((row) => [row.owner_url, row.definition_revision]),
+        );
         let ownerVersions = new Map(
           current.map((row) => [row.owner_url, row.version]),
         );
         if (
           current.length !== owners.length ||
+          owners.some(
+            (receipt) =>
+              ownerDefinitions.get(receipt.url) !== receipt.definitionSeal,
+          ) ||
           (!frame.stale &&
             owners.some(
               (receipt) =>

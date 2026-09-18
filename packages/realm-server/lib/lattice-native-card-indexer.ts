@@ -559,6 +559,7 @@ export function createLatticeNativeCardIndexer({
                 ownerURL: id,
                 consumerGeneration: request.generation,
                 inputs: dataReceipt.retainedInputs,
+                capturedInputs: dataReceipt.capturedInputs,
               },
             }
           : {}),

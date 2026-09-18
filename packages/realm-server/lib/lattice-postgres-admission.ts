@@ -582,7 +582,12 @@ function createPostgresAdmission(
     ]);
     if (
       !realm ||
-      Number(realm.current_generation) !== request.generation - 1 ||
+      // Intermediate work is captured at an older input generation by design.
+      // Admission must agree with publication: newer data may land, while a
+      // rewind, code change, source change or authority change still fences it.
+      (request.inputSnapshot?.stale
+        ? Number(realm.current_generation) < request.generation - 1
+        : Number(realm.current_generation) !== request.generation - 1) ||
       typeof realm.loader_epoch !== 'string' ||
       (mode === 'card' && realm.loader_epoch !== request.loaderEpoch)
     )

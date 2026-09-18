@@ -712,68 +712,84 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   for (const stale of [false, true]) {
-    test(`native ${stale ? 'stale' : 'fresh'} materialization fences an intervening generation`, async (assert) => {
-      const lab = await prepareCodeOwner();
-      const revision = await lab.readRevision();
-      const lookup = {
-        lookupDefinition: async () => lab.root,
-      } as unknown as DefinitionLookup;
-      const run = createLatticeNativeCardIndexer({
-        worker,
-        admit: createPostgresLatticeAdmission({
-          db,
-          network,
-          policies: [policy],
-          runtimeRevision: () => runtime,
-        }),
-        openInputs: async () =>
-          LatticeMaterializationInputs.open({
+    for (const beforeAdmission of [false, true]) {
+      test(`native ${stale ? 'stale' : 'fresh'} materialization fences a generation moving ${beforeAdmission ? 'before admission' : 'before publication'}`, async (assert) => {
+        const lab = await prepareCodeOwner();
+        const revision = await lab.readRevision();
+        const lookup = {
+          lookupDefinition: async () => lab.root,
+        } as unknown as DefinitionLookup;
+        const run = createLatticeNativeCardIndexer({
+          worker,
+          admit: createPostgresLatticeAdmission({
             db,
             network,
-            realmURL: realm,
-            actor,
-            lookup,
-            ...revision,
-            ...(stale ? { stale: true as const } : {}),
+            policies: [policy],
+            runtimeRevision: () => runtime,
           }),
+          openInputs: async () =>
+            LatticeMaterializationInputs.open({
+              db,
+              network,
+              realmURL: realm,
+              actor,
+              lookup,
+              ...revision,
+              ...(stale ? { stale: true as const } : {}),
+            }),
+        });
+        if (beforeAdmission)
+          await db.execute(
+            'UPDATE realm_generations SET current_generation=current_generation+1 WHERE realm_url=$1',
+            { bind: [realm] },
+          );
+        const prepared = await run({
+          ...request,
+          generation: revision.generation + 1,
+          loaderEpoch: revision.loaderEpoch,
+          inputSnapshot: {
+            realmURL: realm,
+            generation: revision.generation,
+            ...(stale ? { stale: true as const } : {}),
+          },
+        });
+        if (beforeAdmission && !stale) {
+          assert.strictEqual(
+            prepared,
+            undefined,
+            'fresh admission still rejects a moved generation',
+          );
+        } else {
+          if (!prepared) throw new Error('Expected native materialization');
+          if (!beforeAdmission)
+            await db.execute(
+              'UPDATE realm_generations SET current_generation=current_generation+1 WHERE realm_url=$1',
+              { bind: [realm] },
+            );
+          if (stale) {
+            await validate(prepared);
+            assert.ok(
+              true,
+              'stale computation tolerates an unrelated committed revision',
+            );
+            await db.execute(
+              "UPDATE realm_file_meta SET content_hash='changed' WHERE file_path='Score/one.json'",
+            );
+            await assert.rejects(
+              validate(prepared),
+              /source or reviewed code/,
+              'staleness never weakens the owner source fence',
+            );
+          } else {
+            await assert.rejects(
+              validate(prepared),
+              /generation changed/,
+              'an ordinary computation cannot report old input as current',
+            );
+          }
+        }
       });
-      const prepared = await run({
-        ...request,
-        generation: revision.generation + 1,
-        loaderEpoch: revision.loaderEpoch,
-        inputSnapshot: {
-          realmURL: realm,
-          generation: revision.generation,
-          ...(stale ? { stale: true as const } : {}),
-        },
-      });
-      if (!prepared) throw new Error('Expected native materialization');
-      await db.execute(
-        'UPDATE realm_generations SET current_generation=current_generation+1 WHERE realm_url=$1',
-        { bind: [realm] },
-      );
-      if (stale) {
-        await validate(prepared);
-        assert.ok(
-          true,
-          'stale computation tolerates an unrelated committed revision',
-        );
-        await db.execute(
-          "UPDATE realm_file_meta SET content_hash='changed' WHERE file_path='Score/one.json'",
-        );
-        await assert.rejects(
-          validate(prepared),
-          /source or reviewed code/,
-          'staleness never weakens the owner source fence',
-        );
-      } else {
-        await assert.rejects(
-          validate(prepared),
-          /generation changed/,
-          'an ordinary computation cannot report old input as current',
-        );
-      }
-    });
+    }
   }
 
   test('equal native output retains its code authority until the code itself changes', async (assert) => {
