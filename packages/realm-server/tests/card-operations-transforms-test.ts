@@ -513,16 +513,48 @@ module(basename(import.meta.filename), function () {
     const PLAIN: OperationDefinition = { base: 'read', deterministic: true };
 
     test('an operation with no stages is handed its values through', async function (assert) {
+      // The settings reader refuses to answer, which is what says the
+      // no-stage path reaches for nothing rather than merely producing the
+      // same values in the end.
+      let ctx = {
+        name: 'read',
+        realmConfig: () => {
+          throw new Error('an operation with no stages read the settings');
+        },
+      };
       let payload = { body: 'hi' };
       assert.strictEqual(
-        await runInputTransform(PLAIN, payload, { name: 'read' }),
+        await runInputTransform(PLAIN, payload, ctx),
         payload,
         'the payload is the same object, not a copy of it',
       );
       let result = { data: null };
+      assert.strictEqual(await runOutputTransform(PLAIN, result, ctx), result);
+    });
+
+    test('a stage that names no setting does not read one', async function (assert) {
+      let reads = 0;
+      let projected = await runOutputTransform(
+        {
+          base: 'read',
+          deterministic: true,
+          output: { syntax: 'solidified', source: '{kept: .data.id}' },
+        },
+        { data: { id: CARD } },
+        {
+          name: 'read',
+          realmConfig: async () => {
+            reads++;
+            return {};
+          },
+        },
+      );
+      assert.deepEqual(projected, { kept: CARD }, 'the stage ran');
       assert.strictEqual(
-        await runOutputTransform(PLAIN, result, { name: 'read' }),
-        result,
+        reads,
+        0,
+        'and the settings, which cost a parse of the realm config document, ' +
+          'were left unread',
       );
     });
 

@@ -111,7 +111,16 @@ export interface TransformContext {
   // rather than a value, and reached only when the program names one: a cold
   // read is a parse of the realm's config document, and the stages that name
   // no setting are most of them.
-  realmConfig?: () => Promise<Record<string, JsonValue>>;
+  //
+  // Required, unlike every other slot, and that is the point. The others are
+  // absent for reasons a transport has — an anonymous request has no actor, a
+  // stage may run over no payload — whereas a transport able to run a stage at
+  // all can reach its realm's settings, and a declaration's `output` runs on
+  // whichever transport the caller used. Leaving this optional is what let one
+  // supply site be built without it, so the same program answered on a read
+  // and refused on a write; requiring it makes that a compile error rather
+  // than a case someone has to think to test for.
+  realmConfig: () => Promise<Record<string, JsonValue>>;
   // The target this operation runs against, for the refusal's `id`.
   id?: string;
   // The name the operation was invoked under, for the refusal's `meta`.
@@ -176,10 +185,9 @@ async function runStage(
   let bxl = await loadBxlTransform();
   // Read before the evaluation rather than from inside it: the program runs
   // synchronously, so a value it may ask for has to be in hand first.
-  let realmConfig =
-    ctx.realmConfig && namesRealmConfig(source)
-      ? await ctx.realmConfig()
-      : undefined;
+  let realmConfig = namesRealmConfig(source)
+    ? await ctx.realmConfig()
+    : undefined;
   try {
     return bxl.runBxlTransform(
       source,
