@@ -43,7 +43,7 @@ import {
 } from './types.ts';
 import type { CodeRef } from '../code-ref.ts';
 import type { JsonValue } from '../json-validation.ts';
-import type { RequestTimings } from '../request-timings.ts';
+import type { RequestTimings, StageCursor } from '../request-timings.ts';
 import type { Definition } from '../definitions.ts';
 import type { LooseSingleCardDocument } from '../index.ts';
 import type { RealmResourceIdentifier } from '../realm-identifiers.ts';
@@ -150,6 +150,12 @@ export interface BatchCore {
       clientRequestId?: string | null;
       waitForIndex?: boolean;
       initiatingUser?: string | null;
+      // Where the commit stamps the stages it owns. The durable write, the
+      // index enqueue, the wait for the worker and the invalidation that
+      // follows it all happen inside this call, and each can be the whole of
+      // a slow write — so the commit marks them on the caller's timeline
+      // rather than leaving the caller one bucket it cannot read.
+      stageCursor?: StageCursor;
     },
   ): Promise<{
     writes: {
@@ -427,9 +433,26 @@ export async function commitBatch(
       }
       // Everything above either produced bytes for every entry or threw, and a
       // throw leaves the realm as it was.
-      return await timed('write', () =>
-        commitStaged(core, entries, staged, baseHashes, positions, opts),
-      );
+      //
+      // The commit stamps its own stages as it passes them, so what is left
+      // for `commit` is the work around them: assembling one file list out of
+      // what the entries staged, and reporting what landed. A core that stamps
+      // nothing — a caller standing in for the realm — leaves the whole commit
+      // here.
+      let cursor = timings?.cursor();
+      try {
+        return await commitStaged(
+          core,
+          entries,
+          staged,
+          baseHashes,
+          positions,
+          opts,
+          cursor,
+        );
+      } finally {
+        cursor?.mark('commit');
+      }
     },
   );
 }
@@ -1218,6 +1241,7 @@ async function commitStaged(
   baseHashes: (string | undefined)[],
   positions: readonly number[],
   opts: CommitBatchOptions,
+  stageCursor: StageCursor | undefined,
 ): Promise<BatchEntryResult[]> {
   // One entry per file, in batch order. Two entries may name one card, and
   // the second built on the first rather than racing it — it merged over the
@@ -1349,6 +1373,12 @@ async function commitStaged(
     }
   }
   let deletes = [...deleted];
+  // The file list is assembled, so the window that closes here is that
+  // assembly and the refusals above it. Closed before the realm is reached
+  // rather than left to the cursor's next mark, which is the realm's own
+  // first stage — synchronous in-memory work reported as a wait for indexing
+  // would be the exact confusion these stages exist to remove.
+  stageCursor?.mark('commit');
   let committed = await core.commitUnlocked(
     { writes, appends, deletes },
     {
@@ -1358,6 +1388,7 @@ async function commitStaged(
       // it, the same as every other write path, so a reader draining its own
       // writes waits for this job rather than returning ahead of it.
       initiatingUser: opts.actor ?? null,
+      ...(stageCursor ? { stageCursor } : {}),
     },
   );
   // Emitted here rather than where the record was built: a staged entry is not
