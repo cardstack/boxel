@@ -225,6 +225,12 @@
    PRIMARY KEY ( realm_url, owner_url, field_path, source_realm_url, source_url, validated_through )
 );
 
+ CREATE TABLE IF NOT EXISTS lattice_scheduler_service (
+   realm_url TEXT NOT NULL,
+   state BLOB NOT NULL,
+   PRIMARY KEY ( realm_url )
+);
+
  CREATE TABLE IF NOT EXISTS lattice_work_failures (
    realm_url TEXT NOT NULL,
    owner_url TEXT NOT NULL,

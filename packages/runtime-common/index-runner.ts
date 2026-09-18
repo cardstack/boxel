@@ -52,7 +52,8 @@ import {
   type LatticeReadScope,
   type LatticeScheduledWork,
 } from './lattice-work.ts';
-import { latticeOrderWave, LatticeWaveBudget } from './lattice-scheduling.ts';
+import { LatticeWaveBudget } from './lattice-scheduling.ts';
+import { LatticeStride } from './lattice-stride.ts';
 import type { Querier } from './expression.ts';
 import { resolveModuleCacheContext } from './index-runner/prewarm-modules.ts';
 import {
@@ -936,6 +937,10 @@ export class IndexRunner {
           overdueOnly: followup.overdueOnly,
         })
       : await publication.registry.pending(this.realmURL.href);
+    if (followup)
+      this.#log.debug(
+        `${jobIdentity(this.#jobInfo)} Lattice ready frontier: ${Date.now() - startedAt}ms, ${pending.length} eligible owners`,
+      );
     // A queued wake-up is an obligation to inspect current work, not a frozen
     // owner list. Publication or retirement may already have satisfied it.
     // An old wave number must not reject an empty current work set.
@@ -952,13 +957,6 @@ export class IndexRunner {
     // pending owner, so one wave can publish a batch of them; a batch never
     // reads its own members. The cap keeps one job's duration and input
     // residency bounded.
-    if (followup)
-      pending = latticeOrderWave(
-        pending,
-        Math.floor(LATTICE_WAVE_BATCH / 2),
-        // With one slow owner per wave, alternate which class gets first use.
-        followup.wave % 2 === 0,
-      ).slice(0, LATTICE_WAVE_BATCH);
     if (followup && !pending.length) {
       if (
         await publication.wakeHeldOwners(
@@ -1007,6 +1005,12 @@ export class IndexRunner {
         let yielded: LatticeWorkSuperseded | undefined;
         const renderStartedAt = Date.now();
         const queue = [...pending];
+        const scheduler = followup
+          ? new LatticeStride(
+              pending,
+              await publication.registry.schedulingState(this.realmURL.href),
+            )
+          : undefined;
         const budget = followup
           ? new LatticeWaveBudget(LATTICE_WAVE_BATCH, LATTICE_WAVE_BUDGET_MS)
           : undefined;
@@ -1132,15 +1136,17 @@ export class IndexRunner {
           await finishing;
         };
         const lanes = this.#nativeCardIndexer ? LATTICE_WAVE_CONCURRENCY : 1;
-        await Promise.all(
+        const outcomes = await Promise.allSettled(
           Array.from({ length: Math.min(lanes, queue.length) }, async () => {
             while (
-              queue.length &&
+              (scheduler ? scheduler.remaining : queue.length) &&
               !superseded &&
               !yielded &&
               (!budget || budget.take())
             ) {
-              const next = queue.shift()!;
+              const service = scheduler?.take();
+              const next = service ? service.row : queue.shift()!;
+              const ownerStartedAt = performance.now();
               try {
                 await materializeOwner(next);
               } catch (error) {
@@ -1160,11 +1166,33 @@ export class IndexRunner {
                   return;
                 }
                 throw error;
+              } finally {
+                service?.complete(performance.now() - ownerStartedAt);
               }
             }
           }),
         );
-        this.#latticeTimings.latticeOwnersDeferred += queue.length;
+        if (scheduler && this.#jobInfo.jobId > 0) {
+          try {
+            await publication.registry.saveSchedulingState(
+              this.realmURL.href,
+              scheduler.state,
+              {
+                jobId: this.#jobInfo.jobId,
+                reservationId: this.#jobInfo.reservationId,
+              },
+            );
+          } catch (error) {
+            // An expired attempt may lose its advisory service sample, but
+            // cannot replace a successor's accounting or publish its data.
+            if (!(error instanceof LatticeWorkSuperseded)) throw error;
+          }
+        }
+        for (const outcome of outcomes)
+          if (outcome.status === 'rejected') throw outcome.reason;
+        this.#latticeTimings.latticeOwnersDeferred += scheduler
+          ? scheduler.remaining
+          : queue.length;
         if (superseded) throw superseded;
         this.#latticeTimings.latticeRenderMs +=
           Date.now() -

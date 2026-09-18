@@ -1,3 +1,10 @@
+import { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
+import {
+  LatticeStride,
+  type LatticeServiceState,
+} from '@cardstack/runtime-common/lattice-stride';
+import { LatticeQueryRegistry } from '@cardstack/runtime-common/lattice-query-registry';
+import { IndexQueryEngine } from '@cardstack/runtime-common/index-query-engine';
 import QUnit from 'qunit';
 import { basename } from 'node:path';
 import { PgAdapter } from '@cardstack/postgres';
@@ -219,6 +226,214 @@ module(basename(import.meta.filename), (hooks) => {
         .includes(bootstrap),
       'first publications with settled inputs count as progress even in a stale wave',
     );
+  });
+
+  test('Stride pays actual service: costly refreshes cannot displace cheap input progress', (assert) => {
+    const rows = [
+      { ownerURL: realm + 'Input/one.json' },
+      {
+        ownerURL: realm + 'Board/one.json',
+        stale: true as const,
+        pendingInputCount: 10,
+      },
+    ];
+    let state: LatticeServiceState | undefined;
+    const spent = [0, 0];
+    const counts = [0, 0];
+    for (let i = 0; i < 2000; i++) {
+      // Model one-owner waves on different workers; no process-local credit.
+      const scheduler = new LatticeStride(rows, state);
+      const work = scheduler.take()!;
+      const kind = work.row.stale ? 1 : 0;
+      const ms = kind ? 200 : 10;
+      spent[kind] += ms;
+      counts[kind]++;
+      work.complete(ms);
+      state = scheduler.state;
+    }
+    assert.true(
+      Math.abs(spent[0] / spent[1] - 3) < 0.15,
+      JSON.stringify(spent),
+    );
+    assert.true(
+      counts[0] > counts[1] * 40,
+      'service, not the number of jobs, is divided',
+    );
+    assert.true(
+      counts[1] > 0,
+      'refresh still receives service under sustained input load',
+    );
+  });
+
+  test('urgent arrivals retain their service debt and sleepers gain no unlimited credit', (assert) => {
+    const rows = [0, 1, 2].map((demand) => ({
+      ownerURL: realm + `Input/${demand}.json`,
+      demand: demand === 0 ? undefined : (demand as 1 | 2),
+    }));
+    let state: LatticeServiceState | undefined;
+    const counts = [0, 0, 0];
+    for (let i = 0; i < 700; i++) {
+      const s = new LatticeStride(rows, state);
+      const work = s.take()!;
+      if (i === 0)
+        assert.strictEqual(work.row.demand, 2, 'waiter wins initial tie');
+      counts[work.row.demand ?? 0]++;
+      work.complete(10);
+      state = s.state;
+    }
+    assert.deepEqual(counts, [100, 200, 400]);
+    for (let i = 0; i < 100; i++) {
+      const s = new LatticeStride([rows[2]], state);
+      s.take()!.complete(10);
+      state = s.state;
+    }
+    const resumed = new LatticeStride(rows, state);
+    assert.true(
+      resumed.state.pools.progress.accounts['0'].pass >=
+        state!.pools.progress.clock,
+    );
+    assert.true(
+      resumed.state.pools.progress.accounts['1'].pass >=
+        state!.pools.progress.clock,
+    );
+  });
+
+  test('in-flight service is reserved; small waves rotate equally eligible owners', (assert) => {
+    const rows = Array.from({ length: 12 }, (_, i) => ({
+      ownerURL: realm + `Input/${i}.json`,
+    }));
+    const mixed = new LatticeStride([
+      ...rows,
+      ...rows.map((row) => ({
+        ...row,
+        ownerURL: row.ownerURL + 'refresh',
+        stale: true as const,
+        pendingInputCount: 12,
+      })),
+    ]);
+    const active = Array.from({ length: 4 }, () => mixed.take()!);
+    assert.strictEqual(
+      active.filter(({ row }) => 'stale' in row && row.stale).length,
+      1,
+    );
+    for (const work of active) work.complete(10);
+    assert.throws(() => active[0].complete(10), /charged twice/);
+    let state: LatticeServiceState | undefined;
+    const visited = new Set<string>();
+    for (let i = 0; i < rows.length; i++) {
+      const s = new LatticeStride(rows, state);
+      const work = s.take()!;
+      visited.add(work.row.ownerURL);
+      work.complete(100);
+      state = s.state;
+    }
+    assert.strictEqual(
+      visited.size,
+      rows.length,
+      'one-owner waves do not repeatedly refresh the same first owner',
+    );
+  });
+
+  test('hundreds of same-type siblings cannot delay every board type behind a flat cursor', (assert) => {
+    const rows = [
+      ...Array.from({ length: 500 }, (_, i) => ({
+        ownerURL: realm + `PlayerSeason/${i}.json`,
+      })),
+      ...['SeasonProgress', 'Standings', 'Quadrant'].map((type) => ({
+        ownerURL: realm + `${type}/one.json`,
+      })),
+      ...Array.from({ length: 5 }, (_, i) => ({
+        ownerURL: realm + `Leaderboard/${i}.json`,
+      })),
+    ];
+    let state: LatticeServiceState | undefined;
+    const visited = new Set<string>();
+    for (let i = 0; i < 25; i++) {
+      const s = new LatticeStride(rows, state);
+      const work = s.take()!;
+      visited.add(work.row.ownerURL);
+      work.complete(100);
+      state = s.state;
+    }
+    for (const type of ['SeasonProgress', 'Standings', 'Quadrant'])
+      assert.true(visited.has(realm + `${type}/one.json`));
+    assert.strictEqual(
+      [...visited].filter((id) => id.includes('/PlayerSeason/')).length,
+      5,
+    );
+    assert.strictEqual(
+      [...visited].filter((id) => id.includes('/Leaderboard/')).length,
+      5,
+    );
+  });
+
+  test('service survives a worker change; an expired claim cannot replace the newer ledger', async (assert) => {
+    const registry = new LatticeQueryRegistry(
+      db,
+      new IndexQueryEngine(
+        db,
+        {
+          async lookupDefinition() {
+            throw new Error('No definitions used by scheduling');
+          },
+        },
+        new VirtualNetwork(),
+      ),
+    );
+    const [job] = await db.execute(
+      "INSERT INTO jobs(job_type,concurrency_group,priority,timeout,args) VALUES('lattice-materialize',$1,8,600,$2) RETURNING id",
+      { bind: ['lattice:' + realm, JSON.stringify({ realmURL: realm })] },
+    );
+    const [claim] = await db.execute(
+      "INSERT INTO job_reservations(job_id,worker_id,locked_until) VALUES($1,'stride-first',clock_timestamp()+interval '10 minutes') RETURNING id",
+      { bind: [job.id] },
+    );
+    const reservation = {
+      jobId: Number(job.id),
+      reservationId: Number(claim.id),
+    };
+    const s = new LatticeStride([{ ownerURL: realm + 'Input/one.json' }]);
+    s.take()!.complete(275);
+    await registry.saveSchedulingState(realm, s.state, reservation);
+    const peer = new PgAdapter();
+    try {
+      const successor = new LatticeQueryRegistry(
+        peer,
+        new IndexQueryEngine(
+          peer,
+          {
+            async lookupDefinition() {
+              throw new Error('No definitions used by scheduling');
+            },
+          },
+          new VirtualNetwork(),
+        ),
+      );
+      assert.deepEqual(await successor.schedulingState(realm), s.state);
+      assert.strictEqual(
+        await successor.schedulingState(realm + 'other/'),
+        undefined,
+      );
+      await db.execute(
+        "UPDATE job_reservations SET locked_until=clock_timestamp()-interval '1 second' WHERE id=$1",
+        { bind: [claim.id] },
+      );
+      await assert.rejects(
+        registry.saveSchedulingState(
+          realm,
+          { version: 1, pools: {} },
+          reservation,
+        ),
+        /reservation no longer current/,
+      );
+      assert.deepEqual(
+        await successor.schedulingState(realm),
+        s.state,
+        'fenced writer leaves measured service intact',
+      );
+    } finally {
+      await peer.close();
+    }
   });
 
   test('Postgres fans out bounded read hints without database rows or rebroadcast loops', async (assert) => {

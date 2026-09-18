@@ -1,3 +1,4 @@
+import type { LatticeServiceState } from './lattice-stride.ts';
 import { latticeConcurrencyGroup } from './jobs/lattice.ts';
 import { latticeDemandFor } from './lattice-demand.ts';
 import {
@@ -172,6 +173,42 @@ export class LatticeQueryRegistry
   constructor(db: DBAdapter, engine: IndexQueryEngine) {
     this.db = db;
     this.engine = engine;
+  }
+
+  async schedulingState(
+    realmURL: string,
+  ): Promise<LatticeServiceState | undefined> {
+    const [row] = await query(
+      this.db,
+      [
+        'SELECT state FROM lattice_scheduler_service WHERE realm_url =',
+        param(realmURL),
+      ],
+      { state: 'JSON' },
+    );
+    return row?.state as unknown as LatticeServiceState | undefined;
+  }
+
+  // Secondary waves are serialized per realm by their queue reservation. Persist
+  // measured service even for failed/withheld attempts, but never let an expired
+  // worker overwrite its successor's ledger. This is not a publication receipt.
+  async saveSchedulingState(
+    realmURL: string,
+    state: LatticeServiceState,
+    reservation: NonNullable<LatticeScheduledWork['reservation']>,
+  ): Promise<void> {
+    await this.db.withWriteLock('lattice-service:' + realmURL, async (tx) => {
+      if (!tx) throw new Error('Queued Lattice service requires PostgreSQL');
+      await this.assertReservationCurrent({ realmURL, reservation }, tx);
+      await tx([
+        'INSERT INTO lattice_scheduler_service (realm_url,state) VALUES (',
+        param(realmURL),
+        ',',
+        param(JSON.stringify(state)),
+        '::jsonb)',
+        'ON CONFLICT (realm_url) DO UPDATE SET state=EXCLUDED.state',
+      ]);
+    });
   }
 
   async preparePublication(
@@ -1030,7 +1067,10 @@ export class LatticeQueryRegistry
   // (before the swap changed the owner rows); this guarantees no replacement
   // claim or finalization lands inside the commit span, while the group lock
   // is held for milliseconds instead of the whole promotion.
-  async assertReservationCurrent(work: LatticeScheduledWork, tx: Querier) {
+  async assertReservationCurrent(
+    work: Pick<LatticeScheduledWork, 'realmURL' | 'reservation'>,
+    tx: Querier,
+  ) {
     if (!work.reservation) return;
     if (this.db.kind !== 'pg')
       throw new Error('Lattice queue reservations require PostgreSQL');
