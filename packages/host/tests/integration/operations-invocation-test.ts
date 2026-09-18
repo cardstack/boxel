@@ -230,7 +230,7 @@ module('Integration | operations invocation', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
-    activeRealms: [testRealmURL, testRealm2URL],
+    activeRealms: [testRealmURL],
     autostart: true,
   });
 
@@ -250,6 +250,10 @@ module('Integration | operations invocation', function (hooks) {
     ({ operations } = await loader.import<typeof OperationsModule>(
       '@cardstack/base/operations',
     ));
+    // An operation that reads `actor()` is refused outright when the request
+    // authenticated nobody, so the session has to be established before the
+    // first call rather than recovered from a 401 afterwards.
+    await getService('realm').login(testRealmURL);
     // Looking the service up is what arms the bridge a card reads the
     // transport back through, the same as the app's own boot does.
     getService('operations');
@@ -723,6 +727,14 @@ module('Integration | operations invocation', function (hooks) {
           },
         },
       });
+      await getService('realm').login(testRealm2URL);
+      // Mounting a realm resets the loader, so the module and both cards are
+      // read after it: `operations()` asks what a value is an instance of, and
+      // a copy of it from the earlier loader would not recognize a card the
+      // store built with the new one.
+      ({ operations } = await getService('loader-service').loader.import<
+        typeof OperationsModule
+      >('@cardstack/base/operations'));
       let elsewhere = loaded(
         await getService('store').get<CardDefType>(`${testRealm2URL}elsewhere`),
         'test2/elsewhere',
@@ -982,134 +994,145 @@ module('Integration | operations invocation', function (hooks) {
       assert.strictEqual(sent.length, 0, 'and nothing was sent');
     });
   });
+});
 
-  module('the typed surface', function () {
-    // Compile-time assertions. The call does nothing at run time; it fails to
-    // type-check unless the two types are identical, so the call is the
-    // assertion.
-    type Identical<Left, Right> =
-      (<T>() => T extends Left ? 1 : 2) extends <T>() => T extends Right ? 1 : 2
-        ? true
-        : false;
+// The typed surface, and the declarations it is read from.
+//
+// No realm is mounted here on purpose: mounting one resets the loader, and
+// these tests declare their own cards — so the card API the classes extend and
+// the module that reads their declarations have to be the same copy, which they
+// are only while nothing has reset the loader underneath them.
+module('Integration | operations invocation types', function (hooks) {
+  setupRenderingTest(hooks);
+  setupBaseRealm(hooks);
+  setupCardLogs(hooks, async () =>
+    getService('loader-service').loader.import('@cardstack/base/card-api'),
+  );
+  setupMockMatrix(hooks);
 
-    function expectTypeEquals<Expected, Actual>(
-      ..._assertion: Identical<Expected, Actual> extends true
-        ? []
-        : ['the two types are not identical']
-    ) {}
+  hooks.beforeEach(function () {
+    loader = getService('loader-service').loader;
+  });
 
-    test('an operation takes the payload its declaration types, and answers by the behavior it is built on', async function (assert) {
-      let { operation, params } = await loader.import<typeof OperationsModule>(
-        '@cardstack/base/operations',
-      );
+  // Compile-time assertions. The call does nothing at run time; it fails to
+  // type-check unless the two types are identical, so the call is the
+  // assertion.
+  type Identical<Left, Right> =
+    (<T>() => T extends Left ? 1 : 2) extends <T>() => T extends Right ? 1 : 2
+      ? true
+      : false;
 
-      class Report extends CardDef {
-        @operation static addComment = {
-          base: 'transform',
-          params: { body: StringField },
-          append: { to: 'comments', value: { body: params('body') } },
-        } satisfies OperationsModule.OperationDeclaration;
-        @operation static archive = {
-          base: 'delete',
-        } satisfies OperationsModule.OperationDeclaration;
-      }
+  function expectTypeEquals<Expected, Actual>(
+    ..._assertion: Identical<Expected, Actual> extends true
+      ? []
+      : ['the two types are not identical']
+  ) {}
 
-      type Bucket = OperationsModule.CardInstanceOperations<typeof Report>;
+  test('an operation takes the payload its declaration types, and answers by the behavior it is built on', async function (assert) {
+    let { operation, params } = await loader.import<typeof OperationsModule>(
+      '@cardstack/base/operations',
+    );
 
+    class Report extends CardDef {
+      @operation static addComment = {
+        base: 'transform',
+        params: { body: StringField },
+        append: { to: 'comments', value: { body: params('body') } },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static archive = {
+        base: 'delete',
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+
+    type Bucket = OperationsModule.CardInstanceOperations<typeof Report>;
+
+    expectTypeEquals<
+      (payload: { body: string }) => Promise<OperationWriteResult>,
+      Bucket['addComment']
+    >();
+    // A declaration takes the place of the base operation it names, so the
+    // rebound `delete` is the declared one — and a delete still reports that
+    // there is no state left to describe.
+    // A payload stays optional on a declaration that names no params: an
+    // operation annotated `: OperationDeclaration` for a subclass to reshape
+    // widens its schema away, and it is still invocable with one.
+    expectTypeEquals<
+      (payload?: Record<string, unknown>) => Promise<null>,
+      Bucket['archive']
+    >();
+    expectTypeEquals<
+      (patch: OperationsModule.CardPatch) => Promise<OperationWriteResult>,
+      Bucket['update']
+    >();
+    // The two behaviors reached elsewhere are not members at all.
+    expectTypeEquals<false, 'readSource' extends keyof Bucket ? true : false>();
+    expectTypeEquals<false, 'create' extends keyof Bucket ? true : false>();
+    // A file carries neither a card's document writes nor a batch.
+    class _Notes extends FileDef {}
+    type FileBucket = OperationsModule.FileInstanceOperations<typeof _Notes>;
+    expectTypeEquals<false, 'atomic' extends keyof FileBucket ? true : false>();
+    expectTypeEquals<
+      false,
+      'appendContainsMany' extends keyof FileBucket ? true : false
+    >();
+    expectTypeEquals<
+      (payload: { line: string }) => Promise<OperationWriteResult>,
+      FileBucket['appendLine']
+    >();
+    assert.ok(Report, 'the declarations are read off the class');
+  });
+
+  test("a batch's results are typed from the handles the builder returns", async function (assert) {
+    let { operation, params, linkTo } = await loader.import<
+      typeof OperationsModule
+    >('@cardstack/base/operations');
+
+    class Activity extends CardDef {}
+    class Classroom extends CardDef {
+      @operation static addActivity = {
+        base: 'transform',
+        params: { activity: linkTo(() => Activity) },
+        append: { to: 'activities', value: params('activity') },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+
+    // Never called: the assertions are the types it is written in.
+    async function typeChecks(
+      classroom: OperationsModule.CardInstanceOperations<typeof Classroom>,
+    ) {
+      let _pair = await classroom.atomic((b) => {
+        let activity = b.create(Activity, { headline: 'Lab safety' });
+        let linked = b.addActivity({ activity });
+        return [activity, linked];
+      });
       expectTypeEquals<
-        (payload: { body: string }) => Promise<OperationWriteResult>,
-        Bucket['addComment']
+        [OperationWriteResult, OperationWriteResult],
+        typeof _pair
       >();
-      // A declaration takes the place of the base operation it names, so the
-      // rebound `delete` is the declared one — and a delete still reports that
-      // there is no state left to describe.
-      // A payload stays optional on a declaration that names no params: an
-      // operation annotated `: OperationDeclaration` for a subclass to reshape
-      // widens its schema away, and it is still invocable with one.
-      expectTypeEquals<
-        (payload?: Record<string, unknown>) => Promise<null>,
-        Bucket['archive']
-      >();
-      expectTypeEquals<
-        (patch: OperationsModule.CardPatch) => Promise<OperationWriteResult>,
-        Bucket['update']
-      >();
-      // The two behaviors reached elsewhere are not members at all.
-      expectTypeEquals<
-        false,
-        'readSource' extends keyof Bucket ? true : false
-      >();
-      expectTypeEquals<false, 'create' extends keyof Bucket ? true : false>();
-      // A file carries neither a card's document writes nor a batch.
-      class _Notes extends FileDef {}
-      type FileBucket = OperationsModule.FileInstanceOperations<typeof _Notes>;
-      expectTypeEquals<
-        false,
-        'atomic' extends keyof FileBucket ? true : false
-      >();
-      expectTypeEquals<
-        false,
-        'appendContainsMany' extends keyof FileBucket ? true : false
-      >();
-      expectTypeEquals<
-        (payload: { line: string }) => Promise<OperationWriteResult>,
-        FileBucket['appendLine']
-      >();
-      assert.ok(Report, 'the declarations are read off the class');
-    });
 
-    test("a batch's results are typed from the handles the builder returns", async function (assert) {
-      let { operation, params, linkTo } = await loader.import<
-        typeof OperationsModule
-      >('@cardstack/base/operations');
+      // A builder that returns nothing is answered positionally, which is a
+      // tree rather than a tuple: a group's position holds its members'
+      // results.
+      let _positional = await classroom.atomic((b) => {
+        b.addActivity({ activity: 'http://x/a' });
+      });
+      expectTypeEquals<
+        OperationsModule.OperationResultTree,
+        typeof _positional
+      >();
 
-      class Activity extends CardDef {}
-      class Classroom extends CardDef {
-        @operation static addActivity = {
-          base: 'transform',
-          params: { activity: linkTo(() => Activity) },
-          append: { to: 'activities', value: params('activity') },
-        } satisfies OperationsModule.OperationDeclaration;
-      }
-
-      // Never called: the assertions are the types it is written in.
-      async function typeChecks(
-        classroom: OperationsModule.CardInstanceOperations<typeof Classroom>,
-      ) {
-        let _pair = await classroom.atomic((b) => {
-          let activity = b.create(Activity, { headline: 'Lab safety' });
-          let linked = b.addActivity({ activity });
-          return [activity, linked];
+      // A group's handle carries its members' results, so the nesting the
+      // builder wrote is the nesting the tuple has.
+      let _nested = await classroom.atomic((b) => {
+        let group = b.parallel((p) => {
+          let one = p.addActivity({ activity: 'http://x/a' });
+          return [one];
         });
-        expectTypeEquals<
-          [OperationWriteResult, OperationWriteResult],
-          typeof _pair
-        >();
-
-        // A builder that returns nothing is answered positionally, which is a
-        // tree rather than a tuple: a group's position holds its members'
-        // results.
-        let _positional = await classroom.atomic((b) => {
-          b.addActivity({ activity: 'http://x/a' });
-        });
-        expectTypeEquals<
-          OperationsModule.OperationResultTree,
-          typeof _positional
-        >();
-
-        // A group's handle carries its members' results, so the nesting the
-        // builder wrote is the nesting the tuple has.
-        let _nested = await classroom.atomic((b) => {
-          let group = b.parallel((p) => {
-            let one = p.addActivity({ activity: 'http://x/a' });
-            return [one];
-          });
-          return [group];
-        });
-        expectTypeEquals<[[OperationWriteResult]], typeof _nested>();
-      }
-      void typeChecks;
-      assert.ok(Classroom, 'the batch surface is typed from the declarations');
-    });
+        return [group];
+      });
+      expectTypeEquals<[[OperationWriteResult]], typeof _nested>();
+    }
+    void typeChecks;
+    assert.ok(Classroom, 'the batch surface is typed from the declarations');
   });
 });

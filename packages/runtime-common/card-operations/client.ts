@@ -422,6 +422,16 @@ function entryData(
     // member rather than as a param, so it never reaches the operation's
     // payload.
     data.meta = { adoptsFrom: typeRef(subject, name) };
+  } else if (
+    info.base === 'update' &&
+    subject.family === 'card' &&
+    data.meta === undefined
+  ) {
+    // An update of a card is a patch of its document, which is a card
+    // resource — so it names the type it patches. Filled from the class of the
+    // instance being patched rather than written by the caller, who is naming
+    // field values and has no reason to restate what the card already is.
+    data.meta = { adoptsFrom: typeRef(subject, name) };
   }
   return Object.keys(data).length === 0 ? {} : { data };
 }

@@ -1869,7 +1869,8 @@ type Bucket<Type, Members> =
 
 // A card's declarative update: the field values to merge, and the links to
 // replace. It is the same document a `PATCH` of the card carries, which is the
-// behavior this is the other front door onto.
+// behavior this is the other front door onto — minus the type, which the call
+// fills from the class of the card being patched.
 export interface CardPatch {
   attributes?: Record<string, unknown>;
   relationships?: Record<string, unknown>;
@@ -2141,6 +2142,10 @@ function subjectFor(target: unknown): OperationsSubject {
   let owner = defConstructorFor(target as BaseDef, 'operations');
   let instance = target as CardDef;
   let realm = instance[realmURL];
+  // The instance's own type travels with it: a patch of a card's document is a
+  // card resource, which names the type it patches, and the caller is naming
+  // field values rather than restating what the card already is.
+  let codeRef = identifyCard(owner);
   return {
     scope: 'instance',
     family: familyOf(owner, 'operations'),
@@ -2148,6 +2153,7 @@ function subjectFor(target: unknown): OperationsSubject {
     operations: carriedOperations(owner),
     ...(instance.id ? { id: instance.id } : {}),
     ...(realm ? { realmURL: realm.href } : {}),
+    ...(codeRef ? { codeRef } : {}),
   };
 }
 
