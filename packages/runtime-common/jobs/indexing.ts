@@ -236,6 +236,24 @@ export async function awaitRealmIndexSettled(
     // `indexing:<realm>` lane, which is what a caller wanting "all indexing
     // has settled" — a readiness probe, a publish — asks for.
     jobTypes?: string[];
+    // Narrows the lane to passes this writer has a stake in. Reading your own
+    // write matters; being made to read someone else's does not, and serving
+    // another user a stale version of the card you are updating is the
+    // intended behaviour rather than a compromise. So a caller that names
+    // itself waits for its own indexing and lets every other writer's pass go
+    // by, where one naming nobody waits for the lane — which is what a
+    // readiness probe or a publish means.
+    //
+    // A pass no HTTP write produced records no user, and reads as
+    // `realmOwner` rather than as nobody: a row written before the column
+    // existed, a file-watcher echo, a GC sweep still gate somebody, and the
+    // owner is the identity such a pass is closest to. The consequence is
+    // that the owner pays for those passes and no other writer does, which is
+    // the intended reading — it fails closed for exactly one identity.
+    // Naming `initiatedBy` without `realmOwner` therefore lets every
+    // untagged pass through, so the two travel together.
+    initiatedBy?: string;
+    realmOwner?: string;
   },
 ): Promise<boolean> {
   if (dbAdapter.kind !== 'pg') {
@@ -246,12 +264,28 @@ export async function awaitRealmIndexSettled(
   let pollIntervalMs = opts?.pollIntervalMs ?? 1000;
 
   let jobTypes = opts?.jobTypes;
+  let initiatedBy = opts?.initiatedBy;
+  let realmOwner = opts?.realmOwner;
 
   let hasSettled = async () => {
     let expression: Expression = [
       `SELECT 1 FROM jobs WHERE status = 'unfulfilled' AND concurrency_group =`,
       param(indexingConcurrencyGroup(realmURL)),
     ];
+    if (initiatedBy) {
+      // Containment over the recorded set, since a coalesced pass carries
+      // every caller that merged into it. The null arm is the untagged pass,
+      // which gates the realm owner alone.
+      expression.push(
+        `AND (initiated_by @> to_jsonb(`,
+        param(initiatedBy),
+        `::text) OR (initiated_by IS NULL AND`,
+        param(initiatedBy),
+        `=`,
+        param(realmOwner ?? null),
+        `))`,
+      );
+    }
     if (jobTypes?.length) {
       expression.push('AND job_type IN', '(');
       jobTypes.forEach((jobType, index) => {

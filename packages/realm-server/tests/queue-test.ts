@@ -79,6 +79,7 @@ module(basename(import.meta.filename), function () {
       args: IncrementalIndexEnqueueArgs;
       clientRequestId: string | null;
       priority?: number;
+      initiatedBy?: string[];
     }) {
       let priority = args.priority ?? userInitiatedPriority;
       return await publisher.publish<IncrementalDoneResult>({
@@ -90,6 +91,7 @@ module(basename(import.meta.filename), function () {
           args.args,
           args.clientRequestId,
         ),
+        ...(args.initiatedBy ? { initiatedBy: args.initiatedBy } : {}),
         mapResult: mapIncrementalDoneResult(args.clientRequestId),
       });
     }
@@ -1332,6 +1334,98 @@ module(basename(import.meta.filename), function () {
         release.fulfill();
         await worker.destroy();
       }
+    });
+
+    test('the row records every writer whose work a coalesced pass carries', async function (assert) {
+      // What a gate in another replica reads to decide whether anything of its
+      // own writer's is outstanding. A pass that merged two publishes is
+      // indexing both writers' bytes, so recording only whoever got there
+      // first would let the absorbed writer past a pass that has not indexed
+      // its write yet.
+      await runner.destroy();
+      let realmURL = 'http://example.com/initiated-by-union/';
+      let writer = '@writer:localhost';
+      let someoneElse = '@someone-else:localhost';
+
+      let first = await publishIncrementalIndexJob({
+        clientRequestId: 'request-1',
+        initiatedBy: [writer],
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [{ url: `${realmURL}a`, operation: 'update' }],
+        },
+      });
+      let second = await publishIncrementalIndexJob({
+        clientRequestId: 'request-2',
+        initiatedBy: [someoneElse],
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [{ url: `${realmURL}b`, operation: 'update' }],
+        },
+      });
+      assert.strictEqual(
+        first.id,
+        second.id,
+        'the two publishes coalesced onto one pending job',
+      );
+
+      let [row] = (await adapter.execute(
+        `SELECT initiated_by FROM jobs WHERE id = $1`,
+        { bind: [first.id] },
+      )) as { initiated_by: string[] | null }[];
+      assert.deepEqual(
+        [...(row.initiated_by ?? [])].sort(),
+        [someoneElse, writer].sort(),
+        'both writers are on the row',
+      );
+
+      // A publish naming nobody adds nobody rather than emptying the set: an
+      // untagged pass reads as the realm owner's, and a set emptied by one
+      // would stop gating the writers already on it.
+      let untagged = await publishIncrementalIndexJob({
+        clientRequestId: 'request-3',
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [{ url: `${realmURL}c`, operation: 'update' }],
+        },
+      });
+      assert.strictEqual(untagged.id, first.id);
+      let [after] = (await adapter.execute(
+        `SELECT initiated_by FROM jobs WHERE id = $1`,
+        { bind: [first.id] },
+      )) as { initiated_by: string[] | null }[];
+      assert.deepEqual(
+        [...(after.initiated_by ?? [])].sort(),
+        [someoneElse, writer].sort(),
+        'and the publish that named nobody left them there',
+      );
+    });
+
+    test('a publish naming no writer leaves the row untagged', async function (assert) {
+      // Null, not an empty set: the gate reads null as the realm owner's, and
+      // an empty set would gate nobody at all.
+      await runner.destroy();
+      let realmURL = 'http://example.com/initiated-by-absent/';
+      let job = await publishIncrementalIndexJob({
+        clientRequestId: 'request-1',
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [{ url: `${realmURL}a`, operation: 'update' }],
+        },
+      });
+      let [row] = (await adapter.execute(
+        `SELECT initiated_by FROM jobs WHERE id = $1`,
+        { bind: [job.id] },
+      )) as { initiated_by: string[] | null }[];
+      assert.strictEqual(row.initiated_by, null);
     });
 
     test('incremental dedup: a publish that reads its own write does not attach to a running pass', async function (assert) {

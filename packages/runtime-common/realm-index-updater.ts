@@ -367,6 +367,10 @@ export class RealmIndexUpdater {
         timeout: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
         priority: userInitiatedPriority,
         args: makeIncrementalArgsWithCallerMetadata(args, clientRequestId),
+        // Onto the row, so a gate in another replica can see whose pass this
+        // is. The in-memory deferred below records the same thing for this
+        // replica's own gates, and the two have to agree.
+        ...(opts?.initiatedBy ? { initiatedBy: [opts.initiatedBy] } : {}),
         mapResult: mapIncrementalDoneResult(clientRequestId),
       });
     } catch (e: any) {

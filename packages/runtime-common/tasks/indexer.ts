@@ -283,6 +283,7 @@ function chooseIncrementalCoalesceDecision(
         jobId: sameTypeCandidate.id,
         update: {
           ...maxPriorityAndTimeout(sameTypeCandidate, incoming),
+          initiatedBy: mergeInitiators(sameTypeCandidate, incoming),
         },
       };
     }
@@ -292,6 +293,12 @@ function chooseIncrementalCoalesceDecision(
       jobId: sameTypeCandidate.id,
       update: {
         ...maxPriorityAndTimeout(sameTypeCandidate, incoming),
+        // The merged pass carries both callers' work, so the row has to name
+        // both: a writer whose pass was absorbed into someone else's job
+        // would otherwise be invisible to its own gate and would not wait for
+        // indexing of bytes it wrote. A publish naming nobody adds nobody,
+        // which leaves an all-untagged job still reading as the realm owner.
+        initiatedBy: mergeInitiators(sameTypeCandidate, incoming),
         args: {
           ...existingArgs,
           changes: mergeIncrementalChanges(
@@ -366,6 +373,22 @@ function chooseIncrementalCoalesceDecision(
 // pass lands. Read loosely, off the raw args rather than the parsed shape: a
 // job enqueued by a worker predating the field carries none, and reading that
 // as "reads its own write" would turn off the in-flight join everywhere.
+// The callers a merged job carries, deduped. Order is not meaningful — the
+// gate asks about membership — so the existing set keeps its order and new
+// names go on the end, which keeps a row stable when the same caller
+// publishes twice.
+function mergeInitiators(
+  existing: QueueCoalesceCandidate,
+  incoming: { initiatedBy?: string[] },
+): string[] {
+  return [
+    ...new Set([
+      ...(existing.initiatedBy ?? []),
+      ...(incoming.initiatedBy ?? []),
+    ]),
+  ];
+}
+
 function argsReadOwnWrite(args: unknown): boolean {
   return isObjectLike(args) && args.readsOwnWrite === true;
 }
@@ -383,6 +406,12 @@ function chooseFromScratchCoalesceDecision(
       jobId: sameTypeCandidate.id,
       update: {
         ...maxPriorityAndTimeout(sameTypeCandidate, incoming),
+        // The merged pass carries both callers' work, so the row has to name
+        // both: a writer whose pass was absorbed into someone else's job
+        // would otherwise be invisible to its own gate and would not wait for
+        // indexing of bytes it wrote. A publish naming nobody adds nobody,
+        // which leaves an all-untagged job still reading as the realm owner.
+        initiatedBy: mergeInitiators(sameTypeCandidate, incoming),
         args: {
           ...(isObjectLike(sameTypeCandidate.args)
             ? sameTypeCandidate.args

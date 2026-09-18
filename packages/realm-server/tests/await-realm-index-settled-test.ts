@@ -21,16 +21,21 @@ async function enqueueIndexJob(
   dbAdapter: PgAdapter,
   url: string,
   status: 'unfulfilled' | 'resolved' | 'rejected' = 'unfulfilled',
+  // The writers whose work the row carries. Omitted leaves the column null,
+  // which is the untagged pass — a row from before the column existed, or one
+  // no HTTP write produced.
+  initiatedBy?: string[],
 ): Promise<number> {
   let [{ id }] = (await dbAdapter.execute(
-    `INSERT INTO jobs (job_type, concurrency_group, timeout, priority, args, status)
-       VALUES ('from-scratch-index', $1, 3600, 10, $2, $3)
+    `INSERT INTO jobs (job_type, concurrency_group, timeout, priority, args, status, initiated_by)
+       VALUES ('from-scratch-index', $1, 3600, 10, $2, $3, $4)
        RETURNING id`,
     {
       bind: [
         indexingConcurrencyGroup(url),
         JSON.stringify({ realmURL: url }),
         status,
+        initiatedBy ? JSON.stringify(initiatedBy) : null,
       ],
     },
   )) as { id: number }[];
@@ -145,6 +150,131 @@ module(basename(import.meta.filename), function (hooks) {
         }),
         'that realm holds its own gate',
       );
+    });
+
+    // Reading your own write matters; being made to read someone else's does
+    // not. A writer that names itself waits for its own indexing and lets
+    // every other writer's pass go by — serving another user a stale version
+    // of the card you are updating is the intended behaviour, not a
+    // compromise.
+    module('scoped to one writer', function () {
+      const writer = '@writer:localhost';
+      const someoneElse = '@someone-else:localhost';
+      const owner = '@owner:localhost';
+
+      test("another writer's pass does not hold this writer", async function (assert) {
+        await enqueueIndexJob(dbAdapter, realmURL, 'unfulfilled', [
+          someoneElse,
+        ]);
+        assert.true(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            initiatedBy: writer,
+            realmOwner: owner,
+          }),
+          'the lane is occupied, but by work this writer has no stake in',
+        );
+        assert.false(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            pollIntervalMs: 50,
+          }),
+          'and a caller naming nobody still waits for the lane',
+        );
+      });
+
+      test("a writer's own pass holds it", async function (assert) {
+        await enqueueIndexJob(dbAdapter, realmURL, 'unfulfilled', [writer]);
+        assert.false(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            pollIntervalMs: 50,
+            initiatedBy: writer,
+            realmOwner: owner,
+          }),
+          'a pass indexing bytes this writer wrote is one it must wait for',
+        );
+      });
+
+      // A pass carries every caller that merged into it, so a writer absorbed
+      // into someone else's job is still waiting on its own bytes. Recording
+      // only whoever got there first would let this writer past a pass that
+      // has not indexed its write yet.
+      test('a coalesced pass holds every writer it carries', async function (assert) {
+        await enqueueIndexJob(dbAdapter, realmURL, 'unfulfilled', [
+          someoneElse,
+          writer,
+        ]);
+        assert.false(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            pollIntervalMs: 50,
+            initiatedBy: writer,
+            realmOwner: owner,
+          }),
+          'the writer that merged in waits for the merged pass',
+        );
+        assert.false(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            pollIntervalMs: 50,
+            initiatedBy: someoneElse,
+            realmOwner: owner,
+          }),
+          'and so does the one that started it',
+        );
+      });
+
+      // A pass no HTTP write produced records nobody. Reading that as nobody's
+      // would let every writer past work that may well be indexing their
+      // bytes, so it reads as the realm owner instead: it gates somebody, and
+      // the owner is the identity such a pass is closest to.
+      test('an untagged pass gates the realm owner alone', async function (assert) {
+        await enqueueIndexJob(dbAdapter, realmURL);
+        assert.false(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            pollIntervalMs: 50,
+            initiatedBy: owner,
+            realmOwner: owner,
+          }),
+          'the owner waits for a pass with no writer recorded',
+        );
+        assert.true(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            initiatedBy: writer,
+            realmOwner: owner,
+          }),
+          'and no other writer does',
+        );
+      });
+
+      // The two scopes are independent conditions on one query, so a writer
+      // whose own pass is of a type the caller did not ask about is still let
+      // through.
+      test('the writer scope composes with the job-type scope', async function (assert) {
+        await enqueueIndexJob(dbAdapter, realmURL, 'unfulfilled', [writer]);
+        assert.true(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            initiatedBy: writer,
+            realmOwner: owner,
+            jobTypes: ['incremental-index'],
+          }),
+          'this writer has a pass in the lane, but not one of these types',
+        );
+        assert.false(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            pollIntervalMs: 50,
+            initiatedBy: writer,
+            realmOwner: owner,
+            jobTypes: ['from-scratch-index'],
+          }),
+          'and it does hold when the type is one the caller asked about',
+        );
+      });
     });
 
     // The prerender-html channel is a separate lane on purpose, gated

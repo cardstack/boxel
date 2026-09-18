@@ -12,6 +12,10 @@ export interface JobsTable {
   timeout: number;
   priority: number;
   args: PgPrimitive;
+  // The users whose work this job carries, as a jsonb array. Null on a row
+  // from a publish that named none and on one written before the column
+  // existed; `awaitRealmIndexSettled` owns what that reads as.
+  initiated_by: PgPrimitive;
   status: 'unfulfilled' | 'resolved' | 'rejected';
   created_at: Date;
   finished_at: Date;
