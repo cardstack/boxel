@@ -75,7 +75,9 @@ function assertChromeKnobsReset(assert: Assert, selector: string) {
 }
 
 // Nested theme of the scheme-island card: a plainly light root palette and a
-// plainly dark palette, distinct from Soft Pop and from the boxel-ui defaults
+// plainly dark palette, distinct from Soft Pop and from the boxel-ui defaults.
+// `accent` is defined at the root only, so dark contexts show whether a
+// root-only token survives or falls back to the Boxel dark default.
 const MEADOW_THEME_VARS = {
   background: '#f4f9f1',
   foreground: '#14261a',
@@ -109,8 +111,6 @@ const MEADOW_DARK_VARS = {
   primaryForeground: '#101a13',
   secondary: '#233326',
   secondaryForeground: '#d9ecd4',
-  accent: '#f0d76a',
-  accentForeground: '#101a13',
   muted: '#1a281e',
   mutedForeground: '#a3b8a8',
   destructive: '#e0736b',
@@ -540,6 +540,11 @@ module('Acceptance | theme scheme islands', function (hooks) {
       computedProperty(stamped, '--background'),
       MEADOW_DARK_VARS.background,
       'the stamped island background comes from the nested theme',
+    );
+    assert.strictEqual(
+      computedProperty(stamped, '--accent'),
+      MEADOW_THEME_VARS.accent,
+      'a token the nested theme defines only at the root keeps its value in the dark island, as on a dark card root',
     );
     assert.notStrictEqual(
       MEADOW_DARK_VARS.primary,

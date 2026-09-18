@@ -19,7 +19,7 @@ module('Unit | theme-scoped-css', function () {
     assert.strictEqual(
       css,
       `${SELECTOR}{--background: #fff; --primary: #112233}` +
-        `${ISLANDS}{${lightIsland('--background: #fff; --primary: #112233')}}`,
+        `${ISLANDS}{${lightIsland('--background: #fff; --primary: #112233')}${darkIsland('--background: #fff; --primary: #112233')}}`,
     );
   });
 
@@ -32,7 +32,7 @@ module('Unit | theme-scoped-css', function () {
       css,
       `${SELECTOR}{--primary: #112233}` +
         `@container style(--boxel-color-scheme: dark){${SELECTOR}{--primary: #445566}}` +
-        `${ISLANDS}{${darkIsland('--primary: #445566')}${lightIsland('--primary: #112233')}}`,
+        `${ISLANDS}{${lightIsland('--primary: #112233')}${darkIsland('--primary: #112233; --primary: #445566')}}`,
     );
   });
 
@@ -48,7 +48,7 @@ module('Unit | theme-scoped-css', function () {
   test('re-emits each palette on scheme islands stamped inside the card', function (assert) {
     let css = themeScopedCss(
       SCOPE,
-      ':root { --primary: #112233; } .dark { --primary: #445566; }',
+      ':root { --primary: #112233; --accent: #abcdef; } .dark { --primary: #445566; }',
     ).toString();
     let islands = css.slice(css.indexOf('@scope'));
     assert.true(
@@ -56,19 +56,46 @@ module('Unit | theme-scoped-css', function () {
       'the island rules are scoped to this theme and stop at a nested themed card',
     );
     assert.true(
-      islands.includes(darkIsland('--primary: #445566')),
-      'a dark island gets the dark palette',
-    );
-    assert.true(
-      islands.includes(lightIsland('--primary: #112233')),
+      islands.includes(lightIsland('--primary: #112233; --accent: #abcdef')),
       'a light island gets the root palette',
     );
-    let el = document.createElement('div');
-    el.setAttribute('data-theme', 'dark');
     assert.true(
-      el.matches(':is(.dark,[data-theme="dark"])'),
-      'the dark island selector matches a data-theme="dark" element',
+      islands.includes(
+        darkIsland('--primary: #112233; --accent: #abcdef; --primary: #445566'),
+      ),
+      'a dark island gets the root palette with the dark declarations on top, so a root-only token survives there',
     );
+    assert.true(
+      islands.indexOf(':scope [data-theme="light"]') <
+        islands.indexOf(':scope :is(.dark'),
+      'the dark rule comes last, matching theme.css precedence for an element carrying both markers',
+    );
+  });
+
+  test('an element carrying both scheme markers resolves the dark palette, as in theme.css', function (assert) {
+    let scope = 'both-markers';
+    let style = document.createElement('style');
+    style.textContent = themeScopedCss(
+      scope,
+      ':root { --primary: #112233; } .dark { --primary: #445566; }',
+    ).toString();
+    let root = document.createElement('div');
+    root.setAttribute('data-boxel-theme-scope', scope);
+    let island = document.createElement('div');
+    island.className = 'dark';
+    island.setAttribute('data-theme', 'light');
+    root.appendChild(island);
+    document.head.appendChild(style);
+    document.body.appendChild(root);
+    try {
+      assert.strictEqual(
+        getComputedStyle(island).getPropertyValue('--primary').trim(),
+        '#445566',
+      );
+    } finally {
+      root.remove();
+      style.remove();
+    }
   });
 
   test('bare declarations without a selector are treated as root variables', function (assert) {
@@ -76,7 +103,7 @@ module('Unit | theme-scoped-css', function () {
     assert.strictEqual(
       css,
       `${SELECTOR}{--primary: #112233}` +
-        `${ISLANDS}{${lightIsland('--primary: #112233')}}`,
+        `${ISLANDS}{${lightIsland('--primary: #112233')}${darkIsland('--primary: #112233')}}`,
     );
   });
 
@@ -120,7 +147,7 @@ module('Unit | theme-scoped-css', function () {
     let css = themeScopedCss(SCOPE, '--safe: blue; --x} body: red').toString();
     assert.strictEqual(
       css,
-      `${SELECTOR}{--safe: blue}${ISLANDS}{${lightIsland('--safe: blue')}}`,
+      `${SELECTOR}{--safe: blue}${ISLANDS}{${lightIsland('--safe: blue')}${darkIsland('--safe: blue')}}`,
     );
   });
 
