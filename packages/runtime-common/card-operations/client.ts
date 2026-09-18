@@ -552,9 +552,13 @@ export interface SearchInvokeOptions {
   realms?: (string | URL)[];
   // What the returned resource's life is tied to. A search subscribes to every
   // realm it covers and re-runs while it lives, so it is torn down with the
-  // thing that wanted it — a component, a controller. Left out, it lives as
-  // long as the session's own transport does, which is right for a search
-  // whose results the session keeps.
+  // thing that wanted it — a component, a controller. Left out, it is tied to
+  // whatever the session registered as its transport, which in a browser lives
+  // for the life of the tab: right for a search the session keeps reading,
+  // and worth naming an owner to avoid for a search one view wants. A card
+  // instance is not an owner the application knows, so a card that holds the
+  // resource in a field takes the tab-lived one; a card that wants the search
+  // to end with a view hands `query()` to the search component instead.
   owner?: object;
 }
 
