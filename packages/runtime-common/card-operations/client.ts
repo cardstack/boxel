@@ -682,14 +682,30 @@ async function sendBatch(
   env: OperationsEnvironment,
   returned: unknown,
 ): Promise<unknown> {
+  // Read before the batch is sent: what the builder handed back says which
+  // results the caller wants, and a batch that writes should not commit
+  // because the caller asked for its answer in a shape nothing can read.
+  let projection = projectionOf(root, returned);
   let answer = await env.transport.send(
     root.batch.realmURL,
     root.writes ? 'POST' : 'QUERY',
     { 'boxel:operations': root.members.map((member) => member.wire) },
   );
   let results = answer['atomic:results'] ?? [];
-  if (returned === undefined) {
+  if (!projection) {
     return resultsOf(root.members, results);
+  }
+  return projection.map((handle) => resultFor(handle, results));
+}
+
+// The handles whose results the caller asked for, or nothing when the builder
+// returned nothing and the answer is every entry's result in order.
+function projectionOf(
+  root: BatchScope,
+  returned: unknown,
+): HandleState[] | undefined {
+  if (returned === undefined) {
+    return undefined;
   }
   if (!Array.isArray(returned)) {
     throw new Error(
@@ -702,7 +718,7 @@ async function sendBatch(
         `an atomic() builder returns handles its own calls produced; this one returned something else`,
       );
     }
-    return resultFor(handle[HANDLE], results);
+    return handle[HANDLE];
   });
 }
 
@@ -982,6 +998,29 @@ function queryTarget(
   };
 }
 
+// The markers a declaration's clauses are written with. They stand for values
+// an invocation supplies — the caller's identity, a member of the payload, the
+// target's stored source — and lowering resolves them against the invocation
+// for a declared operation.
+//
+// A target written at the call site resolves none of them, because the caller
+// is the invocation and already holds the values. The two surfaces look alike
+// enough that an author will reach for one in the other, and a marker left in
+// a filter is a well-formed search operand: it would be compared against
+// stored values as a literal object, match nothing, and read as a filter that
+// genuinely found nothing. So it is refused by name, before anything is sent.
+const MARKER_KEYS = ['$ref', '$bxl'] as const;
+
+function markerIn(value: Record<string, unknown>): string | undefined {
+  for (let key of MARKER_KEYS) {
+    if (key in value) {
+      let named = value[key];
+      return typeof named === 'string' ? named : key;
+    }
+  }
+  return undefined;
+}
+
 // A filter as an author writes it names types with the classes themselves —
 // `on: Person` — so they are read as the code refs that name them, the same
 // reading a declaration's type clauses get when they are lowered. A thunk is
@@ -1000,6 +1039,12 @@ function defRefs(value: unknown, env: OperationsEnvironment): unknown {
     return value.map((member) => defRefs(member, env));
   }
   if (isPlainRecord(value)) {
+    let marker = markerIn(value);
+    if (marker) {
+      throw new Error(
+        `find() names the cards to target with values the caller holds, and this filter contains ${marker}(), which stands for a value a declared operation is supplied when it is invoked`,
+      );
+    }
     return Object.fromEntries(
       Object.entries(value).map(([key, member]) => [key, defRefs(member, env)]),
     );
