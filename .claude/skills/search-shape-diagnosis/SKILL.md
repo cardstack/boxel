@@ -250,6 +250,7 @@ Three more shape the same mechanism without being rungs:
 `LINK_SHAPE_LOAD_HALF_LIFE_MS` (120000, how far back the mean reaches),
 `LINK_SHAPE_MIN_DWELL_MS` (60000, the floor on how often a realm may change
 level) and `LINK_SHAPE_HEARTBEAT_MS` (60000, the no-change record's cadence).
+All seven are settable the same way.
 
 Four properties decide whether a change to any of these does what you expect:
 
@@ -270,9 +271,14 @@ Four properties decide whether a change to any of these does what you expect:
    landing exactly when the server is busiest. That trade is the reason the
    upper rung sits at 12: lowering it to 8 raised a quiet control window's
    degraded time from 0.3% to 3.8%.
-4. **An absent value is the shipped default.** Each is parsed with a fallback,
-   so an unset or unparseable parameter leaves the default in force rather
-   than disabling the policy.
+4. **Anything that is not a number is the shipped default.** Each is parsed
+   with a fallback, so an absent, empty or non-numeric value leaves the
+   application's default in force rather than disabling the policy. That is
+   load-bearing rather than incidental — see below.
+
+   Careful with `0`: it is a number, and each knob clamps up to its own
+   minimum rather than reading as unset. For an engage threshold that minimum
+   is 1, so `0` means *permanently engaged*, not *off*.
 
 **Setting one.** These reach the container as ECS `secrets` resolved from SSM
 Parameter Store at `/<env>/boxel/<NAME>`, so a change takes three steps and the
@@ -292,12 +298,17 @@ transition record's `threshold` field rather than from the parameter, and give
 the fleet a load pass before trusting any measurement: the first pass after any
 deployment is cold and worthless.
 
-Terraform owns these parameters with their shipped defaults and
-`ignore_changes = [value]`, so an apply creates them where they are missing and
-never overwrites a value set out of band. Do not delete one to "reset" it:
-every task-definition revision that names a parameter fails to start if it is
-absent, including a rollback to an earlier revision. Put the default back
-instead.
+Terraform creates all seven where they are missing, seeded with the literal
+`default` — a word, not a number, so the application's own value stays in
+force. That is what keeps the shipped defaults authoritative: `ignore_changes =
+[value]` ignores the seed exactly as it ignores an operator's edit, so a number
+seeded in Terraform would become the environment's value permanently and a
+later change to a shipped default would never reach a deployed environment.
+
+So an unmodified environment reads `default` on all seven, and a threshold that
+has been tuned reads a number. To put one back, **write `default` again — do
+not delete the parameter**: every task-definition revision that names one fails
+to start if it is absent, including a rollback to an earlier revision.
 
 **Production is a shared environment.** A threshold change there is a deploy
 with user-visible effect on every realm the fleet serves, so it is an operator
