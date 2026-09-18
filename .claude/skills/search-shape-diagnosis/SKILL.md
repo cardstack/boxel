@@ -230,6 +230,117 @@ Those counts are over realms the process has **served since start**, each at the
 
 A `dwellMs` of `null` is a realm's first move, not a zero-length dwell — it had no prior level to have dwelt in.
 
+### The thresholds: what they mean and how to set them
+
+Four values decide when a realm changes rung. All four are **thresholds on the
+load reading** — the time-weighted mean of in-flight searches, per replica —
+and none of them selects a link shape. Which shape a rung serves is fixed by
+the ladder; these only decide when a realm arrives at that rung. The
+`_THRESHOLD` suffix is there because a bare `…_ENGAGE` reads as a switch that
+turns a shape on, which is the one thing it does not do.
+
+| Parameter                                | Ships as | Crossing it                                                               |
+| ---------------------------------------- | -------: | ------------------------------------------------------------------------- |
+| `LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD`  |        4 | reads that may return more than one row start shedding their link closure |
+| `LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD` |        2 | those reads carry it again                                                |
+| `LINK_SHAPE_ALL_ENGAGE_THRESHOLD`        |       12 | every live read sheds it, including a single-card read                    |
+| `LINK_SHAPE_ALL_RELEASE_THRESHOLD`       |        6 | single-row reads carry it again                                           |
+
+Three more shape the same mechanism without being rungs:
+`LINK_SHAPE_LOAD_HALF_LIFE_MS` (120000, how far back the mean reaches),
+`LINK_SHAPE_MIN_DWELL_MS` (60000, the floor on how often a realm may change
+level) and `LINK_SHAPE_HEARTBEAT_MS` (60000, the no-change record's cadence).
+All seven are settable the same way.
+
+Four properties decide whether a change to any of these does what you expect:
+
+1. **Per replica, no shared store.** Each process reads only its own
+   admissions, so a fleet-wide in-flight of 12 spread over N tasks is ~12/N
+   per replica. A threshold is only meaningful stated together with the fleet
+   size it was chosen against, and adding tasks raises the fleet-wide load
+   needed to engage roughly linearly. Read the current count rather than
+   assuming it: distinct containers per 30-minute bucket, not distinct
+   container ids over a short probe, which counts a deployment rollover as
+   concurrency.
+2. **The gap between an engage and its release is the hysteresis band**, and
+   the band is what keeps a realm from flapping. A release at or above its own
+   engage is self-cancelling; the parser clamps that case rather than
+   honouring it, so a nonsensical pair silently becomes a different one than
+   what was typed. Check the value the process reports on a transition record,
+   not the one in Parameter Store.
+3. **Every rung change costs a realm its cached validators.** The link mode is
+   folded into both response validators and keys the card+json response cache,
+   so a lower engage buys earlier protection and pays in cache fragmentation
+   landing exactly when the server is busiest. That trade is the reason the
+   upper rung sits at 12: lowering it to 8 raised a quiet control window's
+   degraded time from 0.3% to 3.8%.
+
+   The fragmentation _rate_, though, does not track the engage as directly as
+   that trade suggests, so "lower engage, more flapping" is not a safe thing to
+   tune by. Replaying production against candidate pairs, the rate inside a
+   busy stretch was at or below the higher engage's, while over all replayed
+   time it rose — the reliable effect of a lower engage is more time spent
+   degraded, not more transitions. Two cautions on that: a replay of a recorded
+   reading is open-loop, so it cannot show degradation lowering service time
+   and therefore lowering the reading that chose it; and it consults the ladder
+   on every health sample rather than on every read, which overstates how often
+   a quiet realm moves. Judge a candidate on the `dwellMs` distribution its
+   transitions actually report, and treat a distribution piled at
+   `LINK_SHAPE_MIN_DWELL_MS` as the band being too narrow rather than as noise.
+
+4. **Anything that is not a number is the shipped default.** Each is parsed
+   with a fallback, so an absent, empty or non-numeric value leaves the
+   application's default in force rather than disabling the policy. That is
+   load-bearing rather than incidental — see below.
+
+   Careful with `0`: it is a number, and each knob clamps up to its own
+   minimum rather than reading as unset. For an engage threshold that minimum
+   is 1, so `0` means _permanently engaged_, not _off_.
+
+5. **The reading counts searches, not work.** `inFlight` is incremented once
+   per admitted search regardless of what that search costs, so a reading of 5
+   made of unbounded whole-table queries and a reading of 5 made of typical
+   production traffic are the same number over very different quantities of
+   work. A threshold fitted against one population does not transfer to the
+   other, and a reading measured under a synthetic load is not evidence about
+   the load a comparable production reading represents. This is the reason a
+   rung chosen from a saturation run wants checking against production traffic
+   before it ships.
+
+**Setting one.** These reach the container as ECS `secrets` resolved from SSM
+Parameter Store at `/<env>/boxel/<NAME>`, so a change takes three steps and the
+middle one is the one people forget:
+
+```sh
+aws ssm put-parameter --name /staging/boxel/LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD \
+  --value 5 --type String --overwrite
+aws ecs update-service --cluster boxel-staging --service boxel-realm-server-staging \
+  --force-new-deployment
+```
+
+The value is read **once, at container start**. Writing the parameter changes
+nothing on a running fleet — the deployment is what applies it, and until it
+completes the fleet serves both values. Confirm the new one took effect from a
+transition record's `threshold` field rather than from the parameter, and give
+the fleet a load pass before trusting any measurement: the first pass after any
+deployment is cold and worthless.
+
+Terraform creates all seven where they are missing, seeded with the literal
+`default` — a word, not a number, so the application's own value stays in
+force. That is what keeps the shipped defaults authoritative: `ignore_changes =
+[value]` ignores the seed exactly as it ignores an operator's edit, so a number
+seeded in Terraform would become the environment's value permanently and a
+later change to a shipped default would never reach a deployed environment.
+
+So an unmodified environment reads `default` on all seven, and a threshold that
+has been tuned reads a number. To put one back, **write `default` again — do
+not delete the parameter**: every task-definition revision that names one fails
+to start if it is absent, including a rollback to an earlier revision.
+
+**Production is a shared environment.** A threshold change there is a deploy
+with user-visible effect on every realm the fleet serves, so it is an operator
+decision rather than an investigative step — propose it, do not arrange it.
+
 ### Traps specific to reading load alongside this
 
 Three of these cost real time on the investigation that produced the policy, and they apply directly here.

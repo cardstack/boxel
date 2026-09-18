@@ -26,10 +26,15 @@ import {
 const REALM = 'http://localhost:4201/test/';
 const OTHER_REALM = 'http://localhost:4201/other/';
 
-// The production thresholds, restated here so a test reads against named
-// numbers rather than against whatever the defaults happen to be. A change to
-// the shipped values is meant to fail the assertions that pin behaviour at a
-// threshold, not to silently retune every test.
+// A fixed ladder for the tests below, deliberately not the shipped defaults.
+// What these exercise is the ladder's mechanics — one rung per consult, the
+// band holding a level, the dwell floor — and those want a geometry that stays
+// put: both bands wide enough to step through, and a gap between the rungs
+// that a single load value can sit inside. Reading the shipped values here
+// instead would let a retune silently reshape every scenario, and a scenario
+// whose load values no longer straddle the rung they were written for can pass
+// while testing nothing. Whether the shipped numbers are the right ones is a
+// question about production traffic, decided where they are defined.
 const ENGAGE_MULTI_ROW = 8;
 const RELEASE_MULTI_ROW = 4;
 const ENGAGE_ALL = 12;
