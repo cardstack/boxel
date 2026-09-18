@@ -269,6 +269,26 @@ jobs:
         run: pnpm run verify:package
         working-directory: packages/bxl
 
+  host-deploy-cache-control-test:
+    name: Host Deploy Cache-Control Tests
+    needs: change-check
+    if: needs.change-check.outputs.boxel == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: host-deploy-cache-control-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      # Which `Cache-Control` each deployed file carries is decided entirely by
+      # config/deploy.js, and the deploy itself is the first place a mistake
+      # shows up — by which point a wrong directive is already in browsers that
+      # will not ask again. Needs nothing running.
+      - name: Host deploy cache-control suite
+        run: pnpm test:deploy-cache-control
+        working-directory: packages/host
+
   eslint-plugin-boxel-test:
     name: ESLint Plugin Boxel Tests
     needs: change-check
