@@ -164,6 +164,7 @@ export interface Definition {
     displayNames: string[];
     cardType: string;
     materialized?: true;
+    livenessTier?: import('./lattice-liveness.ts').LatticeLivenessTier;
   };
 }
 

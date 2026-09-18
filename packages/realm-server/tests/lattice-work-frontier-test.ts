@@ -206,6 +206,58 @@ module('lattice-work-frontier-test.ts | postgres', function (hooks) {
     );
   });
 
+  test('zero liveness withholds an intermediate but never the settled result', async (assert) => {
+    const input = await owner('Input/1', 'PatientDaySummary');
+    const board = await owner('Board/1', 'WardBoard', { deps: [input] });
+    await db.execute(
+      `UPDATE lattice_owners SET liveness_tier=CASE WHEN owner_url=$1 THEN 'visible' ELSE 'progress' END,
+      stale_within=2, stale_after=now()-interval '1 minute', published_at=now()-interval '1 minute'`,
+      { bind: [board] },
+    );
+    // An expensive queued input consumes all capacity. No demand lease also
+    // means this board cannot consume an early-refresh budget.
+    const state = {
+      version: 1 as const,
+      pools: {},
+      costByType: { [realm + 'Input']: 100_000 },
+    };
+    let ready = await registry.ready(realm, {
+      candidates: { limit: 24, state },
+    });
+    assert.deepEqual(
+      ready.map((row) => row.ownerURL),
+      [input],
+    );
+    const underFeed = await registry.ready(realm, {
+      overdueOnly: true,
+      candidates: { limit: 24, state },
+    });
+    assert.deepEqual(
+      underFeed.map((row) => row.ownerURL),
+      [input],
+      'settling progresses under a source backlog with no refresh budget',
+    );
+    assert.true(
+      underFeed[0].stale,
+      'captured intermediate keeps the final obligation',
+    );
+    await db.execute(
+      'UPDATE lattice_owners SET dirty_generation=NULL WHERE owner_url=$1',
+      { bind: [input] },
+    );
+    ready = await registry.ready(realm, { candidates: { limit: 24, state } });
+    assert.deepEqual(
+      ready.map((row) => row.ownerURL),
+      [board],
+      'final result bypasses the refresh budget even while f recovers',
+    );
+    assert.strictEqual(
+      ready[0].stale,
+      undefined,
+      'settled work takes the ordinary correctness path',
+    );
+  });
+
   test('query type readiness includes stale nonmatches; concrete aliases order the next level', async (assert) => {
     const census = await owner('A-census', 'FacilityCensus', {
       deps: [realm + 'B-board'],

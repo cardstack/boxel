@@ -1,3 +1,9 @@
+import {
+  latticeLiveness,
+  latticeEarlyRefreshDue,
+  assertLatticeLivenessTier,
+  type LatticeLivenessTier,
+} from './lattice-liveness.ts';
 import type { LatticeTrace } from './lattice-trace.ts';
 import { LatticeStride, type LatticeServiceState } from './lattice-stride.ts';
 import { latticeConcurrencyGroup } from './jobs/lattice.ts';
@@ -130,7 +136,8 @@ export interface LatticeOwnerPublication {
   // See PublicationReceipt.freshWithin: the hold armed from publication.
   freshWithin?: number;
   // See PublicationReceipt.staleWithin. Only a ready publication sets it.
-  staleWithin?: number;
+  staleWithin?: number | null;
+  livenessTier?: LatticeLivenessTier;
   // See PublicationReceipt.stale: the owner keeps its obligation.
   stale?: true;
 }
@@ -479,8 +486,9 @@ export class LatticeQueryRegistry
         throw new Error('Lattice publication has an invalid fresh window');
       freshWithin = owner.freshWithin;
     }
+    assertLatticeLivenessTier(owner.livenessTier);
     let staleWithin: number | undefined;
-    if (!owner.retired && !owner.pending && owner.staleWithin !== undefined) {
+    if (!owner.retired && !owner.pending && owner.staleWithin != null) {
       if (!Number.isSafeInteger(owner.staleWithin) || owner.staleWithin < 1)
         throw new Error('Lattice publication has an invalid staleness window');
       staleWithin = owner.staleWithin;
@@ -502,7 +510,7 @@ export class LatticeQueryRegistry
     await tx([
       `INSERT INTO lattice_owners
        (realm_url, owner_url, published_generation, input_generation,
-        dirty_generation, definition_revision, retired, code_bound${pg ? ', settle_until, stale_within, stale_after' : ''}) VALUES (`,
+        dirty_generation, definition_revision, retired, code_bound${pg ? ', settle_until, stale_within, stale_after, liveness_tier, published_at, dirty_since' : ''}) VALUES (`,
       param(realmURL),
       ',',
       param(ownerURL),
@@ -560,6 +568,14 @@ export class LatticeQueryRegistry
             ]
           : [', NULL, NULL']
         : []),
+      ...(pg
+        ? [
+            ',',
+            param(owner.livenessTier ?? null),
+            owner.pending ? ', NULL,' : ', now(),',
+            dirtyGeneration === null ? 'NULL' : 'now()',
+          ]
+        : []),
       `) ON CONFLICT (realm_url, owner_url) DO UPDATE SET
        published_generation = EXCLUDED.published_generation,
        input_generation = EXCLUDED.input_generation, dirty_generation = EXCLUDED.dirty_generation,
@@ -567,7 +583,16 @@ export class LatticeQueryRegistry
        retired = EXCLUDED.retired, code_bound = EXCLUDED.code_bound${
          pg
            ? `, settle_until = EXCLUDED.settle_until,
-       stale_within = COALESCE(EXCLUDED.stale_within, lattice_owners.stale_within),
+       liveness_tier = COALESCE(EXCLUDED.liveness_tier, lattice_owners.liveness_tier),
+       published_at = COALESCE(EXCLUDED.published_at, lattice_owners.published_at),
+       membership_dirty = CASE WHEN EXCLUDED.dirty_generation IS NULL THEN FALSE ELSE lattice_owners.membership_dirty END,
+       dirty_since = CASE WHEN EXCLUDED.dirty_generation IS NULL THEN NULL
+         ELSE COALESCE(lattice_owners.dirty_since, EXCLUDED.dirty_since) END,
+       stale_within = ${
+         owner.staleWithin === undefined || owner.pending
+           ? 'COALESCE(EXCLUDED.stale_within, lattice_owners.stale_within)'
+           : 'EXCLUDED.stale_within'
+       },
        stale_after = ${
          // A publication that evaluated no grains (a re-registration of a
          // re-indexed source, the browser producer) keeps the window the
@@ -745,6 +770,7 @@ export class LatticeQueryRegistry
     newDocument: LatticeDocument | undefined,
     tx?: Querier,
     matchers?: Map<string, Expression>,
+    membershipChanged?: Set<string>,
   ): Promise<string[]> {
     // Every watch either document routes to, keyed per watch rather than
     // per owner: a row that stays matched by a watch dirties the owner only
@@ -813,6 +839,7 @@ export class LatticeQueryRegistry
         )
       )
         continue;
+      if (was !== is) membershipChanged?.add(watch.ownerURL);
       owners.add(watch.ownerURL);
     }
     return [...owners].sort();
@@ -823,6 +850,7 @@ export class LatticeQueryRegistry
     realmURL: string,
     owners: string[],
     generation: number,
+    membershipChanged?: ReadonlySet<string>,
   ) {
     for (let ownerURL of new Set(owners)) {
       // Turning dirty arms the staleness deadline for an owner that declares
@@ -836,7 +864,9 @@ export class LatticeQueryRegistry
         'ELSE dirty_generation END',
         ...(this.db.kind === 'pg'
           ? [
-              `, stale_after = CASE
+              ', membership_dirty = membership_dirty OR',
+              param(membershipChanged?.has(ownerURL) ?? false),
+              `, dirty_since = COALESCE(dirty_since, now()), stale_after = CASE
          WHEN dirty_generation IS NULL AND stale_within IS NOT NULL
          THEN now() + stale_within * interval '1 second'
          ELSE stale_after END`,
@@ -876,12 +906,20 @@ export class LatticeQueryRegistry
       pendingInputCount?: number;
       pendingInputURLs?: string[];
       visible?: true;
+      livenessTier?: LatticeLivenessTier;
+      publishedAt?: number;
+      dirtySince?: number;
+      membershipDirty?: true;
     }>
   > {
     let rows = await query(this.db, [
       'SELECT o.owner_url, o.dirty_generation',
       ...(this.db.kind === 'pg'
-        ? [`, ${latticeOwnerOverdueSQL} AS overdue`]
+        ? [
+            `, ${latticeOwnerOverdueSQL} AS overdue, o.liveness_tier, o.membership_dirty,
+             EXTRACT(EPOCH FROM o.published_at)*1000 AS published_at_ms,
+             EXTRACT(EPOCH FROM o.dirty_since)*1000 AS dirty_since_ms`,
+          ]
         : []),
       ...(opts?.runnableOnly && this.db.kind === 'pg'
         ? [`, ${latticeOwnerCodeVersionSQL} AS code_version`]
@@ -905,6 +943,18 @@ export class LatticeQueryRegistry
     return rows.map((row) => ({
       ownerURL: row.owner_url as string,
       generation: Number(row.dirty_generation),
+      ...(row.liveness_tier && row.membership_dirty
+        ? { membershipDirty: true as const }
+        : {}),
+      ...(row.liveness_tier
+        ? { livenessTier: row.liveness_tier as LatticeLivenessTier }
+        : {}),
+      ...(row.liveness_tier && row.published_at_ms != null
+        ? { publishedAt: Number(row.published_at_ms) }
+        : {}),
+      ...(row.liveness_tier && row.dirty_since_ms != null
+        ? { dirtySince: Number(row.dirty_since_ms) }
+        : {}),
       ...(row.code_version == null
         ? {}
         : { codeVersion: String(row.code_version) }),
@@ -1162,6 +1212,7 @@ export class LatticeQueryRegistry
     const overdue = new Set(
       runnableOwners.filter((owner) => owner.stale).map((o) => o.ownerURL),
     );
+    const capturedEligible = new Set(overdue);
     const unpublishedRows =
       this.db.kind === 'pg'
         ? await query(this.db, [
@@ -1263,10 +1314,72 @@ export class LatticeQueryRegistry
     const directDemand = latticeDemandFor(this.db).cache.priorities(realmURL);
     const knownDemand = latticePropagateDemand(directDemand, inputs);
     const candidates = opts?.candidates;
+    let governor: ReturnType<typeof latticeLiveness> | undefined;
+    if (candidates && pending.some((owner) => owner.livenessTier)) {
+      const state = candidates.state;
+      const progress = state.settlingServiceMs ?? 0;
+      // One realm has one wave reservation. Extra pool workers serve other
+      // realms, not concurrent waves here; C=1 even with overlapping BXL slots.
+      // Include clean visible owners in R, but never count them in backlog W.
+      const cleanVisible = [...directDemand.keys()].filter(
+        (id) => !pendingInputs.has(id),
+      );
+      const visibleRows = cleanVisible.length
+        ? await query(this.db, [
+            'SELECT owner_url,liveness_tier FROM lattice_owners WHERE realm_url=',
+            param(realmURL),
+            'AND NOT retired AND owner_url = ANY(',
+            textArrayParam(cleanVisible),
+            ')',
+          ])
+        : [];
+      governor = latticeLiveness(
+        [
+          ...visibleRows.map((row) => ({
+            ownerURL: String(row.owner_url),
+            livenessTier: row.liveness_tier as LatticeLivenessTier,
+            visible: true,
+            dirty: false,
+          })),
+          ...pending.map((owner) => ({
+            ...owner,
+            visible: directDemand.has(owner.ownerURL),
+          })),
+        ],
+        (owner) =>
+          state.costByType?.[
+            owner.ownerURL.slice(0, owner.ownerURL.lastIndexOf('/'))
+          ] ?? 500,
+        progress,
+        state.governor,
+      );
+      state.governor = governor;
+      opts?.trace?.event('liveness', { ...governor });
+      // First publications never wait for a refresh budget. A final result is
+      // also never throttled: only remove the stale-input bypass here.
+      for (const owner of runnableOwners) {
+        if (
+          !neverPublished.has(owner.ownerURL) &&
+          !owner.membershipDirty &&
+          !latticeEarlyRefreshDue(
+            { ...owner, visible: directDemand.has(owner.ownerURL) },
+            governor,
+          )
+        ) {
+          overdue.delete(owner.ownerURL);
+          delete owner.stale;
+        }
+      }
+    }
     const scanner = candidates
       ? new LatticeStride(
           runnableOwners
-            .filter((row) => !opts?.overdueOnly || row.stale)
+            .filter(
+              (row) =>
+                !opts?.overdueOnly ||
+                row.stale ||
+                (row.livenessTier && capturedEligible.has(row.ownerURL)),
+            )
             .map((row) => ({
               ...row,
               pendingInputCount: inputs.get(row.ownerURL)!.size,
@@ -1287,7 +1400,10 @@ export class LatticeQueryRegistry
         // executing only a few would otherwise skip most siblings each turn.
         if (!inspected.size) {
           for (const id of candidates.state.frontierReady ?? []) {
-            if (runnable.has(id) && (!opts?.overdueOnly || overdue.has(id))) {
+            if (
+              runnable.has(id) &&
+              (!opts?.overdueOnly || capturedEligible.has(id))
+            ) {
               selected.add(id);
               inspected.add(id);
             }
@@ -1459,11 +1575,17 @@ export class LatticeQueryRegistry
           : {}),
       }))
       .filter(
-        ({ ownerURL, stale }) =>
-          ready.has(ownerURL) && (!opts?.overdueOnly || stale),
+        ({ ownerURL, stale, livenessTier }) =>
+          ready.has(ownerURL) &&
+          (!opts?.overdueOnly ||
+            stale ||
+            (livenessTier && capturedEligible.has(ownerURL))),
       )
       .map(({ stale, ...row }): (typeof runnableOwners)[number] =>
-        stale && (opts?.overdueOnly || inputs.get(row.ownerURL)!.size > 0)
+        (opts?.overdueOnly &&
+          row.livenessTier &&
+          capturedEligible.has(row.ownerURL)) ||
+        (stale && (opts?.overdueOnly || inputs.get(row.ownerURL)!.size > 0))
           ? { ...row, stale: true as const }
           : row,
       );

@@ -42,7 +42,8 @@ export interface PublicationReceipt {
   // Registered as `lattice_owners.stale_within`; the registry arms
   // `stale_after` when the owner becomes dirty (and again at a stale
   // publication, which leaves it dirty). Native producer only.
-  staleWithin?: number;
+  staleWithin?: number | null;
+  livenessTier?: import('./lattice-liveness.ts').LatticeLivenessTier;
   // The publication came from a stale attempt: one that ran past its
   // deadline, over feeders' last published bodies and ahead of pending source
   // work. It is a valid value at its input generation, but the owner keeps

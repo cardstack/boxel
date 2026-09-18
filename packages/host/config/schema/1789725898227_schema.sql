@@ -190,6 +190,10 @@
    settle_until,
    stale_within INTEGER,
    stale_after,
+   liveness_tier TEXT,
+   published_at,
+   dirty_since,
+   membership_dirty BOOLEAN DEFAULT false NOT NULL,
    PRIMARY KEY ( realm_url, owner_url )
 );
 

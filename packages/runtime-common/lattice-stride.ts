@@ -1,3 +1,4 @@
+import type { LatticeLivenessState } from './lattice-liveness.ts';
 import {
   latticeOrderWave,
   type LatticeDemandPriority,
@@ -24,6 +25,10 @@ export interface LatticeServiceState {
   frontier?: LatticeServiceState;
   visibleServed?: Array<[string, number]>;
   frontierReady?: string[];
+  governor?: LatticeLivenessState;
+  costByType?: Record<string, number>;
+  settlingServiceMs?: number;
+  refreshWeight?: number;
 }
 interface Candidate {
   ownerURL: string;
@@ -64,6 +69,27 @@ export class LatticeStride<T extends Candidate> {
     this.now = now;
     this.state = state ? structuredClone(state) : { version: 1, pools: {} };
     this.#remaining = rows.length;
+    if (
+      this.state.governor &&
+      this.state.refreshWeight !== this.state.governor.refreshShare
+    ) {
+      const pool = this.state.pools.root;
+      const before = this.state.refreshWeight;
+      if (pool)
+        for (const key of ['progress', 'refresh']) {
+          const account = pool.accounts[key];
+          if (!account) continue;
+          const priorWeight =
+            before === undefined
+              ? weights[key]
+              : Math.max(0.0001, key === 'refresh' ? before : 1 - before);
+          account.pass =
+            pool.clock +
+            ((account.pass - pool.clock) * priorWeight) /
+              this.#weight('root', key);
+        }
+      this.state.refreshWeight = this.state.governor.refreshShare;
+    }
     // Existing type/age ordering is only the tie order within a service class.
     for (const row of latticeOrderWave(rows, 4)) {
       const key = `${phase(row)}/${priority(row)}`;
@@ -188,7 +214,7 @@ export class LatticeStride<T extends Candidate> {
           const id = `${pool}/${key}`;
           this.#reserved.set(id, (this.#reserved.get(id) ?? 0) - estimate);
           const a = this.state.pools[pool].accounts[key];
-          a.pass += actual / weights[key];
+          a.pass += actual / this.#weight(pool, key);
           a.serviceMs += actual;
           a.attempts++;
           a.estimateMs =
@@ -223,10 +249,48 @@ export class LatticeStride<T extends Candidate> {
     pool.active = active;
   }
 
+  #weight(pool: string, key: string) {
+    if (pool === 'root' && this.state.governor) {
+      const share = this.state.governor.refreshShare;
+      return key === 'refresh'
+        ? Math.max(0.0001, share)
+        : Math.max(0.0001, 1 - share);
+    }
+    return weights[key];
+  }
+
   #choose(pool: string, keys: string[]) {
     const score = (key: string) =>
       this.state.pools[pool].accounts[key].pass +
-      (this.#reserved.get(`${pool}/${key}`) ?? 0) / weights[key];
+      (this.#reserved.get(`${pool}/${key}`) ?? 0) / this.#weight(pool, key);
     return keys.reduce((best, key) => (score(key) < score(best) ? key : best));
   }
+}
+
+// One reservation occupies one lane. Distribute its complete wall time by
+// relative owner effort; concurrent BXL slots must not multiply lane capacity.
+export function recordLatticeWaveService(
+  state: LatticeServiceState,
+  samples: Array<{ ownerURL: string; elapsedMs: number; refresh: boolean }>,
+  elapsedMs: number,
+) {
+  const total = samples.reduce((sum, sample) => sum + sample.elapsedMs, 0);
+  if (!total) return;
+  const byType = new Map<string, number[]>();
+  for (const sample of samples) {
+    const cost = Math.max(1, (elapsedMs * sample.elapsedMs) / total);
+    const type = ownerType(sample);
+    const costs = byType.get(type) ?? [];
+    costs.push(cost);
+    byType.set(type, costs);
+    if (!sample.refresh)
+      state.settlingServiceMs = (state.settlingServiceMs ?? 0) + cost;
+  }
+  const costs = (state.costByType ??= {});
+  for (const [type, values] of byType) {
+    const cost = values.reduce((a, b) => a + b, 0) / values.length;
+    costs[type] =
+      costs[type] === undefined ? cost : 0.75 * costs[type] + 0.25 * cost;
+  }
+  while (Object.keys(costs).length > 256) delete costs[Object.keys(costs)[0]];
 }

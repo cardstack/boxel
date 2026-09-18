@@ -1,4 +1,8 @@
 import {
+  latticeTierSeconds,
+  assertLatticeLivenessTier,
+} from '@cardstack/runtime-common/lattice-liveness';
+import {
   startLatticeTrace,
   latticeAttemptId,
   type LatticeTrace,
@@ -336,6 +340,7 @@ export function createLatticeNativeCardIndexer({
             }),
           )
         : undefined;
+      assertLatticeLivenessTier(indexMetadata?.livenessTier);
       if (dataReceipt || discovery) {
         const manifest: PublicationReceipt = {
           version: 1,
@@ -343,8 +348,17 @@ export function createLatticeNativeCardIndexer({
           sourceFields: latticeSourceFields(admission.root.definition),
           validatedThrough: request.inputSnapshot?.generation ?? 0,
           ...(result.freshUntil ? { freshUntil: result.freshUntil } : {}),
-          ...(result.freshWithin ? { freshWithin: result.freshWithin } : {}),
-          ...(result.staleWithin ? { staleWithin: result.staleWithin } : {}),
+          ...(!indexMetadata?.livenessTier && result.freshWithin
+            ? { freshWithin: result.freshWithin }
+            : {}),
+          ...(indexMetadata?.livenessTier
+            ? {
+                livenessTier: indexMetadata.livenessTier,
+                staleWithin: latticeTierSeconds(indexMetadata.livenessTier),
+              }
+            : result.staleWithin
+              ? { staleWithin: result.staleWithin }
+              : {}),
           ...(request.inputSnapshot?.stale ? { stale: true as const } : {}),
           ...(dataReceipt?.projections && !discovery
             ? {

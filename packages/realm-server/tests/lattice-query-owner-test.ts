@@ -1241,6 +1241,47 @@ module(basename(import.meta.filename), function (hooks) {
       )
     )[0];
 
+  test('a card tier declares scheduling advice and progress clears the legacy deadline', async (assert) => {
+    root.nativeIndex!.livenessTier = 'visible';
+    let attempt = await candidate();
+    assert.strictEqual(
+      attempt.result.card.serialized!.data.meta.publication!.staleWithin,
+      2,
+    );
+    await attempt.publish();
+    let [row] = await db.execute(
+      'SELECT liveness_tier,published_at FROM lattice_owners WHERE owner_url=$1',
+      { bind: [owner] },
+    );
+    assert.strictEqual(row.liveness_tier, 'visible');
+    assert.ok(row.published_at);
+    root.nativeIndex!.livenessTier = 'progress';
+    attempt = await candidate();
+    assert.strictEqual(
+      attempt.result.card.serialized!.data.meta.publication!.staleWithin,
+      null,
+    );
+    await attempt.publish();
+    assert.strictEqual((await ownerRow()).stale_within, null);
+    const registry = new LatticeQueryRegistry(
+      db,
+      new IndexQueryEngine(db, lookup, network),
+    );
+    await db.withWriteLock('lattice:index:' + realm, (tx) =>
+      registry.markDirty(tx!, realm, [owner], 99, new Set([owner])),
+    );
+    [row] = await db.execute(
+      'SELECT membership_dirty,dirty_since FROM lattice_owners WHERE owner_url=$1',
+      { bind: [owner] },
+    );
+    assert.true(row.membership_dirty as boolean);
+    assert.ok(row.dirty_since);
+    assert.true(
+      await registry.hasOverdue(realm),
+      'membership changes remain an obligation with no refresh deadline',
+    );
+  });
+
   test('a staleness bound is published as a window and armed when the owner turns dirty', async (assert) => {
     staleTotal(90);
     const { result, publish } = await candidate();

@@ -1,3 +1,4 @@
+import { assertLatticeLivenessTier } from './lattice-liveness.ts';
 import { getBxlComputeDefinition } from '@cardstack/bxl';
 import { getFieldDefinitions } from './definitions.ts';
 import type {
@@ -70,6 +71,7 @@ function getLatticeIndexMetadata(
 ): Definition['nativeIndex'] {
   if (cardDef !== api.CardDef && !(cardDef.prototype instanceof api.CardDef))
     return undefined;
+  assertLatticeLivenessTier((cardDef as typeof CardAPI.CardDef).livenessTier);
   const types: NonNullable<Definition['nativeIndex']>['types'] = [];
   const displayNames: string[] = [];
   let current: typeof BaseDef | null = cardDef;
@@ -85,6 +87,9 @@ function getLatticeIndexMetadata(
           cardDef.displayName === 'Card' ? cardDef.name : cardDef.displayName,
         ...((cardDef as typeof CardAPI.CardDef).materialized
           ? { materialized: true as const }
+          : {}),
+        ...((cardDef as typeof CardAPI.CardDef).livenessTier
+          ? { livenessTier: (cardDef as typeof CardAPI.CardDef).livenessTier }
           : {}),
       };
     }

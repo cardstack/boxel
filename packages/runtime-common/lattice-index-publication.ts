@@ -499,6 +499,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
     }
     let changed = new Set<string>();
     let dirty = new Set<string>();
+    const membershipChanged = new Set<string>();
     let published = new Set<string>();
     // Envelope rows (see `prepare`): compare bodies and rewrite the manifest
     // in Postgres, and copy the attribute body between tables there, so the
@@ -610,6 +611,7 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
           latticeDocument(row),
           tx,
           prepared.matchers,
+          membershipChanged,
         ))
           dirty.add(owner);
       }
@@ -653,8 +655,11 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
             ...(manifest.freshWithin
               ? { freshWithin: manifest.freshWithin }
               : {}),
-            ...(manifest.staleWithin
+            ...(manifest.staleWithin !== undefined
               ? { staleWithin: manifest.staleWithin }
+              : {}),
+            ...(manifest.livenessTier
+              ? { livenessTier: manifest.livenessTier }
               : {}),
             ...(manifest.stale ? { stale: true as const } : {}),
           });
@@ -831,7 +836,13 @@ export class LatticeIndexPublication implements LatticeChangeCapture<
     tailAt = Date.now();
     // A successful owner in this wave was computed from the previous revision.
     // If another output it consumes changed in the wave, it must run again.
-    await this.registry.markDirty(tx, realmURL, [...dirty], generation);
+    await this.registry.markDirty(
+      tx,
+      realmURL,
+      [...dirty],
+      generation,
+      membershipChanged,
+    );
     timings.dirtyMs = Date.now() - tailAt;
     tailAt = Date.now();
     if (this.db.kind === 'pg') {

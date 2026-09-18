@@ -102,8 +102,13 @@ export const latticeOwnerRetryReadySQL = `(${latticeOwnerAttemptsSQL} < ${lattic
 // be covered by its input snapshot. Wait for a newer relevant change before
 // another stale attempt. The ordinary frontier still performs final validation
 // when inputs settle, even if their values did not change.
-// Share this predicate between queue admission, frontier and publication guard.
+// Tiered work may also use captured publications to make settling progress
+// beside source indexing. The frontier, not this coarse eligibility predicate,
+// decides whether dirty inputs require a paid early refresh. All receipt checks
+// remain mandatory. Share this between admission and the publication guard.
 export const latticeOwnerStaleAttemptSQL = `(
+  ((o.membership_dirty OR o.liveness_tier IS NOT NULL)
+    AND o.dirty_generation > o.input_generation) OR
   (o.stale_after IS NOT NULL AND o.stale_after <= now()
     AND o.dirty_generation > o.input_generation) OR EXISTS (
     SELECT 1 FROM boxel_index initial WHERE initial.realm_url=o.realm_url

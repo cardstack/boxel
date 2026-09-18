@@ -4051,6 +4051,10 @@ export class CardDef extends BaseDef {
   // Lattice POC: explicit, inherited opt-in for an indexed summary definition.
   // Normal views stay on their existing live-computation path.
   static materialized = false;
+  // Scheduling only; these tiers never relax data or publication validity.
+  static livenessTier:
+    | import('@cardstack/runtime-common/lattice-liveness').LatticeLivenessTier
+    | undefined;
   static queryInputs:
     | Record<
         string,

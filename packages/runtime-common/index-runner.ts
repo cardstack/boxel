@@ -58,7 +58,7 @@ import {
   type LatticeScheduledWork,
 } from './lattice-work.ts';
 import { LatticeWaveBudget, LatticeReadBarrier } from './lattice-scheduling.ts';
-import { LatticeStride } from './lattice-stride.ts';
+import { LatticeStride, recordLatticeWaveService } from './lattice-stride.ts';
 import type { Querier } from './expression.ts';
 import { resolveModuleCacheContext } from './index-runner/prewarm-modules.ts';
 import {
@@ -950,6 +950,14 @@ export class IndexRunner {
     let published = new Set<string>();
     const ownerBatches = new Set<Batch>();
     const attemptTraces = new Set<LatticeTrace>();
+    const serviceSamples: Array<{
+      ownerURL: string;
+      elapsedMs: number;
+      refresh: boolean;
+    }> = [];
+    let latestServiceState:
+      | import('./lattice-stride.ts').LatticeServiceState
+      | undefined;
     const serviceState = followup
       ? ((await publication.registry.schedulingState(this.realmURL.href)) ?? {
           version: 1 as const,
@@ -985,6 +993,16 @@ export class IndexRunner {
     // reads its own members. The cap keeps one job's duration and input
     // residency bounded.
     if (followup && !pending.length) {
+      if (serviceState && this.#jobInfo.jobId > 0) {
+        await publication.registry.saveSchedulingState(
+          this.realmURL.href,
+          serviceState,
+          {
+            jobId: this.#jobInfo.jobId,
+            reservationId: this.#jobInfo.reservationId,
+          },
+        );
+      }
       if (
         await publication.wakeHeldOwners(
           this.realmURL.href,
@@ -1290,27 +1308,20 @@ export class IndexRunner {
                 throw error;
               } finally {
                 reading.end(next.ownerURL);
-                service?.complete(performance.now() - ownerStartedAt);
+                const elapsedMs = performance.now() - ownerStartedAt;
+                service?.complete(elapsedMs);
+                serviceSamples.push({
+                  ownerURL: next.ownerURL,
+                  elapsedMs,
+                  refresh: Boolean(
+                    next.stale && (next.pendingInputCount ?? 0) > 0,
+                  ),
+                });
               }
             }
           }),
         );
-        if (scheduler && this.#jobInfo.jobId > 0) {
-          try {
-            await publication.registry.saveSchedulingState(
-              this.realmURL.href,
-              scheduler.state,
-              {
-                jobId: this.#jobInfo.jobId,
-                reservationId: this.#jobInfo.reservationId,
-              },
-            );
-          } catch (error) {
-            // An expired attempt may lose its advisory service sample, but
-            // cannot replace a successor's accounting or publish its data.
-            if (!(error instanceof LatticeWorkSuperseded)) throw error;
-          }
-        }
+        latestServiceState = scheduler?.state;
         for (const outcome of outcomes)
           if (outcome.status === 'rejected') throw outcome.reason;
         this.#latticeTimings.latticeOwnersDeferred += scheduler
@@ -1397,6 +1408,29 @@ export class IndexRunner {
       for (const trace of attemptTraces)
         trace.finish('wave-ended-without-publication');
       waveTrace?.finish('closed', { published: published.size });
+      if (latestServiceState && this.#jobInfo.jobId > 0) {
+        recordLatticeWaveService(
+          latestServiceState,
+          serviceSamples,
+          Date.now() - startedAt,
+        );
+        try {
+          await publication.registry.saveSchedulingState(
+            this.realmURL.href,
+            latestServiceState,
+            {
+              jobId: this.#jobInfo.jobId,
+              reservationId: this.#jobInfo.reservationId,
+            },
+          );
+        } catch (error) {
+          if (!(error instanceof LatticeWorkSuperseded))
+            this.#log.warn(
+              'Could not save advisory Lattice service costs',
+              error,
+            );
+        }
+      }
     }
   }
 
