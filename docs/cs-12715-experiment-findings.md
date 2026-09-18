@@ -206,107 +206,19 @@ none exists. Its issue was still on the board when the run was stopped.
 
 ## Control run — is the unstyled card a regression?
 
-The Contributor card renders unstyled: white ground, default sans, none of the
-brand guide's warm paper, serif display, left rule or terracotta accent. The
-question is whether this branch caused it.
+No. A control at `3280ec8943` — the commit this branch starts from, same
+brief, same corpus, fresh realm, same host dist and CLI build — produces a
+card that references _more_ undefined design tokens (132 vs 113) and defines
+_fewer_ (0 vs 7). Both render unstyled.
 
-**It did not.** Control: a worktree at `3280ec8943` — the exact commit this
-branch starts from — with the same brief, the same corpus, a fresh realm
-(`fieldnotes-control`), and the same host dist and CLI build so the agent's
-tooling is identical. `packages/host` is untouched by this branch (`git diff
---name-only 3280ec8943 HEAD -- packages/host` is empty), so reusing its build
-compares like with like.
+The cause is that `design/tokens.css` cannot reach a `.gts`, it predates this
+branch, and it needs its own ticket. Full investigation, history trace and
+recommendation: [`factory-design-token-gap.md`](factory-design-token-gap.md).
 
-|                                            | this branch | control (unmodified) |
-| ------------------------------------------ | ----------- | -------------------- |
-| `var(--…)` references                      | 113         | 132                  |
-| …carrying a fallback                       | 0           | 0                    |
-| token definitions in the card              | 7           | 0                    |
-| defines `--color-paper` / `--font-display` | no          | no                   |
-| catalog imports                            | 2           | 0                    |
-
-Both renders are unstyled, confirmed two independent ways: statically, by the
-token accounting above, and visually, from the render gate's own PNGs. The
-control is marginally worse on both counts — it references more undefined
-tokens, defines none at all, and its labels collide with their values
-(`EMAILamara@fieldnotes.press`) for want of spacing tokens.
-
-### The actual cause
-
-`design/tokens.css` holds every palette and type value. A mockup is an HTML
-page and `<link>`s it, which is why the accepted mockup looks right. A card is
-a `.gts` with `<style scoped>` blocks and has no way to load a workspace CSS
-file, so at render time every `var(--color-paper)` resolves to nothing and the
-browser falls back to its defaults. No gate catches it: parse, lint, evaluate
-and instantiate all pass on CSS that references undefined variables.
-
-The brand guide states the false assumption outright — _"Canonical tokens live
-in `design/tokens.css`. Every mockup links that file; every `.gts` template
-references those `var(--_)` names."\* True of mockups, false of cards.
-
-Worth noting: catalog `Author` solves exactly this by injecting a runtime
-`<style>` block scoped to `.blog-scope` via `themeStyleFor(this)` — and that
-weld is the reason the agent marked `Author` `REUSE-BLOCKED`. The pattern
-rejected as unreusable is the pattern that makes a card render standalone.
-
-Out of scope for this ticket; it reproduces on `main` and needs its own.
-
-### Incidental
-
-The control produced **zero** catalog imports against the same brief and corpus
-where this branch produced two. That is criterion 2 moving in the intended
-direction, but with one run per arm it is consistent-with, not evidence of, an
-effect.
-
----
-
-## Why `design/tokens.css` is never consumed by a `.gts`
-
-Traced through history rather than inferred.
-
-`design/tokens.css` enters in **`cf3c875af5`** ("Factory v2/v3…", 2026-07-17)
-together with `issue-design-foundation.md`. The whole bridge between the file
-and the cards is one word, unchanged since:
-
-> **`design/tokens.css`** — the same decisions as CSS custom properties …
-> Every future mockup links this file; every future `.gts` template
-> **mirrors** these variables.
-
-"Mirrors" can be read as _reproduce them_. But every instruction the build
-turn actually reads says reference, not define:
-
-| file                  | says                                                                |
-| --------------------- | ------------------------------------------------------------------- |
-| `issue-build.md:83`   | "Use theme CSS variables (`var(--*)`) per the notes' token mapping" |
-| `issue-design.md:128` | notes carry "theme-token mapping for every hard-coded color/size"   |
-
-A _mapping_ says which token replaces which colour. Nothing anywhere
-instructs anyone to emit the definitions, and the mockup never needs them
-emitted because an HTML page can `<link>` the stylesheet.
-
-The ambiguity is resolved in the losing direction by the agent that writes the
-brand guide each run. This run's guide paraphrased it as _"every `.gts`
-template **references** those `var(--_)` names"\* — reference, not mirror.
-
-### It has never worked
-
-Three independent factory runs against this brief, one per code revision:
-
-| workspace                                     | var refs in the card | palette tokens defined |
-| --------------------------------------------- | -------------------- | ---------------------- |
-| `user/field-notes` (spike)                    | 100                  | 0                      |
-| `user/fieldnotes-control` (unmodified `main`) | 132                  | 0                      |
-| `user/fieldnotes-reuse` (this branch)         | 113                  | 0                      |
-
-No factory-built card has ever defined a palette token. This is not a
-regression in anything; it is a handoff that was never written, latent since
-the file was introduced, and invisible because CSS treats an undefined
-`var()` with no fallback as _invalid at computed-value time_ — the property
-silently takes its inherited or initial value, and no gate evaluates CSS.
-
-Needs its own ticket. The fix is a choice between the card emitting its own
-token block (what catalog `Author` does via `themeStyleFor`), a Theme card
-supplying them at runtime, or fallbacks on every `var()`.
+One incidental result from the control: it produced **zero** catalog imports
+against the same brief and corpus where this branch produced two. That is
+criterion 2 moving in the intended direction, but with one run per arm it is
+consistent-with, not evidence of, an effect.
 
 ## `GAP` vs `REUSE-BLOCKED` — resolved
 
