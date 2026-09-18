@@ -352,12 +352,6 @@ const SCOPE: Readonly<Record<BaseOperation, 'instance' | 'type'>> = {
 // says less than not being there.
 const REACHED_ELSEWHERE: readonly BaseOperation[] = ['readSource'];
 
-// The behaviors a batch never carries. A query is one of them and still has a
-// member: it is run on the search engine rather than sent to `_operations`, so
-// it is reachable — just never as an entry of a batch, which commits writes
-// under a realm's lock and has nothing to do with reading a collection.
-const NEVER_IN_A_BATCH: readonly BaseOperation[] = ['query'];
-
 // A base behavior with no declaration on it runs whatever the realm's own
 // executor does, and a transform's executor runs a program — which a batch
 // entry has no member to carry. So the behavior is reachable only under the
@@ -394,11 +388,15 @@ function carriesMember(
 // realm under one lock, so it carries neither of the behaviors reached
 // elsewhere, and a card the batch mints is registered with `create(Type, …)`
 // rather than through the bucket of the card the batch is anchored on.
+//
+// A saved search is kept out by the scope rule rather than by a rule of its
+// own: a batch is anchored on a card, a query runs against a type, and what
+// runs against a type is not invocable on one card.
 function carriesEntry(
   subject: OperationsSubject,
   info: CarriedOperationInfo,
 ): boolean {
-  if (!carriesMember(subject, info) || NEVER_IN_A_BATCH.includes(info.base)) {
+  if (!carriesMember(subject, info)) {
     return false;
   }
   return !(info.base === 'create' && !info.declared);

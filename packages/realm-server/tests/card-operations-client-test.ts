@@ -1001,7 +1001,7 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(
             b.openReports,
             undefined,
-            'a batch commits writes under one realm lock; reading a collection is the search engine\u2019s and takes no lock',
+            'a batch is anchored on a card and a saved search runs against a type, so no entry of one can name a search',
           );
           b.escalate();
         },

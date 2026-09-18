@@ -1797,10 +1797,18 @@ function quoteList(values: readonly string[]): string {
 //
 // What a bucket carries is what can be invoked on what it was built for. A
 // file's bucket has its reads and the two writes that work on its bytes and
-// nothing else; a class's has the creates. `readSource` has no member at all —
-// the card source and byte routes serve stored bytes — and a query is reached
-// through the entry search API, so a declared one answers with where to find it
-// rather than sending a batch the realm would refuse.
+// nothing else; a class's has the creates and the saved searches its author
+// declared. `readSource` has no member at all — the card source and byte routes
+// serve stored bytes.
+//
+// **A saved search is as fresh as the index.** A declared `query` is carried
+// out by the search engine rather than by the realm's operation endpoint, so it
+// reads the search index — which lags a write until that write is indexed. To
+// read a card you just wrote, read the card (`operations(card).read()`, or the
+// store); a query is for collections, and its resource refreshes itself as the
+// realms it covers index. It is also the one member that is not awaited: it
+// answers the live entries resource, so make the call once and keep what it
+// answers rather than calling it again per render.
 //
 // **Typing an instance call.** A def's operations are declared as statics, and
 // TypeScript cannot read a class's statics through an instance type, so an
