@@ -21,8 +21,9 @@ const REVALIDATE_CACHE_CONTROL = 'no-cache, max-age=0, must-revalidate';
 const REVALIDATE_EXPIRES = new Date(0);
 
 // One dist, uploaded in two passes so each half carries the directive its
-// filenames can back up. The patterns are complements, so every file is uploaded
-// by exactly one pass.
+// filenames can back up. The patterns are complements, so every file the upload
+// considers is uploaded by exactly one pass. Both passes are filtered with
+// `dotFolders` off, so a dot-prefixed path would reach neither.
 const IMMUTABLE_UPLOAD = 's3-content-addressed';
 const REVALIDATING_UPLOAD = 's3-stable-named';
 

@@ -21,25 +21,29 @@ const s3Plugin = require('ember-cli-deploy-s3');
 process.env.AWS_S3_BUCKET ??= 'cardstack-boxel-host-test';
 process.env.AWS_REGION ??= 'us-east-1';
 
-// Paths a deployed host build serves — every stable-named one it has, plus a
-// sample of the content-addressed ones. `assets/` is the only place the build
-// writes content-addressed filenames; every other path keeps its name across
-// builds, which is what makes an immutable directive on one of them a promise
-// the filename cannot keep.
+// Paths the dist the deploy uploads contains — every stable-named one it has,
+// plus a sample of the content-addressed ones. `assets/` is the only place the
+// build writes content-addressed filenames; every other path keeps its name
+// across builds, which is what makes an immutable directive on one of them a
+// promise the filename cannot keep.
+//
+// The buckets are never pruned, so a path being served by a deployed
+// environment says only that some past build emitted it. This list tracks a
+// build's own output; the dist check at the bottom is what holds it to that.
 const DIST_FILES = [
   'index.html',
   'robots.txt',
   'auth-service-worker.js',
   'test-realm-sw.js',
-  'testem.js',
   'boxel-favicon.png',
   'boxel-webclip.png',
   'default-realm-icon.png',
   'boxel-ui-checksum.txt',
   '@embroider/virtual/vendor.js',
+  '@embroider/virtual/vendor.css',
   '@embroider/virtual/app.css',
   'test-modules/good.js',
-  'tests/index.html',
+  'test-modules/bad.js',
   'assets/main-DMcx_nWD.js',
   'assets/main-BlRjxoZ5.css',
   'assets/editor.main-CQnjGZh9.js',
@@ -59,12 +63,14 @@ interface Upload {
 
 // Drives the configured plugin instances through `configure` + `upload` with the
 // upload client replaced, and reports what each pass would have sent to S3.
-function uploadsFor(deployTarget: string): Promise<Record<string, Upload>> {
+function uploadsFor(
+  deployTarget: string,
+  distFiles: string[] = DIST_FILES,
+): Promise<Record<string, Upload>> {
   let config = deployConfig(deployTarget);
-  // A config that aliases the plugin runs one instance per alias, each reading
-  // the ENV key of the same name; an unaliased one runs a single `s3` instance.
-  // Both shapes are driven here so the assertions below are what decides.
-  let aliases: string[] = config.pipeline.alias?.s3?.as ?? ['s3'];
+  // Aliasing the plugin runs one instance per alias, each reading the ENV key
+  // of the same name.
+  let aliases: string[] = config.pipeline.alias.s3.as;
   let uploads: Record<string, Upload> = {};
 
   let context = {
@@ -72,7 +78,7 @@ function uploadsFor(deployTarget: string): Promise<Record<string, Upload>> {
     project: {},
     config,
     distDir: join(hostDir, 'dist'),
-    distFiles: DIST_FILES,
+    distFiles,
   };
 
   return Promise.all(
@@ -156,12 +162,13 @@ for (let deployTarget of ['s3-preview-staging', 's3-preview-production']) {
   });
 }
 
-// Everything above rests on DIST_FILES describing a real dist, and on `assets/`
-// being where the build puts content-addressed names. A build that moved its
-// hashed output elsewhere would leave those assertions passing over a fiction,
-// so this checks the claim against a dist when one is on disk. HOST_DIST_DIR
-// names it; the deploy pipeline's own output is checked in the build workflow.
-test('the dist paths this suite reasons about are the ones the build writes', (t) => {
+// Everything above runs a hand-maintained list through the passes, so it can
+// only confirm that list against itself. This runs a real dist through them
+// instead: it is the only check that can see a path the patterns miss, and the
+// only one that notices the list drifting from what the build emits.
+// HOST_DIST_DIR names the dist; the deploy's own output is checked in the build
+// workflow, which is the dist that decides whether a deploy is correct.
+test('a real dist partitions across the two passes', async (t) => {
   let named = process.env.HOST_DIST_DIR;
   let dir = (
     named
@@ -201,6 +208,33 @@ test('the dist paths this suite reasons about are the ones the build writes', (t
     [],
     'everything under assets/ is content-addressed',
   );
+
+  // The build lists dot-prefixed paths, but the upload plugin filters both
+  // passes with `dot: false`, so such a path is uploaded by neither and would
+  // be missing from the deploy without failing it. No build emits one; saying
+  // so here keeps the partition below an unconditional claim.
+  let dotPrefixed = built.filter((file) =>
+    file.split('/').some((segment) => segment.startsWith('.')),
+  );
+  assert.deepEqual(dotPrefixed, [], 'no dot-prefixed paths in the dist');
+
+  let uploads = await uploadsFor('production', built);
+  let uploaded = Object.values(uploads).flatMap((upload) => upload.filePaths);
+  assert.deepEqual(
+    [...uploaded].sort(),
+    [...built].sort(),
+    'every file the build wrote is uploaded exactly once',
+  );
+
+  for (let [alias, upload] of Object.entries(uploads)) {
+    for (let filePath of upload.filePaths) {
+      assert.equal(
+        immutable(upload),
+        filePath.startsWith('assets/'),
+        `${filePath} (uploaded by ${alias} as \`${upload.cacheControl}\`)`,
+      );
+    }
+  }
 });
 
 function walk(dir: string): string[] {
