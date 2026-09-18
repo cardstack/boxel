@@ -404,7 +404,7 @@ export async function commitBatch(
         };
         // The top level is a serial group, which is what makes a flat list
         // behave as it always has.
-        await stageRun(tree, 'serial', state, {
+        await stageRun(tree, 'serial', () => state, {
           entries,
           positions,
           staged,
@@ -558,6 +558,30 @@ interface StagingState {
 //
 // The maps hold one key per file the batch names, and `compose` replaces
 // their values rather than editing them, so the copy is shallow.
+// The state a run works against, obtained on first use.
+//
+// A branch's copy is deferred to the moment one of its entries reaches the
+// front of the staging budget, rather than made when the branch is created.
+// Created up front, a batch of N one-entry branches over N files would hold N
+// copies of an N-key map before a single entry had run — quadratic in a width
+// the caller chooses, while only as many entries as the budget allows are ever
+// doing anything. Deferred, a branch that has not started costs nothing and a
+// branch that has finished is collectable.
+//
+// Deferring is safe because of when the state around a group moves: a parallel
+// group's members do not compose into it — a direct entry member defers its
+// compose to the fold-back, and a group member composes into its own copy — so
+// nothing mutates it while a member is live. A serial run mutates it between
+// members, and awaits each one, so again not while a member is live. The copy
+// therefore holds what it would have held had it been taken when the branch
+// began.
+type ObtainState = () => StagingState;
+
+function branchState(parent: ObtainState): ObtainState {
+  let forked: StagingState | undefined;
+  return () => (forked ??= fork(parent()));
+}
+
 function fork(state: StagingState): StagingState {
   return {
     stored: new Map(state.stored),
@@ -723,27 +747,27 @@ function stagingBudget(limit: number): StagingBudget {
 async function stageRun(
   nodes: readonly Scheduled[],
   mode: 'parallel' | 'serial',
-  state: StagingState,
+  obtain: ObtainState,
   run: StagingRun,
 ): Promise<Claims> {
   return mode === 'serial'
-    ? await stageInOrder(nodes, state, run)
-    : await stageConcurrently(nodes, state, run);
+    ? await stageInOrder(nodes, obtain, run)
+    : await stageConcurrently(nodes, obtain, run);
 }
 
 // Members one after another, each composing into the state the next one
 // stages against — the batch's original rule, and the one a flat list gets.
 async function stageInOrder(
   nodes: readonly Scheduled[],
-  state: StagingState,
+  obtain: ObtainState,
   run: StagingRun,
 ): Promise<Claims> {
   let claims: Claims = new Map();
   for (let node of nodes) {
     let claimed =
       node.kind === 'entry'
-        ? await stageOne(node, state, run)
-        : await stageRun(node.members, node.mode, state, run);
+        ? await stageOne(node, obtain, run)
+        : await stageRun(node.members, node.mode, obtain, run);
     for (let [path, at] of claimed) {
       if (!claims.has(path)) {
         claims.set(path, at);
@@ -762,7 +786,7 @@ async function stageInOrder(
 // evaluation cannot be suspended with another's context underneath it.
 async function stageConcurrently(
   nodes: readonly Scheduled[],
-  state: StagingState,
+  obtain: ObtainState,
   run: StagingRun,
 ): Promise<Claims> {
   let outcomes = await Promise.allSettled(
@@ -777,8 +801,8 @@ async function stageConcurrently(
       // goes, so that a serial step inside it builds on the step before, and
       // those intermediate states are no business of the branch beside it.
       node.kind === 'entry'
-        ? await stageOne(node, state, run, { compose: false })
-        : await stageRun(node.members, node.mode, fork(state), run),
+        ? await stageOne(node, obtain, run, { compose: false })
+        : await stageRun(node.members, node.mode, branchState(obtain), run),
     ),
   );
   // Settled rather than raced, and the earliest refusal in request order is
@@ -804,6 +828,7 @@ async function stageConcurrently(
   // request order, so an entry after the group composes over what the group
   // staged and does so in the order the caller wrote rather than the order the
   // work finished in.
+  let state = obtain();
   for (let node of nodes) {
     if (node.kind === 'entry') {
       compose(state, node.entry, run.staged[node.at]);
@@ -818,7 +843,7 @@ async function stageConcurrently(
 
 async function stageOne(
   node: ScheduledEntry,
-  state: StagingState,
+  obtain: ObtainState,
   run: StagingRun,
   // Whether this entry folds its own change into the state it staged against.
   // A serial step does, so the step after it builds on this one. A direct
@@ -828,9 +853,12 @@ async function stageOne(
   { compose: composeIn }: { compose: boolean } = { compose: true },
 ): Promise<Claims> {
   let { entry, at } = node;
-  let change = await run.budget.spend(() =>
-    run.stage(entry, run.positions[at], state),
-  );
+  // The branch's state is obtained inside the allowance, so a branch waiting
+  // its turn has not copied anything yet.
+  let { state, change } = await run.budget.spend(async () => {
+    let state = obtain();
+    return { state, change: await run.stage(entry, run.positions[at], state) };
+  });
   run.staged[at] = change;
   run.baseHashes[at] = change.primaryPath
     ? (state.stored.get(change.primaryPath)?.contentHash ??

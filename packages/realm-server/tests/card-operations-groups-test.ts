@@ -716,6 +716,71 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a branch that starts late still reads the state the group started from', async function (assert) {
+      // The anchored create sits behind a slow step inside its own branch, so
+      // by the time it runs its sibling has finished staging — and it must
+      // still read the card as the group found it.
+      //
+      // What this catches, stated precisely, because it is less than it looks:
+      // two separate things keep a sibling's change away from this create — a
+      // direct entry member defers its compose to the fold-back, and a branch
+      // works from its own copy — and either alone is sufficient. So removing
+      // one leaves this green; it goes red when both go. That makes it a guard
+      // on the pair rather than on either, which is worth knowing before
+      // concluding from a green run that one of them is still doing something.
+      let { core, commits } = stub({
+        stored: {
+          'person-1.json': personFile('Mango'),
+          'person-2.json': personFile('Van Gogh'),
+        },
+        onStage: async (href) => {
+          if (href.endsWith('person-2')) {
+            await new Promise<void>((resolve) => setTimeout(resolve, 50));
+          }
+        },
+      });
+
+      await commitBatch(core, [
+        {
+          op: 'parallel',
+          members: [
+            setAttribute('person-1', { firstName: 'Changed' }),
+            {
+              op: 'serial',
+              members: [
+                setAttribute('person-2', { nickname: 'slow' }),
+                {
+                  op: 'create',
+                  lid: 'late',
+                  href: `${REALM}person-1`,
+                  params: {},
+                  definition: {
+                    base: 'create',
+                    of: PERSON,
+                    fill: { firstName: { $ref: 'instance', key: 'firstName' } },
+                  },
+                } as unknown as BatchNode,
+              ],
+            },
+          ],
+        },
+      ]);
+
+      assert.strictEqual(
+        JSON.parse(commits[0].writes['Person/late.json']).data.attributes
+          .firstName,
+        'Mango',
+        'the late branch reads the card as the group found it, not as the ' +
+          'sibling that finished first staged it',
+      );
+      assert.strictEqual(
+        JSON.parse(commits[0].writes['person-1.json']).data.attributes
+          .firstName,
+        'Changed',
+        "while the sibling's own write still lands",
+      );
+    });
+
     test('a serial run inside a parallel group composes, and the group composes into what follows', async function (assert) {
       let { core, commits } = stub({
         stored: {
