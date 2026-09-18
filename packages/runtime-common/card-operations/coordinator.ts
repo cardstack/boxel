@@ -154,6 +154,7 @@ export interface BatchCore {
     },
     options?: {
       clientRequestId?: string | null;
+      clientAuthored?: string[];
       waitForIndex?: boolean;
       initiatingUser?: string | null;
       // Where the commit stamps the stages it owns. The durable write, the
@@ -1815,10 +1816,19 @@ async function commitStaged(
   // first stage — synchronous in-memory work reported as a wait for indexing
   // would be the exact confusion these stages exist to remove.
   stageCursor?.mark('commit');
+  // The cards this batch mints under a name its caller chose. Those cards hold
+  // what that caller sent, and a caller that was holding one when it sent it
+  // may have moved on since — so the event says so, and re-reading them is
+  // that caller's to decline. Every other card the batch touches took state
+  // the realm computed, which no caller holds and every one of them wants.
+  let clientAuthored = staged
+    .filter((change): change is StagedChange => Boolean(change?.lid))
+    .map((change) => change.id);
   let committed = await core.commitUnlocked(
     { writes, appends, deletes },
     {
       clientRequestId: opts.clientRequestId ?? null,
+      ...(clientAuthored.length ? { clientAuthored } : {}),
       waitForIndex: opts.waitForIndex ?? true,
       // The batch's index job is tagged with the user whose request produced
       // it, the same as every other write path, so a reader draining its own

@@ -488,6 +488,17 @@ export interface IncrementalIndexEventContent {
   // re-runs.
   invalidatedTypes?: string[];
   clientRequestId?: string | null;
+  // Which of `invalidations` this request wrote from content its client
+  // supplied verbatim, rather than from state the realm computed. A client
+  // recognizing `clientRequestId` as its own already holds what these cards
+  // say — and may hold something newer still, edited while the write was in
+  // flight — so re-reading them is how an edit gets lost. Every other
+  // invalidation in the same pass reports state only the realm has.
+  //
+  // Absent when the writer named none, which means nothing in the pass can be
+  // ruled out and a client with fresher state to protect has only the request
+  // id to go on, as it had before this member existed.
+  clientAuthored?: string[];
   // The realm generation the indexing pass committed. Lets a consumer correlate
   // this search-doc update with the prerendered HTML that belongs to it.
   generation?: number;

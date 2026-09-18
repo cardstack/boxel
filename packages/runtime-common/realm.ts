@@ -1435,6 +1435,13 @@ export interface CommitBatchResult {
 
 export interface WriteOptions {
   clientRequestId?: string | null;
+  // The cards among this write's own files whose content the caller supplied
+  // verbatim, named the way the invalidation event names them. Reported on
+  // that event so a client holding these cards can tell them from the ones
+  // this write left the realm to compute. A writer that names none says
+  // nothing about the pass, which is what every writer but the operations
+  // coordinator does.
+  clientAuthored?: string[];
   serializeFile?: boolean | null;
   // When false, the write returns as soon as the source bytes are durable;
   // the *final* index flush kicks off in the background. Callers that need
@@ -2712,10 +2719,18 @@ export class Realm {
     invalidations: string[],
     opts?: {
       clientRequestId?: string | null;
+      clientAuthored?: string[];
       generation?: number;
       invalidatedTypes?: string[];
     },
   ): void {
+    // Narrowed to what the pass actually invalidated. A writer names the cards
+    // it wrote; whether a given one reached this event depends on what the
+    // index did with it, and a name the event does not carry would describe a
+    // card nobody can match it against.
+    let clientAuthored = opts?.clientAuthored?.filter((url) =>
+      invalidations.includes(url),
+    );
     this.broadcastRealmEvent({
       eventName: 'index',
       indexType: 'incremental',
@@ -2723,6 +2738,7 @@ export class Realm {
       ...(opts && Object.prototype.hasOwnProperty.call(opts, 'clientRequestId')
         ? { clientRequestId: opts.clientRequestId }
         : {}),
+      ...(clientAuthored?.length ? { clientAuthored } : {}),
       ...(opts?.generation !== undefined
         ? { generation: opts.generation }
         : {}),
@@ -3432,6 +3448,9 @@ export class Realm {
     let invalidatedTypes = makeInvalidatedTypeAccumulator();
     let indexGeneration: number | undefined;
     let clientRequestId: string | null = options?.clientRequestId ?? null;
+    let clientAuthored: string[] | undefined = options?.clientAuthored?.length
+      ? options.clientAuthored
+      : undefined;
     let initiatingUser: string | null = options?.initiatingUser ?? null;
     // The module→instance flush below runs an index pass whose invalidation
     // set is every dependent of the modules written so far — including the
@@ -3841,6 +3860,7 @@ export class Realm {
         await performIndex(changes);
         this.broadcastIncrementalInvalidationEvent([...invalidations], {
           clientRequestId,
+          ...(clientAuthored ? { clientAuthored } : {}),
           generation: indexGeneration,
           invalidatedTypes: invalidatedTypes.value,
         });
@@ -3893,6 +3913,7 @@ export class Realm {
                 [...new Set([...priorInvalidations, ...deferredInvalidations])],
                 {
                   clientRequestId,
+                  ...(clientAuthored ? { clientAuthored } : {}),
                   generation: meta.generation ?? indexGeneration,
                   invalidatedTypes: types.value,
                 },
@@ -3921,6 +3942,7 @@ export class Realm {
       // behavior.
       this.broadcastIncrementalInvalidationEvent([...invalidations], {
         clientRequestId,
+        ...(clientAuthored ? { clientAuthored } : {}),
         generation: indexGeneration,
         invalidatedTypes: invalidatedTypes.value,
       });

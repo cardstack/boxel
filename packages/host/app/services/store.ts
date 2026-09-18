@@ -2389,6 +2389,7 @@ export default class StoreService extends Service implements StoreInterface {
         reloadsTriggered++;
       }
       let clientRequestId = event.clientRequestId ?? undefined;
+      let clientAuthored = event.clientAuthored;
 
       let instance = this.peekError(invalidation) ?? this.peek(invalidation);
       if (instance) {
@@ -2426,9 +2427,27 @@ export default class StoreService extends Service implements StoreInterface {
               clientRequestId.startsWith('instance:') ||
               clientRequestId.startsWith('editor-with-instance')
             ) {
-              realmEventsLogger.debug(
-                `ignoring invalidation for card ${invalidation} because request id ${clientRequestId} is ours and an instance type`,
-              );
+              // Our own write, of the kind whose content we sent — so this
+              // instance already holds what the card says, and may hold
+              // something newer that was typed while the write was in flight.
+              // Re-reading it is how that edit gets lost.
+              //
+              // One request can write several cards, though, and only some of
+              // them carry what we sent: the rest took state the realm
+              // computed, which we do not hold and which nothing else will
+              // bring us. A writer that says which is which narrows the skip
+              // to those cards; one that says nothing leaves the whole pass
+              // skipped, which is what a single-card write means by it.
+              if (clientAuthored && !clientAuthored.includes(invalidation)) {
+                reloadFile = true;
+                realmEventsLogger.debug(
+                  `reloading card ${invalidation} because request id ${clientRequestId} is ours but did not carry this card's content`,
+                );
+              } else {
+                realmEventsLogger.debug(
+                  `ignoring invalidation for card ${invalidation} because request id ${clientRequestId} is ours and an instance type`,
+                );
+              }
             } else {
               reloadFile = true;
               realmEventsLogger.debug(
@@ -3671,6 +3690,58 @@ export default class StoreService extends Service implements StoreInterface {
       return await fn();
     } finally {
       deferred.fulfill();
+    }
+  }
+
+  // Runs a batch write under the same per-instance lock a save takes, for every
+  // card the caller is already holding that the batch is about to mint. An
+  // autosave of one of those cards that starts while the batch is in flight
+  // waits for it and then PATCHes the card the batch named, rather than posting
+  // a second one.
+  //
+  // Nested rather than acquired as a set: each lock is a queue for one local id
+  // and the batch is the only thing that holds more than one, so there is no
+  // second holder to deadlock against — and folding keeps this the same
+  // primitive a save takes rather than a second kind of lock.
+  async withMutationLocks<T>(
+    localIds: readonly string[],
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    let [first, ...rest] = localIds;
+    if (first === undefined) {
+      return await fn();
+    }
+    return await this.withCardMutationLock(first, () =>
+      this.withMutationLocks(rest, fn),
+    );
+  }
+
+  // Pairs every card a committed batch minted with the instance this store was
+  // already holding for it, and promotes that instance the way a save does.
+  //
+  // A pair naming a card the store never held is skipped rather than refused: a
+  // batch mints cards from plain data as readily as from an instance, and one
+  // nothing here is holding has no identity to assign. What is refused is a
+  // pairing that contradicts one the store already made — the identity map
+  // throws on it, and doing so from inside an event handler would surface it
+  // far from the batch that caused it, so it is caught here where the caller is
+  // still waiting.
+  async adoptMintedIdentities(
+    minted: readonly { lid: string; id: string }[],
+  ): Promise<void> {
+    for (let { lid, id } of minted) {
+      let remoteId = rri(id);
+      let held = this.store.getCard(remoteId);
+      if (held && held[localIdSymbol] !== lid) {
+        throw new Error(
+          `the batch minted ${remoteId} for local id ${lid}, but this store already holds that card under local id ${held[localIdSymbol]}`,
+        );
+      }
+      let instance = this.store.getCard(lid);
+      if (!instance || instance.id) {
+        continue;
+      }
+      await this.assignRemoteIdentity(instance, remoteId);
     }
   }
 
