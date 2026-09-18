@@ -25,6 +25,16 @@ import { OperationFailure, type OperationDefinition } from './types.ts';
 // permitted to read or write the realm. Treat a projection as a response
 // shape, never as a boundary.
 //
+// **Where a failure leaves the realm.** An `input` runs before anything is
+// staged, so a program that fails there refuses the operation with nothing
+// written. An `output` projects the result, and a write's result does not
+// exist until the write has committed — so a program that fails there answers
+// 400 over a card that has already changed. The refusal says the caller cannot
+// be told what happened, not that nothing did. What it cannot be is a
+// surprise: a program that does not parse, or that reaches outside the
+// dialect, is refused when the declaration is lowered, so the only way to
+// reach this is a program that ran on values it could not handle.
+//
 // **What a transform is handed.** `.` is the value the stage was given: the
 // payload for an `input`, the result document for an `output`. Alongside it
 // the request context carries `params()` and `actor()`. `instance()` is a slot

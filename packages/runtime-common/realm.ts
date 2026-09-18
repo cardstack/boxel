@@ -4566,8 +4566,12 @@ export class Realm {
         }
         // The `output` stage runs after the commit, over the result the wire
         // would otherwise carry. It projects what the caller is told about the
-        // write; it cannot unmake one, and the batch has already committed by
-        // the time it runs.
+        // write and cannot unmake one: a program that fails here answers 400
+        // over a card that has already changed, which is the one place the
+        // batch's all-or-nothing does not reach. A program that does not parse
+        // or reaches outside the transform dialect is refused when the
+        // declaration is lowered, so what gets here is a program that ran on
+        // values it could not handle.
         try {
           results[entry.index] = projectedResult(
             entry,

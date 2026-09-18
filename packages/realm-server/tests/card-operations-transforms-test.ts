@@ -65,7 +65,7 @@ function stub(operations?: Definition['operations']): OperationCore {
   return {
     realmURL: REALM,
     definitionLookup: {
-      async lookupDefinition(codeRef) {
+      async lookupDefinition(codeRef: CodeRef) {
         return {
           type: 'card-def',
           codeRef,
@@ -77,7 +77,7 @@ function stub(operations?: Definition['operations']): OperationCore {
       },
     },
     indexQueryEngine: {
-      async cardDocument(url) {
+      async cardDocument(url: URL) {
         return {
           type: 'doc',
           doc: storedDocument(url),
@@ -88,7 +88,7 @@ function stub(operations?: Definition['operations']): OperationCore {
           queryBacked: false,
         } as any;
       },
-      async instance(url) {
+      async instance(url: URL) {
         return {
           type: 'instance',
           instance: {
@@ -122,7 +122,7 @@ function stub(operations?: Definition['operations']): OperationCore {
     async fileMetaDocument() {
       return undefined;
     },
-    resolveCodeRef(codeRef) {
+    resolveCodeRef(codeRef: CodeRef) {
       return codeRef as any;
     },
     fileDefCodeRef() {
@@ -198,13 +198,15 @@ const REDACTING_READ: OperationDefinition = {
   },
 };
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('output', function () {
     test('a projection replaces the document the caller is served', async function (assert) {
       let result = documentOf(await read(stub({ read: REDACTING_READ })));
       assert.true(result.projected, 'the result reports that it was projected');
       assert.deepEqual(
-        result.document,
+        // An author's projection is whatever the program produced, so it is
+        // compared as data rather than against the document type it replaced.
+        result.document as unknown,
         {
           data: {
             type: 'card',
