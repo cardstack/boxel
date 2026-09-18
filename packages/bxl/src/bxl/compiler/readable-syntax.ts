@@ -10,6 +10,7 @@ import {
 } from '../bridge/formula-statistical-manifest.ts';
 import { FORMULA_BESSEL_FUNCTIONS } from '../bridge/formula-bessel-manifest.ts';
 import { canonicalValidationFunctionName } from '../bridge/validation-manifest.ts';
+import { JQ_TOKENIZER_KEYWORDS } from '../../jqtools/parser/Tokenizer.ts';
 
 export type ReadableFieldKind = 'scalar' | 'object' | 'array';
 
@@ -87,6 +88,15 @@ export type ReadableFunctionDialect = 'excel' | 'jq' | 'bxl-helper' | 'unknown';
 export interface ReadableFunctionDispatch {
   name: string;
   dialect: ReadableFunctionDialect;
+  /**
+   * This call's single argument names a key rather than describing a value,
+   * so a quoted argument stays a literal instead of resolving against the
+   * schema's field labels — which is how a multi-word label like
+   * `"Packing Notes"` is written, and would otherwise turn `params("Image")`
+   * on a card with an `Image` field into a read of that field. A bare label
+   * still compiles as an expression, so a computed key stays available.
+   */
+  keyNameArgument?: true;
 }
 
 export interface ReadableFunctionCallAnalysis {
@@ -464,6 +474,20 @@ const TRAILING_ARRAY_PACKED_VARIADIC_FORMULAS = new Map<string, number>([
   ['TEXTJOIN', 2],
 ]);
 
+/**
+ * The calls whose single argument is a key name, which
+ * {@link dispatchReadableFunctionCall} stamps onto the dispatch record as
+ * `keyNameArgument`. Matched case-insensitively so the decision tracks the
+ * name however dispatch spells it.
+ *
+ * `actor` is absent because it has no keyed form: `actor()` is the caller's
+ * user id, so there is no key to hold literal.
+ *
+ * The match is against the lower-cased name, so each entry is spelled that
+ * way — `realmConfig` appears here as `realmconfig`.
+ */
+const KEY_NAME_ARGUMENT_CALLS = new Set(['instance', 'params', 'realmconfig']);
+
 const CASE_INSENSITIVE_JQ_FUNCTIONS = new Set([
   'add',
   'all',
@@ -660,6 +684,14 @@ export function dispatchReadableFunctionCall({
     return { name: lower, dialect: 'jq' };
   }
 
+  // The request-context builtins. The name is left exactly as written, like
+  // the mutation dialect's other calls — `Append` no more resolves than
+  // `Params` does — so this adds the key-name decision without folding case
+  // or changing which implementation the name reaches.
+  if (KEY_NAME_ARGUMENT_CALLS.has(lower)) {
+    return { name, dialect: 'unknown', keyNameArgument: true };
+  }
+
   return { name, dialect: 'unknown' };
 }
 
@@ -830,14 +862,18 @@ function readableFieldPath(field: ReadableField): string[] {
   return field.path?.length ? field.path : [field.key];
 }
 
+// One field step of a jq path. A key that is a jq keyword (`label`, `if`,
+// `as`) is spelled `."label"`: jq 1.7 accepts the bare form only when it is
+// glued to the dot, and the compiler's own spacing pass would separate it.
+function jqFieldSuffix(key: string): string {
+  if (JQ_PARSER_KEYWORDS.has(key)) return `.${JSON.stringify(key)}`;
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(key)
+    ? `.${key}`
+    : `[${JSON.stringify(key)}]`;
+}
+
 function jqPathSuffix(field: ReadableField): string {
-  return readableFieldPath(field)
-    .map((key) =>
-      /^[A-Za-z_][A-Za-z0-9_]*$/.test(key)
-        ? `.${key}`
-        : `[${JSON.stringify(key)}]`,
-    )
-    .join('');
+  return readableFieldPath(field).map(jqFieldSuffix).join('');
 }
 
 /**
@@ -1223,6 +1259,11 @@ function appendPart(parts: string[], source: string) {
     source &&
     !/^[\s)\]},;]/.test(source)
   ) {
+    parts.push(' ');
+  }
+  // `. as $x` must not collapse to `.as $x`: glued to the dot, a keyword is
+  // a field name to jq 1.7 (a real `.as` field arrives here as `"as"`).
+  if (previous === '.' && JQ_PARSER_KEYWORDS.has(source)) {
     parts.push(' ');
   }
   // Space after jq separators `;` / `,` so compiled output reads nicely
@@ -2305,6 +2346,23 @@ class Compiler {
       return compiledLet;
     }
 
+    // A literal key name is emitted as-is rather than compiled as an
+    // expression, so it cannot be resolved into a field path. `tokenSource`
+    // re-quotes it the same way every other string literal is re-quoted,
+    // which is what keeps an escape or an interpolation valid jq.
+    if (analysis.dispatch.keyNameArgument && ranges.length === 1) {
+      const [keyStart, keyEnd] = ranges[0];
+      const keyToken = this.tokens[keyStart];
+      if (keyEnd - keyStart === 1 && keyToken?.type === 'string') {
+        this.index = close + 1;
+        return {
+          source: `${name}(${tokenSource(keyToken)})`,
+          changed: originalName !== name,
+          warnings: [],
+        };
+      }
+    }
+
     // Thread the caller's `.` scope through into each argument's compile.
     // For filter combinators like `map`/`select`, callers always arrive with
     // `itemScope` already set to the element shape (pipes set itemScope to
@@ -2485,7 +2543,7 @@ class Compiler {
           !resolved && allowPascalFallback ? pascalCaseToCamelKey(label) : null;
         out = resolved
           ? jqPathSuffix(resolved.field)
-          : `.${fallbackKey ?? label.value}`;
+          : jqFieldSuffix(fallbackKey ?? label.value);
         valueScope = resolved?.valueScope;
         arrayItemScope = resolved?.arrayItemScope;
         pendingImplicitArray = Boolean(resolved?.field.kind === 'array');
@@ -2505,7 +2563,7 @@ class Compiler {
       const resolved = resolveField(dotScope, label.value);
       const fallbackKey =
         !resolved && allowPascalFallback ? pascalCaseToCamelKey(label) : null;
-      out = `${resolved ? jqPathSuffix(resolved.field) : `.${fallbackKey ?? label.value}`}?`;
+      out = `${resolved ? jqPathSuffix(resolved.field) : jqFieldSuffix(fallbackKey ?? label.value)}?`;
       valueScope = resolved?.valueScope;
       arrayItemScope = resolved?.arrayItemScope;
       pendingImplicitArray = Boolean(resolved?.field.kind === 'array');
@@ -2538,7 +2596,7 @@ class Compiler {
       }
       const suffix = resolved
         ? jqPathSuffix(resolved.field)
-        : `.${fallbackKey!}`;
+        : jqFieldSuffix(fallbackKey!);
       const resolvesAgainstItem = Boolean(itemResolved);
       out = resolvesAgainstItem
         ? suffix
@@ -2598,7 +2656,7 @@ class Compiler {
         }
         const suffix = resolved
           ? jqPathSuffix(resolved.field)
-          : `.${fallbackKey ?? label.value}`;
+          : jqFieldSuffix(fallbackKey ?? label.value);
         out += `${optional ? '?' : ''}${suffix}`;
         valueScope = resolved?.valueScope;
         arrayItemScope = resolved?.arrayItemScope;
@@ -2665,6 +2723,12 @@ class Compiler {
   ): Token | undefined {
     const token = this.tokens[this.index];
     if (!token || !['ident', 'string'].includes(token.type)) {
+      return undefined;
+    }
+    // A bare jq keyword after the dot is the keyword (`. as $x`, `else . end`):
+    // a keyword the author glued to the dot as a field name has already been
+    // respelled `."label"` and arrives here as a string token.
+    if (token.type === 'ident' && JQ_PARSER_KEYWORDS.has(token.value)) {
       return undefined;
     }
 
@@ -3717,12 +3781,54 @@ export function preprocessReadableSource(source: string): {
   return { source: next, rewrites };
 }
 
+// jq 1.7 reads a keyword glued to a dot as a field name (`.label`, `.if`),
+// while `. as $x` stays a binding. Respell such a field as `."label"` in the
+// author's source, where adjacency is still the author's, so every later
+// pass (the unchanged-source fast path, spacing, formatting, the jq
+// tokenizer) sees an unambiguous string index instead of a keyword. Never
+// run it on compiled output, whose spacing is the compiler's.
+// The jq tokenizer's own keyword set, not the readable dialect's, since
+// this is about what jq's parser would reject after a dot.
+const JQ_PARSER_KEYWORDS = JQ_TOKENIZER_KEYWORDS;
+
+export function respellKeywordFields(source: string): string {
+  let tokens: Token[];
+  try {
+    tokens = tokenize(source);
+  } catch {
+    return source;
+  }
+  const edits: Array<{ start: number; end: number }> = [];
+  for (let i = 1; i < tokens.length; i++) {
+    const previous = tokens[i - 1];
+    const token = tokens[i];
+    if (
+      token.type === 'ident' &&
+      JQ_PARSER_KEYWORDS.has(token.value) &&
+      previous.type === 'op' &&
+      previous.value === '.' &&
+      previous.end !== undefined &&
+      token.start !== undefined &&
+      token.end !== undefined &&
+      previous.end === token.start
+    ) {
+      edits.push({ start: token.start, end: token.end });
+    }
+  }
+  let out = source;
+  for (const edit of edits.reverse()) {
+    out = `${out.slice(0, edit.start)}"${out.slice(edit.start, edit.end)}"${out.slice(edit.end)}`;
+  }
+  return out;
+}
+
 export function compileReadableSyntax(
   source: string,
   options: ReadableSyntaxOptions = {},
 ): ReadableSyntaxCompileResult {
   const pre = preprocessReadableSource(source);
-  const tokens = tokenize(pre.source);
+  const respelled = respellKeywordFields(pre.source);
+  const tokens = tokenize(respelled);
   const compiler = new Compiler(tokens, { schema: options.schema });
   const compiled = compiler.compile(options.schema);
   const compiledSource = compiled.needsRootBinding

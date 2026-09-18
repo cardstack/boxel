@@ -1,5 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
 import { eq } from '@cardstack/boxel-ui/helpers';
+import { nowDate } from '../helpers/clock';
 
 interface AgeConfiguration {
   ageOptions?: {
@@ -31,7 +32,7 @@ export class Age extends GlimmerComponent<AgeSignature> {
 
     try {
       const birth = new Date(this.birthDate);
-      const today = new Date();
+      const today = nowDate();
 
       // If birth date is in the future, return null (invalid)
       if (birth > today) return null;
@@ -70,7 +71,7 @@ export class Age extends GlimmerComponent<AgeSignature> {
 
     try {
       const birth = new Date(this.birthDate);
-      const today = new Date();
+      const today = nowDate();
 
       // If birth date is in the future, can't calculate next birthday
       if (birth > today) return null;
@@ -98,7 +99,7 @@ export class Age extends GlimmerComponent<AgeSignature> {
     if (!this.birthDate) return false;
     try {
       const birth = new Date(this.birthDate);
-      const today = new Date();
+      const today = nowDate();
       return birth > today;
     } catch {
       return false;

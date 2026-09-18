@@ -188,6 +188,85 @@ describe('itemsFromSearchEntryDoc — flatten a data-only entry doc to items', (
   it('returns an empty array for an empty document', () => {
     expect(itemsFromSearchEntryDoc({})).toEqual([]);
   });
+
+  it("folds the entry's `_matchRelevance` into the item's meta, in entry order", () => {
+    let doc = {
+      data: [
+        {
+          id: 'https://realm/a/dense',
+          relationships: {
+            item: { data: { type: 'card', id: 'https://realm/a/dense' } },
+          },
+          meta: { generation: 1, _matchRelevance: 0.9 },
+        },
+        {
+          id: 'https://realm/a/sparse',
+          relationships: {
+            item: { data: { type: 'card', id: 'https://realm/a/sparse' } },
+          },
+          meta: { generation: 1, _matchRelevance: 0.2 },
+        },
+      ],
+      included: [
+        {
+          type: 'card',
+          id: 'https://realm/a/dense',
+          attributes: { title: 'Dense' },
+          meta: { adoptsFrom: { name: 'Card' } },
+        },
+        {
+          type: 'card',
+          id: 'https://realm/a/sparse',
+          attributes: { title: 'Sparse' },
+        },
+      ],
+    };
+    let items = itemsFromSearchEntryDoc(doc);
+    expect(items.map((i) => (i as any).meta._matchRelevance)).toEqual([
+      0.9, 0.2,
+    ]);
+    // the existing item meta is preserved alongside the folded-in score
+    expect((items[0] as any).meta.adoptsFrom).toEqual({ name: 'Card' });
+  });
+
+  it('leaves the item untouched when no `_matchRelevance` rides the entry', () => {
+    let doc = {
+      data: [
+        {
+          id: 'https://realm/a/one',
+          relationships: {
+            item: { data: { type: 'card', id: 'https://realm/a/one' } },
+          },
+          meta: { generation: 1 },
+        },
+      ],
+      included: [{ type: 'card', id: 'https://realm/a/one', attributes: {} }],
+    };
+    let items = itemsFromSearchEntryDoc(doc);
+    expect('meta' in (items[0] as object)).toBe(false);
+  });
+
+  it('does not mutate a shared included resource across entries', () => {
+    let shared = {
+      type: 'card',
+      id: 'https://realm/a/one',
+      attributes: {},
+    };
+    let doc = {
+      data: [
+        {
+          id: 'https://realm/a/one',
+          relationships: {
+            item: { data: { type: 'card', id: 'https://realm/a/one' } },
+          },
+          meta: { _matchRelevance: 0.5 },
+        },
+      ],
+      included: [shared],
+    };
+    itemsFromSearchEntryDoc(doc);
+    expect('meta' in shared).toBe(false);
+  });
 });
 
 describe('composeMixedScopeDedup — invariant mixed-scope output', () => {

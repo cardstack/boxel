@@ -296,10 +296,8 @@ export class OfficePreview extends GlimmerComponent<FilePreviewSignature> {
         content: '';
         position: absolute;
         inset: 12% 12%;
-        background-image: repeating-linear-gradient(
-            var(--border) 0 1px,
-            transparent 1px 16px
-          ),
+        background-image:
+          repeating-linear-gradient(var(--border) 0 1px, transparent 1px 16px),
           repeating-linear-gradient(
             90deg,
             var(--border) 0 1px,

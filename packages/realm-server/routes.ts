@@ -6,6 +6,7 @@ import type {
   Realm,
   VirtualNetwork,
   Prerenderer,
+  LinkShapePolicy,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
@@ -55,6 +56,7 @@ import handleUnlistedRealmPathRequest from './handlers/handle-unlisted-realm-pat
 import handlePrerenderProxy from './handlers/handle-prerender-proxy.ts';
 import handleSearch from './handlers/handle-search.ts';
 import type { JobScopedSearchCache } from './job-scoped-search-cache.ts';
+import type { LiveSearchCache } from './live-search-cache.ts';
 import handleRealmIndexCounts from './handlers/handle-realm-index-counts.ts';
 import handleRealmInfo from './handlers/handle-realm-info.ts';
 import handleFederatedTypes from './handlers/handle-federated-types.ts';
@@ -137,6 +139,13 @@ export type CreateRoutesArgs = {
   // once the new code is live and the service is stable.
   reportHostShell?: () => Promise<void>;
   searchCache: JobScopedSearchCache;
+  // Per-process coalescing + short-TTL cache for live `_federated-search`
+  // traffic. Injectable so a test can supply one configured with `ttlMs: 0`
+  // (coalescing on, retention off) to force each caller to compute; when
+  // unset the handler constructs its own with production defaults.
+  liveSearchCache?: LiveSearchCache;
+  // Decides how much of each result's link graph a live search carries.
+  linkShapePolicy?: LinkShapePolicy;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
@@ -238,7 +247,14 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.all(
     '/_federated-search',
     multiRealmAuthorization(args),
-    handleSearch({ reconciler: args.reconciler, searchCache }),
+    handleSearch({
+      reconciler: args.reconciler,
+      searchCache,
+      dbAdapter: args.dbAdapter,
+      virtualNetwork: args.virtualNetwork,
+      liveSearchCache: args.liveSearchCache,
+      linkShapePolicy: args.linkShapePolicy,
+    }),
   );
   router.all(
     '/_federated-info',

@@ -30,6 +30,7 @@ import type { MediaCacheAdapter } from './media-cache.ts';
 import * as Tasks from './tasks/index.ts';
 import type { WorkerArgs, TaskArgs } from './tasks/index.ts';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
+import { heartbeatJob } from './queue.ts';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
@@ -125,6 +126,11 @@ export interface IndexingProgressEvent {
   type: 'indexing-started' | 'file-visited' | 'indexing-finished';
   realmURL: string;
   jobId: number;
+  // The reservation the reporting job holds. Carried so a progress report can
+  // double as the job's heartbeat: the queue keys heartbeats by reservation,
+  // because a job id can have more than one over its life. Optional for
+  // callers that mint a synthetic event without a reservation behind it.
+  reservationId?: number;
   jobType?: string;
   totalFiles?: number;
   filesCompleted?: number;
@@ -161,6 +167,7 @@ export class Worker {
   #reportRealmEvent: ((event: RealmEventContent) => void) | undefined;
   #realmServerMatrixUsername;
   #indexJobsOnly: boolean;
+  #skipPrerenderHtmlRealms: string[];
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
   #createPrerenderAuth: (
     userId: string,
@@ -182,6 +189,7 @@ export class Worker {
     prerenderer,
     createPrerenderAuth,
     indexJobsOnly,
+    skipPrerenderHtmlRealms,
     mediaCacheAdapter,
   }: {
     indexWriter: IndexWriter;
@@ -199,6 +207,7 @@ export class Worker {
     // When true, register handlers only for INDEX_JOB_TYPES so this worker
     // is a dedicated indexing lane — see INDEX_JOB_TYPES above.
     indexJobsOnly?: boolean;
+    skipPrerenderHtmlRealms?: string[];
     // The MediaCache object store, absent when the process has none
     // configured (media-cache tasks then no-op).
     mediaCacheAdapter?: MediaCacheAdapter;
@@ -221,6 +230,7 @@ export class Worker {
     this.#prerenderer = prerenderer;
     this.#createPrerenderAuth = createPrerenderAuth;
     this.#indexJobsOnly = indexJobsOnly ?? false;
+    this.#skipPrerenderHtmlRealms = skipPrerenderHtmlRealms ?? [];
     this.#mediaCacheAdapter = mediaCacheAdapter;
   }
 
@@ -247,6 +257,7 @@ export class Worker {
       reportRealmEvent: this.reportRealmEvent.bind(this),
       createPrerenderAuth: this.#createPrerenderAuth,
       mediaCacheAdapter: this.#mediaCacheAdapter,
+      skipPrerenderHtmlRealms: this.#skipPrerenderHtmlRealms,
     };
 
     let registrations: Record<string, () => Promise<unknown> | unknown> = {
@@ -272,6 +283,8 @@ export class Worker {
         ),
       'media-cache-gc': () =>
         this.#queue.register(`media-cache-gc`, Tasks['mediaCacheGc'](taskArgs)),
+      'scoped-css-gc': () =>
+        this.#queue.register(`scoped-css-gc`, Tasks['scopedCssGc'](taskArgs)),
       'copy-index': () =>
         this.#queue.register(`copy-index`, Tasks['copy'](taskArgs)),
       'lint-source': () =>
@@ -365,6 +378,11 @@ export class Worker {
   }
 
   private reportProgress(event: IndexingProgressEvent) {
+    // Progress is also the job's proof of life. Telling the queue here — at
+    // the one place every progress report already passes through — is what
+    // lets a long pass keep its worker: its deadline measures silence, and
+    // this is the job breaking it.
+    heartbeatJob(event.reservationId);
     this.#reportProgress?.(event);
   }
 

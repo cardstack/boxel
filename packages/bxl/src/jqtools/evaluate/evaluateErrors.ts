@@ -1,8 +1,12 @@
 import { JqEvaluateError, NotImplementedError } from '../errors.ts';
+import { notDefinedHint } from './runtimeState.ts';
 import { typeOf } from './utils/utils.ts';
 
 export function notDefinedError(name: string) {
-  return new JqEvaluateError(`'${name}' is not defined`);
+  const hint = notDefinedHint(name);
+  return new JqEvaluateError(
+    `'${name}' is not defined${hint ? `. ${hint}` : ''}`,
+  );
 }
 
 export function notImplementedError(featureName: string) {

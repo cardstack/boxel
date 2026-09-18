@@ -41,7 +41,10 @@ import {
   type PrerenderedHtmlFormat,
 } from './prerendered-html-format.ts';
 import { isCodeRef, isResolvedCodeRef } from './card-document-shape.ts';
-import { generalSortFields } from './index-query-engine.ts';
+import {
+  generalSortFields,
+  MATCH_RELEVANCE_SORT_KEY,
+} from './index-query-engine.ts';
 import { ensureTrailingSlash } from './paths.ts';
 import { parseUsedRenderType } from './search-resource-helpers.ts';
 
@@ -147,6 +150,12 @@ export interface SearchEntryQuery {
   realms?: string[];
   cardUrls?: string[];
   scope?: SearchEntryScope;
+  // The card types an entry must be one of to satisfy this query's filter, or
+  // `undefined` when the filter admits an entry of any type — see
+  // `wireFilterTypeAnchors`. Read off the wire filter, which carries the
+  // `item.on` anchors the translation to `itemQuery` spreads across `on` and
+  // `type`.
+  typeAnchors?: CodeRef[];
 }
 
 function invalidQuery(message: string): SearchRequestError {
@@ -507,6 +516,7 @@ function translateSort(value: unknown, rootAnchor: unknown): unknown[] {
       out.on === undefined &&
       typeof out.by === 'string' &&
       !(out.by in generalSortFields) &&
+      out.by !== MATCH_RELEVANCE_SORT_KEY &&
       rootAnchor !== undefined
     ) {
       out.on = rootAnchor;
@@ -680,6 +690,9 @@ export function parseSearchEntryQueryFromPayload(
     realms,
     cardUrls,
     scope,
+    typeAnchors: wireFilterTypeAnchors(
+      record.filter as SearchEntryWireFilter | undefined,
+    ),
   };
 }
 
@@ -834,6 +847,107 @@ export function wireFilterHasMatches(
   return false;
 }
 
+// The card types an entry must be one of to satisfy this filter, or
+// `undefined` when the filter admits an entry of any type. An over-
+// approximation, and deliberately so: every entry the filter matches adopts
+// from at least one of the returned refs, but not every entry adopting from
+// one of them matches.
+//
+// That direction is what a live search needs. An index event names the types
+// it touched; a query whose anchors are disjoint from them cannot have gained
+// or lost a member, because a member would have to be of one of these types
+// and a row of one of these types would have named it in the event. The
+// reverse — narrowing the anchors — would let a real membership change slip
+// past, so every shape whose anchors can't be established returns `undefined`
+// and leaves the caller re-running unconditionally.
+//
+// The engine ANDs a node's own `item.on` with every branch it could take (see
+// `filterCondition`), so an anchored node answers for its whole subtree
+// whatever that subtree contains and whichever branch runs.
+//
+// An unanchored node is only readable when exactly one member decides what it
+// matches. A node carrying several is compiled from just one of them and the
+// rest are dead weight — and which one that is cannot be read off the node,
+// because `filterCondition` and the query validator disagree about the order
+// they choose in. Reading the wrong member would anchor a node the engine is
+// running untyped, so a multi-member node anchors nothing.
+//
+// Given the one member: `every` is satisfied by any one branch's anchors (a
+// match satisfies all the branches, so any one of them constrains it), `any`
+// needs all of its branches anchored because an unanchored branch admits an
+// entry of any type, and a bare `not` or operator member anchors nothing.
+export function wireFilterTypeAnchors(
+  filter: SearchEntryWireFilter | undefined,
+): CodeRef[] | undefined {
+  if (!filter) {
+    return undefined;
+  }
+  let anchor = filter[ITEM_ANCHOR];
+  if (anchor) {
+    return [anchor];
+  }
+  let member = soleShapeMember(filter);
+  if (member === 'every' && filter.every?.length) {
+    for (let branch of filter.every) {
+      let anchors = wireFilterTypeAnchors(branch);
+      if (anchors) {
+        return anchors;
+      }
+    }
+    return undefined;
+  }
+  if (member === 'any' && filter.any?.length) {
+    let anchors: CodeRef[] = [];
+    for (let branch of filter.any) {
+      let branchAnchors = wireFilterTypeAnchors(branch);
+      if (!branchAnchors) {
+        return undefined;
+      }
+      anchors.push(...branchAnchors);
+    }
+    return anchors;
+  }
+  return undefined;
+}
+
+// The members that decide what a filter node matches, as opposed to the
+// `item.on` anchor that gates whichever of them runs.
+const SHAPE_MEMBERS = [
+  'any',
+  'every',
+  'not',
+  'eq',
+  'in',
+  'contains',
+  'range',
+  'matches',
+] as const;
+
+// The single member that decides what an unanchored node matches, or
+// `undefined` when it carries none or several. An `eq` binding nothing but the
+// `htmlQuery` rendering selection doesn't count: the parser lifts that binding
+// out of the node, so it never decides anything.
+function soleShapeMember(
+  filter: SearchEntryWireFilter,
+): (typeof SHAPE_MEMBERS)[number] | undefined {
+  let members = SHAPE_MEMBERS.filter((member) => {
+    let value = filter[member];
+    if (value === undefined) {
+      return false;
+    }
+    return !(member === 'eq' && bindsOnlyHtmlQuery(value));
+  });
+  return members.length === 1 ? members[0] : undefined;
+}
+
+function bindsOnlyHtmlQuery(eq: unknown): boolean {
+  if (typeof eq !== 'object' || eq == null) {
+    return false;
+  }
+  let keys = Object.keys(eq);
+  return keys.length > 0 && keys.every((key) => key === HTML_QUERY);
+}
+
 // ---------------------------------------------------------------------------
 // The wire grammar — what a client sends to `_search` /
 // `_federated-search`. `SearchEntryWireQuery` is the entry-rooted
@@ -974,6 +1088,14 @@ export function combineSearchEntryResults(
     if (combined.meta.htmlQuery == null && doc.meta?.htmlQuery != null) {
       combined.meta.htmlQuery = doc.meta.htmlQuery;
     }
+    // Any realm that clipped its closure clips the merged one: the combined
+    // `included[]` is the union, so a consumer holding it is short by whatever
+    // that realm withheld. Each realm holds its own ceiling, which is why the
+    // report is a fact rather than a figure — there is no single number here to
+    // merge.
+    if (doc.meta?.linkClosureTruncated) {
+      combined.meta.linkClosureTruncated = true;
+    }
     for (let resource of doc.included ?? []) {
       if (resource.id) {
         // NUL-separated so a `(type, id)` pair can't alias another by
@@ -1077,8 +1199,11 @@ export function buildEntryResource(args: {
   // Omitted only by callers with no generation to surface (unit tests); the
   // engine always supplies it.
   generation?: number;
+  // Full-text relevance for the query's `matches` terms — present only on a
+  // relevance-sorted query; rides in `meta._matchRelevance`. Omitted otherwise.
+  matchRelevance?: number;
 }): EntryResource {
-  let { url, htmlIds, itemType, iconId, generation } = args;
+  let { url, htmlIds, itemType, iconId, generation, matchRelevance } = args;
   let resource: EntryResource = {
     type: EntryResourceType,
     id: url,
@@ -1097,8 +1222,13 @@ export function buildEntryResource(args: {
       data: { type: IconResourceType, id: iconId },
     };
   }
-  if (generation !== undefined) {
-    resource.meta = { generation };
+  if (generation !== undefined || matchRelevance !== undefined) {
+    resource.meta = {
+      ...(generation !== undefined ? { generation } : {}),
+      ...(matchRelevance !== undefined
+        ? { _matchRelevance: matchRelevance }
+        : {}),
+    };
   }
   return resource;
 }

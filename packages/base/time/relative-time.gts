@@ -1,9 +1,4 @@
-import {
-  FieldDef,
-  Component,
-  field,
-  contains,
-} from '../card-api';
+import { FieldDef, Component, field, contains } from '../card-api';
 import StringField from '../string';
 import NumberField from '../number';
 import { action } from '@ember/object';

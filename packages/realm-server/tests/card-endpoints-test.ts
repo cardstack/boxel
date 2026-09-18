@@ -14,11 +14,14 @@ import type {
   ResourceID,
 } from '@cardstack/runtime-common';
 import {
+  CardDocumentCache,
   isSingleCardDocument,
   ri,
   baseRRI,
   rri,
+  SKIP_INDEX_WAIT_HEADER,
   searchEntryWireQueryFromQuery,
+  setWriteTimingSinkForTests,
   type LooseSingleCardDocument,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -28,6 +31,7 @@ import {
   setupPermissionedRealmsCached,
   setupMatrixRoom,
   closeServer,
+  waitUntil,
   testRealmInfo,
   createJWT,
   testRealmServerMatrixUserId,
@@ -35,7 +39,10 @@ import {
   type RealmRequest,
   withRealmPath,
 } from './helpers/index.ts';
-import { expectIncrementalIndexEvent } from './helpers/indexing.ts';
+import {
+  ABSENT_OR_NULL_CLIENT_REQUEST_ID,
+  expectIncrementalIndexEvent,
+} from './helpers/indexing.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -46,6 +53,31 @@ function parseSearchQuery(searchURL: URL) {
     return parse(queryParam) as Record<string, any>;
   }
   return parse(searchURL.searchParams.toString()) as Record<string, any>;
+}
+
+// The `handler=` total a `realm:write-timing` line reports, in ms. The line
+// also carries `status`, which sits ahead of it and is read separately — it is
+// the answer the write gave, not a duration.
+function handlerMs(line: string): number | undefined {
+  let match = /\bhandler=(\d+)ms\b/.exec(line);
+  return match ? Number(match[1]) : undefined;
+}
+
+// The stages a `realm:write-timing` line attributes the handler across, keyed
+// by stage name. Read from after the `handler=` total so the total itself is
+// not counted as one of them, and only as far as the first ` | `: a timeline
+// can carry a busy-time section and a counter section after that, and both are
+// `name=<int>` pairs that are not wall-clock. Collecting those would make the
+// sum exceed the handler while nothing overlapped at all, which is the one
+// thing that guard is supposed to mean.
+function stageMs(line: string): Record<string, number> {
+  let wallClock = line.split(' | ')[0];
+  let tail = wallClock.slice(wallClock.search(/\bhandler=\d+ms\b/));
+  let stages: Record<string, number> = {};
+  for (let [, stage, ms] of tail.matchAll(/\b([a-zA-Z]+)=(\d+)(?!ms)\b/g)) {
+    stages[stage] = Number(ms);
+  }
+  return stages;
 }
 
 // Create minimal valid PNG bytes for testing
@@ -855,8 +887,8 @@ module(basename(import.meta.filename), function () {
           let etag = response.get('etag') ?? '';
           assert.ok(etag, 'response carries an ETag');
           assert.true(
-            /^"\d+(?:-[0-9a-f]+)?:card-rri"$/.test(etag),
-            `ETag matches "<indexed_at>(-<realmInfoHash>)?:card-rri" pattern (got ${etag})`,
+            /^"\d+(?:-[0-9a-f]+)?:card-rri-lb\d+"$/.test(etag),
+            `ETag matches "<indexed_at>(-<realmInfoHash>)?:card-rri-lb<budget>" pattern (got ${etag})`,
           );
           assert.strictEqual(
             response.get('cache-control'),
@@ -919,6 +951,65 @@ module(basename(import.meta.filename), function () {
           );
           assert.ok(response.body.data, 'full body is returned');
           assert.ok(response.get('etag'), '200 response still carries an ETag');
+        });
+
+        test('a 200 answers as card+json and varies on what selects its representation', async function (assert) {
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('content-type'),
+            'application/vnd.card+json',
+            'the 200 is typed as card+json',
+          );
+          assert.strictEqual(
+            response.get('vary'),
+            'Accept, x-boxel-link-shape',
+            'caches key on the negotiated type and on the link shape, which are the two request members that select which representation of this URL is returned',
+          );
+        });
+
+        test('a 304 answers with no body and still varies on what selects its representation', async function (assert) {
+          let firstResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(firstResponse.status, 200, 'first GET succeeds');
+          let etag = firstResponse.get('etag') ?? '';
+          assert.ok(etag, 'first response carries an ETag');
+
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-None-Match', etag);
+
+          assert.strictEqual(response.status, 304, 'HTTP 304 status');
+          // `response.body` can be `{}` when supertest cannot decode an empty
+          // buffer, so the body check reads `response.text`.
+          assert.notOk(response.text, 'the 304 carries no body');
+          assert.strictEqual(
+            response.get('vary'),
+            'Accept, x-boxel-link-shape',
+            'a 304 has to carry the same key as the 200 it revalidates, or a cache stores the response under a narrower one',
+          );
+        });
+
+        test('an Accept the realm serves no route for falls through to the module/file fallback and 404s', async function (assert) {
+          // Content negotiation has no 406 arm: an unmatched Accept leaves the
+          // router with no route, and the request lands on the fallback that
+          // serves modules and raw files. `person-1` names a card, and neither
+          // that name nor any executable-extension form of it is a file on
+          // disk, so the fallback reports it missing.
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/x-unknown');
+
+          assert.strictEqual(
+            response.status,
+            404,
+            `an unsupported Accept 404s rather than 406ing: ${response.text}`,
+          );
         });
 
         // A write lands on the realm's file system before it is indexed, so
@@ -1229,6 +1320,269 @@ module(basename(import.meta.filename), function () {
             );
           }
         });
+
+        test('an errored row that recorded no title reports none', async function (assert) {
+          // The row's own account is what the body carries. A failure that was
+          // not a card error records no title, and reporting one anyway would
+          // put a value in the body that describes nothing on the row.
+          let cardURL = `${testRealmHref}person-1`;
+          let errorDoc = {
+            message: 'boom',
+            status: 500,
+            additionalErrors: null,
+          };
+          for (let table of ['boxel_index', 'boxel_index_working']) {
+            await dbAdapter.execute(
+              `UPDATE ${table}
+                 SET has_error = TRUE, error_doc = $1::jsonb
+                 WHERE (url = $2 OR file_alias = $2) AND type = 'instance'`,
+              { bind: [JSON.stringify(errorDoc), cardURL] },
+            );
+          }
+
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 500, 'HTTP 500 status');
+          assert.strictEqual(
+            response.body.errors?.[0]?.title,
+            undefined,
+            'the body carries no title, because the row recorded none',
+          );
+          assert.strictEqual(
+            response.body.errors?.[0]?.message,
+            'boom',
+            'and carries the message the row did record',
+          );
+        });
+      });
+
+      // Assembling a card+json body reads the index row and then expands the
+      // card's whole link closure into `included[]`, so the same card asked
+      // for repeatedly — by different readers, or by one tab re-reading after
+      // each neighbouring write — pays for those bytes again every time. The
+      // response cache collapses those reads onto one assembly and reports
+      // which of miss / join / hit each request took.
+      module('card+json response cache', function (hooks) {
+        setupPermissionedRealmCached(hooks, {
+          fixture: 'realistic',
+          realmURL,
+          permissions: {
+            '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          onRealmSetup,
+        });
+
+        test('a repeat read of an unchanged card is served from the cache', async function (assert) {
+          let first = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          let second = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(first.status, 200, `HTTP 200: ${first.text}`);
+          assert.strictEqual(second.status, 200, `HTTP 200: ${second.text}`);
+          assert.strictEqual(
+            first.get('x-boxel-card-cache'),
+            'miss',
+            'the first read assembles the document',
+          );
+          assert.strictEqual(
+            second.get('x-boxel-card-cache'),
+            'hit',
+            'the second read is served without reassembling',
+          );
+          assert.deepEqual(
+            second.body,
+            first.body,
+            'the cached read returns the same document',
+          );
+          assert.strictEqual(
+            second.get('etag'),
+            first.get('etag'),
+            'and the same validator',
+          );
+        });
+
+        // Freshness comes from the key, not from an eviction step: the write
+        // re-indexes the card, which rotates the validator the cache keys on,
+        // so the entry assembled before the write is simply unreachable.
+        test('a write makes the next read reassemble, with nothing evicted', async function (assert) {
+          let before = await request
+            .get('/hassan')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(before.status, 200, `HTTP 200: ${before.text}`);
+          let primed = await request
+            .get('/hassan')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            primed.get('x-boxel-card-cache'),
+            'hit',
+            'the card is cached before the write',
+          );
+
+          let patch = await request
+            .patch('/hassan')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan Abdel-Rahman' },
+                meta: {
+                  adoptsFrom: { module: rri('./friend.gts'), name: 'Friend' },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(patch.status, 200, `HTTP 200: ${patch.text}`);
+
+          let after = await request
+            .get('/hassan')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            after.get('x-boxel-card-cache'),
+            'miss',
+            'the read after the write assembles a fresh document',
+          );
+          assert.notStrictEqual(
+            after.get('etag'),
+            before.get('etag'),
+            'because the write rotated the validator the cache keys on',
+          );
+          assert.strictEqual(
+            after.body.data.attributes.firstName,
+            'Hassan Abdel-Rahman',
+            'and the fresh document carries the written value',
+          );
+        });
+
+        test('a conditional read of a cached card still answers 304', async function (assert) {
+          let first = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          let etag = first.get('etag') ?? '';
+          assert.ok(etag, 'the first read carries a validator');
+
+          let conditional = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-None-Match', etag);
+
+          assert.strictEqual(
+            conditional.status,
+            304,
+            'the conditional read still short-circuits to 304',
+          );
+          assert.strictEqual(
+            conditional.get('etag'),
+            etag,
+            'and echoes the validator',
+          );
+          assert.notOk(conditional.text, '304 response has no body');
+        });
+      });
+
+      // A cache whose assembly of one card waits on the test, so a second
+      // request for that card is guaranteed to arrive while the first is
+      // still assembling rather than racing it. Lives in its own module
+      // because the injected instance is shared by every test in the module
+      // it is passed to, where the per-test default is a fresh cache.
+      module('card+json response cache coalescing', function (hooks) {
+        class HoldableCardDocumentCache extends CardDocumentCache {
+          heldUrl: string | undefined;
+          release: Promise<void> | undefined;
+          onAssemblyStarted: (() => void) | undefined;
+          override getOrPopulate(
+            args: Parameters<CardDocumentCache['getOrPopulate']>[0],
+          ) {
+            let held = this.heldUrl && args.url.endsWith(this.heldUrl);
+            let { release, onAssemblyStarted } = this;
+            return super.getOrPopulate({
+              ...args,
+              populate: async () => {
+                if (held) {
+                  onAssemblyStarted?.();
+                  await release;
+                }
+                return args.populate();
+              },
+            });
+          }
+        }
+        let cache = new HoldableCardDocumentCache({
+          telemetryIntervalMs: 0,
+        });
+
+        setupPermissionedRealmCached(hooks, {
+          fixture: 'realistic',
+          realmURL,
+          permissions: {
+            '*': ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          onRealmSetup,
+          cardDocumentCache: cache,
+        });
+
+        test('a second read of a card still being assembled joins that assembly instead of starting its own', async function (assert) {
+          let releaseAssembly!: () => void;
+          cache.heldUrl = '/person-1';
+          cache.release = new Promise<void>(
+            (resolve) => (releaseAssembly = resolve),
+          );
+          let assemblyStarted = new Promise<void>(
+            (resolve) => (cache.onAssemblyStarted = resolve),
+          );
+
+          // supertest sends lazily; `.then` starts each request now.
+          let first = request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .then((response) => response);
+          await assemblyStarted;
+          let second = request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .then((response) => response);
+          await waitUntil(async () => cache.stats.joins === 1, {
+            timeout: 10_000,
+            interval: 10,
+            timeoutMessage: 'the second read to join the in-flight assembly',
+          });
+
+          releaseAssembly();
+          let [a, b] = await Promise.all([first, second]);
+
+          assert.strictEqual(a.status, 200, `HTTP 200: ${a.text}`);
+          assert.strictEqual(b.status, 200, `HTTP 200: ${b.text}`);
+          assert.strictEqual(
+            a.get('x-boxel-card-cache'),
+            'miss',
+            'the first read assembles',
+          );
+          assert.strictEqual(
+            b.get('x-boxel-card-cache'),
+            'join',
+            'the second read joins that assembly rather than running its own',
+          );
+          assert.strictEqual(
+            b.text,
+            a.text,
+            'and both receive byte-identical documents',
+          );
+
+          let third = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            third.get('x-boxel-card-cache'),
+            'hit',
+            'a read after the assembly settles is served from the entry it left behind',
+          );
+        });
       });
 
       module('permissioned realm', function (hooks) {
@@ -1344,6 +1698,50 @@ module(basename(import.meta.filename), function () {
             'realm is not public readable',
           );
         });
+
+        // Read permission is realm-scoped and checked before the handler
+        // runs, so an unauthorized caller never reaches the response cache —
+        // a warm entry assembled for a reader who had permission is not a way
+        // around the gate.
+        test('a cached body is not reachable by a caller without read permission', async function (assert) {
+          let authorized = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
+            );
+          assert.strictEqual(authorized.status, 200, 'the reader is served');
+          assert.strictEqual(
+            authorized.get('x-boxel-card-cache'),
+            'miss',
+            'and their read populated the cache',
+          );
+
+          let unauthorized = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
+          assert.strictEqual(
+            unauthorized.status,
+            403,
+            'a caller without read permission is still refused',
+          );
+          assert.notOk(
+            unauthorized.body?.data,
+            'and receives no card document',
+          );
+
+          let anonymous = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            anonymous.status,
+            401,
+            'as is a caller with no credentials at all',
+          );
+          assert.notOk(anonymous.body?.data, 'who also receives no document');
+        });
       });
     });
 
@@ -1360,6 +1758,59 @@ module(basename(import.meta.filename), function () {
         });
 
         let { getMessagesSince } = setupMatrixRoom(hooks, getRealmSetup);
+
+        // The create path reads the new card back through its own call, so the
+        // shape it answers with is asserted separately from the patch path's.
+        // The read of the card the create just made is the control: it is what
+        // the create would have assembled had it asked.
+        test('a create side-loads none of the new card’s links', async function (assert) {
+          let write = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Mango' },
+                relationships: {
+                  friend: { links: { self: `${testRealmHref}hassan` } },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri(`${testRealmHref}friend.gts`),
+                    name: 'Friend',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(write.status, 201, `HTTP 201: ${write.text}`);
+          // The stored link survives; what a readback would have added on top
+          // of it — the resolved target, and the target's own resource — does
+          // not.
+          assert.ok(
+            write.body.data.relationships?.friend?.links?.self,
+            'the create still names the card its link points at',
+          );
+          assert.notOk(
+            write.body.included,
+            'but carries no side-loaded resources',
+          );
+
+          let localPath = new URL(write.body.data.id).pathname.replace(
+            new URL(testRealmHref).pathname,
+            '',
+          );
+          let read = await request
+            .get(`/${localPath}`)
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(read.status, 200, `HTTP 200: ${read.text}`);
+          assert.ok(
+            (read.body.included ?? []).some(
+              (resource: any) => resource.id === `${testRealmHref}hassan`,
+            ),
+            'the read of the created card does side-load that link',
+          );
+        });
 
         test('serves the request', async function (assert) {
           let realmEventTimestampStart = Date.now();
@@ -1387,6 +1838,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: null,
               timeout: 5000,
             },
           );
@@ -1444,6 +1896,240 @@ module(basename(import.meta.filename), function () {
               },
             },
             'file contents are correct',
+          );
+        });
+
+        test("the incremental index event echoes the write's X-Boxel-Client-Request-Id", async function (assert) {
+          // The writing client recognizes its own event by this id and skips
+          // reloading over its own fresher local edits, so the echo is part of
+          // the wire contract, not a diagnostic.
+          let realmEventTimestampStart = Date.now();
+
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: rri('@cardstack/base/card-api'),
+                    name: 'CardDef',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-Boxel-Client-Request-Id', 'post-client-request-id');
+
+          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+
+          await expectIncrementalIndexEvent(
+            testRealmHref,
+            realmEventTimestampStart,
+            {
+              assert,
+              getMessagesSince,
+              realm: testRealmHref,
+              clientRequestId: 'post-client-request-id',
+              timeout: 5000,
+            },
+          );
+        });
+
+        test('a 201 answers as card+json and varies on Accept', async function (assert) {
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: rri('@cardstack/base/card-api'),
+                    name: 'CardDef',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(
+            response.get('content-type'),
+            'application/vnd.card+json',
+            'the 201 is typed as card+json',
+          );
+          assert.strictEqual(
+            response.get('vary'),
+            'Accept',
+            'the response varies on Accept',
+          );
+        });
+
+        test('the 201 reports the created card as the index holds it', async function (assert) {
+          // A create answers from the card read back out of the index, never
+          // from the serialization it just wrote: a computed field is derived
+          // at index time and never stored, so a body carrying one is the
+          // request having waited for the incremental index job its own write
+          // queued.
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Van Gogh' },
+                meta: {
+                  adoptsFrom: {
+                    // Absolute, because a created card is stored one directory
+                    // down and a relative ref would be resolved from there.
+                    module: rri(`${testRealmHref}person`),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            201,
+            `HTTP 201 status: ${response.text}`,
+          );
+          assert.strictEqual(
+            response.body.data.attributes?.cardTitle,
+            'Van Gogh',
+            'the 201 carries the computed field the stored file does not hold',
+          );
+        });
+
+        test('Content-Type routes the request when Accept matches no route', async function (assert) {
+          // The router's second chance: an unmatched Accept falls back to
+          // Content-Type, which is what makes a body-bearing POST route on the
+          // type of what it is sending rather than the type it wants back.
+          let response = await request
+            .post('/')
+            .set('Accept', 'application/x-unknown')
+            .set('Content-Type', 'application/vnd.card+json')
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'card',
+                  attributes: {},
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('@cardstack/base/card-api'),
+                      name: 'CardDef',
+                    },
+                  },
+                },
+              }),
+            );
+
+          assert.strictEqual(
+            response.status,
+            201,
+            `the create route still runs: ${response.text}`,
+          );
+        });
+
+        test('a local id written inside a relationship data array is refused', async function (assert) {
+          // A collection's edges are stored one key per member —
+          // `friends.0`, `friends.1` — and that is the only spelling whose
+          // links survive serialization. A local id written inside the
+          // `data` array has no key of its own to carry one, so the card
+          // would be stored with the edge missing and the write would report
+          // success.
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan' },
+                relationships: {
+                  friends: { data: [{ type: 'card', lid: 'local-id-7' }] },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('https://localhost:4202/node-test/friend'),
+                    name: 'Friend',
+                  },
+                },
+              },
+              included: [
+                {
+                  lid: 'local-id-7',
+                  type: 'card',
+                  attributes: { firstName: 'Boris' },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('https://localhost:4202/node-test/friend'),
+                      name: 'Friend',
+                    },
+                  },
+                },
+              ],
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            400,
+            `HTTP 400 status: ${response.text}`,
+          );
+        });
+
+        test('a local id no resource in the payload creates is refused', async function (assert) {
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan' },
+                relationships: {
+                  friend: { data: { type: 'card', lid: 'nobody-sent-this' } },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('https://localhost:4202/node-test/friend'),
+                    name: 'Friend',
+                  },
+                },
+              },
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            400,
+            `a local id naming nothing is the payload's fault: ${response.text}`,
+          );
+        });
+
+        test('a POST to an existing card URL is not a create route and 404s', async function (assert) {
+          // Create matches the realm root and directory paths only, so a POST
+          // aimed at a card 404s through the module/file fallback instead of
+          // replacing the card.
+          let response = await request
+            .post('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Van Gogh' },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            404,
+            `POST to a card URL 404s: ${response.text}`,
           );
         });
 
@@ -1565,6 +2251,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: null,
               type: 'Friend',
               timeout: 5000,
             },
@@ -1663,6 +2350,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: null,
               type: 'Friend',
               timeout: 5000,
             },
@@ -2576,6 +3264,286 @@ module(basename(import.meta.filename), function () {
 
         let { getMessagesSince } = setupMatrixRoom(hooks, getRealmSetup);
 
+        // `hassan` links to `jade`, which links back — so a closure walk over
+        // this card has something to find and does not terminate at one layer.
+        // The read is the control: it is what the write would have assembled.
+        test('a write side-loads none of the written card’s links', async function (assert) {
+          let write = await request
+            .patch('/hassan')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan Abdel-Rahman' },
+                meta: {
+                  adoptsFrom: { module: rri('./friend.gts'), name: 'Friend' },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(write.status, 200, `HTTP 200: ${write.text}`);
+          assert.strictEqual(
+            write.body.data.attributes.firstName,
+            'Hassan Abdel-Rahman',
+            'the write answers with the value it stored',
+          );
+          assert.strictEqual(
+            write.body.data.relationships?.friend?.links?.self,
+            './jade',
+            'and still names the card the stored link points at',
+          );
+          assert.notOk(
+            write.body.included,
+            'but carries no side-loaded resources',
+          );
+
+          let read = await request
+            .get('/hassan')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(read.status, 200, `HTTP 200: ${read.text}`);
+          assert.ok(
+            (read.body.included ?? []).some(
+              (resource: any) => resource.id === `${testRealmHref}jade`,
+            ),
+            'the read of the same card does side-load that link',
+          );
+        });
+
+        // Each of these stages can be the whole of a slow write, and none is
+        // distinguishable from outside the handler, so the line has to carry
+        // every one of them for a write's duration to be attributable.
+        test('a write reports where its time went', async function (assert) {
+          let lines: string[] = [];
+          setWriteTimingSinkForTests((line) => lines.push(line));
+          try {
+            let response = await request
+              .patch('/hassan')
+              .send({
+                data: {
+                  type: 'card',
+                  // A value the fixture does not already hold: an unchanged
+                  // patch short-circuits before the write, and the stages
+                  // asserted below are the ones that short circuit skips.
+                  attributes: { firstName: 'Hassan Timed' },
+                  meta: {
+                    adoptsFrom: { module: rri('./friend.gts'), name: 'Friend' },
+                  },
+                },
+              })
+              .set('Accept', 'application/vnd.card+json')
+              .set('X-Boxel-Logging-Correlation-Id', 'write-timing-probe');
+
+            assert.strictEqual(
+              response.status,
+              200,
+              `HTTP 200: ${response.text}`,
+            );
+          } finally {
+            setWriteTimingSinkForTests(undefined);
+          }
+
+          assert.strictEqual(lines.length, 1, 'the write emitted one line');
+          let line = lines[0];
+          assert.ok(
+            line.startsWith('PATCH '),
+            `line names the method: ${line}`,
+          );
+          assert.ok(
+            line.includes('corr=write-timing-probe'),
+            `line carries the caller's correlation id: ${line}`,
+          );
+          for (let stage of [
+            'lock',
+            'drain',
+            'stage',
+            'persist',
+            'enqueue',
+            'awaitIndex',
+            'invalidate',
+            'commit',
+            'readback',
+            'stringify',
+          ]) {
+            assert.ok(
+              new RegExp(`\\b${stage}=\\d+`).test(line),
+              `line attributes the ${stage} stage: ${line}`,
+            );
+          }
+          assert.ok(
+            / status=200 /.test(line),
+            `line reports the answer the write gave: ${line}`,
+          );
+          let handler = handlerMs(line);
+          assert.notStrictEqual(
+            handler,
+            undefined,
+            `line reports the whole handler: ${line}`,
+          );
+          // The guard that keeps the stages a timeline rather than a set of
+          // overlapping measurements. A stage that contained the ones inside
+          // it would count their time twice and push the total past the
+          // handler, and every share read off the line would be wrong by the
+          // same factor.
+          let stages = stageMs(line);
+          let total = Object.values(stages).reduce((sum, ms) => sum + ms, 0);
+          assert.ok(
+            total <= handler!,
+            `the stages sum to no more than the handler (${total} <= ${handler}): ${line}`,
+          );
+        });
+
+        // The wait for a worker is the one stage this header removes, and a
+        // caller reaching for it is asking to stop paying for it. A line that
+        // reported the same stages either way could not show that it worked.
+        test('a write that opts out of waiting for the index reports no wait', async function (assert) {
+          let lines: string[] = [];
+          setWriteTimingSinkForTests((line) => lines.push(line));
+          try {
+            let response = await request
+              .patch('/hassan')
+              .send({
+                data: {
+                  type: 'card',
+                  attributes: { firstName: 'Hassan Deferred' },
+                  meta: {
+                    adoptsFrom: { module: rri('./friend.gts'), name: 'Friend' },
+                  },
+                },
+              })
+              .set('Accept', 'application/vnd.card+json')
+              .set(SKIP_INDEX_WAIT_HEADER, 'true');
+
+            assert.strictEqual(
+              response.status,
+              200,
+              `HTTP 200: ${response.text}`,
+            );
+          } finally {
+            setWriteTimingSinkForTests(undefined);
+          }
+
+          assert.strictEqual(lines.length, 1, 'the write emitted one line');
+          let line = lines[0];
+          let stages = stageMs(line);
+          assert.ok(
+            'persist' in stages,
+            `the write still reports making the bytes durable: ${line}`,
+          );
+          assert.ok(
+            'enqueue' in stages,
+            `and still reports queueing its index job: ${line}`,
+          );
+          assert.notOk(
+            'awaitIndex' in stages,
+            `but reports no wait for a worker to run it: ${line}`,
+          );
+          // This write's answer is built from the document the commit stored
+          // rather than read back out of the index, and building it reaches
+          // for the realm's info. Without a stage over that, the work would
+          // sit after the last stage the line reports, and the timeline would
+          // end before the handler did.
+          assert.ok(
+            'stringify' in stages,
+            `and still reports building its answer: ${line}`,
+          );
+          let handler = handlerMs(line);
+          assert.notStrictEqual(
+            handler,
+            undefined,
+            `line reports the whole handler: ${line}`,
+          );
+          let total = Object.values(stages).reduce((sum, ms) => sum + ms, 0);
+          assert.ok(
+            total <= handler!,
+            `the stages sum to no more than the handler (${total} <= ${handler}): ${line}`,
+          );
+        });
+
+        // What is stored for a relationship depends on whether the link can be
+        // relativized against the writing realm. A scoped reference cannot be,
+        // and must not be resolved either: resolving one stores whatever URL
+        // the linked realm answers to in this environment, so a realm under
+        // version control ends up carrying a dev or staging host.
+        test('stores a scoped cross-realm link verbatim', async function (assert) {
+          let scopedLink = '@cardstack/catalog/Pet/vangogh';
+
+          let response = await request
+            .patch('/hassan')
+            .send({
+              data: {
+                type: 'card',
+                relationships: {
+                  friend: { links: { self: scopedLink } },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./friend.gts'),
+                    name: 'Friend',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'hassan.json',
+          );
+          let stored = JSON.parse(readFileSync(cardFile, 'utf8'));
+          assert.strictEqual(
+            stored.data.relationships.friend.links.self,
+            scopedLink,
+            'the stored link is the scoped reference the client sent',
+          );
+        });
+
+        test('still relativizes a same-realm link', async function (assert) {
+          let response = await request
+            .patch('/hassan')
+            .send({
+              data: {
+                type: 'card',
+                relationships: {
+                  friend: { links: { self: `${testRealmHref}jade` } },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./friend.gts'),
+                    name: 'Friend',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'hassan.json',
+          );
+          let stored = JSON.parse(readFileSync(cardFile, 'utf8'));
+          assert.strictEqual(
+            stored.data.relationships.friend.links.self,
+            './jade',
+            'an in-realm link is still stored relative',
+          );
+        });
+
         test('serves the request', async function (assert) {
           let entry = 'person-1.json';
 
@@ -2822,9 +3790,15 @@ module(basename(import.meta.filename), function () {
 
         test('PATCH response carries an ETag and writes invalidate the previous one', async function (assert) {
           // Capture the pre-patch ETag, mutate the card, and verify the PATCH
-          // response advertises a *different* ETag for the new state — that's
-          // the contract that lets the caller cache the post-patch body
-          // without an extra round-trip GET.
+          // response advertises a different ETag for the new state.
+          //
+          // A write answers with the written card alone while a GET answers
+          // with its link closure, so the two are different representations of
+          // one card and take different validators. That is what the
+          // `write-echo` variant records, and it is why the ETag a PATCH
+          // returns does not short-circuit a later GET of the same URL: being
+          // 304'd on it would hand the caller a body with no `included[]` as
+          // though it were the GET representation.
           let initialResponse = await request
             .get('/person-1')
             .set('Accept', 'application/vnd.card+json');
@@ -2851,8 +3825,8 @@ module(basename(import.meta.filename), function () {
           let patchEtag = patchResponse.get('etag') ?? '';
           assert.ok(patchEtag, 'PATCH response carries an ETag');
           assert.true(
-            /^"\d+(?:-[0-9a-f]+)?:card-rri"$/.test(patchEtag),
-            `PATCH ETag matches "<indexed_at>(-<realmInfoHash>)?:card-rri" pattern (got ${patchEtag})`,
+            /^"\d+(?:-[0-9a-f]+)?:card-rri-write-echo"$/.test(patchEtag),
+            `PATCH ETag names the write-echo shape (got ${patchEtag})`,
           );
           assert.notStrictEqual(
             patchEtag,
@@ -2871,25 +3845,46 @@ module(basename(import.meta.filename), function () {
             200,
             'old ETag no longer matches → fresh 200',
           );
-          assert.strictEqual(
+          assert.true(
+            /^"\d+(?:-[0-9a-f]+)?:card-rri-lb\d+"$/.test(
+              staleResponse.get('etag') ?? '',
+            ),
+            `GET reports a validator for the read shape (got ${staleResponse.get('etag')})`,
+          );
+          assert.notStrictEqual(
             staleResponse.get('etag'),
-            patchEtag,
-            'GET reports the new ETag',
+            originalEtag,
+            'and it advanced with the write',
           );
 
-          // And the new etag from the PATCH must short-circuit on next GET.
-          let cachedResponse = await request
+          // The PATCH's own validator describes the write echo, which carries
+          // no `included[]`, so it must not satisfy a GET — a 304 here would
+          // leave the caller holding the narrower body as the card's read
+          // representation.
+          let echoValidated = await request
             .get('/person-1')
             .set('Accept', 'application/vnd.card+json')
             .set('If-None-Match', patchEtag);
           assert.strictEqual(
+            echoValidated.status,
+            200,
+            'the write echo’s ETag does not short-circuit a GET',
+          );
+
+          // The GET's own validator still does.
+          let freshEtag = echoValidated.get('etag') ?? '';
+          let cachedResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-None-Match', freshEtag);
+          assert.strictEqual(
             cachedResponse.status,
             304,
-            'new ETag from PATCH lets a follow-up GET short-circuit',
+            'the ETag a GET returns lets a follow-up GET short-circuit',
           );
         });
 
-        test('no-op PATCH response carries an ETag matching the existing one', async function (assert) {
+        test('no-op PATCH response carries the write-echo validator over the unchanged state', async function (assert) {
           // Prime once so the stored file is in canonical serialized form;
           // the no-op assertions below measure the steady state (see the
           // no-op lastModified test).
@@ -2929,10 +3924,23 @@ module(basename(import.meta.filename), function () {
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(patchResponse.status, 200, 'no-op PATCH succeeds');
+          // Nothing was rewritten, so `indexed_at` has not moved and the
+          // validator is built over the same state the GET described. It is
+          // still a different validator, because a no-op PATCH answers with
+          // the write-echo shape like any other write — which is what keeps a
+          // caller from treating the echo as the card's read representation.
           assert.strictEqual(
             patchResponse.get('etag'),
+            (initialEtag ?? '').replace(
+              /:card-rri-lb\d+"$/,
+              ':card-rri-write-echo"',
+            ),
+            'no-op PATCH validates the unchanged state under the write-echo shape',
+          );
+          assert.notStrictEqual(
+            patchResponse.get('etag'),
             initialEtag,
-            'no-op PATCH returns the same ETag (no rewrite, indexed_at unchanged)',
+            'and so does not collide with the validator a GET returns',
           );
         });
 
@@ -2996,6 +4004,60 @@ module(basename(import.meta.filename), function () {
             card.data.relationships?.['cardInfo.theme'],
             undefined,
             'the unset, non-searchable base-card link is not persisted (not in a searchable path and never set)',
+          );
+        });
+
+        test('a patch that changes nothing rewrites a card the index has never seen', async function (assert) {
+          // The short circuit that leaves an unchanged card alone needs the
+          // index to hold a document for the card. A card written straight to
+          // disk has no row at all, so there is nothing to answer from and the
+          // patch rewrites it in canonical serialized form instead — which is
+          // what gets it indexed. A client reaches this state by writing a
+          // card's source and patching it before the write's indexing lands.
+          let realmDir = join(dir.name, 'realm_server_1', 'test');
+          let cardFile = join(realmDir, 'unindexed-patch-target.json');
+          writeFileSync(
+            cardFile,
+            JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Pending' },
+                meta: {
+                  adoptsFrom: { module: './person.gts', name: 'Person' },
+                },
+              },
+            }),
+          );
+
+          let response = await request
+            .patch('/unindexed-patch-target')
+            .send({
+              data: {
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+          assert.strictEqual(
+            response.body.data.attributes?.firstName,
+            'Pending',
+            'the card is served back with what the file holds',
+          );
+          assert.strictEqual(
+            readJSONSync(cardFile).data.meta.adoptsFrom.module,
+            './person',
+            'the card was rewritten in canonical form, which indexes it',
           );
         });
 
@@ -4006,6 +5068,292 @@ module(basename(import.meta.filename), function () {
           }
         });
 
+        test("the incremental index event echoes the write's X-Boxel-Client-Request-Id", async function (assert) {
+          let realmEventTimestampStart = Date.now();
+
+          let response = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Van Gogh',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-Boxel-Client-Request-Id', 'patch-client-request-id');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+          await expectIncrementalIndexEvent(
+            `${testRealmHref}person-1.json`,
+            realmEventTimestampStart,
+            {
+              assert,
+              getMessagesSince,
+              realm: testRealmHref,
+              clientRequestId: 'patch-client-request-id',
+            },
+          );
+        });
+
+        test('a 200 answers as card+json and varies on Accept', async function (assert) {
+          let response = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Van Gogh',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('content-type'),
+            'application/vnd.card+json',
+            'the 200 is typed as card+json',
+          );
+          assert.strictEqual(
+            response.get('vary'),
+            'Accept',
+            'the response varies on Accept',
+          );
+        });
+
+        test('the 200 reports the patched card as the index holds it', async function (assert) {
+          // The same settled-state contract the create answers on: the patched
+          // card is read back out of the index, so its computed fields are
+          // resolved over the values this request just wrote rather than over
+          // whatever the index held before it.
+          let response = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Van Gogh' },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+          assert.strictEqual(
+            response.body.data.attributes?.cardTitle,
+            'Van Gogh',
+            'the 200 carries the computed field recomputed over the patch',
+          );
+        });
+
+        test('a no-op patch answers as card+json too', async function (assert) {
+          // A patch that changes nothing skips the file rewrite, and it still
+          // answers on the same wire contract as one that writes.
+          let patchBody = {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: rri('./person'),
+                  name: 'Person',
+                },
+              },
+            },
+          };
+          // The first patch of a hand-authored fixture may rewrite it into
+          // canonical serialized form; the second is the genuine no-op.
+          await request
+            .patch('/person-1')
+            .send(patchBody)
+            .set('Accept', 'application/vnd.card+json');
+
+          let response = await request
+            .patch('/person-1')
+            .send(patchBody)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('content-type'),
+            'application/vnd.card+json',
+            'the no-op 200 is typed as card+json',
+          );
+          assert.strictEqual(
+            response.get('vary'),
+            'Accept',
+            'the no-op response varies on Accept',
+          );
+        });
+
+        test('a no-op patch that defers its indexing still answers from the index', async function (assert) {
+          // Deferring indexing decides what happens after a write, and a
+          // patch that changes nothing makes no write to defer. So this
+          // request is answered the way every other unchanged patch is —
+          // from the card as the index holds it, computed fields and all —
+          // rather than from the bytes on disk, which carry neither.
+          let patchBody = {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: rri('./person'),
+                  name: 'Person',
+                },
+              },
+            },
+          };
+          // The first patch of a hand-authored fixture rewrites it into
+          // canonical serialized form; the second is the genuine no-op.
+          await request
+            .patch('/person-1')
+            .send(patchBody)
+            .set('Accept', 'application/vnd.card+json');
+
+          let response = await request
+            .patch('/person-1')
+            .send(patchBody)
+            .set('Accept', 'application/vnd.card+json')
+            .set(SKIP_INDEX_WAIT_HEADER, 'true');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+          assert.strictEqual(
+            response.body.data.attributes?.cardTitle,
+            'Mango',
+            'the computed field only the indexed document carries is present',
+          );
+          assert.ok(
+            response.get('etag'),
+            'the response carries the validator an indexed answer has',
+          );
+        });
+
+        test('a PATCH of the .json form of a card URL does not patch the card', async function (assert) {
+          // The patch route excludes the `.json` form, so the canonical
+          // no-extension URL is the only one that patches a card. The request
+          // lands on the module/file fallback instead, which finds the stored
+          // instance file and serves it back verbatim.
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'person-1.json',
+          );
+          let before = readJSONSync(cardFile);
+
+          let response = await request
+            .patch('/person-1.json')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Van Gogh',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('content-type'),
+            'application/json',
+            'the fallback types the response as the stored file, not card+json',
+          );
+          assert.deepEqual(
+            readJSONSync(cardFile),
+            before,
+            'the stored card is untouched',
+          );
+
+          let getResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(
+            getResponse.body.data.attributes?.firstName,
+            'Mango',
+            'the served card still carries its pre-request value',
+          );
+        });
+
+        test('a read issued straight after a deferred write serves the written state', async function (assert) {
+          // A read drains the requester's own in-flight incremental indexing
+          // before consulting the index, so a client never has to poll for its
+          // own write to become visible.
+          //
+          // Two things this has to set up, or it passes whether or not the
+          // drain exists. The write must defer its indexing —
+          // `X-Boxel-Skip-Index-Wait` returns once the bytes are durable,
+          // where the default path waits for the index and leaves nothing in
+          // flight to drain. And both requests must carry the same identity:
+          // the gate waits on indexing *that requester initiated*, so an
+          // anonymous read is excused from waiting and a different user's read
+          // finds nothing of its own pending.
+          let jwt = createJWT(testRealm, 'john', ['read', 'write']);
+          let patchResponse = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Van Gogh',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json')
+            .set('Authorization', `Bearer ${jwt}`)
+            .set('X-Boxel-Skip-Index-Wait', 'true');
+          assert.strictEqual(patchResponse.status, 200, 'the PATCH succeeds');
+
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('Authorization', `Bearer ${jwt}`);
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.body.data.attributes?.firstName,
+            'Van Gogh',
+            'the read serves the state the write just produced',
+          );
+        });
         test('broadcasts realm events', async function (assert) {
           let realmEventTimestampStart = Date.now();
 
@@ -4034,6 +5382,7 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: null,
             },
           );
         });
@@ -4514,7 +5863,51 @@ module(basename(import.meta.filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              clientRequestId: ABSENT_OR_NULL_CLIENT_REQUEST_ID,
             },
+          );
+        });
+
+        test('the incremental index event carries no client request id, even when the request sends one', async function (assert) {
+          // Delete never reads `X-Boxel-Client-Request-Id`, so a client cannot
+          // recognize its own delete event the way it recognizes its own
+          // create or update.
+          let realmEventTimestampStart = Date.now();
+
+          let response = await request
+            .delete('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-Boxel-Client-Request-Id', 'delete-client-request-id');
+
+          assert.strictEqual(response.status, 204, 'HTTP 204 status');
+
+          await expectIncrementalIndexEvent(
+            `${testRealmHref}person-1.json`,
+            realmEventTimestampStart,
+            {
+              assert,
+              getMessagesSince,
+              realm: testRealmHref,
+              clientRequestId: ABSENT_OR_NULL_CLIENT_REQUEST_ID,
+            },
+          );
+        });
+
+        test('a 204 answers with no content type and varies on Accept', async function (assert) {
+          let response = await request
+            .delete('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 204, 'HTTP 204 status');
+          assert.strictEqual(
+            response.get('content-type'),
+            undefined,
+            'the 204 carries no content type',
+          );
+          assert.strictEqual(
+            response.get('vary'),
+            'Accept',
+            'the response varies on Accept',
           );
         });
 
@@ -4622,6 +6015,126 @@ module(basename(import.meta.filename), function () {
       });
     });
 
+    // `HEAD` is how a client discovers which realm serves a URL. A discovery
+    // probe reads `X-Boxel-Realm-Url` and `X-Boxel-Realm-Public-Readable` off
+    // the response and looks at nothing else — not the body, not the status —
+    // so what it rests on is that every response the realm builds carries
+    // those headers, for any path and without the caller proving it may read
+    // anything.
+    module('card HEAD request', function (_hooks) {
+      module('public readable realm', function (hooks) {
+        setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
+          realmURL,
+          permissions: {
+            '*': ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          onRealmSetup,
+        });
+
+        test('a probe that sends no Accept names the realm whatever the path', async function (assert) {
+          // What the realm-discovery callers send: no `Accept` of their own,
+          // which matches no route, so the request lands on the module/file
+          // fallback and the realm identity comes off whatever that answers.
+          for (let path of [
+            '/person-1',
+            '/no-such-card',
+            '/some/nested/path',
+          ]) {
+            let response = await request.head(path);
+
+            assert.strictEqual(
+              response.get('X-boxel-realm-url'),
+              testRealmHref,
+              `the response for ${path} names the realm serving the URL`,
+            );
+            assert.strictEqual(
+              response.get('X-boxel-realm-public-readable'),
+              'true',
+              `the response for ${path} reports the realm as public readable`,
+            );
+          }
+        });
+
+        test('an Accept the realm has no read route for answers 200 whatever the path', async function (assert) {
+          for (let path of [
+            '/person-1',
+            '/no-such-card',
+            '/',
+            '/some/nested/path',
+          ]) {
+            let response = await request
+              .head(path)
+              .set('Accept', 'application/vnd.api+json');
+
+            assert.strictEqual(response.status, 200, `HTTP 200 for ${path}`);
+            assert.strictEqual(
+              response.get('X-boxel-realm-url'),
+              testRealmHref,
+              `the response for ${path} names the realm serving the URL`,
+            );
+            assert.strictEqual(
+              response.get('X-boxel-realm-public-readable'),
+              'true',
+              `the response for ${path} reports the realm as public readable`,
+            );
+          }
+        });
+
+        test('answers 200 with the realm-identity headers for a card that exists', async function (assert) {
+          let response = await request
+            .head('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmHref,
+            'the response names the realm serving the URL',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            'true',
+            'the response reports the realm as public readable',
+          );
+        });
+      });
+
+      module('permissioned realm', function (hooks) {
+        setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
+          realmURL,
+          permissions: {
+            john: ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          onRealmSetup,
+        });
+
+        test('answers 200 without a JWT, and reports the realm as not public readable', async function (assert) {
+          let response = await request
+            .head('/person-1')
+            .set('Accept', 'application/vnd.card+json'); // no Authorization header
+
+          assert.strictEqual(
+            response.status,
+            200,
+            'discovery does not require authentication',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmHref,
+            'the response names the realm serving the URL',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            undefined,
+            'the realm is not public readable',
+          );
+        });
+      });
+    });
     module('file URLs', function (hooks) {
       setupPermissionedRealmCached(hooks, {
         realmURL,
@@ -4901,6 +6414,7 @@ boxel:
     const consumerRealmURL = 'http://127.0.0.1:5522/test/';
     const UNREACHABLE_REALM_URL = 'https://example.invalid/offline/';
     let consumerRequest: RealmRequest;
+    let providerRequest: RealmRequest;
 
     setupPermissionedRealmsCached(hooks, {
       realms: [
@@ -5002,6 +6516,10 @@ boxel:
       ],
       onRealmSetup({ realms }) {
         let latestRealms = realms.slice(-2);
+        providerRequest = withRealmPath(
+          supertest(latestRealms[0].realmHttpServer),
+          new URL(providerRealmURL),
+        );
         consumerRequest = withRealmPath(
           supertest(latestRealms[1].realmHttpServer),
           new URL(consumerRealmURL),
@@ -5011,6 +6529,62 @@ boxel:
 
     hooks.afterEach(() => {
       resetCatalogRealms();
+    });
+
+    // A query-backed field finds its targets by running a query when the card
+    // is read, and a write to a card that enters or leaves that query
+    // deliberately leaves the owner's `deps` and `indexed_at` alone. The
+    // response cache keys on a validator built from `indexed_at`, so such a
+    // document must never be retained — otherwise the owner would keep
+    // serving the pre-write answer until the entry aged out.
+    test('a query-backed document is re-resolved on every read rather than served from the cache', async function (assert) {
+      let first = await consumerRequest
+        .get('/favorite')
+        .set('Accept', 'application/vnd.card+json');
+      let second = await consumerRequest
+        .get('/favorite')
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(first.status, 200, `HTTP 200: ${first.text}`);
+      assert.strictEqual(second.status, 200, `HTTP 200: ${second.text}`);
+      assert.strictEqual(
+        second.get('x-boxel-card-cache'),
+        'miss',
+        'the repeat read runs the query again instead of reading a retained answer',
+      );
+      assert.strictEqual(
+        second.body.data.relationships.matches?.data?.[0]?.id,
+        `${providerRealmURL}person-remote`,
+        'and resolves the current top match',
+      );
+
+      // `matches` sorts by name descending and takes one, so a new provider
+      // card sorting after 'Zed' becomes the answer.
+      let write = await providerRequest
+        .post('/')
+        .send({
+          data: {
+            type: 'card',
+            attributes: { name: 'Zoe' },
+            meta: {
+              adoptsFrom: {
+                module: rri(`${providerRealmURL}person`),
+                name: 'Person',
+              },
+            },
+          },
+        })
+        .set('Accept', 'application/vnd.card+json');
+      assert.strictEqual(write.status, 201, `HTTP 201: ${write.text}`);
+
+      let afterWrite = await consumerRequest
+        .get('/favorite')
+        .set('Accept', 'application/vnd.card+json');
+      assert.strictEqual(
+        afterWrite.body.data.relationships.matches?.data?.[0]?.id,
+        write.body.data.id,
+        'the read after the write sees the new top match immediately, with no wait for an entry to expire',
+      );
     });
 
     test('linksTo query resolves the first aggregated result and includes it', async function (assert) {
@@ -5076,6 +6650,59 @@ boxel:
         ),
         'local person is present in included array',
       );
+    });
+
+    // A write is answered from the written card alone. The read of the same
+    // card in the same test is the control: it is what the card's query-backed
+    // fields resolve to, and what the write would have assembled had it asked.
+    test('a write does not resolve the written card’s query-backed fields', async function (assert) {
+      let read = await consumerRequest
+        .get('/favorite')
+        .set('Accept', 'application/vnd.card+json');
+      assert.strictEqual(read.status, 200, `HTTP 200: ${read.text}`);
+      assert.ok(
+        read.body.data.relationships?.favorite?.links?.search,
+        'the read resolves the query-backed field',
+      );
+      assert.ok(
+        (read.body.included ?? []).some(
+          (resource: any) => resource.id === `${consumerRealmURL}local-person`,
+        ),
+        'and side-loads the card that field found',
+      );
+
+      let write = await consumerRequest
+        .patch('/favorite')
+        .send({
+          data: {
+            type: 'card',
+            attributes: { cardInfo: { name: 'Renamed' } },
+            meta: {
+              adoptsFrom: {
+                module: rri('./favorite-finder'),
+                name: 'FavoriteLookup',
+              },
+            },
+          },
+        })
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(write.status, 200, `HTTP 200: ${write.text}`);
+      assert.strictEqual(
+        write.body.data.id,
+        `${consumerRealmURL}favorite`,
+        'the write answers about the card it wrote',
+      );
+      assert.strictEqual(
+        write.body.data.attributes.cardInfo.name,
+        'Renamed',
+        'and answers with the value it just stored',
+      );
+      assert.notOk(
+        write.body.data.relationships?.favorite?.links?.search,
+        'but runs no query for the query-backed field',
+      );
+      assert.notOk(write.body.included, 'and side-loads nothing');
     });
 
     test('linksToMany query returns remote results and records errors for failing realm', async function (assert) {

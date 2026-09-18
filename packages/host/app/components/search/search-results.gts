@@ -34,6 +34,13 @@ interface HostSearchResultsSignature {
     // component varies nothing through `@query` — the resource's owner drives
     // it. When absent the component creates and owns its resource as before.
     resource?: SearchEntriesResource;
+    // Card-facing scoping, set by the `@context.searchResultsComponent`
+    // wrapper: a no-realm search targets `@getDefaultRealm` rather than fanning
+    // out to every readable realm. Host-owned call sites (choosers, playground,
+    // the sheet) omit both and keep the all-realms default. Ignored on the
+    // `@resource` path — the caller-owned resource carries its own scoping.
+    cardInitiated?: boolean;
+    getDefaultRealm?: () => string | undefined;
   };
   Blocks: SearchResultsComponentSignature['Blocks'];
 }
@@ -58,6 +65,10 @@ export default class SearchResults extends Component<HostSearchResultsSignature>
     return this.args.overlays ?? true;
   }
 
+  private get displayContainer(): boolean {
+    return this.args.displayContainer ?? true;
+  }
+
   // Created once per component: the view-model layer memoizes render-stable
   // entries on top of a search resource. With `@resource` it wraps the
   // caller-owned resource (whose subscriptions and re-runs outlive this
@@ -70,12 +81,18 @@ export default class SearchResults extends Component<HostSearchResultsSignature>
         this.args.resource,
         () => this.mode,
         () => this.overlays,
+        () => this.displayContainer,
       )
     : getRenderableSearchEntries(
         this,
         () => this.args.query,
         () => this.mode,
         () => this.overlays,
+        () => this.displayContainer,
+        {
+          cardInitiated: this.args.cardInitiated,
+          getDefaultRealm: this.args.getDefaultRealm,
+        },
       );
 
   private get results(): SearchResultsYield {

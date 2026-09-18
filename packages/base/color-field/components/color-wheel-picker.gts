@@ -10,10 +10,10 @@ import type {
   WheelColorFormat,
   WheelVariantConfiguration,
 } from '../util/color-utils';
+import type { RGBA } from '@cardstack/boxel-ui/helpers';
 import {
   detectColorFormat,
   hslToRgb,
-  RGBA,
   rgbaToFormatString,
   rgbaToHsv,
 } from '@cardstack/boxel-ui/helpers';
@@ -230,6 +230,7 @@ export default class ColorWheelPicker extends Component<ColorFieldSignature> {
       // Store the latest event and throttle updates using requestAnimationFrame
       this.pendingInteractionEvent = event;
       if (this.pendingInteractionFrame === null) {
+        // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- coalesces pointer moves into one repaint per frame
         this.pendingInteractionFrame = requestAnimationFrame(() => {
           if (this.pendingInteractionEvent) {
             this.handleWheelInteraction(this.pendingInteractionEvent);
@@ -312,6 +313,7 @@ export default class ColorWheelPicker extends Component<ColorFieldSignature> {
     // Set initial canvas size
     element.width = this.size;
     element.height = this.size;
+    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- canvas repaint
     requestAnimationFrame(() => this.drawColorWheel());
   }
 
@@ -319,6 +321,7 @@ export default class ColorWheelPicker extends Component<ColorFieldSignature> {
     if (this.wheelCanvasElement) {
       this.wheelCanvasElement.width = this.size;
       this.wheelCanvasElement.height = this.size;
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- canvas repaint
       requestAnimationFrame(() => this.drawColorWheel());
     }
   }

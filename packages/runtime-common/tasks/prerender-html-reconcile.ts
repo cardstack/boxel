@@ -10,7 +10,10 @@ import {
   type QueueCoalesceContext,
   type QueueCoalesceDecision,
 } from '../queue.ts';
-import { enqueuePrerenderHtmlJob } from '../jobs/prerender-html.ts';
+import {
+  enqueuePrerenderHtmlJob,
+  skipsPrerenderHtml,
+} from '../jobs/prerender-html.ts';
 import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from './indexer.ts';
 import {
   fetchRealmGenerations,
@@ -78,7 +81,13 @@ registerQueueJobDefinition({
 const prerenderHtmlReconcile: Task<
   PrerenderHtmlReconcileArgs,
   PrerenderHtmlReconcileResult
-> = ({ dbAdapter, queuePublisher, reportStatus, log }) =>
+> = ({
+  dbAdapter,
+  queuePublisher,
+  reportStatus,
+  log,
+  skipPrerenderHtmlRealms,
+}) =>
   async function (args) {
     let { jobInfo } = args;
     reportStatus(jobInfo, 'start');
@@ -115,6 +124,17 @@ const prerenderHtmlReconcile: Task<
     let urlsEnqueued = 0;
     let realmsInBackoff = 0;
     for (let [realmURL, urls] of plan) {
+      // A realm configured to render no HTML has every row permanently
+      // unrendered, which is indistinguishable here from residue worth
+      // repairing — `ph.url IS NULL` is the first staleness condition. Without
+      // this the sweep would re-enqueue on every tick the very render the
+      // configuration exists to prevent, at whole-realm size.
+      if (skipsPrerenderHtml(realmURL, skipPrerenderHtmlRealms)) {
+        log.debug(
+          `${jobIdentity(jobInfo)} prerender-html reconcile: skipping realm configured not to render: ${realmURL} (${urls.length} unrendered url(s))`,
+        );
+        continue;
+      }
       // Render as the realm's owner, mirroring how an index pass spawns the
       // prerender job. Realms owned only by a bot (`realm/…`) are re-enqueued
       // by the deploy-time from-scratch reindex, so their residue self-heals on

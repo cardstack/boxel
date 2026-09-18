@@ -1,6 +1,7 @@
 import type Koa from 'koa';
 
 import {
+  captureOutputContentType,
   captureSpecHash,
   emitScreenshotPerf,
   ensureTrailingSlash,
@@ -52,12 +53,15 @@ import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 // response. `deviceScaleFactor` is the effective scale: the engine-reported
 // factor when the capture just ran, else the spec's declared override on a
 // ledger serve (which has no engine report), else null at the default scale.
+// `pageCount` describes a paged (pdf) capture, which has no pixel extent —
+// its `width`/`height` are null — and is absent on a raster one.
 interface CaptureResult {
   name: string | null;
   url: string | null;
   width: number | null;
   height: number | null;
   deviceScaleFactor: number | null;
+  pageCount?: number;
   base64?: string;
 }
 
@@ -88,10 +92,10 @@ interface CaptureResult {
  * [{name, url, width, height, deviceScaleFactor, base64?}]` on every ready
  * response. `url` is the durable served URL when the capture persisted under
  * its ledger identity — any singular spec on a capture format, custom
- * geometry included — and null when nothing persists (a batch, a
- * non-capture format such as fitted, a card the index doesn't know, a
- * server without a MediaCache store, or a caller without realm read) —
- * embed the `base64` in that case.
+ * geometry and pdf output included — and null when nothing persists (a
+ * batch, a `target` capture, a non-capture format such as fitted, a card
+ * the index doesn't know, a server without a MediaCache store, or a caller
+ * without realm read) — embed the `base64` in that case.
  *
  * Request body (JSON:API):
  * ```json
@@ -246,13 +250,16 @@ export default function handleScreenshotCard({
     let captureSpec = captureSpecParse.captureSpec ?? null;
     // The full capture identity: format plus the normalized singular
     // geometry overrides. Its hash keys the ledger, so a custom singular
-    // capture persists and serves under its own durable URL exactly like a
-    // format-only one. A batch has no identity (the identity names one
-    // capture, not a set), and fitted sits outside the canonical
-    // (ledger/GET-DSL) serving contract — both leave it undefined and stay
-    // capture-only.
+    // capture — pdf output included — persists and serves under its own
+    // durable URL exactly like a format-only one. A batch has no identity
+    // (the identity names one capture, not a set), fitted sits outside the
+    // canonical (ledger/GET-DSL) serving contract, and a `target` capture
+    // crops to one element while sitting outside the identity pick —
+    // hashing it would alias element-cropped bytes onto the geometry-only
+    // key, so the whole-viewport URL would serve the crop. All three leave
+    // the identity undefined and stay capture-only.
     let spec: CaptureSpec | undefined =
-      isCaptureFormat(format) && !captureSpec?.captures
+      isCaptureFormat(format) && !captureSpec?.captures && !captureSpec?.target
         ? { format, ...(captureSpec ?? {}) }
         : undefined;
 
@@ -328,6 +335,11 @@ export default function handleScreenshotCard({
           jobId: null,
           reservationId: null,
           hasTwin: null,
+          // Spec-derived (a batch is always raster), known even when the
+          // capture never runs.
+          contentType: captureOutputContentType(
+            captureSpec?.captures ? 'png' : (captureSpec?.type ?? 'png'),
+          ),
           ...(generationLookupMs != null ? { generationLookupMs } : {}),
           ...(ledgerLookupMs != null ? { ledgerLookupMs } : {}),
           totalMs: Date.now() - requestStart,
@@ -468,15 +480,22 @@ export default function handleScreenshotCard({
         // byte-only entries have no durable served URL. Normalize them into the
         // one captures[] shape callers build on — url: null marks "no durable
         // reference, embed the base64" — so captures[i].url is never a
-        // silently-undefined read. Honors the base64 opt-out here too.
-        attributes.captures = result.captures.map((c) => ({
-          name: c.name,
-          url: null,
-          width: c.width ?? null,
-          height: c.height ?? null,
-          deviceScaleFactor: c.deviceScaleFactor ?? null,
-          ...(withBase64 && c.base64 !== undefined ? { base64: c.base64 } : {}),
-        }));
+        // silently-undefined read. Honors the base64 opt-out here too. A paged
+        // capture carries its page count instead of the pixel extent it does
+        // not have — the same count the engine bounds the document against.
+        attributes.captures = result.captures.map(
+          (c): CaptureResult => ({
+            name: c.name,
+            url: null,
+            width: c.width ?? null,
+            height: c.height ?? null,
+            deviceScaleFactor: c.deviceScaleFactor ?? null,
+            ...(c.pageCount !== undefined ? { pageCount: c.pageCount } : {}),
+            ...(withBase64 && c.base64 !== undefined
+              ? { base64: c.base64 }
+              : {}),
+          }),
+        );
       }
       if (entryKey && spec && result.status === 'ready') {
         // A canonical capture persisted under its ledger identity: replace
@@ -489,6 +508,7 @@ export default function handleScreenshotCard({
             width: result.width ?? null,
             height: result.height ?? null,
             deviceScaleFactor: result.captures?.[0]?.deviceScaleFactor ?? null,
+            pageCount: result.captures?.[0]?.pageCount,
             normalizedRealmURL,
             instanceLocalPath,
             spec,
@@ -524,6 +544,7 @@ function captureResult({
   width,
   height,
   deviceScaleFactor = null,
+  pageCount,
   normalizedRealmURL,
   instanceLocalPath,
   spec,
@@ -533,6 +554,7 @@ function captureResult({
   width: number | null;
   height: number | null;
   deviceScaleFactor?: number | null;
+  pageCount?: number;
   normalizedRealmURL: string;
   instanceLocalPath: string;
   spec: CaptureSpec;
@@ -550,6 +572,11 @@ function captureResult({
     // ran, else the spec's declared override (a ledger serve has no engine
     // report), else null at the default scale.
     deviceScaleFactor: deviceScaleFactor ?? spec.deviceScaleFactor ?? null,
+    // A paged capture's only extent, carried when the engine just reported
+    // it. A ledger serve has no engine report and the row stores no page
+    // count, so it comes back absent there — the same way it is absent on a
+    // raster capture.
+    ...(pageCount !== undefined ? { pageCount } : {}),
     ...(withBase64 && base64 !== undefined ? { base64 } : {}),
   };
 }

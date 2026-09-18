@@ -135,6 +135,7 @@ module('Integration | serialization', function (hooks) {
       };
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Post },
@@ -180,6 +181,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Post },
@@ -235,6 +237,7 @@ module('Integration | serialization', function (hooks) {
       };
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Item },
@@ -275,6 +278,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Post },
@@ -313,6 +317,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Post },
@@ -348,6 +353,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Post },
@@ -390,6 +396,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Employee, Post },
@@ -452,6 +459,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Post },
@@ -489,6 +497,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Post },
@@ -522,6 +531,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Post },
@@ -556,6 +566,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Post },
@@ -589,6 +600,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -631,6 +643,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -680,6 +693,7 @@ module('Integration | serialization', function (hooks) {
       @field pet = linksTo(Pet);
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet, Toy },
@@ -737,6 +751,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -774,6 +789,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -821,6 +837,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -870,6 +887,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -930,6 +948,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { DriverCard },
@@ -976,6 +995,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { DriverCard },
@@ -1006,6 +1026,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Post },
@@ -1044,6 +1065,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Post },
@@ -1119,6 +1141,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet, Toy },
@@ -1263,6 +1286,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet, Toy },
@@ -1364,6 +1388,7 @@ module('Integration | serialization', function (hooks) {
       @field pet = linksTo(Pet);
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet, Toy },
@@ -1521,6 +1546,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet },
@@ -1635,6 +1661,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet },
@@ -1709,6 +1736,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet },
@@ -1765,6 +1793,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet, Toy },
@@ -1886,6 +1915,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -1959,6 +1989,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -2002,6 +2033,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -2112,6 +2144,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet, Toy },
@@ -2251,6 +2284,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet, Toy },
@@ -2392,6 +2426,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet, Toy },
@@ -2509,6 +2544,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -2594,6 +2630,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Post },
@@ -2629,6 +2666,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Post },
@@ -2689,6 +2727,7 @@ module('Integration | serialization', function (hooks) {
       };
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Post },
@@ -2750,6 +2789,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Post },
@@ -2804,6 +2844,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Employee, Person, Post },
@@ -2849,6 +2890,7 @@ module('Integration | serialization', function (hooks) {
     });
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { TestCard, SpecialStringA },
@@ -2886,6 +2928,7 @@ module('Integration | serialization', function (hooks) {
     });
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { TestCard, SpecialStringA, SpecialStringB },
@@ -2922,6 +2965,7 @@ module('Integration | serialization', function (hooks) {
       @field specialField = contains(StringField);
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { TestCard, SpecialStringA },
@@ -2971,6 +3015,7 @@ module('Integration | serialization', function (hooks) {
       @field specialField = containsMany(StringField);
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { TestCard, SpecialStringA, SpecialStringB },
@@ -3038,6 +3083,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'trip-info-cards.gts': {
@@ -3150,6 +3196,7 @@ module('Integration | serialization', function (hooks) {
       };
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Post },
@@ -3206,6 +3253,7 @@ module('Integration | serialization', function (hooks) {
       });
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -3240,6 +3288,7 @@ module('Integration | serialization', function (hooks) {
       @field innerList = containsMany(Probe);
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { ComputedProbe, Probe },
@@ -3303,6 +3352,7 @@ module('Integration | serialization', function (hooks) {
       });
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -3348,6 +3398,7 @@ module('Integration | serialization', function (hooks) {
       });
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -3407,6 +3458,7 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -3519,6 +3571,7 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -3635,6 +3688,7 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -3688,6 +3742,7 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -3747,6 +3802,7 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -3795,6 +3851,7 @@ module('Integration | serialization', function (hooks) {
     test('can serialize CardDef.cardTheme as a non-null computed linksTo', async function (assert) {
       class Article extends CardDef {}
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: { 'test-cards.gts': { Article } },
       });
@@ -3822,6 +3879,7 @@ module('Integration | serialization', function (hooks) {
       };
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Schedule },
@@ -3875,6 +3933,7 @@ module('Integration | serialization', function (hooks) {
       };
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Appointment, Schedule },
@@ -3919,6 +3978,7 @@ module('Integration | serialization', function (hooks) {
       @field dates = containsMany(DateField);
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Schedule },
@@ -3952,6 +4012,7 @@ module('Integration | serialization', function (hooks) {
       });
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Appointment, Schedule },
@@ -4000,6 +4061,7 @@ module('Integration | serialization', function (hooks) {
       @field published = contains(DateTimeField);
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Post },
@@ -4074,6 +4136,7 @@ module('Integration | serialization', function (hooks) {
       });
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Animal, Person, Post },
@@ -4150,6 +4213,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Employee, Person, Post },
@@ -4255,6 +4319,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Employee, Person, Pet, Post },
@@ -4378,6 +4443,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Employee, Customer, Group },
@@ -4663,6 +4729,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Tag, PriorityTag, StatusTag, Category, Article },
@@ -4831,6 +4898,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Role, DogWalker, Employee, Group },
@@ -4948,6 +5016,7 @@ module('Integration | serialization', function (hooks) {
       @field pet = linksTo(Pet);
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet, Toy },
@@ -5049,6 +5118,7 @@ module('Integration | serialization', function (hooks) {
     );
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Listing, DrumKitCard, BeatMakerCard },
@@ -5165,6 +5235,7 @@ module('Integration | serialization', function (hooks) {
     );
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Listing, DrumKitCard, BeatMakerCard },
@@ -5270,6 +5341,7 @@ module('Integration | serialization', function (hooks) {
       });
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'person.gts': { Person },
@@ -5346,6 +5418,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'person.gts': { Person },
@@ -5439,6 +5512,7 @@ module('Integration | serialization', function (hooks) {
       });
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'blog.gts': { Blog },
@@ -5565,6 +5639,7 @@ module('Integration | serialization', function (hooks) {
       });
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Certificate, Person, Post, Blog },
@@ -5839,6 +5914,7 @@ module('Integration | serialization', function (hooks) {
       });
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -5914,6 +5990,7 @@ module('Integration | serialization', function (hooks) {
       };
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -6010,6 +6087,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet },
@@ -6116,6 +6194,7 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -6217,6 +6296,7 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -6299,6 +6379,7 @@ module('Integration | serialization', function (hooks) {
         @field pets = linksToMany(Pet);
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -6460,6 +6541,7 @@ module('Integration | serialization', function (hooks) {
         @field entryPoints = linksToMany(Section);
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Workspace },
@@ -6574,6 +6656,7 @@ module('Integration | serialization', function (hooks) {
         @field pets = linksToMany(Pet);
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -6733,6 +6816,7 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet, Toy },
@@ -6883,6 +6967,7 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -6955,6 +7040,7 @@ module('Integration | serialization', function (hooks) {
         @field pets = linksToMany(Pet);
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -7026,6 +7112,7 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -7189,6 +7276,7 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person },
@@ -7285,6 +7373,7 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person },
@@ -7388,6 +7477,7 @@ module('Integration | serialization', function (hooks) {
         @field friends = linksToMany(() => Person);
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person },
@@ -7468,6 +7558,7 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Friend, Person, Pet },
@@ -7611,6 +7702,7 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Friend, Person, Pet },
@@ -7746,6 +7838,7 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Friend, Person, Pet },
@@ -7801,6 +7894,7 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Friend, Person, Pet },
@@ -7851,6 +7945,7 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
+        skipBootIndex: true,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Friend, Person, Pet },
@@ -7985,6 +8080,7 @@ module('Integration | serialization', function (hooks) {
           @field infinity = contains(NumberField);
         }
         await setupIntegrationTestRealm({
+          skipBootIndex: true,
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { Sample },
@@ -8042,6 +8138,7 @@ module('Integration | serialization', function (hooks) {
         }
 
         await setupIntegrationTestRealm({
+          skipBootIndex: true,
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { Sample },
@@ -8086,6 +8183,7 @@ module('Integration | serialization', function (hooks) {
           @field someZeroString = contains(BigIntegerField);
         }
         await setupIntegrationTestRealm({
+          skipBootIndex: true,
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { Sample },
@@ -8135,6 +8233,7 @@ module('Integration | serialization', function (hooks) {
         }
 
         await setupIntegrationTestRealm({
+          skipBootIndex: true,
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { Sample },
@@ -8198,6 +8297,7 @@ module('Integration | serialization', function (hooks) {
           // });
         }
         await setupIntegrationTestRealm({
+          skipBootIndex: true,
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { Sample },
@@ -8239,6 +8339,7 @@ module('Integration | serialization', function (hooks) {
           @field someNull = contains(EthereumAddressField);
         }
         await setupIntegrationTestRealm({
+          skipBootIndex: true,
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { Sample },
@@ -8290,6 +8391,7 @@ module('Integration | serialization', function (hooks) {
         }
 
         await setupIntegrationTestRealm({
+          skipBootIndex: true,
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { Sample },
@@ -8351,6 +8453,7 @@ module('Integration | serialization', function (hooks) {
           @field body = contains(RichMarkdownField);
         }
         await setupIntegrationTestRealm({
+          skipBootIndex: true,
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { Post },
@@ -8389,6 +8492,7 @@ module('Integration | serialization', function (hooks) {
           @field body = contains(RichMarkdownField);
         }
         await setupIntegrationTestRealm({
+          skipBootIndex: true,
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { Post },
@@ -8429,6 +8533,7 @@ module('Integration | serialization', function (hooks) {
           @field body = contains(RichMarkdownField);
         }
         await setupIntegrationTestRealm({
+          skipBootIndex: true,
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { Post },
@@ -8474,6 +8579,7 @@ module('Integration | serialization', function (hooks) {
           @field body = contains(BadField);
         }
         await setupIntegrationTestRealm({
+          skipBootIndex: true,
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { BadField, Post },

@@ -481,6 +481,20 @@ module(basename(import.meta.filename), function () {
         let pendingC: ReturnType<typeof fireRequest> | undefined;
         let diag = createDiagLog('N concurrent same-path readers');
         let passed = false;
+        // The compile reads the module's stored bytes through the operation
+        // core, and that read sits inside the region this dedup shares — so
+        // what the join saves is a read as well as a babel run. Counting the
+        // core's file opens is what would notice the read moving out from
+        // under the dedup, where it would run once per joiner.
+        let core = testRealm.operationCore;
+        let openStoredFile = core.openStoredFile;
+        let sourceReads = 0;
+        core.openStoredFile = (localPath) => {
+          if (localPath === modulePath) {
+            sourceReads += 1;
+          }
+          return openStoredFile(localPath);
+        };
         try {
           let before = testRealm.__testOnlyGetTranspileCallCount();
           diag.note('start', { before });
@@ -513,12 +527,18 @@ module(basename(import.meta.filename), function () {
             'exactly one transpileJS call serviced three concurrent same-path readers',
           );
           assert.strictEqual(
+            sourceReads,
+            1,
+            'and one read of the module, on behalf of the reader that started the compile',
+          );
+          assert.strictEqual(
             testRealm.__testOnlyGetInFlightTranspileCount(),
             0,
             'in-flight slot released after the shared transpile settled',
           );
           passed = true;
         } finally {
+          core.openStoredFile = openStoredFile;
           releaseGate();
           testRealm.__testOnlyDelayTranspile(undefined);
           await Promise.allSettled(

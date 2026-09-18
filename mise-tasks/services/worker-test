@@ -20,7 +20,11 @@ else
   MIGRATE_ARG=""
 fi
 
+# Storeless like CI: this stack's ledger lives in PGDATABASE_TEST, and the
+# slug-scoped MEDIA_CACHE_DIR pairs with the dev database's ledger (see the
+# media-cache block in mise-tasks/lib/env-vars.sh).
 NODE_ENV=test \
+  MEDIA_CACHE_DIR= \
   PGPORT="${PGPORT}" \
   PGDATABASE="${PGDATABASE_TEST}" \
   NODE_NO_WARNINGS=1 \

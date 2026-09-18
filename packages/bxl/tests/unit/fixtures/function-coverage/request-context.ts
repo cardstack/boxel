@@ -1,0 +1,286 @@
+/**
+ * The request-context builtins: `params`, `actor`, `instance` and
+ * `realmConfig`.
+ *
+ * These read no arguments beyond a key name — their whole answer comes from
+ * the context the host scoped around the evaluation — so each case supplies
+ * one through `context` and asserts what the program read out of it. They
+ * resolve only in the mutation library set, so every case names it.
+ *
+ * `actor` is the exception to the key-name shape: it has only `actor/0`, and
+ * answers the caller's user id as a string.
+ *
+ * The values here are deliberately unlike the document a program edits: a
+ * case that read `.` instead of the context would produce the input rather
+ * than these, and say so.
+ */
+import { deepStrictEqual } from 'node:assert';
+import { inMutationLibraries, jqCases, type CoverageCase } from './case.ts';
+
+const context = {
+  params: { body: 'Looks good to me', mentions: ['user:grace'], count: 2 },
+  actor: 'user:ada',
+  instance: { id: 'https://example.test/Post/1', commentCount: 4 },
+  realmConfig: { approver: 'user:mae', escalateAfterDays: 3 },
+};
+
+/** The document a program is editing, which none of these builtins read. */
+const editedDocument = {
+  body: 'the document, not the payload',
+  id: 'the document id, not the context one',
+};
+
+const cases: CoverageCase[] = [
+  {
+    covers: 'params/1',
+    source: 'params("body")',
+    input: editedDocument,
+    context,
+    expected: 'Looks good to me',
+  },
+  {
+    covers: 'params/1',
+    // A key holding a non-scalar comes back whole rather than flattened into
+    // the output stream, so a payload list can be appended as one item.
+    source: 'params("mentions")',
+    context,
+    outputs: [['user:grace']],
+  },
+  {
+    covers: 'params/1',
+    source: 'params("nope")',
+    context,
+    // The operation layer checks declared keys before a program runs; this is
+    // the backstop, and it names the keys that are there so a typo is
+    // obvious from the message alone.
+    throws: /asks for "nope".*"body", "count", "mentions"/,
+  },
+  {
+    covers: 'params/1',
+    source: 'params("body")',
+    // No `context`: a program evaluated outside every scope gets an error
+    // rather than `null`, which would append a missing comment body.
+    throws: /needs a request context/,
+  },
+  {
+    covers: 'params/1',
+    source: 'params("body")',
+    context: { actor: context.actor },
+    throws: /needs the payload the caller sent/,
+  },
+  {
+    covers: 'actor/0',
+    source: 'actor()',
+    input: editedDocument,
+    context,
+    check(outputs) {
+      deepStrictEqual(outputs, ['user:ada']);
+    },
+  },
+  {
+    covers: 'actor/0',
+    source: 'actor()',
+    context: { params: context.params },
+    throws: /needs the caller identity/,
+  },
+  {
+    covers: 'actor/0',
+    source: 'actor()',
+    // An actor the host supplied as anything but a user id is a host defect,
+    // and is reported as one instead of reaching the document.
+    context: { actor: { id: 'user:ada' } },
+    throws: /to be a string, but the host supplied object/,
+  },
+  {
+    covers: 'instance/0',
+    source: 'instance() | .commentCount',
+    input: editedDocument,
+    context,
+    expected: 4,
+  },
+  {
+    covers: 'instance/1',
+    source: 'instance("id")',
+    input: editedDocument,
+    context,
+    expected: 'https://example.test/Post/1',
+  },
+  {
+    covers: 'instance/1',
+    source: 'instance("id")',
+    context: { params: context.params, actor: context.actor },
+    throws: /needs the stored document being edited/,
+  },
+  {
+    covers: 'instance/1',
+    source: 'instance("commentCount")',
+    // A key held with an explicit `undefined` is absent, not a value:
+    // `undefined` is not JSON, and yielding it would reach the planner as a
+    // value and write an intent that unsets the field.
+    context: { instance: { id: 'https://e.test/1', commentCount: undefined } },
+    throws: /asks for "commentCount".*it has "id"/,
+  },
+  {
+    covers: 'instance/1',
+    source: 'instance("commentCount")',
+    // A JSON `null`, by contrast, is a real value and passes through.
+    //
+    // `outputs` rather than `expected`, because `expected: null` normalizes
+    // from an empty stream as well as from a single `null` — and emitting
+    // one value rather than none is exactly what this case is for.
+    context: { instance: { id: 'https://e.test/1', commentCount: null } },
+    outputs: [null],
+  },
+  {
+    covers: 'instance/1',
+    source: 'instance("toString")',
+    // Only the object's own keys are readable. A prototype-chain name would
+    // otherwise answer with a function, which is not a JSON value at all.
+    context,
+    throws: /asks for "toString"/,
+  },
+  {
+    covers: 'params/1',
+    source: 'params("constructor")',
+    context,
+    throws: /asks for "constructor"/,
+  },
+  {
+    covers: 'params/1',
+    // A key name has to be a string. The message names what arrived, so a
+    // program passing a field value by mistake can see what it did.
+    source: 'params(1)',
+    context,
+    throws: /takes a key name as a string, not number/,
+  },
+  {
+    covers: 'params/1',
+    source: 'params(null)',
+    context,
+    throws: /takes a key name as a string, not null/,
+  },
+  {
+    covers: 'params/1',
+    source: 'params(["body"])',
+    context,
+    throws: /takes a key name as a string, not an array/,
+  },
+  {
+    covers: 'params/1',
+    // The array arm of the slot-type message. A slot the host supplied as an
+    // array is a host defect and says so, rather than being indexed into.
+    source: 'params("body")',
+    context: { params: ['body'] },
+    throws: /to be an object, but the host supplied an array/,
+  },
+  {
+    covers: 'params/1',
+    source: 'params("body")',
+    context: { params: {} },
+    throws: /it has no readable keys/,
+  },
+  {
+    covers: 'params/1',
+    // Long key lists are truncated so one wide payload cannot bury the
+    // message it is attached to.
+    source: 'params("absent")',
+    context: {
+      params: Object.fromEntries(
+        Array.from({ length: 15 }, (_entry, index) => [
+          `k${String(index).padStart(2, '0')}`,
+          index,
+        ]),
+      ),
+    },
+    throws: /"k00", "k01".*"k11" and 3 more/,
+  },
+  {
+    covers: 'instance/1',
+    source: 'instance("nickname")',
+    context,
+    // An absent field on a stored document is ordinary, so the message names
+    // the reading that tolerates it rather than only refusing.
+    throws: /Use `instance\(\)` and index it if the key may be absent\./,
+  },
+  {
+    covers: 'realmConfig/1',
+    source: 'realmConfig("approver")',
+    input: editedDocument,
+    context,
+    expected: 'user:mae',
+  },
+  {
+    covers: 'realmConfig/1',
+    // A setting is whatever JSON the realm owner wrote, so a program can read
+    // a number and compare it as one rather than parsing a string.
+    source: 'realmConfig("escalateAfterDays") + 1',
+    context,
+    expected: 4,
+  },
+  {
+    covers: 'realmConfig/0',
+    source: 'realmConfig() | keys',
+    input: editedDocument,
+    context,
+    outputs: [['approver', 'escalateAfterDays']],
+  },
+  {
+    covers: 'realmConfig/0',
+    // A realm that configures nothing still supplies a map. The program is
+    // told the realm has no settings, which is a different fix from the realm
+    // having supplied none at all.
+    source: 'realmConfig()',
+    context: { realmConfig: {} },
+    outputs: [{}],
+  },
+  {
+    covers: 'realmConfig/1',
+    source: 'realmConfig("approver")',
+    context: { realmConfig: {} },
+    throws: /not in the realm configuration — it has no readable keys/,
+  },
+  {
+    covers: 'realmConfig/1',
+    // The same message shape the other keyed slots use, naming what is there.
+    source: 'realmConfig("approvers")',
+    context,
+    throws: /asks for "approvers".*"approver", "escalateAfterDays"/,
+  },
+  {
+    covers: 'realmConfig/1',
+    source: 'realmConfig("approver")',
+    // A realm setting is absent for the ordinary reason a stored field is, so
+    // the message names the reading that tolerates it.
+    context: { realmConfig: { threshold: 3 } },
+    throws: /Use `realmConfig\(\)` and index it if the setting may be absent\./,
+  },
+  {
+    covers: 'realmConfig/0',
+    source: 'realmConfig()',
+    context: { params: context.params },
+    throws: /needs the realm configuration/,
+  },
+  {
+    covers: 'realmConfig/0',
+    source: 'realmConfig()',
+    // No `context` at all, which is a different failure from a realm with no
+    // settings and says so.
+    throws: /needs a request context/,
+  },
+  {
+    covers: 'realmConfig/1',
+    source: 'realmConfig("approver")',
+    context: { realmConfig: ['approver'] },
+    throws: /to be an object, but the host supplied an array/,
+  },
+  {
+    covers: 'realmConfig/1',
+    source: 'realmConfig(3)',
+    context,
+    throws: /takes a key name as a string, not number/,
+  },
+];
+
+export const requestContextCases: CoverageCase[] = jqCases(
+  cases.map(inMutationLibraries),
+);

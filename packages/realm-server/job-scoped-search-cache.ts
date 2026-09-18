@@ -95,8 +95,14 @@ export class JobScopedSearchCache {
     query: Query;
     opts: unknown | undefined;
     populate: () => Promise<string>;
+    // Fires the moment the cache decides how it will satisfy the request, and
+    // before `populate` runs on a miss — the same contract as
+    // `LiveSearchCache`'s seam, so a caller reporting which cache answered can
+    // report it the same way for both. The per-job hit/miss tallies below are
+    // aggregates dropped at `clearJob`; this reports the individual request.
+    onOutcome?: (outcome: 'hit' | 'miss') => void;
   }): Promise<string> {
-    let hash = innerKeyHash(args.realms, args.query, args.opts);
+    let hash = searchRequestKeyHash(args.realms, args.query, args.opts);
     let existing = await this.#getCachedByHash(args.jobId, hash);
     if (existing !== undefined) {
       let stat = this.#stats.get(args.jobId);
@@ -104,9 +110,11 @@ export class JobScopedSearchCache {
         stat.hits += 1;
         stat.lastTouchedAt = Date.now();
       }
+      args.onOutcome?.('hit');
       return existing;
     }
 
+    args.onOutcome?.('miss');
     let result = await args.populate();
     // Count the miss only after populate resolves: if it throws we count
     // nothing and never allocate a #stats entry for a jobId that produced no
@@ -143,7 +151,7 @@ export class JobScopedSearchCache {
   }): Promise<string | undefined> {
     return this.#getCachedByHash(
       args.jobId,
-      innerKeyHash(args.realms, args.query, args.opts),
+      searchRequestKeyHash(args.realms, args.query, args.opts),
     );
   }
 
@@ -215,37 +223,7 @@ export class JobScopedSearchCache {
   async realmGenerations(
     realms: string[],
   ): Promise<Record<string, { index: number; html: number }>> {
-    let out: Record<string, { index: number; html: number }> = {};
-    for (let realm of realms) {
-      out[realm] = { index: 0, html: 0 };
-    }
-    if (realms.length === 0) {
-      return out;
-    }
-    let rows = (await query(this.#dbAdapter, [
-      `SELECT rg.realm_url AS realm_url,
-              rg.current_generation AS index_generation,
-              (SELECT MAX(ph.generation) FROM prerendered_html ph
-                 WHERE ph.realm_url = rg.realm_url) AS html_generation
-         FROM realm_generations rg
-        WHERE rg.realm_url IN`,
-      ...addExplicitParens(
-        separatedByCommas(realms.map((realm) => [param(realm)])),
-      ),
-    ] as Expression)) as {
-      realm_url: string;
-      index_generation: number | string | null;
-      html_generation: number | string | null;
-    }[];
-    let toNum = (value: number | string | null): number =>
-      typeof value === 'string' ? parseInt(value) : (value ?? 0);
-    for (let row of rows) {
-      out[row.realm_url] = {
-        index: toNum(row.index_generation),
-        html: toNum(row.html_generation),
-      };
-    }
-    return out;
+    return fetchRealmGenerations(this.#dbAdapter, realms);
   }
 
   // Job-id-based weak ETag. Same `(jobId, realms, query, opts)` always produces
@@ -258,7 +236,7 @@ export class JobScopedSearchCache {
     query: Query;
     opts: unknown | undefined;
   }): string {
-    return `W/"${args.jobId}-${innerKeyHash(args.realms, args.query, args.opts)}"`;
+    return `W/"${args.jobId}-${searchRequestKeyHash(args.realms, args.query, args.opts)}"`;
   }
 
   // ── Janitor (missed-NOTIFY backstop) ──
@@ -332,12 +310,54 @@ export class JobScopedSearchCache {
   }
 }
 
-// Compose the per-job inner key and hash it. Excludes jobId since the outer
+// Standalone form of `realmGenerations` so callers without a
+// JobScopedSearchCache instance (the live-search path) read the same
+// fingerprints from the same source of truth.
+export async function fetchRealmGenerations(
+  dbAdapter: DBAdapter,
+  realms: string[],
+): Promise<Record<string, { index: number; html: number }>> {
+  let out: Record<string, { index: number; html: number }> = {};
+  for (let realm of realms) {
+    out[realm] = { index: 0, html: 0 };
+  }
+  if (realms.length === 0) {
+    return out;
+  }
+  let rows = (await query(dbAdapter, [
+    `SELECT rg.realm_url AS realm_url,
+            rg.current_generation AS index_generation,
+            (SELECT MAX(ph.generation) FROM prerendered_html ph
+               WHERE ph.realm_url = rg.realm_url) AS html_generation
+       FROM realm_generations rg
+      WHERE rg.realm_url IN`,
+    ...addExplicitParens(
+      separatedByCommas(realms.map((realm) => [param(realm)])),
+    ),
+  ] as Expression)) as {
+    realm_url: string;
+    index_generation: number | string | null;
+    html_generation: number | string | null;
+  }[];
+  let toNum = (value: number | string | null): number =>
+    typeof value === 'string' ? parseInt(value) : (value ?? 0);
+  for (let row of rows) {
+    out[row.realm_url] = {
+      index: toNum(row.index_generation),
+      html: toNum(row.html_generation),
+    };
+  }
+  return out;
+}
+
+// Compose the canonical search-request key and hash it. Shared by this
+// job-scoped cache and the live-search cache so an identical request always
+// addresses one identity. Excludes jobId since the outer
 // `job_id` column already partitions by job. The realms array is included
 // verbatim (no sort, no dedupe): `_federated-search` preserves input order in
 // its `data` array and first-occurrence `included`, so `[A, B]` and `[B, A]`
 // are different responses and must hash to different entries.
-function innerKeyHash(
+export function searchRequestKeyHash(
   realms: string[],
   query: Query,
   opts: unknown | undefined,

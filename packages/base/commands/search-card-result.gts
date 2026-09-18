@@ -10,8 +10,8 @@ import {
   IconSearchThick,
 } from '@cardstack/boxel-ui/icons';
 import { type Query, primitive } from '@cardstack/runtime-common';
+import type { BaseDef } from '../card-api';
 import {
-  BaseDef,
   CardDef,
   Component,
   StringField,

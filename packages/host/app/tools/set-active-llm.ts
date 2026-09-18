@@ -24,14 +24,21 @@ export default class SetActiveLLMTool extends HostBaseTool<
   protected async run(
     input: BaseToolModule.SetActiveLLMInput,
   ): Promise<undefined> {
+    // The room reads any value other than 'act' as Ask. A model that mixes
+    // this up with the submode (GPT-5.4 Mini sent 'code') would switch the
+    // room out of Act mode and then wait on its own patches for approval.
+    // Validate before either event is sent so a rejected call cannot partially
+    // change the active model.
+    if (input.mode && input.mode !== 'act' && input.mode !== 'ask') {
+      throw new Error(
+        `mode must be "act" or "ask", got "${input.mode}". To open code mode, use switch-submode instead.`,
+      );
+    }
     if (input.model) {
       await this.matrixService.sendActiveLLMEvent(input.roomId, input.model);
     }
-    if (input.mode) {
-      await this.matrixService.sendLLMModeEvent(
-        input.roomId,
-        input.mode as 'act' | 'ask',
-      );
+    if (input.mode === 'act' || input.mode === 'ask') {
+      await this.matrixService.sendLLMModeEvent(input.roomId, input.mode);
     }
     return undefined;
   }

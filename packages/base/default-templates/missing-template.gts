@@ -1,7 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
 import type { CardContext, BaseDef, CardDef, Format } from '../card-api';
-// @ts-ignore no types
-import cssUrl from 'ember-css-url';
 import { identifyCard, isCardDef, moduleFrom } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';

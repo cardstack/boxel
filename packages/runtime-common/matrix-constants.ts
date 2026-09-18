@@ -274,6 +274,15 @@ export const SLIDING_SYNC_LIST_RANGE_END = 9;
 // is what DirectoryResource subscribes to for live file-tree refresh; without
 // the higher limit it gets silently dropped from the live Room.timeline.
 export const INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
+// The ai-bot's room list window. Sliding sync reports changes only for rooms
+// inside the requested range, and matrix-js-sdk does not backfill a `limited`
+// timeline, so a one-room window (`[[0, 0]]`) makes the bot see only the newest
+// event of the newest room per sync response: when two rooms change in the
+// same gap between two responses, the other room's event is lost, and the
+// turn it belonged to hangs until someone posts in that room again. With a
+// hundred-room window and SLIDING_SYNC_AI_ROOM_TIMELINE_LIMIT events per room
+// a drop needs more than a hundred rooms changing inside one gap.
+export const SLIDING_SYNC_AI_BOT_ROOM_LIST_RANGE: [number, number] = [0, 99];
 export const SLIDING_SYNC_AI_ROOM_TIMELINE_LIMIT = 20;
 export const SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT = 20;
 export const SLIDING_SYNC_TIMEOUT = 30000;

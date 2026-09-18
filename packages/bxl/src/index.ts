@@ -21,7 +21,10 @@ import {
   tokenizeNativeJq,
 } from './bxl/bridge/native.ts';
 import { materializeCardInput, safeFieldMap } from './bxl/bridge/card-input.ts';
-import type { NativeRuntimeLimits } from './jqtools/evaluate/runtimeState.ts';
+import type {
+  NativeRuntimeClock,
+  NativeRuntimeLimits,
+} from './jqtools/evaluate/runtimeState.ts';
 import type {
   ReadableSchema,
   ReadableSyntaxCompileResult,
@@ -81,8 +84,10 @@ import {
   BXL_ERROR_MASKING_CALLS,
   BXL_FUNCTION_SAFETY_CATEGORIES,
   BXL_METADATA_CALLS,
+  BXL_MUTATION_DENIED_CALLS,
   BXL_PREDICATE_LOWERABLE_CALLS,
   BXL_PROFILE_FUNCTION_POLICIES,
+  BXL_REQUEST_CONTEXT_CALLS,
   BXL_VOLATILE_CALLS,
   categoryForBxlFunction,
   classifyBxlProfileFunction,
@@ -151,7 +156,7 @@ export type {
   PreparedBoxelRuntime,
 } from './boxel-runtime.ts';
 
-export const VERSION = '0.6.0';
+export const VERSION = '0.7.0-unstable.8';
 
 /**
  * Runtime identity: the version plus the set of behaviors this build of the
@@ -189,6 +194,7 @@ export const BXL_BUILD_INFO = {
     'boxel-source-mutation-adapter',
     'boxel-source-structural-lowering',
     'computed-write-skip',
+    'mutation-request-context',
   ] as const,
 };
 
@@ -201,8 +207,10 @@ export {
   BXL_ERROR_MASKING_CALLS,
   BXL_FUNCTION_SAFETY_CATEGORIES,
   BXL_METADATA_CALLS,
+  BXL_MUTATION_DENIED_CALLS,
   BXL_PREDICATE_LOWERABLE_CALLS,
   BXL_PROFILE_FUNCTION_POLICIES,
+  BXL_REQUEST_CONTEXT_CALLS,
   BXL_VOLATILE_CALLS,
   categoryForBxlFunction,
   classifyBxlProfileFunction,
@@ -255,6 +263,7 @@ export type {
   BxlSqlPredicateModule,
   BuiltinLibraryName,
   JqToReadableBxlResult,
+  NativeRuntimeClock,
   NativeRuntimeLimits,
   ReadableSchema,
   ReadableSyntaxCompileResult,
@@ -317,20 +326,30 @@ export type {
   BxlCardSourceRelationship,
   BxlCardSourceResource,
   BxlCardSourceSchemaOptions,
+  BxlMutationContext,
+  BxlMutationErrorDetails,
   BxlMutationErrorPhase,
   BxlMutationField,
   BxlMutationFieldType,
   BxlMutationIntent,
   BxlMutationJson,
+  BxlMutationJsonObject,
+  BxlMutationOverlayReason,
+  BxlMutationOverlays,
+  BxlMutationOverlayTier,
   BxlMutationPath,
   BxlMutationPlan,
   BxlMutationPlanOptions,
   BxlMutationPrepareOptions,
+  BxlMutationReadEvent,
+  BxlMutationReadOutcome,
+  BxlMutationReadTier,
   BxlMutationReturning,
   BxlMutationRootField,
   BxlMutationSchema,
   BxlMutationStatementPlan,
   BxlMutationStatementStreamOptions,
+  BxlMutationUnavailableOverlay,
   BxlStructuredMutationOperation,
   BxlMutateCardSourceOptions,
   BxlUpdateViaExecutionOptions,

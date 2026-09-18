@@ -1,0 +1,114 @@
+{
+  "_comment": [
+    "EXAMPLE ONLY. Replace every entry with the queries the realm under test",
+    "actually issues, transcribed from its card source. The shapes here are",
+    "invented placeholders that match no real realm.",
+    "",
+    "Queries are written in the `_federated-search` ENTRY wire grammar: the",
+    "type anchor is `item.on`, and field paths inside eq/contains/in/range",
+    "carry an `item.` prefix. `${realm}` expands to the realm URL under test.",
+    "Every key other than `label` is sent to the endpoint as-is, so `sort` and",
+    "`page` work here too, and a filter is passed through whole — see the",
+    "predicates in extraQueries below, which is how a run A/Bs adding one to a",
+    "query that has none. See lib/workload.ts.",
+    "",
+    "`fieldset` selects which document the searches ask for, and so which code",
+    "path the run measures: `item` is card data only, the path a query-backed",
+    "field takes; `entries` (the default) is the prerendered renderings a grid",
+    "fetches, and costs several times as much for the same filter. A single",
+    "query can carry its own `fields` member instead, which wins for itself —",
+    "that is how one workload models a screen whose surfaces differ.",
+    "",
+    "`variants` are the filter fragments a shape cycles through, one per",
+    "re-run, merged over its own filter. Without them a shape asks the same",
+    "question every time and the realm answers it from its live-search cache",
+    "after the first, so the run reports what a cache hit costs rather than",
+    "what answering costs. Pick values that match rows: a fragment selecting",
+    "nothing is a cheap search that measures none of the shape's work."
+  ],
+
+  "fieldset": "item",
+
+  "queries": [
+    {
+      "label": "Widget",
+      "filter": {
+        "item.on": { "module": "${realm}schema/widget", "name": "Widget" }
+      }
+    },
+    {
+      "label": "Gadget(by day)",
+      "filter": {
+        "item.on": { "module": "${realm}schema/gadget", "name": "Gadget" }
+      },
+      "page": { "size": 100 },
+      "variants": [
+        { "eq": { "item.day": "2026-01-05" } },
+        { "eq": { "item.day": "2026-01-06" } },
+        { "eq": { "item.day": "2026-01-07" } },
+        { "eq": { "item.day": "2026-01-08" } },
+        { "eq": { "item.day": "2026-01-09" } }
+      ]
+    },
+    {
+      "label": "Sprocket(rendered)",
+      "filter": {
+        "item.on": { "module": "${realm}schema/sprocket", "name": "Sprocket" },
+        "eq": { "htmlQuery": { "eq": { "format": "fitted" } } }
+      },
+      "fields": { "entry": ["html"] }
+    }
+  ],
+
+  "secondaryQueries": [
+    {
+      "label": "Widget(secondary)",
+      "filter": {
+        "item.on": { "module": "${realm}schema/widget", "name": "Widget" }
+      }
+    },
+    {
+      "label": "Notice",
+      "filter": {
+        "item.on": { "module": "${realm}schema/notice", "name": "Notice" }
+      }
+    }
+  ],
+
+  "extraQueries": [
+    {
+      "label": "Sprocket(bounded)",
+      "filter": {
+        "item.on": { "module": "${realm}schema/sprocket", "name": "Sprocket" },
+        "eq": { "item.category": "active" }
+      }
+    },
+    {
+      "label": "Sprocket(range)",
+      "filter": {
+        "item.on": { "module": "${realm}schema/sprocket", "name": "Sprocket" },
+        "range": { "item.updatedAt": { "gt": "2026-01-01" } }
+      }
+    },
+    {
+      "label": "Widget(contains)",
+      "filter": {
+        "item.on": { "module": "${realm}schema/widget", "name": "Widget" },
+        "contains": { "item.title": "draft" }
+      }
+    }
+  ],
+
+  "write": {
+    "path": "WidgetReport",
+    "adoptsFrom": {
+      "module": "${realm}schema/widget-report",
+      "name": "WidgetReport"
+    },
+    "attributes": {
+      "title": "Load harness report ${n}",
+      "reportedOn": "${date}",
+      "body": "Written by the load harness."
+    }
+  }
+}

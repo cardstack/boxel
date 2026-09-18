@@ -5,6 +5,7 @@ import { modifier } from 'ember-modifier';
 import FileIcon from '@cardstack/boxel-icons/file';
 
 import type { ComponentLike } from '@glint/template';
+import { now } from '../helpers/clock';
 
 // Structurally the same as card-api's `CardOrFieldTypeIcon`, restated here so
 // the shells need nothing from card-api — not even a type. card-api imports the
@@ -134,7 +135,7 @@ export function relativeDate(value?: Date | string | number | null): string {
   if (!d || Number.isNaN(d.getTime())) {
     return '';
   }
-  let days = Math.floor((Date.now() - d.getTime()) / 86400000);
+  let days = Math.floor((now() - d.getTime()) / 86400000);
   if (days < 0) {
     return shortDate(d);
   }

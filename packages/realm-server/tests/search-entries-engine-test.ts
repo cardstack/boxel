@@ -235,6 +235,81 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a relevance-sorted entry query orders by score and carries meta._matchRelevance on the wire', async function (assert) {
+      // The wire spelling end-to-end: the sort key is addressed as
+      // `item._matchRelevance` and must NOT inherit the filter's type anchor
+      // (it is anchorless), and the computed score must ride each entry's
+      // `meta`. John matches the full-text term (his rendered markdown carries
+      // "John"); Jane is admitted only by the `eq` branch, so she scores 0 and
+      // sorts last under the default `desc`.
+      let doc = await testRealm.realmIndexQueryEngine.searchEntries(
+        parseSearchEntryQueryFromPayload({
+          filter: {
+            'item.on': { module: `${realmHref}person`, name: 'Person' },
+            any: [{ matches: 'john' }, { eq: { 'item.firstName': 'Jane' } }],
+          },
+          sort: [{ by: 'item._matchRelevance' }],
+        }),
+      );
+      assert.deepEqual(
+        doc.data.map((entry) => entry.id),
+        [johnId, janeId],
+        'the full-text hit ranks ahead of the eq-only hit by default (desc)',
+      );
+      let johnRelevance = entryFor(doc, johnId)!.meta?._matchRelevance;
+      assert.strictEqual(
+        typeof johnRelevance,
+        'number',
+        'the matching entry carries a numeric relevance',
+      );
+      assert.ok(
+        johnRelevance! > 0,
+        `the matching entry's relevance is positive; got ${johnRelevance}`,
+      );
+      assert.ok(
+        johnRelevance! <= 1,
+        `ts_rank_cd flag 32 bounds the score to at most 1; got ${johnRelevance}`,
+      );
+      assert.strictEqual(
+        entryFor(doc, janeId)!.meta?._matchRelevance,
+        0,
+        'an entry admitted by a non-matches branch scores 0',
+      );
+
+      // Opt-in: without the relevance sort the same entries carry no score.
+      let plain =
+        await testRealm.realmIndexQueryEngine.searchEntries(personQuery());
+      for (let entry of plain.data) {
+        assert.false(
+          '_matchRelevance' in (entry.meta ?? {}),
+          `${entry.id} carries no relevance without the sort`,
+        );
+      }
+    });
+
+    test('a relevance sort with no positive matches term is rejected at parse time', async function (assert) {
+      assert.throws(
+        () =>
+          parseSearchEntryQueryFromPayload({
+            filter: {
+              'item.on': { module: `${realmHref}person`, name: 'Person' },
+            },
+            sort: [{ by: 'item._matchRelevance' }],
+          }),
+        /requires at least one positive `matches` filter/,
+        'the wire parser rejects it as an invalid query (HTTP 400), before the engine runs',
+      );
+      assert.throws(
+        () =>
+          parseSearchEntryQueryFromPayload({
+            filter: { not: { matches: 'john' } },
+            sort: [{ by: 'item._matchRelevance' }],
+          }),
+        /requires at least one positive `matches` filter/,
+        'a negated-only matches term does not count as a positive term',
+      );
+    });
+
     test('an id filter in canonical-RRI (prefix) form matches the card indexed under its URL-form id', async function (assert) {
       // The realm has no registered prefix by default; register one so a
       // canonical-RRI value resolves, and remove it afterward so the cached

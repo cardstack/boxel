@@ -1,4 +1,4 @@
-import Modifier from 'ember-modifier';
+import type Modifier from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash-es';
 import { WatchedArray, rawArrayValues } from './watched-array';
@@ -26,10 +26,6 @@ import { getLinksToManyComponent } from './links-to-many-component';
 import {
   assertIsSerializerName,
   baseRef,
-  CardContextName,
-  CardError,
-  CodeRef,
-  ToolContext,
   Deferred,
   byteStreamToUint8Array,
   fields,
@@ -57,12 +53,10 @@ import {
   loadCardDocument,
   Loader,
   localId,
-  LocalPath,
   meta,
   primitive,
   realmURL,
   relativeTo,
-  SingleCardDocument,
   uuidv4,
   NumberSerializer,
   type Format,
@@ -88,9 +82,6 @@ import {
   FileMetaResourceType,
   CardResourceType,
   loadFileMetaDocument,
-  CardResource,
-  LooseLinkableResource,
-  LooseSingleResourceDocument,
   shouldTrackRuntimeModuleGraph,
   shouldTrackRuntimeRelationship,
   trackRuntimeFileDependency,
@@ -120,11 +111,11 @@ import {
   type DeclaredScreenshotRoster,
   type DeclaredScreenshotSpecPayload,
   type DeclaredScreenshotFormat,
+  type ScreenshotsMeta,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
   ensureQueryFieldSearchResource,
-  peekQueryFieldSearchResource,
   queryFieldHasUnreachableRealms,
   resolveQueryFieldEagerly,
   validateRelationshipQuery,
@@ -149,6 +140,7 @@ import FileDefFittedTemplate from './default-templates/file-def-fitted';
 import FileDefIsolatedTemplate from './default-templates/file-def-isolated';
 import type { FilePreviewComponent } from './file-formats/file-preview-stage';
 import { ImagePreview } from './file-formats/image-preview';
+import { IMAGE_THUMB_SCREENSHOTS } from './file-formats/image-captures';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import FileIcon from '@cardstack/boxel-icons/file';
 import ImageIcon from '@cardstack/boxel-icons/image';
@@ -224,12 +216,23 @@ import {
 import { TextInputValidator } from './text-input-validator';
 import { type GetMenuItemParams, getDefaultCardMenuItems } from './menu-items';
 import { getDefaultFileMenuItems } from './file-menu-items';
-import {
+import type {
   LinkableDocument,
   SingleFileMetaDocument,
 } from '@cardstack/runtime-common/document-types';
 import type { MarkdownEmbedChooser } from '@cardstack/runtime-common/bfm-card-references';
-import type { FileMetaResource } from '@cardstack/runtime-common';
+import type {
+  FileMetaResource,
+  CardContextName,
+  CardError,
+  CodeRef,
+  ToolContext,
+  LocalPath,
+  SingleCardDocument,
+  CardResource,
+  LooseLinkableResource,
+  LooseSingleResourceDocument,
+} from '@cardstack/runtime-common';
 
 export const BULK_GENERATED_ITEM_COUNT = 3;
 
@@ -532,43 +535,83 @@ export interface StoreSearchResource<T extends CardDef | FileDef = CardDef> {
   // the server's own result set rather than the reconciled one, so a locally
   // edited or created card can't be mistaken for a short page.
   readonly isPartial: boolean;
+  // Hand a running resource the result set a document fetched since it started
+  // carries. Optional: a store whose resources hold no state worth superseding
+  // implements no supersession.
+  reseed?(seed: StoreSearchSeed<T>): void;
+  // The identity of the seeded result set the resource holds, and `undefined`
+  // once a search has re-derived that set for itself. Read it to decide whether
+  // a seed is worth handing over: a remembered "last seed applied" would go on
+  // claiming a set the resource has since replaced, and would then skip a
+  // document restoring the earlier one.
+  readonly appliedSeedIdentity?: string;
 }
 
-export type GetSearchResourceFuncOpts = {
+// A result set a producer already resolved, handed to a search resource in
+// place of running the query. Generic in the row type so a `FileDef` search
+// seeds with file-meta rows rather than being narrowed to `CardDef`.
+export type StoreSearchSeed<T extends CardDef | FileDef = CardDef> = {
+  cards: T[];
+  // What this result set is, as against any other the same query could
+  // produce: two seeds sharing an identity assert the same thing, so a
+  // resource already holding one ignores the other. It has to cover
+  // everything the seed asserts and not just its rows — a page-clamped
+  // field whose match count moved holds the same row and a different
+  // answer.
+  identity?: string;
+  // The index generation this set was resolved at, and the realm whose counter
+  // that generation belongs to. Separate from the identity and doing a
+  // different job: the identity says whether two sets differ, these say which
+  // of them is newer. A generation counts writes within one realm, so it orders
+  // nothing without the realm that issued it.
+  //
+  // Keeping the generation out of the identity is deliberate — a realm
+  // generation moves on every write anywhere in the realm, so folding it in
+  // would make every set look different from every other and re-apply answers
+  // that had not changed.
+  generation?: number;
+  realm?: string;
+  searchURL?: string;
+  realms?: string[];
+  queryErrors?: Array<{
+    realm: string;
+    type: string;
+    message: string;
+    status?: number;
+  }>;
+  // IDs the parent doc named in `relationships.{field}.data`. Used
+  // by the SearchResource when `cards` is empty and the parent
+  // skipped query-backed expansion — the resource loads each ID by
+  // URL instead of running a live re-query.
+  cardURLs?: string[];
+  // The result meta the seed was resolved under, chiefly `page.total` —
+  // the query's match count, which exceeds `cards.length` when the page
+  // ceiling clamped the expansion. Absent it, the resource takes the
+  // record count for the total and a truncated seed reads as complete.
+  meta?: QueryResultsMeta;
+  // The seed's match count is not knowable and must not be inferred from its
+  // rows — the producer resolved the field but deliberately reported no
+  // total, as a query-backed field does when one of its realms failed.
+  totalUnknown?: boolean;
+};
+
+export type GetSearchResourceFuncOpts<T extends CardDef | FileDef = CardDef> = {
   isLive?: boolean;
+  // Queue this search behind the concurrency ceiling of the store it runs
+  // against, instead of putting it on the wire the moment the resource is
+  // created. Independent of the caps applied to card `@context` searches (page
+  // size, realms fan-out): this changes when a search runs, never what it
+  // returns.
+  throttled?: boolean;
   doWhileRefreshing?: (() => void) | undefined;
   dependencyTracking?: RuntimeDependencyTrackingContext;
-  seed?: {
-    cards: CardDef[];
-    searchURL?: string;
-    realms?: string[];
-    queryErrors?: Array<{
-      realm: string;
-      type: string;
-      message: string;
-      status?: number;
-    }>;
-    // IDs the parent doc named in `relationships.{field}.data`. Used
-    // by the SearchResource when `cards` is empty and the parent
-    // skipped query-backed expansion — the resource loads each ID by
-    // URL instead of running a live re-query.
-    cardURLs?: string[];
-    // The result meta the seed was resolved under, chiefly `page.total` —
-    // the query's match count, which exceeds `cards.length` when the page
-    // ceiling clamped the expansion. Absent it, the resource takes the
-    // record count for the total and a truncated seed reads as complete.
-    meta?: QueryResultsMeta;
-    // The seed's match count is not knowable and must not be inferred from its
-    // rows — the producer resolved the field but deliberately reported no
-    // total, as a query-backed field does when one of its realms failed.
-    totalUnknown?: boolean;
-  };
+  seed?: StoreSearchSeed<T>;
 };
 export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
   parent: object,
   getQuery: () => Query | undefined,
   getRealms?: () => string[] | undefined,
-  opts?: GetSearchResourceFuncOpts,
+  opts?: GetSearchResourceFuncOpts<T>,
 ) => StoreSearchResource<T>;
 
 export interface CardStore {
@@ -596,6 +639,15 @@ export interface CardStore {
   realmForId(id: string): string | undefined;
   getCard(url: string): CardDef | undefined;
   getFileMeta(url: string): FileDef | undefined;
+  // Whether an instance this store is already holding for `url` is current
+  // enough to hand to a link edge in place of a fresh load. The property a
+  // store has to make good on is that what it holds still reflects the realm:
+  // either it drops what it holds when its view of the realm moves, or it
+  // reloads what it holds when the realm says a file changed. A store that
+  // offers neither — or one asked about a target whose changes it would never
+  // hear about — answers false, and the edge loads for itself. Absent means
+  // false, so a store with no opinion never serves a held instance to a link.
+  canReuseResidentInstance?(url: string): boolean;
   setCard(url: string, instance: CardDef): void;
   setFileMeta(url: string, instance: FileDef): void;
   setCardNonTracked(id: string, instance: CardDef): void;
@@ -1318,6 +1370,35 @@ function serializeNonPresentLink(
   };
 }
 
+// Whether the `includedScope` keeps this link target's resource out of
+// `included[]`. 'all' keeps every resident target, 'local' keeps only the
+// unsaved (`lid`-bearing) ones — the write shape, where `included` is a
+// co-creation manifest — and 'none' keeps none.
+function isExcludedByIncludedScope(
+  value: CardDef,
+  includedScope: SerializeOpts['includedScope'] = 'all',
+): boolean {
+  return value.id ? includedScope !== 'all' : includedScope === 'none';
+}
+
+// The relationship entry that stands in for a link target whose own resource
+// is not inlined: a saved target by `links.self` + `id`, an unsaved one by
+// `lid`. Every reference-only path — an already-visited target, a
+// scope-excluded one, and the tail of a full serialization — emits exactly
+// this, so the spellings cannot drift apart.
+function referenceRelationship(
+  value: CardDef,
+  relationshipType: string,
+  opts?: SerializeOpts,
+): Relationship {
+  return value.id
+    ? {
+        links: { self: makeRelativeURL(value.id, opts) },
+        data: { type: relationshipType, id: value.id },
+      }
+    : { data: { type: relationshipType, lid: value[localId] } };
+}
+
 class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   readonly fieldType = 'linksTo';
   private cardThunk: () => CardT;
@@ -1470,24 +1551,22 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
         `linksTo field '${this.name}' cannot serialize a FileDef without an id`,
       );
     }
-    if (visited.has(value.id)) {
+    // A target already serialized on this walk, or one the includedScope
+    // excludes, needs only its relationship entry — so the recursive
+    // serialization of the target, and the traversal of its own linked graph,
+    // is skipped entirely.
+    if (
+      visited.has(value.id) ||
+      visited.has((value as CardDef)[localId]) ||
+      isExcludedByIncludedScope(value as CardDef, opts?.includedScope)
+    ) {
       return {
         relationships: {
-          [this.name]: {
-            links: {
-              self: makeRelativeURL(value.id, opts),
-            },
-            data: { type: relationshipType, id: value.id },
-          },
-        },
-      };
-    }
-    if (visited.has((value as CardDef)[localId])) {
-      return {
-        relationships: {
-          [this.name]: {
-            data: { type: relationshipType, lid: (value as CardDef)[localId] },
-          },
+          [this.name]: referenceRelationship(
+            value as CardDef,
+            relationshipType,
+            opts,
+          ),
         },
       };
     }
@@ -1504,21 +1583,11 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     if (serialized) {
       let resource: JSONAPIResource = {
         relationships: {
-          [this.name]: {
-            ...(value.id
-              ? {
-                  links: {
-                    self: makeRelativeURL(value.id, opts),
-                  },
-                  data: { type: relationshipType, id: value.id },
-                }
-              : {
-                  data: {
-                    type: relationshipType,
-                    lid: (value as CardDef)[localId],
-                  },
-                }),
-          },
+          [this.name]: referenceRelationship(
+            value as CardDef,
+            relationshipType,
+            opts,
+          ),
         },
       };
       if (
@@ -2021,7 +2090,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     // through `serializeNonPresentLink` instead of collapsing to `data: null`.
     rawArrayValues(values).forEach((value, i) => {
       if (value == null) {
-        relationships[`${this.name}\.${i}`] = {
+        relationships[`${this.name}.${i}`] = {
           links: {
             self: null,
           },
@@ -2030,7 +2099,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         return;
       }
       if (isNonPresentLink(value)) {
-        relationships[`${this.name}\.${i}`] = serializeNonPresentLink(
+        relationships[`${this.name}.${i}`] = serializeNonPresentLink(
           value.reference,
           relationshipType,
           opts,
@@ -2042,19 +2111,19 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
           `linksToMany field '${this.name}' cannot serialize a FileDef without an id`,
         );
       }
-      if (visited.has(value.id)) {
-        relationships[`${this.name}\.${i}`] = {
-          links: {
-            self: makeRelativeURL(value.id, opts),
-          },
-          data: { type: relationshipType, id: value.id },
-        };
-        return;
-      }
-      if (visited.has((value as CardDef)[localId])) {
-        relationships[`${this.name}\.${i}`] = {
-          data: { type: relationshipType, lid: (value as CardDef)[localId] },
-        };
+      // Same reference-only rule as linksTo: a target already serialized on
+      // this walk, or one the includedScope excludes, contributes its
+      // relationship entry and nothing else.
+      if (
+        visited.has(value.id) ||
+        visited.has((value as CardDef)[localId]) ||
+        isExcludedByIncludedScope(value as CardDef, opts?.includedScope)
+      ) {
+        relationships[`${this.name}.${i}`] = referenceRelationship(
+          value as CardDef,
+          relationshipType,
+          opts,
+        );
         return;
       }
 
@@ -2082,21 +2151,11 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         doc.included.push(serialized);
       }
 
-      relationships[`${this.name}\.${i}`] = {
-        ...(value.id
-          ? {
-              links: {
-                self: makeRelativeURL(value.id, opts),
-              },
-              data: { type: relationshipType, id: value.id },
-            }
-          : {
-              data: {
-                type: relationshipType,
-                lid: (value as CardDef)[localId],
-              },
-            }),
-      };
+      relationships[`${this.name}.${i}`] = referenceRelationship(
+        value as CardDef,
+        relationshipType,
+        opts,
+      );
     });
 
     return { relationships };
@@ -2474,7 +2533,7 @@ interface InternalFieldInitializer {
 // userland `@field` under one of these would shadow the getter via the
 // prototype chain silently, so the decorator refuses them by name (the
 // `boxel/no-reserved-field-names` lint rule is the authoring-time backstop).
-const RESERVED_FIELD_NAMES = ['screenshotURLs'];
+const RESERVED_FIELD_NAMES = ['screenshotURLs', 'screenshotsMeta'];
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
 // different signature than Typescript thinks they do.
@@ -2688,12 +2747,12 @@ export class BaseDef {
       ) {
         return { id: valueId };
       }
-      function makeAbsoluteURL(maybeRelativeReference: string) {
+      let makeAbsoluteURL = (maybeRelativeReference: string) => {
         if (!value[relativeTo]) {
           return maybeRelativeReference;
         }
         return resolveRef(maybeRelativeReference, value[relativeTo]);
-      }
+      };
       return Object.fromEntries(
         Object.entries(
           getFields(value, {
@@ -2721,10 +2780,6 @@ export class BaseDef {
               ];
             }
             if (isNonPresentLink(rawValue)) {
-              let normalizedId = rawValue.reference;
-              if (value[relativeTo]) {
-                normalizedId = resolveRef(normalizedId, value[relativeTo]);
-              }
               return [fieldName, { id: makeAbsoluteURL(rawValue.reference) }];
             }
             // Reuse the value we already peeked above instead of re-reading
@@ -2880,6 +2935,28 @@ export type BaseDefComponent = ComponentLike<{
 // such element to remain; a component that never resolves its pending
 // element fails that slot's capture rather than persisting an unready frame.
 // Components with no async work omit the attribute and capture immediately.
+//
+// A component that learns its content can never become ready — a corrupt or
+// password-protected document, an undecodable video — should not leave the
+// pending attribute standing until the engine's timeout: swap in a
+// `data-screenshot-failed` attribute instead (remove the pending attribute,
+// set the failed one), which fails the slot immediately. Set the attribute's
+// value to a short human-readable cause; the engine carries it into the
+// slot's failure diagnostics, so an unreadable file is distinguishable from
+// a hung component. Failing the slot is the correct outcome for unreadable
+// content — no manifest entry lands and consumers fall back — where
+// resolving readiness over an unpainted box would persist a blank frame as
+// if it were real content.
+//
+// Clear the attribute with `el.removeAttribute('data-screenshot-pending')`
+// from the async continuation (and set the failure signal with
+// `el.setAttribute('data-screenshot-failed', cause)`) — never by
+// re-rendering it off a tracked property
+// (`data-screenshot-pending={{if this.pending 'true'}}`). Capture
+// pages run in backgrounded tabs, where the browser throttles the timers a
+// tracked update's render flush rides, so the flip can sit unflushed past
+// the engine's whole wait; the engine watches for the DOM mutation itself,
+// which a direct attribute mutation produces immediately.
 //
 // `format` reuses one of the card's display formats instead. A format-based
 // screenshot referenced by that same format's own markup (say, a fitted
@@ -3703,10 +3780,17 @@ export class FileDef extends BaseDef {
   }
 
   // See CardDef.screenshotURLs — the same reserved, meta-derived getter for
-  // file-backed defs. The prerender pass captures only instance rows, so a
-  // file's declared names read `undefined` until file rows capture too.
+  // file-backed defs. The prerender pass captures a URL's file rendering
+  // alongside its instance rendering, so a file family's declared names
+  // resolve here just as a card's do.
   get screenshotURLs(): Record<string, string | undefined> {
     return composeScreenshotURLs(this);
+  }
+
+  // See CardDef.screenshotsMeta — the same reserved, meta-derived getter for
+  // file-backed defs.
+  get screenshotsMeta(): ScreenshotsMeta | undefined {
+    return getCardMeta(this, 'screenshots');
   }
 
   // The four shared format shells own identity, facts, budgets, and state for
@@ -3832,6 +3916,14 @@ export class ImageDef extends FileDef {
   // The four formats come from FileDef's shared shells; the family supplies
   // only the renderer that draws its pixels.
   static previewComponent: FilePreviewComponent = ImagePreview;
+
+  // The family-wide capture: a `thumb` that feeds the thumbnail fallback
+  // chain and the fitted cell, for vectors and rasters alike. The srcset
+  // renditions are declared one level down on `RasterImageDef` — srcset
+  // excludes vectors, so an SVG must not pay for captures nothing reads.
+  // File-content-keyed, so a metadata-only edit never re-decodes the pixels.
+  // See `image-captures` for the boxes and the capture-only components.
+  static screenshots: Record<string, ScreenshotSpec> = IMAGE_THUMB_SCREENSHOTS;
 
   // CS-10787: emit a markdown image reference. If no URL is available we
   // fall back to a placeholder that names the image — useful to downstream
@@ -4021,6 +4113,17 @@ export class CardDef extends BaseDef {
   // decorator so a userland field can't shadow it.
   get screenshotURLs(): Record<string, string | undefined> {
     return composeScreenshotURLs(this);
+  }
+
+  // The instance's `meta.screenshots` entries verbatim — the dimensional
+  // companion to `screenshotURLs` for consumers that need more than the URL:
+  // each captured slot's width/height/deviceScaleFactor (a `srcset`
+  // assembler's inputs) and its `useAsThumbnail` flag. Same absence
+  // semantics: a slot appears only once `meta.screenshots` holds it, so an
+  // uncaptured live instance reads `undefined` here. Reserved like
+  // `screenshotURLs`, so a userland field can't shadow it.
+  get screenshotsMeta(): ScreenshotsMeta | undefined {
+    return getCardMeta(this, 'screenshots');
   }
 
   [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
@@ -4282,48 +4385,50 @@ function lazilyLoadLink(
   });
   void (async () => {
     let isFileLink = isFileDef(field.card);
+    // A field getter is what calls this, and the getter runs inside a render.
+    // Everything below writes the field and notifies card tracking, which a
+    // render that has already read that field treats as a backtracking
+    // re-render and rejects. Yielding here puts every one of those writes in a
+    // later microtask, whichever branch produced the value: a branch that
+    // loads yields on its own fetch, and a branch that hands over an instance
+    // the store already holds has nothing of its own to wait for.
+    await Promise.resolve();
     try {
       let fieldValue: CardDef | FileDef;
-      // Inside an indexing render the store is scoped to the realm view being
-      // rendered: it drops every instance it holds when the render scope moves
-      // (the host store's `observeIndexingJob`, called before a render
-      // hydrates its card and from the load path — not a member of the
-      // `CardStore` interface in this file), so every instance in it was
-      // deserialized
-      // against THIS view of the realm's files. Note it is that drop which
-      // carries the guarantee, not the `clearCache` reset — that one is
-      // scheduled only when a pass invalidates an executable, and reaches only
-      // the single tab its visit lands on, so a pass that changed only
-      // instances schedules none at all.
-      // So an instance already in the store is current — reuse it directly
-      // instead of re-fetching its card+source and re-running the full field
+      // Hand over an instance the store is already holding instead of
+      // re-fetching its card+source and re-running the full field
       // deserialization on every link edge that points at it. That per-edge
-      // redundancy is what makes a densely cross-linked render quadratic (the
-      // same target reached through many parents is rebuilt once per parent).
-      // The per-consumer dependency is still recorded so invalidation tracks
-      // this edge. Gated on BOTH the render flag AND `__boxelJobId` — the same
-      // gate the store scopes itself on: outside a render (the live app) a link
-      // may be stale after invalidation and must reload, and a render carrying
-      // no job id is one whose store never scoped itself, so it offers no
-      // guarantee to reuse on.
-      let inIndexingRender =
-        typeof globalThis !== 'undefined' &&
-        Boolean((globalThis as any).__boxelRenderContext) &&
-        Boolean((globalThis as any).__boxelJobId);
-      let reusable = inIndexingRender
+      // redundancy is what makes a densely cross-linked render quadratic — the
+      // same target reached through many parents is rebuilt once per parent —
+      // and it costs the most on a search, whose results routinely share
+      // targets. The per-consumer dependency is still recorded either way, so
+      // invalidation tracks this edge.
+      //
+      // Whether what the store holds is current enough to stand in for a load
+      // is the store's own question, so the store answers it rather than this
+      // module inferring it from render globals. What this adds is reuse
+      // across time — an edge asking after an earlier one has already settled.
+      // Edges asking at the same moment are collapsed by the loads still in
+      // flight, both the per-instance map above and the store's own per-URL
+      // one, and this leaves both of those doing their job.
+      let reusable = store.canReuseResidentInstance?.(reference)
         ? isFileLink
           ? store.getFileMeta(reference)
           : store.getCard(reference)
         : undefined;
-      // Only reuse an instance that finished deserializing. The job-scoped
-      // store also holds partially-built, non-tracked instances: a failed
-      // `_updateFromSerialized` leaves its half-built instance behind (the
-      // store keeps it so cyclic deserialization can resolve), with
-      // `isSavedInstance` still false — it flips true only at the end of a
-      // successful deserialize. Reusing such a partial would skip the
-      // load/error path that plants the broken-link sentinel and index an
-      // incomplete target; falling through re-attempts the load and re-plants
-      // the sentinel.
+      // Whether the held instance finished deserializing is part of what the
+      // store answers above, and it has to be: a deserialize plants its
+      // instance before it builds any field and leaves a failed one in place
+      // so cyclic deserialization can still resolve it, and nothing on the
+      // instance records which of those it is. `isSavedInstance` reads like
+      // that record and is not one — a `FileDef` carries it true from its
+      // class body and never has it cleared, and the link deserializers stamp
+      // it true on any resident instance they hand back without checking. It
+      // stays here as a narrowing on the card branch, not as the answer.
+      //
+      // Reusing a partial would skip the load/error path that plants the
+      // broken-link sentinel and hand the reader an incomplete target;
+      // falling through re-attempts the load and re-plants the sentinel.
       if (
         reusable &&
         reusable[isSavedInstance] === true &&
@@ -4545,14 +4650,37 @@ function hasInflightLoadForField(
 
 // Supply `getRelationshipMembershipState` with the loading status and query-field membership
 // that live above field-support: in-flight link loads (here) and per-field
-// search resources (in query-field-support). Observe-only — this never starts a
-// load or a search; the template's field getter does that.
+// search resources (in query-field-support). In-flight link loads are observed
+// rather than started; a query field is resolved, for the reason below.
 registerRelationshipProbe((instance, field) => {
   // Entangle the reading render with the field's loading signal so a deferred
   // bump (load start / settle, or query resource creation) re-evaluates this.
   readFieldLoadingSignal(instance, field.name);
   if (field.queryDefinition) {
-    let resource = peekQueryFieldSearchResource(instance, field.name);
+    // Asking a query field for its state is a demand for the field. A card that
+    // renders a pending state while `isLoaded` is false, and reaches its rows
+    // only once loaded, would otherwise wait forever on a search nothing had
+    // started. Creation is idempotent — an existing resource comes back as-is
+    // without re-arming anything — so repeated reads observe rather than
+    // restart, and a field whose query is not yet resolvable still reports as
+    // unresolved until it is.
+    //
+    // This resolves on the same terms as the field getter, including how the
+    // resource's liveness is decided, because a status read and a value read
+    // are the same demand arriving by different routes. That is deliberately
+    // unlike the pass that runs at deserialization, which defers inside a
+    // render context rather than deciding liveness for a card it was not asked
+    // about: here the caller is the render that wants the field.
+    let resource = ensureQueryFieldSearchResource(
+      getStore(instance),
+      instance,
+      field,
+      runtimeQueryDependencyContext({
+        queryField: field.name,
+        consumer: (instance as CardDef).id,
+        source: 'card-api:relationship-probe',
+      }),
+    );
     let isLoading = resource?.isLoading ?? false;
     let bucketEntry = getDataBucket(instance).get(field.name);
     let queryMembership: RelationshipState[] | undefined;
@@ -5225,6 +5353,23 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         // and have a chance to fix it so that it adheres to the definition
         return [];
       }
+      // Inclusive per-field hydration timing, opt-in via the collector on
+      // `opts` (see DeserializeOpts.hydrateFieldsMs). The span opens before
+      // the field-override resolution — a `loadCardDef` for an override is
+      // part of what hydrating this field costs — and closes after the
+      // deserialized value is in hand, covering the nested recursion and any
+      // link load it awaited. Sibling fields deserialize concurrently under
+      // the `Promise.all` below, so spans overlap; each value is that
+      // field's own wall-clock, not a summable slice.
+      let hydrateFieldsMs = opts?.hydrateFieldsMs;
+      let hydrateFieldPath = hydrateFieldsMs
+        ? opts!.hydrateFieldPath
+          ? `${opts!.hydrateFieldPath}.${fieldName}`
+          : fieldName
+        : undefined;
+      let hydrateStart = hydrateFieldsMs ? performance.now() : 0;
+      let fieldOpts =
+        hydrateFieldPath !== undefined ? { ...opts, hydrateFieldPath } : opts;
       let resourceMetaFields = resource.meta?.fields;
       let overrideApplied = false;
       if (field.fieldType === 'containsMany') {
@@ -5294,7 +5439,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         doc,
         store,
         relativeTo: relativeToVal,
-        opts,
+        opts: fieldOpts,
       });
 
       field = applyLinkOverrideFromValue(
@@ -5302,6 +5447,14 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         field,
         deserializedValue,
       ) as Field<T>;
+      if (hydrateFieldsMs && hydrateFieldPath !== undefined) {
+        // Accumulate rather than assign: a plural field's items all land
+        // under the owning field's path, and a card re-entered on another
+        // branch adds to the same key.
+        hydrateFieldsMs[hydrateFieldPath] =
+          (hydrateFieldsMs[hydrateFieldPath] ?? 0) +
+          (performance.now() - hydrateStart);
+      }
       return [field, deserializedValue];
     }),
   )) as [Field<T>, any][];
@@ -5376,11 +5529,24 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     // computed once and every card without one skips the walk entirely.
     if (hasQueryFields(instance)) {
       let store = getStore(instance);
+      // A document's `data` is what it is about; its `included` carries the
+      // cards its links name. `resourceFrom` hands a link's target on by
+      // identity, so comparing against `data` separates the two exactly, and a
+      // link followed on its own reaches here as the `data` of the document its
+      // own read returned.
+      //
+      // Every caller deserializes from a single-resource document — a search
+      // result is re-wrapped as its own — so the collection form is answered
+      // only because the document type admits one, not because a caller sends
+      // one. Membership of `data` is the same question either way.
+      let isDocumentSubject = Array.isArray(doc.data)
+        ? (doc.data as LooseCardResource[]).includes(resource)
+        : doc.data === resource;
       for (let field of Object.values(
         getFields(instance, { includeComputeds: true }),
       )) {
         if (field?.queryDefinition) {
-          resolveQueryFieldEagerly(store, instance, field);
+          resolveQueryFieldEagerly(store, instance, field, isDocumentSubject);
         }
       }
     }
@@ -5895,6 +6061,7 @@ class FallbackCardStore implements CardStore {
   }
   async loaded() {
     let observedGeneration = this.#loadGeneration;
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       if (this.#inFlight.size === 0) {
         await Promise.resolve();

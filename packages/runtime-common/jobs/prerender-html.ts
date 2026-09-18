@@ -11,6 +11,30 @@ import { Deferred } from '../deferred.ts';
 import type { IncrementalChange } from '../tasks/indexer.ts';
 import type { PrerenderHtmlArgs } from '../tasks/prerender-html.ts';
 
+// When two publishes carry the same URL, the merged job keeps 'update':
+// the render consults disk truth, so an update-tagged URL whose file is
+// gone still lands as a tombstone (the visit writes nothing over the
+// up-front tombstone), while a delete-tagged URL is never visited at all —
+// so a delete from one pass must not swallow a later pass's re-create, or
+// the re-created card's HTML would stay tombstoned at a generation the
+// index channel considers current.
+export function mergePrerenderHtmlChanges(
+  existing: IncrementalChange[],
+  incoming: IncrementalChange[],
+): IncrementalChange[] {
+  let byUrl = new Map<string, IncrementalChange>();
+  for (let change of [...existing, ...incoming]) {
+    let previous = byUrl.get(change.url);
+    if (
+      !previous ||
+      (previous.operation === 'delete' && change.operation === 'update')
+    ) {
+      byUrl.set(change.url, change);
+    }
+  }
+  return [...byUrl.values()];
+}
+
 // A prerender-html job normally floors one tier below the index pass that
 // spawned it — a user-initiated index (userInitiatedPriority) yields
 // userInitiatedPrerenderHtmlPriority, anything lower yields
@@ -212,6 +236,27 @@ export async function publishedHtmlHasCaughtUp(
 // publishes: per-URL update-wins merge, max generation/priority/timeout.
 // Callers fire-and-forget — an index pass must never block on, or fail
 // with, its prerender enqueue; a missed enqueue self-heals on the next pass.
+// Whether `realmURL` is configured to render no HTML.
+//
+// A realm's identity in a job is whichever of its `--fromUrl` / `--toUrl` pair
+// that job carries, and the two are not interchangeable across realms — one
+// bootstrap realm's jobs name its external URL while another's name its source
+// URL. So the configured value has to be written to match, and a trailing
+// slash is the one difference not worth making someone debug.
+//
+// Both the spawn site on a from-scratch index and the reconcile sweep consult
+// this: a realm that renders nothing has every row permanently unrendered, and
+// to the sweep that is indistinguishable from residue worth repairing.
+export function skipsPrerenderHtml(
+  realmURL: string,
+  skipPrerenderHtmlRealms: string[] | undefined,
+): boolean {
+  let normalize = (url: string) => (url.endsWith('/') ? url : `${url}/`);
+  return (skipPrerenderHtmlRealms ?? []).some(
+    (configured) => normalize(configured) === normalize(realmURL),
+  );
+}
+
 export async function enqueuePrerenderHtmlJob(
   queuePublisher: QueuePublisher,
   {

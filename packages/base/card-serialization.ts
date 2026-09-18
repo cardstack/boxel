@@ -75,6 +75,22 @@ export interface SerializeOpts {
   useAbsoluteURL?: boolean;
   omitFields?: [typeof BaseDef];
   omitQueryFields?: boolean;
+  // How much of the linked graph rides along in `included[]`. 'all' — the
+  // default, and what a direct `serializeCard` call gets — serializes every
+  // resident link target. 'local' serializes only the local (unsaved,
+  // `lid`-bearing) targets reachable without crossing an excluded one: the
+  // write shape, where `included` is a co-creation manifest and saved targets
+  // are reference-only. 'none' serializes no link targets at all.
+  //
+  // An excluded target contributes its relationship entry only, and its own
+  // linked graph is not traversed — which is the point: a new card linking
+  // into a large saved graph serializes none of that graph on save. Under
+  // 'local' that also bounds what a write co-creates to the local targets it
+  // reaches directly. An unsaved card hanging off a saved link is not
+  // co-created, because nothing the write persists could reference it: the
+  // saved link's own file is not rewritten, and the write's response names
+  // only the primary card, so its id would never reach the client.
+  includedScope?: 'all' | 'local' | 'none';
   maybeRelativeReference?: (possibleReference: string) => string;
   overrides?: Map<string, typeof BaseDef>;
 }
@@ -82,6 +98,18 @@ export interface SerializeOpts {
 export interface DeserializeOpts {
   ignoreBrokenLinks?: true;
   dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+  // Opt-in per-field hydration timing. When a caller supplies the collector,
+  // `_updateFromSerialized` accumulates each field's inclusive
+  // deserialization wall-clock into it, keyed by dotted path, and threads
+  // `hydrateFieldPath` down the recursion so a nested field's key names its
+  // whole path from the root. Absent for every other caller, which then pays
+  // one property read per field and allocates nothing — the interactive app
+  // deserializes on its hot path too.
+  hydrateFieldsMs?: Record<string, number>;
+  // The path of the field whose value is currently being deserialized, i.e.
+  // the prefix the next level down qualifies its own field names with. Set
+  // only alongside `hydrateFieldsMs`; the root call leaves it unset.
+  hydrateFieldPath?: string;
 }
 
 // --- Serialization Symbols ---
@@ -301,8 +329,9 @@ export function serializeCardResource(
   if (!adoptsFrom) {
     throw new Error(`bug: could not identify card: ${model.constructor.name}`);
   }
-  let { includeUnrenderedFields: remove, ...fieldOpts } = opts ?? {};
-  let { id: removedIdField, ...fields } = getFields(model, {
+  let { includeUnrenderedFields: _includeUnrenderedFields, ...fieldOpts } =
+    opts ?? {};
+  let { id: _id, ...fields } = getFields(model, {
     ...fieldOpts,
     usedLinksToFieldsOnly: !opts?.includeUnrenderedFields,
   });

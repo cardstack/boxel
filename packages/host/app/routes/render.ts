@@ -22,6 +22,7 @@ import {
   screenshotsMetaFromRoster,
   SupportedMimeType,
   isCardError,
+  isJsonContentType,
   rri,
   type CardErrorsJSONAPI,
   type DeclaredScreenshotRoster,
@@ -32,10 +33,16 @@ import {
   parseRenderRouteOptions,
   serializeRenderRouteOptions,
   logger as runtimeLogger,
+  type BuildModelDiagnostics,
+  type BuildModelStagesMs,
+  type ModuleEvaluation,
+  type StoreSettleWait,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import {
+  CardError,
   coerceErrorMessage,
+  isGatewayFailureStatus,
   serializableError,
 } from '@cardstack/runtime-common/error';
 
@@ -49,6 +56,13 @@ import {
   recordAttemptedRenderCardId,
 } from '../utils/register-boxel-transition';
 import { runDomDesyncCheck } from '../utils/render-desync-detector';
+import {
+  newHistoryEntries,
+  newLoadEntries,
+  pruneTimingEntries,
+  pruneTimingPaths,
+  roundMs,
+} from '../utils/render-diagnostics';
 import {
   RenderCardTypeTracker,
   deriveCardTypeFromDoc,
@@ -72,7 +86,7 @@ import type RealmServerService from '../services/realm-server';
 import type RenderErrorStateService from '../services/render-error-state';
 import type RenderStoreService from '../services/render-store';
 import type StoreService from '../services/store';
-import type { CardDef } from '@cardstack/base/card-api';
+import type { CardDef, QueryLoadMeta } from '@cardstack/base/card-api';
 
 type RenderStatus = 'loading' | 'ready' | 'error' | 'unusable';
 
@@ -82,6 +96,13 @@ export type Model = {
   cardId: string;
   renderOptions: ReturnType<typeof parseRenderRouteOptions>;
   capturedDeps?: string[];
+  // The model build's own timing breakdown, bounded and rounded for
+  // persistence. A model is built once per visit and shared by every child
+  // route step in it, so this rides the model rather than any one step: the
+  // render.meta route folds it into the payload the indexer persists. Absent
+  // on the trivial models the file-extract and file-render branches return —
+  // neither runs the stages this measures.
+  buildModelDiagnostics?: BuildModelDiagnostics;
   readonly status: RenderStatus;
   readonly ready: boolean;
   readyPromise: Promise<void>;
@@ -128,6 +149,16 @@ export default class RenderRoute extends Route<Model> {
   #modelStates = new Map<Model, ModelState>();
   #pendingReadyModels = new Set<Model>();
   #modelPromises = new Map<string, Promise<Model>>();
+  // Stage buckets of the model build currently in progress. Held on the
+  // route rather than only on the model so the timeout capture can read the
+  // stages that completed before the stall — a model that never resolves
+  // never reaches a child route to report through.
+  #buildModelMs: BuildModelStagesMs | undefined;
+  // The same build's live per-field hydration collector. A stall inside the
+  // `hydrate` stage is exactly the case where the stage bucket never closes,
+  // so the fields collected up to the stall are what names the field the
+  // deserialization is stuck on.
+  #hydrateFieldsMs: Record<string, number> | undefined;
   #authGuard = createAuthErrorGuard();
   #restoreRenderTimers: (() => void) | undefined;
   #releaseTimerBlock: (() => void) | undefined;
@@ -202,6 +233,8 @@ export default class RenderRoute extends Route<Model> {
     this.#detachWindowErrorListeners();
     this.lastStoreResetKey = undefined;
     this.renderBaseParams = undefined;
+    this.#buildModelMs = undefined;
+    this.#hydrateFieldsMs = undefined;
     this.#lastAttemptedCardId = undefined;
     this.lastRenderErrorSignature = undefined;
     this.renderErrorState.clear();
@@ -344,6 +377,13 @@ export default class RenderRoute extends Route<Model> {
       return {
         renderStage: stage,
         stageAgeMs,
+        // The stages the model build finished. A stall leaves the stage it
+        // is in absent, and `renderStage` / `stageAgeMs` name that one — so
+        // the two together account for the whole build.
+        buildModelMs: this.#buildModelMs ?? {},
+        // Pruned on read: the collector is unbounded while the build runs,
+        // and a wedged page's diagnostic payload has to stay small.
+        hydrateFieldsMs: pruneTimingPaths(this.#hydrateFieldsMs ?? {}) ?? {},
         currentId: id,
         currentNonce: nonce,
         cardDocsInFlight: storeService.cardDocsInFlight ?? [],
@@ -415,6 +455,11 @@ export default class RenderRoute extends Route<Model> {
     // settle-time snapshot; #settleModelAfterRender repopulates it.
     (globalThis as any).__boxelRenderCapturedDeps = undefined;
     (globalThis as any).__boxelRenderRefreshCapturedDeps = undefined;
+    // Same reason: a stale bucket set from the previous card must not be
+    // readable as this build's. The trivial file branches below return
+    // before any stage runs, so they leave this empty.
+    this.#buildModelMs = {};
+    this.#hydrateFieldsMs = undefined;
     // Bind the stores to this visit's render scope before anything is fetched
     // or hydrated. A tab serves visits from many scopes and holds the
     // instances they loaded, and a resident link target is handed to
@@ -491,12 +536,35 @@ export default class RenderRoute extends Route<Model> {
     }
     if (parsedOptions.fileRender) {
       let fileRenderData = (globalThis as any).__boxelFileRenderData as
-        | { resource: any; fileDefCodeRef: { module: string; name: string } }
+        | {
+            resource: any;
+            fileDefCodeRef: { module: string; name: string };
+            // The visit's realm, stashed by the prerender server alongside
+            // the file data — a file render has no response header to learn
+            // its realm from the way the card branch does.
+            realmURL?: string;
+          }
         | undefined;
       if (!fileRenderData) {
         throw new Error('fileRender mode requires __boxelFileRenderData');
       }
       let { resource } = fileRenderData;
+      // The file-half twin of the card branch's declaration-derived
+      // `meta.screenshots` injection below (`declarationScreenshotsMeta`):
+      // the FileDef family's declared roster asserts each slot's durable URL
+      // so the file's own prerendered formats can embed it on the very first
+      // pass, before that pass's captures persist.
+      let fileScreenshotsMeta = await this.fileDeclarationScreenshotsMeta(
+        fileRenderData.fileDefCodeRef,
+        resource,
+        fileRenderData.realmURL,
+      );
+      if (fileScreenshotsMeta) {
+        resource = {
+          ...resource,
+          meta: { ...resource.meta, screenshots: fileScreenshotsMeta },
+        };
+      }
       let doc = { data: resource };
       let instance = (await this.store.addFileMeta(
         resource,
@@ -535,16 +603,54 @@ export default class RenderRoute extends Route<Model> {
     // This is for host tests
     (globalThis as any).__renderModel = undefined;
 
-    (globalThis as any).__boxelSetRenderStage?.('buildModel:fetching-source');
+    // Stage stamping for `buildModelMs`. Each `enterStage` closes the
+    // previous stage's bucket and opens the next at the same boundary the
+    // `renderStage` breadcrumb already marks — so a successful visit
+    // accounts for the model build that its route-step bucket
+    // (`indexRoutesMs.card.meta`, or `renderFormatsMs.card.isolated` on a
+    // fused visit) otherwise absorbs whole. A stage that throws or stalls
+    // never closes, which is what leaves it absent for the timeout path to
+    // name via `renderStage`.
+    // The local owns the object and the field aliases it, rather than the
+    // other way round: a build stamps the buckets it created, so a second
+    // build starting on this tab takes over what the timeout path reads
+    // without either build writing into the other's numbers.
+    let buildModelMs: BuildModelStagesMs = {};
+    this.#buildModelMs = buildModelMs;
+    let openStage: keyof BuildModelStagesMs | undefined;
+    let openedAt = 0;
+    let closeStage = () => {
+      if (openStage) {
+        buildModelMs[openStage] = roundMs(performance.now() - openedAt);
+        openStage = undefined;
+      }
+    };
+    let enterStage = (breadcrumb: string, stage: keyof BuildModelStagesMs) => {
+      closeStage();
+      openStage = stage;
+      openedAt = performance.now();
+      (globalThis as any).__boxelSetRenderStage?.(breadcrumb);
+    };
+    // Module evaluations are attributed to the build by diffing the Loader's
+    // rolling history across it. Snapshotted here rather than at the top of
+    // the method so a loader reset above (epoch change, clearCache) isn't
+    // read as this build having evaluated the whole graph twice.
+    // The slowest-N history saturates over a loader's life, so a later card
+    // in a job can evaluate modules that never enter it. The monotonic
+    // totals are snapshotted alongside it so the row can say an evaluation
+    // happened even when the itemized list comes back empty.
+    let loader = this.loaderService.loader;
+    let moduleEvaluationsBefore = loader.recentModuleEvaluations;
+    let moduleTotalsBefore = loader.moduleEvaluationTotals;
+    // Filled in place by `store.add` below; keyed by dotted field path.
+    let hydrateFieldsMs: Record<string, number> = {};
+    this.#hydrateFieldsMs = hydrateFieldsMs;
+
+    enterStage('buildModel:fetching-source', 'fetchSource');
     let response: Response;
     try {
       response = await this.#authGuard.race(() =>
-        this.network.authedFetch(id, {
-          method: 'GET',
-          headers: {
-            Accept: SupportedMimeType.CardSource,
-          },
-        }),
+        this.#fetchCardSourceWithGatewayRetry(id),
       );
     } catch (err: any) {
       if (this.#authGuard.isAuthError(err)) {
@@ -552,6 +658,24 @@ export default class RenderRoute extends Route<Model> {
         throw err;
       }
       throw err;
+    }
+
+    // Guard the parse. This is the document-loading path the CS-12966 incident
+    // ran through: the render fetches the card's own document through the
+    // public balancer, and when that comes back a gateway error the body is
+    // the balancer's HTML error page, not a card document. Parsing it as one
+    // failed, and that parse failure was latched as the card's render verdict
+    // — one 502 that lasted milliseconds served 500 to every reader for days.
+    // A balancer 5xx, or any body that is not the JSON the request asked for,
+    // is a statement about the network rather than the card: surface it as a
+    // gateway failure the prerender server classifies and the write site
+    // withholds, instead of letting `response.json()` throw on the HTML.
+    let contentType = response.headers.get('content-type');
+    if (
+      isGatewayFailureStatus(response.status) ||
+      !isJsonContentType(contentType)
+    ) {
+      throw this.#gatewayFailureError(id, { response, contentType });
     }
 
     let realmURL = response.headers.get('x-boxel-realm-url')!;
@@ -593,13 +717,14 @@ export default class RenderRoute extends Route<Model> {
     this.#modelStates.set(model, modelState);
 
     let instance: CardDef | undefined;
+    let settleWaits: StoreSettleWait[] | undefined;
     try {
       if ('errors' in doc) {
         this.#dispositionModel(model, 'error');
         this.#cardTypeTracker.set({ cardId: canonicalId, nonce }, undefined);
         throw new Error(JSON.stringify(doc.errors[0], null, 2));
       }
-      (globalThis as any).__boxelSetRenderStage?.('buildModel:deriving-type');
+      enterStage('buildModel:deriving-type', 'deriveType');
       let { derivedCardType, hydratedInstance } = await this.#authGuard.race(
         async () => {
           let derivedCardType = await deriveCardTypeFromDoc(
@@ -631,16 +756,28 @@ export default class RenderRoute extends Route<Model> {
             },
           };
 
-          (globalThis as any).__boxelSetRenderStage?.('buildModel:hydrating');
+          enterStage('buildModel:hydrating', 'hydrate');
           let hydratedInstance = await this.store.add(enhancedDoc, {
             relativeTo: rri(id),
             realm: realmURL,
             doNotPersist: true,
+            hydrateFieldsMs,
           });
-          (globalThis as any).__boxelSetRenderStage?.(
-            'buildModel:store-settle',
-          );
+          // What the settle drains is attributed the same way module
+          // evaluations are: the store's completed-load histories are
+          // rolling and tab-scoped, so snapshot them at the stage boundary
+          // and diff after. Hydration's own inline loads are already inside
+          // the `hydrate` bucket and its per-field breakdown; what this
+          // names is the loads it fired and left for `store.loaded()`.
+          let settleLoadsBefore = {
+            card: this.store.recentCardDocLoads(),
+            file: this.store.recentFileMetaLoads(),
+            query: this.store.recentQueryLoads(),
+          };
+          enterStage('buildModel:store-settle', 'storeSettle');
           await this.store.loaded();
+          closeStage();
+          settleWaits = this.#settleWaits(settleLoadsBefore);
           return { derivedCardType, hydratedInstance };
         },
       );
@@ -661,6 +798,23 @@ export default class RenderRoute extends Route<Model> {
     if (instance) {
       model.instance = instance;
     }
+    let moduleEvaluationsMs = pruneTimingEntries<ModuleEvaluation>(
+      newLoadEntries(moduleEvaluationsBefore, loader.recentModuleEvaluations),
+    );
+    let prunedHydrateFieldsMs = pruneTimingPaths(hydrateFieldsMs);
+    let moduleTotalsAfter = loader.moduleEvaluationTotals;
+    model.buildModelDiagnostics = {
+      buildModelMs,
+      moduleEvaluationCount: moduleTotalsAfter.count - moduleTotalsBefore.count,
+      moduleEvaluationTotalMs: roundMs(
+        moduleTotalsAfter.totalMs - moduleTotalsBefore.totalMs,
+      ),
+      ...(moduleEvaluationsMs ? { moduleEvaluationsMs } : {}),
+      ...(prunedHydrateFieldsMs
+        ? { hydrateFieldsMs: prunedHydrateFieldsMs }
+        : {}),
+      ...(settleWaits ? { storeSettleWaits: settleWaits } : {}),
+    };
     this.#scheduleReady(model);
 
     // this is to support in-browser rendering, where we actually don't have the
@@ -670,9 +824,194 @@ export default class RenderRoute extends Route<Model> {
     return model;
   }
 
+  // Fetch the card's source document, retrying once when the first attempt
+  // fails at or above the gateway layer — a balancer 5xx, or a network-level
+  // failure that never produced a response at all. The dominant trigger for
+  // CS-12966 was a keep-alive race producing 502s that lasted milliseconds; a
+  // single retry would have turned that incident into a non-event, and it is
+  // cheaper than any classification of the failure after the fact. An auth
+  // failure is never a gateway failure, so it is rethrown untouched and never
+  // spends the one retry — the caller's auth handling deals with it.
+  async #fetchCardSourceWithGatewayRetry(id: string): Promise<Response> {
+    let attempt = () =>
+      this.network.authedFetch(id, {
+        method: 'GET',
+        headers: {
+          Accept: SupportedMimeType.CardSource,
+        },
+      });
+    let response: Response | undefined;
+    let networkError: unknown;
+    try {
+      response = await attempt();
+    } catch (err: any) {
+      if (this.#authGuard.isAuthError(err)) {
+        throw err;
+      }
+      networkError = err;
+    }
+    if (!response || response.status >= 500) {
+      try {
+        return await attempt();
+      } catch (err: any) {
+        if (this.#authGuard.isAuthError(err)) {
+          throw err;
+        }
+        // Both attempts failed at the network level, so no response document
+        // exists to parse: this is unambiguously the network and not the card.
+        throw this.#gatewayFailureError(id, {
+          networkError: err ?? networkError,
+        });
+      }
+    }
+    return response;
+  }
+
+  // A render failure attributable to the network between the render and the
+  // realm rather than to the card. Carries a gateway status (502/503/504, or a
+  // synthesized 502 when a body could not be read as a card document or the
+  // fetch never returned) so the prerender server classifies it as
+  // unattributable and the write site withholds it — keeping the card's prior
+  // good render rather than latching a transient failure as its verdict. Its
+  // message names the URL and what actually came back, so an operator reading
+  // the row on the paths where withholding does not apply (a first render, no
+  // prior content to protect) still sees a diagnosable error.
+  #gatewayFailureError(
+    id: string,
+    opts: {
+      response?: Response;
+      contentType?: string | null;
+      networkError?: unknown;
+    },
+  ): CardError {
+    let status =
+      opts.response && isGatewayFailureStatus(opts.response.status)
+        ? opts.response.status
+        : 502;
+    let detail = opts.response
+      ? `the balancer answered HTTP ${opts.response.status}${
+          opts.contentType ? ` with content type ${opts.contentType}` : ''
+        }`
+      : `the fetch failed at the network level (${
+          (opts.networkError as Error)?.message ?? 'no error message'
+        })`;
+    let error = new CardError(
+      `Gateway or network failure while fetching the card document for ${id}: ${detail}. ` +
+        `The render's fetch of the card document went through the public balancer and did not ` +
+        `return a card document, so this describes the network rather than the card.`,
+      { status },
+    );
+    // The positive marker the prerender classifier withholds on. Stamped here,
+    // where the fetch boundary knows the failure is the network's, so the
+    // classifier never has to infer that from the status — a card render can
+    // carry a gateway status too (a render timeout is a 504), and only this
+    // marker distinguishes the two.
+    error.gatewayFailure = true;
+    return error;
+  }
+
+  // The loads that landed while the model build's settle stage was draining
+  // the store, folded into one bounded, slowest-first list. Each of the
+  // store's three histories is diffed against the snapshot taken at the
+  // stage boundary, so what comes back is this settle's own work and not the
+  // tab's. A query load names its owning field where it has one, and its
+  // `source` label otherwise — the full query shape is not persisted here
+  // (a timed-out row carries it on `recentQueryLoads`).
+  #settleWaits(before: {
+    card: Array<{ url: string; ms: number }>;
+    file: Array<{ url: string; ms: number }>;
+    query: Array<{ meta: QueryLoadMeta; ms: number }>;
+  }): StoreSettleWait[] | undefined {
+    let queryKey = ({ meta, ms }: { meta: QueryLoadMeta; ms: number }) =>
+      `${meta.cardId ?? ''}|${meta.fieldName ?? ''}|${meta.source}|${ms}`;
+    let waits: StoreSettleWait[] = [
+      ...newLoadEntries(before.card, this.store.recentCardDocLoads()).map(
+        ({ url, ms }) => ({ kind: 'card' as const, target: url, ms }),
+      ),
+      ...newLoadEntries(before.file, this.store.recentFileMetaLoads()).map(
+        ({ url, ms }) => ({ kind: 'file' as const, target: url, ms }),
+      ),
+      ...newHistoryEntries(
+        before.query,
+        this.store.recentQueryLoads(),
+        queryKey,
+      ).map(({ meta, ms }) => ({
+        kind: 'query' as const,
+        target:
+          meta.cardId && meta.fieldName
+            ? `${meta.cardId}#${meta.fieldName}`
+            : meta.source,
+        ms,
+      })),
+    ];
+    return pruneTimingEntries(waits);
+  }
+
   setupController(controller: Controller, model: Model) {
     super.setupController(controller, model);
     this.#scheduleReady(model);
+  }
+
+  // The file rendering's variant of `declarationScreenshotsMeta` below (see
+  // that comment for the shared rationale — declaration-derived rosters,
+  // 404-then-self-heal, no `hash`): the roster comes from the file's FileDef
+  // family class (resolved by extension), and the addressed path keeps its
+  // extension — a file row's captures are keyed by the file's own URL, only
+  // instance ids shed `.json`.
+  //
+  // Absent `realmURL` is a deliberate no-op, not a defensive default: the
+  // in-browser prerender twin stashes no realm on purpose — it never
+  // captures, so injection must stay off there, or the baked durable URLs
+  // would 404 with no capture ever landing to self-heal them.
+  private async fileDeclarationScreenshotsMeta(
+    fileDefCodeRef: { module: string; name: string },
+    resource: {
+      id?: string;
+      meta?: { realmURL?: string };
+    },
+    visitRealmURL: string | undefined,
+  ): Promise<ScreenshotsMeta | undefined> {
+    try {
+      let id = resource.id;
+      // The stashed visit realm is the authority; an extract-built resource
+      // carries no meta.realmURL of its own.
+      let realmURL = visitRealmURL ?? resource.meta?.realmURL;
+      if (!id || !realmURL) {
+        return undefined;
+      }
+      let api = await this.cardService.getAPI();
+      if (typeof api.serializeDeclaredScreenshots !== 'function') {
+        return undefined;
+      }
+      let resolvedId = this.network.virtualNetwork.toURL(id);
+      if (!resolvedId.href.startsWith(realmURL)) {
+        return undefined;
+      }
+      let Klass = await loadCardDef(
+        // The wire shape carries plain strings; loadCardDef wants the branded
+        // resource-identifier spelling of the same ref.
+        fileDefCodeRef as Parameters<typeof loadCardDef>[0],
+        {
+          loader: this.loaderService.loader,
+          relativeTo: resolvedId,
+        },
+      );
+      let roster = api.serializeDeclaredScreenshots(
+        Klass as typeof CardDef,
+      ) as DeclaredScreenshotRoster;
+      if (Object.keys(roster).length === 0) {
+        return undefined;
+      }
+      return screenshotsMetaFromRoster(roster, {
+        realmURL,
+        instanceLocalPath: resolvedId.href.slice(realmURL.length),
+      });
+    } catch {
+      // Same posture as `declarationScreenshotsMeta`: a class that fails to
+      // load fails the render itself moments later; this auxiliary read must
+      // never be what surfaces it.
+      return undefined;
+    }
   }
 
   // The render context's `meta.screenshots`: derived from the class's

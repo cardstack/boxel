@@ -36,6 +36,7 @@ import {
   query,
   dbExpression,
   isDbExpression,
+  sortDirection,
 } from './expression.ts';
 import type { RangeOperator, RangeFilterValue } from './query.ts';
 import {
@@ -49,6 +50,8 @@ import {
   type Sort,
   type RangeFilter,
   RANGE_OPERATORS,
+  InvalidQueryError,
+  collectPositiveMatchTerms,
   isCardTypeFilter,
   isReferenceFilterField,
 } from './query.ts';
@@ -186,6 +189,11 @@ export interface IndexedFile {
   atomHtml: string | null;
   iconHtml: string | null;
   markdown: string | null;
+  // The file row's declared-screenshot manifest
+  // (`prerendered_html.screenshots`, type 'file') — joined into the served
+  // file-meta resource's `meta.screenshots` the way an instance row's
+  // manifest is joined into a card's.
+  screenshots: ScreenshotManifest | null;
   generation: number;
   // The generation the file's prerendered HTML was produced at
   // (`prerendered_html.generation`; a file with no prerendered row falls back
@@ -195,6 +203,48 @@ export interface IndexedFile {
   htmlGeneration?: number;
   realmURL: string;
   indexedAt: number | null;
+}
+
+// What link expansion reads off a side-loaded link target. Deliberately not
+// an `IndexedInstance`: that shape promises the prerendered formats, the
+// search doc and both dependency graphs, and a read that selects them on
+// this path fetches bytes no caller can have asked for. A narrower type is
+// what keeps the next caller from quietly depending on fields this read does
+// not fetch.
+// The file-row counterpart of `LinkTargetInstance`, and narrow for the same
+// reason: `IndexedFile` promises the prerendered formats, the icon, the
+// display names and the dependency graph, none of which building a
+// side-loaded file-meta resource reads. Kept structurally a subset of
+// `IndexedFile` so the paths that do hold a full one can still be assembled
+// through the same function.
+export interface LinkTargetFile {
+  canonicalURL: string;
+  // The file row's stored document, and the search doc it falls back to for
+  // any attribute the document does not carry.
+  resource: FileMetaResource | null;
+  searchDoc: Record<string, any> | null;
+  // `types[0]` names the adopted FileDef ref; the resource's own
+  // `meta.adoptsFrom` is the fallback.
+  types: string[] | null;
+  lastModified: number | null;
+  resourceCreatedAt: number | null;
+  // Both the resource's `meta.realmURL` and the prefix test that decides
+  // whether the screenshot manifest applies to this URL.
+  realmURL: string;
+  screenshots: ScreenshotManifest | null;
+}
+
+export interface LinkTargetInstance {
+  // The row's own spelling of its URL — a lookup may have addressed it by
+  // `file_alias`, and the resource's local path is derived from this.
+  canonicalURL: string;
+  // The stored card resource, as `pristine_doc` holds it: relationships
+  // carrying relative `links.self` and no `data`, which link expansion
+  // resolves and rewrites.
+  resource: CardResource;
+  // Rides the prerendered_html channel and is joined into the side-loaded
+  // resource's `meta`, so it is read here even though the formats are not.
+  screenshots: ScreenshotManifest | null;
 }
 
 export interface IndexedInstance {
@@ -302,6 +352,16 @@ export const generalSortFields: Record<string, string> = {
   cardURL: 'i.url COLLATE "POSIX"',
 };
 
+// A synthetic sort key (not a column in `generalSortFields`): the full-text
+// relevance score of a `matches` query, computed per query from the filter's
+// match terms. The leading underscore follows the synthetic-key convention
+// (`_isCardInstance`, `_isCardInstanceFile`) — it is derived, not a stored
+// field. Recognized by the sort validators (`assertSortExpression`,
+// `translateSort`) and handled specially by the order builders below; it never
+// flows through `generalFieldSortColumn` (it has no static column). Sorting by
+// it defaults to `desc` (best match first).
+export const MATCH_RELEVANCE_SORT_KEY = '_matchRelevance';
+
 export { isValidPrerenderedHtmlFormat };
 
 // Whether a predicate sits under an even (`positive`) or odd (`negated`) number
@@ -375,14 +435,39 @@ export class IndexQueryEngine {
     return this.#rowToInstanceOrError(result[0], url, opts);
   }
 
-  // Batch variant of getInstance: one DB round-trip for many URLs.
-  // Returns a map keyed by the LOOKUP URL (matching either i.url or i.file_alias)
-  // so callers can address results by the URL they passed in.
-  async getInstances(
+  // Batch read of the link targets `loadLinks` side-loads, selecting what link
+  // expansion actually consumes and nothing else.
+  //
+  // The wide `getInstance` shape is the wrong one here, and not merely
+  // wasteful. Whichever entry point reaches link expansion — a search's
+  // projected roots or a single card+json document's own — expansion puts
+  // only the resource into `included[]`. Rendered output for any of these
+  // URLs is served by the render-set projection, which joins
+  // `prerendered_html` itself and never reaches this code. So no caller of
+  // this read can have asked for prerendered HTML.
+  //
+  // A `SELECT i.*` costs more than those formats, though: it also drags
+  // `deps` and `last_known_good_deps`, each holding a few hundred dependency
+  // URLs, which together dwarf everything else on the row. Both stay far
+  // larger than the document even if a scoped-CSS dep stops carrying its
+  // stylesheet inline, since the row's cost there is the number of deps
+  // rather than the width of any one.
+  //
+  // So the select names its columns rather than starring: what a star
+  // quietly includes is the whole of the expense, and two of the columns it
+  // includes are ones nothing on this path reads.
+  //
+  // Returns a map keyed by the LOOKUP URL (matching either `i.url` or
+  // `i.file_alias`), matching rows on the same type/tombstone predicate
+  // `getInstance` uses. A row that is absent, deleted, or errored on either
+  // channel is simply not in the map — which is what link expansion does with
+  // one anyway: it leaves the relationship naming a target the document does
+  // not carry.
+  async getLinkTargetInstances(
     urls: URL[],
     opts?: GetEntryOptions,
-  ): Promise<Map<string, InstanceOrError>> {
-    let resultMap = new Map<string, InstanceOrError>();
+  ): Promise<Map<string, LinkTargetInstance>> {
+    let resultMap = new Map<string, LinkTargetInstance>();
     if (urls.length === 0) {
       return resultMap;
     }
@@ -397,7 +482,12 @@ export class IndexQueryEngine {
       let chunkSet = new Set(chunk);
       let chunkParams = chunk.map((href) => [param(href)]);
       let rows = (await this.#query([
-        `SELECT i.*, ${PRERENDERED_HTML_SELECTS}, ${EFFECTIVE_ERROR_SELECTS}`,
+        // The join carries two consumers: `ph.screenshots`, which is joined
+        // into the side-loaded resource's `meta`, and the effective-error
+        // expression below, which reads `ph.error_doc` / `ph.generation`. It
+        // stays for both even though every format column is gone.
+        `SELECT i.url, i.file_alias, i.pristine_doc,
+                ph.screenshots AS screenshots`,
         `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
          WHERE`,
         ...every([
@@ -410,20 +500,47 @@ export class IndexQueryEngine {
           ]),
           ['i.type =', param('instance')],
           any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+          // Errored on either channel is excluded here rather than after the
+          // fact, as the file leg of this same batch does: it keeps an
+          // errored target's document off the wire too, which is this read's
+          // own argument.
+          [`NOT ${effectiveHasError()}`],
         ]),
-      ] as Expression)) as unknown as IndexRowWithHtml[];
+      ] as Expression)) as unknown as {
+        url: string | null;
+        file_alias: string | null;
+        pristine_doc: CardResource | null;
+        screenshots: ScreenshotManifest | null;
+      }[];
       for (let row of rows) {
-        let mapped = this.#rowToInstanceOrError(row, undefined, opts);
-        if (!mapped) {
+        if (!row.url) {
           continue;
         }
+        // Every row here is live and unerrored, and such a row is required to
+        // carry a document. One that does not is unrepresentable rather than
+        // merely unavailable, so it is reported instead of dropped — a
+        // dropped one is indistinguishable from a link whose target is
+        // legitimately gone, and would silently cost the document a
+        // relationship. This rejects the whole read, as the singular one does.
+        if (!row.pristine_doc) {
+          throw new Error(
+            `bug: live index entry for ${row.url} with opts: ${stringify(
+              opts,
+            )} has no pristine_doc`,
+          );
+        }
+        let target: LinkTargetInstance = {
+          canonicalURL: row.url,
+          resource: row.pristine_doc,
+          screenshots: row.screenshots ?? null,
+        };
         // A row may be addressable by its url or its file_alias.
         // Index the result under whichever lookup keys the caller asked about.
-        if (row.url && chunkSet.has(row.url)) {
-          resultMap.set(row.url, mapped);
+        if (chunkSet.has(row.url)) {
+          resultMap.set(row.url, target);
         }
         if (row.file_alias && chunkSet.has(row.file_alias)) {
-          resultMap.set(row.file_alias, mapped);
+          resultMap.set(row.file_alias, target);
         }
       }
     }
@@ -440,12 +557,19 @@ export class IndexQueryEngine {
   // is the realm-scoped raw-SQL twin, built from the same exported join
   // fragments.)
   #liveInstanceConditions(url: URL): Expression {
+    return this.#liveRowConditions(url, 'instance');
+  }
+
+  // The same predicate over the URL's 'file' row — the file-flavored liveness
+  // gate the `?name=` screenshot route falls back to when no instance
+  // matches (a FileDef family's declared captures live on the file row).
+  #liveRowConditions(url: URL, type: 'instance' | 'file'): Expression {
     return every([
       any([
         [`i.url =`, param(url.href)],
         [`i.file_alias =`, param(url.href)],
       ]),
-      ['i.type =', param('instance')],
+      ['i.type =', param(type)],
       any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
       [`NOT ${effectiveHasError()}`],
     ]) as Expression;
@@ -488,30 +612,51 @@ export class IndexQueryEngine {
 
   // The declared-screenshot manifest of a live instance — the `?name=`
   // serving route's addressing read: the shared live-instance predicate (so
-  // a name resolves exactly when a DSL capture of the same instance would),
-  // selecting only the manifest column. `undefined` means no live instance
-  // matches; `null` means the instance is live but nothing has been captured
-  // for it.
+  // a name resolves exactly when a DSL capture of the same instance would).
+  // `undefined` means no live instance matches; a live row comes back with
+  // its canonical `url` (the lookup also matches `file_alias`, and the
+  // MediaCache ledger is keyed off the row's own spelling, never the
+  // request's) and a `manifest` that is null when nothing has been captured.
   async liveInstanceScreenshots(
     url: URL,
     opts?: GetEntryOptions,
-  ): Promise<ScreenshotManifest | null | undefined> {
+  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
+    return await this.#liveRowScreenshots(url, 'instance', opts);
+  }
+
+  // The file-row twin of `liveInstanceScreenshots`: the declared-screenshot
+  // manifest of a live 'file' row. The `?name=` serving route falls back to
+  // this when the addressed path resolves to no live instance — a FileDef
+  // family's declared captures are persisted on the file rendering's row.
+  async liveFileScreenshots(
+    url: URL,
+    opts?: GetEntryOptions,
+  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
+    return await this.#liveRowScreenshots(url, 'file', opts);
+  }
+
+  async #liveRowScreenshots(
+    url: URL,
+    type: 'instance' | 'file',
+    opts?: GetEntryOptions,
+  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
     let rows = (await this.#query([
-      'SELECT ph.screenshots AS screenshots',
+      'SELECT i.url AS url, ph.screenshots AS screenshots',
       `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
       'WHERE',
-      ...this.#liveInstanceConditions(url),
+      ...this.#liveRowConditions(url, type),
       'LIMIT 1',
     ] as Expression)) as unknown as {
+      url: string;
       screenshots: ScreenshotManifest | null;
     }[];
     if (rows.length === 0) {
       return undefined;
     }
-    return rows[0].screenshots ?? null;
+    return { url: rows[0].url, manifest: rows[0].screenshots ?? null };
   }
 
-  // Shared row → InstanceOrError mapping for getInstance / getInstances.
+  // Shared row → InstanceOrError mapping for getInstance.
   // `lookupURL` is used only for error context and is optional in the batch path.
   #rowToInstanceOrError(
     maybeResult: IndexRowWithHtml | undefined,
@@ -614,18 +759,25 @@ export class IndexQueryEngine {
     return this.#rowToIndexedFile(result[0]);
   }
 
-  // Batch variant of getFile.
-  // Keys are the LOOKUP URLs the caller passed in (matching either i.url or i.file_alias).
-  async getFiles(
+  // Batch read of the file-meta link targets `loadLinks` side-loads — the
+  // file leg of the same batch `getLinkTargetInstances` serves, narrow for the
+  // same reason. A side-loaded file's resource is assembled from its stored
+  // document, its search doc and its timestamps; the formats, the icon, the
+  // display names and the dependency graph are all fetched and discarded by a
+  // star select, and `deps` is the widest column on the row.
+  //
+  // Keys are the LOOKUP URLs the caller passed in (matching either `i.url` or
+  // `i.file_alias`).
+  async getLinkTargetFiles(
     urls: URL[],
     opts?: GetEntryOptions,
-  ): Promise<Map<string, IndexedFile>> {
-    let resultMap = new Map<string, IndexedFile>();
+  ): Promise<Map<string, LinkTargetFile>> {
+    let resultMap = new Map<string, LinkTargetFile>();
     if (urls.length === 0) {
       return resultMap;
     }
     let lookupHrefs = [...new Set(urls.map((u) => u.href))];
-    // Same chunking discipline as getInstances — keeps placeholder count
+    // Same chunking discipline as getLinkTargetInstances — keeps placeholder count
     // safely below the sqlite/pg parameter limits.
     let chunkSize = this.#dbAdapter.kind === 'sqlite' ? 450 : 2500;
     for (let start = 0; start < lookupHrefs.length; start += chunkSize) {
@@ -633,7 +785,12 @@ export class IndexQueryEngine {
       let chunkSet = new Set(chunk);
       let chunkParams = chunk.map((href) => [param(href)]);
       let rows = (await this.#query([
-        `SELECT i.*, ${PRERENDERED_HTML_SELECTS}, ${EFFECTIVE_ERROR_SELECTS}`,
+        // `ph.screenshots` is the join's only consumer here — the effective
+        // error expression below is in the WHERE, where this read already
+        // decided liveness before it was narrowed.
+        `SELECT i.url, i.file_alias, i.pristine_doc, i.search_doc, i.types,
+                i.last_modified, i.resource_created_at, i.realm_url,
+                ph.screenshots AS screenshots`,
         `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
          WHERE`,
         ...every([
@@ -648,13 +805,35 @@ export class IndexQueryEngine {
           [`NOT ${effectiveHasError()}`],
           any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
         ]),
-      ] as Expression)) as unknown as IndexRowWithHtml[];
+      ] as Expression)) as unknown as {
+        url: string | null;
+        file_alias: string | null;
+        pristine_doc: FileMetaResource | null;
+        search_doc: Record<string, any> | null;
+        types: string[] | null;
+        last_modified: string | number | null;
+        resource_created_at: string | number | null;
+        realm_url: string | null;
+        screenshots: ScreenshotManifest | null;
+      }[];
       for (let row of rows) {
-        let mapped = this.#rowToIndexedFile(row);
-        if (!mapped) {
+        if (!row.url) {
           continue;
         }
-        if (row.url && chunkSet.has(row.url)) {
+        // Postgres hands back a bigint column as a string; SQLite as a number.
+        let toEpoch = (v: string | number | null) =>
+          typeof v === 'string' ? parseInt(v) : (v ?? null);
+        let mapped: LinkTargetFile = {
+          canonicalURL: row.url,
+          resource: row.pristine_doc ?? null,
+          searchDoc: row.search_doc ?? null,
+          types: row.types ?? null,
+          lastModified: toEpoch(row.last_modified),
+          resourceCreatedAt: toEpoch(row.resource_created_at),
+          realmURL: row.realm_url ?? '',
+          screenshots: row.screenshots ?? null,
+        };
+        if (chunkSet.has(row.url)) {
           resultMap.set(row.url, mapped);
         }
         if (row.file_alias && chunkSet.has(row.file_alias)) {
@@ -685,6 +864,7 @@ export class IndexQueryEngine {
       atom_html: atomHtml,
       icon_html: iconHtml,
       markdown,
+      screenshots,
       generation,
       realm_url: realmURL,
       indexed_at: indexedAt,
@@ -711,6 +891,7 @@ export class IndexQueryEngine {
       atomHtml,
       iconHtml: iconHtml ?? null,
       markdown,
+      screenshots: (screenshots as ScreenshotManifest | null) ?? null,
       lastModified: lastModified != null ? parseInt(lastModified) : null,
       resourceCreatedAt:
         resourceCreatedAt != null ? parseInt(resourceCreatedAt) : null,
@@ -850,6 +1031,28 @@ export class IndexQueryEngine {
       let limitClause = page
         ? [`LIMIT ${page.size} OFFSET ${(page.number ?? 0) * page.size}`]
         : [];
+
+      // Full-text relevance is opt-in: computed only when the caller sorts by
+      // `_matchRelevance`, so every existing `matches` caller pays nothing. When
+      // present it rides the projection as an aggregated, aliased column that the
+      // ORDER BY (below) references — see `matchRelevanceExpression`.
+      let sortsByMatchRelevance = (sort ?? []).some(
+        (s) => !('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY,
+      );
+      let relevanceColumn: CardExpression = [];
+      if (sortsByMatchRelevance) {
+        // `assertQuery` already rejects this on the wire surfaces (as an
+        // HTTP 400); this re-check is the backstop for callers that reach the
+        // engine directly.
+        let matches = collectPositiveMatchTerms(filter);
+        if (matches.length === 0) {
+          throw new InvalidQueryError(
+            `sort by "${MATCH_RELEVANCE_SORT_KEY}" requires at least one positive \`matches\` filter`,
+          );
+        }
+        relevanceColumn = [',', ...this.matchRelevanceExpression(matches)];
+      }
+
       let query: CardExpression;
       if (conditionalLiveDoc) {
         // Outer-wrap the grouped projection so the conditional `pristine_doc`
@@ -864,6 +1067,7 @@ export class IndexQueryEngine {
           'CASE WHEN sub.html IS NULL THEN sub.pristine_doc_fallback END as pristine_doc',
           'FROM (',
           ...selectClauseExpression,
+          ...relevanceColumn,
           ...innerSortColumns,
           `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(
             opts,
@@ -878,6 +1082,7 @@ export class IndexQueryEngine {
       } else {
         query = [
           ...selectClauseExpression,
+          ...relevanceColumn,
           `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(
             opts,
           )} ${tableValuedFunctionsPlaceholder}`,
@@ -1085,17 +1290,28 @@ export class IndexQueryEngine {
     return [
       'ORDER BY',
       ...separatedByCommas([
-        ...sort.map((s) => [
-          // intentionally not using field arity here--not sure what it means to
-          // sort via a plural field
-          'ANY_VALUE(',
-          'on' in s
-            ? fieldQuery(s.by, s.on, false, 'sort')
-            : this.generalFieldSortColumn(s.by),
-          ')',
-          s.direction ?? 'asc',
-          'NULLS LAST',
-        ]),
+        ...sort.map((s) =>
+          // `_matchRelevance` is the aggregated relevance column projected by
+          // the SELECT (see `_search`); reference the alias directly and default
+          // to `desc` (best match first). Everything else sorts on a column.
+          !('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY
+            ? [
+                `"${MATCH_RELEVANCE_SORT_KEY}"`,
+                sortDirection(s.direction ?? 'desc'),
+                'NULLS LAST',
+              ]
+            : [
+                // intentionally not using field arity here--not sure what it
+                // means to sort via a plural field
+                'ANY_VALUE(',
+                'on' in s
+                  ? fieldQuery(s.by, s.on, false, 'sort')
+                  : this.generalFieldSortColumn(s.by),
+                ')',
+                sortDirection(s.direction),
+                'NULLS LAST',
+              ],
+        ),
         // `url` then `type` are the final sort keys for deterministic results
         // (the two rows of a dual-indexed card `.json` share a url).
         ['i.url COLLATE "POSIX"'],
@@ -1125,6 +1341,17 @@ export class IndexQueryEngine {
     let innerSortColumns: CardExpression = [];
     let outerKeys: CardExpression[] = [];
     sort.forEach((s, i) => {
+      // `_matchRelevance` is already projected by the inner SELECT (see
+      // `_search`), so it rides through `sub.*` — reference it in the outer
+      // ORDER BY directly, with no inner `_sort_i` alias, defaulting to `desc`.
+      if (!('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY) {
+        outerKeys.push([
+          `"${MATCH_RELEVANCE_SORT_KEY}"`,
+          sortDirection(s.direction ?? 'desc'),
+          'NULLS LAST',
+        ]);
+        return;
+      }
       let alias = `_sort_${i}`;
       innerSortColumns.push(
         ', ANY_VALUE(',
@@ -1133,7 +1360,7 @@ export class IndexQueryEngine {
           : this.generalFieldSortColumn(s.by),
         `) AS ${alias}`,
       );
-      outerKeys.push([alias, s.direction ?? 'asc', 'NULLS LAST']);
+      outerKeys.push([alias, sortDirection(s.direction), 'NULLS LAST']);
     });
     // `url` then `type` are the final tiebreakers, matching `orderExpression`
     // for deterministic results (a dual-indexed card `.json`'s two rows share
@@ -1253,7 +1480,13 @@ export class IndexQueryEngine {
   //
   // A ref whose definition doesn't resolve keeps only its own key and matches
   // nothing (unless rows were stamped under that spelling).
-  private async typeKeysFor(ref: CodeRef): Promise<string[]> {
+  //
+  // Public because the live-search cache key is scoped by the same keys: it
+  // reads a per-type watermark for each of a query's type anchors, and those
+  // keys have to be the ones this engine matches rows on or the key would
+  // address a row nothing writes. Calling the engine rather than reproducing
+  // it is what keeps the two from drifting.
+  async typeKeysFor(ref: CodeRef): Promise<string[]> {
     let keys = [internalKeyFor(ref, undefined, this.#virtualNetwork)];
     if (isResolvedCodeRef(ref)) {
       try {
@@ -1413,6 +1646,55 @@ export class IndexQueryEngine {
         return this.fieldRangeFilter(key, filterValue as RangeFilterValue, on);
       }),
     ]);
+  }
+
+  // The relevance value for a `matches` query, aggregated per (url, type) group.
+  //
+  // Postgres scores the row's markdown tsvector against the OR-union of the
+  // positive match terms with `ts_rank_cd` — cover-density (proximity/position
+  // aware), normalized to a bounded 0–1 range via flag 32 so it reads as a clean
+  // gauge. The tsvector is recomputed here (the markdown GIN index is a lossy
+  // expression index and can't hand a rankable vector back), through the SAME
+  // `markdown_search_text` wrapper as the match predicate and its index, so the
+  // ranked text is exactly the filtered text.
+  //
+  // SQLite has no full-text ranking, so it falls back to boolean 1/0 (did the
+  // LIKE predicate match at all) — enough for a deterministic sort in host
+  // in-browser tests; meaningful ranking is Postgres-only.
+  //
+  // `MAX(...)` lets the value survive `GROUP BY i.url, i.type` (and any
+  // table-valued fan-out, where every fanned row shares the same markdown).
+  private matchRelevanceExpression(matches: string[]): CardExpression {
+    let pgTsQuery: Expression = [];
+    matches.forEach((m, i) => {
+      if (i > 0) {
+        pgTsQuery.push('||');
+      }
+      pgTsQuery.push(`websearch_to_tsquery('english',`, param(m), `)`);
+    });
+    let sqliteLike: Expression = [];
+    matches.forEach((m, i) => {
+      if (i > 0) {
+        sqliteLike.push('OR');
+      }
+      sqliteLike.push(
+        `LOWER(coalesce(ph.markdown, '')) LIKE LOWER(`,
+        param(`%${escapeSqliteLikePattern(m)}%`),
+        `) ESCAPE '\\'`,
+      );
+    });
+    return [
+      'MAX(',
+      dbExpression({
+        pg: [
+          `ts_rank_cd(to_tsvector('english', markdown_search_text(ph.markdown)), `,
+          ...pgTsQuery,
+          `, 32)`,
+        ],
+        sqlite: [`CASE WHEN (`, ...sqliteLike, `) THEN 1 ELSE 0 END`],
+      }),
+      `) AS "${MATCH_RELEVANCE_SORT_KEY}"`,
+    ];
   }
 
   // Full-text matches predicate. Postgres uses tsvector/tsquery on the
@@ -1670,7 +1952,8 @@ export class IndexQueryEngine {
             typeof element === 'string' ||
             element.kind === 'table-valued-tree' ||
             element.kind === 'json-contains' ||
-            element.kind === 'types-contains'
+            element.kind === 'types-contains' ||
+            element.kind === 'sort-direction'
           ) {
             return Promise.resolve([element]);
           } else if (element.kind === 'field-query') {
@@ -2277,6 +2560,11 @@ export function fileEntryFromResult(
     atomHtml: result.atom_html ?? null,
     iconHtml: result.icon_html ?? null,
     markdown: result.markdown ?? null,
+    // The search projections don't select the manifest — like an instance
+    // search entry, whose `meta.screenshots` joins only on the single-card
+    // GET — so this is null on the search path and populated on the
+    // `getFile`/`getFiles` paths, whose SELECT carries `ph.screenshots`.
+    screenshots: (result.screenshots as ScreenshotManifest | null) ?? null,
     lastModified,
     resourceCreatedAt,
     generation: result.generation ?? 0,

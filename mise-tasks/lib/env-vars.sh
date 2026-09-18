@@ -236,6 +236,28 @@ else
 
 fi
 
+# Media cache (declared screenshots: poster/thumb/rendition captures).
+# Without a store the capture pipeline is disabled and every
+# `_screenshot/...?name=` URL 404s forever, so local dev defaults to a disk
+# store under the same ~/.local/share/boxel home the dev certs use.
+#
+# An object directory must pair one-to-one with a media_cache_ledger: the
+# reclaim and GC paths count references only in their own ledger before
+# deleting from the store, and object keys are content hashes the disk
+# adapter dedupes on, so two ledgers over one directory let either delete
+# bytes the other still serves. Hence the per-slug scoping (each slug's dir
+# pairs with its dev database's ledger; standard-mode checkouts all share
+# the `boxel` database, so they correctly share the `local` directory), and
+# hence the test stack — PGDATABASE_TEST is a second ledger under the same
+# slug — runs storeless: services/test-realms and services/worker-test
+# blank this variable. Deployed environments use S3 (MEDIA_CACHE_BUCKET)
+# instead. CI is left unset on purpose: captures would add prerender work
+# at service boot and land thumbnails in Percy snapshots on a
+# race-dependent schedule.
+if [ -z "${CI:-}" ]; then
+  export MEDIA_CACHE_DIR="${MEDIA_CACHE_DIR:-$HOME/.local/share/boxel/media-cache/${ENV_SLUG:-local}}"
+fi
+
 # Puppeteer bundles a Chrome and downloads it at install time, and the
 # lockfile's tree pins a build with a known h2 stream-window bug: it hangs the
 # dev prerender forever on the first cold-start fetch of vite's large

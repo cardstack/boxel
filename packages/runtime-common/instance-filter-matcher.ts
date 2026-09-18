@@ -681,6 +681,11 @@ function sortValue(
     case 'cardURL':
       return instance.id ?? null;
     default:
+      // `_matchRelevance` also lands here (null → URL-order), which is safe
+      // only because a relevance sort requires a `matches` filter and `matches`
+      // fails `isClientEvaluable`, so those queries never reach this comparator
+      // (server results pass through unsorted). If `matches` ever becomes
+      // client-evaluable, this needs a relevance shim.
       return null;
   }
 }

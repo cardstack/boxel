@@ -21,6 +21,8 @@ import * as CreateAIAssistantRoomToolModule from './create-ai-assistant-room';
 import * as CreateAndOpenSubmissionWorkflowCard from './create-and-open-submission-workflow-card';
 import * as CreateSpecToolModule from './create-specs';
 import * as CreateSubmissionWorkflowToolModule from './create-submission-workflow';
+import * as CreateWorkspaceToolModule from './create-workspace';
+import * as DeleteWorkspaceToolModule from './delete-workspace';
 import * as DownloadFileToRealmToolModule from './download-file-to-realm';
 import * as EvaluateModuleToolModule from './evaluate-module';
 import * as ExecuteAtomicOperationsToolModule from './execute-atomic-operations';
@@ -72,6 +74,7 @@ import * as SaveCardToolModule from './save-card';
 import * as ScreenshotCardToolModule from './screenshot-card';
 import * as SearchAndChooseToolModule from './search-and-choose';
 import * as SearchCardsToolModule from './search-cards';
+import * as SearchEntriesToolModule from './search-entries';
 import * as SearchGoogleImagesToolModule from './search-google-images';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
 import * as SendRequestViaProxyToolModule from './send-request-via-proxy';
@@ -277,6 +280,7 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
   shimHostToolModule(virtualNetwork, 'save-card', SaveCardToolModule);
   shimHostToolModule(virtualNetwork, 'serialize-card', SerializeCardToolModule);
   shimHostToolModule(virtualNetwork, 'search-cards', SearchCardsToolModule);
+  shimHostToolModule(virtualNetwork, 'search-entries', SearchEntriesToolModule);
   shimHostToolModule(
     virtualNetwork,
     'search-and-choose',
@@ -306,6 +310,16 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     virtualNetwork,
     'retry-submission-workflow',
     RetrySubmissionWorkflowToolModule,
+  );
+  shimHostToolModule(
+    virtualNetwork,
+    'create-workspace',
+    CreateWorkspaceToolModule,
+  );
+  shimHostToolModule(
+    virtualNetwork,
+    'delete-workspace',
+    DeleteWorkspaceToolModule,
   );
   shimHostToolModule(virtualNetwork, 'open-workspace', OpenWorkspaceToolModule);
   shimHostToolModule(
@@ -506,6 +520,8 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   CreateAndOpenSubmissionWorkflowCard.default,
   CreateSubmissionWorkflowToolModule.default,
   RetrySubmissionWorkflowToolModule.default,
+  CreateWorkspaceToolModule.default,
+  DeleteWorkspaceToolModule.default,
   OpenInInteractModeModule.default,
   OpenWorkspaceToolModule.default,
   GenerateThemeExampleToolModule.default,
@@ -530,6 +546,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   SearchAndChooseToolModule.default,
   SearchCardsToolModule.SearchCardsByQueryTool,
   SearchCardsToolModule.SearchCardsByTypeAndTitleTool,
+  SearchEntriesToolModule.default,
   SearchGoogleImagesToolModule.default,
   SendAiAssistantMessageModule.default,
   SendBotTriggerEventToolModule.default,

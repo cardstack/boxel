@@ -1,8 +1,8 @@
 import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { fn, get } from '@ember/helper';
+import type { BaseDef, CreateCardFn, CardCrudFunctions } from './card-api';
 import {
-  BaseDef,
   type CardContext,
   type Box,
   type BoxComponent,
@@ -11,8 +11,6 @@ import {
   type FieldDef,
   type Format,
   type LinkableDefConstructor,
-  CreateCardFn,
-  CardCrudFunctions,
   isFileDef,
   brokenLinkDisplayName,
   brokenLinkFormat,
@@ -23,8 +21,8 @@ import {
   type RelationshipState,
 } from './field-support';
 import { rawArrayValues } from './watched-array';
+import type { BoxComponentSignature } from './field-component';
 import {
-  BoxComponentSignature,
   CardCrudFunctionsConsumer,
   DefaultFormatsConsumer,
   PermissionsConsumer,
@@ -37,6 +35,7 @@ import {
   Pill,
 } from '@cardstack/boxel-ui/components';
 import { restartableTask } from 'ember-concurrency';
+import type { Loader, CardErrorJSONAPI } from '@cardstack/runtime-common';
 import {
   chooseCard,
   chooseFile,
@@ -46,12 +45,11 @@ import {
   CardContextName,
   RealmURLContextName,
   getNarrowestType,
-  Loader,
+  loadCardDef,
   isCardInstance,
   type ResolvedCodeRef,
   uuidv4,
   CardCrudFunctionsContextName,
-  CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 import {
   IconMinusCircle,
@@ -127,10 +125,34 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     this.chooseCard.perform();
   };
 
+  // getNarrowestType only narrows card refs; a FileDef constraint is checked here
+  private async narrowestFileDef(): Promise<typeof BaseDef> {
+    let fieldDef = this.args.field.card;
+    if (!this.args.typeConstraint) {
+      return fieldDef;
+    }
+    try {
+      let constrained = await loadCardDef(this.args.typeConstraint, {
+        loader: myLoader(),
+      });
+      if (
+        isFileDef(constrained) &&
+        (constrained === fieldDef ||
+          constrained.prototype instanceof (fieldDef as any))
+      ) {
+        return constrained;
+      }
+    } catch {
+      // unloadable constraint: keep the field's own type
+    }
+    return fieldDef;
+  }
+
   private chooseCard = restartableTask(async () => {
     if (isFileDef(this.args.field.card)) {
-      let fileType = identifyCard(this.args.field.card);
-      let fileTypeName = this.args.field.card.displayName;
+      let fileDef = await this.narrowestFileDef();
+      let fileType = identifyCard(fileDef);
+      let fileTypeName = fileDef.displayName;
       let file = await chooseFile(
         fileType ? { fileType, fileTypeName } : undefined,
       );

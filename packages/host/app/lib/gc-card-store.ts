@@ -16,9 +16,7 @@ import {
   trackRuntimeInstanceDependency,
   logger,
   type Query,
-  type QueryResultsMeta,
   type RuntimeDependencyTrackingContext,
-  type ErrorEntry,
   type CardErrorJSONAPI,
   type CardError,
   type SingleCardDocument,
@@ -62,6 +60,10 @@ const loadTrackingLogger = logger('store-load-tracking');
 // symptom a missing scope crossing produces.
 const jobScopeLogger = logger('store-job-scope');
 
+// Stands in for the non-tracked bucket when a lookup is restricted to tracked
+// instances, so the search reads the same way in both modes.
+const NO_BUCKET: ReadonlyMap<string, never> = new Map<string, never>();
+
 type LocalId = string;
 type InstanceGraph = Map<LocalId, Set<LocalId>>;
 type StoredInstance = CardDef | FileDef;
@@ -72,35 +74,22 @@ type StoreHooks = {
   // the field. Absent means it does not — a store that renders deterministically
   // from the document it was handed must not start searches of its own.
   resolvesQueryFieldsEagerly?(): boolean;
+  // Whether the owner would be told that `id` was re-indexed, so that what
+  // this store holds for it gets reloaded rather than going quietly stale.
+  // Absent means it would not — an owner that watches nothing keeps every
+  // link edge loading for itself.
+  receivesIndexEventsFor?(id: string): boolean;
+  // Spelled as the shared options type rather than re-declared field by field.
+  // A hop that lists the options by hand is where one silently goes missing:
+  // the object is forwarded whole, so TypeScript never excess-property-checks
+  // it, and the flag keeps riding through until someone forwards field by field
+  // instead — at which point the behavior it controls (a seed's match count,
+  // whether a search queues) reverts with no type error to notice it.
   getSearchResource<T extends CardDef | FileDef = CardDef>(
     parent: object,
     getQuery: () => Query | undefined,
     getRealms?: () => string[] | undefined,
-    opts?: {
-      isLive?: boolean;
-      doWhileRefreshing?: (() => void) | undefined;
-      dependencyTracking?: RuntimeDependencyTrackingContext;
-      seed?:
-        | {
-            cards: T[];
-            searchURL?: string;
-            realms?: string[];
-            meta?: QueryResultsMeta;
-            errors?: ErrorEntry[];
-            queryErrors?: Array<{
-              realm: string;
-              type: string;
-              message: string;
-              status?: number;
-            }>;
-            // Declared on every hop the seed travels, not just at its ends. The
-            // flag exists to stop a match count being inferred from the rows,
-            // so a hop that forwards the seed field by field rather than whole
-            // would drop it and restore exactly the inference it prevents.
-            totalUnknown?: boolean;
-          }
-        | undefined;
-    },
+    opts?: GetSearchResourceFuncOpts<T>,
   ): StoreSearchResource<T>;
 };
 
@@ -516,6 +505,79 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   getFileMeta(id: string): FileDef | undefined {
     return this.getFileMetaItem('instance', id) as FileDef | undefined;
+  }
+
+  // The card-document load outstanding for `url`, if there is one. A lazy link
+  // edge's fetch lives here rather than in the owner's own read map, so an
+  // invalidation arriving mid-fetch has to wait this out before it can judge
+  // whether what landed reflects the write it announced. Matched on the
+  // store-key form, since a link is fetched under whichever spelling of an id
+  // it carried.
+  cardDocLoadInFlight(url: string): Promise<unknown> | undefined {
+    let wanted = this.#storeKey(url.replace(/\.json$/, ''));
+    for (let [candidate, load] of this.#cardDocsInFlight) {
+      if (this.#storeKey(candidate.replace(/\.json$/, '')) === wanted) {
+        return load;
+      }
+    }
+    return undefined;
+  }
+
+  // Whether the instance held for `id` can stand in for a fresh load on a link
+  // edge. Two unrelated mechanisms reach the same property, one per kind of
+  // store this class serves.
+  //
+  // Inside a render scope this store is scoped to the realm view being
+  // rendered: it drops every instance it holds when the scope moves
+  // (`observeIndexingJob`), so anything still resident was deserialized
+  // against THIS view of the realm's files. It is that drop which carries the
+  // guarantee, not the `clearCache` reset — that one is scheduled only when a
+  // pass invalidates an executable, and reaches only the single tab its visit
+  // lands on, so a pass that changed only instances schedules none at all.
+  //
+  // Outside one, currency comes from the realm's own index events: the owner
+  // reloads what this store holds when a realm announces it re-indexed a file,
+  // which makes a resident instance current rather than merely cached. That
+  // reaches only the realms the owner watches, and it takes a watch out per
+  // instance something references — so the realms a page is reading are
+  // covered, while a target reached only by following a link out of them is
+  // not, and is excluded rather than trusted. This is the same trust the
+  // owner's own read path already places in residency, which hands back a held
+  // instance instead of re-fetching it; the watch is the one condition this
+  // adds on top.
+  canReuseResidentInstance(id: string): boolean {
+    if (!this.#holdsCompletedInstance(id)) {
+      return false;
+    }
+    if (currentRenderScope() !== undefined) {
+      return true;
+    }
+    return this.#storeHooks?.receivesIndexEventsFor?.(id) ?? false;
+  }
+
+  // Whether what this store holds for `id` finished deserializing. A
+  // deserialize plants its instance before it builds any field, so the identity
+  // map holds half-built instances too — and a failed one stays there, since
+  // cyclic deserialization has to be able to resolve it. Completion is what
+  // moves an instance into the tracked bucket, so that is what this reads.
+  //
+  // The store has to answer this rather than the instance, because nothing on
+  // the instance survives as an answer: `FileDef` carries `isSavedInstance`
+  // true from its class body and never has it cleared, and both link
+  // deserializers stamp that flag true on whatever resident instance they hand
+  // back, without checking that it finished.
+  #holdsCompletedInstance(id: string): boolean {
+    // File-meta rows key on the full URL; card ids never carry an extension
+    // and fold to the store-key form (see `getFileMetaItem` / `getCardItem`).
+    if (this.#fileMetaInstances.has(id)) {
+      return true;
+    }
+    let { item } = this.tryFindingCardItem(
+      'instance',
+      this.#storeKey(id.replace(/\.json$/, '')),
+      true,
+    );
+    return item !== undefined;
   }
 
   getRemoteIds(localId: string) {
@@ -1241,14 +1303,19 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   private tryFindingCardItem(
     type: 'instance' | 'error',
     localOrRemoteId: string,
+    // Search only the tracked buckets. An instance reaches those when
+    // `_updateFromSerialized` finishes and calls `makeTracked`, so a caller
+    // that must not see a half-built instance asks for tracked only.
+    trackedOnly?: true,
   ): {
     item: CardDef | CardErrorJSONAPI | undefined;
     localId: string | undefined;
   } {
     let bucket =
       type === 'instance' ? this.#cardInstances : this.#cardInstanceErrors;
-    let silentBucket =
-      type === 'instance'
+    let silentBucket = trackedOnly
+      ? NO_BUCKET
+      : type === 'instance'
         ? this.#nonTrackedCardInstances
         : this.#nonTrackedCardInstanceErrors;
     let localId = isLocalId(localOrRemoteId) ? localOrRemoteId : undefined;
@@ -1457,7 +1524,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     parent: object,
     getQuery: () => Query | undefined,
     getRealms?: () => string[] | undefined,
-    opts?: GetSearchResourceFuncOpts,
+    opts?: GetSearchResourceFuncOpts<T>,
   ) {
     if (!this.#storeHooks?.getSearchResource) {
       return {

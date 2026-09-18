@@ -1,3 +1,4 @@
+import { find, waitUntil } from '@ember/test-helpers';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
@@ -266,6 +267,242 @@ module('Integration | content-only file preview components', function (hooks) {
       .dom('img[data-test-image-preview]')
       .hasAttribute('alt', 'hero.png', 'reading formats describe the image');
     assertNoShellChrome(assert);
+  });
+
+  test('ImagePreview assembles srcset from the captured rendition slots', async function (assert) {
+    let { ImagePreview } = fileFormats;
+    // A wire-shape model carrying the same `screenshotsMeta` key a FileDef
+    // instance exposes: the reading formats offer the captured renditions as
+    // narrower candidates with the original as the largest.
+    let image = {
+      id: 'http://example.com/img/hero.png',
+      url: 'http://example.com/img/hero.png',
+      name: 'hero.png',
+      contentType: 'image/png',
+      width: 3000,
+      height: 2250,
+      screenshotsMeta: {
+        thumb: {
+          url: 'http://example.com/_screenshot/img/hero.png?name=thumb',
+          width: 170,
+          height: 250,
+          deviceScaleFactor: 2,
+          useAsThumbnail: true,
+        },
+        'rendition-640': {
+          url: 'http://example.com/_screenshot/img/hero.png?name=rendition-640',
+          width: 640,
+          height: 480,
+          deviceScaleFactor: 1,
+        },
+        'rendition-1280': {
+          url: 'http://example.com/_screenshot/img/hero.png?name=rendition-1280',
+          width: 1280,
+          height: 960,
+          deviceScaleFactor: 1,
+        },
+      },
+    };
+    await renderComponent(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div style='position: relative; width: 200px; height: 150px;'>
+          <ImagePreview @model={{image}} />
+        </div>
+      </template>,
+    );
+    let srcset =
+      find('img[data-test-image-preview]')?.getAttribute('srcset') ?? '';
+    assert.ok(
+      srcset.includes('?name=rendition-640 640w'),
+      `the small rendition is a candidate (got: ${srcset})`,
+    );
+    assert.ok(
+      srcset.includes('?name=rendition-1280 1280w'),
+      'the large rendition is a candidate',
+    );
+    assert.ok(
+      srcset.includes('http://example.com/img/hero.png 3000w'),
+      'the original is the largest candidate',
+    );
+    assert.notOk(
+      srcset.includes('?name=thumb'),
+      'the cover-cropped thumb is not a srcset candidate',
+    );
+    assert
+      .dom('img[data-test-image-preview]')
+      .hasAttribute('sizes', '100vw', 'w descriptors carry a sizes hint');
+  });
+
+  test('ImagePreview offers no srcset for animated or vector sources', async function (assert) {
+    let { ImagePreview } = fileFormats;
+    // A rendition of a GIF is a still of its first frame — substituting it
+    // in a reading format would silently drop the animation.
+    let gif = {
+      id: 'http://example.com/img/loop.gif',
+      url: 'http://example.com/img/loop.gif',
+      name: 'loop.gif',
+      contentType: 'image/gif',
+      width: 3000,
+      height: 2250,
+      screenshotsMeta: {
+        'rendition-640': {
+          url: 'http://example.com/_screenshot/img/loop.gif?name=rendition-640',
+          width: 640,
+          height: 480,
+          deviceScaleFactor: 1,
+        },
+      },
+    };
+    await renderComponent(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div style='position: relative; width: 200px; height: 150px;'>
+          <ImagePreview @model={{gif}} />
+        </div>
+      </template>,
+    );
+    assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('srcset');
+    assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('sizes');
+  });
+
+  test('ImagePreview offers no srcset for animatable formats (WebP/AVIF)', async function (assert) {
+    let { ImagePreview } = fileFormats;
+    // WebP and AVIF can animate, and no extracted signal says whether a
+    // given file does — a rendition of an animated one would be a frozen
+    // first frame, so the whole format sits out.
+    let webp = {
+      id: 'http://example.com/img/loop.webp',
+      url: 'http://example.com/img/loop.webp',
+      name: 'loop.webp',
+      contentType: 'image/webp',
+      width: 3000,
+      height: 2250,
+      screenshotsMeta: {
+        'rendition-640': {
+          url: 'http://example.com/_screenshot/img/loop.webp?name=rendition-640',
+          width: 640,
+          height: 480,
+          deviceScaleFactor: 1,
+        },
+      },
+    };
+    await renderComponent(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div style='position: relative; width: 200px; height: 150px;'>
+          <ImagePreview @model={{webp}} />
+        </div>
+      </template>,
+    );
+    assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('srcset');
+    assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('sizes');
+  });
+
+  test('ImagePreview offers no srcset for images narrower than the rendition canvas', async function (assert) {
+    let { ImagePreview } = fileFormats;
+    // The renditions' canvas is 4:3 with the image contained inside; under
+    // scale-down the browser sizes the canvas, so a portrait image's
+    // rendition would display at a fraction of the original's size.
+    let portrait = {
+      id: 'http://example.com/img/tall.png',
+      url: 'http://example.com/img/tall.png',
+      name: 'tall.png',
+      contentType: 'image/png',
+      width: 2250,
+      height: 3000,
+      screenshotsMeta: {
+        'rendition-640': {
+          url: 'http://example.com/_screenshot/img/tall.png?name=rendition-640',
+          width: 640,
+          height: 480,
+          deviceScaleFactor: 1,
+        },
+        'rendition-1280': {
+          url: 'http://example.com/_screenshot/img/tall.png?name=rendition-1280',
+          width: 1280,
+          height: 960,
+          deviceScaleFactor: 1,
+        },
+      },
+    };
+    await renderComponent(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div style='position: relative; width: 200px; height: 150px;'>
+          <ImagePreview @model={{portrait}} />
+        </div>
+      </template>,
+    );
+    assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('srcset');
+    assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('sizes');
+  });
+
+  test('PdfViewer hands its fetched document to the object as a blob URL in live renders', async function (assert) {
+    let loader: Loader = getService('loader-service').loader;
+    let { PdfViewer } = await loader.import<any>(
+      `${baseRealm.url}file-formats/pdf-viewer`,
+    );
+    // A native <object>'s own fetch bypasses service workers, so the viewer
+    // fetches the bytes itself and hands the object a blob URL. A data: URL
+    // stands in for the realm document — the fetch path is identical, no
+    // auth needed. What this pins is the fetch→blob handoff only: the
+    // Authorization injection that motivates it lives in the host auth
+    // service worker, and `isServiceWorkerSupported()` short-circuits under
+    // `isTesting()`, so the authed private-realm leg has no test coverage —
+    // a green run here says nothing about it.
+    let pdfB64 =
+      'JVBERi0xLjQKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PgplbmRvYmoKMyAwIG9iago8PC9UeXBlL1BhZ2UvUGFyZW50IDIgMCBSL01lZGlhQm94WzAgMCAyMDAgMjAwXT4+CmVuZG9iagp4cmVmCjAgNAowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1MiAwMDAwMCBuIAowMDAwMDAwMTAxIDAwMDAwIG4gCnRyYWlsZXIKPDwvU2l6ZSA0L1Jvb3QgMSAwIFI+PgpzdGFydHhyZWYKMTY0CiUlRU9G';
+    let model = {
+      url: `data:application/pdf;base64,${pdfB64}`,
+      name: 'doc.pdf',
+      contentType: 'application/pdf',
+    };
+    await renderComponent(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div style='position: relative; width: 400px; height: 300px;'>
+          <PdfViewer @model={{model}} @format='isolated' />
+        </div>
+      </template>,
+    );
+    // The object is withheld until the fetch settles (no unauthenticated
+    // flash), then mounts with the blob-backed document.
+    await waitUntil(() => find('[data-test-pdf-viewer]'), { timeout: 10000 });
+    let data = find('[data-test-pdf-viewer]')?.getAttribute('data') ?? '';
+    assert.ok(
+      data.startsWith('blob:'),
+      `the object loads the fetched blob, not the plain URL (got: ${data})`,
+    );
+  });
+
+  test('PdfViewer falls back to the plain URL when its fetch cannot get the bytes', async function (assert) {
+    let loader: Loader = getService('loader-service').loader;
+    let { PdfViewer } = await loader.import<any>(
+      `${baseRealm.url}file-formats/pdf-viewer`,
+    );
+    // An anonymous visitor on a public realm has no session for the viewer's
+    // fetch to ride; the plain URL is the working path there, so a failed
+    // fetch must fall back to it rather than rendering nothing.
+    let model = {
+      url: '/definitely-not-here.pdf',
+      name: 'missing.pdf',
+      contentType: 'application/pdf',
+    };
+    await renderComponent(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div style='position: relative; width: 400px; height: 300px;'>
+          <PdfViewer @model={{model}} @format='isolated' />
+        </div>
+      </template>,
+    );
+    await waitUntil(() => find('[data-test-pdf-viewer]'), { timeout: 10000 });
+    let data = find('[data-test-pdf-viewer]')?.getAttribute('data') ?? '';
+    assert.ok(
+      data.endsWith('/definitely-not-here.pdf'),
+      `the object falls back to the plain URL (got: ${data})`,
+    );
   });
 
   test('AudioPreview renders the waveform and player from a bare FileDef instance', async function (assert) {

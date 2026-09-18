@@ -138,10 +138,10 @@ export type FileMetaResourceResourceMeta = Meta & {
   // See CardResourceMeta.error — a file-meta serialization can likewise carry
   // the result's error doc when it failed to render.
   error?: ErrorEntry;
-  // See CardResourceMeta.screenshots. The prerender pass captures only
-  // instance rows, so nothing stamps this on file-meta responses — the key
-  // exists so FileDef's `screenshotURLs` getter reads both kinds uniformly
-  // when file rows capture too.
+  // See CardResourceMeta.screenshots. Stamped at serve time from the file
+  // row's prerendered manifest — the file-meta GET and linked-file resources
+  // join it exactly as a card+json GET joins an instance row's, so FileDef's
+  // `screenshotURLs` getter reads both kinds uniformly.
   screenshots?: ScreenshotsMeta;
 };
 
@@ -188,11 +188,15 @@ export interface FileMetaResource {
   };
 }
 
-// A scoped stylesheet referenced by an `html` rendering. The scoped-CSS
-// URL base64-embeds the whole stylesheet, so it travels exactly once here in
-// `attributes.href` (the host loads it via `loader.import`); the `id` is a
-// stable content hash of that URL (see `cssResourceId`) so `styles.data[].id`
-// references stay short and `included` dedupes identical stylesheets for free.
+// A scoped stylesheet referenced by an `html` rendering. `attributes.href` is
+// the scoped-CSS module URL the host loads via `loader.import` — hashed form
+// (`…md5-<hash>.glimmer-scoped.css`, rooted under the answering realm's
+// `_scoped-css/` space and served from its `scoped_css` table) for indexed
+// deps, or inline form (the whole stylesheet base64-embedded in the URL,
+// loaded with no network hop) for rows indexed before interning. The `id` is
+// a stable content hash of that URL (see `cssResourceId`) so
+// `styles.data[].id` references stay short and `included` dedupes identical
+// stylesheets for free.
 export interface CssResource {
   id: string;
   type: typeof CssResourceType;
@@ -275,7 +279,16 @@ export interface EntryResource {
   // consumer tell fresh index data from stale and pair it against the `html`
   // resource's own generation (the two channels advance independently).
   meta?: {
-    generation: number;
+    // The engine always supplies the generation; optional because `meta` can
+    // be assembled from `_matchRelevance` alone by callers with no generation
+    // to surface (unit tests).
+    generation?: number;
+    // Full-text relevance of this entry for the query's `matches` terms
+    // (Postgres `ts_rank_cd`, 0–1). Present only on a query that sorts by
+    // `_matchRelevance`; absent otherwise. Lets a consumer gauge hit strength
+    // and re-rank across realms (the federated path concatenates per-realm
+    // results without re-sorting).
+    _matchRelevance?: number;
   };
 }
 

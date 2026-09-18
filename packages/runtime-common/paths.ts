@@ -306,3 +306,39 @@ export function isMarkdownFile(id: string): boolean {
   }
   return MARKDOWN_FILE_EXTENSION.test(pathname);
 }
+
+// The subtree capture serving claims. A realm's GET dispatch answers every
+// path under it from the capture ledger, so a realm file stored there could
+// never be read back: it would index and list, and every GET of it would come
+// back an uncaptured miss. Every surface that writes into a realm refuses it
+// for that reason — direct writes, `/_atomic` operations, and batch entries —
+// and each one reads the reservation from here so a change to it reaches all
+// of them. Removals stay admitted everywhere, being the recovery path for
+// anything already stored under it.
+export const CAPTURE_SERVING_PREFIX = '_screenshot/';
+
+export function isCaptureServingPath(localPath: LocalPath): boolean {
+  return localPath.startsWith(CAPTURE_SERVING_PREFIX);
+}
+
+// The name a file's content is assembled under while it is being written from
+// a description of itself. The write's source is its own destination, so the
+// result is built beside the file and moved onto it — a rename, so the file is
+// only ever the content it held before or the content it holds after.
+//
+// Beside it rather than elsewhere on the machine because a rename is atomic
+// only within one filesystem, and a realm's storage is not the filesystem the
+// operating system's temporary directory is on. That puts the half-written
+// file inside the realm's own tree, so the realm holds it to being no part of
+// the realm: it is never indexed, never served, and never written to
+// deliberately. A process that dies mid-write leaves one behind, and the same
+// rule is what keeps it inert until the next write replaces it.
+export const PARTIAL_WRITE_SUFFIX = '.boxel-partial';
+
+export function partialWritePath(localPath: LocalPath): LocalPath {
+  return `${localPath}${PARTIAL_WRITE_SUFFIX}` as LocalPath;
+}
+
+export function isPartialWritePath(localPath: LocalPath): boolean {
+  return localPath.endsWith(PARTIAL_WRITE_SUFFIX);
+}

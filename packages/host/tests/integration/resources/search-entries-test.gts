@@ -50,12 +50,16 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 const testRealm2URL = 'http://test-realm/test2/';
 
+interface TestNamedArgs {
+  query: SearchEntryWireQuery | undefined;
+  cardInitiated?: boolean;
+  getDefaultRealm?: () => string | undefined;
+}
+
 function getResourceForTest(
   parent: object,
   args: () => {
-    named: {
-      query: SearchEntryWireQuery | undefined;
-    };
+    named: TestNamedArgs;
   },
 ) {
   return SearchEntriesResource.from(parent, args) as unknown as Omit<
@@ -64,12 +68,7 @@ function getResourceForTest(
   > & {
     // we expose the private loaded promise just for our tests
     loaded: Promise<void>;
-    modify: (
-      positional: never[],
-      named: {
-        query: SearchEntryWireQuery | undefined;
-      },
-    ) => void;
+    modify: (positional: never[], named: TestNamedArgs) => void;
   };
 }
 
@@ -107,7 +106,12 @@ module('Integration | search-entries resource', function (hooks) {
       mockMatrixUtils,
       realmURL: testRealmURL,
       contents: {
+        // `book.gts` is shimmed first, so it owns the class's identity and is
+        // the module the index stamps rows under. `catalog.gts` re-exports
+        // the same class, giving a query a second, non-canonical spelling of
+        // the same type to name it by.
         'book.gts': { Book },
+        'catalog.gts': { Book },
         'books/1.json': new Book({ title: 'Mango', status: 'ready' }),
         'books/2.json': new Book({ title: 'Van Gogh', status: 'draft' }),
       },
@@ -274,6 +278,75 @@ module('Integration | search-entries resource', function (hooks) {
         'an html-bearing entry has no item fallback',
       );
     }
+  });
+
+  test('a card-initiated no-realm search scopes to the default realm instead of fanning out', async function (assert) {
+    // The footgun this guards against: a card whose realms array resolves to
+    // empty (e.g. its model has no id yet) would otherwise turn a single-realm
+    // render into a federated scan across every readable realm. Card-initiated,
+    // it targets the default realm (the realm the `@context` was provided with)
+    // and never sees realm2's matching book.
+    let search = getResourceForTest(storeService, () => ({
+      named: {
+        query: { filter: { 'item.on': bookRef } },
+        cardInitiated: true,
+        getDefaultRealm: () => testRealmURL,
+      },
+    }));
+    await search.loaded;
+
+    assert.strictEqual(
+      search.entries.length,
+      2,
+      'only the two books in the default realm are returned',
+    );
+    assert.true(
+      search.entries.every((entry) => entry.realmUrl === testRealmURL),
+      'every result is from the default realm',
+    );
+    assert.false(
+      search.entries.some((entry) => entry.realmUrl === testRealm2URL),
+      'realm2 was never searched — no fan-out',
+    );
+  });
+
+  test('a card-initiated no-realm search with no resolvable default realm yields no results', async function (assert) {
+    // When the default realm cannot be determined (the model has no id yet), a
+    // card search returns nothing rather than falling back to every realm.
+    let search = getResourceForTest(storeService, () => ({
+      named: {
+        query: { filter: { 'item.on': bookRef } },
+        cardInitiated: true,
+        getDefaultRealm: () => undefined,
+      },
+    }));
+    await search.loaded;
+
+    assert.strictEqual(
+      search.entries.length,
+      0,
+      'no results, rather than a fan-out across all realms',
+    );
+  });
+
+  test('a host-owned no-realm search keeps the all-realms fallback', async function (assert) {
+    // Host-owned surfaces (the search sheet, choosers, playground) legitimately
+    // want every readable realm — leaving `cardInitiated` unset preserves that.
+    let search = getResourceForTest(storeService, () => ({
+      named: {
+        query: { filter: { 'item.on': bookRef } },
+      },
+    }));
+    await search.loaded;
+
+    assert.true(
+      search.entries.some((entry) => entry.realmUrl === testRealmURL),
+      'the default realm is searched',
+    );
+    assert.true(
+      search.entries.some((entry) => entry.realmUrl === testRealm2URL),
+      'realm2 is searched too — the all-realms fallback still fans out',
+    );
   });
 
   test('registers file result URLs so clicks/overlay classify them as files', async function (assert) {
@@ -456,6 +529,336 @@ module('Integration | search-entries resource', function (hooks) {
       search.entries.find((entry) => entry.id === `${testRealmURL}books/3`),
       'the new book appears after the incremental index event',
     );
+  });
+
+  // An index event names the adoption chains its pass touched, so a query
+  // whose type anchors are disjoint from them can sit the event out instead of
+  // re-running in full on every client holding it.
+  module('index event type gating', function () {
+    // Nothing in this realm adopts from it — the stand-in for "somebody else's
+    // unrelated write".
+    const unrelatedType = 'http://test-realm/test/observation/Observation';
+
+    function relayIndexEvent(invalidatedTypes?: string[]) {
+      getService('message-service').relayRealmEvent({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [`${testRealmURL}observations/1.json`],
+        ...(invalidatedTypes !== undefined ? { invalidatedTypes } : {}),
+        realmURL: testRealmURL,
+      });
+    }
+
+    function countingSearch(): () => number {
+      let searchCount = 0;
+      storeService.searchEntries = async () => {
+        searchCount++;
+        return entryCollectionDoc([
+          {
+            id: `${testRealmURL}books/1`,
+            indexGen: 1,
+            htmlGen: 1,
+            html: '<div>Mango</div>',
+          },
+        ]);
+      };
+      return () => searchCount;
+    }
+
+    test('an event that touched no anchored type does not re-run the query', async function (assert) {
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      let searchCount = countingSearch();
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+          },
+        }));
+        await search.loaded;
+        let baseline = searchCount();
+
+        // The anchors resolve off the first event that carries types, so that
+        // event takes the re-run it would have taken anyway.
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          searchCount(),
+          baseline + 1,
+          'the first typed event re-runs while the anchors resolve',
+        );
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          searchCount(),
+          baseline + 1,
+          'a write to a type the query is not anchored on is skipped',
+        );
+
+        // Spelled out rather than derived through `internalKeyFor`: the
+        // resource resolves its anchors with that same function, so deriving
+        // the expected key here would move both sides of the comparison
+        // together and assert nothing about the spelling.
+        relayIndexEvent([unrelatedType, `${testRealmURL}book/Book`]);
+        await settled();
+        assert.strictEqual(
+          searchCount(),
+          baseline + 2,
+          'an event naming the anchored type re-runs the query',
+        );
+
+        relayIndexEvent();
+        await settled();
+        assert.strictEqual(
+          searchCount(),
+          baseline + 3,
+          'an event carrying no type information re-runs the query',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+      }
+    });
+
+    test('an anchor resolves through the module that defines the type, not only the one the query names', async function (assert) {
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      let searchCount = countingSearch();
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: {
+              filter: {
+                'item.on': { module: testRRI('catalog'), name: 'Book' },
+              },
+              realms: [testRealmURL],
+            },
+          },
+        }));
+        await search.loaded;
+        let baseline = searchCount();
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          searchCount(),
+          baseline + 1,
+          'the first typed event re-runs while the anchors resolve',
+        );
+
+        // The query names `catalog`, the rows are stamped under `book`. The
+        // anchor's own spelling shares no key with them, so only the
+        // canonical half of the resolution can bridge the two — without it
+        // this event reads as unrelated and the member is silently missed.
+        relayIndexEvent([`${testRealmURL}book/Book`]);
+        await settled();
+        assert.strictEqual(
+          searchCount(),
+          baseline + 2,
+          'an event naming the defining module re-runs a query anchored through the re-exporting one',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+      }
+    });
+
+    test('a loader replacement re-resolves the anchors before they gate again', async function (assert) {
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      let searchCount = countingSearch();
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+          },
+        }));
+        await search.loaded;
+        let baseline = searchCount();
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          searchCount(),
+          baseline + 1,
+          'the anchors resolve and the second event is skipped',
+        );
+
+        // A module rewrite replaces the loader, and what a ref canonicalizes
+        // to is a property of the loader that resolved it — a module that
+        // re-exports a type can name a different one across that boundary.
+        getService('loader-service').resetLoader({
+          clearFetchCache: true,
+          reason: 'test',
+          codeChange: true,
+        });
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          searchCount(),
+          baseline + 2,
+          'the first event after the replacement re-runs while the anchors re-resolve',
+        );
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          searchCount(),
+          baseline + 2,
+          'the re-resolved anchors gate again',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+      }
+    });
+
+    test('a query that admits an entry of any type re-runs on every event', async function (assert) {
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      let searchCount = countingSearch();
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: {
+              filter: { eq: { 'item.status': 'ready' } },
+              realms: [testRealmURL],
+            },
+          },
+        }));
+        await search.loaded;
+        let baseline = searchCount();
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        relayIndexEvent([unrelatedType]);
+        await settled();
+
+        assert.strictEqual(
+          searchCount(),
+          baseline + 2,
+          'an unanchored filter can gain a member of any type, so nothing is skipped',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+      }
+    });
+  });
+
+  test('a burst of realm events coalesces into a single re-run', async function (assert) {
+    let searchCount = 0;
+    let originalSearchEntries = storeService.searchEntries.bind(storeService);
+    storeService.searchEntries = async () => {
+      searchCount++;
+      return entryCollectionDoc([
+        {
+          id: `${testRealmURL}books/1`,
+          indexGen: 1,
+          htmlGen: 1,
+          html: '<div>Mango</div>',
+        },
+      ]);
+    };
+
+    try {
+      let search = getResourceForTest(storeService, () => ({
+        named: {
+          query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+        },
+      }));
+      await search.loaded;
+      let baseline = searchCount;
+      let messageService = getService('message-service');
+
+      for (let i = 1; i <= 5; i++) {
+        messageService.relayRealmEvent({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${testRealmURL}books/${i}.json`],
+          realmURL: testRealmURL,
+        });
+      }
+      await settled();
+
+      assert.strictEqual(
+        searchCount,
+        baseline + 1,
+        'five index events inside one window produce one re-run',
+      );
+
+      // The scheduler re-arms after a flush: a later event is not starved by
+      // the earlier burst.
+      messageService.relayRealmEvent({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [`${testRealmURL}books/1.json`],
+        realmURL: testRealmURL,
+      });
+      await settled();
+
+      assert.strictEqual(
+        searchCount,
+        baseline + 2,
+        'an event after the flush schedules its own re-run',
+      );
+    } finally {
+      storeService.searchEntries = originalSearchEntries;
+    }
+  });
+
+  test('a query change inside the window cancels the armed re-run', async function (assert) {
+    let searchCount = 0;
+    let originalSearchEntries = storeService.searchEntries.bind(storeService);
+    storeService.searchEntries = async () => {
+      searchCount++;
+      return entryCollectionDoc([
+        {
+          id: `${testRealmURL}books/1`,
+          indexGen: 1,
+          htmlGen: 1,
+          html: '<div>Mango</div>',
+        },
+      ]);
+    };
+
+    try {
+      let search = getResourceForTest(storeService, () => ({
+        named: {
+          query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+        },
+      }));
+      await search.loaded;
+      let baseline = searchCount;
+      let messageService = getService('message-service');
+
+      // Arm the scheduler with an event, then change the query before the
+      // window flushes. The query change owns the whole result set again and
+      // must cancel the armed flush — the events it accumulated describe a
+      // result set that no longer exists. Without the cancel a redundant
+      // second search fires a window later.
+      messageService.relayRealmEvent({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [`${testRealmURL}books/1.json`],
+        realmURL: testRealmURL,
+      });
+      search.modify([], {
+        query: {
+          filter: { 'item.on': bookRef, eq: { 'item.status': 'ready' } },
+          realms: [testRealmURL],
+        },
+      });
+      await settled();
+
+      assert.strictEqual(
+        searchCount,
+        baseline + 1,
+        'the query change cancels the armed flush; only its own search runs',
+      );
+    } finally {
+      storeService.searchEntries = originalSearchEntries;
+    }
   });
 
   // A prerender_html event can't change a structured query's membership, so a
@@ -1047,7 +1450,7 @@ module('Integration | search-entries resource', function (hooks) {
       }
     });
 
-    test('a stylesheet-import failure during a member refresh falls back to a full re-run', async function (assert) {
+    test('a stylesheet-import failure during a member refresh degrades that entry to unstyled without a full re-run', async function (assert) {
       let cssHref = `${testRealmURL}book.gts.deadbeef.glimmer-scoped.css`;
       let searchCount = 0;
       let originalSearchEntries = storeService.searchEntries.bind(storeService);
@@ -1101,21 +1504,24 @@ module('Integration | search-entries resource', function (hooks) {
         }) as Loader['import'];
 
         relayPrerenderHtml([`${testRealmURL}books/1.json`], 2);
-        await waitUntil(() => searchCount > baseline, { timeout: 10_000 });
+        await waitUntil(() => search.entries[0]?.htmlGeneration === 2, {
+          timeout: 10_000,
+        });
         await settled();
 
         assert.true(
           importCalls.includes(cssHref),
           'the member refresh actually attempted the stylesheet import',
         );
-        assert.ok(
-          searchCount > baseline,
-          'the failed stylesheet import falls back to the coarse re-run',
+        assert.strictEqual(
+          searchCount,
+          baseline,
+          'a failed stylesheet import degrades the entry rather than triggering the coarse re-run',
         );
         assert.strictEqual(
           search.entries[0]?.htmlGeneration,
-          1,
-          "the failed member's refresh was not applied",
+          2,
+          "the member's refresh is applied even though its stylesheet failed to load",
         );
       } finally {
         storeService.searchEntries = originalSearchEntries;

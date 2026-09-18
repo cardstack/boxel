@@ -346,6 +346,54 @@ module('Acceptance | prerender | meta', function (hooks) {
     );
   });
 
+  test('a serialized instance stops at its own resource, however deep the resident graph', async function (assert) {
+    // Jade links to Hassan, who links to three pets. The searchable settle
+    // leaves that whole graph resident, so this is the case where walking it
+    // would cost the most and contribute the least: a link target is a
+    // reference here, and its own links are not the card's to carry.
+    let url = `${testRealmURL}Person/jade.json`;
+    await visit(renderPath(url, '/meta'));
+    let { value } = await capturePrerenderResult('textContent');
+    let meta: PrerenderMeta = JSON.parse(value);
+    assert.deepEqual(
+      meta.serialized,
+      {
+        data: {
+          type: 'card',
+          id: testRRI('Person/jade'),
+          attributes: {
+            name: 'Jade',
+            cardTitle: 'Jade',
+            cardInfo: {
+              name: null,
+              summary: null,
+              cardThumbnailURL: null,
+              notes: null,
+            },
+            cardDescription: null,
+            cardThumbnailURL: null,
+            numOfPets: '0',
+          },
+          relationships: {
+            friend: {
+              links: {
+                self: './hassan',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: rri('../person'),
+              name: 'Person',
+            },
+            realmURL: testRealmURL,
+          },
+        },
+      },
+      'the link target is a reference, and neither it nor its own links ride along',
+    );
+  });
+
   test('can generate display name', async function (assert) {
     let url = `${testRealmURL}Pet/paper.json`;
     await visit(renderPath(url, '/meta'));
@@ -580,6 +628,104 @@ module('Acceptance | prerender | meta', function (hooks) {
       },
       'search doc is correct',
     );
+  });
+
+  test("the meta payload carries the parent route's model-build breakdown", async function (assert) {
+    // The model build runs in the parent `render` route, inside the same
+    // transition the prerender runner times as this visit's `meta` route
+    // step — so without these stages on the payload, the dominant part of
+    // that step's wall-clock has no breakdown at all. `clearCache` forces a
+    // cold build so `deriveType` covers a real module-graph load rather
+    // than a warm-tab no-op.
+    let url = `${testRealmURL}Person/hassan.json`;
+    await visit(customRenderPath(url, { clearCache: true }, 1) + '/meta');
+    let { value } = await capturePrerenderResult('textContent');
+    let meta: PrerenderMeta = JSON.parse(value);
+
+    let buildModelMs = meta.diagnostics?.buildModelMs;
+    assert.ok(buildModelMs, 'the model build breakdown rides the payload');
+    for (let stage of [
+      'fetchSource',
+      'deriveType',
+      'hydrate',
+      'storeSettle',
+    ] as const) {
+      let ms = buildModelMs?.[stage];
+      assert.strictEqual(
+        typeof ms,
+        'number',
+        `buildModelMs.${stage} is measured, got: ${JSON.stringify(ms)}`,
+      );
+      assert.ok(
+        (ms as number) >= 0,
+        `buildModelMs.${stage} is a non-negative span`,
+      );
+    }
+
+    // The three waits the meta route itself performs before any of its own
+    // work: the two per-loader-cached base-module loads and the parent's
+    // ready settle. All are serial phases of the `meta` route step, so
+    // leaving them out would put the gap back in the bucket this breakdown
+    // exists to close.
+    for (let phase of [
+      'cardApiLoadMs',
+      'readySettleMs',
+      'searchableLoadMs',
+    ] as const) {
+      assert.strictEqual(
+        typeof meta.diagnostics?.[phase],
+        'number',
+        `${phase} is measured, got: ${JSON.stringify(meta.diagnostics?.[phase])}`,
+      );
+    }
+
+    // The uncapped module-evaluation totals. These are what distinguishes
+    // "the graph was already warm" from "the itemized list lost the
+    // slowest-N race", so a reader must always be able to get them — the
+    // bounded list below can legitimately be empty either way.
+    //
+    // Only their presence is asserted, not a non-zero count: this realm's
+    // modules are registered as objects, which the test adapter installs
+    // via `shimModule`, and a shimmed module is evaluated by definition
+    // rather than through `Loader.evaluate()`. A count of zero here is the
+    // harness, not the card.
+    for (let field of [
+      'moduleEvaluationCount',
+      'moduleEvaluationTotalMs',
+    ] as const) {
+      assert.strictEqual(
+        typeof meta.diagnostics?.[field],
+        'number',
+        `${field} is measured, got: ${JSON.stringify(meta.diagnostics?.[field])}`,
+      );
+    }
+
+    // The per-stage detail blocks are bounded to the slowest entries at or
+    // over a floor, so a small fixture card legitimately records none of
+    // them. What must hold is that anything recorded is well-formed —
+    // a malformed entry would only surface in production otherwise.
+    for (let evaluation of meta.diagnostics?.moduleEvaluationsMs ?? []) {
+      assert.strictEqual(
+        typeof evaluation.url,
+        'string',
+        'a module evaluation entry names its module',
+      );
+      assert.strictEqual(typeof evaluation.ms, 'number');
+    }
+    for (let wait of meta.diagnostics?.storeSettleWaits ?? []) {
+      assert.ok(
+        ['card', 'file', 'query'].includes(wait.kind),
+        `a settle wait carries a known kind, got: ${wait.kind}`,
+      );
+      assert.strictEqual(typeof wait.target, 'string');
+      assert.strictEqual(typeof wait.ms, 'number');
+    }
+    for (let [path, ms] of Object.entries(
+      meta.diagnostics?.hydrateFieldsMs ?? {},
+    )) {
+      assert.ok(path.length > 0, 'a hydration entry is keyed by field path');
+      assert.strictEqual(typeof ms, 'number');
+    }
   });
 
   test('a render carrying both cardRender and fileExtract returns the file extract alongside the meta payload', async function (assert) {

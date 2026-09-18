@@ -17,7 +17,7 @@ Maps every file in `src/jqtools/` to its upstream source at
 | `evaluate/applyBinary.ts`                       | `evaluate/applyBinary.ts`                       | ✓ near-verbatim                   |
 | `evaluate/applyFormat.ts`                       | `evaluate/applyFormat.ts`                       | ✓ near-verbatim                   |
 | `evaluate/compare.ts`                           | `evaluate/compare.ts`                           | ✓ near-verbatim                   |
-| `evaluate/evaluateErrors.ts`                    | `evaluate/evaluateErrors.ts`                    | ✓ near-verbatim                   |
+| `evaluate/evaluateErrors.ts`                    | `evaluate/evaluateErrors.ts`                    | near-verbatim + not-defined hints |
 | `evaluate/generateCombinations.ts`              | `evaluate/generateCombinations.ts`              | ✓ near-verbatim                   |
 | `evaluate/generateObjects.ts`                   | `evaluate/generateObjects.ts`                   | ✓ near-verbatim                   |
 | `evaluate/utils/binaryOperator.ts`              | `evaluate/utils/binaryOperator.ts`              | ✓ near-verbatim                   |
@@ -82,9 +82,30 @@ maxOutputBytes, maxWallClockMs, signal }`.
 - `checkRuntimeBudget()` — called from `evaluate.ts` at iterator boundaries
   to enforce budgets without corrupting generator state.
 - `HaltSignal` — thrown when budgets exceed; callers unwrap the diagnostic.
+- `NativeRequestContext` — public shape of the request-scoped values the
+  `params`, `actor` and `instance` builtins read.
+- `withRequestContext(context, fn)` — scopes one request context to `fn` on a
+  stack separate from the diagnostics frames, since a host scopes a context
+  around a whole call while entry points inside it open frames of their own.
+  Refuses a callback that returns a promise or a lazy iterator: the scope is
+  synchronous and would be unwound before either completed.
+- `currentRequestContext()` — the innermost scoped context, read by the
+  request-context builtins in `bxl/bridge/`.
+- `notDefinedHint(name)` — the sentence `notDefinedError` appends for a
+  `NAME/arity` that names a request-context builtin at an arity it does not
+  have. Resolution is per name _and_ arity, so `actor("id")` is an undefined
+  call rather than a bad argument to a defined one, and the bare upstream
+  message says only that. The hint names the form that exists. It lives here
+  because the accessors' shape is this file's subject.
 
-Good candidate for upstream contribution if `alexxander/jq-tools` adopts a
-pluggable runtime-hook API.
+The request-context trio is BXL's own concept rather than anything jq has, and
+it lives here because a native filter is invoked as `(input, ...args)` with no
+access to the `Environment` — so a builtin has no other route to a
+host-supplied value. It is the one piece of request-scoped state inside this
+vendored subsystem; keep that in mind when auditing against upstream.
+
+The budget half is a good candidate for upstream contribution if
+`alexxander/jq-tools` adopts a pluggable runtime-hook API.
 
 ### `evaluate/dateTime.ts`
 

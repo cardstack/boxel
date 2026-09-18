@@ -464,7 +464,12 @@ jobs:
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
       - name: Install Playwright Browsers
-        run: pnpm exec playwright install
+        # Chromium only: playwright.config.ts declares no other project and no
+        # spec here launches Firefox or WebKit. Fetching them anyway makes
+        # Playwright's host validation warn that their libraries (libgtk-4,
+        # libgst*, libflite*) are missing, which reads like a broken install
+        # rather than two browsers this suite never uses.
+        run: pnpm exec playwright install chromium
         working-directory: packages/matrix
       # Warm the test images from the GHCR mirror so the services
       # below (and the Playwright synapse/smtp fixtures) start from a local
@@ -505,9 +510,17 @@ jobs:
           grep -E '^\[start:prerender-manager-dev' /tmp/server.log > /tmp/prerender-manager.log || true
           grep -E '^\[start:icons' /tmp/server.log > /tmp/icon-server.log || true
           grep -E '^\[start:host-dist' /tmp/server.log > /tmp/host-dist.log || true
+      # The log uploads below are for reading a shard after the fact. Nothing
+      # downstream consumes them, so losing one loses that view of this shard
+      # and nothing else, and a failed upload does not fail the shard. The
+      # blob report further down stays fatal on purpose: the merge and
+      # shard-timings jobs consume it, and a report that did not upload would
+      # publish a smaller build as a complete one rather than show as a failed
+      # shard.
       - name: Upload realm server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: matrix-test-realm-server-log-${{ matrix.shardIndex }}
           path: /tmp/server.log
@@ -515,6 +528,7 @@ jobs:
       - name: Upload worker manager log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: matrix-test-worker-manager-log-${{ matrix.shardIndex }}
           path: /tmp/worker-manager.log
@@ -522,6 +536,7 @@ jobs:
       - name: Upload prerender server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: matrix-test-prerender-server-log-${{ matrix.shardIndex }}
           path: /tmp/prerender-server.log
@@ -529,6 +544,7 @@ jobs:
       - name: Upload prerender manager log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: matrix-test-prerender-manager-log-${{ matrix.shardIndex }}
           path: /tmp/prerender-manager.log
@@ -536,6 +552,7 @@ jobs:
       - name: Upload icon server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: matrix-test-icon-server-log-${{ matrix.shardIndex }}
           path: /tmp/icon-server.log
@@ -543,6 +560,7 @@ jobs:
       - name: Upload host-dist log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: matrix-test-host-dist-log-${{ matrix.shardIndex }}
           path: /tmp/host-dist.log
@@ -550,15 +568,18 @@ jobs:
 
       - name: Upload blob report to GitHub Actions Artifacts
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: blob-report-${{ matrix.shardIndex }}
           path: packages/matrix/blob-report
           retention-days: 1
 
+      # Traces are evidence for a human reading a failed spec. Nothing
+      # downstream consumes them, so a failed upload does not fail the shard.
       - name: Upload Playwright traces
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        continue-on-error: true
         with:
           name: playwright-traces-${{ matrix.shardIndex }}
           path: packages/matrix/test-results/**/trace.zip
@@ -605,7 +626,7 @@ jobs:
         run: pnpm exec playwright merge-reports --reporter html ./all-blob-reports
 
       - name: Upload HTML report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: html-report--attempt-${{ github.run_attempt }}
           path: playwright-report
@@ -715,7 +736,7 @@ jobs:
 
             if [ "$(git rev-parse origin/main)" != "$WORKFLOW_SHA" ] && \
                git log --format="%s" "$WORKFLOW_SHA..origin/main" \
-                 | grep -qvE "Update (host test (memory )?baselines?|matrix shard timings)"; then
+                 | grep -qvE "Update (host test (memory )?baselines?|matrix shard timings|realm-server shard timings)"; then
               echo "main has advanced past $WORKFLOW_SHA — skipping (a newer CI run will publish the timings)."
               exit 0
             fi
@@ -756,6 +777,10 @@ jobs:
       cancel-in-progress: true
     strategy:
       fail-fast: false
+      # Three places carry the shard count and must move together: this list,
+      # `shardTotal` below, and `--shard-count` on the timings generator in
+      # realm-server-shard-timings-update, which decides whether a rebalance
+      # is worth committing by predicting the slowest shard.
       matrix:
         shardIndex: [1, 2, 3, 4, 5, 6]
         shardTotal: [6]
@@ -795,7 +820,7 @@ jobs:
           TEST_MODULES: ${{ steps.shard_modules.outputs.modules }}
           JUNIT_OUTPUT_FILE: ${{ github.workspace }}/junit/realm-server-${{ matrix.shardIndex }}.xml
       - name: Upload junit report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         if: ${{ !cancelled() }}
         with:
           name: realm-server-test-report-${{ matrix.shardIndex }}
@@ -820,9 +845,16 @@ jobs:
           grep -E '^\[start:test-realms|^\[start:worker-test' /tmp/server.log > /tmp/test-realms.log || true
           grep -E '^\[start:icons' /tmp/server.log > /tmp/icon-server.log || true
           grep -E '^\[start:host-dist' /tmp/server.log > /tmp/host-dist.log || true
+      # The log uploads below are for reading a shard after the fact. Nothing
+      # downstream consumes them, so losing one loses that view of this shard
+      # and nothing else, and a failed upload does not fail the shard. The
+      # junit report above stays fatal on purpose: the merge job consumes it,
+      # and a report that did not upload would publish a smaller build as a
+      # complete one rather than show as a failed shard.
       - name: Upload realm server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-realm-server-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/server.log
@@ -830,6 +862,7 @@ jobs:
       - name: Upload worker manager log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-worker-manager-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/worker-manager.log
@@ -837,6 +870,7 @@ jobs:
       - name: Upload prerender server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-prerender-server-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/prerender-server.log
@@ -844,6 +878,7 @@ jobs:
       - name: Upload prerender manager log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-prerender-manager-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/prerender-manager.log
@@ -851,6 +886,7 @@ jobs:
       - name: Upload start:development log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-start-development-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/start-development.log
@@ -858,6 +894,7 @@ jobs:
       - name: Upload test-realms log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-test-realms-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/test-realms.log
@@ -865,6 +902,7 @@ jobs:
       - name: Upload icon server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-icon-server-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/icon-server.log
@@ -872,6 +910,7 @@ jobs:
       - name: Upload host-dist log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: realm-server-test-host-dist-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/host-dist.log
@@ -898,7 +937,7 @@ jobs:
       - name: Merge reports
         run: npx junit-report-merger realm-server.xml "./all-realm-server-reports/*.xml"
       - name: Upload merged report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         if: ${{ !cancelled() }}
         with:
           name: realm-server-test-report-merged
@@ -934,11 +973,118 @@ jobs:
 
       - name: Upload realm-tests slot
         if: ${{ !cancelled() && hashFiles('slot/slot.md') != '' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: pr-comment-slot-realm-tests
           path: slot/
           retention-days: 7
+
+  realm-server-shard-timings-update:
+    name: Update Realm Server Shard Timings
+    # Push-to-main only, like its two siblings: this is a job holding
+    # `contents: write`, so it must not run from a ref an untrusted branch can
+    # rewrite.
+    #
+    # Maintains packages/realm-server/tests/test-module-timings.json, the
+    # per-file durations that decide which shard each test file runs on (see
+    # packages/realm-server/scripts/shard-test-modules.cjs). Without this the
+    # weights only change when someone remembers to regenerate them by hand,
+    # and every file added in between packs at DEFAULT_WEIGHT no matter what it
+    # actually costs.
+    #
+    # Runs off the merge job rather than the shards, because that is what
+    # produces the merged report — and it runs whether or not the shards
+    # passed. Files missing from a failed shard's report keep their committed
+    # values, and skipping red runs would leave the weights to rot through a
+    # flaky week.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !cancelled() && needs.realm-server-merge-reports.result == 'success' }}
+    needs: [realm-server-merge-reports]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: realm-server-shard-timings-update-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # History past the triggering SHA, so the staleness check below can
+          # see what landed on main while this run was going.
+          fetch-depth: 0
+
+      # mise alone, not `./.github/actions/init`. The generator imports node
+      # builtins and two local scripts and nothing else, so the frozen-lockfile
+      # install that init performs would be several minutes spent on packages
+      # this job never loads. .mise.toml still pins the node version.
+      - uses: jdx/mise-action@c1ecc8f748cd28cdeabf76dab3cccde4ce692fe4 # v4.0.0
+        with:
+          install: true
+
+      - name: Download the merged JUnit report
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: realm-server-test-report-merged
+          path: merged-realm-server-report
+
+      - name: Update shard timings
+        # Retry from the latest main: another PR may merge while this workflow
+        # is running, causing `git push` to be rejected. Each retry fetches and
+        # hard-resets to the freshest tip-of-main, then regenerates against it.
+        #
+        # Staleness guard: if a commit other than an automated measurement
+        # update landed on main since this workflow was triggered, skip — that
+        # newer push triggered its own run, which will publish weights derived
+        # from its own code.
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          WORKFLOW_SHA="${{ github.sha }}"
+          REPORT="$PWD/merged-realm-server-report/realm-server.xml"
+
+          if [ ! -f "$REPORT" ]; then
+            echo "No merged report at $REPORT — leaving the weights unchanged."
+            exit 0
+          fi
+
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+
+            if [ "$(git rev-parse origin/main)" != "$WORKFLOW_SHA" ] && \
+               git log --format="%s" "$WORKFLOW_SHA..origin/main" \
+                 | grep -qvE "Update (host test (memory )?baselines?|matrix shard timings|realm-server shard timings)"; then
+              echo "main has advanced past $WORKFLOW_SHA — skipping (a newer CI run will publish the weights)."
+              exit 0
+            fi
+
+            git reset --hard origin/main
+
+            # Gated on drift: the weights are only rewritten when doing so
+            # improves the predicted slowest shard by over a minute, so
+            # run-to-run jitter doesn't produce a commit per main push. The
+            # shard count must match `shardIndex` on realm-server-test above.
+            #
+            # A nonzero exit — the attribution floor, an unreadable report —
+            # fails the job rather than committing degraded weights.
+            node packages/realm-server/scripts/generate-test-module-timings.mjs "$REPORT" \
+              --min-drift-seconds 60 --shard-count 6
+
+            if git diff --quiet packages/realm-server/tests/test-module-timings.json; then
+              echo "Shard timings unchanged — nothing to commit."
+              exit 0
+            fi
+            git add packages/realm-server/tests/test-module-timings.json
+            git commit -m "Update realm-server shard timings [skip ci]"
+
+            if git push; then
+              exit 0
+            fi
+            echo "Push rejected on attempt $attempt — retrying after $((attempt * 5))s"
+            sleep $((attempt * 5))
+          done
+          echo "Failed to push shard timings after 5 attempts"
+          exit 1
 
   amd-transpile-bench:
     name: AMD Transpile Bench
@@ -1069,7 +1215,7 @@ jobs:
         run: pnpm vscode:package
         working-directory: packages/vscode-boxel-tools
       - name: Upload
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: vscode-boxel-tools
           path: packages/vscode-boxel-tools/boxel-tools*vsix
@@ -1249,9 +1395,14 @@ jobs:
         # mise-tasks/ci/cache-index means raising this and the job's ceiling
         # with it.
         timeout-minutes: 60
+      # Evidence for reading this job after the fact; the index caches below
+      # are what it exists to publish and every consumer reads those. A failed
+      # log upload therefore does not fail the job, and leaves the caches to be
+      # verified and published.
       - name: Upload service logs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
+        continue-on-error: true
         with:
           name: cache-index-log
           path: /tmp/cache-index.log
@@ -1262,7 +1413,7 @@ jobs:
       - name: Verify index cache is complete
         run: scripts/verify-index-cache.sh /tmp/boxel-index-cache.sql.gz
       - name: Upload index cache
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: boxel-index-cache
           path: /tmp/boxel-index-cache.sql.gz
@@ -1279,7 +1430,7 @@ jobs:
             /tmp/boxel-index-cache-host.sql.gz \
             /tmp/boxel-index-cache-host.tables
       - name: Upload host-scoped index cache
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: boxel-index-cache-host
           path: /tmp/boxel-index-cache-host.sql.gz
@@ -1293,7 +1444,7 @@ jobs:
             /tmp/boxel-index-cache-test.sql.gz \
             /tmp/boxel-index-cache-test.tables
       - name: Upload test-realm index cache
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-artifact-retry
         with:
           name: boxel-index-cache-test
           path: /tmp/boxel-index-cache-test.sql.gz

@@ -15,6 +15,7 @@ import AllCardsIcon from '@cardstack/boxel-icons/square-stack';
 import AllFilesIcon from '@cardstack/boxel-icons/files';
 import FileIcon from '@cardstack/boxel-icons/file';
 
+import type { CardErrorJSONAPI } from '@cardstack/runtime-common';
 import {
   chooseCard,
   specRef,
@@ -25,7 +26,6 @@ import {
   subscribeToRealm,
   codeRefFromInternalKey,
   type Query,
-  CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
 import CardsGridLayout, {
@@ -47,7 +47,7 @@ import {
   type BoxComponent,
 } from './card-api';
 import type { RealmEventContent } from './matrix-event';
-import { Spec } from './spec';
+import type { Spec } from './spec';
 import StringField from './string';
 
 const [_CardView, StripView, GridView] = VIEW_OPTIONS;

@@ -9,7 +9,12 @@ import {
   fetchRequestFromContext,
 } from '../middleware/index.ts';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
-import { handleStreamingRequest } from '../lib/proxy-forward.ts';
+import {
+  clientDisconnectSignal,
+  handleStreamingRequest,
+  isClientDisconnectError,
+  upstreamCallSignal,
+} from '../lib/proxy-forward.ts';
 import * as Sentry from '@sentry/node';
 
 const log = logger('request-forward');
@@ -121,6 +126,13 @@ export default function handleRequestForward({
   dbAdapter: DBAdapter;
 }) {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
+    // A caller that stops waiting must take the upstream call with it. The
+    // forward runs inside a per-user advisory lock that serializes that
+    // user's billable calls across replicas, so an upstream request nobody is
+    // reading any more still blocks that user's next forward for as long as
+    // it runs — on a slow model call, over a minute.
+    let clientGone = clientDisconnectSignal(ctxt);
+
     try {
       // 1. Validate JWT token and extract user
       const token = ctxt.state.token;
@@ -303,13 +315,22 @@ export default function handleRequestForward({
             destinationConfig,
             dbAdapter,
             matrixUserId,
+            clientGone,
           );
           return;
         }
 
+        // Cancelling the upstream call is what ends the critical section:
+        // without it the lock is held until a response the client will never
+        // read finally arrives. The signal is released once that response
+        // exists, so reading it and recording its cost cannot be cancelled —
+        // by then the provider has already generated and billed for the
+        // tokens, and abandoning the read only loses the charge.
+        const upstreamCall = upstreamCallSignal(clientGone);
         const fetchOptions: RequestInit = {
           method: json.method,
           headers,
+          signal: upstreamCall.signal,
         };
 
         // Only add body for non-GET requests or when requestBody is provided
@@ -324,6 +345,7 @@ export default function handleRequestForward({
             at processTicksAndRejections (node:internal/process/task_queues:105:5)
         */
         const externalResponse = await globalThis.fetch(finalUrl, fetchOptions);
+        upstreamCall.release();
 
         const responseData = await externalResponse.json();
 
@@ -344,6 +366,16 @@ export default function handleRequestForward({
         await setContextResponse(ctxt, response);
       });
     } catch (error) {
+      if (isClientDisconnectError(error, clientGone)) {
+        // Cancelling on purpose is not a fault: there is no one left to
+        // answer and nothing an on-call engineer could act on, so this stays
+        // out of the error channel. Returning here is what lets the cost lock
+        // release for this user's next forward.
+        log.info(
+          'Client disconnected during request forward; upstream call cancelled',
+        );
+        return;
+      }
       log.error('Error in request forward handler:', error);
       Sentry.captureException(error);
       await sendResponseForSystemError(

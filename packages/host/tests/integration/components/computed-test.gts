@@ -100,6 +100,7 @@ module('Integration | computeds', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Post, Person },
@@ -223,6 +224,7 @@ module('Integration | computeds', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Family, Person },
@@ -301,6 +303,7 @@ module('Integration | computeds', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Family, Person },
@@ -483,6 +486,7 @@ module('Integration | computeds', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Post, Author },
@@ -541,6 +545,7 @@ module('Integration | computeds', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Article, Tag },
@@ -614,6 +619,7 @@ module('Integration | computeds', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Blog, Category },
@@ -669,6 +675,7 @@ module('Integration | computeds', function (hooks) {
       static displayName = 'Article';
     }
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: { 'test-cards.gts': { Article } },
     });

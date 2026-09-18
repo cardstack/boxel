@@ -8,6 +8,7 @@ import {
   PermissionsConsumer,
   getBoxComponent,
 } from './field-component';
+import type { CreateCardFn } from './card-api';
 import {
   type BaseDef,
   type Box,
@@ -16,9 +17,9 @@ import {
   type LinkableDefConstructor,
   brokenLinkDisplayName,
   brokenLinkItemType,
-  CreateCardFn,
   isFileDef,
 } from './card-api';
+import type { Loader } from '@cardstack/runtime-common';
 import {
   chooseCard,
   chooseFile,
@@ -27,7 +28,6 @@ import {
   CardContextName,
   RealmURLContextName,
   getNarrowestType,
-  Loader,
   type ResolvedCodeRef,
   isCardInstance,
 } from '@cardstack/runtime-common';
@@ -38,7 +38,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
 import { consume } from 'ember-provide-consume-context';
-import { type RelationshipState } from './field-support';
+import type { RelationshipState } from './field-support';
 
 // A broken singular link surfaces as a terminal failure state from
 // `getRelationshipMembershipState`. The owning `linksTo` component reads it (it has the

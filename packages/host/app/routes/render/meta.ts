@@ -35,6 +35,13 @@ import { createAuthErrorGuard } from '../../utils/auth-error-guard';
 
 import { runFileExtract } from '../../utils/file-extract-runner';
 
+import {
+  newLoadEntries,
+  pruneTimingEntries,
+  pruneTimingPaths,
+  roundMs,
+} from '../../utils/render-diagnostics';
+
 import { friendlyCardType } from '../../utils/render-error';
 
 import type { FileDefExtractResult } from '../../utils/file-def-attributes-extractor';
@@ -62,77 +69,6 @@ const computePerfLog = logger('host:computed-perf');
 // used regardless of stability (with a warning when still unstable).
 const SEARCHABLE_SETTLE_MAX_PASSES = 20;
 
-// Persistence bounds for the per-field / per-link-load search-doc timings.
-// The raw collectors are unbounded; only the slowest entries at/over the
-// floor land on the row, so a typical ~1 ms search doc records nothing and
-// a wide card can't bloat its diagnostics blob.
-const SEARCH_DOC_TIMING_FLOOR_MS = 1;
-const SEARCH_DOC_TIMING_MAX_ENTRIES = 20;
-
-const roundMs = (ms: number) => Math.round(ms * 100) / 100;
-
-// Slowest-N-at/over-the-floor pruning for the per-field timings. Rank by
-// value when reading — jsonb normalizes key order, so the persisted object
-// carries no ordering. An ancestor's inclusive time is >= any descendant's,
-// so a kept entry's parent chain makes the cut with it (barring an
-// exact-tie at the cut-off).
-function pruneSearchDocFieldsMs(
-  fieldsMs: Record<string, number>,
-): Record<string, number> | undefined {
-  let kept = Object.entries(fieldsMs)
-    .filter(([, ms]) => ms >= SEARCH_DOC_TIMING_FLOOR_MS)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, SEARCH_DOC_TIMING_MAX_ENTRIES);
-  return kept.length > 0
-    ? Object.fromEntries(kept.map(([path, ms]) => [path, roundMs(ms)]))
-    : undefined;
-}
-
-// Same pruning for link-target loads. The floor also drops the near-zero
-// entries recorded when a target was already resident in the store, so what
-// survives is the loads that actually cost something.
-function pruneSearchDocLinkLoads(
-  linkLoads: SearchDocLinkLoad[],
-): SearchDocLinkLoad[] | undefined {
-  let kept = linkLoads
-    .filter(({ ms }) => ms >= SEARCH_DOC_TIMING_FLOOR_MS)
-    .sort((a, b) => b.ms - a.ms)
-    .slice(0, SEARCH_DOC_TIMING_MAX_ENTRIES)
-    .map((load) => ({ ...load, ms: roundMs(load.ms) }));
-  return kept.length > 0 ? kept : undefined;
-}
-
-// Multiset diff over the store's bounded completed-load histories: the
-// entries present in `after` beyond their multiplicity in `before`. Used to
-// attribute loads the walk passes fired through field getters (a computed
-// reading a link loads via `lazilyLoadLink`, not via the generator's
-// targeted loading) — those loads land in the store's history but never
-// pass through the generator's collector. The histories keep only the
-// slowest entries, so a load evicted by slower siblings goes unreported;
-// what survives is by construction the part worth attributing. Exported for
-// unit testing.
-export function newLoadEntries(
-  before: Array<{ url: string; ms: number }>,
-  after: Array<{ url: string; ms: number }>,
-): Array<{ url: string; ms: number }> {
-  let seen = new Map<string, number>();
-  for (let { url, ms } of before) {
-    let key = `${url}|${ms}`;
-    seen.set(key, (seen.get(key) ?? 0) + 1);
-  }
-  let fresh: Array<{ url: string; ms: number }> = [];
-  for (let entry of after) {
-    let key = `${entry.url}|${entry.ms}`;
-    let count = seen.get(key) ?? 0;
-    if (count > 0) {
-      seen.set(key, count - 1);
-    } else {
-      fresh.push(entry);
-    }
-  }
-  return fresh;
-}
-
 // The base module whose generator produces every search doc. Recorded as a
 // dependency of the meta output directly (see the deps union below) rather
 // than relying on its per-loader-cached module-load hook to fire during a
@@ -149,14 +85,29 @@ export default class RenderMetaRoute extends Route<Model> {
   #authGuard = createAuthErrorGuard();
 
   async model(_: unknown, transition: Transition) {
+    // Loading `card-api`, like the `searchable` module below: per-loader
+    // cached, so the first card a tab renders pays the whole module load
+    // here and every card after it reads ~0. Timed for the same reason —
+    // it is the difference between a first-in-tab card's `meta` bucket
+    // being an unexplained outlier and being an explained one.
+    let cardApiLoadStart = performance.now();
     let api = await this.cardService.getAPI();
+    let cardApiLoadMs = performance.now() - cardApiLoadStart;
     let parentModel = this.modelFor('render') as ParentModel | undefined;
     // the global use below is to support in-browser rendering, where we actually don't have the
     // ability to lookup the parent route using RouterService.recognizeAndLoad()
     let renderModel =
       parentModel ??
       ((globalThis as any).__renderModel as ParentModel | undefined);
+    // The parent route kicks off its ready settle (the load-stability loop)
+    // and returns; this await is where the settle is actually paid for, so
+    // it is a serial phase of this route's wall-clock and belongs in the
+    // breakdown of it. On a visit whose html render already drove the settle
+    // this resolves immediately and the cost sits in that render's bucket
+    // instead.
+    let readySettleStart = performance.now();
     await renderModel?.readyPromise;
+    let readySettleMs = performance.now() - readySettleStart;
     let instance: CardDef | undefined = renderModel?.instance;
 
     if (!renderModel || !instance) {
@@ -167,8 +118,13 @@ export default class RenderMetaRoute extends Route<Model> {
 
     // The search doc comes from the searchable-driven generator in its own base
     // module. It derives link depth from the explicit `searchable` annotations
-    // rather than from what the render happened to load.
+    // rather than from what the render happened to load. Loading that module
+    // is a per-loader-cached one-off, so the cost lands on whichever card in
+    // a job reaches this first and is ~0 for every card after it — timed so
+    // that first card's outsized `meta` bucket has a name.
+    let searchableLoadStart = performance.now();
     let searchable = await this.cardService.getSearchable();
+    let searchableLoadMs = performance.now() - searchableLoadStart;
 
     // Produce the search doc by walking until the store's load state is
     // quiescent — the walk IS the pull. The searchable annotations name which
@@ -273,12 +229,19 @@ export default class RenderMetaRoute extends Route<Model> {
       let vn = this.network.virtualNetwork;
       serialized = api.serializeCard(instance, {
         includeComputeds: true,
+        // A card file holds the card's own resource and no linked neighbors,
+        // so no link target's resource belongs in this document. Saying that
+        // up front is what keeps it cheap: the searchable settle above leaves
+        // link targets resident, and at any wider scope the serializer would
+        // walk whatever it finds there — each resident target, and
+        // transitively each target's own — to build an `included[]` this
+        // route then discards. An excluded target still emits its
+        // relationship entry, so the document is unchanged.
+        includedScope: 'none',
         // A query-backed field is resolved live and the index can't invalidate
-        // it, so its serialized value would always be stale — and deep-
-        // serializing the query closure into `included[]` is what wedges a
-        // densely cross-linked realm. Membership comes from the file's own
-        // relationships, so omit query fields here (the relationship data is
-        // stripped below regardless).
+        // it, so its serialized value would always be stale. Membership comes
+        // from the file's own relationships, so omit query fields here (the
+        // relationship data is stripped below regardless).
         omitQueryFields: true,
         maybeRelativeReference: (reference: string) =>
           maybeRelativeReference(
@@ -288,18 +251,18 @@ export default class RenderMetaRoute extends Route<Model> {
           ),
       }) as SingleCardDocument;
       serializeMs = performance.now() - serializeStart;
-      // Emulate the on-disk file serialization: a card file holds only the
-      // card's own resource — relationship slots keep their `links` but drop
-      // the resolved `data`, and no linked neighbors ride along in `included`.
-      // The searchable settle above may have loaded link targets into the
-      // store, and `serializeCard` walks whatever is resident into `included`;
-      // strip both so the serialized instance is a pure function of the card's
-      // own data, independent of which targets happen to be loaded.
+      // The rest of emulating the on-disk file serialization: a relationship
+      // slot keeps its `links` but drops the resolved `data`, so the serialized
+      // instance is a pure function of the card's own data rather than of which
+      // targets happen to be loaded.
       for (let { relationship } of relationshipEntries(
         serialized.data.relationships,
       )) {
         delete relationship.data;
       }
+      // `includedScope: 'none'` builds no `included`; the delete holds the
+      // no-neighbors contract against a card whose own `serialize` hook pushes
+      // one regardless.
       delete serialized.included;
     } finally {
       if (passOpen && typeof api.endComputePass === 'function') {
@@ -321,22 +284,31 @@ export default class RenderMetaRoute extends Route<Model> {
     // `cardTitle` computed already present in the search doc.
     searchDoc._title = searchDoc.cardTitle;
 
-    let searchDocFieldsMs = pruneSearchDocFieldsMs(fieldsMs);
+    let searchDocFieldsMs = pruneTimingPaths(fieldsMs);
     // A target the generator loaded directly also lands in the store's
     // history; keep the generator's entry (it carries the field path) and
     // drop the store's duplicate.
     let targetedUrls = new Set(linkLoads.map(({ target }) => target));
-    let searchDocLinkLoads = pruneSearchDocLinkLoads([
+    let searchDocLinkLoads = pruneTimingEntries<SearchDocLinkLoad>([
       ...linkLoads,
       ...getterFiredLoads.filter(({ target }) => !targetedUrls.has(target)),
     ]);
     let diagnostics: PrerenderMetaDiagnostics = {
+      // The parent route's account of building the model this route was
+      // handed. It rides out here because this is the payload the indexer
+      // persists, and because a model is built once per visit while this
+      // route may run more than once against it — the second run reports the
+      // same numbers rather than a fresh (and empty) build.
+      ...renderModel.buildModelDiagnostics,
       ...(passSnapshot
         ? {
             computedCalls: passSnapshot.calls,
             computedCacheHits: passSnapshot.cacheHits,
           }
         : {}),
+      cardApiLoadMs: roundMs(cardApiLoadMs),
+      readySettleMs: roundMs(readySettleMs),
+      searchableLoadMs: roundMs(searchableLoadMs),
       serializeMs: roundMs(serializeMs),
       searchDocMs: roundMs(searchDocMs),
       searchDocSettleMs: roundMs(searchDocSettleMs),

@@ -1,8 +1,10 @@
 import type { ReadableSchema } from '../../../../src/index.ts';
 import {
   DEFAULT_BUILTIN_LIBRARIES,
+  mutationBuiltinLibraries,
   type BuiltinLibraryName,
 } from '../../../../src/bxl/registry/index.ts';
+import type { NativeRequestContext } from '../../../../src/jqtools/evaluate/runtimeState.ts';
 
 /**
  * The library set a card gets. `DEFAULT_BUILTIN_LIBRARIES` is the array the
@@ -105,6 +107,18 @@ export interface CoverageCase extends Expectation {
    */
   readableSyntax?: boolean;
   /**
+   * Resolve this case against the mutation library set, computed when the
+   * case runs. Set it through {@link inMutationLibraries} rather than by
+   * hand. Takes precedence over `libraries`.
+   */
+  mutationLibraries?: true;
+  /**
+   * Request context to scope around the evaluation, for the builtins that
+   * read one. A case that omits it evaluates outside every scope, which is
+   * how the no-context error path is reached.
+   */
+  context?: NativeRequestContext;
+  /**
    * States that this function is known not to behave as the case asserts,
    * and why. The assertion stays as the correct answer — Excel's, jq's, or
    * validator.js's — and the suite inverts it: the case must keep failing
@@ -144,4 +158,28 @@ export const AUTHORIZATION_LIBRARIES: BuiltinLibraryName[] = [
 /** Marks a case as reaching the authorization surface, which only that set exposes. */
 export function inAuthorizationLibraries(entry: CoverageCase): CoverageCase {
   return { libraries: AUTHORIZATION_LIBRARIES, ...entry };
+}
+
+/**
+ * The libraries a mutation program resolves against — the card set plus the
+ * request-context builtins the mutation dialect adds — derived through the
+ * same function `prepareBxlMutation` calls.
+ *
+ * Computed on each call rather than held in a constant. `CARD_LIBRARIES`
+ * aliases the array `loadAllFormulaExtensions` appends the lazy families to,
+ * so a set materialized while this module loads would be a snapshot from
+ * before that call and would claim mutation programs cannot reach the
+ * financial and statistical families. Every caller here runs after the load.
+ */
+export function mutationLibraries(): BuiltinLibraryName[] {
+  return mutationBuiltinLibraries(CARD_LIBRARIES);
+}
+
+/**
+ * Marks a case as reaching the request-context builtins. The set is resolved
+ * when the case runs, not when the table is built — the tables are
+ * constructed at module load, before the lazy families register.
+ */
+export function inMutationLibraries(entry: CoverageCase): CoverageCase {
+  return { ...entry, mutationLibraries: true };
 }

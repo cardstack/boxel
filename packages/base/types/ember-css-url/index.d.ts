@@ -1,5 +1,5 @@
 declare module 'ember-css-url' {
-  import { HelperLike } from '@glint/template';
+  import type { HelperLike } from '@glint/template';
   import type { SafeString } from '@ember/template';
 
   interface Signature {

@@ -45,6 +45,7 @@ const EXTENSION_BY_CONTENT_TYPE: Record<string, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
   'image/webp': 'webp',
+  'application/pdf': 'pdf',
 };
 
 export interface CaptureManifestEntry {

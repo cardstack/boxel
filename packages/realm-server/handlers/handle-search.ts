@@ -18,10 +18,21 @@ import {
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   RequestTimings,
   emitSearchTiming,
+  describeSearchShape,
+  emitSearchShape,
+  LinkShapePolicy,
+  requestedLinkShape,
+  rowClassForPageSize,
+  X_BOXEL_LINK_SHAPE_HEADER,
+  type LinkShapeDecision,
   type Query,
+  type SearchShapeCacheOutcome,
+  type SearchShapeDescriptor,
+  type SearchShapeLinkMode,
 } from '@cardstack/runtime-common';
 import {
   fetchRequestFromContext,
+  releaseSearchAdmission,
   sendResponseForBadRequest,
   setContextResponse,
 } from '../middleware/index.ts';
@@ -32,12 +43,31 @@ import {
 import { resolveRealmsForFederatedRequest } from '../lib/realm-routing.ts';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 import type { JobScopedSearchCache } from '../job-scoped-search-cache.ts';
+import { LiveSearchCache } from '../live-search-cache.ts';
+import {
+  resolveSearchGenerations,
+  warmSearchTypeWatermarkKeys,
+} from '../search-type-watermarks.ts';
+import type {
+  CodeRef,
+  DBAdapter,
+  Realm,
+  VirtualNetwork,
+} from '@cardstack/runtime-common';
 import {
   PRERENDER_JOB_ID_HEADER,
   PRERENDER_JOB_PRIORITY_HEADER,
   sanitizeJobPriorityHeader,
   sanitizePrerenderJobId,
 } from '../prerender/prerender-constants.ts';
+
+// Response header naming how the live-search cache satisfied a request:
+// `miss` (fresh compute), `join` (awaited an identical in-flight compute), or
+// `hit` (served from the TTL window). Diagnostic only — the body is
+// byte-identical across the three. Added to the CORS `exposeHeaders` list
+// (server.ts) so a cross-origin browser caller can read it, not just
+// server-side supertest/curl.
+export const LIVE_SEARCH_CACHE_HEADER = 'x-boxel-live-search-cache';
 
 // The federated search: the entry wire model over every requested
 // realm. Parses the entry-rooted query (the `item.` membership query,
@@ -50,10 +80,39 @@ import {
 export default function handleSearch(opts: {
   reconciler: RealmRegistryReconciler;
   searchCache?: JobScopedSearchCache;
+  // Reads each searched realm's generation fingerprints (the freshness signal
+  // the live-search cache keys on). Required — every route wiring passes it.
+  dbAdapter: DBAdapter;
+  // Resolves a query's type anchors to the `realm_type_generations` keys the
+  // live-search cache key is scoped by. The process-wide network every realm
+  // is mounted on, so a module named by prefix, real URL or virtual alias
+  // normalizes to the one spelling the indexer stamps.
+  virtualNetwork: VirtualNetwork;
+  // Injectable per test; when unset the handler builds one with production
+  // defaults. A test supplies a `ttlMs: 0` cache (coalescing on, retention
+  // off) to make two sequential callers each compute.
+  liveSearchCache?: LiveSearchCache;
+  // Decides how much of each result's link graph the response carries. The
+  // same policy instance the realms are constructed with, since the fan-out
+  // builds its own opts rather than reading them off a realm — and since the
+  // level is held per realm, sharing the instance is what keeps a federated
+  // search and that realm's own routes on one answer rather than two
+  // independently drifting ladders.
+  linkShapePolicy?: LinkShapePolicy;
 }): (ctxt: Koa.Context) => Promise<void> {
-  let { reconciler, searchCache } = opts;
+  let { reconciler, searchCache, dbAdapter, virtualNetwork } = opts;
+  let linkShapePolicy = opts.linkShapePolicy ?? LinkShapePolicy.pinned('full');
+  let liveSearchCache = opts.liveSearchCache ?? new LiveSearchCache();
   return async function (ctxt: Koa.Context) {
     let handlerStart = Date.now();
+    // Slots the query-shape line is assembled from. `shape` is filled in as
+    // soon as the query parses — a request that never gets that far has no
+    // shape to report — and the rest are stamped by whichever path answers.
+    let shape: SearchShapeDescriptor | undefined;
+    let cacheOutcome: SearchShapeCacheOutcome = 'none';
+    let resultCount: number | null = null;
+    let resultTotal: number | null = null;
+    let resultIncomplete: boolean | null = null;
     let loggingCorrelationId = sanitizeLoggingCorrelationId(
       ctxt.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
     );
@@ -95,6 +154,11 @@ export default function handleSearch(opts: {
     // assembly pass entirely: the host re-resolves every result from its raw
     // card+source file, so the transitive `included[]` expansion is
     // throwaway work in this path. Same gating as `cacheOnlyDefinitions`.
+    //
+    // This is also what keeps the assembled-resource budget off a render's
+    // search: the pass the budget bounds does not run at all here, so there is
+    // nothing to exempt. The budget's exemption is carried by the routes that
+    // do run the pass during a render — the card+html entry leg.
     let omitIncluded = cacheOnlyDefinitions;
     let jobPriority = sanitizeJobPriorityHeader(
       ctxt.get(PRERENDER_JOB_PRIORITY_HEADER),
@@ -102,15 +166,6 @@ export default function handleSearch(opts: {
     let prerenderJobId = sanitizePrerenderJobId(
       ctxt.get(PRERENDER_JOB_ID_HEADER),
     );
-    let searchOpts: {
-      cacheOnlyDefinitions?: true;
-      omitIncluded?: true;
-      priority?: number;
-    } = {};
-    if (cacheOnlyDefinitions) searchOpts.cacheOnlyDefinitions = true;
-    if (omitIncluded) searchOpts.omitIncluded = true;
-    if (jobPriority !== null) searchOpts.priority = jobPriority;
-
     // Two bounds are enforced server-side on the live item leg (never during
     // prerender, never on the prerendered-HTML leg): a hard page-size ceiling
     // (applied just below) and the wall-clock time budget (further down). Both
@@ -130,6 +185,36 @@ export default function handleSearch(opts: {
     if (itemLegBounded) {
       parsed.itemQuery = applyServerSearchPageBound(parsed.itemQuery);
     }
+
+    // How much of each result's link graph this response carries. Decided
+    // after the page clamp above, since the clamped page is the only bound on
+    // this search's result count and the cost of a closure scales with it —
+    // and decided before the cache key below, which folds the served mode
+    // because the two modes are two different response bodies.
+    //
+    // A prerender is already asking for less than either shape and never
+    // reaches the policy; its `linkMode` stays `prerender` and it reports no
+    // decision inputs, because none were consulted.
+    let linkShapeDecision: LinkShapeDecision | null = cacheOnlyDefinitions
+      ? null
+      : linkShapePolicy.decideAcross({
+          realms: realmList,
+          rowClass: rowClassForPageSize(
+            parsed.itemQuery.page?.size as number | undefined,
+          ),
+          requested: requestedLinkShape(ctxt.get(X_BOXEL_LINK_SHAPE_HEADER)),
+        });
+    let resolveLinksOnly = linkShapeDecision?.mode === 'links-only';
+    let searchOpts: {
+      cacheOnlyDefinitions?: true;
+      omitIncluded?: true;
+      resolveLinksOnly?: true;
+      priority?: number;
+    } = {};
+    if (cacheOnlyDefinitions) searchOpts.cacheOnlyDefinitions = true;
+    if (omitIncluded) searchOpts.omitIncluded = true;
+    if (resolveLinksOnly) searchOpts.resolveLinksOnly = true;
+    if (jobPriority !== null) searchOpts.priority = jobPriority;
 
     // The inner cache key: the membership query is the key's `query` member
     // (canonicalized by the cache), and every other body-changing request
@@ -173,6 +258,38 @@ export default function handleSearch(opts: {
     let consumingRealm = sanitizeConsumingRealmHeader(
       ctxt.get(X_BOXEL_CONSUMING_REALM_HEADER),
     );
+
+    // Built from the query the search will actually run — the item-leg page
+    // ceiling above has already been applied — so the reported page size is
+    // the one the index saw, not the one the caller asked for. The link mode
+    // travels with it because the same query costs differently in each, and no
+    // header on the request is a reliable stand-in: `x-boxel-during-prerender`
+    // is raised by the module, file-extract and command-runner routes too,
+    // while the job and consuming-realm headers ride only the render route's
+    // visit.
+    let linkMode: SearchShapeLinkMode = cacheOnlyDefinitions
+      ? 'prerender'
+      : resolveLinksOnly
+        ? 'links-only'
+        : 'full';
+    shape = describeSearchShape({
+      query: parsed,
+      realms: realmList,
+      linkMode,
+      ...(linkShapeDecision
+        ? {
+            requestedLinkMode: linkShapeDecision.requested,
+            linkShapeLoad: linkShapeDecision.load,
+            linkShapeLevel: linkShapeDecision.level,
+            linkShapeRowClass: linkShapeDecision.rowClass,
+          }
+        : {}),
+      correlationId: loggingCorrelationId,
+      jobId: prerenderJobId,
+      consumingRealm,
+      jobPriority,
+    });
+
     // Lazy-mount inside runSearch so cache hits (304 / cached body) skip the
     // lazy-mount work entirely.
     let runSearch = async () => {
@@ -191,6 +308,16 @@ export default function handleSearch(opts: {
         // If the budget already fired, skip stringifying a document we're about
         // to discard (the time-budget race has already resolved with the 408).
         signal?.throwIfAborted();
+        // Counted here rather than off the response because only this path
+        // holds a document: a cache hit, a join and a 304 all answer from a
+        // body another request computed, and they report no counts at all
+        // rather than re-parsing one to invent them. An incomplete merge
+        // reports no total either — it sums only the realms that answered, so
+        // publishing it would claim a number over the rows whose absence made
+        // it unknowable.
+        resultCount = doc.data?.length ?? 0;
+        resultIncomplete = doc.meta.incomplete === true;
+        resultTotal = resultIncomplete ? null : (doc.meta.page?.total ?? null);
         // Serialize compact: an entry doc can run to many MB, so indentation
         // whitespace is pure wire overhead the consumer parses straight back off.
         let stringify = async () => JSON.stringify(doc);
@@ -203,16 +330,32 @@ export default function handleSearch(opts: {
       return itemLegBounded ? runWithSearchTimeBudget(doRun) : doRun();
     };
 
-    let emitTimeline = () => {
-      if (!timings || loggingCorrelationId === null) {
-        return;
+    // Called once by whichever path answers the request — a fresh compute, any
+    // of the cache outcomes, a 304, the time-budget cutoff, or a throw. The
+    // stage timeline rides the caller's correlation id and so is emitted only
+    // for an instrumented request; the query-shape line is emitted for every
+    // request that got far enough to have a shape, which is what makes a load
+    // event replayable from logs alone.
+    let emitTelemetry = (override?: { status?: number }) => {
+      if (timings && loggingCorrelationId !== null) {
+        emitSearchTiming(
+          `corr=${loggingCorrelationId}` +
+            (prerenderJobId ? ` job=${prerenderJobId}` : '') +
+            ` handler=${Date.now() - handlerStart}ms ` +
+            timings.toLogFragment(),
+        );
       }
-      emitSearchTiming(
-        `corr=${loggingCorrelationId}` +
-          (prerenderJobId ? ` job=${prerenderJobId}` : '') +
-          ` handler=${Date.now() - handlerStart}ms ` +
-          timings.toLogFragment(),
-      );
+      if (shape) {
+        emitSearchShape({
+          ...shape,
+          results: resultCount,
+          total: resultTotal,
+          incomplete: resultIncomplete,
+          cache: cacheOutcome,
+          status: override?.status ?? ctxt.status,
+          totalMs: Date.now() - handlerStart,
+        });
+      }
     };
 
     let jobId = searchCache ? prerenderJobId : null;
@@ -225,7 +368,29 @@ export default function handleSearch(opts: {
         query: parsed.itemQuery,
         opts: cacheKeyOpts,
         runSearch,
-        emitTimeline,
+        emitTelemetry,
+        recordCacheOutcome: (outcome) => {
+          cacheOutcome = outcome;
+        },
+        liveSearch: {
+          cache: liveSearchCache,
+          dbAdapter,
+          virtualNetwork,
+          typeAnchors: parsed.typeAnchors,
+          // Only realms this process already holds. Resolving an anchor's
+          // canonical spelling must never be the thing that forces a mount —
+          // this request may well be a cache hit, which skips mounting
+          // entirely.
+          mountedRealm: () => {
+            for (let url of realmList) {
+              let realm = reconciler.mounted.get(url);
+              if (realm) {
+                return realm;
+              }
+            }
+            return undefined;
+          },
+        },
       });
     } catch (e) {
       // The per-request time budget fired inside `runSearch`. A bounded search
@@ -236,9 +401,12 @@ export default function handleSearch(opts: {
           ctxt,
           buildSearchErrorResponse(e.message, e.status),
         );
-        emitTimeline();
+        emitTelemetry();
         return;
       }
+      // Koa answers an escaping throw with a 500 once the handler unwinds, so
+      // report that rather than the status the context is still carrying.
+      emitTelemetry({ status: 500 });
       throw e;
     }
   };
@@ -281,11 +449,22 @@ async function respondWithJobScopedSearchCache(
     query: Query;
     opts: unknown;
     runSearch: () => Promise<string>;
-    emitTimeline?: () => void;
+    emitTelemetry?: () => void;
+    // Which cache, if any, answered — reported before the response is sent so
+    // the telemetry emitted alongside it carries the outcome.
+    recordCacheOutcome?: (outcome: SearchShapeCacheOutcome) => void;
+    liveSearch?: {
+      cache: LiveSearchCache;
+      dbAdapter: DBAdapter;
+      virtualNetwork: VirtualNetwork;
+      typeAnchors: CodeRef[] | undefined;
+      mountedRealm: () => Realm | undefined;
+    };
   },
 ): Promise<void> {
   let { searchCache, jobId, consumingRealm, realms, query, runSearch } = args;
-  let emitTimeline = args.emitTimeline ?? (() => {});
+  let emitTelemetry = args.emitTelemetry ?? (() => {});
+  let recordCacheOutcome = args.recordCacheOutcome ?? (() => {});
   let cacheable = searchCache && jobId && consumingRealm;
 
   if (cacheable) {
@@ -317,7 +496,8 @@ async function respondWithJobScopedSearchCache(
       if (cached !== undefined) {
         ctxt.status = 304;
         ctxt.set('ETag', expectedEtag);
-        emitTimeline();
+        recordCacheOutcome('not-modified');
+        emitTelemetry();
         return;
       }
     }
@@ -327,6 +507,8 @@ async function respondWithJobScopedSearchCache(
       query,
       opts: keyOpts,
       populate: runSearch,
+      onOutcome: (decided) =>
+        recordCacheOutcome(decided === 'hit' ? 'job-hit' : 'job-miss'),
     });
     await setContextResponse(
       ctxt,
@@ -337,7 +519,65 @@ async function respondWithJobScopedSearchCache(
         },
       }),
     );
-    emitTimeline();
+    emitTelemetry();
+    return;
+  }
+
+  // The live (non-indexer) path: coalesce identical concurrent requests and
+  // serve a short-TTL cache. The key folds in each realm's generation
+  // fingerprints, scoped to the types this query's filter is anchored on — so
+  // a swap on one of those types changes the key and the next request
+  // recomputes, while a swap on a type the query cannot match leaves the entry
+  // reachable. A query with no readable anchors, and one whose anchors have
+  // not been resolved to their index keys yet, take the realm-wide
+  // generation, which every index batch advances. See
+  // `resolveSearchGenerations` for what the scoped key does and does not
+  // cover; for a change outside the anchors the TTL is the staleness bound
+  // rather than merely a retention bound.
+  // Authorization is realm-scoped and was validated for this exact realm list
+  // by `multiRealmAuthorization` before the handler ran, so a body computed
+  // for one caller is byte-identical to what any other authorized caller
+  // would compute.
+  if (args.liveSearch) {
+    // Off the critical path: resolves the anchors whose keys are cold or aged
+    // out so a later request is scoped, and never blocks this one.
+    warmSearchTypeWatermarkKeys({
+      anchors: args.liveSearch.typeAnchors,
+      virtualNetwork: args.liveSearch.virtualNetwork,
+      mountedRealm: args.liveSearch.mountedRealm,
+    });
+    let generations = await resolveSearchGenerations(
+      args.liveSearch.dbAdapter,
+      realms,
+      args.liveSearch.typeAnchors,
+      args.liveSearch.virtualNetwork,
+    );
+    let { body, outcome } = await args.liveSearch.cache.getOrPopulate({
+      realms,
+      query,
+      opts: { ...(args.opts as Record<string, unknown>), generations },
+      populate: runSearch,
+      // A joiner or a hit holds no result document of its own, so it stops
+      // counting toward the search admission ceiling here rather than when
+      // its response ends; the ceiling is then a bound on concurrent
+      // computations, which is what holds the heap.
+      onOutcome: (decided) => {
+        recordCacheOutcome(decided);
+        if (decided !== 'miss') {
+          releaseSearchAdmission(ctxt);
+        }
+      },
+    });
+    // The body is a string the cache may be handing to many requests at once,
+    // so it goes to Koa as-is. Wrapping it in a `Response` would encode it into
+    // a stream that `setContextResponse` decodes back into a per-request copy;
+    // this way a joiner's or a hit's cost on the way out is Koa's own write of
+    // the shared string and nothing more.
+    ctxt.status = 200;
+    ctxt.set('content-type', SupportedMimeType.CardJson);
+    ctxt.set(LIVE_SEARCH_CACHE_HEADER, outcome);
+    ctxt.body = body;
+    emitTelemetry();
     return;
   }
 
@@ -348,5 +588,5 @@ async function respondWithJobScopedSearchCache(
       headers: { 'content-type': SupportedMimeType.CardJson },
     }),
   );
-  emitTimeline();
+  emitTelemetry();
 }

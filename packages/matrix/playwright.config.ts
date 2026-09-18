@@ -38,6 +38,18 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: 2,
+  // A ceiling on the whole run, below the shard job's own `timeout-minutes`.
+  // Which of the two expires first decides whether a wedged shard is
+  // diagnosable: reaching this one ends the run through Playwright, which
+  // writes its blob report and names what was still running, while reaching the
+  // job cap has GitHub kill the container with no report written at all.
+  //
+  // Per-test budgets cannot bound this on their own — the tail is tests times
+  // `retries` — so the two limits are set independently and this one is kept
+  // clear of the job cap by enough to cover the fixture boot ahead of the run
+  // and the artifact upload after it. Runs take a fraction of it; it exists for
+  // the run that does not.
+  globalTimeout: 25 * 60 * 1000,
   globalSetup: 'tests/global.setup.ts',
   // Without `--shard`, every shard's blob report would default to the same
   // `report.zip`, and the merge job downloads all of them into one directory.

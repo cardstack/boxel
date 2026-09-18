@@ -1028,6 +1028,25 @@ module(basename(import.meta.filename), function () {
         };
       }
 
+      // A render that failed for its own reasons and merely *mentions* a
+      // missing export among the console errors `RenderRunner` merged onto it.
+      function timeoutCarryingModuleError() {
+        return {
+          response: {
+            card: {
+              error: {
+                error: {
+                  message: 'Render timed out after 30000ms',
+                  additionalErrors: [{ message: MISSING_EXPORT }],
+                },
+              },
+            },
+          },
+          timings: timings(),
+          pool: poolMeta(),
+        };
+      }
+
       function rendered() {
         return {
           response: { card: { isolatedHTML: '<div>fresh</div>' } },
@@ -1042,6 +1061,12 @@ module(basename(import.meta.filename), function () {
         let samples = 0;
         return () => (++samples > 1 ? 'b778fe76' : 'babf3612');
       }
+
+      // The pool's own token, which these tests must also state: the predicate
+      // reads the warmed samples, so leaving them undefined makes the gate fire
+      // whatever the reported token does — and a test named for a moving token
+      // would pass identically with a steady one.
+      const POOL_ON_OUTGOING = () => 'babf3612';
 
       function visitRequest(
         request: SuperTest<Test>,
@@ -1079,6 +1104,7 @@ module(basename(import.meta.filename), function () {
         let built = buildPrerenderApp({
           serverURL: 'http://127.0.0.1:4222',
           getHostShellHash: shellThatMovesOnce(),
+          getWarmedHostShellHash: POOL_ON_OUTGOING,
           awaitHostShellRecycle: () =>
             recycleDeferred.promise.then(() => {
               recycleSettled = true;
@@ -1132,10 +1158,14 @@ module(basename(import.meta.filename), function () {
         await built.prerenderer.stop();
       });
 
-      test("a module failure under a steady shell is returned as the card's own", async function (assert) {
+      // What makes a module failure the card's own is not that nothing moved
+      // during the render — it is that the pool can be shown to have been on
+      // the current shell throughout. So this states both tokens.
+      test("a module failure on a pool that is current is returned as the card's own", async function (assert) {
         let built = buildPrerenderApp({
           serverURL: 'http://127.0.0.1:4222',
           getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'b778fe76',
         });
         let request: SuperTest<Test> = supertest(built.app.callback());
 
@@ -1160,10 +1190,408 @@ module(basename(import.meta.filename), function () {
         await built.prerenderer.stop();
       });
 
+      // A failure that survives the re-render is returned, whatever the pool
+      // did in between. Recovery here is exactly one extra render: the pool
+      // being behind is grounds for trying again, never grounds for this
+      // server to answer 5xx — the manager prunes a server that returns one,
+      // and its proxy loop walks on to prune the next, so a single visit can
+      // empty the registry.
+      test('a failure surviving the re-render is returned to the caller', async function (assert) {
+        // The pool is behind when the first render runs and current once the
+        // recycle resolves, which is what a working recycle looks like.
+        let warmed = 'babf3612';
+        let recycleDeferred = new Deferred<void>();
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => warmed,
+          awaitHostShellRecycle: () =>
+            recycleDeferred.promise.then(() => {
+              warmed = 'b778fe76';
+            }),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        let calls = 0;
+        let firstRenderEntered = new Deferred<void>();
+        (built.prerenderer as any).prerenderVisit = async () => {
+          if (++calls === 1) {
+            firstRenderEntered.fulfill();
+          }
+          // Both attempts fail the same way: the card really is broken.
+          return moduleFailure();
+        };
+
+        let resPromise = inFlight(() =>
+          visitRequest(request, `${realmURL.href}genuinely-broken`, authFor()),
+        );
+        await firstRenderEntered.promise;
+        recycleDeferred.fulfill();
+
+        let res = await resPromise;
+        assert.strictEqual(calls, 2, 'the re-render happened');
+        assert.strictEqual(
+          res.status,
+          201,
+          'answered with the failure rather than a 5xx that would prune the fleet',
+        );
+        assert.strictEqual(
+          res.body.data.attributes.card.error.error.message,
+          MISSING_EXPORT,
+          "the caller gets the card's own failure to persist",
+        );
+        // The stamped tokens have to describe the render the response came
+        // from. Both attempts failed identically, so only the pool
+        // distinguishes them: the discarded one ran behind, the retry ran
+        // current. Reporting the discarded attempt's pool here would say this
+        // failure came from an outgoing bundle when it did not — and a later
+        // persistence decision reading that would suppress a row for a card
+        // that really is broken.
+        let stamped = res.body.data.attributes.meta.diagnostics;
+        assert.strictEqual(
+          stamped.warmedHostShellHash,
+          'b778fe76',
+          'the retry started on the recycled pool, not the outgoing one',
+        );
+        assert.strictEqual(
+          stamped.warmedHostShellHashAtCompletion,
+          'b778fe76',
+          'and finished on it',
+        );
+        assert.strictEqual(
+          stamped.hostShellHashAtCompletion,
+          'b778fe76',
+          'so the warmed pair agrees with the reported pair — one render, four consistent values',
+        );
+        await built.prerenderer.stop();
+      });
+
+      // The verdict the write site acts on, in both directions. Suppressing a
+      // row is only safe if the mark is absent whenever the failure might be
+      // the card's — so these two cases differ in nothing but whether the pool
+      // ever reached the shell being served.
+      test('a pool that never reaches the current shell marks the failure unattributable', async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'babf3612',
+          awaitHostShellRecycle: () => Promise.resolve(),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        let calls = 0;
+        (built.prerenderer as any).prerenderVisit = async () => {
+          calls++;
+          return moduleFailure();
+        };
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}pool-never-current`,
+          authFor(),
+        );
+        assert.strictEqual(calls, 2, 'one re-render, and no more');
+        assert.strictEqual(res.status, 201, 'the failure is still returned');
+        assert.deepEqual(
+          res.body.data.attributes.meta.diagnostics.staleShellFailure,
+          ['instance'],
+          'marked, and scoped to the row that actually failed this way',
+        );
+      });
+
+      test('a genuine break on a current pool is not marked', async function (assert) {
+        // The pool is behind for the first render and current after the
+        // recycle, so the retry runs on the shell being served and its failure
+        // is the card's. Nothing here may be withheld.
+        let warmed = 'babf3612';
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => warmed,
+          awaitHostShellRecycle: async () => {
+            warmed = 'b778fe76';
+          },
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        let calls = 0;
+        (built.prerenderer as any).prerenderVisit = async () => {
+          calls++;
+          return moduleFailure();
+        };
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}genuinely-broken-import`,
+          authFor(),
+        );
+        assert.strictEqual(calls, 2, 'the re-render happened');
+        assert.strictEqual(res.status, 201);
+        assert.notOk(
+          res.body.data.attributes.meta.diagnostics.staleShellFailure,
+          'unmarked, so the error persists and the break stays visible',
+        );
+        assert.strictEqual(
+          res.body.data.attributes.card.error.error.message,
+          MISSING_EXPORT,
+          "and it is the card's own failure that is returned",
+        );
+      });
+
+      // The scoping the review asked for. One visit produces the instance and
+      // file rows independently: here the card render hit the stale bundle
+      // while the file extraction failed for a reason of its own. A verdict
+      // naming the response rather than the rows would withhold both, hiding
+      // the file's genuine failure.
+      test('a verdict names only the rows that failed on the stale bundle', async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'babf3612',
+          awaitHostShellRecycle: () => Promise.resolve(),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        (built.prerenderer as any).prerenderVisit = async () => ({
+          response: {
+            card: { error: { error: { message: MISSING_EXPORT } } },
+            fileExtract: {
+              error: { error: { message: 'Unexpected end of JSON input' } },
+            },
+          },
+          timings: timings(),
+          pool: poolMeta(),
+        });
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}two-failures`,
+          authFor(),
+        );
+        assert.deepEqual(
+          res.body.data.attributes.meta.diagnostics.staleShellFailure,
+          ['instance'],
+          "only the card's row is withheld; the file's own failure stays visible",
+        );
+      });
+
+      // The narrowing that separates driving a re-render from withholding a
+      // row. A timeout whose console happens to carry a missing-export line is
+      // worth one more render — the broad test allows that — but it is not
+      // grounds to withhold the timeout the render actually produced. Using the
+      // broad predicate for the mark makes this fail.
+      test('a failure that merely mentions a missing export is not marked', async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'babf3612',
+          awaitHostShellRecycle: () => Promise.resolve(),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        let calls = 0;
+        (built.prerenderer as any).prerenderVisit = async () => {
+          calls++;
+          return timeoutCarryingModuleError();
+        };
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}timed-out-render`,
+          authFor(),
+        );
+        assert.strictEqual(
+          calls,
+          2,
+          'the broad test still drove a re-render, which is cheap and fine',
+        );
+        assert.notOk(
+          res.body.data.attributes.meta.diagnostics.staleShellFailure,
+          'but the timeout is not withheld: the missing export was not the failure',
+        );
+        assert.strictEqual(
+          res.body.data.attributes.card.error.error.message,
+          'Render timed out after 30000ms',
+          'and the real failure is what reaches the caller',
+        );
+      });
+
+      // The gateway-failure verdict, on the same write-site contract as the
+      // stale-shell one but reached a different way: it keys on the
+      // `gatewayFailure` marker the fetch boundary stamps, not on the error
+      // status. A render fetched the card's document through the balancer, got
+      // a 502, and had that latched as the card's verdict; the marker is what
+      // tells that transient network event apart from a genuinely broken card.
+      test('a gateway-marked card error marks the failure unattributable', async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'b778fe76',
+          awaitHostShellRecycle: () => Promise.resolve(),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        (built.prerenderer as any).prerenderVisit = async () => ({
+          response: {
+            card: {
+              error: {
+                error: {
+                  message: 'Gateway or network failure',
+                  status: 502,
+                  gatewayFailure: true,
+                },
+              },
+            },
+          },
+          timings: timings(),
+          pool: poolMeta(),
+        });
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}gateway-502`,
+          authFor(),
+        );
+        assert.strictEqual(res.status, 201, 'the failure is still returned');
+        assert.deepEqual(
+          res.body.data.attributes.meta.diagnostics.gatewayFailure,
+          ['instance'],
+          'marked, and scoped to the row whose fetch hit the balancer',
+        );
+        await built.prerenderer.stop();
+      });
+
+      test('a gateway failure withholds only its row, not one that failed for its own reasons', async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'b778fe76',
+          awaitHostShellRecycle: () => Promise.resolve(),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        (built.prerenderer as any).prerenderVisit = async () => ({
+          response: {
+            card: {
+              error: {
+                error: {
+                  message: 'Gateway or network failure',
+                  status: 503,
+                  gatewayFailure: true,
+                },
+              },
+            },
+            fileExtract: {
+              error: {
+                error: { message: 'Unexpected end of JSON input', status: 500 },
+              },
+            },
+          },
+          timings: timings(),
+          pool: poolMeta(),
+        });
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}gateway-and-file`,
+          authFor(),
+        );
+        assert.deepEqual(
+          res.body.data.attributes.meta.diagnostics.gatewayFailure,
+          ['instance'],
+          "only the card's row is withheld; the file's own 500 stays visible",
+        );
+        await built.prerenderer.stop();
+      });
+
+      test('a genuine card error carrying no gateway marker is not marked', async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'b778fe76',
+          awaitHostShellRecycle: () => Promise.resolve(),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        (built.prerenderer as any).prerenderVisit = async () => ({
+          response: {
+            card: {
+              error: {
+                error: { message: 'the card is genuinely broken', status: 500 },
+              },
+            },
+          },
+          timings: timings(),
+          pool: poolMeta(),
+        });
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}genuine-500`,
+          authFor(),
+        );
+        assert.notOk(
+          res.body.data.attributes.meta.diagnostics.gatewayFailure,
+          'a 500 is the card, not the network — the break stays visible',
+        );
+        await built.prerenderer.stop();
+      });
+
+      // The status alone would misclassify this: a render timeout is a 504,
+      // carrying the same number a balancer idle-timeout does. It comes from the
+      // card render — a template or query fan-out too slow to finish — and never
+      // gets the `gatewayFailure` marker, so it must not be withheld. Withholding
+      // it would drop exactly the cards that most need to stay visible off every
+      // `has_error`-driven surface.
+      test('a render-timeout 504 is not marked as a gateway failure', async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+          getWarmedHostShellHash: () => 'b778fe76',
+          awaitHostShellRecycle: () => Promise.resolve(),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        (built.prerenderer as any).prerenderVisit = async () => ({
+          response: {
+            card: {
+              error: {
+                error: {
+                  message: 'Render timeout',
+                  title: 'Render timeout',
+                  status: 504,
+                },
+              },
+            },
+            pageUnusableError: {
+              error: {
+                message: 'Render timeout',
+                title: 'Render timeout',
+                status: 504,
+              },
+            },
+          },
+          timings: timings(),
+          pool: poolMeta(),
+        });
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}render-timeout`,
+          authFor(),
+        );
+        assert.notOk(
+          res.body.data.attributes.meta.diagnostics.gatewayFailure,
+          'a 504 the card render produced stays visible — only a marked fetch failure is withheld',
+        );
+        await built.prerenderer.stop();
+      });
+
       test('a rejecting re-render answers 500 so the visit is retried elsewhere', async function (assert) {
         let built = buildPrerenderApp({
           serverURL: 'http://127.0.0.1:4222',
           getHostShellHash: shellThatMovesOnce(),
+          getWarmedHostShellHash: POOL_ON_OUTGOING,
         });
         let request: SuperTest<Test> = supertest(built.app.callback());
 
@@ -1202,6 +1630,7 @@ module(basename(import.meta.filename), function () {
           isDraining: () => localDraining,
           drainingPromise: drainingDeferred.promise,
           getHostShellHash: shellThatMovesOnce(),
+          getWarmedHostShellHash: POOL_ON_OUTGOING,
           awaitHostShellRecycle: () => {
             recycleWaitEntered.fulfill();
             // Never settles, so the drain is guaranteed to win the race.

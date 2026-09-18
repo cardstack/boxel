@@ -995,15 +995,18 @@ export class FontMetadataField extends FieldDef {
           <div class='row'><dt>Glyphs</dt><dd>{{@model.glyphCount}}</dd></div>
         {{/if}}
         {{#if this.technicalSummary}}
-          <div class='row'><dt>Outline</dt><dd>{{this.technicalSummary}}</dd></div>
+          <div class='row'><dt>Outline</dt><dd
+            >{{this.technicalSummary}}</dd></div>
         {{/if}}
         {{#if @model.axes.length}}
           <div class='row'><dt>Axes</dt><dd class='list'>{{#each
-                @model.axes as |axis|
+                @model.axes
+                as |axis|
               }}<span>{{axis}}</span>{{/each}}</dd></div>
         {{/if}}
         {{#if @model.postscriptName}}
-          <div class='row'><dt>PostScript</dt><dd>{{@model.postscriptName}}</dd></div>
+          <div class='row'><dt>PostScript</dt><dd
+            >{{@model.postscriptName}}</dd></div>
         {{/if}}
         {{#if this.vendor}}
           <div class='row'><dt>Vendor</dt><dd>{{this.vendor}}</dd></div>
@@ -1371,7 +1374,8 @@ export class DocumentInfoField extends FieldDef {
           <div class='row'><dt>Made with</dt><dd>{{this.madeWith}}</dd></div>
         {{/if}}
         {{#if @model.pdfVersion}}
-          <div class='row'><dt>PDF version</dt><dd>{{@model.pdfVersion}}</dd></div>
+          <div class='row'><dt>PDF version</dt><dd
+            >{{@model.pdfVersion}}</dd></div>
         {{/if}}
         {{#if @model.encrypted}}
           <div class='row'><dt>Security</dt><dd>Encrypted</dd></div>
@@ -1491,7 +1495,8 @@ export class OfficeMetadataField extends FieldDef {
         {{/if}}
         {{#if @model.sheetNames.length}}
           <div class='row'><dt>Sheets</dt><dd class='list'>{{#each
-                @model.sheetNames as |sheet|
+                @model.sheetNames
+                as |sheet|
               }}<span>{{sheet}}</span>{{/each}}</dd></div>
         {{/if}}
         {{#if @model.lastModifiedBy}}

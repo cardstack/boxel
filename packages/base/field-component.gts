@@ -1,3 +1,4 @@
+import type { CardContext, FieldFormats, CardCrudFunctions } from './card-api';
 import {
   type Box,
   type Field,
@@ -8,12 +9,10 @@ import {
   type BaseDefComponent,
   type BaseDefConstructor,
   type Theme,
-  CardContext,
   formats,
-  FieldFormats,
-  CardCrudFunctions,
 } from './card-api';
 import { isCard, isCompoundField } from './field-support';
+import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import {
   CardContextName,
   DefaultFormatsContextName,
@@ -23,7 +22,6 @@ import {
   isCardInstance,
   type CodeRef,
   type Permissions,
-  ResolvedCodeRef,
   CardCrudFunctionsContextName,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
@@ -549,6 +547,9 @@ export function getBoxComponent(
 
         .field-component-card.atom-format.display-container-false {
           display: contents;
+          /* no box of its own to paint, so the text must follow the surface
+             it sits on rather than the container's --foreground */
+          color: inherit;
         }
         .field-component-card.atom-format.display-container-true {
           display: inline-block;

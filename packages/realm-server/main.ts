@@ -3,6 +3,7 @@ import './setup-logger.ts'; // This should be first
 import './lib/wtfnode-on-signal.ts';
 import { writeSync } from 'node:fs';
 import {
+  CardDocumentCache,
   Realm,
   VirtualNetwork,
   isUrlLike,
@@ -46,6 +47,7 @@ import { ModuleCacheCoordinator } from './lib/module-cache-coordination.ts';
 import { JobsFinishedListener } from './lib/jobs-finished-listener.ts';
 import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import { startHealthSampler } from './health-sampler.ts';
+import { buildLinkShapePolicy } from './search-inflight.ts';
 import { startEventLoopHeartbeat } from './liveness/event-loop-heartbeat.ts';
 import { startLivenessResponder } from './liveness/index.ts';
 import { resolveFullIndexOnStartup } from './lib/full-index-on-startup.ts';
@@ -182,6 +184,11 @@ const SKIP_BOOT_INDEX = process.env.REALM_SERVER_SKIP_BOOT_INDEX === 'true';
 // 1-prerender-per-fleet on cold fan-out.
 const PRERENDER_COALESCE_ACROSS_PROCESSES =
   process.env.PRERENDER_COALESCE_ACROSS_PROCESSES === 'true';
+
+// How much of a card's link graph each live read carries, chosen per realm
+// from the load this process is under. The construction, and why it is not an
+// operator setting, live beside the gate it reads in `search-inflight.ts`.
+const linkShapePolicy = buildLinkShapePolicy();
 
 let {
   port,
@@ -470,10 +477,11 @@ const reportHostShellToManager = async () => {
   // `jobs_finished` NOTIFY evicts the same entries the handlers populate.
   let searchCache = new JobScopedSearchCache(dbAdapter);
   searchCache.startJanitor();
-  // Periodic event-loop-lag + in-flight-search sampler. Emits a
-  // `realm:health` line only during saturation windows, so a stalled
-  // `_search` can be checked against whether the process's event loop was
-  // starved at the time.
+  // Periodic event-loop-lag + in-flight-search + heap sampler. Emits a
+  // `realm:health` line every interval, so a stalled `_search` can be checked
+  // against whether the process's event loop was starved at the time, and heap
+  // growth toward the OOM limit is visible (and alertable) on a calm process
+  // before a search storm — not only inside saturation windows.
   let stopHealthSampler = startHealthSampler();
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
@@ -523,6 +531,12 @@ const reportHostShellToManager = async () => {
   // One store shared by every realm this server mounts; the `_screenshot/`
   // route serves every request as an uncaptured miss when none is configured.
   let mediaCacheAdapter = createMediaCacheAdapterFromEnv();
+
+  // One card+json response cache for the whole process, shared across every
+  // realm it mounts: entries are keyed on absolute card URLs, and the byte
+  // cap is meant to bound this process's heap rather than each realm's share
+  // of it.
+  let cardDocumentCache = new CardDocumentCache();
 
   if (SKIP_MODULES_CACHE_CLEAR_ON_STARTUP) {
     log.info('Skipping modules cache clear on startup (opted out via env)');
@@ -636,6 +650,7 @@ const reportHostShellToManager = async () => {
               DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
           ),
           mediaCacheAdapter,
+          cardDocumentCache,
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
@@ -649,6 +664,7 @@ const reportHostShellToManager = async () => {
           ...(process.env.DISABLE_MODULE_CACHING === 'true'
             ? { disableModuleCaching: true }
             : {}),
+          linkShapePolicy,
         },
       );
       // Publish synchronously into realms[] + virtualNetwork. The
@@ -702,6 +718,7 @@ const reportHostShellToManager = async () => {
       : undefined,
     prerenderer,
     reportHostShell: reportHostShellToManager,
+    linkShapePolicy,
   });
 
   let httpServer = server.listen(port);

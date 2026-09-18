@@ -616,6 +616,31 @@ function materializeForField(
   return value;
 }
 
+/**
+ * Carry the links a write leaves alone from the value it replaces into the
+ * value replacing it.
+ *
+ * A contained value is rebuilt here as a fresh instance filled from what the
+ * Card stores, and a link is never stored — so a relationship the plan says
+ * this write does not touch has to be handed across from the value going out.
+ * What moves is the live Card the link points at, which is what the model
+ * holds at a relationship Field.
+ */
+function carryKeptLinks(
+  previous: unknown,
+  next: unknown,
+  keep: BxlMutationPath[] | undefined,
+): void {
+  if (!keep?.length || previous === undefined) return;
+  for (const path of keep) {
+    const holder = valueAt(next, path.slice(0, -1));
+    if (!holder || typeof holder !== 'object') continue;
+    const held = valueAt(previous, path);
+    (holder as Record<string | number, unknown>)[path[path.length - 1]!] =
+      Array.isArray(held) ? [...held] : held;
+  }
+}
+
 function setLive(root: object, path: BxlMutationPath, value: unknown): Undo {
   const { parent, key } = parentAt(root, path);
   const record = parent as Record<string | number, unknown>;
@@ -640,11 +665,18 @@ function applyIntent(
   switch (intent.op) {
     case 'set': {
       const target = fieldAtPath(card, intent.path, runtime);
-      return setLive(
-        card,
-        intent.path,
-        materializeForField(intent.after, target.field, runtime, target.item),
+      const next = materializeForField(
+        intent.after,
+        target.field,
+        runtime,
+        target.item,
       );
+      carryKeptLinks(
+        valueAt(card, intent.path),
+        next,
+        intent.keepRelationships,
+      );
+      return setLive(card, intent.path, next);
     }
     case 'copy': {
       const target = fieldAtPath(card, intent.path, runtime);

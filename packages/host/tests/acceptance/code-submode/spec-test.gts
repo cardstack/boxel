@@ -161,6 +161,22 @@ const specCardSource = `
   }
 `;
 
+const notesFileDefSource = `
+  import { TextFileDef } from '@cardstack/base/text-file-def';
+
+  export class NotesFileDef extends TextFileDef {
+    static displayName = 'Notes File';
+  }
+`;
+
+const attachmentFileDefSource = `
+  import { TextFileDef } from '@cardstack/base/text-file-def';
+
+  export class AttachmentFileDef extends TextFileDef {
+    static displayName = 'Attachment File';
+  }
+`;
+
 const primitiveFieldCardSource = `
   import {
     field,
@@ -320,6 +336,37 @@ module('Acceptance | Spec preview', function (hooks) {
           'quote-field.gts': quoteFieldCardSource,
           'primitive-field.gts': primitiveFieldCardSource,
           'polymorphic-field.gts': polymorphicFieldCardSource,
+          'notes-file-def.gts': notesFileDefSource,
+          'attachment-file-def.gts': attachmentFileDefSource,
+          'notes.txt': 'Hello from the test realm.',
+          'notes-file-def-entry.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'Notes File',
+                cardDescription: 'Spec for NotesFileDef',
+                specType: 'file',
+                ref: {
+                  module: `./notes-file-def`,
+                  name: 'NotesFileDef',
+                },
+              },
+              relationships: {
+                'fileExamples.0': {
+                  links: {
+                    self: `${testRealmURL}notes.txt`,
+                  },
+                  data: { type: 'file-meta', id: `${testRealmURL}notes.txt` },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealmRRI}spec`,
+                  name: 'Spec',
+                },
+              },
+            },
+          },
           'person-entry.json': {
             data: {
               type: 'card',
@@ -949,6 +996,53 @@ module('Acceptance | Spec preview', function (hooks) {
       .dom('[data-test-quote-field-embedded]')
       .containsText('Words build worlds');
   });
+  test('renders file examples in isolated spec view for a file definition', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}notes-file-def.gts`,
+    });
+    await click('[data-test-module-inspector-view="spec"]');
+    await click('[data-test-view-spec-instance]');
+
+    assert
+      .dom(
+        `[data-test-card="${testRealmURL}notes-file-def-entry"][data-test-card-format="isolated"]`,
+      )
+      .exists();
+    assert
+      .dom(
+        '[data-test-plural-view-field="fileExamples"] [data-test-plural-view-item="0"]',
+      )
+      .exists('the linked file renders as the example');
+    assert
+      .dom('[data-test-plural-view-field="linkedExamples"]')
+      .doesNotExist('a file spec does not offer the card example slot');
+  });
+
+  test('creating a spec for a file definition sets its type to file', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}attachment-file-def.gts`,
+    });
+    assert.dom('[data-test-create-spec-button]').exists();
+    await click('[data-test-create-spec-button]');
+    assert.dom('[data-test-module-inspector-view="spec"]').hasClass('active');
+    assert.dom('[data-test-exported-type]').hasText('file');
+    assert.dom('[data-test-exported-name]').hasText('AttachmentFileDef');
+    assert
+      .dom('[data-test-links-to-many="fileExamples"]')
+      .exists('the file example editor is offered');
+
+    await click('[data-test-links-to-many="fileExamples"] [data-test-add-new]');
+    assert
+      .dom('[data-test-choose-file-modal]')
+      .containsText(
+        'Choose Attachment File',
+        "the file chooser is narrowed to the spec's own file type",
+      );
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+
   test<TestContextWithSave>('have ability to create new spec instances', async function (assert) {
     await visitOperatorMode({
       submode: 'code',

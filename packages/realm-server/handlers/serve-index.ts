@@ -7,9 +7,14 @@ import type {
   Realm,
 } from '@cardstack/runtime-common';
 import {
+  CAPTURE_SERVING_PREFIX,
   PREFIX_REALMS,
+  RealmPaths,
+  SCOPED_CSS_SERVING_PREFIX,
   foreignQueryParams,
   hasExtension,
+  isCaptureServingPath,
+  isHashedScopedCSSRequest,
   isRedirectRoutingRule,
   logger,
   param,
@@ -78,6 +83,86 @@ const scopedCSSLog = logger('realm-server:scoped-css');
 function isDocumentEmbedRequest(ctxt: Koa.Context): boolean {
   let destination = ctxt.header['sec-fetch-dest'];
   return destination === 'embed' || destination === 'object';
+}
+
+// A capture URL — `{realm}_screenshot/…` — names bytes the realm serves (a
+// PNG or a PDF), never a card the app could open. A tab navigation to one (a
+// "Download PDF" link opened in a new tab) advertises text/html like any
+// navigation, and the shell would boot the app against a URL that is not a
+// card; the realm's own route serves the capture whatever the request
+// accepts. GET only, matching the realm's dispatch: it serves captures on GET
+// alone, so any other method falls through to the ordinary negotiation.
+//
+// The realm reserves `_screenshot/` only at its root (`isCaptureServingPath`
+// on the realm-local path), so a nested `folder/_screenshot/card` is an
+// ordinary card path that must keep opening the app. The path-segment test
+// is a cheap pre-filter; the realm lookup that decides runs only for URLs
+// that pass it.
+async function isCaptureServingRequest(
+  ctxt: Koa.Context,
+  requestURL: URL,
+  routingDeps: RealmRoutingDeps,
+): Promise<boolean> {
+  if (
+    ctxt.method !== 'GET' ||
+    !requestURL.pathname.includes(`/${CAPTURE_SERVING_PREFIX}`)
+  ) {
+    return false;
+  }
+  let realm = await findOrMountRealm(requestURL, routingDeps);
+  if (!realm) {
+    return false;
+  }
+  // Match on the request's protocol, as findOrMountRealm does: a realm
+  // registered as https is still this request's realm behind a
+  // TLS-terminating proxy that hands the server http.
+  let realmURL = new URL(realm.url);
+  realmURL.protocol = requestURL.protocol;
+  let paths = new RealmPaths(realmURL);
+  return (
+    paths.inRealm(requestURL) && isCaptureServingPath(paths.local(requestURL))
+  );
+}
+
+// A hashed scoped-CSS URL — `{realm}_scoped-css/<file>.md5-<hash>.glimmer-scoped.css`
+// — names a stylesheet module the realm serves, never a card the app could
+// open, so the shell has nothing to boot against it and the realm's route
+// answers whatever the request accepts. Falling through matters beyond that
+// tidiness: the realm serves this body with a year-long `immutable`
+// `Cache-Control` and no `Vary: Accept`, which is only sound while the URL
+// yields one body for every `Accept`. Were the shell to answer a `text/html`
+// request for one of these, the same URL would have two bodies and a browser
+// cache — which stores one variant per URL — could hold either for a year.
+//
+// The gate mirrors the realm's own dispatch: GET only, and the `_scoped-css/`
+// prefix as well as the hashed filename shape, so a realm file whose name
+// merely looks hashed keeps opening the app.
+async function isScopedCSSServingRequest(
+  ctxt: Koa.Context,
+  requestURL: URL,
+  routingDeps: RealmRoutingDeps,
+): Promise<boolean> {
+  if (
+    ctxt.method !== 'GET' ||
+    !requestURL.pathname.includes(`/${SCOPED_CSS_SERVING_PREFIX}`)
+  ) {
+    return false;
+  }
+  let realm = await findOrMountRealm(requestURL, routingDeps);
+  if (!realm) {
+    return false;
+  }
+  let realmURL = new URL(realm.url);
+  realmURL.protocol = requestURL.protocol;
+  let paths = new RealmPaths(realmURL);
+  if (!paths.inRealm(requestURL)) {
+    return false;
+  }
+  let localPath = paths.local(requestURL);
+  return (
+    localPath.startsWith(SCOPED_CSS_SERVING_PREFIX) &&
+    isHashedScopedCSSRequest(localPath)
+  );
 }
 
 export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
@@ -242,16 +327,6 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
   }
 
   let serveIndex = async (ctxt: Koa.Context, next: Koa.Next) => {
-    if (isDocumentEmbedRequest(ctxt)) {
-      // Fall through to the realm, which serves the file's own bytes and
-      // lets its content type decide what the embed renders.
-      return next();
-    }
-    let acceptHeader = ctxt.header.accept ?? '';
-    let lowerAcceptHeader = acceptHeader.toLowerCase();
-    let includesVndMimeType = lowerAcceptHeader.includes('application/vnd.');
-    let includesHtmlMimeType = lowerAcceptHeader.includes('text/html');
-
     // Derive the request URL via fullRequestURL so the protocol honors
     // `x-forwarded-proto` from a TLS-terminating proxy (ALB/Traefik), matching
     // the rest of the request pipeline. Building it from the raw `ctxt.protocol`
@@ -259,6 +334,21 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // probe (isIndexedCardInstance → hasExtensionlessSourceModule) throw on the
     // http-vs-https mismatch and mis-serve a module URL as the HTML page.
     let requestURL = fullRequestURL(ctxt);
+
+    if (
+      isDocumentEmbedRequest(ctxt) ||
+      (await isCaptureServingRequest(ctxt, requestURL, routingDeps)) ||
+      (await isScopedCSSServingRequest(ctxt, requestURL, routingDeps))
+    ) {
+      // Fall through to the realm, which serves the file's (capture's, or
+      // stylesheet's) own bytes and lets its content type decide what the
+      // browser renders.
+      return next();
+    }
+    let acceptHeader = ctxt.header.accept ?? '';
+    let lowerAcceptHeader = acceptHeader.toLowerCase();
+    let includesVndMimeType = lowerAcceptHeader.includes('application/vnd.');
+    let includesHtmlMimeType = lowerAcceptHeader.includes('text/html');
 
     // Track published realm info from routing checks to avoid redundant
     // DB queries in the ETag logic below.

@@ -1,5 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
-import { type CardDef } from '../card-api';
+import type { CardDef } from '../card-api';
 import { cn, not } from '@cardstack/boxel-ui/helpers';
 
 export default class DefaultAtomViewTemplate extends GlimmerComponent<{

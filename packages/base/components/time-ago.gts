@@ -1,6 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import ClockIcon from '@cardstack/boxel-icons/clock';
+import { now } from '../helpers/clock';
 
 // Configuration interface
 interface TimeAgoConfiguration {
@@ -18,13 +19,13 @@ interface TimeAgoSignature {
 }
 
 export class TimeAgo extends GlimmerComponent<TimeAgoSignature> {
-  @tracked currentTime = Date.now();
+  @tracked currentTime = now();
   private intervalId: number | null = null;
 
   constructor(owner: any, args: any) {
     super(owner, args);
     this.intervalId = window.setInterval(() => {
-      this.currentTime = Date.now();
+      this.currentTime = now();
     }, 60000);
   }
 

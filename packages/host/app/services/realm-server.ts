@@ -1,4 +1,5 @@
 import type Owner from '@ember/owner';
+import { getOwner } from '@ember/owner';
 import Service from '@ember/service';
 import { service } from '@ember/service';
 
@@ -18,16 +19,20 @@ import {
   publishRealm as publishRealmOperation,
   SupportedMimeType,
   Deferred,
+  fetcher,
+  realmServerAuthorizationMiddleware,
   ri,
   testRealmURL,
   unpublishRealm as unpublishRealmOperation,
   waitForReady as waitForReadyOperation,
+  type FetcherMiddlewareHandler,
   type PublishProgress,
   type RealmClient,
   type RealmIdentifier,
   type RealmIndexCounts,
   type RealmInfo,
   type JWTPayload,
+  type RealmServerTokenSource,
 } from '@cardstack/runtime-common';
 import {
   joinDMRoom,
@@ -40,6 +45,8 @@ import {
   RealmServerSessionLocalStorageKey,
   SessionLocalStorageKey,
 } from '@cardstack/host/utils/local-storage-keys';
+
+import { createServerRequestTimingMiddleware } from './client-telemetry';
 
 import type { ExtendedClient } from './matrix-sdk-loader';
 import type NetworkService from './network';
@@ -104,7 +111,10 @@ export interface ArchivedRealmInfo {
 
 type RealmServerEventSubscriber = (data: any) => Promise<void>;
 
-export default class RealmServerService extends Service {
+export default class RealmServerService
+  extends Service
+  implements RealmServerTokenSource
+{
   @service declare private network: NetworkService;
   @service declare private session: SessionService;
   @service declare private realm: RealmService;
@@ -352,6 +362,9 @@ export default class RealmServerService extends Service {
     this.token = undefined;
     this.client = undefined;
     this.loggingIn = undefined;
+    // An in-flight mint outlives the logout otherwise, and would hand the next
+    // account's session to a request the previous one issued.
+    this.reauthenticating = undefined;
     this.auth = { type: 'anonymous' };
     this.availableRealms.splice(0, this.availableRealms.length, {
       type: 'base',
@@ -1126,59 +1139,196 @@ export default class RealmServerService extends Service {
     });
   }
 
+  // A realm-server request that names a set of realms — the federated
+  // endpoints, of which `_federated-search` is the high-volume one. It is
+  // issued through a middleware stack rather than bare, so a 401 is
+  // reauthenticated and replayed once, and the request carries a correlation id
+  // joining the client's `server-request` telemetry to the server's
+  // `realm:search-timing` and `realm:requests` lines for the same request.
   maybeAuthedFetchForRealms(
     url: string,
     realms: string[],
     options: RequestInit = {},
   ) {
-    const headers = new Headers(options.headers);
-    if (!headers.has('Authorization')) {
-      if (this.token) {
-        headers.set('Authorization', `Bearer ${this.token}`);
-      } else {
-        let realmToken = this.getRealmTokenForRealms(realms);
-        if (realmToken) {
-          headers.set('Authorization', `Bearer ${realmToken}`);
-        }
-      }
-    }
-    return this.network.fetch(url, {
-      ...options,
-      headers,
-    });
+    return this.fetcherForRealms(realms)(url, options);
   }
 
-  // args is of type `RequestForwardBody` in realm-server/handlers/handle-request-forward
+  // Only the authorization middleware varies per call — it needs this
+  // request's realm list to choose its fallback token — so the timing
+  // middleware, which is realm-independent, is built once per service rather
+  // than once per search.
+  //
+  // `authErrorEventMiddleware` — which the per-realm `authedFetch` stack
+  // carries — is deliberately absent. Its `boxel-auth-error` event is listened
+  // for only by the prerender render routes, which race it against the render
+  // to fail fast; a federated search answers 401 for the whole request when any
+  // one of its realms is unreadable, so routing that through the event would
+  // abort a whole render over a single query field the card can render without.
+  private fetcherForRealms(realms: string[]): typeof globalThis.fetch {
+    let timingMiddleware = (this.serverRequestTimingMiddleware ??=
+      createServerRequestTimingMiddleware(getOwner(this)!));
+    return fetcher(
+      this.network.fetch,
+      [
+        realmServerAuthorizationMiddleware(this, realms),
+        // Innermost, so it wraps each real network attempt: an auth-retry is
+        // recorded as its own retried-flagged attempt rather than folded into
+        // the first attempt's duration.
+        timingMiddleware,
+      ],
+      this.network.virtualNetwork,
+    );
+  }
+
+  private serverRequestTimingMiddleware: FetcherMiddlewareHandler | undefined;
+
+  // `RealmServerTokenSource`. The realm-server session token is what the
+  // federated endpoints validate. The per-realm token is the fallback for a
+  // caller holding realm sessions but no realm-server session yet — at app
+  // boot, before the matrix client lands — and authenticates because the
+  // endpoint reads only the `user` claim, which both token families carry.
+  //
+  // Both families are checked for expiry, for the reason given on
+  // `getRealmTokenForRealms`: an expired token can only be rejected, so
+  // sending one spends a round trip to learn what its own `exp` claim already
+  // says. The session token can outlive its expiry when `tokenRefresher`'s
+  // timer fires late — a slept laptop, a throttled background tab.
+  tokenForRealms(realms: string[]): string | undefined {
+    let sessionToken = this.token;
+    if (sessionToken && !isTokenExpired(sessionToken)) {
+      return sessionToken;
+    }
+    return this.getRealmTokenForRealms(realms);
+  }
+
+  // `RealmServerTokenSource`. A burst of searches failing against the same
+  // rejected session shares one mint rather than each driving its own login.
+  //
+  // `rejectedToken` is the token the refused request actually carried. It is
+  // what separates "this session is stale" from "this request was in flight
+  // while someone else replaced the session" — the service's *current* token
+  // cannot tell those apart, since a 401 for a token sent seconds ago can
+  // arrive after a concurrent mint or the token refresher has already moved on.
+  async reauthenticateRealmServer(
+    rejectedToken?: string,
+  ): Promise<string | undefined> {
+    if (this.reauthenticating) {
+      return this.reauthenticating;
+    }
+    // The session has already moved past the one that was refused, so that
+    // newer session is what the replay should carry. Minting again would
+    // discard a session nothing has rejected.
+    if (rejectedToken && this.token && this.token !== rejectedToken) {
+      return this.token;
+    }
+    // No matrix client means no session can be minted, and `login()` throws
+    // that precondition rather than returning — so the 401 stands.
+    if (!this.hasClient) {
+      return undefined;
+    }
+    this.reauthenticating = (async () => {
+      try {
+        // Minted through the login task rather than `login()`, which
+        // short-circuits on the logged-in state. Clearing the token to defeat
+        // that short-circuit is what the obvious version does, and it would
+        // publish an anonymous auth state — and an empty persisted session —
+        // to every other consumer of this service for the length of the round
+        // trip. An in-flight login is joined rather than duplicated.
+        if (!this.loggingIn) {
+          this.loggingIn = this.loginTask.perform();
+        }
+        await this.loggingIn;
+        return this.token;
+      } catch (e: any) {
+        console.error(
+          `RealmServerService - failed to reauthenticate to realm server: ${e.message}`,
+          e,
+        );
+        return undefined;
+      } finally {
+        this.reauthenticating = undefined;
+      }
+    })();
+    return this.reauthenticating;
+  }
+
+  private reauthenticating: Promise<string | undefined> | undefined;
+
+  // The forwarded fields are `RequestForwardBody` in
+  // realm-server/handlers/handle-request-forward. `timeoutMs` is not one of
+  // them — it is the caller's budget for the call, spent here rather than
+  // sent.
+  //
+  // Abandoning the wait is not enough to honour a budget: the realm server
+  // holds a per-user lock across replicas for the whole life of the upstream
+  // call, so a model call nobody is reading any more still delays that user's
+  // next one. Aborting the request is what releases it, hence a real signal on
+  // the fetch rather than a race against a timer. Omitting `timeoutMs` sends
+  // no signal at all and waits indefinitely.
   async requestForward(args: {
     url: string;
     method: string;
     requestBody: string;
     headers?: Record<string, string>;
     multipart?: boolean;
+    timeoutMs?: number;
   }) {
     await this.login();
 
-    const response = await this.network.fetch(
-      `${this.url.href}_request-forward`,
-      {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.token}`,
-        },
-        body: JSON.stringify(args),
-      },
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `Request forward failed: ${response.status} - ${errorText}`,
-      );
+    let { timeoutMs, ...forwardedRequest } = args;
+    let deadline: AbortController | undefined;
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    if (timeoutMs != null && timeoutMs > 0) {
+      deadline = new AbortController();
+      deadlineTimer = setTimeout(() => deadline!.abort(), timeoutMs);
     }
 
-    return response;
+    let responded = false;
+    try {
+      const response = await this.network.fetch(
+        `${this.url.href}_request-forward`,
+        {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.token}`,
+          },
+          body: JSON.stringify(forwardedRequest),
+          signal: deadline?.signal,
+        },
+      );
+      // The budget covers time-to-response, so it stops the moment a response
+      // is in hand — here rather than on the way out, because the error path
+      // below reads the body while the timer would still be armed. A firing
+      // during that read aborts a body the server did answer with.
+      responded = true;
+      clearTimeout(deadlineTimer);
+      deadlineTimer = undefined;
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Request forward failed: ${response.status} - ${errorText}`,
+        );
+      }
+
+      return response;
+    } catch (e) {
+      // The abort surfaces as a generic `AbortError` from whichever layer
+      // noticed it first; the controller is the only thing that knows the
+      // deadline was the reason, so name it here.
+      // Only a deadline that fired before any response is a timeout. Once the
+      // server has answered, a later failure is that failure — reporting it as
+      // a timeout would discard the status and body that did arrive.
+      if (!responded && deadline?.signal.aborted) {
+        throw new Error(`Request forward timed out after ${timeoutMs}ms`);
+      }
+      throw e;
+    } finally {
+      // Already cleared on the responded path; this covers a fetch that threw.
+      clearTimeout(deadlineTimer);
+    }
   }
 
   async registerBot(username: string) {
@@ -1592,7 +1742,11 @@ export default class RealmServerService extends Service {
     for (let realmURL of realms) {
       let normalizedRealmURL = ensureTrailingSlash(realmURL);
       let token = sessionTokens[normalizedRealmURL] ?? sessionTokens[realmURL];
-      if (token) {
+      // An expired token buys nothing: the server rejects it, so sending it
+      // spends a round trip to learn what its own `exp` claim already says.
+      // Skipping it lets a publicly-readable realm answer the unauthenticated
+      // request, and leaves the 401 path to mint a realm-server session.
+      if (token && !isTokenExpired(token)) {
         return token;
       }
     }
@@ -1606,6 +1760,16 @@ const sessionLocalStorageKey = RealmServerSessionLocalStorageKey;
 function claimsFromRawToken(rawToken: string): RealmServerJWTPayload {
   let [_header, payload] = rawToken.split('.');
   return JSON.parse(atob(payload)) as RealmServerJWTPayload;
+}
+
+// `exp` is unix seconds. A token whose claims will not parse — or whose `exp`
+// is absent, or is not a finite number — is treated as expired, since nothing
+// usable can be said about it. Comparing a non-finite `exp` would answer
+// "not expired" and send the token anyway, which is the opposite of what an
+// unreadable claim should buy.
+function isTokenExpired(rawToken: string): boolean {
+  let exp = realmClaimsFromRawToken(rawToken)?.exp;
+  return !Number.isFinite(exp) || (exp as number) * 1000 <= Date.now();
 }
 
 function realmClaimsFromRawToken(rawToken: string): JWTPayload | undefined {

@@ -4,7 +4,8 @@
  * Every function BXL exposes must be invoked by at least one case with its
  * result asserted: jq's own builtins, the Excel/formulajs helpers — including
  * the lazily chunked statistical, Bessel, engineering, and financial families
- * — the validator.js helpers, and the authorization builtins. The list of
+ * — the validator.js helpers, the authorization builtins, and the
+ * request-context builtins a mutation program reads. The list of
  * functions to cover is read out of the resolved registry rather than
  * maintained by hand, so adding a builtin without a case fails this suite.
  *
@@ -15,10 +16,10 @@
  * especially — the case calls it directly.
  *
  * "Exposed" is the union over the library sets BXL actually ships — what a
- * card resolves against and what the authorization runtime does — and within
- * each, every name a program can reach rather than only the ones `builtins`
- * reports. A name callable but unlisted still needs a case; see
- * PRIVATE_BUILTINS for why each of those is unlisted.
+ * card resolves against, what the authorization runtime does, and what a
+ * mutation program does — and within each, every name a program can reach
+ * rather than only the ones `builtins` reports. A name callable but unlisted
+ * still needs a case; see PRIVATE_BUILTINS for why each of those is unlisted.
  *
  * The inputs here are plain JSON, which is the whole function surface's
  * natural test bed. That BXL drives `computeVia` on real card instances —
@@ -38,7 +39,10 @@ import {
   functionCoverageCases,
   UNREACHABLE_BUILTINS,
 } from './fixtures/function-coverage/index.ts';
-import { AUTHORIZATION_LIBRARIES } from './fixtures/function-coverage/case.ts';
+import {
+  AUTHORIZATION_LIBRARIES,
+  mutationLibraries,
+} from './fixtures/function-coverage/case.ts';
 import {
   PRIVATE_BUILTINS,
   reachableNames,
@@ -58,16 +62,18 @@ const libraries = installInvocationRecorder();
 
 const failures = registryGateFailures(libraries);
 
-// The surface to cover is what a program can reach in either shipped set, so
+// The surface to cover is what a program can reach in any shipped set, so
 // dropping a library from one set does not quietly shrink the gate.
 const exposed = new Set([
   ...reachableNames(libraries),
   ...reachableNames(AUTHORIZATION_LIBRARIES),
+  ...reachableNames(mutationLibraries()),
 ]);
 
 const published = new Set([
   ...resolveBuiltinRegistry(libraries).publicNames,
   ...resolveBuiltinRegistry(AUTHORIZATION_LIBRARIES).publicNames,
+  ...resolveBuiltinRegistry(mutationLibraries()).publicNames,
 ]);
 const notPrivate = [...PRIVATE_BUILTINS.keys()]
   .filter((name) => !exposed.has(name) || published.has(name))

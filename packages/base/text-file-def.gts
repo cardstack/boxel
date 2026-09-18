@@ -1,8 +1,8 @@
 import { byteStreamToUint8Array } from '@cardstack/runtime-common';
 import TextFileIcon from '@cardstack/boxel-icons/file-text';
 import GlimmerComponent from '@glimmer/component';
+import type { BaseDefComponent } from './card-api';
 import {
-  BaseDefComponent,
   Component,
   NumberField,
   StringField,
@@ -64,7 +64,10 @@ class TextPreview extends GlimmerComponent<FilePreviewSignature> {
   }
 
   get truncated(): boolean {
-    return this.args.format === 'fitted' && Boolean(this.args.model?.previewTruncated);
+    return (
+      this.args.format === 'fitted' &&
+      Boolean(this.args.model?.previewTruncated)
+    );
   }
 
   <template>
@@ -91,7 +94,10 @@ class TextPreview extends GlimmerComponent<FilePreviewSignature> {
       .text-preview__body {
         margin: 0;
         padding: var(--boxel-sp);
-        font-family: var(--font-mono, var(--boxel-monospace-font-family, monospace));
+        font-family: var(
+          --font-mono,
+          var(--boxel-monospace-font-family, monospace)
+        );
         font-size: 0.8125rem;
         line-height: 1.55;
         white-space: pre-wrap;

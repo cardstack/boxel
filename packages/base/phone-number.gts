@@ -1,6 +1,5 @@
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
-import { tracked } from '@glimmer/tracking';
 
 import {
   primitive,
@@ -166,10 +165,7 @@ export default class PhoneNumberField extends FieldDef {
       }
       let parsed = parseForDisplay(value);
       if (parsed?.number?.international && parsed?.number?.rfc3966) {
-        return markdownLink(
-          parsed.number.international,
-          parsed.number.rfc3966,
-        );
+        return markdownLink(parsed.number.international, parsed.number.rfc3966);
       }
       return markdownEscape(value);
     }
@@ -178,8 +174,6 @@ export default class PhoneNumberField extends FieldDef {
 }
 
 class PhoneNumberTypeEdit extends Component<typeof PhoneNumberType> {
-  @tracked label: string | undefined = this.args.model.label;
-
   statuses = PhoneNumberType.values;
   selectedStatus = this.selected;
   placeholder = 'Select phone number type';
@@ -194,14 +188,13 @@ class PhoneNumberTypeEdit extends Component<typeof PhoneNumberType> {
 
   get selected() {
     return this.types?.find((type) => {
-      return type.label === this.label;
+      return type.label === this.args.model.label;
     });
   }
 
   @action onSelect(type: PhoneNumberType): void {
-    this.label = type.label;
-    this.args.model.label = this.selected?.label;
-    this.args.model.index = this.selected?.index;
+    this.args.model.label = type.label;
+    this.args.model.index = type.index;
   }
 
   <template>
@@ -268,8 +261,6 @@ export class ContactPhoneNumber extends FieldDef {
   static embedded = class Embedded extends Component<
     typeof ContactPhoneNumber
   > {
-    <template>
-      <@fields.phoneNumber @format='embedded' />
-    </template>
+    <template><@fields.phoneNumber @format='embedded' /></template>
   };
 }

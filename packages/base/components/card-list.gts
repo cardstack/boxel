@@ -7,7 +7,10 @@ import Component from '@glimmer/component';
 import { consume } from 'ember-provide-consume-context';
 import { modifier } from 'ember-modifier';
 
-import { CardContainer, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import {
+  CardContainer,
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
 
 import FileIcon from '@cardstack/boxel-icons/file';
 import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
@@ -138,9 +141,7 @@ export default class CardList extends Component<Signature> {
   // no-HTML *card* rows are excluded: the former render their error affordance,
   // the latter resolve live (self-healing) through `<entry.component />`.
   shouldRenderFallback(entry: RenderableSearchEntryLike): boolean {
-    return (
-      !entry.html && entry.item?.type === 'file-meta' && !entry.isError
-    );
+    return !entry.html && entry.item?.type === 'file-meta' && !entry.isError;
   }
 
   // Render the full-cell error tile for an error row with no renderable HTML —

@@ -8,6 +8,7 @@ import {
   baseRealmRRI,
   rri,
   trimExecutableExtension,
+  type OperationLoweringDiagnostic,
   type RenderRouteOptions,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
@@ -93,6 +94,75 @@ module('Acceptance | prerender | module', function (hooks) {
       @field reviewer = linksTo(() => SearchAuthor, { searchable: 'bogus' });
     }
   `;
+  // The three `BaseDef` families in one module, so a single visit shows how
+  // definition build classifies each of them.
+  const FAMILIES_MODULE = `
+    import { CardDef, FieldDef, field, contains, StringField } from '@cardstack/base/card-api';
+    import { FileDef } from '@cardstack/base/file-api';
+
+    export class Caption extends FieldDef {
+      static displayName = 'Caption';
+      @field text = contains(StringField);
+    }
+
+    export class Photo extends CardDef {
+      static displayName = 'Photo';
+      @field caption = contains(Caption);
+    }
+
+    export class PhotoFile extends FileDef {
+      static displayName = 'PhotoFile';
+    }
+
+    export class PlainFile extends FileDef {}
+  `;
+  // One declaration that lowers cleanly (Note.addTag) and one whose clause
+  // names a field the type does not have (Note.addNote), so the same visit
+  // covers both the captured `operations` and the recorded findings.
+  const OPERATIONS_MODULE = `
+    import { CardDef, field, contains, containsMany, StringField } from '@cardstack/base/card-api';
+    import { FileDef } from '@cardstack/base/file-api';
+    import { operation, params, realmConfig } from '@cardstack/base/operations';
+
+    export class Note extends CardDef {
+      static displayName = 'Note';
+      @field body = contains(StringField);
+      @field tags = containsMany(StringField);
+
+      @operation static addTag = {
+        base: 'transform',
+        params: { tag: StringField },
+        append: { to: 'tags', value: params('tag') },
+      };
+
+      @operation static addNote = {
+        base: 'transform',
+        params: { text: StringField },
+        set: { bdy: params('text') },
+      };
+
+      @operation static logTag = {
+        base: 'appendContainsMany',
+        params: { tag: StringField },
+        field: 'tags',
+        item: params('tag'),
+      };
+    }
+
+    export class NoteLog extends FileDef {
+      static displayName = 'NoteLog';
+
+      @operation static record = {
+        base: 'appendLine',
+        params: { line: StringField },
+      };
+
+      @operation static readRedacted = {
+        base: 'read',
+        output: { name: true, at: realmConfig('timezone') },
+      };
+    }
+  `;
 
   hooks.beforeEach(async function () {
     ({ adapter, realm } = await withCachedRealmSetup(async () =>
@@ -105,6 +175,8 @@ module('Acceptance | prerender | module', function (hooks) {
           'child.gts': CHILD_MODULE,
           'broken.gts': BROKEN_MODULE,
           'searchable-card.gts': SEARCHABLE_MODULE,
+          'note.gts': OPERATIONS_MODULE,
+          'families.gts': FAMILIES_MODULE,
         },
       }),
     ));
@@ -148,6 +220,91 @@ module('Acceptance | prerender | module', function (hooks) {
     assert.ok(
       personEntry.types.includes(`${baseRealmRRI}card-api/CardDef`),
       'types include base card',
+    );
+  });
+
+  test('classifies each of the three BaseDef families', async function (assert) {
+    // A file is a sibling of a card under `BaseDef`, not a kind of field: it
+    // has a URL and content-derived metadata, so the entry a consumer reads to
+    // decide what a target supports has to tell it apart from a field.
+    let moduleURL = `${testRealmURL}families.gts`;
+
+    await visit(modulePath(moduleURL));
+    let { model } = captureModuleResult();
+
+    let moduleAlias = trimExecutableExtension(rri(moduleURL));
+    let definitionFor = (name: string) => {
+      let entry = model.definitions[`${moduleAlias}/${name}`];
+      assert.strictEqual(entry?.type, 'definition', `${name} has a definition`);
+      return entry?.type === 'definition' ? entry.definition : undefined;
+    };
+    let photo = definitionFor('Photo');
+    let caption = definitionFor('Caption');
+    let photoFile = definitionFor('PhotoFile');
+
+    assert.strictEqual(photo?.type, 'card-def', 'a card def is a card def');
+    assert.strictEqual(
+      caption?.type,
+      'field-def',
+      'a field def is a field def',
+    );
+    assert.strictEqual(photoFile?.type, 'file-def', 'a file def is a file def');
+
+    // Every family declares a display name on its class; the entry records one
+    // only for the families a consumer can address by URL.
+    assert.strictEqual(photo?.displayName, 'Photo', "a card's display name");
+    assert.strictEqual(
+      photoFile?.displayName,
+      'PhotoFile',
+      "a file's display name",
+    );
+    assert.strictEqual(
+      caption?.displayName,
+      null,
+      'the entry for a field def records none',
+    );
+    // A file def that declares no name of its own still records one: the entry
+    // carries whatever the class resolves to, inherited included.
+    assert.strictEqual(
+      definitionFor('PlainFile')?.displayName,
+      'File',
+      "an undeclared file def's inherited display name",
+    );
+
+    // A file def's own fields are captured the same way a card's are, so a
+    // consumer reads a file's metadata off its entry without loading the
+    // module.
+    assert.ok(
+      'contentType' in (photoFile?.fields ?? {}),
+      "a file def's fields are captured",
+    );
+
+    // Ancestry is recorded for both families that have one to filter on, each
+    // walked up to its own family's root. A field def has no URL, so none.
+    let typesFor = (name: string) => {
+      let entry = model.definitions[`${moduleAlias}/${name}`];
+      return entry?.type === 'definition' ? entry.types : [];
+    };
+    assert.ok(
+      typesFor('Photo').includes(`${baseRealmRRI}card-api/CardDef`),
+      "a card's ancestry reaches CardDef",
+    );
+    assert.ok(
+      typesFor('PhotoFile').includes(`${moduleAlias}/PhotoFile`),
+      "a file's ancestry includes itself",
+    );
+    assert.ok(
+      typesFor('PhotoFile').includes(`${baseRealmRRI}card-api/FileDef`),
+      "a file's ancestry reaches FileDef",
+    );
+    assert.notOk(
+      typesFor('PhotoFile').includes(`${baseRealmRRI}card-api/CardDef`),
+      "a file's ancestry stops at its own family root",
+    );
+    assert.deepEqual(
+      typesFor('Caption'),
+      [],
+      'a field def records no ancestry',
     );
   });
 
@@ -403,6 +560,132 @@ module('Acceptance | prerender | module', function (hooks) {
       model.meta?.diagnostics?.searchablePathIssues,
       undefined,
       'no searchablePathIssues meta when nothing is annotated',
+    );
+  });
+
+  test('captures lowered @operation declarations onto the definition entry', async function (assert) {
+    let moduleURL = `${testRealmURL}note.gts`;
+
+    await visit(modulePath(moduleURL));
+    let { status, model } = captureModuleResult();
+    assert.strictEqual(status, 'ready', 'module loads');
+
+    let noteKey = `${trimExecutableExtension(rri(moduleURL))}/Note`;
+    let entry = model.definitions[noteKey];
+    assert.strictEqual(entry?.type, 'definition', 'the definition was built');
+    let operations =
+      entry?.type === 'definition' ? entry.definition.operations : undefined;
+    assert.deepEqual(
+      Object.keys(operations ?? {}).sort(),
+      ['addNote', 'addTag', 'logTag'],
+      'every declaration is captured — a declaration with findings is stored too, so invoking it reports them rather than reading as unknown',
+    );
+    assert.deepEqual(
+      operations?.addTag.program,
+      { source: 'append(.tags;params("tag"));', syntax: 'solidified' },
+      'the convenience clause reaches the entry as canonical BXL',
+    );
+    assert.true(operations?.addNote.invalid, 'the bad declaration is flagged');
+    assert.deepEqual(
+      operations?.logTag.items,
+      { tags: { $ref: 'params', key: 'tag' } },
+      'an append to a containsMany reaches the entry as the item template it substitutes, and no program',
+    );
+  });
+
+  test("captures a file def's declarations, including the writes on its bytes", async function (assert) {
+    let moduleURL = `${testRealmURL}note.gts`;
+
+    await visit(modulePath(moduleURL));
+    let { model } = captureModuleResult();
+
+    let logKey = `${trimExecutableExtension(rri(moduleURL))}/NoteLog`;
+    let entry = model.definitions[logKey];
+    assert.strictEqual(entry?.type, 'definition', 'the definition was built');
+    assert.strictEqual(
+      entry?.type === 'definition' ? entry.definition.type : undefined,
+      'file-def',
+      'and is recorded as the family whose declarations these were checked against',
+    );
+    let operations =
+      entry?.type === 'definition' ? entry.definition.operations : undefined;
+    assert.deepEqual(
+      Object.keys(operations ?? {}).sort(),
+      ['readRedacted', 'record'],
+      'a file def declares the reads and the writes that work on its bytes',
+    );
+    assert.strictEqual(
+      operations?.record.program,
+      undefined,
+      'an appendLine carries no program: the line is the payload',
+    );
+    assert.deepEqual(
+      Object.keys(operations?.record.params ?? {}),
+      ['line'],
+      'which the schema names',
+    );
+    assert.deepEqual(
+      operations?.readRedacted.output,
+      {
+        source: '{name:true, at:realmConfig("timezone")}',
+        syntax: 'solidified',
+      },
+      'a realm setting lowers to the builtin of the same name',
+    );
+    assert.notOk(operations?.record.invalid, 'the appendLine has no findings');
+    assert.notOk(
+      operations?.readRedacted.invalid,
+      'and neither does the read that reads a realm setting',
+    );
+  });
+
+  test('records operation-lowering findings on meta.diagnostics, tagged with the owning def', async function (assert) {
+    let moduleURL = `${testRealmURL}note.gts`;
+
+    await visit(modulePath(moduleURL));
+    let { model } = captureModuleResult();
+
+    let noteKey = `${trimExecutableExtension(rri(moduleURL))}/Note`;
+    assert.deepEqual(
+      model.meta?.diagnostics?.operationIssues?.map(
+        (issue: OperationLoweringDiagnostic) => ({
+          codeRef: issue.codeRef,
+          code: issue.code,
+          operation: issue.operation,
+          path: issue.path,
+        }),
+      ),
+      [
+        {
+          codeRef: noteKey,
+          code: 'unknown-field',
+          operation: 'addNote',
+          path: 'set.bdy',
+        },
+      ],
+      'only the bad clause is recorded, tagged with its owning def',
+    );
+  });
+
+  test('a module that declares no operations produces no operations key and no findings', async function (assert) {
+    let moduleURL = `${testRealmURL}person.gts`;
+
+    await visit(modulePath(moduleURL));
+    let { model } = captureModuleResult();
+
+    let personKey = `${trimExecutableExtension(rri(moduleURL))}/Person`;
+    let entry = model.definitions[personKey];
+    assert.strictEqual(entry?.type, 'definition', 'the definition was built');
+    assert.notOk(
+      entry?.type === 'definition'
+        ? 'operations' in entry.definition
+        : undefined,
+      'the definition entry for every existing card is unchanged',
+    );
+    assert.strictEqual(
+      model.meta?.diagnostics?.operationIssues,
+      undefined,
+      'and no operationIssues meta is emitted',
     );
   });
 });

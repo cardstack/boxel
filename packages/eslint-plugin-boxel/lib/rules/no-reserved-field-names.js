@@ -3,7 +3,7 @@
 // chain; card-api's `field` decorator refuses them at runtime, and this rule
 // is the authoring-time backstop. Keep in sync with `RESERVED_FIELD_NAMES`
 // in packages/base/card-api.gts.
-const RESERVED_FIELD_NAMES = ['screenshotURLs'];
+const RESERVED_FIELD_NAMES = ['screenshotURLs', 'screenshotsMeta'];
 
 function isFieldDecorator(decorator) {
   let expression = decorator.expression;

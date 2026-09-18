@@ -1,10 +1,4 @@
-import {
-  contains,
-  field,
-  Component,
-  CardDef,
-  FieldDef,
-} from './card-api';
+import { contains, field, Component, CardDef, FieldDef } from './card-api';
 import StringField from './string';
 import CurrencyDollarIcon from '@cardstack/boxel-icons/currency-dollar';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
@@ -21,9 +15,7 @@ export class Currency extends CardDef {
   @field code = contains(StringField);
 
   static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <@fields.code />
-    </template>
+    <template><@fields.code /></template>
   };
 }
 
@@ -96,9 +88,7 @@ export default class CurrencyField extends FieldDef {
   }
 
   static atom = class Atom extends Component<typeof this> {
-    <template>
-      {{@model.symbol}}
-    </template>
+    <template>{{@model.symbol}}</template>
   };
 
   static embedded = class Embedded extends Component<typeof this> {

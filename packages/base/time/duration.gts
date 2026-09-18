@@ -1,9 +1,4 @@
-import {
-  FieldDef,
-  Component,
-  field,
-  contains,
-} from '../card-api';
+import { FieldDef, Component, field, contains } from '../card-api';
 import NumberField from '../number';
 import { tracked } from '@glimmer/tracking';
 import HourglassIcon from '@cardstack/boxel-icons/hourglass';

@@ -5,12 +5,14 @@ import type {
   Loader,
   LocalPath,
   RealmAdapter,
+  SplicedSource,
 } from '@cardstack/runtime-common';
 import {
   RealmPaths,
   createResponse,
   hasExecutableExtension,
   Deferred,
+  streamSpliced,
   unixTime,
   type LintResult,
 } from '@cardstack/runtime-common';
@@ -22,11 +24,13 @@ import type {
   FileRef,
   Kind,
   RequestContext,
+  AdapterAppendResult,
   AdapterWriteResult,
   TokenClaims,
 } from '@cardstack/runtime-common/realm';
 
 import { WebMessageStream, messageCloseHandler } from './stream';
+import { createFixtureMtimeSequence } from './test-clock';
 
 import { createJWT, testRealmURL } from '.';
 
@@ -65,6 +69,8 @@ export class TestRealmAdapter implements RealmAdapter {
   #subscriber: ((message: FileWatcherEventContent) => void) | undefined;
   #loader: Loader | undefined; // Will be set in the realm's constructor - needed for openFile for shimming purposes
   #ready = new Deferred<void>();
+  // Per adapter, so each realm's files stay inside the just-now window.
+  #nextMtime = createFixtureMtimeSequence();
   #potentialModulesAndInstances: { content: any; url: URL }[] = [];
   #mockMatrixUtils: MockUtils;
 
@@ -80,7 +86,7 @@ export class TestRealmAdapter implements RealmAdapter {
     this.#paths = new RealmPaths(realmURL);
     this.#mockMatrixUtils = mockMatrixUtils;
 
-    let now = unixTime(Date.now());
+    let now = this.#nextMtime();
 
     for (let [path, content] of Object.entries(contents)) {
       let segments = path.split('/');
@@ -283,6 +289,13 @@ export class TestRealmAdapter implements RealmAdapter {
       path,
       content: fileRefContent,
       lastModified: this.#lastModified.get(this.#paths.fileURL(path).href)!,
+      // The content is in hand, so its size costs nothing to report — and a
+      // reader that edits a file without holding it asks for the size rather
+      // than for the content.
+      size:
+        fileRefContent instanceof Uint8Array
+          ? fileRefContent.length
+          : new TextEncoder().encode(fileRefContent).length,
     };
 
     if (fileRefContent === shimmedModuleIndicator) {
@@ -311,7 +324,7 @@ export class TestRealmAdapter implements RealmAdapter {
 
     let updateEvent: FileWatcherEventContent;
 
-    let lastModified = unixTime(Date.now());
+    let lastModified = this.#nextMtime();
     this.#lastModified.set(this.#paths.fileURL(path).href, lastModified);
 
     if (dir.contents[name]) {
@@ -342,6 +355,80 @@ export class TestRealmAdapter implements RealmAdapter {
       path,
       lastModified,
     };
+  }
+
+  // This adapter holds a file's bytes in memory, so there is no file system
+  // position to append at: the content is joined onto what is already held and
+  // written back. The bound an append promises against a real file system is
+  // therefore not one this adapter keeps, which is the same trade every other
+  // method here makes — an in-memory realm is the wrong place to measure the
+  // cost of reaching a disk.
+  async append(
+    path: LocalPath,
+    contents: string | Uint8Array,
+  ): Promise<AdapterAppendResult> {
+    let file = await this.openFile(path);
+    let existing =
+      file?.content instanceof Uint8Array
+        ? file.content
+        : new TextEncoder().encode(
+            file?.content === undefined ? '' : String(file.content),
+          );
+    let added =
+      contents instanceof Uint8Array
+        ? contents
+        : new TextEncoder().encode(contents);
+    let bytes = new Uint8Array(existing.length + added.length);
+    bytes.set(existing);
+    bytes.set(added, existing.length);
+    // Written back as text when that is what the file held, so a realm whose
+    // files are strings keeps holding strings — an appended log read back as
+    // bytes would serve differently than the same file written whole.
+    let written = await this.write(
+      path,
+      file?.content instanceof Uint8Array
+        ? bytes
+        : new TextDecoder().decode(bytes),
+    );
+    return { ...written, size: bytes.length };
+  }
+
+  // This adapter holds a file's bytes in memory, so the aliasing a splice has
+  // to resolve against a real filesystem — the write's source being its own
+  // destination — is resolved by reading the content out before replacing it.
+  async writeSpliced(
+    path: LocalPath,
+    content: SplicedSource,
+  ): Promise<AdapterWriteResult> {
+    let chunks: Uint8Array[] = [];
+    for await (let chunk of streamSpliced(content, (start, end) =>
+      this.readRange(path, start, end),
+    )) {
+      chunks.push(chunk);
+    }
+    let bytes = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+    let offset = 0;
+    for (let chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return await this.write(path, new TextDecoder().decode(bytes));
+  }
+
+  async *readRange(
+    path: LocalPath,
+    start: number,
+    end: number,
+  ): AsyncIterable<Uint8Array> {
+    let file = await this.openFile(path);
+    if (!file || end <= start) {
+      return;
+    }
+    let bytes =
+      file.content instanceof Uint8Array
+        ? file.content
+        : new TextEncoder().encode(String(file.content));
+    yield bytes.subarray(start, end);
   }
 
   postUpdateEvent(data: FileWatcherEventContent) {

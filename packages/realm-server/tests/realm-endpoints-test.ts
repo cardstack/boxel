@@ -14,6 +14,7 @@ import {
   baseRealmRRI,
   baseRRI,
   CachingDefinitionLookup,
+  scopedCSSInjectorSource,
   SupportedMimeType,
   type LooseSingleCardDocument,
   type QueuePublisher,
@@ -216,6 +217,153 @@ module(basename(import.meta.filename), function () {
         'cache control header is set correctly',
       );
       assert.ok(response.headers['etag'], 'ETag header is present');
+    });
+
+    // A card's module graph pulls one hashed scoped-CSS request per styled
+    // module — hundreds on a single page load — so this response's headers
+    // decide whether that population costs a page load nothing or one round
+    // trip per URL. Both assertions below are about staying out of the
+    // network: the URL carries the content hash, so the bytes can never go
+    // stale under it, and neither a revalidation nor a cache-variant miss
+    // has anything to discover.
+    test('hashed scoped-CSS is served with headers that let a browser answer it from cache', async function (assert) {
+      let interned = (await dbAdapter.execute(
+        `SELECT hash, css FROM scoped_css WHERE realm_url = $1 LIMIT 1`,
+        { bind: [testRealmURL.href] },
+      )) as { hash: string; css: string }[];
+      assert.strictEqual(
+        interned.length,
+        1,
+        'precondition: indexing interned scoped CSS for the fixture realm',
+      );
+      let { hash, css } = interned[0];
+
+      let response = await request
+        .get(`/_scoped-css/person.gts.md5-${hash}.glimmer-scoped.css`)
+        .set('Accept', SupportedMimeType.All)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.headers['content-type'],
+        'text/javascript',
+        'served as the JS module `loader.import` evaluates',
+      );
+      assert.strictEqual(
+        response.headers['cache-control'],
+        'public, max-age=31536000, immutable',
+        'cache control header is set correctly',
+      );
+      assert.strictEqual(
+        response.text,
+        scopedCSSInjectorSource(
+          `${testRealmURL.pathname}_scoped-css/person.gts.md5-${hash}.glimmer-scoped.css`,
+          css,
+        ),
+        'the body is the injector for the interned stylesheet',
+      );
+
+      // No validator: `cachedFetch` conditionalizes any request it holds an
+      // ETag for, and a caller-supplied `If-None-Match` makes the browser
+      // skip its own cache and ask the server. An ETag here would buy a 304
+      // where otherwise there is no request at all.
+      assert.strictEqual(
+        response.headers['etag'],
+        undefined,
+        'no ETag, so nothing conditionalizes the request',
+      );
+      // The body is keyed by the URL's content hash alone, so the response
+      // must not claim to vary on `Accept`: a browser cache stores one
+      // variant per URL, and a `Vary` the route does not honor lets two
+      // `Accept` spellings evict each other's copy. What reaches the wire is
+      // `@koa/cors`'s own `Vary: Origin` — pinned exactly, so this asserts
+      // what the response carries rather than only what it omits. That one is
+      // no more honored than the header it replaces (the server configures
+      // `origin: '*'` with no credentials, so `Access-Control-Allow-Origin`
+      // is the literal `*` for every caller); it is harmless because its
+      // value is the same for every request, so it names one variant rather
+      // than splitting the population into several.
+      assert.strictEqual(
+        response.headers['vary'],
+        'Origin',
+        'does not vary on Accept, so no Accept spelling can evict the stored entry',
+      );
+    });
+
+    // Declining to vary on `Accept` asserts a contract, not just the absence
+    // of a header: every `Accept` gets this same response. A browser stores
+    // one variant per URL and holds it for the full year, so a spelling that
+    // routed somewhere else would be cached under this URL and served in
+    // place of the stylesheet — or the reverse. `text/html` is the spelling
+    // that can: it is what a tab navigation sends, and the index handler
+    // answers those with the app shell for realm paths it does not exempt.
+    test('every Accept spelling gets the same hashed scoped-CSS response', async function (assert) {
+      let interned = (await dbAdapter.execute(
+        `SELECT hash FROM scoped_css WHERE realm_url = $1 LIMIT 1`,
+        { bind: [testRealmURL.href] },
+      )) as { hash: string }[];
+      assert.strictEqual(
+        interned.length,
+        1,
+        'precondition: indexing interned scoped CSS for the fixture realm',
+      );
+      let path = `/_scoped-css/person.gts.md5-${interned[0].hash}.glimmer-scoped.css`;
+      let get = (accept: string) =>
+        request
+          .get(path)
+          .set('Accept', accept)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+          );
+
+      let baseline = await get(SupportedMimeType.All);
+      for (let accept of ['text/html', 'text/javascript', '*/*']) {
+        let response = await get(accept);
+        assert.strictEqual(
+          response.status,
+          baseline.status,
+          `same status for Accept: ${accept}`,
+        );
+        assert.strictEqual(
+          response.headers['content-type'],
+          baseline.headers['content-type'],
+          `same content type for Accept: ${accept}`,
+        );
+        assert.strictEqual(
+          response.headers['cache-control'],
+          baseline.headers['cache-control'],
+          `same cache-control for Accept: ${accept}`,
+        );
+        assert.strictEqual(
+          response.text,
+          baseline.text,
+          `same body for Accept: ${accept}`,
+        );
+      }
+    });
+
+    // Positive control for the two absence assertions above: the same realm,
+    // reached through a route that really does content-negotiate, still
+    // declares `Vary: Accept`. Without this, dropping the header everywhere
+    // would leave that test green.
+    test('a content-negotiating route still declares Vary: Accept', async function (assert) {
+      let response = await request
+        .get(`/person`)
+        .set('Accept', SupportedMimeType.All)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.headers['vary'],
+        'Accept',
+        'module serving negotiates on Accept and says so',
+      );
     });
 
     test('serves file meta with dedicated accept header', async function (assert) {
@@ -775,6 +923,18 @@ module(basename(import.meta.filename), function () {
           `incremental event carries a positive generation: ${content.generation}`,
         );
         delete content.generation;
+        // The card is brand new, so the index held no row for it before this
+        // pass: its adoption chain can only have come from what the pass
+        // wrote. A live query anchored on Person — or on the CardDef its
+        // chain passes through — has to hear about it; one anchored on the
+        // markdown file in this realm does not.
+        assertInvalidatedTypes(assert, content, {
+          includes: [
+            `${testRealmHref}person/Person`,
+            `${baseRealmRRI}card-api/CardDef`,
+          ],
+          excludes: [`${baseRealmRRI}markdown-file-def/MarkdownDef`],
+        });
         assert.deepEqual(content, {
           eventName: 'index',
           indexType: 'incremental',
@@ -877,6 +1037,7 @@ module(basename(import.meta.filename), function () {
           assert,
           getMessagesSince,
           realm: testRealmHref,
+          clientRequestId: null,
         },
       );
 
@@ -942,6 +1103,30 @@ module(basename(import.meta.filename), function () {
           `incremental event carries a positive generation: ${content.generation}`,
         );
         delete content.generation;
+        // The pass wrote no row for a deleted card, so this chain can only
+        // have come from the row the index held before it — which is what a
+        // query anchored on Person needs in order to drop the member.
+        assertInvalidatedTypes(assert, content, {
+          includes: [
+            `${testRealmHref}person/Person`,
+            `${baseRealmRRI}card-api/CardDef`,
+          ],
+          excludes: [`${baseRealmRRI}markdown-file-def/MarkdownDef`],
+        });
+        // A removal does not read `X-Boxel-Client-Request-Id`, so there is no
+        // id for a client to recognize its own delete by — the field is
+        // asserted as carrying none rather than compared, so it stays a true
+        // statement about that path whichever way it is spelled.
+        let carriesNoClientRequestId =
+          content.clientRequestId === null ||
+          content.clientRequestId === undefined;
+        assert.true(
+          carriesNoClientRequestId,
+          `the event carries no client request id (got ${JSON.stringify(
+            content.clientRequestId,
+          )})`,
+        );
+        delete content.clientRequestId;
         assert.deepEqual(content, {
           eventName: 'index',
           indexType: 'incremental',
@@ -1754,6 +1939,33 @@ function findRealmEvent(
       m.content.eventName === eventName &&
       (realmEventIsIndex(m.content) ? m.content.indexType === indexType : true),
   ) as RealmEvent | undefined;
+}
+
+// Check the adoption chains an incremental index event carries, then strip the
+// field so the caller's `deepEqual` over the rest of the content stays exact.
+function assertInvalidatedTypes(
+  assert: Assert,
+  content: Record<string, any>,
+  expected: { includes: string[]; excludes: string[] },
+) {
+  let invalidatedTypes = content.invalidatedTypes as string[] | undefined;
+  assert.ok(
+    Array.isArray(invalidatedTypes),
+    'the incremental event carries the types its pass touched',
+  );
+  for (let type of expected.includes) {
+    assert.true(
+      (invalidatedTypes ?? []).includes(type),
+      `${type} is named: ${(invalidatedTypes ?? []).join(', ')}`,
+    );
+  }
+  for (let type of expected.excludes) {
+    assert.false(
+      (invalidatedTypes ?? []).includes(type),
+      `${type} is not named: ${(invalidatedTypes ?? []).join(', ')}`,
+    );
+  }
+  delete content.invalidatedTypes;
 }
 
 function realmEventIsIndex(

@@ -13,6 +13,7 @@ export {
 
 export {
   BxlMutationStatementStream,
+  collectMutationReadPaths,
   createBxlMutationStatementStream,
   frameBxlMutationStatements,
 } from './syntax.ts';
@@ -35,6 +36,9 @@ export type {
   BxlUpdateViaMetadata,
   BxlUpdateViaOptions,
 } from './boxel-adapter.ts';
+
+export { EMPTY_OVERLAY_INDEX, mergeBxlMutationOverlays } from './overlays.ts';
+export type { OverlayIndex } from './overlays.ts';
 
 export {
   applyBxlMutationPlanToCardSource,
@@ -61,19 +65,29 @@ export type {
 export { BxlMutationError } from './types.ts';
 
 export type {
+  BxlMutationContext,
+  BxlMutationErrorDetails,
   BxlMutationErrorPhase,
   BxlMutationField,
   BxlMutationFieldType,
   BxlMutationIntent,
   BxlMutationJson,
+  BxlMutationJsonObject,
+  BxlMutationOverlayReason,
+  BxlMutationOverlays,
+  BxlMutationOverlayTier,
   BxlMutationPath,
   BxlMutationPlan,
   BxlMutationPlanOptions,
   BxlMutationPrepareOptions,
+  BxlMutationReadEvent,
+  BxlMutationReadOutcome,
+  BxlMutationReadTier,
   BxlMutationReturning,
   BxlMutationRootField,
   BxlMutationSchema,
   BxlMutationStatementPlan,
+  BxlMutationUnavailableOverlay,
   BxlStructuredMutationOperation,
   PreparedBxlMutation,
 } from './types.ts';

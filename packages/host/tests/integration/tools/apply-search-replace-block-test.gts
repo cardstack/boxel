@@ -7,7 +7,9 @@ import {
   SEPARATOR_MARKER,
 } from '@cardstack/runtime-common';
 
-import ApplySearchReplaceBlockTool from '@cardstack/host/tools/apply-search-replace-block';
+import ApplySearchReplaceBlockTool, {
+  APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES,
+} from '@cardstack/host/tools/apply-search-replace-block';
 
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -773,5 +775,275 @@ ${REPLACE_MARKER}`;
       result.resultContent.includes(SEPARATOR_MARKER),
       'no separator marker leaks into the file',
     );
+  });
+
+  test('matches a search block that differs from the file only by a trailing comma', async function (assert) {
+    // A model writing a JSON search block from memory ends the object with `}`
+    // where the file has `},` because another key follows. The block still
+    // applies, and the replacement is written exactly as the model wrote it.
+    let toolService = getService('tool-service');
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
+
+    const fileContent = `{
+  "meta": {
+    "adoptsFrom": {
+      "module": "../wedding-planner",
+      "name": "WeddingPlanner"
+    },
+    "realmURL": "https://example.com/realm/"
+  }
+}`;
+    const codeBlock = `${SEARCH_MARKER}
+    "adoptsFrom": {
+      "module": "../wedding-planner",
+      "name": "WeddingPlanner"
+    }
+${SEPARATOR_MARKER}
+    "adoptsFrom": {
+      "module": "./wedding-planner",
+      "name": "WeddingPlanner"
+    },
+${REPLACE_MARKER}`;
+
+    let result = await applyCommand.execute({ fileContent, codeBlock });
+
+    assert.strictEqual(
+      result.resultContent,
+      `{
+  "meta": {
+    "adoptsFrom": {
+      "module": "./wedding-planner",
+      "name": "WeddingPlanner"
+    },
+    "realmURL": "https://example.com/realm/"
+  }
+}`,
+    );
+  });
+
+  test("carries the file's trailing comma into a replacement that omits it in both halves", async function (assert) {
+    // The model believes the object ends with `}`, so it writes `}` in both
+    // SEARCH and REPLACE. The block applies through the trailing-comma pass,
+    // and the file's `},` must stay `},` or the JSON breaks.
+    let toolService = getService('tool-service');
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
+
+    const fileContent = `{
+  "meta": {
+    "adoptsFrom": {
+      "module": "../wedding-planner",
+      "name": "WeddingPlanner"
+    },
+    "realmURL": "https://example.com/realm/"
+  }
+}`;
+    const codeBlock = `${SEARCH_MARKER}
+    "adoptsFrom": {
+      "module": "../wedding-planner",
+      "name": "WeddingPlanner"
+    }
+${SEPARATOR_MARKER}
+    "adoptsFrom": {
+      "module": "./wedding-planner",
+      "name": "WeddingPlanner"
+    }
+${REPLACE_MARKER}`;
+
+    let result = await applyCommand.execute({ fileContent, codeBlock });
+
+    assert.strictEqual(
+      result.resultContent,
+      `{
+  "meta": {
+    "adoptsFrom": {
+      "module": "./wedding-planner",
+      "name": "WeddingPlanner"
+    },
+    "realmURL": "https://example.com/realm/"
+  }
+}`,
+      'the comma the file had is kept',
+    );
+  });
+
+  test('removes a trailing comma the model imagined when the file has none', async function (assert) {
+    let toolService = getService('tool-service');
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
+
+    const fileContent = `{
+  "meta": {
+    "adoptsFrom": {
+      "module": "../a",
+      "name": "A"
+    }
+  }
+}`;
+    const codeBlock = `${SEARCH_MARKER}
+    "adoptsFrom": {
+      "module": "../a",
+      "name": "A"
+    },
+${SEPARATOR_MARKER}
+    "adoptsFrom": {
+      "module": "./a",
+      "name": "A"
+    },
+${REPLACE_MARKER}`;
+
+    let result = await applyCommand.execute({ fileContent, codeBlock });
+
+    assert.strictEqual(
+      result.resultContent,
+      `{
+  "meta": {
+    "adoptsFrom": {
+      "module": "./a",
+      "name": "A"
+    }
+  }
+}`,
+      'no stray comma before the closing brace',
+    );
+  });
+
+  test('prefers an exact match over a trailing-comma match', async function (assert) {
+    let toolService = getService('tool-service');
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
+
+    const fileContent = `first,
+first
+last`;
+    const codeBlock = `${SEARCH_MARKER}
+first
+${SEPARATOR_MARKER}
+changed
+${REPLACE_MARKER}`;
+
+    let result = await applyCommand.execute({ fileContent, codeBlock });
+
+    assert.strictEqual(
+      result.resultContent,
+      `first,
+changed
+last`,
+      'the exact line is replaced, not the line that only matches without its comma',
+    );
+  });
+
+  test('does not relax a trailing comma on a search line before the last', async function (assert) {
+    // The model wrote two adjacent JSON properties without either comma. The
+    // last line may differ from the file by its comma, the first may not:
+    // matching it anyway would write the replacement's missing comma into
+    // the file and break the JSON silently, where a reported failure lets
+    // the model correct the block.
+    let toolService = getService('tool-service');
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
+
+    const fileContent = `{
+  "name": "pkg",
+  "version": "1.0.0",
+  "private": true
+}`;
+    const codeBlock = `${SEARCH_MARKER}
+  "name": "pkg"
+  "version": "1.0.0"
+${SEPARATOR_MARKER}
+  "name": "pkg-renamed"
+  "version": "2.0.0"
+${REPLACE_MARKER}`;
+
+    try {
+      await applyCommand.execute({ fileContent, codeBlock });
+      assert.ok(false, 'expected the patch to be rejected');
+    } catch (error: any) {
+      assert.strictEqual(
+        error.message,
+        `${APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.SEARCH_PATTERN_NOT_FOUND}. The first search line that does not appear anywhere in the file: "name": "pkg"`,
+        'the line whose comma the matcher does not forgive is the one named',
+      );
+    }
+  });
+
+  test('does not name a last line the matcher would accept without its comma', async function (assert) {
+    // Every search line exists in the file, the last one only up to its
+    // trailing comma, which the matcher forgives. The block fails because
+    // the lines are not adjacent, and the message must say that rather than
+    // point at the comma the model is allowed to get wrong.
+    let toolService = getService('tool-service');
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
+
+    const fileContent = `alpha
+beta
+gamma,`;
+    const codeBlock = `${SEARCH_MARKER}
+alpha
+gamma
+${SEPARATOR_MARKER}
+x
+${REPLACE_MARKER}`;
+
+    try {
+      await applyCommand.execute({ fileContent, codeBlock });
+      assert.ok(false, 'expected the patch to be rejected');
+    } catch (error: any) {
+      assert.strictEqual(
+        error.message,
+        `${APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.SEARCH_PATTERN_NOT_FOUND}. Every search line appears somewhere in the file, but not as one contiguous run in this order.`,
+      );
+    }
+  });
+
+  test('names the first search line that is missing from the file', async function (assert) {
+    let toolService = getService('tool-service');
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
+
+    const fileContent = `export class Task extends CardDef {
+  @field title = contains(StringField);
+}`;
+    const codeBlock = `${SEARCH_MARKER}
+export class Task extends CardDef {
+  @field cardTitle = contains(StringField);
+}
+${SEPARATOR_MARKER}
+export class Task extends CardDef {
+  @field cardTitle = contains(StringField);
+  @field dueDate = contains(DateField);
+}
+${REPLACE_MARKER}`;
+
+    try {
+      await applyCommand.execute({ fileContent, codeBlock });
+      assert.ok(false, 'expected the patch to be rejected');
+    } catch (error: any) {
+      assert.strictEqual(
+        error.message,
+        `${APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.SEARCH_PATTERN_NOT_FOUND}. The first search line that does not appear anywhere in the file: @field cardTitle = contains(StringField);`,
+      );
+    }
+  });
+
+  test('reports when every search line exists but not contiguously', async function (assert) {
+    let toolService = getService('tool-service');
+    let applyCommand = new ApplySearchReplaceBlockTool(toolService.toolContext);
+
+    const fileContent = `a
+b
+c`;
+    const codeBlock = `${SEARCH_MARKER}
+c
+a
+${SEPARATOR_MARKER}
+x
+${REPLACE_MARKER}`;
+
+    try {
+      await applyCommand.execute({ fileContent, codeBlock });
+      assert.ok(false, 'expected the patch to be rejected');
+    } catch (error: any) {
+      assert.strictEqual(
+        error.message,
+        `${APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.SEARCH_PATTERN_NOT_FOUND}. Every search line appears somewhere in the file, but not as one contiguous run in this order.`,
+      );
+    }
   });
 });

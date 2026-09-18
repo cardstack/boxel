@@ -1,4 +1,5 @@
-import { Component, FieldDef, field, contains, relativeTo } from './card-api';
+import type { relativeTo } from './card-api';
+import { Component, FieldDef, field, contains } from './card-api';
 import BooleanField from './boolean';
 import { AbsoluteCodeRefField } from './code-ref';
 import { JsonField } from './json-field';

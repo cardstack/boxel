@@ -691,6 +691,10 @@ async function runGlintCheck(
             // Card code imports host tools as
             // `@cardstack/boxel-host/tools/<name>`.
             '@cardstack/boxel-host/tools/*': [`${HOST_APP_PATH}/tools/*`],
+            // Host library modules card code may import (e.g.
+            // `lib/pdfjs-loader`); `lib` is among the bundled host-app
+            // subdirs.
+            '@cardstack/boxel-host/lib/*': [`${HOST_APP_PATH}/lib/*`],
             '@cardstack/boxel-ui/*': [`${BOXEL_UI_PATH}/*`],
             '*': [`${HOST_TYPES_PATH}/*`],
           },

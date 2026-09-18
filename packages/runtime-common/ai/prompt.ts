@@ -269,6 +269,28 @@ export async function getPromptParts(
   };
 }
 
+// The host reports a patch result with the fenced block's position among ALL
+// code blocks in the message, while `codePatchBlocks` holds the patch blocks
+// only. A message that quotes an example code fence before its first patch
+// therefore reports indexes that never line up with 0..n-1, so matching by
+// position waited forever on a patch the host had long applied. Match by
+// count instead: a result per distinct block index, at least one per patch.
+//
+// A failed result counts: the host offers no way to re-apply a failed block,
+// so the block's outcome is final and its reply is resolved. The blocks that
+// did apply are checked for correctness on their own; the failed ones are
+// retried in a new reply that gets its own check.
+function allCodePatchesHaveAResult(
+  codePatchBlocks: string[],
+  results: CodePatchResultEvent[],
+): boolean {
+  if (codePatchBlocks.length === 0) {
+    return true;
+  }
+  let indexes = new Set(results.map((result) => result.content.codeBlockIndex));
+  return indexes.size >= codePatchBlocks.length;
+}
+
 function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
   // If the aibot is awaiting command or code patch results, it should not respond yet.
   let lastEventExcludingResults = findLast(
@@ -310,16 +332,10 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
         );
       });
     });
-  let allCodePatchesHaveResults =
-    codePatchBlocks.length === 0 ||
-    codePatchBlocks.every((_codePatchBlock: string, codePatchIndex: number) => {
-      return recentEventsToCheck.some((event) => {
-        return (
-          isCodePatchResultEvent(event) &&
-          event.content.codeBlockIndex === codePatchIndex
-        );
-      });
-    });
+  let allCodePatchesHaveResults = allCodePatchesHaveAResult(
+    codePatchBlocks,
+    recentEventsToCheck.filter(isCodePatchResultEvent),
+  );
   if (!allToolsHaveResults || !allCodePatchesHaveResults) {
     return false;
   }
@@ -1093,6 +1109,131 @@ function getCodePatchResults(
   return codePatchResultEvents;
 }
 
+// The host records a patch outcome on a codePatchResult event, and those
+// events are not rendered into the history. For an applied block that is
+// fine: the correctness check reports on the result. A failed block left the
+// model with no signal at all, so it would re-read the file and resend the
+// same block. This message records which blocks of the reply failed and why.
+// It is a record, not an instruction: a retry is a new block in a new reply,
+// so this block stays failed for the rest of the session, and an imperative
+// here would stand in history long after the fix landed. The instruction
+// rides the trailing message, see buildFailedCodePatchFollowUp.
+//
+// Only a block whose latest result is a failure is reported: a block that
+// failed once and then applied on a retry is an applied block.
+function latestCodePatchResults(
+  cardMessageEvent: CardMessageEvent,
+  history: DiscreteMatrixEvent[],
+): CodePatchResultEvent[] {
+  let latestResultByBlock = new Map<number, CodePatchResultEvent>();
+  for (let result of getCodePatchResults(cardMessageEvent, history)) {
+    latestResultByBlock.set(result.content.codeBlockIndex, result);
+  }
+  return [...latestResultByBlock.values()].sort(
+    (a, b) => a.content.codeBlockIndex - b.content.codeBlockIndex,
+  );
+}
+
+function failedCodePatchResults(
+  cardMessageEvent: CardMessageEvent,
+  history: DiscreteMatrixEvent[],
+): CodePatchResultEvent[] {
+  return latestCodePatchResults(cardMessageEvent, history).filter(
+    (result) => result.content['m.relates_to']?.key === 'failed',
+  );
+}
+
+function appliedAnyCodePatch(
+  cardMessageEvent: CardMessageEvent,
+  history: DiscreteMatrixEvent[],
+): boolean {
+  return latestCodePatchResults(cardMessageEvent, history).some(
+    (result) => result.content['m.relates_to']?.key === 'applied',
+  );
+}
+
+function buildFailedCodePatchMessage(
+  cardMessageEvent: CardMessageEvent,
+  history: DiscreteMatrixEvent[],
+): string | undefined {
+  let failures = failedCodePatchResults(cardMessageEvent, history);
+  if (failures.length === 0) {
+    return undefined;
+  }
+  return failures
+    .map((result) => {
+      let fileUrl = result.content.data?.attachedFiles?.[0]?.sourceUrl;
+      let reason = result.content.failureReason ?? 'unknown error';
+      return `Code block ${result.content.codeBlockIndex + 1}${
+        fileUrl ? ` (${fileUrl})` : ''
+      } was not applied: ${reason}`;
+    })
+    .join('\n');
+}
+
+// The instruction that goes with a failed patch, for this request only. It
+// applies while the bot's most recent reply that carried patches has a
+// failed block and nothing has replaced it: a re-read turn in between keeps
+// it, a later reply with new patches ends it, and a new message from the
+// user ends it too. Consecutive replies since the user's message whose
+// every block failed are counted, and at the same cap the correctness check
+// uses the retrying stops and the model is told to report to the user
+// instead — otherwise a model that cannot get the SEARCH block right would
+// loop, fail, and pay for it until someone noticed. A reply that landed some
+// of its blocks is progress, not another failed attempt at the same thing:
+// it ends the count, so three replies that each finish part of the job are
+// never mistaken for three failures in a row.
+function buildFailedCodePatchFollowUp(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): string | undefined {
+  let lastUserMessageIndex = findLastIndex(
+    history,
+    (event) =>
+      event.sender !== aiBotUserId &&
+      event.type === 'm.room.message' &&
+      !isToolOrCodePatchResult(event),
+  );
+  let patchReplies = history.slice(lastUserMessageIndex + 1).filter((event) => {
+    if (
+      event.sender !== aiBotUserId ||
+      event.type !== 'm.room.message' ||
+      isToolOrCodePatchResult(event)
+    ) {
+      return false;
+    }
+    let content = event.content as CardMessageContent;
+    if (content.isStreamingFinished === false) {
+      return false;
+    }
+    return extractCodePatchBlocks(content.body ?? '').length > 0;
+  }) as CardMessageEvent[];
+  let latestReply = patchReplies[patchReplies.length - 1];
+  if (
+    !latestReply ||
+    failedCodePatchResults(latestReply, history).length === 0
+  ) {
+    return undefined;
+  }
+  let failedAttempts = 0;
+  for (let i = patchReplies.length - 1; i >= 0; i--) {
+    if (
+      failedCodePatchResults(patchReplies[i], history).length === 0 ||
+      appliedAnyCodePatch(patchReplies[i], history)
+    ) {
+      break;
+    }
+    failedAttempts++;
+  }
+  // The latest reply has a failed block, so a retry is due even when the
+  // same reply also made progress; that counts as the first attempt.
+  failedAttempts = Math.max(failedAttempts, 1);
+  if (failedAttempts >= MAX_CORRECTNESS_FIX_ATTEMPTS) {
+    return FAILED_CODE_PATCH_LIMIT_INSTRUCTION;
+  }
+  return `${FAILED_CODE_PATCH_RETRY_INSTRUCTION} Attempt ${failedAttempts} of ${MAX_CORRECTNESS_FIX_ATTEMPTS}.`;
+}
+
 function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
   const content = event.content as CardMessageContent;
   return (getToolRequests<Partial<EncodedToolRequest>>(content) ?? []).map(
@@ -1276,9 +1417,13 @@ type FormattedCorrectnessSummary = {
   hasErrors: boolean;
 };
 
-const SEARCH_REPLACE_FIX_INSTRUCTION = `1. Propose fixes for the above errors by using one or more SEARCH/REPLACE blocks (DO NOT use the patchCardInstance tool function, because it will not work for broken cards).
-2. You MUST re-fetch the files that have errors so that you can see their updated content before proposing fixes.
-3. Respond very briefly that there is an issue with the file(s) (1 sentence max) that you will attempt to fix and do not mention SEARCH/REPLACE blocks in your prose.`;
+// Sent after a correctness check fails. The fix must be a SEARCH/REPLACE block
+// against the file: a card that just failed its check is usually not indexed,
+// so any card-editing tool (patch-fields, patchCardInstance) applies to
+// nothing and costs a turn. Name no tool, ban them all.
+const SEARCH_REPLACE_FIX_INSTRUCTION = `1. Fix the errors above by editing the failing file(s) with SEARCH/REPLACE blocks. Do not call any tool to make the fix — a card that just failed its check is not indexed yet, so a tool applies to nothing.
+2. First re-fetch the files that have errors so the SEARCH block matches their current content, then write the fixing blocks in the same reply.
+3. One short sentence of prose before the blocks saying there is an issue you are fixing; do not mention SEARCH/REPLACE blocks in the prose.`;
 
 const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
   'Summarize the results above in one short sentence confirming that the target is now auto-corrected. Mention any warnings if they exist. Do not mention correctness or automated checks or tool calls.';
@@ -1290,6 +1435,16 @@ const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have 
 // for a summary reads as the end of the work. It was: a build announced as
 // two cards delivered one, reported it was clean, and stopped, because
 // nothing resumes a plan across turns.
+// A failed patch leaves two traces in the prompt. History carries a record of
+// the failure after the reply that produced it (buildFailedCodePatchMessage):
+// past tense, stable bytes, and it stays true for the rest of the session.
+// The instruction to retry rides the volatile trailing message instead
+// (buildFailedCodePatchFollowUp), so it is present only while the retry is
+// pending and disappears once the next patch lands, rather than standing in
+// history as an order a weak model keeps obeying after the fix.
+const FAILED_CODE_PATCH_RETRY_INSTRUCTION = `A code block in your last reply was not applied; the reason is recorded after that reply. Re-read the file and send a new block whose SEARCH lines are copied exactly from the current file. Do not send the same block again.`;
+const FAILED_CODE_PATCH_LIMIT_INSTRUCTION = `Code patches have failed to apply ${MAX_CORRECTNESS_FIX_ATTEMPTS} times in a row. Do not send another patch. Tell the user which file could not be updated and why, and ask how they want to proceed.`;
+
 const CHECK_CORRECTNESS_SUMMARY_INSTRUCTION =
   'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls. If work you already described remains unfinished, carry straight on with it in the same reply — this is a note on what just landed, not a request to stop.';
 
@@ -1594,6 +1749,16 @@ export async function buildPromptForModel(
           history,
         )
       ).forEach((message) => historicalMessages.push(message));
+      let failedCodePatchMessage = buildFailedCodePatchMessage(
+        event as CardMessageEvent,
+        history,
+      );
+      if (failedCodePatchMessage) {
+        historicalMessages.push({
+          role: 'user',
+          content: failedCodePatchMessage,
+        });
+      }
     }
     if (event.sender !== aiBotUserId) {
       let attachmentText = await buildAttachmentsMessagePart(
@@ -1675,6 +1840,7 @@ export async function buildPromptForModel(
   let trailingContent = [
     contextContent,
     unsupportedNote,
+    buildFailedCodePatchFollowUp(history, aiBotUserId),
     shouldPromptCheckCorrectnessSummary(history, aiBotUserId)
       ? CHECK_CORRECTNESS_SUMMARY_INSTRUCTION
       : undefined,
@@ -1785,16 +1951,10 @@ function collectPendingCodePatchCorrectnessCheck(
       continue;
     }
 
-    let appliedCodePatchResults = codePatchResults.filter(
-      (result) => result.content['m.relates_to']?.key === 'applied',
+    let allCodePatchesResolved = allCodePatchesHaveAResult(
+      codePatchBlocks,
+      codePatchResults,
     );
-    let allCodePatchesResolved =
-      codePatchBlocks.length === 0 ||
-      codePatchBlocks.every((_block, index) =>
-        appliedCodePatchResults.some(
-          (result) => result.content.codeBlockIndex === index,
-        ),
-      );
     let allRelevantToolsResolved =
       relevantTools.length === 0 ||
       relevantTools.every((request) =>
@@ -1864,15 +2024,10 @@ function hasUnresolvedCodePatches(
     if (isCancelled && !appliedChanges) {
       return false;
     }
-    let allCodePatchesResolved =
-      codePatchBlocks.length === 0 ||
-      codePatchBlocks.every((_block, index) =>
-        codePatchResults.some(
-          (result) =>
-            result.content['m.relates_to']?.key === 'applied' &&
-            result.content.codeBlockIndex === index,
-        ),
-      );
+    let allCodePatchesResolved = allCodePatchesHaveAResult(
+      codePatchBlocks,
+      codePatchResults,
+    );
     let allRelevantToolsResolved =
       relevantTools.length === 0 ||
       relevantTools.every((request) =>
@@ -1924,16 +2079,10 @@ function buildCodePatchCorrectnessMessage(
     return undefined;
   }
 
-  let appliedCodePatchResults = codePatchResults.filter(
-    (result) => result.content['m.relates_to']?.key === 'applied',
+  let allCodePatchesResolved = allCodePatchesHaveAResult(
+    codePatchBlocks,
+    codePatchResults,
   );
-  let allCodePatchesResolved =
-    codePatchBlocks.length === 0 ||
-    codePatchBlocks.every((_block, index) =>
-      appliedCodePatchResults.some(
-        (result) => result.content.codeBlockIndex === index,
-      ),
-    );
   let allRelevantToolsResolved =
     relevantTools.length === 0 ||
     relevantTools.every((request) =>

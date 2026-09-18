@@ -82,11 +82,24 @@ beforeAll(async () => {
 
 afterAll(async () => {
   cleanupProfile?.();
-  await stopTestRealmServer();
-  // The prerender server is memoized per module registry, but vitest gives
-  // each test file a fresh registry — stop the OS-level server so the next
-  // suite's getTestPrerenderer() doesn't hit EADDRINUSE.
-  await stopTestPrerenderServer();
+  try {
+    await stopTestRealmServer();
+  } finally {
+    // The prerender server is memoized per module registry, but vitest gives
+    // each test file a fresh registry — stop the OS-level server so the next
+    // suite's getTestPrerenderer() doesn't hit EADDRINUSE.
+    //
+    // Stopped after the realm server rather than before it: a render still in
+    // flight when the prerender port closes fails with ECONNREFUSED, which the
+    // prerender client reads as a deployment blip and retries twelve times with
+    // exponential backoff. Draining the realm server first means nothing is
+    // rendering by the time the port goes away.
+    //
+    // In `finally` because the port is process-wide. A realm teardown that
+    // throws would otherwise leave it bound, and the next suite's
+    // getTestPrerenderer() would fail for a reason of its own.
+    await stopTestPrerenderServer();
+  }
   // Shutting down a realm server and a browser-backed prerender server is not
   // a 10-second job on a loaded runner, and the default hook timeout is 10s.
   // Timing out here aborts the teardown above, which is the very thing that

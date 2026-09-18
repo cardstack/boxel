@@ -20,11 +20,11 @@ import {
   PermissionsConsumer,
 } from './field-component';
 import { Button, IconButton } from '@cardstack/boxel-ui/components';
+import type { Loader } from '@cardstack/runtime-common';
 import {
   getPlural,
   fields,
   type ResolvedCodeRef,
-  Loader,
   loadCardDef,
   uuidv4,
   isCardInstance,

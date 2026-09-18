@@ -6,8 +6,10 @@
 
 Certain property names are provided by the system as getters on
 `CardDef`/`FileDef` — `screenshotURLs`, which exposes the durable served URLs
-of a card's declared screenshots. A userland `@field` under one of these
-names would shadow the system getter via the prototype chain. card-api's
+of a card's declared screenshots, and `screenshotsMeta`, which exposes those
+captures' `meta.screenshots` entries (dimensions, thumbnail flag). A userland
+`@field` under one of these names would shadow the system getter via the
+prototype chain. card-api's
 `field` decorator refuses these names at runtime; this rule surfaces the
 mistake at authoring time.
 

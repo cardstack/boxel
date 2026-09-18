@@ -138,6 +138,7 @@ let {
   migrateDB,
   prerendererUrl,
   serviceName = 'worker',
+  skipPrerenderHtmlRealm: skipPrerenderHtmlRealms = [],
 } = yargs(process.argv.slice(2))
   .usage('Start worker manager')
   .options({
@@ -190,6 +191,11 @@ let {
       description:
         'Traefik service name for registration in branch mode (default: worker)',
       type: 'string',
+    },
+    skipPrerenderHtmlRealm: {
+      description:
+        'Realm URL whose from-scratch index must not spawn the follow-on prerender_html job. Repeatable. A test-harness affordance: the realm ends up indexed but never rendered, so anything reading its prerendered HTML sees nothing at all rather than something late. No deployment sets this.',
+      type: 'array',
     },
   })
   .parseSync();
@@ -812,6 +818,9 @@ async function startWorker(
       `--prerendererUrl=${prerendererUrl}`,
       `--priority=${priority}`,
       ...(opts?.indexJobsOnly ? [`--indexJobsOnly`] : []),
+      ...skipPrerenderHtmlRealms.map(
+        (realmURL) => `--skipPrerenderHtmlRealm=${realmURL}`,
+      ),
       ...flattenDeep(
         urlMappings.map(([from, to]) => [
           `--fromUrl='${from instanceof URL ? from.href : from}'`,

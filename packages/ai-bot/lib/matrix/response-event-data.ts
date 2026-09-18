@@ -38,9 +38,17 @@ export default class ResponseEventData {
         content: '',
       };
     }
+    let contentEnd = this.contentStartIndex + remainingBudget;
+    if (contentEnd < content.length) {
+      contentEnd = cutOutsideCodeBlocks(
+        content,
+        this.contentStartIndex,
+        contentEnd,
+      );
+    }
     let contentForNextMessage = content.slice(
       this.contentStartIndex,
-      this.contentStartIndex + remainingBudget,
+      contentEnd,
     );
     return {
       reasoning: reasoningForNextMessage,
@@ -64,4 +72,32 @@ export default class ResponseEventData {
     nextEvent.reasoningStartIndex = this.reasoningEndIndex;
     return nextEvent;
   }
+}
+
+// A SEARCH/REPLACE block that is cut across two events is never applied: the
+// host reads patches per event, so each half is a malformed block. When the
+// cut would land inside a fenced code block, move it back to the start of
+// that block (the opening fence line, or the URL line the host expects right
+// after it), so the whole block moves to the next event. A block bigger than
+// one event still has to be cut; the hard cut stays as the fallback.
+export function cutOutsideCodeBlocks(
+  content: string,
+  start: number,
+  proposedEnd: number,
+): number {
+  let piece = content.slice(start, proposedEnd);
+  let fences = piece.match(/^```/gm) ?? [];
+  if (fences.length % 2 === 0) {
+    return proposedEnd; // the cut is not inside a fence
+  }
+  let lastFence = piece.lastIndexOf('\n```');
+  if (lastFence === -1) {
+    lastFence = piece.startsWith('```') ? 0 : -1;
+  } else {
+    lastFence += 1; // the fence line itself starts after the newline
+  }
+  if (lastFence <= 0) {
+    return proposedEnd; // the open block is the whole piece; cut anyway
+  }
+  return start + lastFence;
 }

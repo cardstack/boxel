@@ -15,6 +15,7 @@ import { formatDateForMarkdown } from './markdown-helpers';
 import { Countdown } from './components/countdown';
 import { Timeline } from './components/timeline';
 import { Age } from './components/age';
+import { nowDate } from './helpers/clock';
 
 // The Intl API is supported in all modern browsers. In older ones, we polyfill
 // it in the application route at app startup.
@@ -51,9 +52,7 @@ interface ViewSignature {
 }
 
 class View extends GlimmerComponent<ViewSignature> {
-  <template>
-    {{this.formatted}}
-  </template>
+  <template>{{this.formatted}}</template>
   get formatted() {
     if (this.args.model == null) {
       return '[no date]';
@@ -126,7 +125,9 @@ class AtomView extends GlimmerComponent<ViewSignature> {
     if (!this.args.model) return 'No date';
     try {
       const date = new Date(String(this.args.model));
-      const config = this.args.configuration as DateFieldConfiguration | undefined;
+      const config = this.args.configuration as
+        | DateFieldConfiguration
+        | undefined;
       return formatDateTime(date, {
         preset: config?.preset || 'medium',
         fallback: 'Invalid date',
@@ -217,7 +218,7 @@ export default class DateField extends FieldDef {
       if (!date?.length) {
         return set(null);
       }
-      let parsed = parse(date, dateFormat, new Date());
+      let parsed = parse(date, dateFormat, nowDate());
       if (!isValid(parsed)) {
         return;
       }

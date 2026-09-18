@@ -232,6 +232,7 @@ module('Integration | enumField', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Task },
@@ -324,6 +325,7 @@ module('Integration | enumField', function (hooks) {
 
     // register card so it can be identified for serialization
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Task },
@@ -365,6 +367,7 @@ module('Integration | enumField', function (hooks) {
 
     // register card so it can be identified for serialization
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Task },
@@ -682,6 +685,7 @@ module('Integration | enumField', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Task },
@@ -812,6 +816,7 @@ module('Integration | enumField', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
+      skipBootIndex: true,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Task },

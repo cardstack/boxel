@@ -1,4 +1,8 @@
-import { registerDestructor } from '@ember/destroyable';
+import {
+  isDestroyed,
+  isDestroying,
+  registerDestructor,
+} from '@ember/destroyable';
 import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import { cached } from '@glimmer/tracking';
@@ -16,6 +20,8 @@ import {
   type CodeRef,
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
+
+import { LiveSearchRefreshScheduler } from '../lib/live-search-refresh-scheduler';
 
 import type StoreService from '../services/store';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
@@ -48,6 +54,14 @@ export class FileTreeFromIndexResource extends Resource<Args> {
   #fileTypeFilter: CodeRef | undefined;
   #fileFieldFilter: Record<string, unknown> | undefined;
   #subscription: { realmURL: string; unsubscribe: () => void } | undefined;
+  // Defers the event-triggered re-run so a burst of realm events — a write's
+  // index event plus its prerender_html follow-ups, or many concurrent
+  // writers — costs one `store.searchEntries` (a `_federated-search` POST),
+  // not one per event. Only event-triggered re-runs are deferred; the initial
+  // modify() search still runs immediately.
+  #refreshScheduler = new LiveSearchRefreshScheduler(() =>
+    this.#flushEventRefresh(),
+  );
   // @ts-ignore we use this.loaded for test instrumentation.
   private loaded: Promise<void> | undefined;
   private _fileURLs = new TrackedArray<string>();
@@ -55,6 +69,7 @@ export class FileTreeFromIndexResource extends Resource<Args> {
   constructor(owner: object) {
     super(owner);
     registerDestructor(this, () => {
+      this.#refreshScheduler.cancel();
       this.#subscription?.unsubscribe();
     });
   }
@@ -83,7 +98,7 @@ export class FileTreeFromIndexResource extends Resource<Args> {
             ) {
               return;
             }
-            this.search.perform();
+            this.#refreshScheduler.schedule();
           },
         ),
       };
@@ -93,6 +108,16 @@ export class FileTreeFromIndexResource extends Resource<Args> {
       return;
     }
     this.loaded = this.search.perform();
+  }
+
+  // The deferred arm of the subscription callback: performs one search over
+  // the burst the scheduler's window accumulated. Guarded against a teardown
+  // (or a not-yet-modified resource) between arm and flush.
+  #flushEventRefresh(): void {
+    if (isDestroyed(this) || isDestroying(this) || !this.#realmURL) {
+      return;
+    }
+    this.search.perform();
   }
 
   get isLoading(): boolean {

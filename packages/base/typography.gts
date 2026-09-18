@@ -14,7 +14,7 @@ import {
   StringField,
 } from './card-api';
 import CSSValueField from './css-value';
-import { type CssVariableField } from './structured-theme-variables';
+import type { CssVariableField } from './structured-theme-variables';
 
 class TypographyEmbedded extends Component<typeof TypographyField> {
   <template>
