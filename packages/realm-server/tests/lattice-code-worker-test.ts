@@ -213,6 +213,131 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('shared readiness code proofs invalidate on their dependencies and recover conservatively', async function (assert) {
+    await publish('counter.gts', code);
+    await run();
+    const admitted = await readLatticeCodeAdmission(
+      db,
+      policy,
+      realm + 'counter.gts',
+      'Counter',
+    );
+    assert.ok(admitted);
+    const reference = JSON.stringify(admitted!.reference);
+    const owner = realm + 'Counter/one.json';
+    await db.execute(
+      `INSERT INTO lattice_owners(realm_url,owner_url,published_generation,input_generation,definition_revision,code_bound)
+      VALUES($1,$2,1,1,'definition',TRUE)`,
+      { bind: [realm, owner] },
+    );
+    await db.execute(
+      'INSERT INTO lattice_owner_code(realm_url,owner_url,generation,reference) VALUES($1,$2,1,$3)',
+      { bind: [realm, owner, reference] },
+    );
+    const cached = async () =>
+      (
+        await db.execute(
+          'SELECT current FROM lattice_readiness_code WHERE reference=$1',
+          { bind: [reference] },
+        )
+      )[0]?.current;
+    const valid = async () =>
+      (
+        await query(
+          db,
+          latticeOwnerCodeStatuses([param(realm)], [param('epoch')]),
+        )
+      )[0].current;
+    assert.true(await cached());
+    assert.true(await valid());
+    await db.execute(
+      'UPDATE realm_metadata SET show_as_catalog=TRUE,updated_at=NOW() WHERE url=$1',
+      { bind: [realm] },
+    );
+    await db.execute(
+      'UPDATE realm_user_permissions SET write=FALSE WHERE realm_url=$1 AND username=$2',
+      { bind: [realm, actor] },
+    );
+    await db.execute(
+      'UPDATE lattice_code_realms SET policy_revision=policy_revision WHERE realm_url=$1',
+      { bind: [realm] },
+    );
+    assert.true(
+      await cached(),
+      'non-read-authority metadata changes retain the shared proof',
+    );
+    await writeSource('unrelated.json', '{"amount":2}');
+    assert.true(await cached(), 'unrelated data writes retain code proof');
+    await db.execute(
+      'UPDATE lattice_owners SET dirty_generation=2 WHERE owner_url=$1',
+      { bind: [owner] },
+    );
+    assert.true(await cached(), 'dirty data does not invalidate code');
+    await db.execute(
+      'UPDATE realm_user_permissions SET read=FALSE WHERE realm_url=$1 AND username=$2',
+      { bind: [realm, actor] },
+    );
+    assert.strictEqual(
+      await cached(),
+      null,
+      'permission change invalidates before commit',
+    );
+    assert.false(await valid());
+    await db.execute(
+      'UPDATE realm_user_permissions SET read=TRUE WHERE realm_url=$1 AND username=$2',
+      { bind: [realm, actor] },
+    );
+    assert.true(
+      await valid(),
+      'uncached fallback revalidates actual authority',
+    );
+    await db.execute('SELECT lattice_readiness_bind_code($1)', {
+      bind: [reference],
+    });
+    assert.true(await cached());
+    await db.execute(
+      "UPDATE realm_file_meta SET content_hash='changed' WHERE realm_url=$1 AND file_path='api.gts'",
+      { bind: [realm] },
+    );
+    assert.strictEqual(
+      await cached(),
+      null,
+      'transitive file change invalidates without a code-worker round trip',
+    );
+    assert.false(await valid());
+    await writeSource('api.gts', api);
+    assert.false(
+      await valid(),
+      'restored source still waits for its code-link obligation',
+    );
+    await run();
+    await db.execute('SELECT lattice_readiness_bind_code($1)', {
+      bind: [reference],
+    });
+    assert.true(await valid());
+    await db.execute(
+      'UPDATE realm_metadata SET archived_at=NOW() WHERE url=$1',
+      { bind: [realm] },
+    );
+    assert.strictEqual(await cached(), null);
+    assert.false(await valid());
+    await db.execute(
+      'UPDATE realm_metadata SET archived_at=NULL WHERE url=$1',
+      { bind: [realm] },
+    );
+    await db.execute('SELECT lattice_readiness_bind_code($1)', {
+      bind: [reference],
+    });
+    assert.true(await cached());
+    await db.execute('TRUNCATE lattice_readiness_code');
+    assert.true(await valid(), 'loss of cache uses the original proof');
+    await db.execute('TRUNCATE lattice_owner_code');
+    assert.false(
+      await valid(),
+      'a lost owner binding cannot be supplied by cached index facts',
+    );
+  });
+
   test('template publication preserves bound data and obligations; computation edits dirty its owner', async function (assert) {
     const text = code.replace(
       ' }',
@@ -335,16 +460,14 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('ordinary metadata writes have no Lattice trigger or invalidation side effects', async function (assert) {
+  test('ordinary metadata writes do not schedule Lattice work', async function (assert) {
     await publish('counter.gts', code);
     await run();
     const before = await artifacts();
     assert.deepEqual(
-      await query(db, [
-        "SELECT tgname FROM pg_trigger WHERE tgrelid='realm_file_meta'::regclass AND tgname LIKE 'lattice_%' AND NOT tgisinternal",
-      ]),
+      await db.execute('SELECT reference FROM lattice_readiness_code'),
       [],
-      'the shared table has no Lattice trigger',
+      'no code proof exists until a native owner is bound',
     );
     await persistFileMeta(db, realm, [
       {
@@ -366,7 +489,7 @@ module(basename(import.meta.filename), function (hooks) {
         'Counter',
       ),
       undefined,
-      'the source hash still fences old code without a trigger',
+      'the source hash still fences old code without scheduling work',
     );
     await removeFileMeta(db, realm, ['api.gts']);
     assert.deepEqual(

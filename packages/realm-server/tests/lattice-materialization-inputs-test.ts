@@ -982,14 +982,10 @@ module(basename(import.meta.filename), function (hooks) {
     );
   }
 
-  test('settled consumers share the broad proof and fall back to partitions after an input becomes dirty', async (assert) => {
+  test('readiness follows index and owner changes without a realm fingerprint or wide-body scan', async (assert) => {
     const a = await materializedCard('a', 2);
     await sourceProof(a);
     await card('b', 3, 'B');
-    const scans = () =>
-      statements.filter((sql) =>
-        sql.includes('SELECT 1 FROM lattice_owners o LEFT JOIN boxel_index i'),
-      ).length;
     const read = async (group: string) => {
       const input = await open();
       const result = await input.query('records', {
@@ -1003,55 +999,89 @@ module(basename(import.meta.filename), function (hooks) {
       first.result.cards.map((c) => c.resource.attributes?.amount),
       [2],
     );
-    const afterFirst = scans();
     const second = await read('B');
     assert.deepEqual(
       second.result.cards.map((c) => c.resource.attributes?.amount),
       [3],
     );
-    assert.strictEqual(
-      scans(),
-      afterFirst,
-      'another partition reuses the successful broad proof',
+    await publish(first.input.seal().assertCurrent);
+    await publish(second.input.seal().assertCurrent);
+    assert.false(
+      statements.some((sql) => sql.includes('string_agg(owner_url')),
+      'no realm-wide cache fingerprint',
     );
-    const commit = (input: LatticeMaterializationInputs) => {
-      const receipt = input.seal();
-      return publish((tx) =>
-        receipt.assertCurrent((expression) => {
-          // Transaction queries use their pinned connection, not db.execute.
-          statements.push(
-            expression.filter((part) => typeof part === 'string').join(' '),
-          );
-          return tx(expression);
-        }),
-      );
-    };
-    await commit(first.input);
-    const afterCommit = scans();
-    assert.true(afterCommit > afterFirst, 'commit obtains a separate proof');
-    await commit(second.input);
-    assert.strictEqual(
-      scans(),
-      afterCommit,
-      'commit shares its own current proof',
+    assert.false(
+      statements.some((sql) =>
+        sql.includes('SELECT 1 FROM lattice_owners o LEFT JOIN boxel_index i'),
+      ),
+      'readiness does not fetch full indexed bodies',
+    );
+    const [compact] = await db.execute(
+      'SELECT pristine_doc,search_doc FROM lattice_input_readiness WHERE url=$1',
+      { bind: [a] },
+    );
+    assert.notOk(
+      (compact.pristine_doc as any).attributes,
+      'no card attributes duplicated in readiness',
+    );
+    assert.notOk(
+      (compact.search_doc as any).amount,
+      'computed values are not source partition evidence',
     );
     await db.execute(
       'UPDATE lattice_owners SET dirty_generation=5 WHERE owner_url=$1',
       { bind: [a] },
     );
-    const unaffected = await read('B');
-    assert.deepEqual(
-      unaffected.result.cards.map((c) => c.resource.attributes?.amount),
-      [3],
+    assert.strictEqual(
+      (await read('B')).result.cards.length,
+      1,
+      'unrelated partition still runs',
     );
-    assert.true(
-      scans() > afterCommit,
-      'changed owner state invalidates the broader proof',
+    await assert.rejects(read('A'), /unsettled materialized inputs/);
+    await db.execute(
+      'UPDATE lattice_owners SET dirty_generation=NULL WHERE owner_url=$1',
+      { bind: [a] },
+    );
+    assert.strictEqual(
+      (await read('A')).result.cards.length,
+      1,
+      'settling releases the partition',
+    );
+    // No owner column or realm generation changes: the old guard cache could
+    // incorrectly reuse a pass. The index-owned facts must change immediately.
+    await db.execute(
+      "UPDATE boxel_index SET pristine_doc=pristine_doc #- '{meta,publication,outputRevision}' WHERE url=$1",
+      { bind: [a] },
     );
     await assert.rejects(
       read('A'),
       /unsettled materialized inputs/,
-      'the relevant partition still waits',
+      'index-only stub transition is visible',
+    );
+    await db.execute(
+      "UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{meta,publication,outputRevision}','5') WHERE url=$1",
+      { bind: [a] },
+    );
+    assert.strictEqual((await read('A')).result.cards.length, 1);
+    await db.execute('DELETE FROM boxel_index WHERE url=$1', { bind: [a] });
+    assert.deepEqual(
+      await db.execute('SELECT url FROM lattice_input_readiness WHERE url=$1', {
+        bind: [a],
+      }),
+      [],
+    );
+    await assert.rejects(
+      read('B'),
+      /unsettled materialized inputs/,
+      'unknown missing type is conservative',
+    );
+  });
+
+  test('ordinary cards do not create readiness artifacts', async (assert) => {
+    await card('ordinary', 5);
+    assert.deepEqual(
+      await db.execute('SELECT url FROM lattice_input_readiness'),
+      [],
     );
   });
 

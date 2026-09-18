@@ -132,8 +132,8 @@ async function checkQueryInputs(
   // over what dirty feeders last published, and keeps its obligation so the
   // ordinary path corrects any false negative once they settle.
   const pending = await tx([
-    `SELECT 1 FROM lattice_owners o LEFT JOIN boxel_index i
-     ON i.realm_url=o.realm_url AND i.url=o.owner_url AND i.type='instance'
+    `SELECT 1 FROM lattice_owners o LEFT JOIN lattice_input_readiness i
+     ON i.realm_url=o.realm_url AND i.url=o.owner_url
      LEFT JOIN (`,
     ...latticeOwnerCodeStatuses(
       [param(frame.realmURL)],
@@ -169,9 +169,9 @@ async function checkQueryInputs(
           param(frame.generation),
           `OR o.published_generation<1`,
         ]),
-    `) UNION ALL SELECT 1 FROM boxel_index i WHERE i.realm_url=`,
+    `) UNION ALL SELECT 1 FROM lattice_input_readiness i WHERE i.realm_url=`,
     param(frame.realmURL),
-    `AND i.type='instance' AND i.is_deleted IS NOT TRUE
+    `AND i.is_deleted IS NOT TRUE
      AND i.pristine_doc->'meta'->'publication' IS NOT NULL
      AND (i.pristine_doc->'meta'->'publication'->>'outputRevision') IS NULL
      AND (`,
@@ -201,76 +201,17 @@ export class LatticeMaterializationInputs {
   static MAX_CARD_BYTES = 4_194_304;
   static MAX_TOTAL_BYTES = 67_108_864;
   static MAX_QUERIES = 64;
-  // The unsettled-inputs guard is a predicate over every owner of a type
-  // scope, joined to their index rows: the 32 renders of a wave ask the same
-  // question of the same rows. A pass is remembered against a fingerprint of
-  // the realm's owner rows (the columns the guard reads) plus the generation
-  // and code epoch; the fingerprint is one aggregate over lattice_owners
-  // (milliseconds) where the guard is a join with JSON extraction per row.
-  static #guardPassed = new WeakMap<DBAdapter, Map<string, string>>();
-  static async guardOnce(
-    db: DBAdapter,
-    run: (expression: Expression) => Promise<Record<string, unknown>[]>,
-    frame: Frame,
-    scopeKey: string,
-    check: () => Promise<void>,
-  ) {
-    const [row] = await run([
-      `SELECT md5(coalesce(string_agg(owner_url || ':' || coalesce(dirty_generation::text,'') || ':' || coalesce(published_generation::text,'') || ':' || coalesce(input_generation::text,'') || ':' || definition_revision || ':' || retired::text, ',' ORDER BY owner_url),'')) AS fingerprint
-       FROM lattice_owners WHERE realm_url=`,
-      param(frame.realmURL),
-    ]);
-    const key = `${frame.realmURL}|${frame.loaderEpoch}|${frame.stale ? 1 : 0}|${scopeKey}`;
-    const version = `${frame.generation}|${String(row?.fingerprint)}`;
-    let passed = LatticeMaterializationInputs.#guardPassed.get(db);
-    if (!passed) {
-      passed = new Map();
-      LatticeMaterializationInputs.#guardPassed.set(db, passed);
-    }
-    if (passed.get(key) === version) return;
-    await check();
-    if (passed.size >= 256) passed.delete(passed.keys().next().value!);
-    passed.set(key, version);
-  }
+  // Index processing maintains compact per-card readiness facts. Code proofs
+  // are shared and invalidated by their own inputs. No whole-realm fingerprint
+  // or broad-then-partition probe: evaluate the exact conservative scope once.
   static async guardQueryInputs(
-    db: DBAdapter,
+    _db: DBAdapter,
     run: Querier,
     frame: Frame,
     scopes: QueryReadiness,
-    phase: 'read' | 'commit',
+    _phase: 'read' | 'commit',
   ) {
-    // A successful broader proof implies every source partition is ready.
-    // Share that proof among consumers instead of scanning all owner bodies
-    // for every different predicate. A failed broad proof says nothing about
-    // a partition: only then pay for the narrower check. Both proofs use the
-    // existing owner/generation/code fingerprint and separate commit namespace.
-    try {
-      await this.guardOnce(
-        db,
-        run,
-        frame,
-        `${phase}|type|${JSON.stringify(scopes.typeScope)}`,
-        () =>
-          checkQueryInputs(run, frame, {
-            typeScope: scopes.typeScope,
-            sourceScope: scopes.typeScope,
-          }),
-      );
-      return;
-    } catch (error) {
-      if (!(error instanceof LatticeInputsPending)) throw error;
-      if (
-        JSON.stringify(scopes.typeScope) === JSON.stringify(scopes.sourceScope)
-      )
-        throw error;
-    }
-    await this.guardOnce(
-      db,
-      run,
-      frame,
-      `${phase}|partition|${JSON.stringify(scopes)}`,
-      () => checkQueryInputs(run, frame, scopes),
-    );
+    await checkQueryInputs(run, frame, scopes);
   }
   #db: DBAdapter;
   trace?: LatticeTrace;

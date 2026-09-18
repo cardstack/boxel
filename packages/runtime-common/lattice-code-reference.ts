@@ -57,9 +57,10 @@ export function latticeOwnerCodeStatuses(
       WHERE o.realm_url=`,
     ...realm,
     `), proofs AS MATERIALIZED (
-      SELECT reference,lattice_code_reference_current(reference) AS current
+      SELECT refs.reference,COALESCE(c.current,lattice_code_reference_current(refs.reference)) AS current
       FROM (SELECT DISTINCT reference FROM bindings
         WHERE code_bound AND binding_generation=published_generation) refs
+      LEFT JOIN lattice_readiness_code c ON c.reference=refs.reference
     ) SELECT b.owner_url,COALESCE(CASE WHEN NOT b.code_bound
         THEN b.definition_revision=`,
     ...epoch,

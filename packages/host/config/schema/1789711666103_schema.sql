@@ -156,6 +156,18 @@
    PRIMARY KEY ( realm_url, url, type )
 );
 
+ CREATE TABLE IF NOT EXISTS lattice_input_readiness (
+   realm_url TEXT NOT NULL,
+   url TEXT NOT NULL,
+   generation,
+   has_error BOOLEAN,
+   is_deleted BOOLEAN,
+   types BLOB,
+   search_doc BLOB,
+   pristine_doc BLOB,
+   PRIMARY KEY ( realm_url, url )
+);
+
  CREATE TABLE IF NOT EXISTS lattice_owner_code (
    realm_url TEXT NOT NULL,
    owner_url TEXT NOT NULL,
@@ -197,6 +209,13 @@
    read_paths BLOB,
    projection BLOB,
    PRIMARY KEY ( realm_url, owner_url, field_path )
+);
+
+ CREATE TABLE IF NOT EXISTS lattice_readiness_code (
+   reference BLOB NOT NULL,
+   current BOOLEAN,
+   dependency_keys NOT NULL,
+   PRIMARY KEY ( reference )
 );
 
  CREATE TABLE IF NOT EXISTS lattice_retained_bodies (

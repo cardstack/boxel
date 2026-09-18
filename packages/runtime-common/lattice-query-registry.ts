@@ -1165,15 +1165,15 @@ export class LatticeQueryRegistry
     const unpublishedRows =
       this.db.kind === 'pg'
         ? await query(this.db, [
-            `SELECT i.url AS owner_url FROM boxel_index i
+            `SELECT i.url AS owner_url FROM lattice_input_readiness i
            WHERE i.realm_url=`,
             param(realmURL),
-            `AND i.type='instance' AND i.is_deleted IS NOT TRUE
+            `AND i.is_deleted IS NOT TRUE
            AND i.pristine_doc->'meta'->'publication' IS NOT NULL
            AND (i.pristine_doc->'meta'->'publication'->>'outputRevision') IS NULL
            UNION SELECT o.owner_url FROM lattice_owners o
-           LEFT JOIN boxel_index i ON i.realm_url=o.realm_url
-             AND i.url=o.owner_url AND i.type='instance'
+           LEFT JOIN lattice_input_readiness i ON i.realm_url=o.realm_url
+             AND i.url=o.owner_url
            LEFT JOIN (`,
             ...latticeOwnerCodeStatuses(
               [param(realmURL)],
