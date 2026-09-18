@@ -29,6 +29,10 @@ import type {
 } from '@cardstack/runtime-common/definitions';
 import type { SearchEntryQuery } from '@cardstack/runtime-common/search-entry';
 import type { JsonValue } from '@cardstack/runtime-common/json-validation';
+import {
+  SearchBoundError,
+  SERVER_ABSOLUTE_MAX_PAGE_SIZE,
+} from '@cardstack/runtime-common/search-bounds';
 import type { CardResource, Relationship } from '@cardstack/runtime-common';
 
 // ============================================================================
@@ -69,6 +73,8 @@ interface Stub {
   queries: SearchEntryQuery[];
   // Every card URL whose index row the resolution read.
   peeked: string[];
+  // The abort signal each search was handed, in query order.
+  signals: (AbortSignal | undefined)[];
   // The most searches that were ever in flight at once.
   peakConcurrency: () => number;
 }
@@ -112,6 +118,9 @@ interface StubOptions {
   // describing different snapshots — which is a state a real realm reaches and
   // a stub is the only cheap way to sit in.
   reportedTotal?: number;
+  // Make the search fail the way a bound does. 'budget' is the wall-clock
+  // timeout, which the search route answers as a 408.
+  searchThrows?: 'budget';
 }
 
 function stub(opts: StubOptions): Stub {
@@ -123,7 +132,9 @@ function stub(opts: StubOptions): Stub {
     delays = [],
     everyDelay,
     reportedTotal,
+    searchThrows,
   } = opts;
+  let signals: (AbortSignal | undefined)[] = [];
   let inFlight = 0;
   let peak = 0;
   let answers: string[][] = Array.isArray(opts.matches[0])
@@ -162,8 +173,15 @@ function stub(opts: StubOptions): Stub {
       },
     },
     indexQueryEngine: {
-      async searchEntries(query) {
+      async searchEntries(query, searchOpts) {
         queries.push(query);
+        signals.push(searchOpts?.signal);
+        if (searchThrows === 'budget') {
+          throw new SearchBoundError(
+            408,
+            'search exceeded the 30s request time limit and was cancelled',
+          );
+        }
         let at = queries.length - 1;
         inFlight++;
         peak = Math.max(peak, inFlight);
@@ -227,7 +245,7 @@ function stub(opts: StubOptions): Stub {
     fileDefCodeRef: notReached('fileDefCodeRef') as any,
     unresolveInstanceIds: notReached('unresolveInstanceIds') as any,
   };
-  return { core, queries, peeked, peakConcurrency: () => peak };
+  return { core, queries, peeked, signals, peakConcurrency: () => peak };
 }
 
 // One entry, sent as the caller writes it.
@@ -449,17 +467,6 @@ module(basename(import.meta.filename), function () {
         on: ACTIVITY,
         eq: { status: 'open' },
       });
-    });
-
-    test('an entry expecting many asks for every match', async function (assert) {
-      let stubbed = stub({ matches: [`${REALM}activities/a`] });
-      await resolve(
-        stubbed,
-        invoke({
-          'boxel:target': { query: openActivities(), expect: 'many' },
-        }),
-      );
-      assert.strictEqual(stubbed.queries[0].itemQuery.page, undefined);
     });
 
     test('a marker in the filter is refused rather than compared as a value', async function (assert) {
@@ -1283,6 +1290,149 @@ module(basename(import.meta.filename), function () {
       ),
     );
     assert.strictEqual(stubbed.peakConcurrency(), 3);
+  });
+
+  test('a collection stored as one array-valued relationship is followed', async function (assert) {
+    // `CardResource.relationships` is typed `Relationship | Relationship[]`,
+    // so a collection may arrive as one entry holding a list rather than as
+    // the per-member `field.N` keys the canonical serialization writes.
+    // Reading only the keyed form found nothing and answered as though the
+    // card had no link.
+    let stubbed = stub({
+      matches: [`${REALM}activities/a`],
+      cards: {
+        [`${REALM}activities/a`]: {
+          adoptsFrom: ACTIVITY,
+          relationships: {
+            attendees: [
+              { links: { self: `${REALM}people/ann` } },
+              { links: { self: `${REALM}people/bo` } },
+            ] as unknown as Relationship,
+          },
+        },
+      },
+      fields: { attendees: { type: 'linksToMany' } },
+    });
+    let tree = await resolve(
+      stubbed,
+      invoke({
+        'boxel:target': {
+          query: openActivities(),
+          field: 'attendees',
+          expect: 'many',
+        },
+      }),
+    );
+    assert.deepEqual(
+      membersOf(tree[0]).map((entry) => entry.href),
+      [`${REALM}people/ann`, `${REALM}people/bo`],
+    );
+  });
+
+  test('an emptied collection still reads as no link, not as an array of none', async function (assert) {
+    // The field's own key is where the array form sits AND where an emptied
+    // collection's null link lives, so reading that key must not turn the
+    // second into a target.
+    let stubbed = stub({
+      matches: [`${REALM}activities/a`],
+      cards: {
+        [`${REALM}activities/a`]: {
+          adoptsFrom: ACTIVITY,
+          relationships: { attendees: { links: { self: null } } },
+        },
+      },
+      fields: { attendees: { type: 'linksToMany' } },
+    });
+    let error = await refusal(() =>
+      resolve(
+        stubbed,
+        invoke({
+          'boxel:target': { query: openActivities(), field: 'attendees' },
+        }),
+      ),
+    );
+    assert.true(error.detail?.includes('links to no card'), error.detail);
+  });
+
+  test('an expansion beyond what the realm materializes is refused, not truncated', async function (assert) {
+    // A caller that asked to run against every card answering a filter, and
+    // is silently handed the first few hundred, is told its batch succeeded
+    // — so the entries it thinks it wrote are the ones it never checks.
+    let tooMany = Array.from(
+      { length: SERVER_ABSOLUTE_MAX_PAGE_SIZE + 1 },
+      (_unused, index) => `${REALM}activities/${index}`,
+    );
+    let stubbed = stub({ matches: tooMany });
+    let error = await refusal(() =>
+      resolve(
+        stubbed,
+        invoke({
+          'boxel:target': { query: openActivities(), expect: 'many' },
+        }),
+      ),
+    );
+    assert.strictEqual(error.status, 400);
+    assert.true(
+      error.detail?.includes(`${SERVER_ABSOLUTE_MAX_PAGE_SIZE} cards`),
+      `names the bound: ${error.detail}`,
+    );
+  });
+
+  test('an expansion at the bound is carried out', async function (assert) {
+    // The control: the ceiling is a ceiling, not an off-by-one that refuses
+    // the largest expansion the realm does allow.
+    let atBound = Array.from(
+      { length: SERVER_ABSOLUTE_MAX_PAGE_SIZE },
+      (_unused, index) => `${REALM}activities/${index}`,
+    );
+    let stubbed = stub({ matches: atBound });
+    let tree = await resolve(
+      stubbed,
+      invoke({
+        'boxel:target': { query: openActivities(), expect: 'many' },
+      }),
+    );
+    assert.strictEqual(
+      membersOf(tree[0]).length,
+      SERVER_ABSOLUTE_MAX_PAGE_SIZE,
+    );
+  });
+
+  test('the expansion query asks for one row beyond the bound, so going over is visible', async function (assert) {
+    let stubbed = stub({ matches: [`${REALM}activities/a`] });
+    await resolve(
+      stubbed,
+      invoke({ 'boxel:target': { query: openActivities(), expect: 'many' } }),
+    );
+    assert.strictEqual(
+      stubbed.queries[0].itemQuery.page?.size,
+      SERVER_ABSOLUTE_MAX_PAGE_SIZE + 1,
+    );
+  });
+
+  test('the search runs under the wall-clock budget, and a timeout is answered as one', async function (assert) {
+    // A query target is a search issued on the realm's behalf; reaching the
+    // engine by a different door than `_search` is no reason for it to be
+    // the one search a request runs without a deadline.
+    let stubbed = stub({ matches: [], searchThrows: 'budget' });
+    let error = await refusal(() =>
+      resolve(stubbed, invoke({ 'boxel:target': { query: openActivities() } })),
+    );
+    assert.strictEqual(error.status, 408, 'the budget error keeps its status');
+    assert.strictEqual(error.meta?.entry, 0);
+    assert.true(error.detail?.includes('could not finish'), error.detail);
+  });
+
+  test('the signal reaches the engine', async function (assert) {
+    let stubbed = stub({ matches: [`${REALM}activities/a`] });
+    await resolve(
+      stubbed,
+      invoke({ 'boxel:target': { query: openActivities() } }),
+    );
+    assert.true(
+      stubbed.signals[0] instanceof AbortSignal,
+      'the search was handed the budget signal to thread into its work',
+    );
   });
 
   module('a batch with more than one query target', function () {

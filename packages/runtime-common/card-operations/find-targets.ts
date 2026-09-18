@@ -4,6 +4,12 @@ import {
   parseSearchEntryQueryFromPayload,
   type SearchEntryWireQuery,
 } from '../search-entry.ts';
+import {
+  runWithSearchTimeBudget,
+  SearchBoundError,
+  SERVER_ABSOLUTE_MAX_PAGE_SIZE,
+} from '../search-bounds.ts';
+import type { EntryCollectionDocument } from '../document-types.ts';
 import type { CardResource, Relationship } from '../resource-types.ts';
 import { OperationFailure, type EntryPosition } from './types.ts';
 import { STAGING_WIDTH } from './coordinator.ts';
@@ -318,17 +324,23 @@ async function runFilter(
   find: QueryTarget,
   { core }: Resolution,
 ): Promise<{ urls: string[]; total: number }> {
+  // Both shapes are paged, and neither page is the caller's to choose.
+  //
+  // Expecting one card needs to tell none from one from several and nothing
+  // beyond that, so two rows is the whole of it.
+  //
+  // Expecting many is bounded by the size no item-leg search may exceed
+  // however deliberately it asks — the realm's own statement of the most rows
+  // one request may materialize. An expansion is one staged entry per row, so
+  // that bound is the right one to borrow rather than a number invented here,
+  // and it is already an operator's to tune. One row beyond it is requested so
+  // that going over is visible in the rows themselves.
+  let ceiling = SERVER_ABSOLUTE_MAX_PAGE_SIZE;
   let wire: SearchEntryWireQuery = {
     filter: find.query,
     scope: 'cards',
     fields: { entry: [IDENTITY_FIELDSET] },
-    // An entry expecting one card needs to tell none from one from several
-    // and nothing beyond that, so it reads at most two rows and takes the
-    // count off the result meta — which counts every matching row whatever
-    // the page held, and so names the number the refusal reports even when
-    // that number is large. An entry expecting many runs against all of them
-    // and asks for no page at all.
-    ...(find.expect === 'one' ? { page: { size: 2 } } : {}),
+    page: { size: find.expect === 'one' ? 2 : ceiling + 1 },
   };
   let marker = markerIn(find.query);
   if (marker) {
@@ -362,11 +374,48 @@ async function runFilter(
       entry.position,
     );
   }
-  let doc = await core.indexQueryEngine.searchEntries(query);
-  return {
-    urls: doc.data.map((match) => match.id),
-    total: doc.meta.page.total,
-  };
+  // Under the same wall-clock budget the search route runs its item leg
+  // under, with the signal threaded in so the work stops rather than being
+  // abandoned. A query target is a search issued on the realm's behalf; it
+  // reaching the engine by a different door than `_search` is no reason for
+  // it to be the one search a request can run without a deadline.
+  let doc: EntryCollectionDocument;
+  try {
+    doc = await runWithSearchTimeBudget((signal) =>
+      core.indexQueryEngine.searchEntries(query, { signal }),
+    );
+  } catch (err: unknown) {
+    if (err instanceof SearchBoundError) {
+      // Its own status, which is a 408 for the budget: nothing the caller sent
+      // is malformed, and the remedy is a narrower filter rather than a
+      // corrected payload.
+      throw new OperationFailure({
+        status: err.status,
+        code: 'invalid-params',
+        title: 'Query target not resolved',
+        detail:
+          `entry ${entry.position} describes the card it runs against with ` +
+          `a query the realm could not finish: ${err.message}`,
+        meta: { entry: entry.position },
+      });
+    }
+    throw err;
+  }
+  let urls = doc.data.map((match) => match.id);
+  if (urls.length > ceiling) {
+    // Refused rather than truncated. A caller that asked to run against every
+    // card answering a filter, and is silently given the first few hundred,
+    // is told its batch succeeded — so the entries it thinks it wrote are the
+    // ones it will not go looking for.
+    throw refuse(
+      `entry ${entry.position} describes the card it runs against with a ` +
+        `query, and more than the ${ceiling} cards this endpoint expands ` +
+        `into one batch answer to it; narrow the filter, or send the ` +
+        `targets as entries of their own`,
+      entry.position,
+    );
+  }
+  return { urls, total: doc.meta.page.total };
 }
 
 // The names a declared query's markers are written under, and the members one
@@ -575,31 +624,42 @@ function linksOf(
 ): string[] {
   let relationships = instance.relationships ?? {};
   if (type === 'linksTo') {
-    let self = selfOf(relationships[field]);
-    return self ? [self] : [];
+    return selfsOf(relationships[field]);
   }
-  let links: string[] = [];
+  // The field's own key first, which is where the array form sits when a
+  // relationship map carries one: `CardResource.relationships` is typed
+  // `Relationship | Relationship[]`, so a collection may arrive either as one
+  // entry holding a list or as the per-member keys the canonical serialization
+  // writes. Reading only the keyed form would find nothing for the array one
+  // and answer as though the card had no link — an empty result under `many`
+  // and a wrong "links to no card" under `one`, which is the shape of silence
+  // this file exists to remove. An `Array.isArray` guard is not enough on its
+  // own: the field's own key is also where an emptied collection's null link
+  // lives, and `selfsOf` reads that as no link either way.
+  let links = selfsOf(relationships[field]);
   for (let index = 0; ; index++) {
     let relationship = relationships[`${field}.${index}`];
     if (relationship === undefined) {
       break;
     }
-    let self = selfOf(relationship);
-    if (self) {
-      links.push(self);
-    }
+    links.push(...selfsOf(relationship));
   }
   return links;
 }
 
-function selfOf(
+// The cards one relationship entry points at: none for a null or absent link,
+// one for an ordinary relationship, and one per member for the array form.
+function selfsOf(
   relationship: Relationship | Relationship[] | undefined,
-): string | undefined {
-  if (!relationship || Array.isArray(relationship)) {
-    return undefined;
+): string[] {
+  if (!relationship) {
+    return [];
+  }
+  if (Array.isArray(relationship)) {
+    return relationship.flatMap((member) => selfsOf(member));
   }
   let self = relationship.links?.self;
-  return typeof self === 'string' && self.length > 0 ? self : undefined;
+  return typeof self === 'string' && self.length > 0 ? [self] : [];
 }
 
 // One link as the URL this realm addresses the card by.

@@ -183,7 +183,12 @@ export interface OperationIndexQueryEngine {
   // to this realm by the engine itself — a `RealmIndexQueryEngine` is one
   // realm's — which is what makes a found target inside this realm a property
   // of the machinery rather than a check.
-  searchEntries(query: SearchEntryQuery): Promise<EntryCollectionDocument>;
+  searchEntries(
+    query: SearchEntryQuery,
+    // The wall-clock budget's signal, so an abandoned search stops rather
+    // than running on under a request that has already been answered.
+    opts?: { signal?: AbortSignal },
+  ): Promise<EntryCollectionDocument>;
 }
 
 export interface RunOperationOptions {
