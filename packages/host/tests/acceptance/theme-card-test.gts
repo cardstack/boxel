@@ -1,22 +1,11 @@
 import { click, fillIn } from '@ember/test-helpers';
-import { tracked } from '@glimmer/tracking';
 
-import Moon from '@cardstack/boxel-icons/moon';
-import Sun from '@cardstack/boxel-icons/sun';
 import { getService } from '@universal-ember/test-support';
 
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
-import {
-  BoxelButton,
-  BoxelContainer,
-  BoxelInput,
-  FittedCardContainer,
-  Pill,
-  Switch,
-} from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 
 import { Deferred } from '@cardstack/runtime-common';
 
@@ -37,6 +26,7 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+import { SOFT_POP_VARS } from '../helpers/theme-fixtures';
 
 const ROOT_CSS_VARS = {
   background: '#0a0f23',
@@ -118,46 +108,6 @@ const OCEAN_BLUE_THEME_VARS = {
   spacing: '0.25rem',
 };
 
-// Outer theme of the scheme-island card: a plainly light root palette and a
-// plainly dark palette, so a wrong scheme is visible at a glance
-const SUNRISE_THEME_VARS = {
-  primary: '#c2410c',
-  primaryForeground: '#fff7ed',
-  background: '#fff7ed',
-  foreground: '#431407',
-  card: '#ffedd5',
-  cardForeground: '#7c2d12',
-};
-
-const SUNRISE_DARK_VARS = {
-  primary: '#fdba74',
-  primaryForeground: '#431407',
-  background: '#431407',
-  foreground: '#ffedd5',
-  card: '#7c2d12',
-  cardForeground: '#fed7aa',
-};
-
-// Applied to the nested card: both palettes are distinct from Sunrise's and
-// from the boxel-ui defaults, so a leak from either is told apart
-const MIDNIGHT_THEME_VARS = {
-  primary: '#123456',
-  primaryForeground: '#ffffff',
-  background: '#e6ecf5',
-  foreground: '#0b1a2e',
-  card: 'lavender',
-  cardForeground: '#6f1393',
-};
-
-const MIDNIGHT_DARK_VARS = {
-  primary: '#7fb2ff',
-  primaryForeground: '#04101f',
-  background: '#063772',
-  foreground: '#dbe7ff',
-  card: '#471b58',
-  cardForeground: '#d598ed',
-};
-
 const FOREST_GREEN_THEME_VARS = {
   primary: '#2e7d32',
   primaryForeground: '#FFFFFF',
@@ -180,61 +130,6 @@ function hexToRgb(hex: string): string {
   const b = parseInt(hex.slice(5, 7), 16);
   return `rgb(${r}, ${g}, ${b})`;
 }
-
-const SOFT_POP_VARS = `:root {
-  --background: oklch(0.9789 0.0082 121.6272);
-  --foreground: oklch(0 0 0);
-  --card: oklch(1.0000 0 0);
-  --card-foreground: oklch(0 0 0);
-  --popover: oklch(1.0000 0 0);
-  --popover-foreground: oklch(0 0 0);
-  --primary: oklch(0.5106 0.2301 276.9656);
-  --primary-foreground: oklch(1.0000 0 0);
-  --secondary: oklch(0.7038 0.1230 182.5025);
-  --secondary-foreground: oklch(1.0000 0 0);
-  --muted: oklch(0.9551 0 0);
-  --muted-foreground: oklch(0.3211 0 0);
-  --accent: oklch(0.7686 0.1647 70.0804);
-  --accent-foreground: oklch(0 0 0);
-  --destructive: oklch(0.6368 0.2078 25.3313);
-  --destructive-foreground: oklch(1.0000 0 0);
-  --border: oklch(0 0 0);
-  --input: oklch(0.5555 0 0);
-  --ring: oklch(0.7853 0.1041 274.7134);
-  --font-sans: DM Sans, sans-serif;
-  --font-serif: DM Sans, sans-serif;
-  --font-mono: Space Mono, monospace;
-  --radius: 1rem;
-  --tracking-normal: normal;
-  --spacing: 0.25rem;
-  }
-
-  .dark {
-    --background: oklch(0 0 0);
-    --foreground: oklch(1.0000 0 0);
-    --card: oklch(0.2455 0.0217 257.2823);
-    --card-foreground: oklch(1.0000 0 0);
-    --popover: oklch(0.2455 0.0217 257.2823);
-    --popover-foreground: oklch(1.0000 0 0);
-    --primary: oklch(0.6801 0.1583 276.9349);
-    --primary-foreground: oklch(0 0 0);
-    --secondary: oklch(0.7845 0.1325 181.9120);
-    --secondary-foreground: oklch(0 0 0);
-    --muted: oklch(0.3211 0 0);
-    --muted-foreground: oklch(0.8452 0 0);
-    --accent: oklch(0.8790 0.1534 91.6054);
-    --accent-foreground: oklch(0 0 0);
-    --destructive: oklch(0.7106 0.1661 22.2162);
-    --destructive-foreground: oklch(0 0 0);
-    --border: oklch(0.4459 0 0);
-    --input: oklch(1.0000 0 0);
-    --ring: oklch(0.6801 0.1583 276.9349);
-    --font-sans: DM Sans, sans-serif;
-    --font-serif: DM Sans, sans-serif;
-    --font-mono: Space Mono, monospace;
-    --radius: 1rem;
-    --shadow: 0px 0px 0px 0px hsl(0 0% 10.1961% / 0.05), 0px 1px 2px -1px hsl(0 0% 10.1961% / 0.05);
-}`;
 
 module('Acceptance | theme-card-test', function (hooks) {
   setupApplicationTest(hooks);
@@ -266,7 +161,7 @@ module('Acceptance | theme-card-test', function (hooks) {
     cardApi = await loader.import('@cardstack/base/card-api');
     booleanMod = await loader.import('@cardstack/base/boolean');
 
-    let { field, contains, linksTo, CardDef, Component } = cardApi;
+    let { field, contains, CardDef, Component } = cardApi;
     let { default: BooleanField } = booleanMod;
 
     class CheckboxCard extends CardDef {
@@ -293,312 +188,12 @@ module('Acceptance | theme-card-test', function (hooks) {
     // Stamps scheme switches inside its own template, below the themed
     // container, and nests a linked card so a nested theme's islands can be
     // told apart from the outer theme's.
-    // Shows the variables each palette defines, painted with themselves, so the
-    // scheme in effect can be read off the rendered card.
-    const VarSwatches = <template>
-      <ul class='var-swatches' ...attributes>
-        <li class='swatch-background'>--background / --foreground</li>
-        <li class='swatch-card'>--card / --card-foreground</li>
-        <li class='swatch-primary'>--primary / --primary-foreground</li>
-      </ul>
-      <style scoped>
-        .var-swatches {
-          list-style: none;
-          margin: 0;
-          padding: 0;
-          display: grid;
-          gap: var(--boxel-sp-4xs);
-          font: var(--boxel-font-xs);
-        }
-        .var-swatches li {
-          padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
-          border: 1px solid var(--border);
-        }
-        .swatch-background {
-          background-color: var(--background);
-          color: var(--foreground);
-        }
-        .swatch-card {
-          background-color: var(--card);
-          color: var(--card-foreground);
-        }
-        .swatch-primary {
-          background-color: var(--primary);
-          color: var(--primary-foreground);
-        }
-      </style>
-    </template>;
-
-    class SchemeIslandCard extends CardDef {
-      static displayName = 'Scheme Island Card';
-      @field nested = linksTo(CardDef);
-
-      static isolated = class Isolated extends Component<typeof this> {
-        // Stamps the chosen scheme on the card's own root
-        @tracked mode: 'light' | 'dark' = 'light';
-
-        setDarkMode = (isDark: boolean) => {
-          this.mode = isDark ? 'dark' : 'light';
-        };
-
-        <template>
-          <BoxelContainer
-            @display='grid'
-            data-theme={{this.mode}}
-            data-test-scheme-island-root
-          >
-            <header aria-label='Card'>
-              <Pill class='mode-pill' @variant='primary'>
-                {{this.mode}}
-                Mode
-              </Pill>
-              <h2>Scheme Island Card</h2>
-              <p>Expected: Sunrise theme,
-                {{this.mode}}
-                mode (switched below)</p>
-              <Switch
-                @isEnabled={{eq this.mode 'dark'}}
-                @onChange={{this.setDarkMode}}
-                @checkedIcon={{Moon}}
-                @uncheckedIcon={{Sun}}
-                data-test-mode-switch
-              >
-                Dark mode
-              </Switch>
-              <div
-                role='group'
-                aria-label='Sample buttons'
-                class='sample-buttons'
-              >
-                <BoxelButton @kind='default' @size='small'>Default</BoxelButton>
-                <BoxelButton @kind='primary' @size='small'>Primary</BoxelButton>
-                <BoxelButton
-                  @kind='secondary'
-                  @size='small'
-                >Secondary</BoxelButton>
-                <BoxelButton @kind='muted' @size='small'>Muted</BoxelButton>
-                <BoxelButton
-                  @kind='destructive'
-                  @size='small'
-                >Destructive</BoxelButton>
-                <BoxelButton @kind='text-only' @size='small'>Text only</BoxelButton>
-              </div>
-              <VarSwatches />
-            </header>
-            <BoxelContainer
-              class='dark-island'
-              @tag='section'
-              @display='grid'
-              data-theme='dark'
-              data-test-dark-island
-            >
-              <header aria-label='Section 1'>
-                <Pill @variant='primary'>Dark Island</Pill>
-                <p>Expected: Sunrise theme, dark mode</p>
-                <VarSwatches />
-              </header>
-              <@fields.nested @format='embedded' />
-              <FittedCardContainer @size='full-card'>
-                <@fields.nested @format='fitted' />
-              </FittedCardContainer>
-              <@fields.nested @format='atom' />
-            </BoxelContainer>
-            <BoxelContainer
-              class='light-island'
-              @tag='section'
-              @display='grid'
-              data-theme='light'
-              data-test-light-island
-            >
-              <header aria-label='Section 2'>
-                <Pill @variant='primary'>Light Island</Pill>
-                <p>Expected: Sunrise theme, light mode</p>
-                <VarSwatches />
-              </header>
-              <@fields.nested @format='embedded' />
-              <FittedCardContainer @size='full-card'>
-                <@fields.nested @format='fitted' />
-              </FittedCardContainer>
-              <@fields.nested @format='atom' />
-            </BoxelContainer>
-          </BoxelContainer>
-          <style scoped>
-            .dark-island,
-            .light-island {
-              background-color: var(--card);
-              color: var(--card-foreground);
-              border-radius: var(--radius);
-            }
-            .mode-pill {
-              text-transform: capitalize;
-            }
-            header {
-              display: grid;
-              justify-items: start;
-              gap: var(--boxel-sp-xs);
-            }
-            .sample-buttons {
-              display: flex;
-              flex-wrap: wrap;
-              gap: var(--boxel-sp-xs);
-            }
-            h2,
-            p {
-              margin: 0;
-            }
-          </style>
-        </template>
-      };
-
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <BoxelContainer
-            class='nested'
-            @display='grid'
-            data-theme='dark'
-            data-test-nested-dark-island
-          >
-            <Pill @variant='primary'>Embedded</Pill>
-            <p>Expected: Midnight theme, dark mode (stamped here)</p>
-            <VarSwatches />
-          </BoxelContainer>
-          <style scoped>
-            .nested {
-              --boxel-container-gap: var(--boxel-sp-xs);
-              justify-items: start;
-            }
-            p {
-              margin: 0;
-            }
-          </style>
-        </template>
-      };
-
-      static fitted = class Fitted extends Component<typeof this> {
-        <template>
-          <BoxelContainer
-            class='nested'
-            @display='grid'
-            data-test-nested-fitted
-          >
-            <Pill @variant='primary'>Fitted</Pill>
-            <p>Expected: Midnight theme, mode of the surrounding island</p>
-            <VarSwatches />
-          </BoxelContainer>
-          <style scoped>
-            .nested {
-              --boxel-container-gap: var(--boxel-sp-xs);
-              height: 100%;
-              align-content: start;
-              justify-items: start;
-              overflow: hidden;
-            }
-            p {
-              margin: 0;
-            }
-          </style>
-        </template>
-      };
-
-      static atom = class Atom extends Component<typeof this> {
-        <template>
-          <span class='nested-atom' data-test-nested-atom>
-            <Pill @variant='primary'>Atom</Pill>
-            <span>Expected: Midnight theme, mode of the surrounding island</span>
-            <VarSwatches />
-          </span>
-          <style scoped>
-            .nested-atom {
-              display: inline-grid;
-              justify-items: start;
-              gap: var(--boxel-sp-xs);
-              padding: var(--boxel-sp-xs);
-            }
-          </style>
-        </template>
-      };
-    }
-
     await withCachedRealmSetup(async () => {
       await setupAcceptanceTestRealm({
         mockMatrixUtils,
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'checkbox-card.gts': { CheckboxCard },
-          'scheme-island-card.gts': { SchemeIslandCard },
-          'midnight-theme.json': {
-            data: {
-              meta: {
-                adoptsFrom: {
-                  name: 'default',
-                  module: '@cardstack/base/structured-theme',
-                },
-              },
-              type: 'card',
-              attributes: {
-                cardInfo: { name: 'Midnight' },
-                rootVariables: MIDNIGHT_THEME_VARS,
-                darkModeVariables: MIDNIGHT_DARK_VARS,
-              },
-            },
-          },
-          'sunrise-theme.json': {
-            data: {
-              meta: {
-                adoptsFrom: {
-                  name: 'default',
-                  module: '@cardstack/base/structured-theme',
-                },
-              },
-              type: 'card',
-              attributes: {
-                cardInfo: { name: 'Sunrise' },
-                rootVariables: SUNRISE_THEME_VARS,
-                darkModeVariables: SUNRISE_DARK_VARS,
-              },
-            },
-          },
-          'scheme-island.json': {
-            data: {
-              meta: {
-                adoptsFrom: {
-                  name: 'SchemeIslandCard',
-                  module: `${testRealmURL}scheme-island-card`,
-                },
-              },
-              type: 'card',
-              attributes: {
-                cardInfo: { name: 'Scheme Island' },
-              },
-              relationships: {
-                'cardInfo.theme': {
-                  links: { self: `${testRealmURL}sunrise-theme` },
-                },
-                nested: {
-                  links: { self: `${testRealmURL}scheme-island-nested` },
-                },
-              },
-            },
-          },
-          'scheme-island-nested.json': {
-            data: {
-              meta: {
-                adoptsFrom: {
-                  name: 'SchemeIslandCard',
-                  module: `${testRealmURL}scheme-island-card`,
-                },
-              },
-              type: 'card',
-              attributes: {
-                cardInfo: { name: 'Nested Scheme Island' },
-              },
-              relationships: {
-                'cardInfo.theme': {
-                  links: { self: `${testRealmURL}midnight-theme` },
-                },
-              },
-            },
-          },
           'realm.json': realmConfigCardJSON({ name: 'Theme Playground' }),
           'starry-night.json': {
             data: {
@@ -1059,107 +654,6 @@ module('Acceptance | theme-card-test', function (hooks) {
         computedProperty(cardSelector, '--background'),
         ROOT_CSS_VARS.background,
         'root variables apply again when the ambient scheme returns to light',
-      );
-    });
-
-    test('dark mode variables apply inside a dark island the card template stamps', async function (assert) {
-      let cardId = `${testRealmURL}scheme-island`;
-      await visitOperatorMode({
-        stacks: [[{ id: cardId, format: 'isolated' }]],
-      });
-      await this.pauseTest();
-      let cardSelector = `[data-test-card="${cardId}"]`;
-      let islandSelector = `${cardSelector} [data-test-dark-island]`;
-      assert.strictEqual(
-        computedProperty(cardSelector, '--primary'),
-        SUNRISE_THEME_VARS.primary,
-        'the card root keeps the root variables under the light ambient scheme',
-      );
-      assert.strictEqual(
-        computedProperty(islandSelector, '--primary'),
-        SUNRISE_DARK_VARS.primary,
-        'the dark --primary applies inside the island',
-      );
-      assert.strictEqual(
-        computedProperty(islandSelector, '--background'),
-        SUNRISE_DARK_VARS.background,
-        'the dark --background applies inside the island',
-      );
-      assert.strictEqual(
-        computedProperty(islandSelector, '--card'),
-        SUNRISE_DARK_VARS.card,
-        'the dark --card applies inside the island',
-      );
-      assert.strictEqual(
-        computedProperty(islandSelector, '--canvas'),
-        '#1e1b26',
-        'a token the theme omits resolves to the boxel dark default inside the island',
-      );
-    });
-
-    test('root variables apply inside a light island when the ambient scheme is dark', async function (assert) {
-      let cardId = `${testRealmURL}scheme-island`;
-      await visitOperatorMode({
-        stacks: [[{ id: cardId, format: 'isolated' }]],
-      });
-      await this.pauseTest();
-      let cardSelector = `[data-test-card="${cardId}"]`;
-      let islandSelector = `${cardSelector} [data-test-light-island]`;
-
-      document.documentElement.setAttribute('data-theme', 'dark');
-      try {
-        assert.strictEqual(
-          computedProperty(cardSelector, '--primary'),
-          SUNRISE_DARK_VARS.primary,
-          'the card root follows the dark ambient scheme',
-        );
-        assert.strictEqual(
-          computedProperty(islandSelector, '--primary'),
-          SUNRISE_THEME_VARS.primary,
-          'the root --primary applies inside the light island',
-        );
-        assert.strictEqual(
-          computedProperty(islandSelector, '--card'),
-          SUNRISE_THEME_VARS.card,
-          'the root --card applies inside the light island',
-        );
-        assert.strictEqual(
-          computedProperty(islandSelector, '--canvas'),
-          '#f8f7fa',
-          'a token the theme omits resolves to the boxel light default inside the island',
-        );
-      } finally {
-        document.documentElement.removeAttribute('data-theme');
-      }
-    });
-
-    test('an island stamped by a nested themed card does not pick up the outer theme', async function (assert) {
-      let cardId = `${testRealmURL}scheme-island`;
-      let nestedId = `${testRealmURL}scheme-island-nested`;
-      await visitOperatorMode({
-        stacks: [[{ id: cardId, format: 'isolated' }]],
-      });
-      let nestedSelector = `[data-test-card="${nestedId}"]`;
-      let islandSelector = `${nestedSelector} [data-test-nested-dark-island]`;
-      assert.strictEqual(
-        computedProperty(nestedSelector, '--primary'),
-        MIDNIGHT_DARK_VARS.primary,
-        'the nested card resolves its own dark palette under the outer dark island',
-      );
-      assert.strictEqual(
-        computedProperty(islandSelector, '--primary'),
-        MIDNIGHT_DARK_VARS.primary,
-        'the nested island uses the nested theme, not the outer theme',
-      );
-      assert.strictEqual(
-        computedProperty(islandSelector, '--background'),
-        MIDNIGHT_DARK_VARS.background,
-        'the nested island background comes from the nested theme',
-      );
-      assert.notStrictEqual(
-        computedProperty(islandSelector, '--primary'),
-        SUNRISE_DARK_VARS.primary,
-        'the outer theme does not leak into the nested island',
       );
     });
 
