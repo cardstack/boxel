@@ -110,3 +110,94 @@ version of the claim — it isolates what the resolver controls.
   block through both real backends, and fails when the flag is unwired.
 - Suite: `pnpm test:node` 662 pass, 1 failure — the `port-allocator`
   dual-stack test, which fails while a dev stack holds ports. Baseline.
+
+---
+
+## Steps 7–8 — the live run
+
+Brief: the spike's own `Wiki/field-notes` — a magazine publication described in
+contributor vocabulary, never using the word "author", with an editorial
+calendar as the card that has no catalog equivalent. Same brief and same
+corpus as the spike, so the outcomes are comparable.
+
+Run: `--to-phase implementation`, default flags (catalog reuse on), stopped
+after the **Contributor** card. Contributor is the card the catalog can
+actually answer; the remaining three would re-measure the same mechanism at
+four times the token cost.
+
+Note on phases: `--to-phase design` does **not** run the per-card design
+turns. It runs bootstrap and design-foundation and leaves the implementation
+issues on the board. The design turn is the first half of an implementation
+issue, so the reuse step only runs under `--to-phase implementation`.
+
+### Criterion 1 — the gate accepts a catalog-importing card
+
+`run_parse` inside the run, on the shipped card:
+
+```
+run_parse: {"status":"passed","filesChecked":4,"filesWithErrors":0,
+            "errorCount":0,"parseableFiles":["contributor.gts", …]}
+```
+
+`contributor.gts` carries `import FeaturedImageField from
+'@cardstack/catalog/fields/featured-image/featured-image'` and
+`import ContactLinkField from '@cardstack/catalog/fields/contact-link/contact-link'`.
+`run_lint`, `run_evaluate` and `run_instantiate` also passed, and nothing in
+the log resolves a catalog specifier to an error. This is the end-to-end
+proof, through the real pipeline rather than a test harness: on `main` this
+parse fails on the imports alone.
+
+### Criterion 2 — a reference traceable to a decision row
+
+Two, both traceable to `REFERENCE` rows in `design/contributor-NOTES.md`:
+
+| shipped import                           | notes row                           |
+| ---------------------------------------- | ----------------------------------- |
+| `…/fields/featured-image/featured-image` | portrait — image + caption + credit |
+| `…/fields/contact-link/contact-link`     | webLinks — label + url pairs        |
+
+### Criterion 3 — the four rules
+
+`REFERENCE 2 · REUSE-BLOCKED 1 · GAP 0`, and one hand-written definition in
+the shipped card (`Contributor`).
+
+1. **Need #1 is the card.** Row 1 is "Contributor (the card itself)",
+   dispositioned against catalog `Author`. This is the card-level row four
+   spike rounds never produced.
+2. **Every hit dispositioned.** Three catalog hits, three reasoned rows.
+3. **Base-realm imports not counted.** The agent labelled `MarkdownField`,
+   `TextAreaField`, `EmailField` and `StringField` "(base — not a reuse
+   decision)" in its own words. Mechanical check: 0 base-realm rows marked
+   `REFERENCE`.
+4. **Blocked adoption surfaced with a mechanism**, not silently downgraded:
+   _"every format template is welded to the blog-app's `.blog-scope` theme
+   world — `themeStyleFor(this)` runtime CSS block, `var(--blog-color-_)`"\*.
+
+That refusal names, independently, the same weld isolated by hand in Steps
+1–2 above. The agent reached it from reading the module; the variant table
+reached it from the type error.
+
+The substantive win is what is **absent**: no hand-written credited-image or
+link-list FieldDef. The notes say so explicitly — _"No `CreditedImageField` is
+authored in this pass. The catalog's `FeaturedImageField` IS the
+credited-image field for Field Notes."_
+
+### Deviation from the contract, and one scoring correction
+
+- **`GAP` is 0 where the contract expects 1.** The hand-built Contributor card
+  is dispositioned as `REUSE-BLOCKED` (against `Author`, reason given, ending
+  "Build new") rather than as a separate `GAP` row. Substantively every
+  hand-built definition is accounted for with a reason, but the label is not
+  the one the prompt specifies, and a scorer keyed on `GAP` would read this
+  as an unrecorded hand-build. The spike split this into two rows
+  (card = `GAP`, `Author` = `REUSE-BLOCKED`). The prompt should say which it
+  wants when the reason a thing is built new _is_ a blocked adoption.
+- The scoring script's "hand-written definitions" count is not trustworthy as
+  written — it counted 77 by sweeping `run-log.gts`, `run-telemetry.gts` and
+  `.boxel-history/`. The real count for the shipped card is 1.
+
+### Not tested
+
+The **editorial-calendar control** — the card with no catalog equivalent,
+which would show whether the contract can be gamed into reporting reuse where
+none exists. Its issue was still on the board when the run was stopped.
