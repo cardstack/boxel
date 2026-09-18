@@ -22,6 +22,8 @@ const testRealm = new URL('http://127.0.0.1:4445/test/');
 // `type` reached the encoder.
 const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47];
 const RIFF_MAGIC = [0x52, 0x49, 0x46, 0x46];
+// "%PDF" — the header Chromium's print-to-pdf writer emits.
+const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46];
 
 function makeFileSystem() {
   return {
@@ -89,6 +91,23 @@ function makeFileSystem() {
         }
         static screenshots: Record<string, ScreenshotSpec> = {
           tile: { format: 'isolated', width: 170, height: 250, useAsThumbnail: true },
+        };
+      }
+
+      // Declares a pdf screenshot: a paged document of the isolated render,
+      // paginated under print media. An inline break-before forces a second
+      // page (independent of paper size and immune to CSS scoping), so the
+      // page count is a meaningful, non-trivial assertion.
+      export class Statement extends CardDef {
+        @field name = contains(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1>Statement: <@fields.name/></h1>
+            <section style='break-before: page;'>Continued</section>
+          </template>
+        }
+        static screenshots: Record<string, ScreenshotSpec> = {
+          statement: { format: 'isolated', type: 'pdf' },
         };
       }
 
@@ -170,6 +189,19 @@ function makeFileSystem() {
           adoptsFrom: {
             module: rri('./product'),
             name: 'Plain',
+          },
+        },
+      },
+    },
+    'report.json': {
+      data: {
+        attributes: {
+          name: 'Q3',
+        },
+        meta: {
+          adoptsFrom: {
+            module: rri('./product'),
+            name: 'Statement',
           },
         },
       },
@@ -383,6 +415,122 @@ module(basename(import.meta.filename), function (hooks) {
       served!.headers.get('etag'),
       `"${manifest.card.objectKey}"`,
       'the ETag is the capture content hash',
+    );
+  });
+
+  test('a declared pdf is captured under print media, persisted, and served at ?name=', async function (assert) {
+    await writeAndSettle(
+      'report.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Q3' },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'Statement' },
+          },
+        },
+      }),
+    );
+
+    let row = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}report.json`,
+    );
+    assert.ok(row, 'the instance row exists');
+    let manifest = row!.screenshots as ScreenshotManifest | null;
+    assert.ok(manifest?.statement, 'the pdf capture landed in the manifest');
+
+    let statement = manifest!.statement;
+    assert.strictEqual(
+      statement.specHash,
+      await declaredCaptureSpecHash('statement', {
+        format: 'isolated',
+        type: 'pdf',
+      }),
+      'the manifest records the pdf capture identity',
+    );
+    assert.strictEqual(statement.contentType, 'application/pdf');
+    assert.strictEqual(
+      statement.width,
+      undefined,
+      'a pdf manifest entry carries no raster width',
+    );
+    assert.strictEqual(statement.height, undefined);
+    assert.strictEqual(statement.deviceScaleFactor, undefined);
+    assert.true(
+      (statement.pageCount ?? 0) >= 2,
+      'the @page break paginated the render into multiple pages',
+    );
+    assert.true(
+      (statement.byteSize ?? 0) > 0,
+      'the manifest records the document byte size',
+    );
+    assert.notOk(statement.useAsThumbnail, 'a pdf is never a thumbnail');
+
+    let ledger = await declaredLedgerRows(`${testRealm}report`);
+    assert.strictEqual(ledger.length, 1, 'one ledger row for the pdf slot');
+    assert.strictEqual(ledger[0].lane, 'declared');
+    assert.strictEqual(ledger[0].content_type, 'application/pdf');
+    assert.strictEqual(
+      ledger[0].width,
+      null,
+      'the pdf ledger row has null width',
+    );
+    assert.strictEqual(ledger[0].height, null);
+    assert.ok(
+      startsWith(objectBytes(statement.objectKey), PDF_MAGIC),
+      'the persisted bytes are a PDF document',
+    );
+
+    let statementTiming = (row!.diagnostics as any)?.screenshotTimingsMs
+      ?.statement;
+    assert.strictEqual(
+      typeof statementTiming,
+      'number',
+      'the pdf capture records a per-slot timing',
+    );
+    assert.true(
+      statementTiming > 0,
+      'the pdf capture timing is a positive duration',
+    );
+
+    // The card+json join projects the paged facts, and the durable ?name=
+    // URL serves the document.
+    let response = await realm.handle(
+      new Request(`${testRealm}report`, {
+        headers: { Accept: 'application/vnd.card+json' },
+      }),
+    );
+    assert.strictEqual(response!.status, 200);
+    let json = await response!.json();
+    assert.deepEqual(
+      json.data.meta.screenshots.statement,
+      {
+        url: `${testRealm}_screenshot/report?name=statement`,
+        hash: statement.objectKey,
+        contentType: 'application/pdf',
+        pageCount: statement.pageCount,
+        byteSize: statement.byteSize,
+      },
+      'meta.screenshots projects the pdf entry with its paged facts, no raster geometry',
+    );
+
+    let served = await realm.handle(
+      new Request(`${testRealm}_screenshot/report?name=statement`),
+    );
+    assert.strictEqual(served!.status, 200);
+    assert.strictEqual(
+      served!.headers.get('content-type'),
+      'application/pdf',
+      'the ?name= URL serves the pdf',
+    );
+    assert.strictEqual(
+      served!.headers.get('etag'),
+      `"${statement.objectKey}"`,
+      'the ETag is the capture content hash',
+    );
+    assert.true(
+      (served!.headers.get('content-disposition') ?? '').startsWith('inline'),
+      'the pdf serves inline with a filename',
     );
   });
 

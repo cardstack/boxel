@@ -2979,7 +2979,14 @@ export type BaseDefComponent = ComponentLike<{
 // reindex captures "new" bytes, wasting renders and storage churn and
 // defeating image caching (each rotation changes the image's ETag, so
 // every viewer re-downloads it).
-export type ScreenshotSpec = {
+// What the capture renders: a capture-only `render` component, or one of the
+// card's own display formats. Shared by both output kinds below.
+type ScreenshotSpecSource =
+  | { render: BaseDefComponent; format?: undefined }
+  | { format: DeclaredScreenshotFormat; render?: undefined };
+
+// A raster screenshot: a pixel tile of the render, sized by a capture box.
+type RasterScreenshotSpec = {
   // CSS px of the capture box (the fitted envelope).
   width: number;
   height: number;
@@ -3019,10 +3026,29 @@ export type ScreenshotSpec = {
   keyBy?: 'generation' | 'file-content';
   // Encoded image type. Default 'png'.
   type?: 'png' | 'jpeg' | 'webp';
-} & (
-  | { render: BaseDefComponent; format?: undefined }
-  | { format: DeclaredScreenshotFormat; render?: undefined }
-);
+} & ScreenshotSpecSource;
+
+// A pdf screenshot: a paged document of the render, laid out under the card's
+// own print CSS. It has no capture box — `width`/`height` (and the raster-only
+// `deviceScaleFactor`/`background`) are refused, and paper comes from the
+// card's `@page { size }` rule (Chrome's default paper otherwise). Its source
+// must be a viewport-filling format (`isolated` or `embedded`): the box
+// formats (`fitted`/`atom`) need an envelope a pdf entry cannot give, and the
+// author-supplied `render` slot for pdf is a separate capability. A pdf is
+// never a thumbnail — that fallback chain wants an image — so `useAsThumbnail`
+// is refused too.
+type PdfScreenshotSpec = {
+  type: 'pdf';
+  width?: undefined;
+  height?: undefined;
+  deviceScaleFactor?: undefined;
+  background?: undefined;
+  useAsThumbnail?: undefined;
+  // What invalidates the capture; see the raster note above.
+  keyBy?: 'generation' | 'file-content';
+} & ScreenshotSpecSource;
+
+export type ScreenshotSpec = RasterScreenshotSpec | PdfScreenshotSpec;
 
 const SCREENSHOT_SPEC_FIELDS = new Set([
   'render',
@@ -3086,6 +3112,50 @@ function assertValidScreenshotSpec(
         (f) => `"${f}"`,
       ).join(', ')}`,
     );
+  }
+  // A pdf entry is a paged document, not a raster tile: it takes none of the
+  // raster geometry, renders under print media, and paginates onto the card's
+  // own `@page` paper. Validate its distinct shape here and return before the
+  // raster checks below (which require a capture box a pdf entry never has).
+  if (entry.type === 'pdf') {
+    if (hasRender) {
+      throw new Error(
+        `${prefix}: type 'pdf' requires a format ('isolated' or 'embedded'); the author-supplied pdf render slot is not yet available`,
+      );
+    }
+    if (entry.format !== 'isolated' && entry.format !== 'embedded') {
+      throw new Error(
+        `${prefix}: a pdf screenshot's format must be 'isolated' or 'embedded' — the box formats ('fitted', 'atom') need an envelope a pdf entry cannot describe`,
+      );
+    }
+    for (let field of [
+      'width',
+      'height',
+      'deviceScaleFactor',
+      'background',
+    ] as const) {
+      if (entry[field] !== undefined) {
+        throw new Error(
+          `${prefix}: '${field}' is a raster capture field and cannot appear on a pdf screenshot — paper comes from the card's print CSS (@page)`,
+        );
+      }
+    }
+    if (entry.useAsThumbnail !== undefined) {
+      throw new Error(
+        `${prefix}: useAsThumbnail cannot appear on a pdf screenshot — a thumbnail must be an image`,
+      );
+    }
+    if (
+      entry.keyBy !== undefined &&
+      !SCREENSHOT_KEY_BY_VALUES.has(entry.keyBy as string)
+    ) {
+      throw new Error(
+        `${prefix}: keyBy must be one of ${[...SCREENSHOT_KEY_BY_VALUES]
+          .map((v) => `"${v}"`)
+          .join(', ')}`,
+      );
+    }
+    return;
   }
   for (let [field, max] of [
     ['width', SCREENSHOT_MAX_VIEWPORT_WIDTH],
@@ -3261,10 +3331,15 @@ export function serializeDeclaredScreenshots(
 ): DeclaredScreenshotRoster {
   let roster: DeclaredScreenshotRoster = {};
   for (let [name, spec] of Object.entries(getScreenshots(cardOrFileClass))) {
-    let payload: DeclaredScreenshotSpecPayload = {
-      width: spec.width,
-      height: spec.height,
-    };
+    // A pdf entry carries none of the raster geometry (validation refuses it);
+    // its width/height/deviceScaleFactor/background are all absent here.
+    let payload: DeclaredScreenshotSpecPayload = {};
+    if (spec.width !== undefined) {
+      payload.width = spec.width;
+    }
+    if (spec.height !== undefined) {
+      payload.height = spec.height;
+    }
     if (spec.deviceScaleFactor !== undefined) {
       payload.deviceScaleFactor = spec.deviceScaleFactor;
     }
