@@ -1923,9 +1923,14 @@ export interface QueryOperation<Declaration> {
   (
     ...args: [...PayloadArgs<Declaration>, opts?: SearchInvokeOptions]
   ): SearchEntries;
+  // Answers no query when the session cannot say who the caller is — nobody
+  // signed in, or a render, which authenticates as itself rather than as a
+  // viewer. The search component reads that as an idle search, so a card hands
+  // the result over either way and an actor-scoped search renders its rows
+  // when a viewer is there to have them.
   query(
     ...args: [...PayloadArgs<Declaration>, opts?: SearchInvokeOptions]
-  ): SearchEntryWireQuery;
+  ): SearchEntryWireQuery | undefined;
 }
 
 // Whether the call named the class its operations are declared on. It did not

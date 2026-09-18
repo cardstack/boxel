@@ -361,6 +361,31 @@ module('Integration | operations query', function (hooks) {
     );
   });
 
+  test('a render has no viewer, so a search that compares against one answers none', async function (assert) {
+    // The prerender app authenticates as itself so it can render any card, and
+    // what it produces is served to everyone. A saved search that resolved the
+    // caller there would put one identity's rows into shared HTML.
+    (globalThis as any).__boxelPrerenderApp = true;
+    try {
+      assert.strictEqual(
+        saved('myReports').query(),
+        undefined,
+        'the actor-scoped search answers no query, which the search surface reads as an idle search',
+      );
+      assert.ok(
+        saved('openReports').query(),
+        'and a saved search that does not read the caller is unaffected',
+      );
+    } finally {
+      delete (globalThis as any).__boxelPrerenderApp;
+    }
+
+    assert.ok(
+      saved('myReports').query(),
+      'outside a render the same search resolves against the signed-in user',
+    );
+  });
+
   test('a saved search is invoked on the class that declares it', async function (assert) {
     let card = await getService('store').get<CardDef>(
       `${testRealmURL}reports/open-1`,

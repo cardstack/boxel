@@ -917,7 +917,12 @@ module('Integration | operations invocation types', function (hooks) {
       ) => OperationsModule.SearchEntries,
       (...args: Parameters<SavedSearch>) => ReturnType<SavedSearch>
     >();
-    expectTypeEquals<SearchEntryWireQuery, ReturnType<SavedSearch['query']>>();
+    // The wire query, or none — a search that compares against the caller has
+    // nothing to resolve when the session cannot say who that is.
+    expectTypeEquals<
+      SearchEntryWireQuery | undefined,
+      ReturnType<SavedSearch['query']>
+    >();
     assert.deepEqual(
       Object.keys(getDeclaredOperations(Reports)),
       ['openReports'],

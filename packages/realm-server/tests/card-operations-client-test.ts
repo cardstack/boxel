@@ -1263,13 +1263,35 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a query that compares against the caller needs one', function (assert) {
-      let { env } = harness({ actor: null });
+    test('a session that cannot say who the caller is answers no query at all', function (assert) {
+      let { searched, env } = harness({ actor: null });
 
-      assert.throws(
-        () => openReports(env).query(),
-        /nobody is signed in here/,
-        'nothing the caller sent is wrong: the search would compare stored values against nobody and read as one that genuinely found none',
+      assert.strictEqual(
+        openReports(env).query(),
+        undefined,
+        'a search comparing against the caller has nothing to compare, and nothing the caller sent is wrong — so it answers no query rather than refusing one',
+      );
+
+      let idle = openReports(env)();
+      assert.strictEqual(
+        searched[0].getQuery(),
+        undefined,
+        'and the resource it answers with is an idle search, which renders no rows rather than somebody else\u2019s',
+      );
+      assert.ok(idle, 'the caller still gets a resource to hold');
+
+      let openToAll = reportType({
+        operations: carried({
+          everyReport: [
+            'query',
+            true,
+            { query: { filter: { on: REPORT_CLASS, eq: { status: 'open' } } } },
+          ],
+        }),
+      });
+      assert.ok(
+        (buildOperations(openToAll, env).everyReport as any).query(),
+        'a saved search that does not read the caller is unaffected',
       );
     });
 

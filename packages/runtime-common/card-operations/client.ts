@@ -566,10 +566,13 @@ export interface QueryMember {
     payload?: Record<string, unknown>,
     opts?: SearchInvokeOptions,
   ): SearchEntries;
+  // Answers no query when the session cannot say who the caller is — see the
+  // note on the member below. The search component reads an absent query as an
+  // idle search, so a card hands this straight over either way.
   query(
     payload?: Record<string, unknown>,
     opts?: SearchInvokeOptions,
-  ): SearchEntryWireQuery;
+  ): SearchEntryWireQuery | undefined;
 }
 
 // A query is the one operation that answers with a resource rather than a
@@ -587,11 +590,22 @@ export interface QueryMember {
 // underlying resource documents, since every call builds an independent search
 // with its own realm subscriptions.
 //
-// A recompute can also find the session no longer able to resolve the query —
-// signing out withdraws the actor and empties the realm map. The thunk parks
-// the search in that case rather than throwing mid-render; a payload the
-// declaration cannot resolve is the caller's mistake and is still raised at
-// the call, where the caller is.
+// **When the session cannot say who the caller is, a search that compares
+// against them answers nothing** — no query, which the resource reads as an
+// idle search and the search component renders as no rows. One rule, three
+// situations: nobody is signed in, a sign-out withdrew an actor the search
+// had, and the search is running inside a render, where the app authenticates
+// as itself rather than as a viewer. The last is why this is silence rather
+// than a refusal: a render must be a pure function of the document it was
+// handed, and an actor-scoped search that resolved there would bake one
+// identity's rows into HTML every viewer is then served. The live render that
+// follows fills them in.
+//
+// A standing search also stops resolving when the realms it covers go out of
+// the session's view, which is what a sign-out does to them. It parks for the
+// same reason rather than throwing into a render. At the call that same state
+// is raised, because there it means the query names a realm this session
+// cannot see — as does everything a declaration or a payload can get wrong.
 //
 // What it answers with is index freshness. A search reads the index, which
 // lags a write until that write is indexed, so a card just written is read
@@ -606,15 +620,7 @@ function queryMember(
   let wireQuery = (
     payload?: Record<string, unknown>,
     opts?: SearchInvokeOptions,
-  ) =>
-    resolveQuery(
-      subject,
-      env,
-      name,
-      info,
-      payload,
-      opts,
-    ) as SearchEntryWireQuery;
+  ) => resolvedOrIdle(subject, env, name, info, payload, opts);
   let member = ((
     payload?: Record<string, unknown>,
     opts?: SearchInvokeOptions,
@@ -624,7 +630,10 @@ function queryMember(
     // cannot resolve is raised at the call rather than at the first render.
     wireQuery(payload, opts);
     return search.entries(
-      () => standingQuery(subject, env, name, info, payload, opts),
+      () =>
+        resolvedOrIdle(subject, env, name, info, payload, opts, {
+          parkWhenUnscoped: true,
+        }),
       opts?.owner === undefined ? undefined : { owner: opts.owner },
     );
   }) as QueryMember;
@@ -632,31 +641,27 @@ function queryMember(
   return member;
 }
 
-// What a standing search resolves to on a recompute.
+// The query this invocation resolves to, or nothing when the session cannot
+// supply the caller it compares against.
 //
-// The two refusals that are about the session rather than the payload — nobody
-// signed in, and no realm to search — are answered here with no query at all,
-// which parks the resource. A signed-out session raises both, and a search
-// that threw from inside a render would take the render with it rather than
-// showing nothing, which is what a session that can no longer answer a query
-// should show.
-function standingQuery(
+// Only that one condition is silent wherever it is asked, and only because it
+// is the session's to answer rather than the caller's. Everything else — a
+// declaration that does not translate, a payload that leaves a marker
+// unfilled — is raised, since a recompute cannot have introduced it; a scope
+// that resolves to no realm is raised at the call and parked on a recompute,
+// where it means the session's view of its realms went away.
+function resolvedOrIdle(
   subject: OperationsSubject,
   env: OperationsEnvironment,
   name: string,
   info: CarriedOperationInfo,
   payload: Record<string, unknown> | undefined,
   opts: SearchInvokeOptions | undefined,
+  mode?: { parkWhenUnscoped: true },
 ): SearchEntryWireQuery | undefined {
   try {
-    return resolveQuery(subject, env, name, info, payload, opts, {
-      parkWhenUnscoped: true,
-    });
+    return resolveQuery(subject, env, name, info, payload, opts, mode);
   } catch (err: unknown) {
-    // Only the query's own reading of the caller is answered this way, and
-    // only because the session withdrew one it had: every other refusal is
-    // about what the declaration or the payload says, which a recompute cannot
-    // change and which the call already raised.
     if (isOperationFailure(err) && err.error.code === 'actor-required') {
       return undefined;
     }

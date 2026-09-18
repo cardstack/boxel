@@ -97,13 +97,37 @@ export default class OperationsService
   // wants the search to end with a view hands the query to the search
   // component instead of holding the resource.
   search: OperationsSearch = {
-    actor: () => this.matrixService.userId ?? undefined,
+    actor: () => this.actorForSearch(),
     realmFor: (identifier: string) => this.realm.realmOf(rri(identifier)),
     entries: (
       getQuery: () => SearchEntryWireQuery,
       opts?: { owner?: object },
     ): SearchEntries => getSearchEntriesResource(opts?.owner ?? this, getQuery),
   };
+
+  // Who a saved search compares against, when the session can say.
+  //
+  // Nobody, inside the dedicated prerender app: that app authenticates as
+  // itself so it can render any card, and its identity is not the identity of
+  // whoever is later served the HTML it produces. A search that resolved the
+  // actor there would put one user's rows into a rendering everyone reads, and
+  // the store's own rule for that app — render as a pure function of the
+  // document you were handed — is the same rule. The saved search answers no
+  // rows there and the live render that follows fills them in.
+  //
+  // Nobody, too, before the matrix client is up or after a sign-out, where
+  // reading the id throws rather than answering. A query that does not read
+  // the actor is unaffected in all three cases.
+  private actorForSearch(): string | undefined {
+    if ((globalThis as any).__boxelPrerenderApp) {
+      return undefined;
+    }
+    try {
+      return this.matrixService.userId ?? undefined;
+    } catch {
+      return undefined;
+    }
+  }
 
   async send(
     realmURL: string,
