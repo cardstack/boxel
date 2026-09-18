@@ -2,12 +2,12 @@
 
 Never hard-code colors. Always use CSS custom properties.
 
-**Fallback rule — scoped to theme/semantic tokens.** Do not provide hardcoded fallback values inside `var()` when referencing theme or semantic tokens — e.g. `var(--primary, #6366f1)`, `var(--boxel-sp, 1rem)`, `var(--background, white)`. Those tokens are always defined, so the fallback is dead weight that drifts out of sync with the theme. Falling back to another CSS variable is fine: `var(--token, var(--other-token))`.
+**Fallback rule — scoped to theme/semantic tokens.** Do not provide hardcoded fallback values inside `var()` when referencing theme or semantic tokens — e.g. `var(--primary, #6366f1)`, `var(--boxel-sp, 1rem)`, `var(--background, white)`. Those tokens are always defined, so the fallback is dead weight that drifts out of sync with the theme. That includes the status tokens: `--success`, `--warning`, `--info`, and `--attention` are declared in `theme.css` with defaults, so plain `var(--success)` is correct and `var(--success, green)` is the same dead weight. Falling back to another CSS variable is fine: `var(--token, var(--other-token))`.
 
 Two exemptions — both resolved by declaring on a parent container, never inline per selector:
 
 1. **Locally-defined component variables** (`--fit-*`, `--stagger-d`, …): declare them once, with their default values, on the component's parent/root element; descendants reference them bare (`var(--fit-headline-size)`), never with inline fallbacks scattered through child selectors.
-2. **Conditionally-existing runtime tokens** — tokens that only exist on themed containers (the scale-driven `--boxel-fs-*` ladder) or have no default at all (`--font-serif`). These genuinely need a fallback; give it ONCE, in a local-variable declaration on the parent container (e.g. `--serif: var(--font-serif, Georgia, serif);` on the composition root), and reference the local variable bare below.
+2. **Brand Guide custom variables** — tokens outside the contract that only exist when a particular Brand Guide is active. These genuinely need a fallback; give it ONCE, in a local-variable declaration on the parent container (e.g. `--display-size: var(--brand-display-size, 2.4rem);` on the composition root), and reference the local variable bare below. The `--boxel-fs-*` ladder is not one of these: `CardContainer` declares it on every container alongside `--boxel-sp-*`, so it is referenced bare.
 
 Hardcoded hex inside `linear-gradient()` is also a violation: `linear-gradient(180deg, #fef7ed 0%, #fed7aa 100%)` must become `linear-gradient(180deg, var(--muted) 0%, var(--accent) 100%)`.
 
@@ -21,62 +21,28 @@ border: 1px solid var(--border, #d3d3d3);
 **Right:**
 ```css
 padding: var(--boxel-sp);
-background-color: var(--background);
-color: var(--foreground);
+background-color: var(--card);
+color: var(--card-foreground);
 border: 1px solid var(--border);
 ```
 
 ### Semantic Theme Variables (prefer these)
 
-These adapt automatically for light/dark mode and custom themes:
-
-```css
-/* Color roles */
-var(--background)           /* page background-color */
-var(--foreground)           /* primary text color */
-var(--card)                 /* card background-color */
-var(--card-foreground)      /* text on card surface */
-var(--primary)              /* primary background-color */
-var(--primary-foreground)   /* text on primary */
-var(--secondary)            /* secondary background-color */
-var(--secondary-foreground) /* text on secondary */
-var(--muted)                /* muted/subdued background-color */
-var(--muted-foreground)     /* muted text */
-var(--accent)               /* accent background-color */
-var(--accent-foreground)    /* text on accent */
-var(--destructive)          /* error/danger color */
-var(--destructive-foreground) /* text on error/danger surface */
-var(--border)               /* border color */
-var(--input)                /* input background-color */
-var(--ring)                 /* focus ring color */
-var(--chart-1)          /* chart color 1 */
-var(--chart-2)          /* chart color 2 */
-var(--chart-3)          /* chart color 3 */
-var(--chart-4)          /* chart color 4 */
-var(--chart-5)          /* chart color 5 */
-var(--popover)           /* popover background-color */
-var(--popover-foreground) /* popover font color */
-var(--sidebar)            /* sidebar background-color */
-var(--sidebar-foreground)  /* sidebar font color */
-var(--sidebar-border)      /* sidebar border-color */
-var(--sidebar-accent)      /* sidebar accent background-color */
-var(--sidebar-accent-foreground) /* sidebar accent font color */
-var(--sidebar-primary)     /* sidebar primary background-color */
-var(--sidebar-primary-foreground)  /* sidebar primary font color */
-var(--sidebar-ring)        /* sidebar focus-ring color */
-```
+The full inventory — surfaces and their paired foregrounds, status fills, neutral surfaces, hue-as-ink tokens, borders, charts, sidebar, typography, spacing, radius, shadows — lives in one place: `skills/boxel-ui-guidelines/references/theme-token-contract.md`. Read it before styling; this reference only covers how to *use* those tokens. In short: every surface token names a background and pairs with its own `--*-foreground`; the neutral surfaces (`--canvas`, `--inset`, `--field`, `--hover`, `--stripe`, `--selected`) pair with `--foreground`; a hue used as text or icon color on a neutral surface takes its `--*-ink` token.
 
 ### Color Pairing Rules
 
-- `--primary`, `--secondary`, `--accent`, `--destructive`, `--sidebar-primary`, and `--sidebar-accent` are surface/action/state tokens, not ordinary text colors. Boxel's primary may be a bright brand teal, so `color: var(--primary)` can fail on light backgrounds. Use `--foreground` for body text, `--muted-foreground` for secondary text, or the paired `--*-foreground` when text sits on the matching surface.
+- `--primary`, `--secondary`, `--accent`, `--destructive`, `--muted`, `--sidebar-primary`, and `--sidebar-accent` are surface/action/state tokens, not foreground colors. They fail in both directions: Boxel's primary may be a bright brand teal, so `color: var(--primary)` washes out on light backgrounds, while `--muted` is a near-white surface that all but vanishes as `color` on `--background` or `--card`. Each names a background and only pairs with its own `--*-foreground`. This covers **every** foreground role, not just body text — icon `color`/`stroke`/`fill`, borders, rules, and underlines all inherit the same problem. Use `--foreground` for body text, `--muted-foreground` for secondary text and de-emphasized marks, or the paired `--*-foreground` when the element sits on the matching surface.
+
+- The status tokens follow the same contract: `--success`, `--warning`, `--info`, `--attention`, and `--destructive` are fills, each paired with its own `--*-foreground`. A status *word* or *icon* on a neutral surface takes the hue's `--*-ink` token instead (see below), never the fill.
+
+- The neutral surfaces (`--canvas`, `--inset`, `--field`, `--hover`, `--stripe`, `--selected`) have no `-foreground` of their own by design: the theme guarantees `--foreground` reads on every one of them, so a rule that sets one of them as `background-color` pairs it with `color: var(--foreground)` (or inherits it). `--tooltip` is the exception — it is the inverted surface and pairs with `--tooltip-foreground`.
 
 - `--muted-foreground` must only be used on `--muted`, `--background`, or `--card` surfaces. Do not place it on `--primary`, `--accent`, or any other surface — contrast is not guaranteed.
 
 - A rule that sets a semantic `background-color` also sets the paired `--*-foreground` as `color` **in the same rule**, once, at that surface's root. All children inherit the color — never re-declare on descendants what they already inherit.
 
 - You would only redeclare background and color, if you make a nested surface that diverges from its parent — that is the sanctioned case for declaring both: `background-color: var(--card); color: var(--card-foreground);`, `--sidebar`/`--sidebar-foreground`, `--accent`/`--accent-foreground`, `--primary`/`--primary-foreground`, etc.
-
-- Exception: `color: var(--foreground)` on a `--muted` background is fine — theme generation must always guarantee that contrast pair (as it must for `--muted-foreground` on `--background`/`--card`).
 
 - Isolated-format roots do not repeat `background-color: var(--background); color: var(--foreground);` — `CardContainer` already provides that pairing.
 
@@ -90,12 +56,41 @@ var(--sidebar-ring)        /* sidebar focus-ring color */
     - `background-color: var(--primary); color: var(--primary-foreground);`
     - `background-color: var(--secondary); color: var(--secondary-foreground);`
 
+**Hue as ink.** When a word or mark must read *as* a hue on a neutral surface — a status label, a link, a colored icon — use the hue's ink token (`color: var(--success-ink)`, `color: var(--primary-ink)`) rather than the fill. Every fill has one (`--primary-ink`, `--secondary-ink`, `--accent-ink`, `--destructive-ink`, `--success-ink`, `--warning-ink`, `--info-ink`, `--attention-ink`). The default is the hue mixed 60% toward `--foreground`, so it darkens on light surfaces and lightens on dark ones, and a theme that sets only `--success` still gets a readable `--success-ink`. Ink tokens belong on `--background`, `--card`, and `--muted`; on a hue's own fill use its `--*-foreground`.
+
+### Guaranteed Contrast Pairings
+
+The theme owes you these pairings and nothing else. Stay inside them and no contrast check is needed:
+
+- Every surface token with its own `--*-foreground`: `--background`/`--foreground`, `--card`/`--card-foreground`, `--popover`, `--primary`, `--secondary`, `--accent`, `--muted`, `--destructive`, `--success`, `--warning`, `--info`, `--attention`, `--tooltip`, and the `--sidebar-*` family.
+- `--foreground` on any neutral surface: `--canvas`, `--inset`, `--field`, `--hover`, `--stripe`, `--selected`.
+- `--foreground` on `--muted`. `--muted` does have its own `--muted-foreground`, but that pair reads as a disabled surface, so ordinary text on a muted well uses `--foreground` and the theme guarantees it.
+- `--muted-foreground` on `--background`, `--card`, or `--muted`.
+- Each `--*-ink` token on `--background`, `--card`, or `--muted`.
+
+A pair outside this list — an accent token used as ink, a hand-picked combination, a `color-mix()` result, a foreground placed on a surface it was not paired with — has no guarantee behind it, and the theme is free to break it. Prefer restructuring onto a guaranteed pair over keeping the combination.
+
+### `background-color`, Not `background`, for a Plain Color
+
+When a rule sets only a color, write `background-color: var(--card)`, never `background: var(--card)`.
+
+`background` is a shorthand for eight properties. Writing a bare color through it resets the other seven (`background-image`, `-size`, `-position`, `-repeat`, `-origin`, `-clip`, `-attachment`) to their initial values in the same declaration. That is rarely what a color change means, and the damage is silent: a hover rule that says `background: var(--hover)` wipes a gradient or a wallpaper image the resting state set; a parent's `:deep()` override that says `background: var(--card)` erases a child's `background-image`; a theme that later adds a texture to `--canvas` never shows through. It also blurs the pairing rule — the rule for a surface is "set the background color and its `-foreground` together", and `background-color` says exactly that.
+
+Exceptions, where the shorthand is the right tool because you mean more than the color:
+
+- You are setting an image or gradient: `background: linear-gradient(180deg, var(--muted), var(--accent));`, `background: url(...) center / cover no-repeat;`. Tokens still apply inside the gradient stops.
+- You are setting several sub-properties at once and want them read as one declaration.
+- You intend the reset: `background: none;` or `background: transparent;` to clear an inherited image *and* color together. Say so in a comment, because the next reader will assume it was a plain color.
+- Inline `style=` attributes and JS style objects follow the same rule (`backgroundColor` in `Object.assign(el.style, …)`).
+
 ### Semi-transparent Colors on Themed Surfaces
 
 Do not use `rgba()` values on themed backgrounds — they break with dark mode and custom themes. Use `color-mix()` to derive semi-transparent variants from semantic tokens:
 
 - `rgba(255,255,255,0.25)` on primary background → `color-mix(in oklch, var(--primary-foreground) 25%, transparent)`
 - `rgba(0,0,0,0.15)` dark overlay → `color-mix(in oklch, transparent, black 15%)`
+
+The literal `black` there is deliberate, not an exception to the no-hardcoded-colors rule. A scrim's job is to darken whatever is behind it in *both* schemes; a token would flip with the theme (`--foreground` goes light in dark mode and would brighten the scrim). Pure black and pure white are the two colors with no theme meaning, so they are the right base for a darkening or lightening veil. Prefer the contract's ready-made tokens first — `--overlay` for a modal/drawer scrim and `--hover` for a pointer-hover veil — and reach for `color-mix(… black/white …)` only when neither fits.
 
 ### Spacing Tokens
 
@@ -115,25 +110,7 @@ All three options below are valid — choose based on whether you want spacing t
 
 **Note on `--spacing`:** Using `--spacing` directly is valid, but it's a single value. If you need a range of sizes, use the `--boxel-sp-*` scale — or derive your own variables with `calc(var(--spacing) * n)`.
 
-**Note:** The boxel spacing values will be recalculated based on the linked card in cardInfo.theme. Below values are defaults.
-
-```css
-var(--boxel-sp)        /* (1rem) 16px base unit */
-var(--boxel-sp-6xs)    /* ~2px */
-var(--boxel-sp-5xs)    /* ~3px */
-var(--boxel-sp-4xs)    /* ~4px */
-var(--boxel-sp-3xs)    /* ~5px */
-var(--boxel-sp-2xs)    /* ~7px */
-var(--boxel-sp-xs)     /* 9px */
-var(--boxel-sp-sm)     /* 12px */
-var(--boxel-sp-lg)     /* 21px */
-var(--boxel-sp-xl)     /* 28px */
-var(--boxel-sp-2xl)    /* 38px */
-var(--boxel-sp-3xl)   /* 50px */
-var(--boxel-sp-4xl)   /* 67px */
-var(--boxel-sp-5xl)   /* 90px */
-var(--boxel-sp-6xl)   /* 120px */
-```
+The `--boxel-sp-*` ladder and its default values are listed in `skills/boxel-ui-guidelines/references/theme-token-contract.md`.
 
 ### Typography Tokens
 
@@ -147,102 +124,30 @@ Choose based on whether you want the text to respond to the linked theme.
 
 **`font:` shorthand pitfall.** The composite `--boxel-font-*` tokens (`font: var(--boxel-font-sm);` etc.) bundle size/line-height *and* `--boxel-font-family` — the fixed IBM Plex stack. Using the shorthand therefore pins the Boxel family and stomps the theme's `--font-sans`. On themeable content, set the individual `font-size` / `font-weight` / `line-height` properties instead so the theme's family inherits. The shorthand stays valid where Boxel chrome styling is the intent — it's a deliberate theme opt-out, so judge each occurrence by intent, not mechanically.
 
+**`--boxel-font-*` is not a size.** `font-size: var(--boxel-font-sm);` is invalid CSS and the declaration is dropped: `--boxel-font-sm` expands to `<size> / <line-height> <family>`, a value only the `font` shorthand accepts. The two correct forms are `font-size: var(--boxel-font-size-sm);` for themeable content, where the theme's family and line-height inherit, or `font: var(--boxel-font-sm);` where Boxel chrome styling is the intent. Never mix the two names.
+
 #### Semantic typography variables
 
-These are **in addition to** `--font-sans`, `--font-serif`, and `--font-mono`. Use them when styling text by semantic role (heading, body, caption). Use `--font-sans/serif/mono` only when referencing a generic font stack directly.
+These are **in addition to** `--font-sans`, `--font-serif`, and `--font-mono`. Use them when styling text by semantic role (heading, section heading, subheading, body, caption, UI label, eyebrow). Use `--font-sans/serif/mono` only when referencing a generic font stack directly. The role tokens and the low-level size ladder are listed in `skills/boxel-ui-guidelines/references/theme-token-contract.md`.
 
-These are good for isolated or embedded card views. The sizes might be too large for fitted card templates.
+These are good for isolated or embedded card views. The sizes might be too large for fitted card templates. Before declaring any of them, check what `CardContainer` already applies (body role on the root, heading roles on `h1`–`h3`, caption on `small`; see the contract reference) — most templates need no typography declarations at all.
 
 **Note:**
-- `--font-sans` is default for most text, so you don't need to redeclare it. 
-- `--font-mono` is default for most monospace text such as `<code>...</code>` etc. So most likely you don't need to redeclare it.
-- `--font-serif` is not set by default, so if your theme calls for serif font family, you can declare it at the most efficient level of the css.
+- `--font-sans` is applied by `CardContainer` as the card's default family and every role's fallback, so there is no need to redeclare it.
+- `--font-serif` has a default but the container applies it to nothing. For a serif voice, declare `font-family: var(--font-serif)` once at the highest element that needs it.
+- `--font-mono` follows the theme only inside rendered Markdown. A bare `<code>` / `<pre>` in a template gets the fixed Boxel mono from the global stylesheet, so declare `font-family: var(--font-mono)` on those elements when they should match the theme.
 
-```css
-/* Heading */
-var(--boxel-heading-font-family)
-var(--boxel-heading-font-size)
-var(--boxel-heading-font-weight)
-var(--boxel-heading-line-height)
+Each role, including `label` and `eyebrow`, is a slot on the theme's `typography` field, so a theme can retune it; the `--boxel-*` names are what `CardContainer` publishes from those slots. Use the role's letter-spacing token rather than a hand-picked `--boxel-lsp-*` value when the text is in a themed template — an eyebrow's tracking is part of the theme's voice.
 
-/* Section heading */
-var(--boxel-section-heading-font-family)
-var(--boxel-section-heading-font-size)
-var(--boxel-section-heading-font-weight)
-var(--boxel-section-heading-line-height)
-
-/* Subheading */
-var(--boxel-subheading-font-family)
-var(--boxel-subheading-font-size)
-var(--boxel-subheading-font-weight)
-var(--boxel-subheading-line-height)
-
-/* Body */
-var(--boxel-body-font-family)
-var(--boxel-body-font-size)
-var(--boxel-body-font-weight)
-var(--boxel-body-line-height)
-
-/* Caption */
-var(--boxel-caption-font-family)
-var(--boxel-caption-font-size)
-var(--boxel-caption-font-weight)
-var(--boxel-caption-line-height)
-```
-
-#### Low-level typography tokens
-
-Note: The font-family, font-sizes, spacing, radius will be recalculated based on the linked card in cardInfo.theme. Below values are defaults.
-
-```css
-var(--boxel-font-family)           /* IBM Plex Sans */
-var(--boxel-serif-font-family)     /* IBM Plex Serif */
-var(--boxel-monospace-font-family) /* IBM Plex Mono */
-
-var(--boxel-font-size-2xl)  /* 36px */
-var(--boxel-font-size-xl)   /* 32px */
-var(--boxel-font-size-lg)   /* 22px */
-var(--boxel-font-size-md)   /* 20px */
-var(--boxel-font-size)      /* 16px */
-var(--boxel-font-size-sm)   /* 14px */
-var(--boxel-font-size-xs)   /* 12px */
-var(--boxel-font-size-2xs)  /* 11px */
-
-/* Line heights */
-var(--boxel-line-height-xl)
-var(--boxel-line-height-lg)
-var(--boxel-line-height)
-var(--boxel-line-height-sm)
-var(--boxel-line-height-xs)
-
-```
+**Take the whole role group, don't assemble one.** When text needs a size *and* a matching line-height, use the tokens of its semantic role rather than reaching into the primitive ladder and hand-writing the pair — `font-size: var(--boxel-font-size-xs); line-height: calc(15 / 11);` should be `var(--boxel-caption-font-size)` + `var(--boxel-caption-line-height)`. The role group stays internally consistent and re-scales with the theme; a hand-computed `calc()` line-height silently stops matching the moment the theme's type scale changes.
 
 ### Border & Radius Tokens
 
-`--radius` is valid for the base radius, but it's a single value. If you need a range of sizes, use the `--boxel-border-radius-*` scale — or derive your own variables with `calc(var(--radius) * n)`. The `--boxel-border-radius-*` tokens are pre-built and scale with the theme's `radius` setting.
-
-```css
-var(--boxel-border)           /* 1px solid #d3d3d3 */
-var(--boxel-border-color)     /* #d3d3d3 */
-var(--radius)                 /* theme border radius base */
-var(--boxel-border-radius)    /* set by --radius, defaults to 10px */
-var(--boxel-border-radius-xs) /* scales with theme */
-var(--boxel-border-radius-sm) /* scales with theme */
-var(--boxel-border-radius-lg) /* scales with theme */
-var(--boxel-border-radius-xl) /* scales with theme */
-var(--boxel-border-radius-2xl) /* scales with theme */
-```
+`--radius` is valid for the base radius, but it's a single value. If you need a range of sizes, use the `--boxel-border-radius-*` scale (listed in `skills/boxel-ui-guidelines/references/theme-token-contract.md`) — or derive your own variables with `calc(var(--radius) * n)`. The scale is pre-built and re-scales with the theme's `radius` setting. `--boxel-border` / `--boxel-border-color` are fixed Boxel chrome values; themed content uses `1px solid var(--border)`.
 
 ### Shadow & Effects Tokens
 
-Always check the linked card in cardInfo.theme for guidance. Here are some defaults:
-
-```css
-var(--boxel-box-shadow)        /* subtle elevation */
-var(--boxel-box-shadow-hover)  /* hover state elevation */
-var(--boxel-deep-box-shadow)   /* strong elevation */
-var(--boxel-transition)        /* 0.2s ease */
-```
+Prefer the theme's shadow scale (`--shadow-2xs` … `--shadow-2xl`, plus `--shadow-inset` for sunken wells; see `skills/boxel-ui-guidelines/references/theme-token-contract.md`): it is part of the contract, so a theme can retune elevation and the template follows. `--boxel-box-shadow`, `--boxel-box-shadow-hover`, `--boxel-deep-box-shadow`, and `--boxel-transition` are fixed Boxel chrome values that do not respond to the theme.
 
 ### Primitive Color Tokens — Do Not Use for Brand/Theme
 
@@ -263,10 +168,18 @@ var(--boxel-dark-green)
 var(--boxel-yellow)
 var(--boxel-orange)
 
-/* Status */
+/* Status — the fixed palette behind the themed status tokens. In a card, use
+   --destructive / --success / --warning / --info / --attention (and their
+   -foreground / -ink pairs) instead, so the theme can restyle them. */
 var(--boxel-danger)
 var(--boxel-danger-hover)
+var(--boxel-success)
+var(--boxel-warning)
 ```
+
+### Tokens Outside the Contract
+
+`StructuredTheme` has no slot for tokens the contract does not name, and the escape hatches (a `BrandGuide`'s `customCssVariables`, or an extended theme card definition) give up the boundary reset and the ability to switch theme cards. `skills/boxel-ui-guidelines/references/theme-token-contract.md` spells out the trade-off. In a template: map onto a named token wherever one is close enough, and when you must read a custom variable under a theme that may be swapped, give it a fallback once in a local variable on the component root (exemption 2 at the top of this reference).
 
 ### Brand Guide Tokens
 

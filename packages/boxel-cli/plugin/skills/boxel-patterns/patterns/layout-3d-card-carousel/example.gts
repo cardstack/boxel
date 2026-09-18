@@ -230,6 +230,7 @@ export class CardCarousel extends CardDef {
 // - Card chrome breaks immersion. searchResultsComponent entries can
 //   come with operator-mode overlays plus CardContainer chrome
 //   (rounded corners, halo). Pass `@overlays={{false}}` to drop the
-//   overlay, and for a clean carousel look use `@displayContainer={{false}}`
-//   per card or recolor the chrome via `:deep(.boxel-card-container)` from
+//   overlay, and for a clean carousel look pass `@displayContainer={{false}}`
+//   on searchResultsComponent as well (drops the container chrome from
+//   every row) or recolor the chrome via `:deep(.boxel-card-container)` from
 //   scoped CSS — see boxel-ui-guidelines/references/delegated-render-control.md.

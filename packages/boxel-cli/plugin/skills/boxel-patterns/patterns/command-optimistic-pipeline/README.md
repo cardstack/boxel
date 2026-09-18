@@ -13,7 +13,7 @@ validated: source-proven
 **Recipe shape:**
 
 1. Model the run as a real CardDef: `status`, `progressCurrent`, `progressTotal`, `currentStepIndex`, `steps`, `logs`, `startedAt`, `completedAt`, and output fields.
-2. In the invoking component, get `this.args.context?.commandContext` and the current card realm via `realmURL`.
+2. In the invoking component, get `this.args.context?.toolContext` and the current card realm via `realmURL`.
 3. Wrap `SaveCardCommand` in a small `OptimisticSave` helper that stores pending promises and exposes `save(card, realm)` plus `settle()`.
 4. Create one run card per invocation. Save it once, then mutate the same instance for each phase.
 5. Reassign `containsMany` arrays when changing nested steps/logs so tracking sees the structural change.

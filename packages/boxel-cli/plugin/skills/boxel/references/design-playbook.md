@@ -264,16 +264,20 @@ If any answer is "no", iterate before stage 2.
 
 ## Stage 2 — Extract the theme
 
-Scan your stage-1 CSS and pull every distinct decision into a named token. The Theme card you write here IS the design DNA — not a generic shadcn palette, not a guess at good defaults, the actual values that made the mockup work.
+**First check whether you need a theme at all.** If the stage-1 mockup made no visual decisions beyond Boxel's defaults, skip the Theme card and link nothing in stage 3. Otherwise write the mockup's values into a new Theme under the token contract names; the theme sets its own values rather than leaning on the defaults.
 
-**Token roles to surface (use the names that make sense for THIS card):**
+Scan your stage-1 CSS and pull every distinct decision into the theme. The Theme card you write here IS the design DNA — the actual values that made the mockup work, not a guess at good defaults.
 
-- **Color** — `--ink` (primary text), `--ink-soft` (secondary text), `--paper` (background), `--card` (raised surface), `--rule` (border/divider), `--accent` (the one accent), `--accent-soft` (accent at lower alpha if you used one). Skip `--secondary`, `--muted-foreground`, etc. if your design doesn't use them.
-- **Typography** — `--font-display`, `--font-body`, `--font-mono` (only if used). Capture the exact font stacks. Add Google Fonts URLs to `cssImports`.
-- **Scale / rhythm** — `--space-1` through `--space-5` if you used a deliberate spacing scale. Skip if the spacings were ad-hoc.
-- **Radius / shadow** — name them only if you used them more than once.
+**Use a `StructuredTheme` (or richer), never the bare `Theme` card.** The bare card's `cssVariables` string bypasses the token contract: nothing fills in what you omit, nothing validates it, and the theme editors cannot read it. Write your values into `rootVariables` / `darkModeVariables` / `typography` under the contract's names, listed in `boxel-ui-guidelines/references/theme-token-contract.md`. Step up to `StyleReference` or `DetailedStyleReference` when the visual language deserves prose, and to `BrandGuide` when the design has marks or needs custom variables the contract does not name.
 
-**Don't add tokens the mockup didn't earn.** A shadcn-style palette of 20 tokens is wrong if your mockup used 6. The theme should fit the design, not the other way around.
+**Map each decision onto a contract role — don't invent names:**
+
+- **Color** — primary text → `foreground`, muted text → `mutedForeground`, page → `background`, raised surface → `card` + `cardForeground`, border/divider → `border`, the one accent → `accent` + `accentForeground` (or `primary` + `primaryForeground` if it carries the action).
+- **Typography** — the display face → the `heading` slot's `fontFamily` (and `sectionHeading`, `subheading` if they share it), body face → `fontSans` plus the `body` slot, mono → `fontMono` only if used. Weights, line-heights, and tracking go into the matching slot; an uppercase micro-label's `0.22em` is the `eyebrow` slot's `letterSpacing`.
+- **Scale / rhythm** — a deliberate spacing scale becomes `spacing` (a quarter of the base unit: `0.25rem` for a 16px rhythm) and `themeScale`. Skip if the spacings were ad-hoc.
+- **Radius / shadow** — one base `radius`; the `--boxel-border-radius-*` steps derive from it at runtime, so there is nothing else to set. Shadows are the `shadow*` fields (`shadow2xs` … `shadow2xl`).
+
+**Don't fill tokens the mockup didn't earn.** A theme that sets six fields and inherits the rest is right if the mockup used six decisions; a fully-populated palette copied from a template is wrong.
 
 **Theme card JSON shape:**
 
@@ -283,17 +287,18 @@ Scan your stage-1 CSS and pull every distinct decision into a named token. The T
     "type": "card",
     "attributes": {
       "cardInfo": { "name": "<Theme Name>", "summary": "<one-line>", "notes": null, "cardThumbnailURL": null },
-      "cssImports": ["https://fonts.googleapis.com/css2?family=..."],
-      "cssVariables": ":root {\n  --ink: #0f172a;\n  ...\n}\n\n.dark {\n  --ink: #f1f5f9;\n  ...\n}"
+      "rootVariables": { "background": "#fdfcf8", "foreground": "#0f172a", "mutedForeground": "#64748b", "accent": "#b91c1c", "accentForeground": "#ffffff", "fontSans": "'Inter', sans-serif", "spacing": "0.25rem" },
+      "darkModeVariables": { "background": "#0f172a", "foreground": "#f1f5f9", "mutedForeground": "#94a3b8" },
+      "typography": { "heading": { "fontFamily": "'Lyon Display', serif", "fontWeight": "300" }, "eyebrow": { "letterSpacing": "0.22em", "fontWeight": "700" } }
     },
     "meta": {
-      "adoptsFrom": { "module": "@cardstack/base/card-api", "name": "Theme" }
+      "adoptsFrom": { "module": "@cardstack/base/structured-theme", "name": "default" }
     }
   }
 }
 ```
 
-Push the theme card.
+`cssImports` is computed from the font stacks; only a non-Google stylesheet needs a `customCssImports` entry. Push the theme card.
 
 ---
 
@@ -301,14 +306,16 @@ Push the theme card.
 
 Replace every hardcoded value in the isolated template with `var(--*)` references to your new theme. The card should be **pixel-identical** to stage 1.
 
-- Every `#hex` → `var(--ink)` / `var(--paper)` / etc.
-- Every `font-family: 'Lyon Display', ...` → `var(--font-display)`
-- Every `letter-spacing: 0.22em` you used twice → consider `var(--eyebrow-tracking)`; if used once, leave inline
-- Every `box-shadow: 0 18px 40px ...` you used twice → `var(--shadow-lift)`; if used once, leave inline
+- Every `#hex` → `var(--foreground)` / `var(--background)` / `var(--accent)` etc., the contract names you mapped in stage 2
+- Every `font-family: 'Lyon Display', ...` → `var(--boxel-heading-font-family)`; and if it sat on an `h1`, delete the declaration — `CardContainer` already gives `h1`/`h2`/`h3` their roles, the root the body role, and `small` the caption role (see the contract reference)
+- Every `letter-spacing: 0.22em` on an eyebrow → `var(--boxel-eyebrow-letter-spacing)`
+- Every `box-shadow: 0 18px 40px ...` you used twice → the nearest `var(--shadow-lg)` / `var(--shadow-xl)`; if used once, leave inline
 
-**Rule of two:** if a value appears once, leave it inline. If it appears twice or more, tokenize it. Don't manufacture tokens for single uses.
+**Do not add what `CardContainer` already provides.** The host wraps every render in a themed container that sets, on the root, `background-color: var(--background)`, `color: var(--foreground)`, and the whole `body` typography role (family, size, weight, line-height, letter-spacing), and via `@layer reset` gives `h1` the `heading` role, `h2` `sectionHeading`, `h3` `subheading`, `small` the `caption` role, `h4`–`h6` the body size, and zero margins to headings and `p`. Once your stage-2 theme carries those values, do not add the matching declarations to the template — not as tokens, not as literals. Write a declaration only where the design deviates — an `h2` that should read as the `heading` role, a `span` styled as an eyebrow, a `fitted` root that switches to `--card` / `--card-foreground`. Full list: `boxel-ui-guidelines/references/theme-token-contract.md`, "What CardContainer already applies".
 
-Link `cardInfo.theme` on the instance to your new Theme card. Push the updated `.gts` and the instance JSON.
+**Rule of two:** if a value appears once, leave it inline. If it appears twice or more, it belongs in a theme field. A value with no contract role is either inlined or, if the design truly needs it as a variable, a reason to use `BrandGuide` and its `customCssVariables`.
+
+If you extracted a theme in stage 2, link `cardInfo.theme` on the instance to it. Push the updated `.gts` and the instance JSON.
 
 Verify visually that stage 3 matches stage 1. If anything shifted, your theme extraction missed something.
 
@@ -322,11 +329,11 @@ Now you have the design language (in the theme) and the flagship layout (in isol
 
 This rule is what lets a parent (like the Row & Rail Programme showcase) embed your card and override the chrome to match its design language. If your `isolated` adds `border-radius: 8px` to its outer `<article>`, it fights every parent that tries to override.
 
-Per format, outer-element rules. `CardContainer` — which wraps every card render — already applies the theme's `background-color`, `color`, `font-family` (`--font-sans`, falling back to the Boxel sans stack), and body `font-size`; all inherited for free. Don't declare these on the root unless deviating: `font-family` only for a non-sans card voice (such as `--font-serif`); `background-color`/`color` only when a pairing other than the theme's main background/foreground is preferred. `fitted` and `embedded` may make that switch (e.g. `--card` + `--card-foreground`); `isolated` and CardDef `edit` keep the theme's pair.
+Per format, outer-element rules. `CardContainer` — which wraps every card render — already applies the theme's `background-color`, `color`, and the full `body` typography role (family, size, weight, line-height, letter-spacing), plus heading roles on `h1`–`h3` and caption on `small` (see stage 3); all inherited for free. Don't declare these on the root unless deviating: `font-family` only for a non-sans card voice (such as `--font-serif`); `background-color`/`color` only when a pairing other than the theme's main background/foreground is preferred. `fitted` and `embedded` may make that switch (e.g. `--card` + `--card-foreground`); `isolated` and CardDef `edit` keep the theme's pair.
 
 | Format | OK on outermost | NOT OK |
 |---|---|---|
-| `isolated` | `font-family` (only if not `--font-sans`), inner padding, inner grid/flex | `border-radius`, `border`, `box-shadow`, `overflow`, background/foreground overrides (use the theme's) |
+| `isolated` | `height: 100%; overflow-y: auto` (fills the fixed-height container and scrolls; `min-height` clips instead), `font-family` (only if not `--font-sans`), inner padding, inner grid/flex | `border-radius`, `border`, `box-shadow`, `overflow: hidden`, `min-height` in place of `height: 100%`, background/foreground overrides (use the theme's) |
 | `embedded` | same — plus a different background/foreground pairing (e.g. `--card` + `--card-foreground`) | `border-radius`, `border`, `box-shadow`, `overflow`, `width/height/max-width` |
 | `fitted` | a different background/foreground pairing (e.g. `--card` + `--card-foreground`), `font-family` (only if not `--font-sans`), inner padding, inner grid template | `border-radius`, `border`, `box-shadow`, `width/height/min/max-height`, `container-type`, `container-name` |
 | `atom` | inline content only | `padding`, `border`, `border-radius`, `background`, any `display:` other than default |

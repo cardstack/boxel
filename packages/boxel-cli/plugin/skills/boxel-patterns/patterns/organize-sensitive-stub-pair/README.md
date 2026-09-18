@@ -66,7 +66,7 @@ export class FullRecord extends CardDef {
       const profile = this.args.model;
       if (!profile?.operationalStub) return;
       try {
-        await new SyncOperationalStubCommand(this.args.context.commandContext)
+        await new SyncOperationalStubCommand(this.args.context.toolContext)
           .execute(profile);
       } catch (error) {
         console.error('Failed to sync stub:', error);
@@ -108,7 +108,7 @@ export class SyncOperationalStubCommand extends Command<typeof FullRecord, undef
       + new URL(stub.id).pathname.split('/').slice(0, -2).join('/')
       + '/',
     );
-    await new SaveCardCommand(this.commandContext).execute({
+    await new SaveCardCommand(this.toolContext).execute({
       card: stub,
       realm: stubRealm,
     });

@@ -186,11 +186,9 @@ function extractDescription(skillMd: string): string {
   let body = skillMd;
   let frontmatter = skillMd.match(/^---\n([\s\S]*?)\n---\n/);
   if (frontmatter) {
-    let descLine = frontmatter[1]
-      .split('\n')
-      .find((l) => l.startsWith('description:'));
-    if (descLine) {
-      return truncate(descLine.slice('description:'.length).trim());
+    let described = readFrontmatterDescription(frontmatter[1]);
+    if (described) {
+      return truncate(described);
     }
     body = skillMd.slice(frontmatter[0].length);
   }
@@ -198,6 +196,45 @@ function extractDescription(skillMd: string): string {
     .split('\n')
     .find((l) => l.trim() !== '' && !l.trim().startsWith('#'));
   return truncate(line?.trim() ?? '');
+}
+
+/**
+ * Read `description:` out of a frontmatter block, including the block-scalar
+ * forms.
+ *
+ * A description long enough to wrap is naturally authored as
+ * `description: >-` with the text on the following indented lines. Reading
+ * only the key's own line yields the literal `>-`, which is what
+ * `list_skills` would then advertise as the skill's purpose — the agent's
+ * only basis for deciding whether to read it. Skill frontmatter is written
+ * upstream, so this accommodates the form rather than requiring one.
+ */
+function readFrontmatterDescription(block: string): string | undefined {
+  let lines = block.split('\n');
+  let index = lines.findIndex((line) => line.startsWith('description:'));
+  if (index === -1) {
+    return undefined;
+  }
+
+  let value = lines[index].slice('description:'.length).trim();
+  if (!/^[>|][-+]?$/.test(value)) {
+    return value;
+  }
+
+  let folded = value.startsWith('>');
+  let body: string[] = [];
+  for (let line of lines.slice(index + 1)) {
+    if (line.trim() === '') {
+      body.push('');
+      continue;
+    }
+    if (!/^\s/.test(line)) {
+      break;
+    }
+    body.push(line.trim());
+  }
+
+  return folded ? body.join(' ').trim() : body.join('\n').trim();
 }
 
 function truncate(text: string): string {
