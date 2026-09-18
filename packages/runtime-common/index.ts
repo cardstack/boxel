@@ -290,6 +290,14 @@ export interface BuildModelDiagnostics {
   // earlier card in the same job rather than not happening.
   moduleEvaluationCount?: number;
   moduleEvaluationTotalMs?: number;
+  // Present only when this visit dropped the tab's loader before building
+  // the model, naming which of the two synchronizations did it. A drop
+  // makes a nonzero `moduleEvaluationCount` expected rather than
+  // surprising: the graph was warm and this visit threw it away, so the
+  // re-fetch and re-evaluation it pays for is the drop's price and not a
+  // property of the card. Its absence alongside a large count is the
+  // reading that says the tab had never evaluated the graph at all.
+  loaderResetReason?: 'clearCache' | 'loaderEpoch';
   // Per-field hydration wall-clock, keyed by dotted field path from the
   // card's root — the deserialization sibling of `searchDocFieldsMs`, and
   // the breakdown of `buildModelMs.hydrate`. Same bounding, so a cheap card
@@ -2137,6 +2145,37 @@ export interface SearchQuery {
 export interface CopyCardsWithCodeRef {
   sourceCard: CardDef;
   codeRef?: ResolvedCodeRef; // if provided the card will point to a new code ref
+}
+
+// Whether a pass over `urls` has to ask the prerender tab it lands on to drop
+// its loader. Only a change to an executable can make an evaluated module
+// graph describe something other than what is on disk, so only an executable
+// in the set answers yes.
+//
+// The tab-local drop is not the whole of the mechanism, and is not what makes
+// a module change safe: the realm's loader epoch is re-minted by the same
+// condition and threaded on every render, which resets every tab holding a
+// superseded graph rather than only the one this pass's first visit reaches.
+// This stays as the reset for that one tab. Both readers call this same
+// predicate — `IndexWriter` to decide whether to mint, `IndexRunner` to decide
+// whether to arm — so the two cannot disagree about whether the pass changed a
+// module, and a change to what counts as executable moves both at once.
+//
+// The epoch is per realm and a tab's evaluated graph is not: a tab affine to
+// one realm holds the base realm's modules too, and a base-realm write moves
+// only the base realm's epoch. What covers that is the deploy, not indexing.
+// A deployed realm's base modules only change by releasing, the prerender
+// fleet recycles its browsers whenever the host-shell token changes, and that
+// token is the digest of the host's `index.html`, which carries the build's
+// own version — so no release leaves a tab holding modules from the one
+// before it.
+export function passInvalidatesExecutables(urls: Iterable<string>): boolean {
+  for (let url of urls) {
+    if (hasExecutableExtension(url)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function hasExecutableExtension(path: string): boolean {

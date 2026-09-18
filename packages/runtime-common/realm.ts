@@ -12285,6 +12285,30 @@ export class Realm {
       this.invalidateCache(localPath);
 
       if (hasExecutableExtension(localPath)) {
+        // Mint before the delete, for the same reason and in the same order
+        // as the write path: deleting the cached definition only guarantees
+        // the next lookup re-derives one, not what it derives it FROM. The
+        // repopulate prerenders the module, and a prerender tab that already
+        // evaluated it keeps serving the evaluated copy — so the definition
+        // cached under the new bytes' URL would describe the old ones.
+        //
+        // The write path mints because it knows it changed a module. Nothing
+        // wrote this one through the realm, so nothing else on this path
+        // says so: the index pass that covers the module mints its own epoch,
+        // but a pass carrying only instances does not, and on an external
+        // edit the two can be separate passes. Minting here is what makes the
+        // order between them stop mattering.
+        //
+        // Best-effort, like the invalidate below it: a failure leaves the
+        // staleness this call removes, and the covering index pass's own mint
+        // is still the backstop.
+        try {
+          await mintRealmLoaderEpoch(this.#dbAdapter, this.url);
+        } catch (err: unknown) {
+          this.#log.error(
+            `failed to mint a loader epoch for ${this.url} after an external edit to ${tracked.url.href}; a prerender tab holding the pre-edit module may keep rendering its previous schema: ${stringifyErrorForLog(err)}`,
+          );
+        }
         await this.#definitionLookup.invalidate(tracked.url.href);
       }
 
