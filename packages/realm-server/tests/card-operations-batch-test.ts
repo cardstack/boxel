@@ -54,6 +54,7 @@ interface Commit {
   writes: Record<string, string>;
   deletes: string[];
   clientRequestId: string | null | undefined;
+  clientAuthored: string[] | undefined;
   waitForIndex: boolean | undefined;
 }
 
@@ -222,6 +223,7 @@ function stub(opts: StubOptions = {}): Stub {
         writes,
         deletes: [...(batch.deletes ?? [])],
         clientRequestId: options?.clientRequestId,
+        clientAuthored: options?.clientAuthored,
         waitForIndex: options?.waitForIndex,
       });
       return {
@@ -458,6 +460,107 @@ async function refusal(
 }
 
 module(basename(import.meta.filename), function () {
+  // Which cards a commit says it wrote from content its caller supplied.
+  //
+  // The distinction reaches the client as a member of the invalidation event,
+  // and it is the whole of what lets a client tell the cards it is already
+  // holding the state of from the ones the realm computed for it. A card
+  // reported here that the realm in fact computed would have its client
+  // decline to read state only the realm has; one not reported that the client
+  // did supply would have a client re-read a card over an edit made while the
+  // write was in flight.
+  module('what a commit says its caller wrote', function () {
+    test("a card minted under a name its caller chose is the caller's content", async function (assert) {
+      let { core, commits } = stub();
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'create',
+            lid: 'mango',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Mango' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        { clientRequestId: 'req-1' },
+      );
+
+      assert.deepEqual(
+        commits[0].clientAuthored,
+        [`${REALM}Person/mango`],
+        'named as the invalidation event names it, so the two can be matched',
+      );
+    });
+
+    test("a card the realm named is nobody else's to hold", async function (assert) {
+      let { core, commits } = stub();
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'create',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Mango' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        { clientRequestId: 'req-1' },
+      );
+
+      assert.strictEqual(
+        commits[0].clientAuthored,
+        undefined,
+        'a create that named no card of its own left the realm to name it, so no caller is holding it',
+      );
+    });
+
+    test('a card the batch only changed is state the realm computed', async function (assert) {
+      let { core, commits } = stub({
+        stored: {
+          'Person/existing.json': JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Mango' },
+              meta: { adoptsFrom: PERSON },
+            },
+          }),
+        },
+      });
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'update',
+            href: `${REALM}Person/existing`,
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Van Gogh' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        { clientRequestId: 'req-1' },
+      );
+
+      assert.strictEqual(
+        commits[0].clientAuthored,
+        undefined,
+        "the commit claims only the cards it minted under a caller's name",
+      );
+    });
+  });
+
   module('card operations batch', function () {
     test('a create is staged at the path its local id names', async function (assert) {
       let { core, commits } = stub();
