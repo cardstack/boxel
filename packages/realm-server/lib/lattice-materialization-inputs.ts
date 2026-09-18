@@ -645,7 +645,7 @@ export class LatticeMaterializationInputs {
           bytes > LatticeMaterializationInputs.MAX_CARD_BYTES
         )
           throw new Error('Lattice card input is failed, future or oversized');
-        if (row.owner_version && !row.materialized)
+        if (row.owner_version && !row.retired && !row.materialized)
           throw new Error('Lattice materialized feeder has no provenance');
         // A stale frame asks less of a feeder: that its index row is a ready
         // publication of current code. Dirt, and the owner row moving past

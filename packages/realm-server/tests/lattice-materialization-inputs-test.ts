@@ -1192,6 +1192,36 @@ module(basename(import.meta.filename), function (hooks) {
     assert.throws(() => input.seal(), /incomplete/);
   });
 
+  test('an explicitly retired owner can become an ordinary indexed input', async (assert) => {
+    const url = await materializedCard('folded', 12);
+    await db.execute(
+      "UPDATE boxel_index SET pristine_doc=pristine_doc #- '{meta,publication}' WHERE url=$1",
+      { bind: [url] },
+    );
+    await db.execute(
+      'UPDATE lattice_owners SET retired=TRUE WHERE owner_url=$1',
+      { bind: [url] },
+    );
+    const input = await open();
+    assert.strictEqual(
+      (await input.read([url]))[0].resource.attributes?.amount,
+      12,
+    );
+    await publish(input.seal().assertCurrent);
+    const next = await open();
+    await next.read([url]);
+    const receipt = next.seal();
+    await db.execute(
+      "UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{attributes,amount}','13') WHERE url=$1",
+      { bind: [url] },
+    );
+    await assert.rejects(
+      publish(receipt.assertCurrent),
+      /input changed before publication/,
+      'ordinary source fence remains',
+    );
+  });
+
   test('a registered materialization without provenance cannot masquerade as an ordinary input', async (assert) => {
     const url = await materializedCard('feeder', 2);
     await db.execute(
