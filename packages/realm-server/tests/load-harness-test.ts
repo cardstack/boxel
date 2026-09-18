@@ -23,6 +23,19 @@ import {
   describeConnectionSetup,
   measureConnectionSetup,
 } from '../scripts/load-harness/lib/connection.ts';
+import {
+  bootDocumentUrl,
+  describeFleet,
+  describePin,
+  fleetDrift,
+  fleetStraddle,
+  parseServedBuild,
+  pinIsReadable,
+  readFleet,
+  replicaIdFromHeaders,
+  type FleetReading,
+  type ServedBuild,
+} from '../scripts/load-harness/lib/deploy-pin.ts';
 import { LINK_SHAPE_LOAD_HALF_LIFE_MS } from '@cardstack/runtime-common';
 import {
   DEFAULT_LOAD_HALF_LIFE_MS,
@@ -1190,6 +1203,350 @@ module(basename(import.meta.filename), function () {
       });
       assert.true(line.includes('under 3ms'));
       assert.true(line.includes('close to the server'));
+    });
+  });
+
+  module('deploy pin — did the deployment hold still', function () {
+    // The boot document the realm server serves, in the shape it serves it:
+    // the host's config in a percent-encoded meta, the entry module in a
+    // `type="module"` script whose src points at whichever origin holds the
+    // assets, and the chunk preloads that surround it.
+    function bootDocument({
+      bundle = 'main-CThYvmXC.js',
+      version = '0.0.0+38d67f96' as string | undefined,
+      assets = 'https://assets.example.test/',
+    }: {
+      bundle?: string;
+      version?: string;
+      assets?: string;
+    } = {}): string {
+      let config = encodeURIComponent(
+        JSON.stringify({
+          modulePrefix: '@cardstack/host',
+          environment: 'production',
+          ...(version ? { APP: { version } } : {}),
+          assetsURL: assets,
+        }),
+      );
+      return [
+        '<!DOCTYPE html><html lang="en"><head>',
+        `<meta name="@cardstack/host/config/environment" content="${config}">`,
+        `<link rel="modulepreload" href="${assets}assets/chunk-Bv0JxpqV.js">`,
+        `<link rel="modulepreload" href="${assets}assets/common-BZtn9ioa.js">`,
+        `<script type="module" crossorigin="" src="${assets}assets/${bundle}"></script>`,
+        `<link rel="stylesheet" crossorigin="" href="${assets}assets/main-BlRjxoZ5.css">`,
+        '</head><body></body></html>',
+      ].join('\n');
+    }
+
+    function bootResponse({
+      replicaId,
+      status = 200,
+      ...build
+    }: {
+      replicaId?: string;
+      status?: number;
+      bundle?: string;
+      version?: string | undefined;
+      assets?: string;
+    } = {}): Response {
+      let headers = new Headers({ 'content-type': 'text/html' });
+      if (replicaId) {
+        headers.set(
+          'x-ecs-container-metadata-uri-v4',
+          `http://169.254.170.2/v4/${replicaId}`,
+        );
+      }
+      return new Response(bootDocument(build), { status, headers });
+    }
+
+    // A load balancer handing each connection to the next replica, which is
+    // what makes a wave of concurrent probes a fan-out rather than a repeat.
+    function roundRobin(
+      replicas: Parameters<typeof bootResponse>[0][],
+    ): typeof fetch {
+      let next = 0;
+      return (() =>
+        Promise.resolve(
+          bootResponse(replicas[next++ % replicas.length]),
+        )) as unknown as typeof fetch;
+    }
+
+    function reading(
+      replicas: Record<string, ServedBuild>,
+      { probes = 4, responses = Object.keys(replicas).length } = {},
+    ): FleetReading {
+      return { replicas: new Map(Object.entries(replicas)), probes, responses };
+    }
+
+    const build = (
+      bundle: string | undefined,
+      hostVersion: string | undefined,
+    ): ServedBuild => ({ bundle, hostVersion });
+
+    test('reads the entry bundle and the host build version from a boot document', function (assert) {
+      let served = parseServedBuild(bootDocument());
+      assert.strictEqual(served.bundle, 'main-CThYvmXC.js');
+      assert.strictEqual(served.hostVersion, '0.0.0+38d67f96');
+    });
+
+    test('a preloaded chunk is not mistaken for the entry bundle', function (assert) {
+      // The document names dozens of chunks and one entry. Reading a chunk
+      // would pin the run to a file that changes on a different schedule from
+      // the build a browser boots.
+      let served = parseServedBuild(bootDocument());
+      assert.strictEqual(served.bundle, 'main-CThYvmXC.js');
+      assert.notStrictEqual(served.bundle, 'chunk-Bv0JxpqV.js');
+    });
+
+    test('a document that is not the host app pins nothing rather than pinning a guess', function (assert) {
+      let served = parseServedBuild('<html><body>Bad Gateway</body></html>');
+      assert.strictEqual(served.bundle, undefined);
+      assert.strictEqual(served.hostVersion, undefined);
+      assert.false(
+        pinIsReadable(reading({ 'task-a': served })),
+        'an unreadable pin has to say so, or a number gets quoted as one build’s',
+      );
+    });
+
+    test('an unreadable config still leaves the bundle pinned', function (assert) {
+      let html = bootDocument().replace(
+        /content="[^"]*"/,
+        'content="%E0%A4%A"',
+      );
+      let served = parseServedBuild(html);
+      assert.strictEqual(served.bundle, 'main-CThYvmXC.js');
+      assert.strictEqual(served.hostVersion, undefined);
+      assert.true(pinIsReadable(reading({ 'task-a': served })));
+    });
+
+    test('the replica id comes off the container metadata header', function (assert) {
+      assert.strictEqual(
+        replicaIdFromHeaders(
+          new Headers({
+            'x-ecs-container-metadata-uri-v4':
+              'http://169.254.170.2/v4/6654a7425d164a77803fe13a88ae21ab-3236013547',
+          }),
+        ),
+        '6654a7425d164a77803fe13a88ae21ab-3236013547',
+      );
+      assert.strictEqual(
+        replicaIdFromHeaders(new Headers()),
+        undefined,
+        'a deployment that identifies no replica is not a deployment that turned over',
+      );
+    });
+
+    test('the boot document is probed on the host-app route', function (assert) {
+      assert.strictEqual(
+        bootDocumentUrl('https://realms.example.test'),
+        'https://realms.example.test/_standby',
+      );
+      assert.strictEqual(
+        bootDocumentUrl('https://realms.example.test/'),
+        'https://realms.example.test/_standby',
+      );
+    });
+
+    test('a wave probes concurrently, which is what reaches more than one replica', async function (assert) {
+      // Sequential probes reuse one keep-alive socket and therefore one
+      // replica, however many of them there are.
+      let inFlight = 0;
+      let peak = 0;
+      let fetchImpl = (() => {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        return new Promise<Response>((resolve) =>
+          setTimeout(() => {
+            inFlight--;
+            resolve(bootResponse({ replicaId: 'task-a' }));
+          }, 0),
+        );
+      }) as unknown as typeof fetch;
+      await readFleet('https://realms.example.test/_standby', {
+        fetchImpl,
+        waveSize: 4,
+        maxWaves: 1,
+      });
+      assert.strictEqual(
+        peak,
+        4,
+        'all four probes of a wave were open at once',
+      );
+    });
+
+    test('probing stops once a wave meets nobody new', async function (assert) {
+      let fetchImpl = roundRobin([
+        { replicaId: 'task-a' },
+        { replicaId: 'task-b' },
+      ]);
+      let fleet = await readFleet('https://realms.example.test/_standby', {
+        fetchImpl,
+        waveSize: 4,
+        maxWaves: 4,
+      });
+      assert.deepEqual([...fleet.replicas.keys()], ['task-a', 'task-b']);
+      assert.strictEqual(
+        fleet.probes,
+        8,
+        'a second wave confirms the first found everyone; a third would only cost requests',
+      );
+      assert.strictEqual(fleet.responses, 8);
+    });
+
+    test('a target that answers nothing is reported unpinned rather than unchanged', async function (assert) {
+      let fetchImpl = (() =>
+        Promise.reject(
+          new Error('connect ECONNREFUSED'),
+        )) as unknown as typeof fetch;
+      let fleet = await readFleet('https://realms.example.test/_standby', {
+        fetchImpl,
+        waveSize: 4,
+        maxWaves: 4,
+      });
+      assert.strictEqual(fleet.responses, 0);
+      assert.strictEqual(
+        fleet.probes,
+        8,
+        'one unlucky moment gets a second wave before the target is called unreachable',
+      );
+      assert.true(
+        describeFleet(fleet, 'https://realms.example.test/_standby').includes(
+          'not pinned',
+        ),
+      );
+    });
+
+    test('an error page is not counted as a replica that answered', async function (assert) {
+      let fetchImpl = roundRobin([{ replicaId: 'task-a', status: 502 }]);
+      let fleet = await readFleet('https://realms.example.test/_standby', {
+        fetchImpl,
+        waveSize: 2,
+        maxWaves: 2,
+      });
+      assert.strictEqual(fleet.responses, 0);
+      assert.strictEqual(fleet.replicas.size, 0);
+    });
+
+    test('a fleet already serving two builds is caught before the run, not after', async function (assert) {
+      // Each replica caches the boot document for the life of its process, so
+      // replicas that started either side of a host deploy serve two builds at
+      // once and a browser gets whichever answers.
+      let fetchImpl = roundRobin([
+        { replicaId: 'task-a', bundle: 'main-BPZqYHJZ.js' },
+        { replicaId: 'task-b', bundle: 'main-CFoh7RJ4.js' },
+      ]);
+      let fleet = await readFleet('https://realms.example.test/_standby', {
+        fetchImpl,
+        waveSize: 4,
+      });
+      let straddle = fleetStraddle(fleet);
+      assert.strictEqual(straddle.length, 1);
+      assert.true(straddle[0].includes('main-BPZqYHJZ.js'));
+      assert.true(straddle[0].includes('main-CFoh7RJ4.js'));
+    });
+
+    test('one build across every replica is not a straddle', async function (assert) {
+      let fetchImpl = roundRobin([
+        { replicaId: 'task-a' },
+        { replicaId: 'task-b' },
+      ]);
+      let fleet = await readFleet('https://realms.example.test/_standby', {
+        fetchImpl,
+        waveSize: 4,
+      });
+      assert.deepEqual(fleetStraddle(fleet), []);
+      assert.true(
+        describeFleet(fleet, 'https://realms.example.test/_standby').includes(
+          '2 replicas',
+        ),
+      );
+    });
+
+    test('a run whose deployment held still reports no drift', function (assert) {
+      let before = reading({
+        'task-a': build('main-CThYvmXC.js', '0.0.0+38d67f96'),
+        'task-b': build('main-CThYvmXC.js', '0.0.0+38d67f96'),
+      });
+      let after = reading({
+        'task-b': build('main-CThYvmXC.js', '0.0.0+38d67f96'),
+        'task-a': build('main-CThYvmXC.js', '0.0.0+38d67f96'),
+      });
+      assert.deepEqual(
+        fleetDrift(before, after),
+        [],
+        'the same replicas serving the same build, in whatever order they answered',
+      );
+      let pin = describePin(before, after);
+      assert.true(pin.includes('main-CThYvmXC.js'), 'the bundle');
+      assert.true(pin.includes('0.0.0+38d67f96'), 'the host build version');
+    });
+
+    test('a host bundle that moved mid-run is reported with both builds', function (assert) {
+      let drift = fleetDrift(
+        reading({ 'task-a': build('main-BPZqYHJZ.js', '0.0.0+fdcc601a') }),
+        reading({ 'task-a': build('main-CFoh7RJ4.js', '0.0.0+fdcc601a') }),
+      );
+      assert.strictEqual(drift.length, 1);
+      assert.true(drift[0].includes('main-BPZqYHJZ.js'), 'what it was');
+      assert.true(drift[0].includes('main-CFoh7RJ4.js'), 'what it became');
+    });
+
+    test('a host version that moved is caught even when the bundle name did not', function (assert) {
+      // The two are separate facts about the same build, and a check that
+      // reads only one of them is a check that can be passed by the other.
+      let drift = fleetDrift(
+        reading({ 'task-a': build('main-CThYvmXC.js', '0.0.0+38d67f96') }),
+        reading({ 'task-a': build('main-CThYvmXC.js', '0.0.0+b707165c') }),
+      );
+      assert.strictEqual(drift.length, 1);
+      assert.true(drift[0].includes('0.0.0+b707165c'));
+    });
+
+    test('a replica that arrived mid-run is drift even when it serves the same build', function (assert) {
+      // A replaced task is a cold task: its caches are empty and the part of
+      // the window it served is not comparable to the rest.
+      let same = build('main-CThYvmXC.js', '0.0.0+38d67f96');
+      let drift = fleetDrift(
+        reading({ 'task-a': same, 'task-b': same }),
+        reading({ 'task-a': same, 'task-c': same }),
+      );
+      assert.strictEqual(drift.length, 1);
+      assert.true(drift[0].includes('1 replica'));
+      assert.true(
+        drift[0].includes('cold'),
+        'says why an unchanged build still invalidates the window',
+      );
+    });
+
+    test('a deployment that identifies no replicas never reports turnover', function (assert) {
+      // A local stack sets no container header. Filing every response under
+      // one key is what keeps that from reading as a fleet of one that keeps
+      // being replaced.
+      let same = build('main-QY-TXAfv.js', '0.0.0+b707165c');
+      assert.deepEqual(
+        fleetDrift(
+          reading({ unidentified: same }),
+          reading({ unidentified: same }),
+        ),
+        [],
+      );
+    });
+
+    test('a closing probe that answered nothing refuses rather than passing', function (assert) {
+      // Silence is not agreement: a fleet that cannot be read at the close is
+      // a fleet that cannot be confirmed to have held still.
+      let drift = fleetDrift(
+        reading({ 'task-a': build('main-CThYvmXC.js', '0.0.0+38d67f96') }),
+        { replicas: new Map(), probes: 8, responses: 0 },
+      );
+      assert.strictEqual(drift.length, 1);
+      assert.true(drift[0].includes('closing probe'));
+    });
+
+    test('an unpinned run says so in the summary instead of claiming a build', function (assert) {
+      let unpinned = reading({ 'task-a': build(undefined, undefined) });
+      assert.true(describePin(unpinned, unpinned).includes('not pinned'));
     });
   });
 

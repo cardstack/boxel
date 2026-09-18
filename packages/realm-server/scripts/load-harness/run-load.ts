@@ -39,6 +39,15 @@ import {
   summarize,
 } from './lib/common.ts';
 import {
+  bootDocumentUrl,
+  describeFleet,
+  describePin,
+  fleetDrift,
+  fleetStraddle,
+  readFleet,
+  type FleetReading,
+} from './lib/deploy-pin.ts';
+import {
   eventCannotMatch,
   initialSyncToken,
   joinInvitedRooms,
@@ -706,6 +715,27 @@ if (!args.emitWorkload) {
   }
 }
 
+// What the deployment is serving, read now and again at the close. It goes
+// after the connection-setup measurement, which needs the first request to
+// this origin to be genuinely cold, and before everything else, so the window
+// the pin covers is the whole window the numbers come from.
+let bootUrl = bootDocumentUrl(args.realmServerUrl);
+let openingFleet: FleetReading | undefined;
+if (!args.emitWorkload) {
+  openingFleet = await readFleet(bootUrl);
+  console.log(describeFleet(openingFleet, bootUrl));
+  let straddle = fleetStraddle(openingFleet);
+  if (straddle.length) {
+    // Refusing here costs a probe. Refusing at the close costs the window.
+    console.error(
+      `\nRefusing to start: ${straddle.join('; ')}.\n` +
+        `Wait for the rollout to finish — aws ecs describe-services reports\n` +
+        `deployments[0].rolloutState, which must read COMPLETED — and re-run.`,
+    );
+    process.exit(1);
+  }
+}
+
 console.log(`Authenticating ${needed} sessions…`);
 let sessions: Session[] = [];
 for (let row of creds.slice(0, needed)) {
@@ -848,7 +878,7 @@ function describeSpread(): string {
   );
 }
 
-function finish() {
+async function finish() {
   if (!running) {
     return;
   }
@@ -856,7 +886,31 @@ function finish() {
   clearInterval(reportTimer);
   subscribeAbort.abort();
   announceInvalidation();
+  // Whether the deployment held still for the length of the run. A window
+  // that straddles a deploy holds two runs averaged together, and no line of
+  // a summary could say which build it came from — so there is no summary.
+  let closingFleet = openingFleet ? await readFleet(bootUrl) : undefined;
+  if (openingFleet && closingFleet) {
+    let drift = fleetDrift(openingFleet, closingFleet);
+    if (drift.length) {
+      console.log(`\n───── run refused ─────`);
+      console.log(
+        `The deployment moved while this run was measuring:\n` +
+          drift.map((finding) => `  • ${finding}`).join('\n') +
+          `\n\nNo summary follows: these searches describe more than one\n` +
+          `deployment, and nothing in the numbers separates them. Re-run\n` +
+          `against a fleet that is holding still; aws ecs describe-services\n` +
+          `reports which deploy landed and when.`,
+      );
+      process.exit(1);
+    }
+  }
   console.log(`\n───── run summary ─────`);
+  // The build these numbers came from, or the statement that they came from
+  // no build this run could name.
+  if (openingFleet && closingFleet) {
+    console.log(describePin(openingFleet, closingFleet));
+  }
   // Which path these numbers describe. The same filter costs several times as
   // much on the entries path as on the item path, so a figure quoted without
   // its path is not interpretable.
@@ -1056,8 +1110,8 @@ function finish() {
   process.exit(0);
 }
 
-process.on('SIGINT', finish);
-setTimeout(finish, args.minutes * 60000);
+process.on('SIGINT', () => void finish());
+setTimeout(() => void finish(), args.minutes * 60000);
 
 readerSessions.forEach((s, i) => void readerLoop(s, i));
 let writeSpec = workload.write;
