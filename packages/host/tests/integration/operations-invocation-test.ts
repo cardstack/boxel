@@ -868,6 +868,29 @@ module('Integration | operations invocation types', function (hooks) {
       () => Promise<OperationsModule.OperationDocument>,
       Bucket['read']
     >();
+    // A declared create invoked on the class may name its realm, the same way
+    // the base create does: a type has no instance to read one from.
+    class Activities extends CardDef {
+      @operation static createActivity = {
+        base: 'create',
+        of: () => Activities,
+        params: { headline: StringField },
+        fill: { headline: params('headline') },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    expectTypeEquals<
+      (
+        payload: { headline: string },
+        opts?: OperationsModule.InvokeOptions,
+      ) => Promise<OperationWriteResult>,
+      OperationsModule.CardTypeOperations<typeof Activities>['createActivity']
+    >();
+    assert.deepEqual(
+      Object.keys(getDeclaredOperations(Activities)),
+      ['createActivity'],
+      'and the reader agrees with the type about the declared create',
+    );
+
     // The two behaviors reached elsewhere are not members at all.
     expectTypeEquals<false, 'readSource' extends keyof Bucket ? true : false>();
     expectTypeEquals<false, 'create' extends keyof Bucket ? true : false>();

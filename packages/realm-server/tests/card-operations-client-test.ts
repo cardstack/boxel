@@ -876,6 +876,33 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a name the builder owns is refused rather than shadowed', async function (assert) {
+      // `create` is the one operation name that can legitimately collide: a
+      // card may specialize the base behavior, and a batch reads `create` as
+      // its own way to mint a card of any type. The rest of the builder's
+      // members are refused at declaration time, where they are written.
+      let declares = reportInstance();
+      declares.operations = {
+        ...declares.operations,
+        create: { base: 'create', declared: true } as CarriedOperationInfo,
+      };
+      let bucket = buildOperations(declares, harness().env);
+      await assert.rejects(
+        (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
+          (b: any) => {
+            b.escalate();
+          },
+        ),
+        /declares an operation named "create"/,
+        'the batch says which two spellings collided rather than picking one',
+      );
+      assert.strictEqual(
+        typeof bucket.create,
+        'function',
+        'and the declared create is still invocable outside a batch',
+      );
+    });
+
     test('a read-only batch asks only to read', async function (assert) {
       let { sent, env } = batchHarness({
         'atomic:results': [{ data: { type: 'card', id: 'a' } }],

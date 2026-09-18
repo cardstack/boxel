@@ -158,6 +158,28 @@ function isNotDeclarable(name: string): boolean {
   return NOT_DECLARABLE.includes(name as BaseOperationName);
 }
 
+// Names the invocation surface owns. `operations(x)` answers a bucket keyed by
+// operation name, and `atomic` sits in that namespace beside them; inside a
+// batch the builder adds the members that say what an entry runs against. A
+// declaration under one of these names could never be reached — the surface's
+// own member is what a caller gets — so it is refused where it is written
+// rather than shadowed where it is invoked.
+//
+// `create` is deliberately absent: it is a base operation an author may
+// specialize, so the collision with the builder's `create(Type, …)` is settled
+// where the batch is built, not here.
+const RESERVED_BY_INVOCATION: readonly string[] = [
+  'atomic',
+  'on',
+  'find',
+  'parallel',
+  'serial',
+];
+
+function isReservedByInvocation(name: string): boolean {
+  return RESERVED_BY_INVOCATION.includes(name);
+}
+
 // ============================================================================
 // Typed references
 //
@@ -639,6 +661,11 @@ export const operation = function (
   if (isNotDeclarable(key)) {
     throw new Error(
       `${declarationLabel(owner, key)}: "${key}" is a reserved operation name — a "${key}" serves the bytes stored at the def's URL, which the realm answers without reading a definition, so a declaration under this name would never be reached`,
+    );
+  }
+  if (isReservedByInvocation(key)) {
+    throw new Error(
+      `${declarationLabel(owner, key)}: "${key}" is a member of the invocation surface — operations(instance).${key} and a batch builder's ${key} are that, so a declaration under this name would never be reached`,
     );
   }
   assertNameAvailable(owner, key);
@@ -1787,6 +1814,7 @@ function quoteList(values: readonly string[]): string {
 // the client core, which is isomorphic — a realm reads the same shapes off the
 // wire that a caller reads back.
 export type {
+  InvokeOptions,
   OperationDocument,
   OperationResultTree,
   OperationValueResult,
@@ -1845,9 +1873,19 @@ type DeclaredNames<Type, Scope extends 'instance' | 'type'> = {
     : never;
 }[keyof OperationsOf<Type>];
 
+// A type-scoped call takes the same options the base `create` does: it has no
+// instance to read a realm from, so the realm is the caller's to name — and a
+// declared create is reached that way as readily as the base one.
+type ScopedArgs<
+  Declaration,
+  Scope extends 'instance' | 'type',
+> = Scope extends 'type'
+  ? [...PayloadArgs<Declaration>, opts?: InvokeOptions]
+  : PayloadArgs<Declaration>;
+
 type DeclaredOperationMembers<Type, Scope extends 'instance' | 'type'> = {
   [Name in DeclaredNames<Type, Scope>]: (
-    ...args: PayloadArgs<OperationsOf<Type>[Name]>
+    ...args: ScopedArgs<OperationsOf<Type>[Name], Scope>
   ) => Promise<ResultOf<OperationsOf<Type>[Name]>>;
 };
 

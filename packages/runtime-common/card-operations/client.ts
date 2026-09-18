@@ -825,11 +825,24 @@ function builderFor(
 }
 
 // One card's operations, each registering an entry in the batch.
+//
+// A card that declares `create` is the one name that can collide with a member
+// the builder adds: `create(Type, …)` is how a batch mints a card of any type,
+// and the declaration is a specialization of the base behavior anchored on this
+// card. Both are legitimate, so neither silently shadows the other — the
+// collision is refused when the batch is built, where the message can name both
+// spellings, rather than discovered by a call that reaches the wrong one.
 function entryMembers(
   scope: BatchScope,
   subject: InstanceSubject,
 ): Record<string, unknown> {
   let members: Record<string, unknown> = Object.create(null);
+  let declaredCreate = subject.operations.create?.declared;
+  if (declaredCreate) {
+    throw new Error(
+      `${subject.displayName} declares an operation named "create", which a batch reads as its own create(Type, …) — invoke the declared one outside a batch, or rename it`,
+    );
+  }
   for (let [name, info] of Object.entries(subject.operations)) {
     if (!carriesEntry(subject, info)) {
       continue;
