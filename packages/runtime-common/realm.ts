@@ -2728,10 +2728,29 @@ export class Realm {
     // it wrote; whether a given one reached this event depends on what the
     // index did with it, and a name the event does not carry would describe a
     // card nobody can match it against.
+    //
+    // A dropped name is not a harmless narrowing, though: it turns a card its
+    // writer said to leave alone into one every client re-reads, which is the
+    // edit loss this member exists to prevent. Nothing is known to produce one
+    // — both sides spell a card as its realm href without the `.json` — so a
+    // drop means the two spellings have diverged, and it is said out loud
+    // rather than absorbed.
     let clientAuthored = opts?.clientAuthored?.filter((url) =>
       invalidations.includes(url),
     );
     let authorshipReported = clientAuthored !== undefined;
+    if (
+      opts?.clientAuthored &&
+      clientAuthored &&
+      clientAuthored.length !== opts.clientAuthored.length
+    ) {
+      let dropped = opts.clientAuthored.filter(
+        (url) => !invalidations.includes(url),
+      );
+      this.#log.warn(
+        `index event for ${this.url} dropped ${dropped.length} client-authored name(s) that the pass did not invalidate, so their holders will re-read them: ${dropped.join(', ')}`,
+      );
+    }
     this.broadcastRealmEvent({
       eventName: 'index',
       indexType: 'incremental',
@@ -4614,6 +4633,10 @@ export class Realm {
         {
           clientRequestId: caller.clientRequestId || null,
           actor: caller.actor || undefined,
+          // One request, several cards, and not all of them from the same
+          // place — which is the case the event's authorship naming exists
+          // for, and the only front door that produces it.
+          reportAuthorship: true,
         },
       );
       // The coordinator answers in the flat order of the entries it staged,

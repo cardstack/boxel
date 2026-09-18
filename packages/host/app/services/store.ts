@@ -3735,25 +3735,55 @@ export default class StoreService extends Service implements StoreInterface {
   async adoptMintedIdentities(
     minted: readonly { lid: string; id: string }[],
   ): Promise<void> {
-    // Every pairing is checked before any is made. A conflict found partway
-    // through an assignment pass would leave the earlier cards promoted and the
-    // later ones not, which is a harder state to reason about than either
-    // outcome on its own.
+    // Every pairing is judged before any is made, so which cards get promoted
+    // does not depend on where in the list a conflict happened to sit.
+    let conflicts: { lid: string; id: string; held: CardDef }[] = [];
+    let pairs: { lid: string; id: string }[] = [];
     for (let { lid, id } of minted) {
       let held = this.store.getCard(rri(id));
       if (held && held[localIdSymbol] !== lid) {
-        throw new Error(
-          `the batch committed, but its card ${id} cannot be paired with local id ${lid}: this store already holds that card under local id ${held[localIdSymbol]}. The realm has the write; this tab's copy of that card is the thing to reload.`,
-        );
+        conflicts.push({ lid, id, held });
+      } else {
+        pairs.push({ lid, id });
       }
     }
-    for (let { lid, id } of minted) {
+
+    // The batch committed, so every card it wrote exists and every pairing the
+    // store can honor is one the realm already agrees with. Promoting them is
+    // not a partial success to be undone — it is the rest of the batch, and
+    // withholding it would leave those instances unaddressable over a quarrel
+    // about a different card.
+    for (let { lid, id } of pairs) {
       let instance = this.store.getCard(lid);
       if (!instance || instance.id) {
         continue;
       }
       await this.assignRemoteIdentity(instance, rri(id));
     }
+
+    if (conflicts.length === 0) {
+      return;
+    }
+
+    // A conflicting card is the one case where the realm's own event cannot
+    // put things right on its own. The write names that card as carrying this
+    // client's content — which it does, for the local id the batch sent — so
+    // the event is read as one to skip, while the instance this store actually
+    // holds for that URL belongs to a different local id and is now stale with
+    // nothing coming to refresh it. Re-reading it here is what closes that.
+    for (let { held } of conflicts) {
+      // Only one that has a URL of its own can be re-read. An instance filed
+      // under a remote id without holding one has nothing to fetch, and its
+      // being in that state is the disagreement being reported rather than
+      // something a read would settle.
+      if (held.id) {
+        this.reloadTask.perform(held);
+      }
+    }
+    let [{ id, lid, held }] = conflicts;
+    throw new Error(
+      `the batch committed, but its card ${id} cannot be paired with local id ${lid}: this store already holds that card under local id ${held[localIdSymbol]}. The realm has the write, the batch's other cards are paired, and this tab's copy of that card is being re-read.`,
+    );
   }
 
   // Promotes an instance the realm has just named from local-id-only to fully

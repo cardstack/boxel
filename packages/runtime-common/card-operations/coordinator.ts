@@ -205,6 +205,17 @@ export interface CommitBatchOptions {
   // The caller's own id for this batch. Echoed on the realm's index event so a
   // client can tell its own batch's event from anyone else's.
   clientRequestId?: string | null;
+  // Whether the index event should say which of this write's cards carried
+  // content the caller supplied.
+  //
+  // The question only has an interesting answer when one request writes
+  // several cards whose state came from different places, which is what a
+  // batch does. A front door that writes one card has nothing to distinguish:
+  // its request id already names that card's write, and a client reading the
+  // event has always taken the id to be about the card it sent. So the
+  // envelope answers and the card and source routes stay silent, which is what
+  // keeps their events exactly as they were.
+  reportAuthorship?: boolean;
   // The invoking actor, as the identity `actor()` resolves to. It comes from
   // the authenticated realm user the request's permission check verified.
   actor?: string;
@@ -1827,14 +1838,19 @@ async function commitStaged(
   // statement from a writer that said nothing about the question. Collapsing
   // the two would have a client read "I supplied none of this" as "no
   // information" and skip the whole pass — the cards it most needs to re-read.
-  let clientAuthored = staged
-    .filter((change): change is StagedChange => Boolean(change?.lid))
-    .map((change) => change.id);
+  //
+  // A caller that does not ask says nothing at all, which is what every front
+  // door but the envelope does.
+  let clientAuthored = opts.reportAuthorship
+    ? staged
+        .filter((change): change is StagedChange => Boolean(change?.lid))
+        .map((change) => change.id)
+    : undefined;
   let committed = await core.commitUnlocked(
     { writes, appends, deletes },
     {
       clientRequestId: opts.clientRequestId ?? null,
-      clientAuthored,
+      ...(clientAuthored === undefined ? {} : { clientAuthored }),
       waitForIndex: opts.waitForIndex ?? true,
       // The batch's index job is tagged with the user whose request produced
       // it, the same as every other write path, so a reader draining its own

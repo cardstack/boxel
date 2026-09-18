@@ -487,7 +487,7 @@ module(basename(import.meta.filename), function () {
             },
           },
         ],
-        { clientRequestId: 'req-1' },
+        { clientRequestId: 'req-1', reportAuthorship: true },
       );
 
       assert.deepEqual(
@@ -513,7 +513,7 @@ module(basename(import.meta.filename), function () {
             },
           },
         ],
-        { clientRequestId: 'req-1' },
+        { clientRequestId: 'req-1', reportAuthorship: true },
       );
 
       assert.deepEqual(
@@ -550,7 +550,7 @@ module(basename(import.meta.filename), function () {
             },
           },
         ],
-        { clientRequestId: 'req-1' },
+        { clientRequestId: 'req-1', reportAuthorship: true },
       );
 
       assert.deepEqual(
@@ -566,6 +566,36 @@ module(basename(import.meta.filename), function () {
     // is what a writer that does not answer the question looks like — and a
     // client reading "I authored none of this" as "no information" skips the
     // very cards only the realm can tell it about.
+    test('a front door that does not ask is told nothing about authorship', async function (assert) {
+      // The card and source routes write one card each, and their events have
+      // always been read as being about that card. Answering a question they
+      // never asked would change what every one of their events carries.
+      let { core, commits } = stub();
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'create',
+            lid: 'mango',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Mango' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        { clientRequestId: 'req-1' },
+      );
+
+      assert.strictEqual(
+        commits[0].clientAuthored,
+        undefined,
+        'the commit says nothing about which of its cards the caller wrote',
+      );
+    });
+
     test('a batch that authored nothing says so, rather than saying nothing', async function (assert) {
       let { core, commits } = stub({
         stored: {
@@ -593,7 +623,7 @@ module(basename(import.meta.filename), function () {
             },
           },
         ],
-        { clientRequestId: 'req-1' },
+        { clientRequestId: 'req-1', reportAuthorship: true },
       );
 
       let answered = Array.isArray(commits[0].clientAuthored);

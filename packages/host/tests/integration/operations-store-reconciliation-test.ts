@@ -491,6 +491,32 @@ module('Integration | operations store reconciliation', function (hooks) {
     );
   });
 
+  test('one card named twice takes its lock once', async function (assert) {
+    // The locks nest, so a name arriving twice would have the inner
+    // acquisition wait on the deferred the outer one is still holding and the
+    // call would never return. Driven against the store's own lock rather than
+    // through a batch, because what a batch naming one card twice reaches
+    // first is this, and it has to get past it to be refused for it.
+    let store = getService('store');
+    let activity = await unsavedActivity('Lab safety');
+    let localId = activity[localIdSymbol];
+
+    let ran = false;
+    let settledInTime = await Promise.race([
+      store.withMutationLocks([localId, localId], async () => {
+        ran = true;
+        return true;
+      }),
+      new Promise((resolve) => setTimeout(() => resolve(false), 5_000)),
+    ]);
+
+    assert.true(ran, 'the work under the lock ran');
+    assert.true(
+      settledInTime as boolean,
+      'and the call returned rather than waiting on a lock it was already holding',
+    );
+  });
+
   test('a save that starts during the batch patches the card the batch named', async function (assert) {
     let report = await cardAt('report-racing');
     let activity = await unsavedActivity('Lab safety');
