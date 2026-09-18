@@ -154,7 +154,7 @@ module('Acceptance | theme scheme islands', function (hooks) {
     // Shows the variables each palette defines, painted with themselves, so the
     // scheme in effect can be read off the rendered card.
     const VarSwatches = <template>
-      <ul class='var-swatches' ...attributes>
+      <ul class='var-swatches'>
         <li class='swatch-background'>--background / --foreground</li>
         <li class='swatch-card'>--card / --card-foreground</li>
         <li class='swatch-primary'>--primary / --primary-foreground</li>
