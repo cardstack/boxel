@@ -16,7 +16,10 @@ import {
   type EnvelopeEntry,
   type OperationCore,
   type OperationDefinition,
+  type OperationDocumentResult,
   type OperationError,
+  type OperationHeadResult,
+  type OperationResult,
 } from '@cardstack/runtime-common/card-operations';
 import type { CodeRef } from '@cardstack/runtime-common/code-ref';
 import type { Definition } from '@cardstack/runtime-common/definitions';
@@ -151,6 +154,27 @@ function read(
   );
 }
 
+// The two read shapes, narrowed by throwing rather than by an early return: a
+// test that took the wrong branch would otherwise report the assertions it did
+// make and say nothing about the one it skipped.
+function documentOf(result: OperationResult): OperationDocumentResult {
+  if (!isDocumentResult(result)) {
+    throw new Error(
+      `the read answered with no document: ${JSON.stringify(result)}`,
+    );
+  }
+  return result;
+}
+
+function headersOf(result: OperationResult): OperationHeadResult {
+  if (!isHeadResult(result)) {
+    throw new Error(
+      `the read answered with no headers: ${JSON.stringify(result)}`,
+    );
+  }
+  return result;
+}
+
 async function refusal(body: () => Promise<unknown>): Promise<OperationError> {
   try {
     await body();
@@ -177,11 +201,7 @@ const REDACTING_READ: OperationDefinition = {
 module(basename(__filename), function () {
   module('output', function () {
     test('a projection replaces the document the caller is served', async function (assert) {
-      let result = await read(stub({ read: REDACTING_READ }));
-      assert.true(isDocumentResult(result), 'the read answers a document');
-      if (!isDocumentResult(result)) {
-        return;
-      }
+      let result = documentOf(await read(stub({ read: REDACTING_READ })));
       assert.true(result.projected, 'the result reports that it was projected');
       assert.deepEqual(
         result.document,
@@ -197,11 +217,7 @@ module(basename(__filename), function () {
     });
 
     test('a card whose type declares nothing is served the document unchanged', async function (assert) {
-      let result = await read(stub());
-      assert.true(isDocumentResult(result), 'the read answers a document');
-      if (!isDocumentResult(result)) {
-        return;
-      }
+      let result = documentOf(await read(stub()));
       assert.false(result.projected, 'nothing projected it');
       assert.deepEqual(
         (result.document.data as { attributes?: unknown }).attributes,
@@ -211,11 +227,7 @@ module(basename(__filename), function () {
     });
 
     test('the row the headers are computed from survives a projection', async function (assert) {
-      let result = await read(stub({ read: REDACTING_READ }));
-      assert.true(isDocumentResult(result));
-      if (!isDocumentResult(result)) {
-        return;
-      }
+      let result = documentOf(await read(stub({ read: REDACTING_READ })));
       assert.deepEqual(
         result.headers,
         {
@@ -231,23 +243,21 @@ module(basename(__filename), function () {
     });
 
     test('a projection may read the caller', async function (assert) {
-      let result = await read(
-        stub({
-          read: {
-            base: 'read',
-            deterministic: true,
-            readsActor: true,
-            output: {
-              syntax: 'solidified',
-              source: '{data: {type: "card", id: .data.id, readBy: actor()}}',
+      let result = documentOf(
+        await read(
+          stub({
+            read: {
+              base: 'read',
+              deterministic: true,
+              readsActor: true,
+              output: {
+                syntax: 'solidified',
+                source: '{data: {type: "card", id: .data.id, readBy: actor()}}',
+              },
             },
-          },
-        }),
+          }),
+        ),
       );
-      assert.true(isDocumentResult(result));
-      if (!isDocumentResult(result)) {
-        return;
-      }
       assert.strictEqual(
         (result.document.data as { readBy?: string }).readBy,
         ACTOR,
@@ -341,13 +351,9 @@ module(basename(__filename), function () {
     };
 
     test('a value the input supplies satisfies the params check', async function (assert) {
-      let result = await read(stub({ detail: FILLED_READ }), {
-        name: 'detail',
-      });
-      assert.true(isDocumentResult(result));
-      if (!isDocumentResult(result)) {
-        return;
-      }
+      let result = documentOf(
+        await read(stub({ detail: FILLED_READ }), { name: 'detail' }),
+      );
       assert.strictEqual(
         (result.document.data as { view?: string }).view,
         'summary',
@@ -357,14 +363,12 @@ module(basename(__filename), function () {
     });
 
     test('the caller’s own value wins over the default', async function (assert) {
-      let result = await read(stub({ detail: FILLED_READ }), {
-        name: 'detail',
-        params: { view: 'full' },
-      });
-      assert.true(isDocumentResult(result));
-      if (!isDocumentResult(result)) {
-        return;
-      }
+      let result = documentOf(
+        await read(stub({ detail: FILLED_READ }), {
+          name: 'detail',
+          params: { view: 'full' },
+        }),
+      );
       assert.strictEqual(
         (result.document.data as { view?: string }).view,
         'full',
@@ -413,13 +417,9 @@ module(basename(__filename), function () {
 
   module('the headers a projected read would be served with', function () {
     test('a headers-only read projects nothing and says the body would be', async function (assert) {
-      let result = await read(stub({ read: REDACTING_READ }), {
-        headersOnly: true,
-      });
-      assert.true(isHeadResult(result), 'the read answers headers');
-      if (!isHeadResult(result)) {
-        return;
-      }
+      let result = headersOf(
+        await read(stub({ read: REDACTING_READ }), { headersOnly: true }),
+      );
       assert.true(
         result.projected,
         'a HEAD reports what the GET would answer with',
@@ -428,12 +428,11 @@ module(basename(__filename), function () {
     });
 
     test('an ordinary card’s headers report no projection', async function (assert) {
-      let result = await read(stub(), { headersOnly: true });
-      assert.true(isHeadResult(result));
-      if (!isHeadResult(result)) {
-        return;
-      }
-      assert.false(result.projected);
+      let result = headersOf(await read(stub(), { headersOnly: true }));
+      assert.false(
+        result.projected,
+        'an ordinary card is served the headers it always was',
+      );
     });
 
     test('the projection question is answerable without assembling', async function (assert) {
