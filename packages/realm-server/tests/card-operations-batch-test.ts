@@ -21,6 +21,7 @@ import { CardError } from '@cardstack/runtime-common/error';
 import type { CodeRef } from '@cardstack/runtime-common/code-ref';
 import type { RealmIdentifier } from '@cardstack/runtime-common/realm-identifiers';
 import type { Definition } from '@cardstack/runtime-common/definitions';
+import type { JsonValue } from '@cardstack/runtime-common';
 
 // ============================================================================
 // What the coordinator stages, and what it refuses.
@@ -61,6 +62,10 @@ interface Stub {
   lockDepth: () => number;
   drainCount: () => number;
   readsOutsideLock: () => number;
+  // What the batch asked the realm for, in order. Two entries a batch's
+  // correctness depends on the order of: the pre-staging drain, and the read
+  // of the realm's settings that must describe the state the drain left.
+  calls: () => string[];
   // Every read of a stored file, in or out of the lock. `readsOutsideLock`
   // answers where a read happened; this answers whether one has happened at
   // all, which is what distinguishes "before anything was staged" from
@@ -87,6 +92,9 @@ interface StubOptions {
   // is the identity, which keeps a test's expected bytes readable; a test that
   // cares about a serializer refusal supplies its own.
   serialize?: (doc: any) => any;
+  // The realm's own settings, as `realmConfig()` resolves them. Absent is a
+  // realm that configures none.
+  settings?: Record<string, unknown>;
 }
 
 // The bytes a described content stands for. A realm streams these to disk;
@@ -121,12 +129,18 @@ function cardFile(attributes: Record<string, unknown>, adoptsFrom: unknown) {
 }
 
 function stub(opts: StubOptions = {}): Stub {
-  let { stored = {}, definitions = {}, serialize = (doc: any) => doc } = opts;
+  let {
+    stored = {},
+    definitions = {},
+    serialize = (doc: any) => doc,
+    settings = {},
+  } = opts;
   let commits: Commit[] = [];
   let held = 0;
   let maxHeld = 0;
   let drains = 0;
   let readsOutsideLock = 0;
+  let calls: string[] = [];
   let sourceReads = 0;
   let lockedPaths: string[] = [];
 
@@ -190,6 +204,7 @@ function stub(opts: StubOptions = {}): Stub {
     },
     async drainIndexing() {
       drains++;
+      calls.push('drain');
     },
     async isIgnored(url) {
       return (opts.ignored ?? []).some((p) => url.href === `${REALM}${p}`);
@@ -253,6 +268,10 @@ function stub(opts: StubOptions = {}): Stub {
     async lookupDefinition(codeRef) {
       return 'name' in codeRef ? definitions[codeRef.name] : undefined;
     },
+    async realmConfig() {
+      calls.push('settings');
+      return settings as Record<string, JsonValue>;
+    },
   };
   return {
     core,
@@ -260,6 +279,7 @@ function stub(opts: StubOptions = {}): Stub {
     lockDepth: () => maxHeld,
     drainCount: () => drains,
     readsOutsideLock: () => readsOutsideLock,
+    calls: () => [...calls],
     sourceReads: () => sourceReads,
     lockedPaths: () => lockedPaths,
   };
@@ -1660,6 +1680,142 @@ module(basename(import.meta.filename), function () {
         'a link-typed param becomes a relationship',
       );
     });
+    test('a named create fills a value from the realm configuration', async function (assert) {
+      let definition: OperationDefinition = {
+        base: 'create',
+        deterministic: true,
+        of: PERSON,
+        fill: { firstName: { $ref: 'realmConfig', key: 'defaultName' } as any },
+      };
+      let { core, commits } = stub({
+        definitions: { Person: personDefinition() },
+        settings: { defaultName: 'Configured' },
+      });
+
+      await commitBatch(
+        core,
+        [{ op: 'create', lid: 'minted', definition }],
+        {},
+      );
+
+      let { data } = JSON.parse(commits[0].writes['Person/minted.json']);
+      assert.strictEqual(
+        data.attributes.firstName,
+        'Configured',
+        'the marker resolved against the settings the realm supplied',
+      );
+    });
+
+    test('the realm is asked for its settings only when the batch reads one', async function (assert) {
+      // Reading them is a parse of the realm's config document, and most
+      // batches name no setting. One that does not must not pay for it.
+      let plain = stub({ definitions: { Person: personDefinition() } });
+      await commitBatch(
+        plain.core,
+        [
+          {
+            op: 'create',
+            lid: 'minted',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Plain' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        {},
+      );
+      assert.deepEqual(
+        plain.calls(),
+        ['drain'],
+        'a create from a document never asks for them',
+      );
+
+      // The other shape a create takes, and the one that reaches the template
+      // resolver — a declaration whose fill names params rather than settings.
+      let declared = stub({
+        definitions: { Person: personDefinition() },
+        settings: { defaultName: 'Configured' },
+      });
+      await commitBatch(
+        declared.core,
+        [
+          {
+            op: 'create',
+            lid: 'minted',
+            definition: {
+              base: 'create',
+              deterministic: true,
+              of: PERSON,
+              params: { title: { kind: 'field', codeRef: STRING } },
+              fill: { firstName: { $ref: 'params', key: 'title' } as any },
+            },
+            params: { title: 'Declared' },
+          },
+        ],
+        {},
+      );
+      assert.deepEqual(
+        declared.calls(),
+        ['drain'],
+        'and neither does a declaration whose template names none',
+      );
+    });
+
+    test('the settings a batch stages from describe the state its drain left', async function (assert) {
+      // The drain waits for indexing already in flight — which may be a write
+      // to the realm's own config card. Settings read before it would stage
+      // values the realm has already replaced, from a different moment than
+      // the files staged beside them.
+      let definition: OperationDefinition = {
+        base: 'create',
+        deterministic: true,
+        of: PERSON,
+        fill: { firstName: { $ref: 'realmConfig', key: 'defaultName' } as any },
+      };
+      let { core, calls } = stub({
+        definitions: { Person: personDefinition() },
+        settings: { defaultName: 'Configured' },
+      });
+
+      await commitBatch(
+        core,
+        [{ op: 'create', lid: 'minted', definition }],
+        {},
+      );
+
+      assert.deepEqual(
+        calls(),
+        ['drain', 'settings'],
+        'the settings are read after the drain, not before it',
+      );
+    });
+
+    test('a named create naming a setting the realm does not configure is refused', async function (assert) {
+      let definition: OperationDefinition = {
+        base: 'create',
+        deterministic: true,
+        of: PERSON,
+        fill: { firstName: { $ref: 'realmConfig', key: 'defaultName' } as any },
+      };
+      let { core, commits } = stub({
+        definitions: { Person: personDefinition() },
+        settings: { somethingElse: 'x' },
+      });
+
+      // Refused rather than left out: a template that silently wrote nothing
+      // where a setting belongs would store the absence as the value, and a
+      // card missing a field reads as the author's choice.
+      let failure = await refusal(core, [
+        { op: 'create', lid: 'minted', definition },
+      ]);
+      assert.strictEqual(failure?.status, 400);
+      assert.strictEqual(failure?.code, 'invalid-params');
+      assert.deepEqual(commits, [], 'nothing was written');
+    });
+
     test('a named create resolves the actor and the card it is anchored on', async function (assert) {
       let definition: OperationDefinition = {
         base: 'create',

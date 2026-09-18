@@ -173,16 +173,18 @@ function resolveMarker(
         'references instance(), which a query has no target to resolve against',
       );
     case 'realmConfig':
-      // A realm setting is a value the realm supplies, and nothing supplies
-      // one yet: the `config` map a marker reads from arrives with the builtin
-      // that reads it. Refused as the realm's own gap rather than the
-      // caller's, since the declaration is well formed and there is nothing a
-      // caller could send to satisfy it.
+      // A realm setting is a value the realm holds, and this resolution runs
+      // on both sides: the host resolves the same template so a saved search
+      // means the same thing wherever it is evaluated, and the realm keeps its
+      // settings off the wire — they are absent from the `meta.realmInfo` a
+      // card response carries — so the host has no map to resolve against.
+      // Refused here rather than resolved only on the realm, which would make
+      // one query mean two things.
       throw new OperationFailure({
         status: 501,
         code: 'internal-error',
         title: 'Operation not implemented',
-        detail: `${path} reads a realm setting, which this realm does not yet supply to an operation`,
+        detail: `${path} reads a realm setting, which a query does not resolve`,
       });
     default:
       throw invalidParams(

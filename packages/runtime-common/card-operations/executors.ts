@@ -2,6 +2,7 @@ import { cloneDeep, isEqual, merge, mergeWith } from 'lodash-es';
 import { v4 as uuidV4 } from 'uuid';
 
 import { visitModuleDeps, type CodeRef } from '../code-ref.ts';
+import type { JsonValue } from '../json-validation.ts';
 import {
   getImmediateFieldDef,
   type Definition,
@@ -411,6 +412,17 @@ export interface StagingContext {
   // is supplied by the endpoint that verified it — an executor never derives
   // an actor itself.
   actor: string;
+  // The settings of the realm being written, as `realmConfig()` resolves them.
+  // A function because most batches never ask: reading them is a parse of the
+  // realm's config document, and nothing should pay for it to stage a card
+  // that names no setting. It answers the same map however often it is called,
+  // so every entry in the batch reads one snapshot.
+  //
+  // The map is always there to be read, empty for a realm that declares none:
+  // a program naming a setting is told this realm has no such setting rather
+  // than that nothing supplied a configuration, and those are two different
+  // defects.
+  realmConfig(): Promise<Record<string, JsonValue>>;
   // A card document serialized for storage: the bytes the file holds, with
   // every field resolved against the type's definition.
   serializeCard(
@@ -1146,6 +1158,7 @@ export interface ProgramContext {
   params?: Record<string, unknown>;
   actor?: string;
   instance?: Record<string, unknown>;
+  realmConfig?: Record<string, JsonValue>;
 }
 
 export interface BxlMutationModule {
@@ -1341,6 +1354,11 @@ async function transform(
   // the program has said which cards it means — nothing is written either
   // way until the whole batch has staged.
   let linked = new Set<string>();
+  // Read only for a program that names one, so an ordinary transform does not
+  // wait on the realm's config document to stage a card that never asks.
+  let realmConfig = programNamesRealmConfig(program.source)
+    ? await ctx.realmConfig()
+    : undefined;
   let mutated: CardResource;
   try {
     let result = bxl.mutateBxlCardSource({ data: resource }, program.source, {
@@ -1348,7 +1366,7 @@ async function transform(
       syntax: program.syntax,
       programId: `${name}:${uuidV4()}`,
       targetId: url.href,
-      context: contextFor(params, resource, url, ctx),
+      context: contextFor(params, resource, url, ctx, realmConfig),
       overlays,
       // A relationship is stored relative to the file that holds it, and a
       // program compares and rewrites card identities, so the stored spelling
@@ -1467,13 +1485,40 @@ async function transformTargetDefinition(
   return definition;
 }
 
-// The request-scoped values the program reads through `params()`, `actor()`
-// and `instance()`.
+// Whether a program names a realm setting, and so whether staging it has to
+// read one. The registry resolves a builtin by its exact name, so a program
+// that calls this one carries the name in its source; a name that appears only
+// inside a string costs a read the program does not use, which is the
+// direction to be wrong in — the other way round would hand a program a slot
+// the host had not filled.
+function programNamesRealmConfig(source: string): boolean {
+  return source.includes('realmConfig');
+}
+
+// The same question for a declaration's template, asked structurally because a
+// template is data rather than text. A marker may be nested inside a `card(…)`
+// wrapper or an object member, so every value is walked.
+function templateNamesRealmConfig(template: unknown): boolean {
+  if (Array.isArray(template)) {
+    return template.some(templateNamesRealmConfig);
+  }
+  if (template === null || typeof template !== 'object') {
+    return false;
+  }
+  let node = template as Record<string, unknown>;
+  if (node.$ref === 'realmConfig') {
+    return true;
+  }
+  return Object.values(node).some(templateNamesRealmConfig);
+}
+
+// The request-scoped values the program reads through `params()`, `actor()`,
+// `instance()` and `realmConfig()`.
 //
-// Each slot is supplied only where this invocation has something to put in it,
-// because a program that names a slot the realm left out fails loudly rather
-// than reading an empty one — which is the answer an author wants for
-// `actor()` in a request that authenticated nobody.
+// The first two slots are supplied only where this invocation has something to
+// put in them, because a program that names a slot the realm left out fails
+// loudly rather than reading an empty one — which is the answer an author
+// wants for `actor()` in a request that authenticated nobody.
 //
 // `instance(…)` reads the target's stored values, keyed the same way the
 // named-create template reads them: the card's id, and its attributes. A link
@@ -1481,15 +1526,19 @@ async function transformTargetDefinition(
 // stored value, so it is not something `instance(…)` names — the program
 // reads one with `.field`, against the document it is editing.
 //
-// `realmConfig()` has no slot here yet. The builtin and the `config` map in
-// `.realm.json` it reads arrive together, and supplying an empty map before
-// then would let a program that names a setting read nothing where it should
-// be told the realm has none.
+// `realmConfig()` is supplied whenever the program names it, empty map
+// included. A realm that declares no settings is a realm whose settings are
+// known and empty, not a request that arrived without them, and the two read
+// differently to whoever has to fix the program: "this realm has no such
+// setting" points at the realm, "the host supplied no configuration" points at
+// the caller. A program that never names it gets no slot and reads neither
+// message, because it asks nothing.
 function contextFor(
   params: Record<string, unknown> | undefined,
   resource: CardResource,
   url: URL,
   ctx: StagingContext,
+  realmConfig: Record<string, JsonValue> | undefined,
 ): ProgramContext {
   return {
     ...(params ? { params } : {}),
@@ -1498,6 +1547,7 @@ function contextFor(
       id: url.href,
       ...(resource.attributes ?? {}),
     },
+    ...(realmConfig ? { realmConfig } : {}),
   };
 }
 
@@ -2186,6 +2236,10 @@ async function resourceFromTemplate(
   }
   let anchor = entry.href ? anchorResource(entry, ctx) : undefined;
   let linkFields = await linkFieldsOf(of, entry, ctx);
+  // Same as a transform: only a declaration that names a setting waits for one.
+  let realmConfig = templateNamesRealmConfig(definition.fill)
+    ? await ctx.realmConfig()
+    : {};
   let resource: CardResource = { type: 'card', meta: { adoptsFrom: of } };
   for (let [field, template] of Object.entries(definition.fill ?? {})) {
     let resolved = resolveTemplate(template, {
@@ -2194,6 +2248,7 @@ async function resourceFromTemplate(
       ctx,
       anchor,
       field,
+      realmConfig,
     });
     if (resolved.value === undefined) {
       continue;
@@ -2310,6 +2365,10 @@ interface TemplateScope {
   ctx: StagingContext;
   anchor: { id: string; resource: CardResource } | undefined;
   field: string;
+  // The realm's settings, resolved before the template is walked. Resolving
+  // one is asynchronous and walking a template is not, so it arrives here
+  // rather than being read where it is used.
+  realmConfig: Record<string, JsonValue>;
 }
 
 interface ResolvedTemplate {
@@ -2451,20 +2510,29 @@ function resolveMarker(
         isActor: false,
       };
     }
-    case 'realmConfig':
-      // A realm setting is a value the realm supplies, and nothing supplies
-      // one yet: the `config` map a marker reads from arrives with the builtin
-      // that reads it. Refused as the realm's own gap rather than the
-      // caller's, since the declaration is well formed and there is nothing a
-      // caller could send to satisfy it.
-      throw new OperationFailure({
-        status: 501,
-        code: 'internal-error',
-        title: 'Operation not implemented',
-        detail:
-          `\`${path}\` reads a realm setting, which this realm does not yet ` +
-          `supply to an operation`,
-      });
+    case 'realmConfig': {
+      // A setting the realm holds rather than the caller sends, so an absent
+      // one is the realm's gap and not the payload's — and it is refused here
+      // rather than defaulted, for the reason every reference is: a template
+      // that quietly wrote nothing where a setting belongs would store the
+      // absence as the value.
+      let settings = scope.realmConfig;
+      if (marker.key === undefined) {
+        return { value: { ...settings }, isLink: false, isActor: false };
+      }
+      let key = String(marker.key);
+      if (!Object.prototype.hasOwnProperty.call(settings, key)) {
+        throw new OperationFailure({
+          status: 400,
+          code: 'invalid-params',
+          title: 'Unknown realm setting',
+          detail:
+            `\`${path}\` reads realmConfig("${key}"), which realm ` +
+            `${ctx.realmURL} does not configure`,
+        });
+      }
+      return { value: settings[key], isLink: false, isActor: false };
+    }
     default:
       throw new OperationFailure({
         status: 400,

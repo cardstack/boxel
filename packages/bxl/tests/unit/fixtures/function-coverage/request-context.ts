@@ -1,5 +1,6 @@
 /**
- * The request-context builtins: `params`, `actor` and `instance`.
+ * The request-context builtins: `params`, `actor`, `instance` and
+ * `realmConfig`.
  *
  * These read no arguments beyond a key name — their whole answer comes from
  * the context the host scoped around the evaluation — so each case supplies
@@ -20,6 +21,7 @@ const context = {
   params: { body: 'Looks good to me', mentions: ['user:grace'], count: 2 },
   actor: 'user:ada',
   instance: { id: 'https://example.test/Post/1', commentCount: 4 },
+  realmConfig: { approver: 'user:mae', escalateAfterDays: 3 },
 };
 
 /** The document a program is editing, which none of these builtins read. */
@@ -199,6 +201,83 @@ const cases: CoverageCase[] = [
     // An absent field on a stored document is ordinary, so the message names
     // the reading that tolerates it rather than only refusing.
     throws: /Use `instance\(\)` and index it if the key may be absent\./,
+  },
+  {
+    covers: 'realmConfig/1',
+    source: 'realmConfig("approver")',
+    input: editedDocument,
+    context,
+    expected: 'user:mae',
+  },
+  {
+    covers: 'realmConfig/1',
+    // A setting is whatever JSON the realm owner wrote, so a program can read
+    // a number and compare it as one rather than parsing a string.
+    source: 'realmConfig("escalateAfterDays") + 1',
+    context,
+    expected: 4,
+  },
+  {
+    covers: 'realmConfig/0',
+    source: 'realmConfig() | keys',
+    input: editedDocument,
+    context,
+    outputs: [['approver', 'escalateAfterDays']],
+  },
+  {
+    covers: 'realmConfig/0',
+    // A realm that configures nothing still supplies a map. The program is
+    // told the realm has no settings, which is a different fix from the realm
+    // having supplied none at all.
+    source: 'realmConfig()',
+    context: { realmConfig: {} },
+    outputs: [{}],
+  },
+  {
+    covers: 'realmConfig/1',
+    source: 'realmConfig("approver")',
+    context: { realmConfig: {} },
+    throws: /not in the realm configuration — it has no readable keys/,
+  },
+  {
+    covers: 'realmConfig/1',
+    // The same message shape the other keyed slots use, naming what is there.
+    source: 'realmConfig("approvers")',
+    context,
+    throws: /asks for "approvers".*"approver", "escalateAfterDays"/,
+  },
+  {
+    covers: 'realmConfig/1',
+    source: 'realmConfig("approver")',
+    // A realm setting is absent for the ordinary reason a stored field is, so
+    // the message names the reading that tolerates it.
+    context: { realmConfig: { threshold: 3 } },
+    throws: /Use `realmConfig\(\)` and index it if the setting may be absent\./,
+  },
+  {
+    covers: 'realmConfig/0',
+    source: 'realmConfig()',
+    context: { params: context.params },
+    throws: /needs the realm configuration/,
+  },
+  {
+    covers: 'realmConfig/0',
+    source: 'realmConfig()',
+    // No `context` at all, which is a different failure from a realm with no
+    // settings and says so.
+    throws: /needs a request context/,
+  },
+  {
+    covers: 'realmConfig/1',
+    source: 'realmConfig("approver")',
+    context: { realmConfig: ['approver'] },
+    throws: /to be an object, but the host supplied an array/,
+  },
+  {
+    covers: 'realmConfig/1',
+    source: 'realmConfig(3)',
+    context,
+    throws: /takes a key name as a string, not number/,
   },
 ];
 

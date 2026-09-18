@@ -162,6 +162,12 @@ function stub(opts: StubOptions = {}): Stub {
     async lookupDefinition() {
       return undefined;
     },
+    // No settings behind this stub. Nothing here stages an operation that
+    // reads one, and a value invented for a realm the stub never configured
+    // would describe settings no test put there.
+    async realmConfig() {
+      return {};
+    },
   };
   return { core, commits, lockedPaths: () => lockedPaths };
 }

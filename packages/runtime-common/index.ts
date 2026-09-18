@@ -1624,6 +1624,7 @@ export * from './cached-fetch.ts';
 export * from './definition-lookup.ts';
 export * from './loader-epoch.ts';
 export * from './definitions.ts';
+export type { JsonValue } from './json-validation.ts';
 // Only the lowered *shapes*, not the pass that produces them: lowering reaches
 // `@cardstack/bxl` for the program canonicalizer, and a barrel re-export would
 // pull bxl's sources into the typecheck program of every package that imports
