@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -21,6 +22,7 @@ import {
   estimateTokens,
   extractIssueText,
 } from '../src/factory-skill-loader.ts';
+import { catalogSkills } from '../src/skill-catalog.ts';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -942,5 +944,58 @@ module('factory-skill-loader > curated boxel references', function () {
       [],
       'no pending reference has shipped in the built boxel skill yet — once one does, remove it from PENDING_BOXEL_REFERENCES',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Frontmatter descriptions
+// ---------------------------------------------------------------------------
+
+// `list_skills` advertises each skill by its description, and that row is the
+// agent's only basis for deciding whether to read the skill at all. A skill
+// whose description is authored as a YAML block scalar — the natural form once
+// it is longer than a line — used to advertise itself as the literal `>-`.
+module('skill-catalog > descriptions', function () {
+  test('a folded block scalar reads as its text, not its punctuation', async function (assert) {
+    let dir = await mkdtemp(join(tmpdir(), 'skills-'));
+    await mkdir(join(dir, 'folded'), { recursive: true });
+    await writeFile(
+      join(dir, 'folded', 'SKILL.md'),
+      [
+        '---',
+        'name: folded',
+        'description: >-',
+        '  MANDATORY before writing any `.gts`. Search the catalog',
+        '  before you author.',
+        'boxel:',
+        '  kind: skill',
+        '---',
+        '',
+        '# Folded',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+
+    let entries = await catalogSkills([dir]);
+    assert.strictEqual(
+      entries[0].description,
+      'MANDATORY before writing any `.gts`. Search the catalog before you author.',
+    );
+  });
+
+  test('a plain single-line description still reads as itself', async function (assert) {
+    let dir = await mkdtemp(join(tmpdir(), 'skills-'));
+    await mkdir(join(dir, 'plain'), { recursive: true });
+    await writeFile(
+      join(dir, 'plain', 'SKILL.md'),
+      ['---', 'name: plain', 'description: Just one line.', '---', ''].join(
+        '\n',
+      ),
+      'utf8',
+    );
+
+    let entries = await catalogSkills([dir]);
+    assert.strictEqual(entries[0].description, 'Just one line.');
   });
 });
