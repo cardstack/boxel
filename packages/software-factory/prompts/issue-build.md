@@ -68,7 +68,7 @@ non-obvious translation decision, and when recovering from a failed check.
   (+ its PNG). These are authoritative — follow them exactly.
 - The notes' **Reuse decisions** table is part of that contract. Every
   `REFERENCE` row is a module you import rather than a definition you
-  write; only `GAP` rows are yours to build.
+  write; `GAP` and `REUSE-BLOCKED` rows are the ones you build yourself.
 
 ## 2. BUILD — translate the accepted mockup
 
@@ -105,8 +105,8 @@ non-obvious translation decision, and when recovering from a failed check.
 
 - Self-audit the contract before signalling: every `REFERENCE` row appears
   as a real import in the `.gts`, and every definition you wrote by hand
-  corresponds to a `GAP` row. A mismatch either way is a defect — fix it,
-  or `post_update` why the row could not be honoured.
+  corresponds to a `GAP` or `REUSE-BLOCKED` row. A mismatch either way is a
+  defect — fix it, or `post_update` why the row could not be honoured.
 - Call `signal_done`. The orchestrator validates automatically. Calling it
   without the card, an instance, and a Spec is a failure.
 
