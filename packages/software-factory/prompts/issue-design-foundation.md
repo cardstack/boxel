@@ -56,6 +56,17 @@ Write TWO artifacts:
   swatches), the typographic scale and families, spacing/radius/shadow
   rules, and 3–5 explicit dos/don'ts. This is prose a future agent reads
   to make decisions you didn't anticipate.
+
+  **Constrain it to tokens and positive direction.** This guide is written
+  before anyone knows what the cards need or what already exists to reuse,
+  and it binds every later turn. Say what the family *is* — its palette,
+  type, spacing, signature. Do not ban a rendering pattern outright ("no
+  icon treatments", "no pills, ever"): a later turn reads that as a rule
+  and refuses a component or field that would otherwise have been reused,
+  trading something real for a preference formed in ignorance of it. If a
+  pattern genuinely conflicts with the direction, say what the family does
+  instead and why — a "don't" that names no alternative is a defect in this
+  artifact.
 - **`design/tokens.css`** — the same decisions as CSS custom properties:
   `--*` variables for every color role, type size/weight/family,
   spacing step, radius, and shadow. Every future mockup links this file;

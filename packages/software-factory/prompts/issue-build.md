@@ -66,9 +66,18 @@ non-obvious translation decision, and when recovering from a failed check.
 
 - `Read` `design/<card-slug>-NOTES.md` and the accepted `design/<card-slug>.html`
   (+ its PNG). These are authoritative — follow them exactly.
+- The notes' **Reuse decisions** table is part of that contract. Every
+  `REFERENCE` row is a module you import rather than a definition you
+  write; only `GAP` rows are yours to build.
 
 ## 2. BUILD — translate the accepted mockup
 
+- **Wire the `REFERENCE` rows first.** Adopt (`adoptsFrom`), import +
+  `contains`, or `linksTo` exactly as the row's `Wiring` column says,
+  before writing anything of your own. Hand-writing an equivalent of a row
+  the design turn adopted silently discards a decision already made — if a
+  row genuinely cannot be wired, say so with `post_update` and record the
+  gate's error; do not substitute.
 - Write the card definition (`.gts`) with `isolated`, `embedded`, AND
   `fitted` templates reproducing the accepted mockup. Use theme CSS
   variables (`var(--*)`) per the notes' token mapping.
@@ -94,6 +103,10 @@ non-obvious translation decision, and when recovering from a failed check.
 
 ## 4. Done
 
+- Self-audit the contract before signalling: every `REFERENCE` row appears
+  as a real import in the `.gts`, and every definition you wrote by hand
+  corresponds to a `GAP` row. A mismatch either way is a defect — fix it,
+  or `post_update` why the row could not be honoured.
 - Call `signal_done`. The orchestrator validates automatically. Calling it
   without the card, an instance, and a Spec is a failure.
 

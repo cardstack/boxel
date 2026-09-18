@@ -69,12 +69,42 @@ minutes.
 
 ## 1. Ground yourself (context before code)
 
-- `Read` / `Glob` the workspace; `Bash` + `boxel search --realm <target-realm-url>` for cards already in the target realm.
+- `Read` / `Glob` the workspace; `Bash` + `boxel search --realm <target-realm-url>` for cards already in the target realm, and the catalog realm for work already done (§2).
 - Call `list_skills`, then `read_skill` the skills this issue actually touches
   (design, fitted formats, theming, file fields, queries — whatever applies).
   Read precedent: if a similar card exists in the workspace, read its `.gts`.
 
-## 2. DESIGN — HTML mockup before any schema
+## 2. REUSE — decide what you are not building
+
+The catalog is a library of work already done. Consult it **before** you
+mock: a schema you adopt is a given the mockup designs around, and a schema
+the mockup already fixed is one you can no longer adopt.
+
+- **Enumerate the needs this issue implies, the card itself first.** The
+  card you are building is need #1 — the catalog may already publish it, or
+  one close enough to adopt. Then its fields, then any component or command.
+  A list that starts at the fields has already decided the card is new.
+- **Consult the catalog per need.** `catalog-reuse` has the query shapes and
+  how to judge a hit — follow it rather than inventing a query.
+- **Disposition every hit you get back.** Adopted, or refused naming the
+  mismatched fields or the design rule it breaks. A hit you drop without
+  saying why is indistinguishable from one you never saw.
+- **Base-realm imports are not reuse.** `StringField`, `EmailField`,
+  `ImageDef` and their siblings are the standard library. Never record one
+  as a reuse decision.
+- Record the outcome as a **Reuse decisions** table in
+  `design/<card-slug>-NOTES.md` — one row per need, including the card
+  itself: need → decision (`REFERENCE` / `REUSE-BLOCKED` / `GAP`) → module
+  and name → wiring form (`adoptsFrom`, import + `contains`, `linksTo`).
+  Wire every `REFERENCE` row in §4 rather than writing your own equivalent;
+  only `GAP` rows are yours to build. A hand-built definition with no `GAP`
+  row is an omission, not a choice — and a reasoned `GAP` or `REUSE-BLOCKED`
+  is a correct outcome, not a failure.
+- **If a gate blocks an adoption you want**, record `REUSE-BLOCKED` with the
+  gate and its exact error and `post_update` the same — never quietly
+  hand-build the thing instead.
+
+## 3. DESIGN — HTML mockup before any schema
 
 - Write `design/<card-slug>.html`: **ONE page** — a plain HTML+CSS mockup of
   the card with **hard-coded, realistic sample copy** (real names, real
@@ -89,11 +119,11 @@ minutes.
   Knowledge section. Revise the HTML and re-screenshot. Do at least one
   full crit-and-revise pass; stop when you would show it to a designer.
 
-## 3. BUILD — translate the accepted mockup
+## 4. BUILD — translate the accepted mockup
 
 - Write the card definition (`.gts`) with `isolated`, `embedded`, AND
   `fitted` templates that reproduce the accepted mockup. Design decisions
-  were made in step 2 — this is a translation task. Use theme CSS variables
+  were made in step 3 — this is a translation task. Use theme CSS variables
   (`var(--*)`) rather than hard-coded colors where a theme exists.
 - Fields are an API other cards compose with: name them for consumers,
   and prefer FieldDefs for shapes that will recur.
@@ -104,7 +134,7 @@ minutes.
   `linkedExamples`, with its catalog-facing `title` and one-sentence
   `description` attributes populated (never left empty).
 
-## 4. VERIFY
+## 5. VERIFY
 
 - `run_lint({ path })` each file you wrote; then `run_parse()`,
   `run_evaluate()`, and `run_instantiate()` for the whole realm.
@@ -112,7 +142,7 @@ minutes.
   belong to a separate hardening phase that runs later; this loop ships
   zero tests by design.
 
-## 5. Done
+## 6. Done
 
 - Call `signal_done` (factory MCP tool). The orchestrator validates
   parse/lint/eval/instantiate automatically. Do NOT set the issue status
