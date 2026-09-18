@@ -283,6 +283,36 @@ module(basename(import.meta.filename), function (hooks) {
     );
   }
 
+  test('enabled card JSON survives an ordinary card HTML failure without hiding data errors', async function (assert) {
+    let url = new URL(`${realmURL}root`);
+    await renderedRow('root', {
+      error: { message: 'Synthetic format failure', status: 500 },
+    });
+    assert.strictEqual(
+      (await indexEngine.getInstance(url))?.type,
+      'instance-error',
+      'ordinary and HTML consumers retain existing behavior',
+    );
+    let result = await engine.cardDocument(url);
+    assert.strictEqual(result?.type, 'doc');
+    if (result?.type !== 'doc') throw new Error('Expected healthy source JSON');
+    assert.strictEqual(result.doc.data.attributes?.name, 'root');
+    assert.strictEqual(
+      result.doc.data.meta.publication,
+      undefined,
+      'not an owner',
+    );
+    await db.execute(
+      `UPDATE boxel_index SET has_error=TRUE,error_doc='{"status":422,"message":"Source data failed"}' WHERE url=$1`,
+      { bind: [`${realmURL}root.json`] },
+    );
+    assert.strictEqual(
+      (await engine.cardDocument(url))?.type,
+      'error',
+      'source errors remain fatal for JSON',
+    );
+  });
+
   test('item search does not transfer rendering dependencies while HTML search retains them', async function (assert) {
     await renderedRow('root');
     // Include a file row so the mixed/file projections exercise the same

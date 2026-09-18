@@ -742,11 +742,11 @@ export class IndexQueryEngine {
     opts?: GetEntryOptions,
     pristineDoc = 'i.pristine_doc',
   ): string {
-    let sourceErrors = opts?.latticeInput
-      ? 'TRUE'
-      : opts?.latticeData
-        ? "i.pristine_doc->'meta'->'publication' IS NOT NULL"
-        : 'FALSE';
+    // Data consumers in an opted-in realm include ordinary source cards and
+    // folded derivations, not only materialized owners. HTML has an independent
+    // failure channel; a failed format must not hide healthy indexed JSON.
+    let sourceErrors =
+      opts?.latticeInput || opts?.latticeData ? 'TRUE' : 'FALSE';
     let errors = `CASE WHEN ${sourceErrors} THEN i.has_error ELSE ${effectiveHasError()} END AS has_error,
       CASE WHEN ${sourceErrors} THEN i.error_doc ELSE ${effectiveErrorDoc()} END AS error_doc`;
     // Lattice's revision-pinned inputs consume the stored card JSON. They do
