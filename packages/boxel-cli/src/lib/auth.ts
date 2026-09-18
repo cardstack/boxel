@@ -176,6 +176,17 @@ export async function requestLoginToken(
   // NOT a MatrixAuthError: re-authenticating mints a new token, but the limit is
   // per user, so re-auth wouldn't help.
   if (response.status === 429 || errcode === 'M_LIMIT_EXCEEDED') {
+    // The body's `retry_after_ms` is deprecated (Matrix v1.10) in favor of the
+    // standard `Retry-After` header (in seconds); Synapse currently sends both,
+    // so the header is the fallback. Its HTTP-date form parses as NaN and is
+    // ignored — a missing wait is fine, callers treat it as unknown.
+    let retryAfterHeader = response.headers.get('Retry-After');
+    if (retryAfterMs === undefined && retryAfterHeader) {
+      let headerSeconds = Number(retryAfterHeader);
+      if (Number.isFinite(headerSeconds) && headerSeconds >= 0) {
+        retryAfterMs = headerSeconds * 1000;
+      }
+    }
     throw new MatrixRateLimitError(
       `Matrix rate-limited the login-token request: ${response.status} ${text}`,
       retryAfterMs,

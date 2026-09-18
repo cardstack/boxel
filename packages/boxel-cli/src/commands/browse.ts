@@ -29,24 +29,35 @@ const LOCAL_HOST_APP_URL = 'https://localhost:4200/';
 // MatrixRateLimitError). When the reported wait is this short or under, auto-wait
 // and retry once so genuine back-to-back opens "just work".
 const SHORT_WAIT_MS = 5000;
-// Sanity cap on any single wait: retry_after for a 1/min limit is ≤ ~60s, so this
-// only guards against a pathological server value blocking the command forever.
+// What `--wait` blocks for when the server reports no wait: the limit is ~1/min,
+// so a full window is the shortest wait that makes the retry likely to succeed.
+const DEFAULT_WAIT_MS = 60000;
+// Ceiling on any single wait. retry_after for a 1/min limit is ≤ ~60s, so a
+// longer reported wait is pathological — and sleeping less than the server asked
+// guarantees the retry fails, so we error out immediately instead of waiting.
 const MAX_WAIT_MS = 90000;
 
 const defaultSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 // The clear, actionable message shown when we won't (or can't) wait out a
-// login-token rate limit. Names the limit and the wait, and points at `--wait`.
-function rateLimitMessage(retryAfterMs: number | undefined): string {
+// login-token rate limit. Names the limit and the wait. Points at `--wait` only
+// when it would change the outcome — not when it was already given, and not when
+// the reported wait is beyond what `--wait` is willing to block for.
+function rateLimitMessage(
+  retryAfterMs: number | undefined,
+  suggestWait: boolean,
+): string {
   let when =
     retryAfterMs !== undefined
       ? `Try again in ~${describeDuration(retryAfterMs)}`
       : 'Try again shortly';
   return (
     `Login-token minting is rate-limited to about once per minute per account ` +
-    `(a Matrix anti-abuse limit that can't be raised). ${when} — or re-run with ` +
-    `\`--wait\` to block and retry automatically.`
+    `(a Matrix anti-abuse limit that can't be raised). ${when}` +
+    (suggestWait
+      ? ` — or re-run with \`--wait\` to block and retry automatically.`
+      : `.`)
   );
 }
 
@@ -96,7 +107,8 @@ export interface BrowseOptions {
   hostUrl?: string;
   printUrl?: boolean;
   // Block and retry once when login-token minting is rate-limited, even for a
-  // long wait (short waits auto-retry regardless). Capped at MAX_WAIT_MS.
+  // long wait (short waits auto-retry regardless). A reported wait beyond
+  // MAX_WAIT_MS still errors immediately — it can't be waited out.
   wait?: boolean;
   // Injectable seams for testing.
   profileManager?: ProfileManager;
@@ -208,13 +220,21 @@ export async function browse(
       throw err;
     }
     let { retryAfterMs } = err;
+    // A reported wait beyond the ceiling can't be waited out: sleeping less than
+    // the server asked guarantees the retry fails, so error out immediately.
+    let waitable = retryAfterMs === undefined || retryAfterMs <= MAX_WAIT_MS;
     let shouldWait =
-      options.wait === true ||
-      (retryAfterMs !== undefined && retryAfterMs <= SHORT_WAIT_MS);
+      waitable &&
+      (options.wait === true ||
+        (retryAfterMs !== undefined && retryAfterMs <= SHORT_WAIT_MS));
     if (!shouldWait) {
-      throw new Error(rateLimitMessage(retryAfterMs));
+      throw new Error(
+        rateLimitMessage(retryAfterMs, waitable && options.wait !== true),
+      );
     }
-    let waitMs = Math.min(retryAfterMs ?? SHORT_WAIT_MS, MAX_WAIT_MS);
+    // With no reported wait (only reachable under --wait), block a full
+    // rate-limit window — anything shorter makes the retry likely to fail.
+    let waitMs = retryAfterMs ?? DEFAULT_WAIT_MS;
     // Progress on stderr so it never contaminates `--print-url` stdout.
     cliLog.info(
       `Login-token minting is rate-limited; waiting ${describeDuration(
@@ -226,7 +246,9 @@ export async function browse(
       token = await mintToken();
     } catch (retryErr) {
       if (retryErr instanceof MatrixRateLimitError) {
-        throw new Error(rateLimitMessage(retryErr.retryAfterMs));
+        throw new Error(
+          rateLimitMessage(retryErr.retryAfterMs, options.wait !== true),
+        );
       }
       throw retryErr;
     }
@@ -290,7 +312,8 @@ export function registerBrowseCommand(program: Command): void {
     .option(
       '--wait',
       'If login-token minting is rate-limited (~1/min per account), wait out the ' +
-        'reported delay and retry once instead of erroring',
+        'reported delay (or a full window when none is reported) and retry once ' +
+        'instead of erroring',
     )
     .action(async (cardPath: string | undefined, opts: BrowseCliOptions) => {
       try {
