@@ -28,6 +28,7 @@ import type {
   FieldDefinition,
 } from '@cardstack/runtime-common/definitions';
 import type { SearchEntryQuery } from '@cardstack/runtime-common/search-entry';
+import type { JsonValue } from '@cardstack/runtime-common/json-validation';
 import type { CardResource, Relationship } from '@cardstack/runtime-common';
 
 // ============================================================================
@@ -513,7 +514,7 @@ module(basename(import.meta.filename), function () {
           'a marker name beside data a marker never carries',
           { $ref: 'actor', label: 'mine' },
         ],
-      ] as [string, Record<string, unknown>][]) {
+      ] as [string, JsonValue][]) {
         let stubbed = stub({ matches: [`${REALM}activities/a`] });
         let tree = await resolve(
           stubbed,
