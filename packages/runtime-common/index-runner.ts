@@ -199,7 +199,14 @@ export class IndexRunner {
     fileErrors: 0,
     totalIndexEntries: 0,
   };
-  #shouldClearCacheForNextRender = true;
+  // Armed only by a pass whose invalidation set contains an executable — the
+  // same condition that mints a fresh loader epoch. A pass that touches no
+  // module has nothing to drop: the tab's evaluated graph still describes the
+  // modules on disk, and asking it to drop the graph costs a full re-fetch and
+  // re-evaluation of every module the first card reaches. That cost is
+  // amortized across a large pass and is the whole of a one-row pass, which is
+  // what a single card save produces.
+  #shouldClearCacheForNextRender = false;
   // Identifier for this runner's indexing batch (CS-10758 step 3).
   // Threaded into PrerenderVisitArgs and released from the fromScratch /
   // incremental finally blocks. One runner = one batch: if fromScratch
@@ -352,8 +359,14 @@ export class IndexRunner {
     invalidations = discoverResult.urls.map((href) => new URL(href));
     // The from-scratch URL list lives outside the batch's invalidation set
     // until each visit writes its row; feed the loader-epoch scan up front
-    // so the epoch is fixed before the enqueue and the first visit.
+    // so the epoch is fixed before the enqueue and the first visit. The
+    // loader reset reads the same list for the same reason: it is decided
+    // before the first visit, and `batch.invalidations` is empty until that
+    // visit has already been dispatched.
     current.batch.noteInvalidatedURLs(discoverResult.urls);
+    if (passInvalidatesExecutables(discoverResult.urls)) {
+      current.#scheduleClearCacheForNextRender();
+    }
     current.#perfLog.debug(
       `${jobIdentity(current.#jobInfo)} completed invalidations in ${discoverMs} ms`,
     );
@@ -590,10 +603,7 @@ export class IndexRunner {
             invalidations,
           );
         orderMs = Date.now() - orderStart;
-        let hasExecutableInvalidation = invalidations.some((url) =>
-          hasExecutableExtension(url.href),
-        );
-        if (hasExecutableInvalidation) {
+        if (passInvalidatesExecutables(invalidations.map((url) => url.href))) {
           if (!current.#shouldClearCacheForNextRender) {
             current.#log.debug(
               `${jobIdentity(current.#jobInfo)} detected executable invalidation, scheduling loader reset`,
@@ -1350,6 +1360,26 @@ export class IndexRunner {
   async #writeEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
     await this.batch.bufferEntry(url, entry);
   }
+}
+
+// Whether a pass over `urls` has to ask the prerender tab it lands on to drop
+// its loader. Only a change to an executable can make an evaluated module
+// graph describe something other than what is on disk, so only an executable
+// in the set answers yes.
+//
+// The tab-local drop is not the whole of the mechanism, and is not what makes
+// a module change safe: the realm's loader epoch is re-minted by the same
+// condition and threaded on every render, which resets every tab holding a
+// superseded graph rather than only the one this pass's first visit reaches.
+// This stays as the reset for that one tab, decided from the same set so the
+// two can never disagree about whether the pass changed a module.
+export function passInvalidatesExecutables(urls: Iterable<string>): boolean {
+  for (let url of urls) {
+    if (hasExecutableExtension(url)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function assertURLEndsWithJSON(url: URL): URL {

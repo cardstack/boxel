@@ -201,6 +201,34 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('batchId + no clearCache on an unowned affinity claims it', function (assert) {
+        // The protection has to hold for a pass that never clears: only a
+        // pass whose invalidation set contains an executable asks for a
+        // clear, so an instance-only pass would otherwise render its whole
+        // batch on an unowned affinity and a user-initiated clearCache
+        // landing on the same tab would drop the loader underneath it.
+        let decision = computeBatchClearCacheGate(
+          args({
+            affinityValue: REALM,
+            batchId: 'job-1-abcd',
+            renderOptions: { cardRender: true },
+          }),
+          undefined,
+          NOW,
+        );
+        assert.strictEqual(
+          decision.gatedArgs.renderOptions?.clearCache,
+          undefined,
+          'no clearCache requested and none added',
+        );
+        assert.deepEqual(
+          decision.newOwner,
+          { batchId: 'job-1-abcd', since: NOW },
+          'the batch owns the affinity from its first visit',
+        );
+        assert.notOk(decision.log, 'claiming an unowned affinity is not news');
+      });
+
       test('stranger batchId + clearCache:false does not take ownership', function (assert) {
         let existing: BatchOwner = { batchId: 'job-1-abcd', since: NOW - 1000 };
         let decision = computeBatchClearCacheGate(

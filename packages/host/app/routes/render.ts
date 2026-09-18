@@ -481,6 +481,12 @@ export default class RenderRoute extends Route<Model> {
     // pass, and instance-only passes (whose epoch is unchanged) keep the
     // loader warm. Held per tab, unkeyed: the visits that thread an epoch
     // are realm-affine, so one tab only ever sees one realm's epochs.
+    // Which synchronization dropped this tab's loader, for the row's
+    // diagnostics. A dropped loader is the difference between a build that
+    // evaluates the whole module graph and one that evaluates nothing, so a
+    // reader looking at `moduleEvaluationCount` needs to know whether this
+    // visit caused it.
+    let loaderResetReason: BuildModelDiagnostics['loaderResetReason'];
     if (parsedOptions.loaderEpoch !== undefined) {
       let held = (globalThis as any).__boxelLoaderEpoch as string | undefined;
       if (held !== parsedOptions.loaderEpoch) {
@@ -490,9 +496,11 @@ export default class RenderRoute extends Route<Model> {
         });
         this.store.resetCache();
         (globalThis as any).__boxelLoaderEpoch = parsedOptions.loaderEpoch;
+        loaderResetReason = 'loaderEpoch';
       }
     }
     if (parsedOptions.clearCache) {
+      loaderResetReason = 'clearCache';
       this.loaderService.resetLoader({
         clearFetchCache: true,
         reason: 'render-route clearCache',
@@ -809,6 +817,7 @@ export default class RenderRoute extends Route<Model> {
       moduleEvaluationTotalMs: roundMs(
         moduleTotalsAfter.totalMs - moduleTotalsBefore.totalMs,
       ),
+      ...(loaderResetReason ? { loaderResetReason } : {}),
       ...(moduleEvaluationsMs ? { moduleEvaluationsMs } : {}),
       ...(prunedHydrateFieldsMs
         ? { hydrateFieldsMs: prunedHydrateFieldsMs }

@@ -290,6 +290,14 @@ export interface BuildModelDiagnostics {
   // earlier card in the same job rather than not happening.
   moduleEvaluationCount?: number;
   moduleEvaluationTotalMs?: number;
+  // Present only when this visit dropped the tab's loader before building
+  // the model, naming which of the two synchronizations did it. A drop
+  // makes a nonzero `moduleEvaluationCount` expected rather than
+  // surprising: the graph was warm and this visit threw it away, so the
+  // re-fetch and re-evaluation it pays for is the drop's price and not a
+  // property of the card. Its absence alongside a large count is the
+  // reading that says the tab had never evaluated the graph at all.
+  loaderResetReason?: 'clearCache' | 'loaderEpoch';
   // Per-field hydration wall-clock, keyed by dotted field path from the
   // card's root — the deserialization sibling of `searchDocFieldsMs`, and
   // the breakdown of `buildModelMs.hydrate`. Same bounding, so a cheap card

@@ -19,8 +19,10 @@ import { toAffinityKey } from './affinity.ts';
 //   │                             │             │ (legit successor)    │
 //   │ no batchId + clearCache:true│ any owner   │ STRIP clearCache     │
 //   │ no batchId + clearCache:true│ none        │ honor (no protect)   │
-//   │ any + clearCache:false/off  │ any         │ run; touch owner if  │
-//   │                             │             │ batchId matches      │
+//   │ batchId=A + clearCache:off  │ none        │ run; owner := A      │
+//   │ batchId=A + clearCache:off  │ A           │ run; refresh owner   │
+//   │ batchId=B + clearCache:off  │ A (B ≠ A)   │ run; owner unchanged │
+//   │ no batchId + clearCache:off │ any         │ run; owner unchanged │
 //   └─────────────────────────────┴─────────────┴──────────────────────┘
 //
 // Rationale: indexing jobs are serialized per-realm through the queue, so
@@ -63,11 +65,20 @@ export function computeBatchClearCacheGate<
 
   if (!wantsClearCache) {
     // Non-clearing visit is always OK. Touch the owner timestamp if
-    // this visit belongs to the current owner (keeps-alive semantics).
-    if (args.batchId && owner?.batchId === args.batchId) {
+    // this visit belongs to the current owner (keeps-alive semantics),
+    // and claim an unowned affinity so that a batch which never clears
+    // the cache is still protected. Only a pass whose invalidation set
+    // contains an executable asks for a clear, so requiring one to
+    // establish ownership would leave every other pass exposed to the
+    // `no batchId` row below — the threat that row exists for does not
+    // care whether the batch it interrupts happened to clear.
+    // Claiming only when the affinity is unowned keeps the takeover rule
+    // where it is: an owner is replaced by a clearing successor, never by
+    // a visit that merely arrived.
+    if (args.batchId && (!owner || owner.batchId === args.batchId)) {
       return {
         gatedArgs: args,
-        newOwner: { batchId: owner.batchId, since: nowMs },
+        newOwner: { batchId: args.batchId, since: nowMs },
       };
     }
     return { gatedArgs: args };
