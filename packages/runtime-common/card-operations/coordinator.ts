@@ -409,6 +409,7 @@ export async function commitBatch(
           positions,
           staged,
           baseHashes,
+          budget: stagingBudget(STAGING_WIDTH),
           stage: (entry, position, against) =>
             stageEntry(entry, position, {
               realmURL: core.realmURL,
@@ -629,6 +630,9 @@ interface StagingRun {
   positions: readonly EntryPosition[];
   staged: StagedChange[];
   baseHashes: (string | undefined)[];
+  // Shared by every run in the tree, which is what makes the bound a
+  // property of the request rather than of one group.
+  budget: StagingBudget;
   stage(
     entry: BatchEntry,
     position: EntryPosition,
@@ -671,37 +675,49 @@ export const STAGING_WIDTH = ((): number => {
     : DEFAULT_STAGING_WIDTH;
 })();
 
-// Run `work` over `items` with at most `limit` of them in flight, answering in
-// item order with each outcome settled rather than raced — the same shape
-// `Promise.allSettled` answers in, so the caller reads refusals in the order
-// the entries were sent whatever order the work finished in.
+// A batch-wide allowance for the work staging does, handed to every run in
+// the tree rather than created per group.
 //
-// Each item's work is started only as a worker reaches it, which is what keeps
-// whatever that work allocates — a copy of the staging state, an open file —
-// bounded by `limit` rather than by the number of items.
-async function settledInOrder<Item, Result>(
-  items: readonly Item[],
-  limit: number,
-  work: (item: Item) => Promise<Result>,
-): Promise<PromiseSettledResult<Result>[]> {
-  let outcomes: PromiseSettledResult<Result>[] = new Array(items.length);
-  let next = 0;
-  let worker = async (): Promise<void> => {
-    for (let index = next++; index < items.length; index = next++) {
-      try {
-        outcomes[index] = {
-          status: 'fulfilled',
-          value: await work(items[index]),
-        };
-      } catch (reason: unknown) {
-        outcomes[index] = { status: 'rejected', reason };
+// Per group it would not be a bound at all: `stageRun` recurses, so a tree of
+// groups eight wide and three deep would hold eight allowances of eight and
+// stage five hundred entries at once — the number rising with a depth the
+// caller chooses, while the constant stays reassuringly at eight.
+//
+// The allowance is held only around one entry's own staging, never by a group
+// while its members run. That is what makes it deadlock-free: nothing holding
+// one ever waits for another to be released. It is taken in serial runs too,
+// so the bound is over the request rather than over any one group — several
+// serial branches proceeding at once are as many entries in flight as a
+// parallel group of the same width.
+interface StagingBudget {
+  spend<T>(work: () => Promise<T>): Promise<T>;
+}
+
+function stagingBudget(limit: number): StagingBudget {
+  let free = limit;
+  let waiting: (() => void)[] = [];
+  return {
+    async spend<T>(work: () => Promise<T>): Promise<T> {
+      if (free > 0) {
+        free--;
+      } else {
+        await new Promise<void>((resolve) => waiting.push(resolve));
       }
-    }
+      try {
+        return await work();
+      } finally {
+        // Handed straight to the next waiter rather than returned to the
+        // pool and re-taken, so a waiter cannot be passed over by a later
+        // arrival that finds `free` briefly above zero.
+        let next = waiting.shift();
+        if (next) {
+          next();
+        } else {
+          free++;
+        }
+      }
+    },
   };
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, () => worker()),
-  );
-  return outcomes;
 }
 
 async function stageRun(
@@ -749,19 +765,21 @@ async function stageConcurrently(
   state: StagingState,
   run: StagingRun,
 ): Promise<Claims> {
-  let outcomes = await settledInOrder(nodes, STAGING_WIDTH, async (node) =>
-    // A member that is a single entry needs no copy of the state. The only
-    // thing it would put in one is its own staged change, through the compose
-    // at the end of `stageOne` — and the fold-back below applies that to the
-    // state around the group anyway. Skipping both leaves it reading the
-    // state the group started from, which is what a copy would have given it.
-    //
-    // A member that is a group does need one: its own run composes as it
-    // goes, so that a serial step inside it builds on the step before, and
-    // those intermediate states are no business of the branch beside it.
-    node.kind === 'entry'
-      ? await stageOne(node, state, run, { compose: false })
-      : await stageRun(node.members, node.mode, fork(state), run),
+  let outcomes = await Promise.allSettled(
+    nodes.map(async (node) =>
+      // A member that is a single entry needs no copy of the state. The only
+      // thing it would put in one is its own staged change, through the compose
+      // at the end of `stageOne` — and the fold-back below applies that to the
+      // state around the group anyway. Skipping both leaves it reading the
+      // state the group started from, which is what a copy would have given it.
+      //
+      // A member that is a group does need one: its own run composes as it
+      // goes, so that a serial step inside it builds on the step before, and
+      // those intermediate states are no business of the branch beside it.
+      node.kind === 'entry'
+        ? await stageOne(node, state, run, { compose: false })
+        : await stageRun(node.members, node.mode, fork(state), run),
+    ),
   );
   // Settled rather than raced, and the earliest refusal in request order is
   // the one reported. Raced, a group with two entries the caller got wrong
@@ -810,7 +828,9 @@ async function stageOne(
   { compose: composeIn }: { compose: boolean } = { compose: true },
 ): Promise<Claims> {
   let { entry, at } = node;
-  let change = await run.stage(entry, run.positions[at], state);
+  let change = await run.budget.spend(() =>
+    run.stage(entry, run.positions[at], state),
+  );
   run.staged[at] = change;
   run.baseHashes[at] = change.primaryPath
     ? (state.stored.get(change.primaryPath)?.contentHash ??

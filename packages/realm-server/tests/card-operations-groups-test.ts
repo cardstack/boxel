@@ -605,6 +605,62 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('the bound is over the whole tree, not over each group', async function (assert) {
+      // Nesting is where a per-group limit stops being a limit: groups of
+      // `STAGING_WIDTH` nested two deep would hold one allowance each and
+      // stage the square of it at once. Built so that a per-group bound and a
+      // per-request bound give visibly different peaks — enough leaves that
+      // the square would exceed the bound outright.
+      let branches = STAGING_WIDTH;
+      let perBranch = STAGING_WIDTH;
+      let cards: string[] = [];
+      for (let branch = 0; branch < branches; branch++) {
+        for (let leaf = 0; leaf < perBranch; leaf++) {
+          cards.push(`person-${branch}-${leaf}`);
+        }
+      }
+      let held = gate(STAGING_WIDTH);
+      let inFlight = 0;
+      let peak = 0;
+      let { core, commits } = stub({
+        stored: Object.fromEntries(
+          cards.map((card) => [`${card}.json`, personFile(card)]),
+        ),
+        onStage: async () => {
+          peak = Math.max(peak, ++inFlight);
+          try {
+            await held.wait();
+          } finally {
+            inFlight--;
+          }
+        },
+      });
+
+      await commitBatch(core, [
+        {
+          op: 'parallel',
+          members: Array.from({ length: branches }, (_, branch) => ({
+            op: 'parallel' as const,
+            members: Array.from({ length: perBranch }, (_, leaf) =>
+              setAttribute(`person-${branch}-${leaf}`, { nickname: 'x' }),
+            ),
+          })),
+        },
+      ]);
+
+      assert.strictEqual(
+        peak,
+        STAGING_WIDTH,
+        `nested groups share one allowance of ${STAGING_WIDTH}, rather than ` +
+          `taking ${STAGING_WIDTH} each`,
+      );
+      assert.strictEqual(
+        Object.keys(commits[0].writes).length,
+        cards.length,
+        'and every leaf of the tree still landed',
+      );
+    });
+
     test('a member reads its anchor card as the group found it', async function (assert) {
       // A named create reads the card its `href` names through `instance(…)`,
       // and that file is one it never writes — so the conflict rule does not
