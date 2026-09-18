@@ -294,7 +294,7 @@ node run-load.ts --csv ./accounts.csv \
 | `--prime-connections` |      on | Open each batch's connections before timing it. `=false` disables.              |
 | `--model-calls`       |     off | A forwarded request before each write (see below).                              |
 | `--subscribe`         |     off | React to real realm events instead of modelling them (see below).               |
-| `--load-half-life-ms` | 120000  | The window the target smooths its in-flight reading over.                       |
+| `--load-half-life-ms` |  120000 | The window the target smooths its in-flight reading over.                       |
 
 `--model-calls` puts a `_request-forward` call before each write, the position a
 card that generates before saving occupies. The destination is one the realm
@@ -439,22 +439,46 @@ user, one per CSV row, so a 20-row file caps a run at 19 readers. Against a
 deployed realm at `--derive-page-size 0`, 19 readers held a peak 120-second
 mean of **6.3** searches in flight. Read that against the rungs and the cap in
 `packages/runtime-common/search-bounds.ts`: this run cost about three readers
-per unit of mean, so a rung of 8 wants roughly 25 readers and one of 12 roughly
-36, **per replica**. Treat those as a floor rather than an estimate — the
-scaling is only linear while service time holds, and service time is what rises
-first as a realm saturates. Growing the pool is what makes a load number
-realistic, and it is what puts the admission queue under enough pressure to
-shed.
+per unit of mean, so the lower rung at 4 wants roughly 13 readers and the upper
+one at 12 roughly 36, **per replica**. A pool of this size therefore already
+clears the lower rung, while driving a fleet to the upper rung or to the
+admission cap still needs one several times larger. Treat those as a floor
+rather than an estimate — the scaling is only linear while service time holds,
+and service time is what rises first as a realm saturates. Growing the pool is
+what makes a load number realistic, and it is what puts the admission queue
+under enough pressure to shed.
+
+**Which means a default-sized unbounded run now degrades itself partway
+through, and its numbers have to be read accordingly.** Both figures this file
+reports for unbounded runs — the 5.3 concurrency in the derived-run table above
+and the 6.3 peak here — sit above the lower rung of 4. At a 120-second
+half-life the reading crosses it after a couple of half-lives of sustained
+load, so any run longer than a few minutes against a deployment at shipped
+thresholds engages `multi-row` mid-run, and every search it answers after that
+point comes back links-only.
+
+Two consequences. Holding the reader count fixed between two runs is no longer
+enough to make them comparable, because two runs of different durations
+straddle the rung differently, and every table above was measured on the
+un-degraded side of it. And the diagnostic inverts: a run that reports no
+degradation at these readings is now a reason to check that the policy is
+wired up, rather than the expected result.
 
 **Exercising the mechanism is a different question, and much cheaper.** The
-policy's thresholds are environment-readable — `LINK_SHAPE_MULTI_ROW_ENGAGE`
-and `LINK_SHAPE_ALL_ENGAGE`, with `LINK_SHAPE_MULTI_ROW_RELEASE` and
-`LINK_SHAPE_ALL_RELEASE` for the hysteresis band. Setting them low on a
+rungs are thresholds on the load reading, settable per environment —
+`LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD` and `LINK_SHAPE_ALL_ENGAGE_THRESHOLD`,
+with `LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD` and
+`LINK_SHAPE_ALL_RELEASE_THRESHOLD` for the hysteresis band. Lowering them on a
 non-production fleet for the duration of a run puts a real deployment through
 both transitions, the dwell, the band, and the validator and cache-variant
 fragmentation each transition causes, at a load the existing pool can produce.
 What it does not do is tell you where the shipped thresholds sit relative to
 real traffic, which is the question the pool size answers.
+
+They arrive as SSM parameters resolved once at container start, so writing a
+parameter changes nothing until a new deployment applies it. What each
+threshold means, and the sequence for setting one, is in the
+`search-shape-diagnosis` skill.
 
 **What to read while it runs**, in order:
 
@@ -496,6 +520,13 @@ because it is a per-deployment setting rather than a constant — pass
 `LINK_SHAPE_LOAD_HALF_LIFE_MS`, or the two are not the same measurement. The progress line carries the
 current value of that same mean as `load=`, so a run can be steered while it is
 still going — readers added, or a page bound dropped.
+
+One thing the figure does not carry: `inFlight` counts searches, not work. A
+search is one admission whatever it costs, so a reading of 5 on the unbounded
+workload this harness drives stands for far more work than a reading of 5 on a
+realm's ordinary traffic. The number is comparable to a server-side threshold
+because it is the same quantity the server counts — it is not comparable
+between two workloads as a measure of load.
 
 Both are **bounds from above** on what any one replica saw of this driver's
 traffic, twice over: the fleet divides these requests across its replicas, and

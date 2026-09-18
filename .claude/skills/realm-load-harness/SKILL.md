@@ -455,17 +455,30 @@ could not have engaged. Two different questions, two different answers:
   caps a run at 19 readers. At `--derive-page-size 0` that held a peak
   120-second mean of **6.3** searches in flight. Read it against the rungs and
   the cap in `packages/runtime-common/search-bounds.ts`: that run cost about
-  three readers per unit of mean, so a rung of 8 wants roughly 25 readers and
-  one of 12 roughly 36, **per replica**. Those are a floor, not an estimate —
-  the scaling is linear only while service time holds, and service time is what
-  rises first as a realm saturates. Growing the pool is the only fix, and it is
-  what puts the admission queue under enough pressure to shed.
-- **Does the mechanism work?** That does not need the load. The thresholds are
-  environment-readable — `LINK_SHAPE_MULTI_ROW_ENGAGE`, `LINK_SHAPE_ALL_ENGAGE`
-  and the matching `_RELEASE` pair. Set them low on a non-production fleet for
-  the duration of a run and a real deployment goes through both transitions, the
-  dwell, the hysteresis band and the validator and cache-variant fragmentation
-  each transition causes, at a load the existing pool produces.
+  three readers per unit of mean, so the lower rung at 4 wants roughly 13
+  readers and the upper one at 12 roughly 36, **per replica**. So a pool of
+  this size already clears the lower rung, while the upper rung and the
+  admission cap still need one several times larger. Those are a floor, not an
+  estimate — the scaling is linear only while service time holds, and service
+  time is what rises first as a realm saturates. Growing the pool is the only
+  fix, and it is what puts the admission queue under enough pressure to shed.
+
+  The reading is also a count and not a cost: `inFlight` moves once per
+  admitted search whatever that search is doing. An unbounded derived workload
+  reaches a given mean with far fewer requests than ordinary traffic does, so
+  two runs' readings are comparable only at a similar workload shape.
+
+- **Does the mechanism work?** That does not need the load. The rungs are
+  thresholds on the load reading, settable per environment —
+  `LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD`, `LINK_SHAPE_ALL_ENGAGE_THRESHOLD`
+  and the matching `_RELEASE` pair. Lower them on a non-production fleet for
+  the duration of a run and a real deployment goes through both transitions,
+  the dwell, the hysteresis band and the validator and cache-variant
+  fragmentation each transition causes, at a load the existing pool produces.
+  What each threshold means, the per-replica caveat, and the sequence for
+  setting one are in `search-shape-diagnosis` — they arrive as SSM parameters
+  read once at container start, so writing a parameter changes nothing until a
+  deployment applies it.
 
 **How to tell**, in order of authority:
 
