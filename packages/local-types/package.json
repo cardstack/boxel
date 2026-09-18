@@ -8,6 +8,6 @@
     "content-tag": "catalog:",
     "ember-source": "catalog:",
     "@glint/template": "catalog:",
-    "ember-provide-consume-context": "^0.8.0"
+    "ember-provide-consume-context": "catalog:"
   }
 }

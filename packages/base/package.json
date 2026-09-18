@@ -41,7 +41,7 @@
     "yaml": "catalog:"
   },
   "peerDependencies": {
-    "ember-provide-consume-context": "^0.8.0",
+    "ember-provide-consume-context": "catalog:",
     "ember-source": "catalog:",
     "lodash-es": "catalog:"
   },
