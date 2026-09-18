@@ -889,7 +889,13 @@ async function finish() {
   // Whether the deployment held still for the length of the run. A window
   // that straddles a deploy holds two runs averaged together, and no line of
   // a summary could say which build it came from — so there is no summary.
-  let closingFleet = openingFleet ? await readFleet(bootUrl) : undefined;
+  //
+  // The closing reading is told which replicas answered at the start, so it
+  // keeps probing for them: a replica reported as departed has to be one this
+  // reading went looking for and did not find.
+  let closingFleet = openingFleet
+    ? await readFleet(bootUrl, { expect: openingFleet.replicas.keys() })
+    : undefined;
   if (openingFleet && closingFleet) {
     let drift = fleetDrift(openingFleet, closingFleet);
     if (drift.length) {
@@ -1110,7 +1116,16 @@ async function finish() {
   process.exit(0);
 }
 
-process.on('SIGINT', () => void finish());
+// The first Ctrl-C ends the run, which now includes reading the deployment one
+// last time and can take as long as the probes' timeout. A second one is
+// someone who wants out now, and by then `running` is false and `finish` would
+// return without doing anything.
+process.on('SIGINT', () => {
+  if (!running) {
+    process.exit(130);
+  }
+  void finish();
+});
 setTimeout(() => void finish(), args.minutes * 60000);
 
 readerSessions.forEach((s, i) => void readerLoop(s, i));

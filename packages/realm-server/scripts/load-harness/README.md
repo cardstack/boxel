@@ -336,33 +336,54 @@ document at `<realm server>/_standby`, over plain HTTP, with no AWS session:
   `X-ECS-Container-Metadata-URI-v4`. A fleet that turned over is visible even
   when the task definition did not change, and a replaced task is a cold one.
 
-Each reading probes in concurrent waves until a wave meets nobody new, because
-sequential probes reuse one keep-alive socket and so reach one replica however
-often they are repeated. A run opens with the reading printed:
+A run opens with the reading printed:
 
 ```
 Deploy pin: host build main-CowsK790.js (0.0.0+969ffde0), 2 replicas over 8 probes.
 ```
 
-Three outcomes end a run early rather than late:
+**Reading the fleet is a sampling problem**, and the sampling decides what the
+comparison may conclude: a replica missed at the start reads as an arrival at
+the close, one missed at the close reads as a departure, and either would
+refuse a run that nothing happened to. Three properties keep the sample honest.
+Probes within a wave are concurrent; **every probe opens its own connection**,
+because undici prefers a free socket to a new one and a reading otherwise
+converges on the handful of connections its first wave opened (measured against
+a server reporting the socket each request arrived on: 4, 5, 5 distinct sockets
+over three waves of four with keep-alive, and 4, 8, 12 without it); and the
+closing reading keeps probing while any replica the opening one saw has yet to
+answer.
 
-- **The fleet is already serving two builds.** Each replica fetches the boot
+Two outcomes end a run early rather than late:
+
+- **The fleet is already serving two builds** — refused before authentication,
+  so it costs a probe rather than the window. Each replica fetches the boot
   document once and caches it for the life of its process, so replicas that
   started either side of a host deploy serve different builds at the same
-  moment and a browser gets whichever answers. This is refused before
-  authentication, so it costs a probe rather than the window.
-- **The build moved, or a replica arrived, by the close.** The summary is
-  replaced by what moved. Both probes sample the fleet, so a replica that
-  answered neither is invisible to the check — it reports what it saw.
-- **Nothing answered the closing probe.** Silence is not agreement: a fleet
-  that cannot be read cannot be confirmed to have held still.
+  moment and a browser gets whichever answers. This is caught even on a target
+  that identifies no replicas, because the builds a reading saw are kept apart
+  from the replicas that served them.
+- **The build moved, or the fleet changed, by the close.** The summary is
+  replaced by what moved. A replica that arrived served part of the window
+  cold; one that left means the rest of the fleet carried a different share of
+  the load partway through. Both are reported, and a replaced task is both.
 
-A target that answers with something other than a built boot document leaves
-the run unpinned, and the summary says `build: not pinned` rather than claiming
-one. Nothing here replaces checking that a deploy has finished before a
-comparison — `aws ecs describe-services … deployments[0].rolloutState` must
-read `COMPLETED` with `updatedAt` earlier than the run — but a revision that
-lands mid-run always replaces tasks, and that is what the pin sees.
+Two more outcomes leave the run intact and say what is not known about it,
+because neither is evidence that anything moved:
+
+- **Nothing answered at the start** — `build: not pinned`. A run cannot be
+  refused for failing a check it never passed.
+- **Nothing answered at the close** — `build: … NOT CONFIRMED at the close`.
+  Silence says the pin is unknown, not that the deployment moved, and the
+  likeliest target to go quiet at the close is the one the harness has just
+  spent an hour saturating. Throwing that hour away over a question the probe
+  could not ask is the wrong trade; quoting the numbers as one build's without
+  saying so would be worse.
+
+Nothing here replaces checking that a deploy has finished before a comparison —
+`aws ecs describe-services … deployments[0].rolloutState` must read `COMPLETED`
+with `updatedAt` earlier than the run — but a revision that lands mid-run
+always replaces tasks, and that is what the pin sees.
 
 ## Measuring invalidation rather than modelling it
 

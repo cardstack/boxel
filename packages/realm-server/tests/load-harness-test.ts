@@ -25,11 +25,13 @@ import {
 } from '../scripts/load-harness/lib/connection.ts';
 import {
   bootDocumentUrl,
+  buildLabel,
   describeFleet,
   describePin,
   fleetDrift,
   fleetStraddle,
   parseServedBuild,
+  pinIsConfirmable,
   pinIsReadable,
   readFleet,
   replicaIdFromHeaders,
@@ -1208,9 +1210,9 @@ module(basename(import.meta.filename), function () {
 
   module('deploy pin — did the deployment hold still', function () {
     // The boot document the realm server serves, in the shape it serves it:
-    // the host's config in a percent-encoded meta, the entry module in a
-    // `type="module"` script whose src points at whichever origin holds the
-    // assets, and the chunk preloads that surround it.
+    // the host's config in a percent-encoded meta, an inline script, the chunk
+    // preloads, and then the entry module in a `type="module"` script whose
+    // src points at whichever origin holds the assets.
     function bootDocument({
       bundle = 'main-CThYvmXC.js',
       version = '0.0.0+38d67f96' as string | undefined,
@@ -1231,6 +1233,7 @@ module(basename(import.meta.filename), function () {
       return [
         '<!DOCTYPE html><html lang="en"><head>',
         `<meta name="@cardstack/host/config/environment" content="${config}">`,
+        '<script>globalThis.__boxelAssetsURL = "/";</script>',
         `<link rel="modulepreload" href="${assets}assets/chunk-Bv0JxpqV.js">`,
         `<link rel="modulepreload" href="${assets}assets/common-BZtn9ioa.js">`,
         `<script type="module" crossorigin="" src="${assets}assets/${bundle}"></script>`,
@@ -1272,17 +1275,33 @@ module(basename(import.meta.filename), function () {
         )) as unknown as typeof fetch;
     }
 
-    function reading(
-      replicas: Record<string, ServedBuild>,
-      { probes = 4, responses = Object.keys(replicas).length } = {},
-    ): FleetReading {
-      return { replicas: new Map(Object.entries(replicas)), probes, responses };
-    }
-
     const build = (
       bundle: string | undefined,
       hostVersion: string | undefined,
     ): ServedBuild => ({ bundle, hostVersion });
+
+    function reading(
+      replicas: Record<string, ServedBuild>,
+      {
+        probes = 8,
+        responses = Object.keys(replicas).length,
+        builds = Object.values(replicas),
+      }: { probes?: number; responses?: number; builds?: ServedBuild[] } = {},
+    ): FleetReading {
+      return {
+        replicas: new Map(Object.entries(replicas)),
+        builds: new Map(builds.map((b) => [buildLabel(b), b])),
+        probes,
+        responses,
+      };
+    }
+
+    const EMPTY_READING: FleetReading = {
+      replicas: new Map(),
+      builds: new Map(),
+      probes: 8,
+      responses: 0,
+    };
 
     test('reads the entry bundle and the host build version from a boot document', function (assert) {
       let served = parseServedBuild(bootDocument());
@@ -1290,13 +1309,21 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(served.hostVersion, '0.0.0+38d67f96');
     });
 
-    test('a preloaded chunk is not mistaken for the entry bundle', function (assert) {
-      // The document names dozens of chunks and one entry. Reading a chunk
-      // would pin the run to a file that changes on a different schedule from
-      // the build a browser boots.
-      let served = parseServedBuild(bootDocument());
-      assert.strictEqual(served.bundle, 'main-CThYvmXC.js');
-      assert.notStrictEqual(served.bundle, 'chunk-Bv0JxpqV.js');
+    test('the entry is the module script, not the first script and not a preload', function (assert) {
+      // The document names dozens of chunks and one entry, and the chunks come
+      // first. Reading one of those, or the inline script that precedes the
+      // entry, would pin the run to something that changes on a different
+      // schedule from the build a browser boots.
+      let html = bootDocument();
+      assert.true(
+        html.indexOf('modulepreload') < html.indexOf('type="module"'),
+        'the preloads precede the entry, as they do in the served document',
+      );
+      assert.true(
+        html.indexOf('<script>') < html.indexOf('type="module"'),
+        'so does an inline script',
+      );
+      assert.strictEqual(parseServedBuild(html).bundle, 'main-CThYvmXC.js');
     });
 
     test('a document that is not the host app pins nothing rather than pinning a guess', function (assert) {
@@ -1349,8 +1376,6 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a wave probes concurrently, which is what reaches more than one replica', async function (assert) {
-      // Sequential probes reuse one keep-alive socket and therefore one
-      // replica, however many of them there are.
       let inFlight = 0;
       let peak = 0;
       let fetchImpl = (() => {
@@ -1375,7 +1400,34 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('probing stops once a wave meets nobody new', async function (assert) {
+    test('every probe asks for its own connection, and for HTML', async function (assert) {
+      // Concurrency alone only widens the sample WITHIN a wave: by the time
+      // the next wave is issued the pool's sockets are free again, and undici
+      // prefers a free socket to a new one — so a keep-alive reading converges
+      // on the connections its first wave opened and never meets the rest of a
+      // fleet. Measured against a server reporting the socket each request
+      // arrived on: 4, 5, 5 distinct sockets over three waves of four with
+      // keep-alive; 4, 8, 12 without it. The Accept matters as much: the realm
+      // server answers a request that does not ask for HTML from a different
+      // handler, and the reading would name no build at all.
+      let sent: Record<string, string>[] = [];
+      let fetchImpl = ((_url: string, init: RequestInit) => {
+        sent.push(init.headers as Record<string, string>);
+        return Promise.resolve(bootResponse({ replicaId: 'task-a' }));
+      }) as unknown as typeof fetch;
+      await readFleet('https://realms.example.test/_standby', {
+        fetchImpl,
+        waveSize: 2,
+        maxWaves: 2,
+      });
+      assert.true(sent.length > 0, 'probes were issued');
+      for (let headers of sent) {
+        assert.strictEqual(headers.Connection, 'close');
+        assert.strictEqual(headers.Accept, 'text/html');
+      }
+    });
+
+    test('probing stops once a wave discovers nobody new', async function (assert) {
       let fetchImpl = roundRobin([
         { replicaId: 'task-a' },
         { replicaId: 'task-b' },
@@ -1392,6 +1444,55 @@ module(basename(import.meta.filename), function () {
         'a second wave confirms the first found everyone; a third would only cost requests',
       );
       assert.strictEqual(fleet.responses, 8);
+    });
+
+    test('probing keeps going while a replica it was told to expect has not answered', async function (assert) {
+      // Which is what separates "this replica is gone" from "this reading did
+      // not happen to reach it" — and a departure refuses a run.
+      let calls = 0;
+      let lateFleet = () =>
+        (() =>
+          Promise.resolve(
+            bootResponse({ replicaId: ++calls > 8 ? 'task-b' : 'task-a' }),
+          )) as unknown as typeof fetch;
+
+      calls = 0;
+      let unaware = await readFleet('https://realms.example.test/_standby', {
+        fetchImpl: lateFleet(),
+        waveSize: 4,
+        maxWaves: 4,
+      });
+      assert.deepEqual(
+        [...unaware.replicas.keys()],
+        ['task-a'],
+        'a reading with nothing to look for stops as soon as a wave adds nobody',
+      );
+
+      calls = 0;
+      let expecting = await readFleet('https://realms.example.test/_standby', {
+        fetchImpl: lateFleet(),
+        waveSize: 4,
+        maxWaves: 4,
+        expect: ['task-a', 'task-b'],
+      });
+      assert.deepEqual([...expecting.replicas.keys()].sort(), [
+        'task-a',
+        'task-b',
+      ]);
+    });
+
+    test('probing is capped however much each wave keeps finding', async function (assert) {
+      let n = 0;
+      let fetchImpl = (() =>
+        Promise.resolve(
+          bootResponse({ replicaId: `task-${n++}` }),
+        )) as unknown as typeof fetch;
+      let fleet = await readFleet('https://realms.example.test/_standby', {
+        fetchImpl,
+        waveSize: 4,
+        maxWaves: 3,
+      });
+      assert.strictEqual(fleet.probes, 12, 'three waves of four, and no more');
     });
 
     test('a target that answers nothing is reported unpinned rather than unchanged', async function (assert) {
@@ -1444,6 +1545,28 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(straddle.length, 1);
       assert.true(straddle[0].includes('main-BPZqYHJZ.js'));
       assert.true(straddle[0].includes('main-CFoh7RJ4.js'));
+    });
+
+    test('a straddle is caught on a target that identifies no replicas at all', async function (assert) {
+      // Builds are recorded apart from replica identity for this case: file
+      // them under the replica key and every probe overwrites the last, so a
+      // fleet mid-rollout reports whichever response happened to finish last
+      // and the run proceeds across two builds.
+      let fetchImpl = roundRobin([
+        { bundle: 'main-BPZqYHJZ.js' },
+        { bundle: 'main-CFoh7RJ4.js' },
+      ]);
+      let fleet = await readFleet('https://realms.example.test/_standby', {
+        fetchImpl,
+        waveSize: 4,
+      });
+      assert.strictEqual(
+        fleet.replicas.size,
+        1,
+        'nothing identifies the replicas',
+      );
+      assert.strictEqual(fleet.builds.size, 2, 'both builds are kept anyway');
+      assert.strictEqual(fleetStraddle(fleet).length, 1);
     });
 
     test('one build across every replica is not a straddle', async function (assert) {
@@ -1512,17 +1635,39 @@ module(basename(import.meta.filename), function () {
         reading({ 'task-a': same, 'task-c': same }),
       );
       assert.strictEqual(drift.length, 1);
-      assert.true(drift[0].includes('1 replica'));
-      assert.true(
-        drift[0].includes('cold'),
-        'says why an unchanged build still invalidates the window',
+      assert.true(drift[0].includes('1 replica arrived'));
+      assert.true(drift[0].includes('1 replica left'));
+    });
+
+    test('a replica that left mid-run is drift on its own', function (assert) {
+      // A fleet that shrank carried a different share of the load through the
+      // rest of the window, which is the number this harness reports.
+      let same = build('main-CThYvmXC.js', '0.0.0+38d67f96');
+      let drift = fleetDrift(
+        reading({ 'task-a': same, 'task-b': same }),
+        reading({ 'task-a': same }),
+      );
+      assert.strictEqual(drift.length, 1);
+      assert.true(drift[0].includes('1 replica left'));
+      assert.false(
+        drift[0].includes('arrived'),
+        'nothing arrived, and saying so would misdescribe the fleet',
       );
     });
 
-    test('a deployment that identifies no replicas never reports turnover', function (assert) {
-      // A local stack sets no container header. Filing every response under
-      // one key is what keeps that from reading as a fleet of one that keeps
-      // being replaced.
+    test('a deployment that identifies no replicas reports its build moving, and nothing else', function (assert) {
+      // Every response files under one key, so there is no turnover to report
+      // — and filing builds by replica instead would turn one host deploy into
+      // a phantom fleet change as well.
+      let drift = fleetDrift(
+        reading({ unidentified: build('main-QY-TXAfv.js', '0.0.0+b707165c') }),
+        reading({ unidentified: build('main-CowsK790.js', '0.0.0+969ffde0') }),
+      );
+      assert.strictEqual(drift.length, 1);
+      assert.true(drift[0].includes('the host build moved'));
+    });
+
+    test('a local deployment that held still reports nothing', function (assert) {
       let same = build('main-QY-TXAfv.js', '0.0.0+b707165c');
       assert.deepEqual(
         fleetDrift(
@@ -1533,15 +1678,31 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a closing probe that answered nothing refuses rather than passing', function (assert) {
-      // Silence is not agreement: a fleet that cannot be read at the close is
-      // a fleet that cannot be confirmed to have held still.
-      let drift = fleetDrift(
-        reading({ 'task-a': build('main-CThYvmXC.js', '0.0.0+38d67f96') }),
-        { replicas: new Map(), probes: 8, responses: 0 },
-      );
-      assert.strictEqual(drift.length, 1);
-      assert.true(drift[0].includes('closing probe'));
+    test('a closing probe that answered nothing reports an unconfirmed pin, not a deploy', function (assert) {
+      // Silence says the pin is unknown, not that the deployment moved —
+      // and the likeliest target to go quiet at the close is the one this
+      // harness just spent an hour saturating. Throwing that hour away on a
+      // question the probe could not ask is the wrong trade; saying the pin
+      // was never confirmed is not.
+      let before = reading({
+        'task-a': build('main-CThYvmXC.js', '0.0.0+38d67f96'),
+      });
+      assert.deepEqual(fleetDrift(before, EMPTY_READING), []);
+      assert.false(pinIsConfirmable(EMPTY_READING));
+      let pin = describePin(before, EMPTY_READING);
+      assert.true(pin.includes('NOT CONFIRMED'));
+      assert.true(pin.includes('main-CThYvmXC.js'), 'what it was pinned to');
+    });
+
+    test('an opening probe that answered nothing cannot manufacture drift', function (assert) {
+      // Nothing was pinned, so nothing can have moved — and a comparison
+      // against an empty reading would otherwise announce a build that moved
+      // from nothing to whatever the close saw.
+      let after = reading({
+        'task-a': build('main-CThYvmXC.js', '0.0.0+38d67f96'),
+      });
+      assert.deepEqual(fleetDrift(EMPTY_READING, after), []);
+      assert.true(describePin(EMPTY_READING, after).includes('not pinned'));
     });
 
     test('an unpinned run says so in the summary instead of claiming a build', function (assert) {

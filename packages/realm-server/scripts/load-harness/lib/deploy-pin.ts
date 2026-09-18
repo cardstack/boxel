@@ -18,20 +18,25 @@
 //     its config meta (`0.0.0+<sha>`). Either one moving means the client half
 //     of any measurement changed underneath it.
 //
-//   - WHICH REPLICA ANSWERED. `X-ECS-Container-Metadata-URI-v4` carries the
+//   - WHICH REPLICAS ANSWERED. `X-ECS-Container-Metadata-URI-v4` carries the
 //     answering container's id. A fleet that turned over mid-run is then
 //     visible even when the task definition did not change, and a replaced
-//     task is a cold one — its own reason to discard the window, and the way
-//     three runs were lost to cold containers before this check existed.
+//     task is a cold one, which invalidates the window on its own.
 //
 // The realm server fetches the boot document once per process and caches it
 // for that process's life, so what a replica serves is pinned to when that
 // replica started. Two replicas can therefore serve two different host builds
-// at the same moment, and a browser gets whichever one answers. That is why a
-// reading is a set of replicas rather than one answer, and why the probes in a
-// wave are concurrent: undici hands a request to an already-free socket in
-// preference to opening another, so sequential probes ask one replica the same
-// question several times.
+// at the same moment, and a browser gets whichever one answers. A reading is
+// for that reason a set of replicas and a set of builds, never one answer.
+//
+// READING THE FLEET IS A SAMPLING PROBLEM, and the sampling decides what the
+// comparison is allowed to conclude. A reading that missed a replica at the
+// start reports it as an arrival at the close; one that misses a replica at
+// the close reports it as a departure. Both would refuse a run that nothing
+// happened to. Two properties keep the sample honest — probes within a wave
+// run concurrently, and every probe opens its own connection — and the
+// closing reading additionally keeps probing while any replica the opening
+// one saw has yet to answer.
 
 import { ensureTrailingSlash } from './common.ts';
 
@@ -46,10 +51,15 @@ export interface ServedBuild {
 }
 
 export interface FleetReading {
-  // What each answering replica served, keyed by container id. A replica that
-  // answered none of the probes is absent, so this is what was SEEN and never
-  // the whole fleet.
+  // Which replicas answered, keyed by container id, each with the last build
+  // it served. A replica that answered no probe is absent, so this is what was
+  // SEEN and never the whole fleet.
   replicas: Map<string, ServedBuild>;
+  // Every distinct build observed, keyed by label — held apart from replica
+  // identity because a target that identifies no replicas files every response
+  // under one key, and the builds would otherwise overwrite one another until
+  // only the last probe's survived.
+  builds: Map<string, ServedBuild>;
   probes: number;
   responses: number;
 }
@@ -67,10 +77,21 @@ export function bootDocumentUrl(realmServerUrl: string): string {
   return new URL(BOOT_PATH, ensureTrailingSlash(realmServerUrl)).href;
 }
 
-// The realm server negotiates on Accept, and only a request that asks for HTML
-// is answered with the host app. Asking for anything else reaches a different
-// handler and reports a fleet with no build at all.
-const BOOT_HEADERS = { Accept: 'text/html' };
+const BOOT_HEADERS = {
+  // The realm server negotiates on Accept, and only a request that asks for
+  // HTML is answered with the host app. Asking for anything else reaches a
+  // different handler and reports a fleet with no build at all.
+  Accept: 'text/html',
+  // Every probe opens its own connection, which is what makes a wave a
+  // fan-out. undici hands a request to an already-free socket in preference
+  // to opening another, and a wave's sockets are free by the time the next
+  // wave is issued — so without this a reading converges on the handful of
+  // connections its first wave opened, however many waves follow, and misses
+  // most of a fleet larger than one wave. Measured against a server that
+  // reports the socket each request arrived on: three waves of four reach 4,
+  // 5, 5 distinct sockets with keep-alive, and 4, 8, 12 without it.
+  Connection: 'close',
+};
 
 export function parseServedBuild(html: string): ServedBuild {
   return { bundle: entryBundle(html), hostVersion: hostVersion(html) };
@@ -129,12 +150,14 @@ export interface ReadFleetOptions {
   waveSize?: number;
   maxWaves?: number;
   timeoutMs?: number;
+  // Replicas a previous reading saw. The closing reading passes the opening
+  // one's, so a replica is called departed only after this reading has gone
+  // looking for it — the difference between evidence and an unlucky sample.
+  expect?: Iterable<string>;
 }
 
-// Probe the fleet in concurrent waves until a wave meets nobody new. Widening
-// the sample matters in both directions: a replica missed at the start reads
-// as an arrival at the close, and a replica missed at the close hides a build
-// that a browser could still be served.
+// Probe in concurrent waves until a wave discovers nothing new and every
+// expected replica has answered.
 export async function readFleet(
   url: string,
   {
@@ -142,13 +165,15 @@ export async function readFleet(
     waveSize = 4,
     maxWaves = 4,
     timeoutMs = 10000,
+    expect = [],
   }: ReadFleetOptions = {},
 ): Promise<FleetReading> {
+  let expected = [...expect].filter((id) => id !== UNIDENTIFIED_REPLICA);
   let replicas = new Map<string, ServedBuild>();
-  let probes = 0;
-  let responses = 0;
-  for (let wave = 0; wave < maxWaves; wave++) {
-    let known = replicas.size;
+  let builds = new Map<string, ServedBuild>();
+  for (let wave = 0, probes = 0, responses = 0; ; ) {
+    let knownReplicas = replicas.size;
+    let knownBuilds = builds.size;
     let results = await Promise.all(
       Array.from({ length: waveSize }, () =>
         probeOnce(url, fetchImpl, timeoutMs),
@@ -161,15 +186,20 @@ export async function readFleet(
       }
       responses++;
       replicas.set(result.replicaId ?? UNIDENTIFIED_REPLICA, result.build);
+      builds.set(buildLabel(result.build), result.build);
     }
-    // Stop once the fan-out stops discovering. The first wave is exempt so a
+    wave++;
+    let stillLooking = expected.some((id) => !replicas.has(id));
+    let discovered =
+      replicas.size !== knownReplicas || builds.size !== knownBuilds;
+    // Stop once the fan-out has stopped discovering and has met everyone it
+    // came looking for. The first wave is exempt from the first condition so a
     // target that answered nothing gets a second chance rather than being
-    // reported as unreachable on one unlucky moment.
-    if (replicas.size === known && wave > 0) {
-      break;
+    // called unreachable on one unlucky moment.
+    if (wave >= maxWaves || (!discovered && !stillLooking && wave > 1)) {
+      return { replicas, builds, probes, responses };
     }
   }
-  return { replicas, probes, responses };
 }
 
 async function probeOnce(
@@ -201,17 +231,24 @@ async function probeOnce(
 // with something other than a built boot document leaves the run unpinned, and
 // saying so is the whole value — a number quoted as one build's has to be one.
 export function pinIsReadable(reading: FleetReading): boolean {
-  return [...reading.replicas.values()].some(
+  return [...reading.builds.values()].some(
     (build) => build.bundle !== undefined || build.hostVersion !== undefined,
   );
 }
 
-function buildLabel({ bundle, hostVersion: version }: ServedBuild): string {
+export function buildLabel({
+  bundle,
+  hostVersion: version,
+}: ServedBuild): string {
   return `${bundle ?? 'unknown bundle'} (${version ?? 'unknown version'})`;
 }
 
 function distinctBuilds(reading: FleetReading): string[] {
-  return [...new Set([...reading.replicas.values()].map(buildLabel))].sort();
+  return [...reading.builds.keys()].sort();
+}
+
+function countOf(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? '' : 's'}`;
 }
 
 export function describeFleet(reading: FleetReading, url: string): string {
@@ -221,7 +258,7 @@ export function describeFleet(reading: FleetReading, url: string): string {
       `is not pinned to a build.`
     );
   }
-  let replicas = `${reading.replicas.size} replica${reading.replicas.size === 1 ? '' : 's'}`;
+  let replicas = countOf(reading.replicas.size, 'replica');
   if (!pinIsReadable(reading)) {
     return (
       `Deploy pin: ${replicas} answered, none with a boot document naming a ` +
@@ -248,44 +285,62 @@ export function fleetStraddle(reading: FleetReading): string[] {
   ];
 }
 
-// Checked at the close. Each finding is a reason the numbers describe more
-// than one deployment, stated so a reader can see what it rests on.
+// Whether the closing reading can speak for the fleet at all. Silence is not
+// agreement, but it is not evidence of a deploy either: it says the pin is
+// unknown, which the summary reports rather than the run being thrown away.
+export function pinIsConfirmable(after: FleetReading): boolean {
+  return after.responses > 0;
+}
+
+// Checked at the close, against a reading that answered. Each finding is a
+// reason the numbers describe more than one deployment, stated so a reader can
+// see what it rests on.
 export function fleetDrift(
   before: FleetReading,
   after: FleetReading,
 ): string[] {
-  if (after.responses === 0) {
-    return [
-      `nothing answered the closing probe (${after.probes} attempts), so the ` +
-        `deployment cannot be confirmed to have held still`,
-    ];
+  if (!pinIsConfirmable(after) || before.responses === 0) {
+    // Nothing to compare: the caller reports an unconfirmed or unpinned run.
+    return [];
   }
   let findings: string[] = [];
-  let seenBefore = new Set(distinctBuilds(before));
-  let arrivedBuilds = distinctBuilds(after).filter((b) => !seenBefore.has(b));
+  let seenBefore = distinctBuilds(before);
+  let arrivedBuilds = distinctBuilds(after).filter(
+    (b) => !seenBefore.includes(b),
+  );
   if (arrivedBuilds.length) {
     findings.push(
-      `the host build moved: ${[...seenBefore].join(' and ')} at the start, ` +
+      `the host build moved: ${seenBefore.join(' and ')} at the start, ` +
         `${arrivedBuilds.join(' and ')} at the close`,
     );
   }
-  let arrivedReplicas = [...after.replicas.keys()].filter(
-    (id) => id !== UNIDENTIFIED_REPLICA && !before.replicas.has(id),
-  );
-  if (arrivedReplicas.length) {
+  let identified = (reading: FleetReading) =>
+    [...reading.replicas.keys()].filter((id) => id !== UNIDENTIFIED_REPLICA);
+  let arrived = identified(after).filter((id) => !before.replicas.has(id));
+  let departed = identified(before).filter((id) => !after.replicas.has(id));
+  if (arrived.length || departed.length) {
+    // A replaced task is both, and a scaled fleet is one or the other. Either
+    // way the window is not one fleet's: an arrival served part of it cold,
+    // and a departure means the load the rest of the fleet carried changed
+    // partway through.
+    let moved = [
+      arrived.length ? `${countOf(arrived.length, 'replica')} arrived` : '',
+      departed.length ? `${countOf(departed.length, 'replica')} left` : '',
+    ]
+      .filter(Boolean)
+      .join(' and ');
     findings.push(
-      `${arrivedReplicas.length} replica${arrivedReplicas.length === 1 ? '' : 's'} ` +
-        `answered the closing probe that had not answered at the start, so a ` +
-        `task was replaced or added and part of this window was served cold ` +
-        `(both probes sample the fleet, so a replica that answered neither is ` +
-        `invisible to this check)`,
+      `the fleet changed mid-run: ${moved} between the opening and closing ` +
+        `probes (${after.probes} closing probes, which kept looking for every ` +
+        `replica the opening reading saw), so part of this window was served ` +
+        `by tasks the rest of it was not`,
     );
   }
   return findings;
 }
 
 // One line for the run summary, so a quoted number carries the build it
-// describes — or says plainly that it carries none.
+// describes — or says plainly what is not known about it.
 export function describePin(before: FleetReading, after: FleetReading): string {
   if (!pinIsReadable(before)) {
     return (
@@ -293,8 +348,16 @@ export function describePin(before: FleetReading, after: FleetReading): string {
       `numbers are not tied to one`
     );
   }
+  let build = distinctBuilds(before).join(' and ');
+  if (!pinIsConfirmable(after)) {
+    return (
+      `build:    ${build} at the start, NOT CONFIRMED at the close — nothing ` +
+      `answered ${after.probes} closing probes, so a deploy inside this window ` +
+      `would not have been seen`
+    );
+  }
   return (
-    `build:    ${distinctBuilds(before).join(' and ')}, unchanged across the ` +
-    `run (${before.replicas.size} replicas at the start, ${after.replicas.size} at the close)`
+    `build:    ${build}, unchanged across the run ` +
+    `(${before.replicas.size} replicas at the start, ${after.replicas.size} at the close)`
   );
 }
