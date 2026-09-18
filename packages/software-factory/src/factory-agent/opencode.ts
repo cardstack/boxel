@@ -505,7 +505,7 @@ export class OpencodeFactoryAgent implements LoopAgent {
       targetRealm: context.targetRealm,
       catalogRealm: deriveCatalogRealmUrl(context.targetRealm),
       darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
-      enableBoxelUiDiscovery: context.enableBoxelUiDiscovery === true,
+      enableCatalogReuse: context.enableCatalogReuse === true,
       skills,
     });
   }

@@ -48,13 +48,11 @@ export interface ContextBuilderConfig {
   /** Loader for traversing issue relationships (required for buildForIssue). */
   issueLoader?: IssueRelationshipLoader;
   /**
-   * Feature flag — when true, the AgentContext carries
-   * `enableBoxelUiDiscovery: true` so the system prompt template enables the
-   * catalog-search exception. The resolver should also have been constructed
-   * with the same value so the discovery skill is included in the load list.
-   * See CS-10527.
+   * Sanctions reading the catalog realm: the built AgentContext carries
+   * `enableCatalogReuse`, which the system prompt uses to open the
+   * cross-realm firewall and which selects the reuse skills.
    */
-  enableBoxelUiDiscovery?: boolean;
+  enableCatalogReuse?: boolean;
   /**
    * Valid `@cardstack/boxel-host/tools/<name>` module names derived from
    * the host build (import gate). When set, every built context gains
@@ -74,7 +72,7 @@ export class ContextBuilder {
   private skillLoader: SkillLoaderInterface;
   private maxSkillTokens: number | undefined;
   private issueLoader: IssueRelationshipLoader | undefined;
-  private enableBoxelUiDiscovery: boolean;
+  private enableCatalogReuse: boolean;
   private hostToolImports: string[] | undefined;
 
   constructor(config: ContextBuilderConfig) {
@@ -82,7 +80,7 @@ export class ContextBuilder {
     this.skillLoader = config.skillLoader;
     this.maxSkillTokens = config.maxSkillTokens;
     this.issueLoader = config.issueLoader;
-    this.enableBoxelUiDiscovery = config.enableBoxelUiDiscovery === true;
+    this.enableCatalogReuse = config.enableCatalogReuse === true;
     this.hostToolImports = config.hostToolImports;
   }
 
@@ -140,7 +138,7 @@ export class ContextBuilder {
       knowledge,
       skills,
       targetRealm,
-      enableBoxelUiDiscovery: this.enableBoxelUiDiscovery,
+      enableCatalogReuse: this.enableCatalogReuse,
       ...(darkfactoryModuleUrl ? { darkfactoryModuleUrl } : {}),
     };
 
@@ -255,7 +253,7 @@ export class ContextBuilder {
       knowledge,
       skills,
       targetRealm,
-      enableBoxelUiDiscovery: this.enableBoxelUiDiscovery,
+      enableCatalogReuse: this.enableCatalogReuse,
       ...(darkfactoryModuleUrl ? { darkfactoryModuleUrl } : {}),
     };
 
