@@ -188,7 +188,11 @@ export async function readFleet(
       }
       responses++;
       replicas.add(result.replicaId ?? UNIDENTIFIED_REPLICA);
-      if (result.build) {
+      // Only a document that named something goes in. A 200 carrying an error
+      // page parses to a build with nothing in it, and recording that would
+      // put a second "build" beside the real one: a straddle at the start, or
+      // a build that moved at the close, from a fleet that never changed.
+      if (result.build && identifiesBuild(result.build)) {
         builds.set(buildLabel(result.build), result.build);
       }
     }
@@ -233,13 +237,15 @@ async function probeOnce(
   }
 }
 
+function identifiesBuild({ bundle, hostVersion }: ServedBuild): boolean {
+  return bundle !== undefined || hostVersion !== undefined;
+}
+
 // A reading is only a pin if it identifies the build. A target that answers
 // with something other than a built boot document leaves the run unpinned, and
 // saying so is the whole value — a number quoted as one build's has to be one.
 export function pinIsReadable(reading: FleetReading): boolean {
-  return [...reading.builds.values()].some(
-    (build) => build.bundle !== undefined || build.hostVersion !== undefined,
-  );
+  return reading.builds.size > 0;
 }
 
 export function buildLabel({

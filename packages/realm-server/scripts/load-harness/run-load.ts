@@ -606,9 +606,15 @@ async function readerLoop(session: Session, index: number): Promise<void> {
   // than asking its first one every time.
   let pass = 0;
 
-  // First render: the screen fires its whole set at once.
+  // First render: the screen fires its whole set at once. Priming can outlast
+  // a short run or a Ctrl-C, and the first render is the largest batch a
+  // reader issues — so, like the re-runs below, it is not started once the
+  // clock has stopped. The loops that follow then fall straight through, and
+  // the subscribe branch's `finally` still unsubscribes.
   await primeConnections(specs.length);
-  await Promise.all(specs.map((spec) => search(session, spec, index, pass)));
+  if (running) {
+    await Promise.all(specs.map((spec) => search(session, spec, index, pass)));
+  }
 
   if (!args.subscribe) {
     // Modelled invalidation: re-run everything on any write this driver made.

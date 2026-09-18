@@ -1289,7 +1289,11 @@ module(basename(import.meta.filename), function () {
         responses = Object.keys(replicas).length,
       }: { probes?: number; responses?: number } = {},
     ): FleetReading {
-      let served = Object.values(replicas).filter(Boolean) as ServedBuild[];
+      // Mirrors what a reading can actually hold: a document that named
+      // neither identifier is not a build, so it never reaches `builds`.
+      let served = (
+        Object.values(replicas).filter(Boolean) as ServedBuild[]
+      ).filter((b) => b.bundle !== undefined || b.hostVersion !== undefined);
       return {
         replicas: new Set(Object.keys(replicas)),
         builds: new Map(served.map((b) => [buildLabel(b), b])),
@@ -1530,6 +1534,41 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual([...fleet.replicas], ['task-a']);
       assert.strictEqual(fleet.builds.size, 0, 'and names no build');
       assert.false(pinIsReadable(fleet));
+    });
+
+    test('a 200 that is not the boot document names no build', async function (assert) {
+      // A proxy's interstitial parses to a build with nothing in it. Recording
+      // that would stand a second "build" beside the real one — a straddle
+      // before the run, or a build that moved at the close, out of a fleet
+      // that never changed.
+      let interstitial = new Response(
+        '<html><body>Service temporarily unavailable</body></html>',
+        {
+          status: 200,
+          headers: new Headers({
+            'content-type': 'text/html',
+            'x-ecs-container-metadata-uri-v4': 'http://169.254.170.2/v4/task-b',
+          }),
+        },
+      );
+      let next = 0;
+      let fetchImpl = (() =>
+        Promise.resolve(
+          next++ % 2
+            ? bootResponse({ replicaId: 'task-a' })
+            : interstitial.clone(),
+        )) as unknown as typeof fetch;
+      let fleet = await readFleet('https://realms.example.test/_standby', {
+        fetchImpl,
+        waveSize: 4,
+      });
+      assert.deepEqual([...fleet.replicas].sort(), ['task-a', 'task-b']);
+      assert.deepEqual(
+        [...fleet.builds.keys()],
+        ['main-CThYvmXC.js (0.0.0+38d67f96)'],
+        'only the document that named something',
+      );
+      assert.deepEqual(fleetStraddle(fleet), []);
     });
 
     test('a replica erroring at the close is not a replica that left', function (assert) {
