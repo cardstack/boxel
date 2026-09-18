@@ -38,6 +38,17 @@ import {
 // an earlier entry in the same batch creates is not findable — it has not been
 // written, let alone indexed. The zero-match refusal says so when the batch is
 // one that mints cards, because that is the mistake the shape invites.
+//
+// **An entry that matched nothing is gone by the time the definition gates
+// run.** Those gates — whether a `QUERY` batch holds a write, whether an
+// anonymous caller invoked something that reads the actor — are answered from
+// an entry's definition, and a definition comes from the type of the card the
+// entry targets. With no match there is no card, so there is no question to
+// answer: a `QUERY` batch holding an `expect: "many"` entry that matched
+// nothing answers 200 with `[]` rather than the refusal it would earn if the
+// query had matched. Nothing is written either way and the realm's own
+// permission check ran as it always does; what differs is which answer a
+// caller sees for a request whose entry did nothing.
 // ============================================================================
 
 // What one entry's `boxel:target` resolved to: the card URLs, in the order the
@@ -160,6 +171,12 @@ async function resolveOne(
   if (!find.field) {
     return urls;
   }
+  // One match at a time, rather than all of them at once. Each hop reads the
+  // matched card's index row, so a wide `many` would otherwise decide for
+  // itself how much of the realm's connection pool one request holds — the
+  // thing the staging width downstream exists to stop a caller choosing. It
+  // also settles which refusal is reported without having to sort them: the
+  // earliest match that cannot be followed is the one that throws.
   let targets: string[] = [];
   for (let match of urls) {
     targets.push(...(await hop(entry, find, match, context)));

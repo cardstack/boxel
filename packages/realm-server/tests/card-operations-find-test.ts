@@ -234,7 +234,7 @@ async function refusal(fn: () => unknown): Promise<OperationError> {
 }
 
 // The one entry a node holds, for a case that resolved to exactly one.
-function only(node: EnvelopeNode): EnvelopeEntry {
+function entryIn(node: EnvelopeNode): EnvelopeEntry {
   if (isGroup(node)) {
     throw new Error(`expected one entry, and got a "${node.op}" group`);
   }
@@ -245,7 +245,13 @@ function membersOf(node: EnvelopeNode): EnvelopeEntry[] {
   if (!isGroup(node)) {
     throw new Error(`expected a group, and got an entry`);
   }
-  return node.members.map(only);
+  return node.members.map(entryIn);
+}
+
+// How a node schedules what it holds, or `undefined` for an entry — so an
+// assertion about the schedule is one value rather than a conjunction.
+function modeOf(node: EnvelopeNode): string | undefined {
+  return isGroup(node) ? node.op : undefined;
 }
 
 module(basename(__filename), function () {
@@ -260,7 +266,7 @@ module(basename(__filename), function () {
           },
         }),
       );
-      assert.deepEqual(only(node).find, {
+      assert.deepEqual(entryIn(node).find, {
         query: openActivities(),
         field: 'classroom',
         expect: 'many',
@@ -269,8 +275,8 @@ module(basename(__filename), function () {
 
     test('an entry that says nothing about the count expects one card', async function (assert) {
       let [node] = parse(invoke({ 'boxel:target': { query: {} } }));
-      assert.strictEqual(only(node).find?.expect, 'one');
-      assert.strictEqual(only(node).find?.field, undefined);
+      assert.strictEqual(entryIn(node).find?.expect, 'one');
+      assert.strictEqual(entryIn(node).find?.field, undefined);
     });
 
     test('an entry naming its target and describing it is refused', async function (assert) {
@@ -436,7 +442,7 @@ module(basename(__filename), function () {
           data: { status: 'reviewed' },
         }),
       );
-      let entry = only(tree[1]);
+      let entry = entryIn(tree[1]);
       assert.strictEqual(entry.href, `${REALM}activities/a`);
       // The caller's own numbering, so anything this entry later refuses is
       // labelled with the position the caller sent.
@@ -542,7 +548,7 @@ module(basename(__filename), function () {
       );
       // Serial, so the targets are carried out in the order the index
       // returned them.
-      assert.strictEqual(isGroup(tree[0]) && tree[0].op, 'serial');
+      assert.strictEqual(modeOf(tree[0]), 'serial');
       let results = new Map<EntryPosition, EnvelopeResult>(
         invocationsIn(tree).map((entry) => [
           entry.position,
@@ -589,9 +595,9 @@ module(basename(__filename), function () {
       // still holds two members, the second of which is the expansion. That is
       // what puts the found targets and the sibling's href under one parallel
       // group, which is what makes them collide.
-      assert.strictEqual(isGroup(tree[0]) && tree[0].op, 'parallel');
+      assert.strictEqual(modeOf(tree[0]), 'parallel');
       let [sibling, expansion] = (tree[0] as any).members as EnvelopeNode[];
-      assert.strictEqual(only(sibling).href, `${REALM}reports/a`);
+      assert.strictEqual(entryIn(sibling).href, `${REALM}reports/a`);
       assert.deepEqual(
         membersOf(expansion).map((entry) => entry.position),
         [
@@ -626,7 +632,7 @@ module(basename(__filename), function () {
           'boxel:target': { query: openActivities(), field: 'classroom' },
         }),
       );
-      assert.strictEqual(only(tree[0]).href, CLASSROOM);
+      assert.strictEqual(entryIn(tree[0]).href, CLASSROOM);
       assert.deepEqual(stubbed.peeked, [`${REALM}activities/a`]);
     });
 
@@ -647,7 +653,7 @@ module(basename(__filename), function () {
           'boxel:target': { query: openActivities(), field: 'classroom' },
         }),
       );
-      assert.strictEqual(only(tree[0]).href, CLASSROOM);
+      assert.strictEqual(entryIn(tree[0]).href, CLASSROOM);
     });
 
     test('a linksToMany hop makes every linked card a target', async function (assert) {
@@ -922,7 +928,7 @@ module(basename(__filename), function () {
         'boxel:name': 'archive',
         'boxel:target': { query: {} },
       });
-      return only(tree[0]);
+      return entryIn(tree[0]);
     }
 
     test('a create cannot take its target from a query', async function (assert) {
@@ -964,7 +970,7 @@ module(basename(__filename), function () {
           data: { status: 'reviewed' },
         }),
       );
-      let staged = stage(only(tree[0]), { base: 'update' });
+      let staged = stage(entryIn(tree[0]), { base: 'update' });
       assert.strictEqual(staged.op, 'update');
       assert.strictEqual(
         (staged as { href: string }).href,
