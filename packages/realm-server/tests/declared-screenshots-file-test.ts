@@ -723,6 +723,78 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('the video family captures a poster frame onto the file row', async function (assert) {
+    let webmBytes = new Uint8Array(
+      readFileSync(
+        fileURLToPath(
+          new URL(
+            '../../experiments-realm/filedef-fixtures/samples/webm-simple.webm',
+            import.meta.url,
+          ),
+        ),
+      ),
+    );
+    await writeAndSettle('clip.webm', webmBytes);
+
+    let fileRow = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}clip.webm`,
+      'file',
+    );
+    assert.ok(fileRow, 'the file row exists');
+    let manifest = fileRow!.screenshots as ScreenshotManifest | null;
+    assert.ok(manifest?.poster, 'the poster frame landed on the file row');
+    assert.true(
+      manifest!.poster.useAsThumbnail,
+      'the poster feeds the thumbnail chain',
+    );
+    assert.strictEqual(
+      manifest!.poster.contentType,
+      'image/jpeg',
+      'a photographic frame captures as jpeg',
+    );
+    // JPEG SOI marker.
+    assert.ok(
+      startsWith(objectBytes(manifest!.poster.objectKey), [0xff, 0xd8]),
+      'the capture is a JPEG',
+    );
+    let fitted = JSON.stringify(fileRow!.fitted_html ?? {});
+    assert.ok(
+      fitted.includes(`_screenshot/clip.webm?name=poster`),
+      `the fitted rendering carries the poster URL (got: ${fitted.slice(0, 500)})`,
+    );
+  });
+
+  test('an undecodable video captures no poster', async function (assert) {
+    // A WebM/EBML header followed by garbage: the element fires `error`, and
+    // the capture component swaps its readiness signal for
+    // `data-screenshot-failed`, so the slot fails immediately. No manifest
+    // entry may land — resolving readiness instead would persist the empty
+    // capture box as a solid black poster and serve it as the thumbnail for
+    // the life of these bytes.
+    await writeAndSettle(
+      'broken.webm',
+      new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0xde, 0xad, 0xbe, 0xef]),
+    );
+
+    let fileRow = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}broken.webm`,
+      'file',
+    );
+    assert.ok(fileRow, 'the file row still indexes');
+    let manifest = fileRow!.screenshots as ScreenshotManifest | null;
+    assert.notOk(
+      manifest?.poster,
+      'no poster entry lands for an undecodable video',
+    );
+    assert.strictEqual(
+      (await declaredLedgerRows(`${testRealm}broken.webm`)).length,
+      0,
+      'no ledger row lands for an undecodable video',
+    );
+  });
+
   test('an unchanged file carries its capture forward; a content change recaptures', async function (assert) {
     await writeAndSettle('sample.mismatch', 'carry me');
     let firstRow = await prerenderedHtmlRowFor(
