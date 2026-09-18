@@ -12,6 +12,7 @@ import {
   resolveQueryTargets,
   resultsTree,
   stagedTree,
+  STAGING_WIDTH,
   type BatchEntry,
   type EntryPosition,
   type EnvelopeEntry,
@@ -67,6 +68,8 @@ interface Stub {
   queries: SearchEntryQuery[];
   // Every card URL whose index row the resolution read.
   peeked: string[];
+  // The most searches that were ever in flight at once.
+  peakConcurrency: () => number;
 }
 
 interface Card {
@@ -78,6 +81,10 @@ interface Card {
   // Absent stands for a card whose row carries no type, which is what an
   // unreadable definition looks like from here.
   adoptsFrom?: ResolvedCodeRef;
+  // Present for a card whose index row is an error row. The filter on this
+  // path excludes those, so the only way one is reached is a reindex landing
+  // between the search and the hop.
+  errored?: string;
 }
 
 interface StubOptions {
@@ -95,12 +102,17 @@ interface StubOptions {
   // search the slowest, an implementation that reported whichever rejected
   // first would name the later entry.
   delays?: number[];
+  // A delay applied to every query, for the cases that need searches to
+  // overlap so the bound on how many run at once is observable.
+  everyDelay?: number;
 }
 
 function stub(opts: StubOptions): Stub {
   let queries: SearchEntryQuery[] = [];
   let peeked: string[] = [];
-  let { cards = {}, fields = {}, delays = [] } = opts;
+  let { cards = {}, fields = {}, delays = [], everyDelay } = opts;
+  let inFlight = 0;
+  let peak = 0;
   let answers: string[][] = Array.isArray(opts.matches[0])
     ? (opts.matches as string[][])
     : [opts.matches as string[]];
@@ -140,9 +152,15 @@ function stub(opts: StubOptions): Stub {
       async searchEntries(query) {
         queries.push(query);
         let at = queries.length - 1;
-        let delay = delays[at];
-        if (delay !== undefined) {
-          await new Promise((resolve) => setTimeout(resolve, delay));
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        try {
+          let delay = delays[at] ?? everyDelay;
+          if (delay !== undefined) {
+            await new Promise((resolve) => setTimeout(resolve, delay));
+          }
+        } finally {
+          inFlight--;
         }
         let urls = answers[Math.min(at, answers.length - 1)];
         // The page is the realm's own, and the count is not what the page
@@ -162,6 +180,12 @@ function stub(opts: StubOptions): Stub {
         let card = cards[url.href];
         if (!card) {
           return undefined;
+        }
+        if (card.errored) {
+          return {
+            type: 'instance-error',
+            error: { message: card.errored, status: 500 },
+          } as any;
         }
         return {
           type: 'instance',
@@ -190,7 +214,7 @@ function stub(opts: StubOptions): Stub {
     fileDefCodeRef: notReached('fileDefCodeRef') as any,
     unresolveInstanceIds: notReached('unresolveInstanceIds') as any,
   };
-  return { core, queries, peeked };
+  return { core, queries, peeked, peakConcurrency: () => peak };
 }
 
 // One entry, sent as the caller writes it.
@@ -210,10 +234,22 @@ async function resolve(
   stubbed: Stub,
   ...operations: unknown[]
 ): Promise<EnvelopeNode[]> {
+  return await resolveWith(stubbed, {}, ...operations);
+}
+
+// The same, with the realm's identifier map bound — which is how the realm
+// itself calls it, and the only way the registered-prefix arm of a link hop is
+// reached at all.
+async function resolveWith(
+  stubbed: Stub,
+  opts: { resolveIdentifier?: (href: string) => string },
+  ...operations: unknown[]
+): Promise<EnvelopeNode[]> {
   return await resolveQueryTargets(
     stubbed.core,
     newOperationScope(stubbed.core),
     parse(...operations),
+    opts,
   );
 }
 
@@ -254,7 +290,7 @@ function modeOf(node: EnvelopeNode): string | undefined {
   return isGroup(node) ? node.op : undefined;
 }
 
-module(basename(__filename), function () {
+module(basename(import.meta.filename), function () {
   module('the wire grammar', function () {
     test('an entry describes its target with a query, a field and a count', async function (assert) {
       let [node] = parse(
@@ -855,26 +891,243 @@ module(basename(__filename), function () {
       );
       assert.strictEqual(error.id, `${OTHER_REALM}classrooms/maths`);
     });
+  });
 
-    test('a match the realm has no readable row for is refused', async function (assert) {
-      let stubbed = stub({
-        matches: [`${REALM}activities/a`],
-        cards: {},
-        fields: { classroom: { type: 'linksTo' } },
-      });
-      let error = await refusal(() =>
-        resolve(
-          stubbed,
-          invoke({
-            'boxel:target': { query: openActivities(), field: 'classroom' },
-          }),
-        ),
-      );
-      assert.true(
-        error.detail?.includes('no readable index row'),
-        error.detail,
-      );
+  test('a link resolved by a query is refused, and says so rather than saying it is computed', async function (assert) {
+    // A field declared with `{ query }` and no `computeVia` reaches the hop
+    // with `isComputed` false — the definition entry records that from
+    // `computeVia` alone — so a single computed test would follow it, find
+    // nothing on the row, and answer as though the card had no link.
+    let stubbed = stub({
+      matches: [`${REALM}activities/a`],
+      cards: { [`${REALM}activities/a`]: { adoptsFrom: ACTIVITY } },
+      fields: {
+        attendees: {
+          type: 'linksToMany',
+          isComputed: false,
+          query: { filter: {} } as unknown as FieldDefinition['query'],
+        },
+      },
     });
+    let error = await refusal(() =>
+      resolve(
+        stubbed,
+        invoke({
+          'boxel:target': {
+            query: openActivities(),
+            field: 'attendees',
+            expect: 'many',
+          },
+        }),
+      ),
+    );
+    assert.true(error.detail?.includes('resolved by a `query`'), error.detail);
+    // Not the computed wording: the two are different facts about the field
+    // and a caller fixes them differently.
+    assert.false(error.detail?.includes('`computeVia`'), error.detail);
+  });
+
+  test('a scoped reference this realm has no prefix for is refused as cross-realm', async function (assert) {
+    // The one link spelling the writer stores verbatim. It is not a URL, so
+    // joining it against the matched card would produce a path inside this
+    // realm that nothing stores — and the out-of-realm refusal would never
+    // fire for the one spelling that is always out of realm.
+    let stubbed = stub({
+      matches: [`${REALM}activities/a`],
+      cards: {
+        [`${REALM}activities/a`]: {
+          adoptsFrom: ACTIVITY,
+          relationships: {
+            classroom: { links: { self: '@someorg/somerealm/maths' } },
+          },
+        },
+      },
+      fields: { classroom: { type: 'linksTo' } },
+    });
+    let error = await refusal(() =>
+      resolveWith(
+        stubbed,
+        // Bound as the realm binds it: it resolves registered prefixes and
+        // hands anything else back untouched.
+        { resolveIdentifier: (href) => href },
+        invoke({
+          'boxel:target': { query: openActivities(), field: 'classroom' },
+        }),
+      ),
+    );
+    assert.true(
+      error.detail?.includes('no prefix registered for'),
+      error.detail,
+    );
+    // And emphatically not a target inside this realm.
+    assert.false(error.detail?.includes(`${REALM}activities/@someorg`));
+  });
+
+  test('a registered prefix resolves through the realm identifier map', async function (assert) {
+    let stubbed = stub({
+      matches: [`${REALM}activities/a`],
+      cards: {
+        [`${REALM}activities/a`]: {
+          adoptsFrom: ACTIVITY,
+          relationships: {
+            classroom: { links: { self: '@thisorg/thisrealm/maths' } },
+          },
+        },
+      },
+      fields: { classroom: { type: 'linksTo' } },
+    });
+    let tree = await resolveWith(
+      stubbed,
+      {
+        resolveIdentifier: (href) =>
+          href === '@thisorg/thisrealm/maths'
+            ? `${REALM}classrooms/maths`
+            : href,
+      },
+      invoke({
+        'boxel:target': { query: openActivities(), field: 'classroom' },
+      }),
+    );
+    assert.strictEqual(
+      entryIn(tree[0]).href,
+      `${REALM}classrooms/maths`,
+      'the map decided the URL, and the join never ran on the prefix form',
+    );
+  });
+
+  test('a card several matches link to is one target, not one per route', async function (assert) {
+    // A hop converges: every open activity may name one classroom. The
+    // entry names the cards it runs against, not the routes it found them
+    // by — and nothing downstream would catch the duplicate, since a serial
+    // expansion composes two changes to one file rather than refusing them.
+    let shared = `${REALM}classrooms/maths`;
+    let stubbed = stub({
+      matches: [
+        `${REALM}activities/a`,
+        `${REALM}activities/b`,
+        `${REALM}activities/c`,
+      ],
+      cards: {
+        [`${REALM}activities/a`]: {
+          adoptsFrom: ACTIVITY,
+          relationships: { classroom: { links: { self: shared } } },
+        },
+        [`${REALM}activities/b`]: {
+          adoptsFrom: ACTIVITY,
+          relationships: { classroom: { links: { self: shared } } },
+        },
+        [`${REALM}activities/c`]: {
+          adoptsFrom: ACTIVITY,
+          relationships: {
+            classroom: { links: { self: `${REALM}classrooms/art` } },
+          },
+        },
+      },
+      fields: { classroom: { type: 'linksTo' } },
+    });
+    let tree = await resolve(
+      stubbed,
+      invoke({
+        'boxel:target': {
+          query: openActivities(),
+          field: 'classroom',
+          expect: 'many',
+        },
+      }),
+    );
+    assert.deepEqual(
+      membersOf(tree[0]).map((entry) => entry.href),
+      [shared, `${REALM}classrooms/art`],
+      'each card once, in the order it was first reached',
+    );
+  });
+
+  test('a match whose row has gone is refused as a missing target, not as bad params', async function (assert) {
+    // Both this and the errored row below are races against the search that
+    // matched the card: retrying is the remedy, and `invalid-params` would
+    // tell a client to fix a payload instead.
+    let stubbed = stub({
+      matches: [`${REALM}activities/a`],
+      cards: {},
+      fields: { classroom: { type: 'linksTo' } },
+    });
+    let error = await refusal(() =>
+      resolve(
+        stubbed,
+        invoke({
+          'boxel:target': { query: openActivities(), field: 'classroom' },
+        }),
+      ),
+    );
+    assert.strictEqual(error.status, 404);
+    assert.strictEqual(error.code, 'target-not-found');
+    assert.strictEqual(error.meta?.entry, 0);
+  });
+
+  test("a match whose row errored is refused as an errored target, and carries the row's own message", async function (assert) {
+    let stubbed = stub({
+      matches: [`${REALM}activities/a`],
+      cards: {
+        [`${REALM}activities/a`]: { errored: 'the module would not build' },
+      },
+      fields: { classroom: { type: 'linksTo' } },
+    });
+    let error = await refusal(() =>
+      resolve(
+        stubbed,
+        invoke({
+          'boxel:target': { query: openActivities(), field: 'classroom' },
+        }),
+      ),
+    );
+    assert.strictEqual(error.code, 'target-errored');
+    assert.notStrictEqual(error.status, 400, 'not a payload refusal');
+    assert.true(
+      error.detail?.includes('the module would not build'),
+      `the caller learns why, not only that: ${error.detail}`,
+    );
+  });
+
+  test('no more searches run at once than the staging width allows', async function (assert) {
+    // How many entries a batch carries is as much the caller's number as
+    // how many cards one entry matches, and each resolution costs a search.
+    // The delay makes them overlap, so an unbounded fan-out would show its
+    // width here rather than hiding behind being fast.
+    let entries = STAGING_WIDTH + 4;
+    let stubbed = stub({
+      matches: [`${REALM}activities/a`],
+      everyDelay: 15,
+    });
+    let tree = await resolve(
+      stubbed,
+      ...Array.from({ length: entries }, () =>
+        invoke({ 'boxel:target': { query: openActivities() } }),
+      ),
+    );
+    assert.strictEqual(
+      stubbed.queries.length,
+      entries,
+      'every entry still resolved',
+    );
+    assert.strictEqual(invocationsIn(tree).length, entries);
+    assert.strictEqual(
+      stubbed.peakConcurrency(),
+      STAGING_WIDTH,
+      `at most ${STAGING_WIDTH} searches in flight at once`,
+    );
+  });
+
+  test('a batch narrower than the width still runs all of its searches together', async function (assert) {
+    // The control for the case above: the bound is a ceiling, not a
+    // schedule, so a batch under it is not serialized.
+    let stubbed = stub({ matches: [`${REALM}activities/a`], everyDelay: 15 });
+    await resolve(
+      stubbed,
+      ...Array.from({ length: 3 }, () =>
+        invoke({ 'boxel:target': { query: openActivities() } }),
+      ),
+    );
+    assert.strictEqual(stubbed.peakConcurrency(), 3);
   });
 
   module('a batch with more than one query target', function () {

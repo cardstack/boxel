@@ -6,6 +6,7 @@ import {
 } from '../search-entry.ts';
 import type { CardResource, Relationship } from '../resource-types.ts';
 import { OperationFailure, type EntryPosition } from './types.ts';
+import { STAGING_WIDTH } from './coordinator.ts';
 import type { OperationCore, OperationScope } from './dispatch.ts';
 import {
   invocationsIn,
@@ -73,10 +74,16 @@ export async function resolveQueryTargets(
   // Settled rather than raced, for the reason every other pass over a batch's
   // entries is: a batch with two bad entries would otherwise name a different
   // one run to run, decided by which search came back first.
-  let outcomes = await Promise.allSettled(
-    queried.map((entry) =>
-      resolveOne(entry, { core, scope, paths, opts, mintsCards }),
-    ),
+  //
+  // Bounded by the same width staging is, and for the same reason: how many
+  // entries a batch carries is as much the caller's number as how many cards
+  // one of them matches, and each resolution here costs a search — two
+  // statements, since the engine runs the rows and the count together. An
+  // unbounded fan-out would let one authorized request decide how much of the
+  // realm's connection pool it holds, which is the decision the width exists
+  // to keep out of a caller's hands.
+  let outcomes = await settledWithin(STAGING_WIDTH, queried, (entry) =>
+    resolveOne(entry, { core, scope, paths, opts, mintsCards }),
   );
   let refused = outcomes.find((outcome) => outcome.status === 'rejected');
   if (refused) {
@@ -138,6 +145,36 @@ function foundPosition(parent: EntryPosition, index: number): EntryPosition {
   return `${prefix}.boxel:target[${index}]`;
 }
 
+// Every item's outcome, with at most `width` of them in flight at a time.
+//
+// `Promise.allSettled` over a mapped array is the shape this replaces, and the
+// two differ only in how many run at once: results still sit at their item's
+// index, and a rejection is still carried rather than thrown, so the earliest
+// refusal in request order is the one the caller is told about however the
+// work interleaved.
+async function settledWithin<T, R>(
+  width: number,
+  items: readonly T[],
+  run: (item: T) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  let outcomes: PromiseSettledResult<R>[] = new Array(items.length);
+  let next = 0;
+  let worker = async () => {
+    while (next < items.length) {
+      let at = next++;
+      try {
+        outcomes[at] = { status: 'fulfilled', value: await run(items[at]) };
+      } catch (reason: unknown) {
+        outcomes[at] = { status: 'rejected', reason };
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(width, items.length) }, worker),
+  );
+  return outcomes;
+}
+
 // The tree with each query target replaced by what it resolved to.
 function substitute(
   nodes: readonly EnvelopeNode[],
@@ -177,9 +214,24 @@ async function resolveOne(
   // thing the staging width downstream exists to stop a caller choosing. It
   // also settles which refusal is reported without having to sort them: the
   // earliest match that cannot be followed is the one that throws.
+  //
+  // Each card once, in the order it was first reached. A hop converges —
+  // every open report may name one owner — and the entry names the cards it
+  // runs against, not the routes by which it found them, so a card reached
+  // three ways is one target. Nothing downstream would catch the duplicate
+  // either: the expansion is `serial`, and serial composes two changes to one
+  // file rather than refusing them, so `conflicting-targets` sees nothing
+  // wrong. An idempotent `update` would hide it; an append would land three
+  // times.
   let targets: string[] = [];
+  let reached = new Set<string>();
   for (let match of urls) {
-    targets.push(...(await hop(entry, find, match, context)));
+    for (let target of await hop(entry, find, match, context)) {
+      if (!reached.has(target)) {
+        reached.add(target);
+        targets.push(target);
+      }
+    }
   }
   if (find.expect === 'one' && targets.length > 1) {
     // The one match's link field holds a collection, so the entry names as
@@ -308,16 +360,39 @@ async function hop(
   let { core, scope, paths, opts } = context;
   let url = new URL(match);
   let row = await scope.peekInstance(url);
-  if (row?.type !== 'instance') {
-    // The row was there when the filter matched it and is not now, or it is
-    // an error row the filter's own scope did not exclude. Either way the
-    // card's type cannot be read, and the field cannot be judged without it.
-    throw refuse(
-      `entry ${entry.position} follows "${field}" from ${match}, which this ` +
-        `realm has no readable index row for`,
-      entry.position,
-      match,
-    );
+  // Both of these are races against the search that matched the card moments
+  // ago — this path's filter excludes error rows, so neither is a state the
+  // query could have selected — and neither is the caller's request being
+  // wrong. So they carry the codes this subsystem already has for them rather
+  // than `invalid-params`, which would tell a client to fix a payload when
+  // retrying is the remedy.
+  if (!row) {
+    throw new OperationFailure({
+      id: match,
+      status: 404,
+      code: 'target-not-found',
+      title: 'Target not found',
+      detail:
+        `entry ${entry.position} follows "${field}" from ${match}, which ` +
+        `this realm no longer has an index row for`,
+      meta: { entry: entry.position },
+    });
+  }
+  if (row.type !== 'instance') {
+    // The row's own message travels in the detail: the caller needs to know
+    // why the card it matched cannot be read, not only that it cannot. The
+    // row's status is not mirrored the way a read mirrors it — this is not
+    // serving the card, it is reporting that a target cannot be followed to.
+    throw new OperationFailure({
+      id: match,
+      status: 422,
+      code: 'target-errored',
+      title: 'Target errored',
+      detail:
+        `entry ${entry.position} follows "${field}" from ${match}, whose ` +
+        `index row is an error row: ${row.error.message}`,
+      meta: { entry: entry.position },
+    });
   }
   let definition = await definitionOf(core, row.instance, url);
   let fieldDef = definition && getImmediateFieldDef(definition, field);
@@ -338,16 +413,33 @@ async function hop(
       match,
     );
   }
+  // Two ways a link field holds no stored target, kept apart because they are
+  // different facts about the field and a caller fixes them differently — the
+  // same split the write side draws in `unwritableReason`.
+  //
+  // They have to be asked separately for a second reason: a field declared
+  // with a `query` and no `computeVia` reaches here with `isComputed` false.
+  // The definition entry records `isComputed` from `computeVia` alone and
+  // carries the query beside it, so a single `isComputed` test would follow a
+  // query-backed link, find nothing on the row — a query-backed field's
+  // members are written onto the served copy, never onto the stored one — and
+  // answer as though the card simply had no link, which under `many` is an
+  // empty result rather than a refusal.
   if (fieldDef.isComputed) {
-    // A computed link stores no target: its value is whatever its
-    // `computeVia` — or, for a query-backed field, whatever a search — answers
-    // at the moment it is read. There is nothing on the row to follow, and
-    // following one would mean running that computation here, which is a
-    // different thing from reading the realm's index.
     throw refuse(
       `entry ${entry.position} follows "${field}" from ${match}, which is ` +
         `computed; its value comes from its \`computeVia\` rather than from ` +
         `a link the realm stored`,
+      entry.position,
+      match,
+    );
+  }
+  if (fieldDef.query !== undefined) {
+    throw refuse(
+      `entry ${entry.position} follows "${field}" from ${match}, which is ` +
+        `resolved by a \`query\`; it holds no stored link to follow, and the ` +
+        `cards it answers with are whatever that query returns when the ` +
+        `field is read`,
       entry.position,
       match,
     );
@@ -420,9 +512,11 @@ function selfOf(
 // One link as the URL this realm addresses the card by.
 //
 // A stored link is written relative to the card holding it, or under a
-// registered prefix, because that is what makes a realm's files portable. Both
-// are resolved here the way an entry's own `href` is: through the realm's
-// identifier map first, then against the card the link was read from.
+// registered prefix, because that is what makes a realm's files portable. A
+// prefix goes through the realm's identifier map; anything else is joined
+// against the card the link was read from, which is where this differs from
+// how an entry's own `href` resolves — an `href` is parsed absolute or taken
+// as a path from the realm root, and is never joined against a card.
 //
 // A hop can leave this realm, which a query cannot — a card in one realm may
 // link to a card in another. The batch commits under one realm's write lock,
@@ -441,6 +535,23 @@ function hopTarget(
   }: { paths: RealmPaths; opts: ParseEnvelopeOptions; from: URL },
 ): string {
   let resolved = opts.resolveIdentifier?.(link) ?? link;
+  if (resolved.startsWith('@')) {
+    // A scoped reference the identifier map did not resolve, which means this
+    // process has not registered its prefix. It is cross-realm by
+    // construction — that is exactly why the writer stores it verbatim
+    // instead of relativizing it — and it must not reach the join below: a
+    // scoped reference is not a URL, so joining it against the matched card
+    // produces a path *inside* this realm that nothing stores, and the
+    // out-of-realm refusal would never fire for the one spelling that is
+    // always out of realm.
+    throw refuse(
+      `entry ${entry.position} follows "${field}" from ${match} to ` +
+        `"${link}", which names a realm this one has no prefix registered ` +
+        `for; a batch commits to one realm`,
+      entry.position,
+      match,
+    );
+  }
   let absolute: URL;
   try {
     absolute = new URL(resolved, from);
