@@ -118,7 +118,7 @@ export interface IssueLoopWiringConfig {
    * system-prompt catalog-search exception. When omitted, the agent has no
    * awareness of boxel-ui components. See CS-10527.
    */
-  enableBoxelUiDiscovery?: boolean;
+  enableCatalogReuse?: boolean;
   /** Brief title — names the live-blog RunLog card. */
   runTitle?: string;
   /** Context forking: prime once, fork every implementation turn. */
@@ -282,7 +282,7 @@ export async function runFactoryIssueLoop(
     skillResolver: new DefaultSkillResolver(),
     skillLoader: new SkillLoader(),
     issueLoader,
-    enableBoxelUiDiscovery: config.enableBoxelUiDiscovery === true,
+    enableCatalogReuse: config.enableCatalogReuse === true,
     hostToolImports,
   });
 

@@ -101,17 +101,15 @@ export interface FactoryEntrypointOptions {
   debug?: boolean;
   retryBlocked?: boolean;
   /**
-   * Feature flag — when set, the boxel-ui-component-discovery skill is
-   * loaded into the agent's system prompt and the system prompt's
-   * catalog-search exception is enabled, so the agent must search the
-   * catalog for boxel-ui Spec cards before writing UI in a .gts
-   * template. When unset (default), the agent has no awareness of
-   * boxel-ui components at all — neither the skill nor the system-prompt
-   * exception is visible.
+   * Sanctions reading the catalog realm — both the `catalog-reuse` and
+   * `boxel-ui-component-discovery` skills are loaded and the system prompt's
+   * cross-realm firewall opens to catalog searches, so the agent must consult
+   * the catalog before authoring. When false, neither the permission nor the
+   * skills are visible.
    *
-   * Set via `--enable-boxel-ui-discovery` on the CLI.
+   * Defaults to true. `--no-catalog-reuse` turns it off.
    */
-  enableBoxelUiDiscovery?: boolean;
+  enableCatalogReuse?: boolean;
   /** Context forking: prime once per brief, fork every implementation turn. */
   forkContext?: boolean;
   /**
@@ -352,7 +350,7 @@ export function getFactoryEntrypointUsage(): string {
     '                              "quiet" (stalls + failures only), "normal" (default — adds',
     '                              per-turn telemetry and scheduler notes), "verbose" (adds turn',
     '                              starts, heals, and sync successes).',
-    '  --enable-boxel-ui-discovery Make the agent search the catalog for @cardstack/boxel-ui',
+    '  --no-catalog-reuse       Stop the agent consulting the catalog before authoring',
     '                              component Spec cards before writing UI in a .gts template.',
     '                              When omitted, the agent has no awareness of boxel-ui',
     '                              components — neither the discovery skill nor the',
@@ -411,6 +409,12 @@ export function parseFactoryEntrypointArgs(
         debug: {
           type: 'boolean',
         },
+        'no-catalog-reuse': {
+          type: 'boolean',
+        },
+        // Superseded by the single `catalog-reuse` flag. Accepted so an
+        // external caller still passing it does not fail argument parsing;
+        // it selects nothing, because catalog reuse is on by default.
         'enable-boxel-ui-discovery': {
           type: 'boolean',
         },
@@ -540,9 +544,9 @@ export function parseFactoryEntrypointArgs(
     openRouterApiKey,
     debug: parsed.values.debug === true ? true : undefined,
     retryBlocked: parsed.values['no-retry-blocked'] === true ? false : true,
-    // Boxel-ui discovery is on by default — the design-first loop must
-    // search the catalog before hand-rolling UI.
-    enableBoxelUiDiscovery: true,
+    // On by default: the design-first loop must consult the catalog before
+    // authoring, so reuse is the normal path rather than an opt-in.
+    enableCatalogReuse: parsed.values['no-catalog-reuse'] !== true,
     forkContext: parsed.values['fork-context'] === true ? true : undefined,
     toPhase: parseToPhase(parsed.values['to-phase']),
     fixModel:
@@ -1053,7 +1057,7 @@ export async function runFactoryEntrypoint(
     openRouterApiKey: options.openRouterApiKey,
     debug: options.debug,
     retryBlocked: options.retryBlocked,
-    enableBoxelUiDiscovery: options.enableBoxelUiDiscovery,
+    enableCatalogReuse: options.enableCatalogReuse !== false,
     runTitle: brief.title,
     forkContext: options.forkContext,
     toPhase: options.toPhase,
