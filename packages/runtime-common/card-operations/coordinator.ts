@@ -123,11 +123,13 @@ export interface BatchCore {
   // resolves. A card's serialization resolves the definitions its type is
   // built from, and a module written moments earlier may still be indexing,
   // so a batch drains before it stages rather than failing to resolve a type
-  // the realm already holds. Passes that touched no module are not waited
-  // for: they rewrite index rows, which staging resolves nothing from, so a
-  // batch that waited for one would be paying another card's fan-out for
-  // nothing. A batch that opts out of waiting for its own indexing skips this
-  // too — see `CommitBatchOptions.waitForIndex`, which owns that trade.
+  // the realm already holds, and the realm's settings are resolved partly out
+  // of its config document's index row, so a pass touching that is waited for
+  // too. A pass that touched neither is not: it rewrites index rows a staging
+  // batch resolves nothing from, so waiting for one would be paying another
+  // card's fan-out for nothing. A batch that opts out of waiting for its own
+  // indexing skips this too — see `CommitBatchOptions.waitForIndex`, which
+  // owns that trade.
   drainIndexing(): Promise<void>;
   // Whether the realm's ignore rules exclude this URL. An ignored file is
   // never visited by indexing, so it never gets an index row.
@@ -139,9 +141,10 @@ export interface BatchCore {
   // same answer to the question asked here: the index cannot speak for this
   // card.
   //
-  // This is the one read a batch makes of the index, and it is not a network
-  // capability: the engine is the realm's own, handed down narrowed to the
-  // single row a program's reads are layered from. Called inside the lock, so
+  // This is one of the two reads a batch makes of the index — `realmConfig`
+  // is the other — and it is not a network capability: the engine is the
+  // realm's own, handed down narrowed to the single row a program's reads are
+  // layered from. Called inside the lock, so
   // no other writer of these files can move the row underneath the batch —
   // but the row is the index as it stands, not as some other card's pending
   // fan-out will leave it. A program reads indexed values eventually
@@ -228,7 +231,8 @@ export interface CommitBatchOptions {
   // reading: a definition resolves off disk rather than out of the index, so
   // an entry still serializes against a module written moments earlier
   // whichever way this is set. Nor is the drain it governs realm-wide: it
-  // waits only for passes that touched a module. See the drain in
+  // waits only for passes that touched a module or the realm's config
+  // document. See the drain in
   // `commitBatch` for what the wait actually buys, and the realm's own
   // card-write gate for the case stated at length.
   //
@@ -402,10 +406,11 @@ export async function commitBatch(
       // read before widening or removing either copy.
       //
       // The set it waits on is narrower too: only passes that touched an
-      // executable module. An instance-only fan-out changes no definition and
-      // no module's bytes, so no batch has a reason to wait for one — which is
-      // what keeps a hub card's fan-out from gating every other writer in the
-      // realm.
+      // executable module or the realm's config document — the two things a
+      // batch resolves out of the index rather than off disk. An instance-only
+      // fan-out moves neither, so no batch has a reason to wait for one, which
+      // is what keeps a hub card's fan-out from gating every other writer in
+      // the realm.
       //
       // So this is not reserved for entries that serialize nothing. A caller
       // whose response does not read indexed state can take it, and a
@@ -419,8 +424,9 @@ export async function commitBatch(
       // because this wait happens with the batch's file locks held — a removal
       // issued while a bulk import drains would park here holding them, with
       // every other writer of those files queued behind. What is left to park
-      // for is another writer's module landing, and that one is realm-wide by
-      // nature: a definition is not any one file's to hold.
+      // for is another writer's module or config landing, and those are
+      // realm-wide by nature: neither a definition nor a realm setting is any
+      // one file's to hold.
       if (opts.waitForIndex !== false && entries.some(stagesContent)) {
         await timed('drain', () => core.drainIndexing());
       }

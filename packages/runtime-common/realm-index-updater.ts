@@ -141,14 +141,15 @@ export class RealmIndexUpdater {
   // parking every reader behind whatever indexing happens to be in flight.
   // System-originated jobs (file watcher, realm copy) carry no tag.
   //
-  // `touchesExecutable` is whether the pass's change set includes a module.
-  // The write path uses it (`incrementalIndexingOfExecutables`) to wait only
-  // for the passes that can move what a staging write resolves — an
-  // instance-only fan-out, however wide, changes no module and so gates no
+  // `affectsStaging` is whether the pass touched one of the two things a
+  // staging write resolves out of shared state: an executable module, or the
+  // realm's own config document. The write path uses it
+  // (`incrementalIndexingAffectingStaging`) to wait for those passes alone —
+  // an instance-only fan-out, however wide, moves neither and so gates no
   // writer.
   #incrementalIndexingDeferreds = new Map<
     Deferred<void>,
-    { initiatedBy?: string; touchesExecutable?: boolean }
+    { initiatedBy?: string; affectsStaging?: boolean }
   >();
   #fullIndexingDeferreds = new Set<Deferred<void>>();
 
@@ -216,12 +217,18 @@ export class RealmIndexUpdater {
   // of realm-server writes and each row write is atomic; a from-scratch
   // sitting queued behind a system-wide reindex must not block user PATCHes.
   //
-  // This is the widest gate a request waits on, and it is for readers of the
-  // index as a whole — the publishability report, the indexing-error report,
-  // and the cheap "is anything pending at all" check the read-your-writes
-  // drain starts from. A write about to stage wants
-  // `incrementalIndexingOfExecutables()` instead; waiting here would make one
-  // card's fan-out gate every other card's write.
+  // This is the widest gate a request waits on. Its consumers are the readers
+  // of the index as a whole — the publishability report, the indexing-error
+  // report, and the cheap "is anything pending at all" check the
+  // read-your-writes drain starts from — plus one writer that is not a reader
+  // at all: a bulk commit times its render-hold release off this gate, and
+  // that one must stay wide. The hold has to outlive every pass the commit
+  // spawned whatever it touched, so narrowing it would free the render lane
+  // early and collapse the merge window a bulk import depends on.
+  //
+  // A write about to stage wants `incrementalIndexingAffectingStaging()`
+  // instead; waiting here would make one card's fan-out gate every other
+  // card's write.
   incrementalIndexing() {
     if (this.#incrementalIndexingDeferreds.size === 0) {
       return undefined;
@@ -249,13 +256,23 @@ export class RealmIndexUpdater {
     return Promise.all(pending).then(() => undefined);
   }
 
-  // Awaits only the incremental/copy passes whose change set includes an
-  // executable module — the slice of `incrementalIndexing()` that a write
-  // about to stage can be affected by. Returns undefined when nothing
-  // module-touching is in flight, even while instance-only passes are still
-  // draining: those rewrite index rows, and a card's serialization does not
-  // read index rows, so waiting for one buys a staging write nothing and
-  // costs it however long the other card's fan-out takes.
+  // Awaits only the incremental/copy passes that can move what a staging
+  // write resolves — the slice of `incrementalIndexing()` a write about to
+  // stage is actually exposed to. Returns undefined when nothing qualifying
+  // is in flight, even while instance-only passes are still draining: those
+  // rewrite index rows a staging write does not read, so waiting for one buys
+  // it nothing and costs it however long the other card's fan-out takes.
+  //
+  // Two kinds of change qualify, because a staging write resolves two things
+  // out of shared state rather than one:
+  //
+  //   - an executable module, which is what a card's type is built from;
+  //   - the realm's config document, whose indexed row overlays — and wins
+  //     over — the settings read off disk, so a program reading a setting
+  //     would otherwise see one the realm has already replaced.
+  //
+  // Anything else a batch touches it reads from the stored bytes, which the
+  // write lock already makes exclusive.
   //
   // From-scratch passes are outside this gate for the same reason they are
   // outside `incrementalIndexing()`, but the reason has to be re-derived from
@@ -267,14 +284,21 @@ export class RealmIndexUpdater {
   // write reads — while waiting for one would park every writer in the realm
   // for as long as a full reindex takes. Excluded, and not because the other
   // gate excludes it.
-  incrementalIndexingOfExecutables(): Promise<void> | undefined {
+  incrementalIndexingAffectingStaging(): Promise<void> | undefined {
     let pending = [...this.#incrementalIndexingDeferreds.entries()]
-      .filter(([, { touchesExecutable }]) => touchesExecutable)
+      .filter(([, { affectsStaging }]) => affectsStaging)
       .map(([deferred]) => deferred.promise);
     if (pending.length === 0) {
       return undefined;
     }
     return Promise.all(pending).then(() => undefined);
+  }
+
+  // The realm's own config document, whose index row the realm's settings are
+  // overlaid from. Compared by URL rather than by name so a card that merely
+  // ends in `realm.json` somewhere below the root is not mistaken for it.
+  #isRealmConfigDocument(url: URL): boolean {
+    return url.href === new URL('realm.json', this.realmURL).href;
   }
 
   publishFullIndex(
@@ -382,8 +406,9 @@ export class RealmIndexUpdater {
       initiatedBy: opts?.initiatedBy ?? undefined,
       // A removal counts the same as a write: a module that is gone changes
       // what resolves just as surely as one whose bytes moved.
-      touchesExecutable: changes.some(({ url }) =>
-        hasExecutableExtension(url.href),
+      affectsStaging: changes.some(
+        ({ url }) =>
+          hasExecutableExtension(url.href) || this.#isRealmConfigDocument(url),
       ),
     });
     let snapshotVersion = this.#ignoreDataVersion;
@@ -516,7 +541,7 @@ export class RealmIndexUpdater {
     // the realm holds — modules included. It is named here rather than
     // computed because a copy never enumerates its changes up front.
     this.#incrementalIndexingDeferreds.set(indexingDeferred, {
-      touchesExecutable: true,
+      affectsStaging: true,
     });
     try {
       let args: CopyArgs = {

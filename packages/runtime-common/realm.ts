@@ -1445,10 +1445,7 @@ export interface WriteOptions {
   // Note: in a mixed-batch `writeMany` call where a module is followed by
   // an instance, the *intermediate* index flush that fileSerialization
   // depends on is still awaited inline regardless of this flag — without
-  // it, the next instance's serialization would fail. That flush is the
-  // batch's own module landing, not another writer's, which is why the
-  // pre-staging gate can ignore instance-only passes and this one cannot be
-  // skipped. This flag governs
+  // it, the next instance's serialization would fail. This flag governs
   // only the final indexing await. `/_atomic` does write mixed batches and
   // so does reach that intermediate flush; the per-file `+source` POST and
   // the JSON-API card handlers do not, writing a single file and instances
@@ -2407,13 +2404,14 @@ export class Realm {
     return this.#realmIndexUpdater.incrementalIndexing();
   }
 
-  // The write path's gate: the in-flight passes that touched an executable
-  // module. Same contract as `incrementalIndexing()` — undefined when nothing
-  // qualifying is pending, so a caller can check synchronously — over a
-  // narrower set. See `RealmIndexUpdater.incrementalIndexingOfExecutables`
+  // The write path's gate: the in-flight passes that can move what a staging
+  // write resolves — the ones that touched an executable module or the realm's
+  // config document. Same contract as `incrementalIndexing()`, undefined when
+  // nothing qualifying is pending so a caller can check synchronously, over a
+  // narrower set. See `RealmIndexUpdater.incrementalIndexingAffectingStaging`
   // for why an instance-only pass is not in it.
-  incrementalIndexingOfExecutables(): Promise<void> | undefined {
-    return this.#realmIndexUpdater.incrementalIndexingOfExecutables();
+  incrementalIndexingAffectingStaging(): Promise<void> | undefined {
+    return this.#realmIndexUpdater.incrementalIndexingAffectingStaging();
   }
 
   private startReindex(opts?: {
@@ -3410,14 +3408,14 @@ export class Realm {
     // postCardInstance / patchCardInstance handlers) keep the original
     // deadlock-prevention semantics by omitting waitForIndex.
     //
-    // What they wait for is narrower than all of it. Only a pass that
-    // touched an executable module can move what the write below resolves,
-    // so an instance-only fan-out — however many cards it invalidates —
-    // is not waited for here. That is what keeps one card's fan-out from
-    // gating every other card's write in the realm.
+    // What they wait for is narrower than all of it. Only a pass that touched
+    // an executable module or the realm's config document can move what the
+    // write below resolves, so an instance-only fan-out — however many cards
+    // it invalidates — is not waited for here. That is what keeps one card's
+    // fan-out from gating every other card's write in the realm.
     let stageCursor = options?.stageCursor;
     if (options?.waitForIndex !== false) {
-      await this.incrementalIndexingOfExecutables();
+      await this.incrementalIndexingAffectingStaging();
       // A batch coordinator drains before it stages, and this gate drains
       // again. Both wait on the same set of passes, so they are one stage
       // reached twice rather than two stages, and they accumulate together —
@@ -5016,7 +5014,7 @@ export class Realm {
             localPath,
           ),
         drainIndexing: async () => {
-          await this.incrementalIndexingOfExecutables();
+          await this.incrementalIndexingAffectingStaging();
         },
         isIgnored: (url) => this.isIgnored(url),
         // Narrowed to the two documents a program reads values from, each

@@ -17,7 +17,7 @@ import {
 // A JSON-API card POST / PATCH normally blocks before responding on the
 // in-flight indexing that can move what it resolves: the passes that touched
 // an executable module, which the updater exposes as
-// `incrementalIndexingOfExecutables()`. A caller can opt out with the
+// `incrementalIndexingAffectingStaging()`. A caller can opt out with the
 // `x-boxel-skip-index-wait` header: the write indexes deferred and answers
 // from the serialized document.
 //
@@ -52,7 +52,7 @@ const NEVER: Promise<void> = new Promise(() => {});
 // returned callback deletes it to restore the real implementation.
 function stubGate(
   realm: Realm,
-  name: 'incrementalIndexing' | 'incrementalIndexingOfExecutables',
+  name: 'incrementalIndexing' | 'incrementalIndexingAffectingStaging',
   gate: () => Promise<void> | undefined,
 ): () => void {
   let updater = realm.realmIndexUpdater as any;
@@ -106,7 +106,7 @@ module(basename(import.meta.filename), function () {
       // If the write consulted the gate it would hang here forever.
       let restore = stubGate(
         realm,
-        'incrementalIndexingOfExecutables',
+        'incrementalIndexingAffectingStaging',
         () => NEVER,
       );
       try {
@@ -150,7 +150,7 @@ module(basename(import.meta.filename), function () {
       assert.timeout(15000);
       let restore = stubGate(
         realm,
-        'incrementalIndexingOfExecutables',
+        'incrementalIndexingAffectingStaging',
         () => NEVER,
       );
       try {
@@ -190,7 +190,7 @@ module(basename(import.meta.filename), function () {
       let gate = new Deferred<void>();
       let restore = stubGate(
         realm,
-        'incrementalIndexingOfExecutables',
+        'incrementalIndexingAffectingStaging',
         () => gate.promise,
       );
       try {

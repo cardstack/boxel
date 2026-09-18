@@ -286,7 +286,7 @@ module(basename(import.meta.filename), function (hooks) {
       'the pass really is in flight — the wide gate sees it',
     );
     assert.strictEqual(
-      updater.incrementalIndexingOfExecutables(),
+      updater.incrementalIndexingAffectingStaging(),
       undefined,
       'a fan-out that touched no module gates no writer',
     );
@@ -308,7 +308,7 @@ module(basename(import.meta.filename), function (hooks) {
     ]);
     settled.catch(() => {});
 
-    let gate = updater.incrementalIndexingOfExecutables();
+    let gate = updater.incrementalIndexingAffectingStaging();
     assert.notStrictEqual(
       gate,
       undefined,
@@ -319,7 +319,7 @@ module(basename(import.meta.filename), function (hooks) {
     await gate;
 
     assert.strictEqual(
-      updater.incrementalIndexingOfExecutables(),
+      updater.incrementalIndexingAffectingStaging(),
       undefined,
       'the gate drains once the module pass settles',
     );
@@ -340,7 +340,7 @@ module(basename(import.meta.filename), function (hooks) {
     settled.catch(() => {});
 
     assert.notStrictEqual(
-      updater.incrementalIndexingOfExecutables(),
+      updater.incrementalIndexingAffectingStaging(),
       undefined,
       'a module that is gone changes what resolves just as one that moved does',
     );
@@ -364,7 +364,7 @@ module(basename(import.meta.filename), function (hooks) {
     settled.catch(() => {});
 
     assert.notStrictEqual(
-      updater.incrementalIndexingOfExecutables(),
+      updater.incrementalIndexingAffectingStaging(),
       undefined,
       'one module anywhere in the change set is enough',
     );
@@ -391,7 +391,7 @@ module(basename(import.meta.filename), function (hooks) {
     instancePass.settled.catch(() => {});
 
     assert.notStrictEqual(
-      updater.incrementalIndexingOfExecutables(),
+      updater.incrementalIndexingAffectingStaging(),
       undefined,
       'the module pass holds the gate',
     );
@@ -404,7 +404,7 @@ module(basename(import.meta.filename), function (hooks) {
     await modulePass.settled.catch(() => {});
 
     assert.strictEqual(
-      updater.incrementalIndexingOfExecutables(),
+      updater.incrementalIndexingAffectingStaging(),
       undefined,
       'the write path is released while the instance fan-out is still running',
     );
@@ -415,6 +415,68 @@ module(basename(import.meta.filename), function (hooks) {
     );
 
     waiters[1].rejectFromResult(serializedWorkerError);
+    await updater.incrementalIndexing();
+  });
+
+  test("a pass that wrote the realm's config document holds the write-path gate", async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    // Not an executable, but a staging batch resolves the realm's settings
+    // partly out of this card's index row, and that row wins over the copy
+    // read off disk.
+    let { settled } = await updater.enqueueUpdate([
+      new URL(`${realmURL}realm.json`),
+    ]);
+    settled.catch(() => {});
+
+    assert.notStrictEqual(
+      updater.incrementalIndexingAffectingStaging(),
+      undefined,
+      'a config write is waited for even though it touches no module',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await updater.incrementalIndexing();
+
+    assert.strictEqual(
+      updater.incrementalIndexingAffectingStaging(),
+      undefined,
+      'and the gate drains once it settles',
+    );
+  });
+
+  test('a card whose path merely ends in realm.json does not hold the gate', async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    // The realm's config document is the one at the realm root. A card stored
+    // under that name somewhere below it is an ordinary instance.
+    let { settled } = await updater.enqueueUpdate([
+      new URL(`${realmURL}nested/realm.json`),
+    ]);
+    settled.catch(() => {});
+
+    assert.notStrictEqual(
+      updater.incrementalIndexing(),
+      undefined,
+      'the pass really is in flight',
+    );
+    assert.strictEqual(
+      updater.incrementalIndexingAffectingStaging(),
+      undefined,
+      'matching on name alone would have held the gate here',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
     await updater.incrementalIndexing();
   });
 
@@ -433,7 +495,7 @@ module(basename(import.meta.filename), function (hooks) {
     }
 
     assert.notStrictEqual(
-      updater.incrementalIndexingOfExecutables(),
+      updater.incrementalIndexingAffectingStaging(),
       undefined,
       'a copy indexes the whole source realm, modules included',
     );
