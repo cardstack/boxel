@@ -213,7 +213,7 @@ import {
 import {
   canonicalizeTarget,
   newOperationScope,
-  readIsProjected,
+  readShape,
   resolveOperation,
   runOperation,
 } from './card-operations/dispatch.ts';
@@ -9887,8 +9887,10 @@ export class Realm {
       // projected body is not what this request's validator describes, so the
       // two fast paths below — the conditional 304 and the shared response
       // cache — are both off for one, and the question has to be settled
-      // before either is taken rather than learned from the assembly.
-      let projected = false;
+      // before either is taken rather than learned from the assembly. A read
+      // the core cannot resolve is treated the same way, since both fast paths
+      // answer without assembling and its refusal needs the assembly.
+      let assembles = false;
       if (ifNoneMatch || documentCache) {
         await this.getRealmInfo();
         let realmInfoHash = this.getCachedRealmInfoHash();
@@ -9936,9 +9938,10 @@ export class Realm {
             ? peekEtag
             : undefined;
         if (matchedEtag || (documentCache && peekEtag)) {
-          projected = await readIsProjected(this.operationCore, url, scope);
+          assembles =
+            (await readShape(this.operationCore, url, scope)) !== 'plain';
         }
-        if (matchedEtag && !projected) {
+        if (matchedEtag && !assembles) {
           return createResponse({
             requestContext,
             varyOn: LINK_SHAPE_VARY,
@@ -9978,7 +9981,7 @@ export class Realm {
         );
       let assembly: CardJsonAssembly;
       let cacheOutcome: CardDocumentCacheOutcome | undefined;
-      if (documentCache && peekEtag && !projected) {
+      if (documentCache && peekEtag && !assembles) {
         ({ assembly, outcome: cacheOutcome } =
           await documentCache.getOrPopulate({
             url: url.href,

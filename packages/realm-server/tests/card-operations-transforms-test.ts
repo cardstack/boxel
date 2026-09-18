@@ -9,7 +9,7 @@ import {
   isOperationFailure,
   paramsFor,
   projectedResult,
-  readIsProjected,
+  readShape,
   runInputTransform,
   runOperation,
   runOutputTransform,
@@ -438,20 +438,48 @@ module(basename(import.meta.filename), function () {
     });
 
     test('the projection question is answerable without assembling', async function (assert) {
-      assert.true(
-        await readIsProjected(stub({ read: REDACTING_READ }), new URL(CARD)),
+      assert.strictEqual(
+        await readShape(stub({ read: REDACTING_READ }), new URL(CARD)),
+        'projected',
         'a type that declares an output projects',
       );
-      assert.false(
-        await readIsProjected(stub(), new URL(CARD)),
+      assert.strictEqual(
+        await readShape(stub(), new URL(CARD)),
+        'plain',
         'a type that declares nothing does not',
       );
-      assert.false(
-        await readIsProjected(
+      assert.strictEqual(
+        await readShape(
           stub({ read: { base: 'read', deterministic: true } }),
           new URL(CARD),
         ),
+        'plain',
         'a declared read with no output does not either',
+      );
+    });
+
+    test('a read that cannot be resolved is answered by assembling, not by a validator', async function (assert) {
+      assert.strictEqual(
+        await readShape(
+          stub({
+            read: {
+              base: 'read',
+              deterministic: true,
+              invalid: true,
+              issues: [
+                {
+                  code: 'invalid-program',
+                  operation: 'read',
+                  path: 'output',
+                  message: 'the program at `output` does not parse',
+                },
+              ],
+            },
+          }),
+          new URL(CARD),
+        ),
+        'unresolved',
+        'a refusal is coming, and only the full request can report it',
       );
     });
   });

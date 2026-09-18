@@ -535,8 +535,8 @@ export async function resolveOperation(
   return { base: name, deterministic: true };
 }
 
-// Whether a `read` of this target answers with an `output` projection, asked
-// before anything is read.
+// What a `read` of this target would answer with, asked before anything is
+// read.
 //
 // The card+json `GET` has to know this before it answers, because a projected
 // body is not the representation its validator describes: the ETag is built
@@ -547,26 +547,34 @@ export async function resolveOperation(
 // own conditional fast path, rather than learning it from the assembly.
 //
 // It costs the definition lookup the assembly would have made anyway; the row
-// peek is shared with the caller's through `scope`. A target this cannot
-// resolve an operation for is reported as unprojected rather than refused —
-// whatever is wrong with it is the read's to report, with the whole request in
-// hand.
-export async function readIsProjected(
+// peek is shared with the caller's through `scope`.
+//
+// `unresolved` is its own answer rather than being folded into `plain`. A
+// target whose read cannot be resolved — a declaration lowering flagged
+// invalid — has a refusal coming, and the paths this gates are the two that
+// answer without assembling, so reporting it as plain would hand the caller a
+// 304 built from a validator for a card the full request refuses. Saying the
+// question could not be answered sends it down the assembling path, which has
+// the whole request in hand and reports what is actually wrong.
+export type ReadShape = 'projected' | 'plain' | 'unresolved';
+
+export async function readShape(
   core: OperationCore,
   url: URL,
   scope: OperationScope = newOperationScope(core),
-): Promise<boolean> {
+): Promise<ReadShape> {
+  let definition: OperationDefinition;
   try {
-    let definition = await resolveOperation(
+    definition = await resolveOperation(
       core,
       { kind: 'instance', url: url.href },
       'read',
       scope,
     );
-    return definition.output !== undefined;
   } catch {
-    return false;
+    return 'unresolved';
   }
+  return definition.output === undefined ? 'plain' : 'projected';
 }
 
 export async function runOperation(

@@ -6,7 +6,7 @@ export {
   instanceTargetURL,
   newOperationScope,
   pathsFor,
-  readIsProjected,
+  readShape,
   resolveOperation,
   runOperation,
 } from './dispatch.ts';
@@ -18,6 +18,7 @@ export type {
   OperationScope,
   OperationStoredFile,
   OperationStoredFileMeta,
+  ReadShape,
   RunOperationOptions,
 } from './dispatch.ts';
 export { readOperation, erroredTargetRow } from './read.ts';
