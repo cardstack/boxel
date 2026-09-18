@@ -89,7 +89,6 @@ export {
   errorsDocument,
   invocationsIn,
   isGroup,
-  isWrite,
   needsActor,
   paramsFor,
   parseOperationsEnvelope,
@@ -118,6 +117,7 @@ export {
   isIdentityResult,
   isOperationFailure,
   isSourceResult,
+  isWrite,
 } from './types.ts';
 export type {
   BaseOperation,
