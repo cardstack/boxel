@@ -1,4 +1,4 @@
-import { settled } from '@ember/test-helpers';
+import { settled, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -203,6 +203,28 @@ module('Integration | operations store reconciliation', function (hooks) {
     return ids[ids.length - 1];
   }
 
+  // Which cards the store went back to the realm for. Whether a card was
+  // re-read is the decision the event's naming drives, and it is the one the
+  // store makes directly — a card's field values afterwards depend on lazy
+  // loading and link resolution besides, which is a different subject.
+  function recordReads() {
+    let cardService = getService('card-service');
+    let reads: string[] = [];
+    let originalFetchJSON = cardService.fetchJSON.bind(cardService);
+    cardService.fetchJSON = async (url: any, args: any) => {
+      if (!args?.method || args.method === 'GET') {
+        reads.push(String(url));
+      }
+      return await originalFetchJSON(url, args);
+    };
+    return {
+      reads,
+      restore: () => {
+        delete (cardService as any).fetchJSON;
+      },
+    };
+  }
+
   test('a batch promotes the instance it minted a card from', async function (assert) {
     let report = await cardAt('report-adopted');
     let activity = await unsavedActivity('Lab safety');
@@ -340,7 +362,8 @@ module('Integration | operations store reconciliation', function (hooks) {
     );
   });
 
-  test('a card the batch changed reloads even though the batch was ours', async function (assert) {
+  test('one event, two cards, two answers', async function (assert) {
+    let reportURL = `${testRealmURL}report-adopted`;
     let report = await cardAt('report-adopted');
     let activity = await unsavedActivity('Lab safety');
     let store = getService('store');
@@ -350,32 +373,35 @@ module('Integration | operations store reconciliation', function (hooks) {
       b.addActivity({ activity: minted });
       return [minted];
     })) as [{ id: string }];
+    let batchRequestId = lastClientRequestId();
 
-    // The realm appended the link, so the report the store is holding is a
-    // version behind by construction: nothing local produced this state, and
-    // the event is the only word the store gets that it exists.
-    deliverIndexEvent({
-      invalidations: [created.id, `${testRealmURL}report-adopted`],
-      clientRequestId: lastClientRequestId(),
-      clientAuthored: [created.id],
-    });
-    await settled();
+    // Both cards are in one pass, under one request id, and that id is ours.
+    // What separates them is which of them the realm says carried our content:
+    // the card we described, and the report the realm appended the link to.
+    let { reads, restore } = recordReads();
+    try {
+      deliverIndexEvent({
+        invalidations: [created.id, reportURL],
+        clientRequestId: batchRequestId,
+        clientAuthored: [created.id],
+      });
+      await settled();
+    } finally {
+      restore();
+    }
 
-    let links = (report as any).activities ?? [];
-    assert.strictEqual(
-      links.length,
-      1,
-      'the report re-read the state the realm computed for it',
+    assert.true(
+      reads.some((url) => url.startsWith(reportURL)),
+      `the report was re-read, because only the realm knows what it now says: ${JSON.stringify(reads)}`,
+    );
+    assert.false(
+      reads.some((url) => url.startsWith(created.id)),
+      'while the card we described was not, because we are the ones holding what it says',
     );
     assert.strictEqual(
-      links[0]?.id,
-      created.id,
-      'and holds the card the batch minted',
-    );
-    assert.strictEqual(
-      store.peek(`${testRealmURL}report-adopted`),
+      store.peek(reportURL),
       report,
-      'in the object the store was already holding',
+      'and the re-read landed in the object the store was already holding',
     );
   });
 
@@ -473,20 +499,37 @@ module('Integration | operations store reconciliation', function (hooks) {
       'under a name of its own rather than the URL the realm minted',
     );
 
-    deliverIndexEvent({
-      invalidations: [created.id, `${testRealmURL}report-data-only`],
-      clientRequestId: lastClientRequestId(),
-      clientAuthored: [created.id],
-    });
-    await settled();
+    let reportURL = `${testRealmURL}report-data-only`;
+    let { reads, restore } = recordReads();
+    try {
+      deliverIndexEvent({
+        invalidations: [created.id, reportURL],
+        clientRequestId: lastClientRequestId(),
+        clientAuthored: [created.id],
+      });
+      await settled();
+    } finally {
+      restore();
+    }
 
-    let links = (report as any).activities ?? [];
-    assert.strictEqual(
-      links.length,
-      1,
-      'the report the batch changed reloaded and lazy-loaded the new card',
+    assert.true(
+      reads.some((url) => url.startsWith(reportURL)),
+      `the report the batch changed was re-read: ${JSON.stringify(reads)}`,
     );
-    assert.strictEqual((links[0] as any)?.headline, 'Lab safety');
+    // The link resolves when something reads the field, not when the report
+    // reloads — so this waits for it rather than asserting on the tick the
+    // reload happened to land in.
+    await waitUntil(() => ((report as any).activities ?? []).length === 1, {
+      timeout: 10_000,
+      timeoutMessage: 'the report never gained the link',
+    });
+    let [link] = (report as any).activities;
+    assert.strictEqual(
+      link?.id,
+      created.id,
+      'and lazy-loaded the card the batch minted, which it had never seen',
+    );
+    assert.strictEqual((link as any)?.headline, 'Lab safety');
   });
 
   test('a consumer in another realm is re-saved with the URL the batch minted', async function (assert) {

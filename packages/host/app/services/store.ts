@@ -3729,19 +3729,24 @@ export default class StoreService extends Service implements StoreInterface {
   async adoptMintedIdentities(
     minted: readonly { lid: string; id: string }[],
   ): Promise<void> {
+    // Every pairing is checked before any is made. A conflict found partway
+    // through an assignment pass would leave the earlier cards promoted and the
+    // later ones not, which is a harder state to reason about than either
+    // outcome on its own.
     for (let { lid, id } of minted) {
-      let remoteId = rri(id);
-      let held = this.store.getCard(remoteId);
+      let held = this.store.getCard(rri(id));
       if (held && held[localIdSymbol] !== lid) {
         throw new Error(
-          `the batch minted ${remoteId} for local id ${lid}, but this store already holds that card under local id ${held[localIdSymbol]}`,
+          `the batch committed, but its card ${id} cannot be paired with local id ${lid}: this store already holds that card under local id ${held[localIdSymbol]}. The realm has the write; this tab's copy of that card is the thing to reload.`,
         );
       }
+    }
+    for (let { lid, id } of minted) {
       let instance = this.store.getCard(lid);
       if (!instance || instance.id) {
         continue;
       }
-      await this.assignRemoteIdentity(instance, remoteId);
+      await this.assignRemoteIdentity(instance, rri(id));
     }
   }
 
