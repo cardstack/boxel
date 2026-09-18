@@ -203,7 +203,7 @@ async function resolveOne(
   let find = entry.find!;
   let { urls, total } = await runFilter(entry, find, context);
   if (find.expect === 'one') {
-    heldToOneMatch(entry, total, context);
+    heldToOneMatch(entry, urls, total, context);
   }
   if (!find.field) {
     return urls;
@@ -255,15 +255,31 @@ async function resolveOne(
 // The count rule, applied to what the filter matched. `many` takes whatever
 // there is, none included; `one` holds out for exactly one match and names the
 // count it got instead.
+//
+// Decided on the rows, not on the count. The engine runs the data statement
+// and the `COUNT(*)` concurrently, as two statements on two connections, so an
+// index update landing between them leaves the two describing different
+// snapshots. Trusting the count is then wrong in both directions: a count of
+// one beside two returned rows would pass this rule and run the entry against
+// whichever row came first, and a count of one beside no rows would pass it
+// with nothing to target. The rows are what the entry can actually act on, and
+// the page holds two, which is all this rule needs to tell none from one from
+// several.
+//
+// The count is still what a refusal reports, because the rows cannot say how
+// many there are once the page is full — but never as less than the rows
+// themselves, so the number is never smaller than what was seen.
 function heldToOneMatch(
   entry: EnvelopeEntry,
-  total: number,
+  urls: readonly string[],
+  reported: number,
   { mintsCards }: Resolution,
 ): void {
-  if (total === 1) {
+  if (urls.length === 1) {
     return;
   }
-  if (total === 0) {
+  let total = Math.max(urls.length, reported);
+  if (urls.length === 0) {
     throw refuse(
       `entry ${entry.position} describes the card it runs against with a ` +
         `query, and the query matched no card; an entry expecting one card ` +

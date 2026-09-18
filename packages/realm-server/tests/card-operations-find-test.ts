@@ -106,12 +106,24 @@ interface StubOptions {
   // A delay applied to every query, for the cases that need searches to
   // overlap so the bound on how many run at once is observable.
   everyDelay?: number;
+  // The count the engine reports, when a case needs it to disagree with the
+  // rows. The engine runs the data statement and the `COUNT(*)` concurrently
+  // on two connections, so an index update landing between them leaves the two
+  // describing different snapshots — which is a state a real realm reaches and
+  // a stub is the only cheap way to sit in.
+  reportedTotal?: number;
 }
 
 function stub(opts: StubOptions): Stub {
   let queries: SearchEntryQuery[] = [];
   let peeked: string[] = [];
-  let { cards = {}, fields = {}, delays = [], everyDelay } = opts;
+  let {
+    cards = {},
+    fields = {},
+    delays = [],
+    everyDelay,
+    reportedTotal,
+  } = opts;
   let inFlight = 0;
   let peak = 0;
   let answers: string[][] = Array.isArray(opts.matches[0])
@@ -173,7 +185,7 @@ function stub(opts: StubOptions): Stub {
           data: (size === undefined ? urls : urls.slice(0, size)).map(
             (id) => ({ id }) as any,
           ),
-          meta: { page: { total: urls.length } },
+          meta: { page: { total: reportedTotal ?? urls.length } },
         };
       },
       async instance(url) {
@@ -607,6 +619,61 @@ module(basename(import.meta.filename), function () {
           'a card another entry of this batch creates is not one it can match',
         ),
         error.detail,
+      );
+    });
+
+    test('the count rule reads the rows, not a count that disagrees with them', async function (assert) {
+      // The engine runs the data statement and the `COUNT(*)` concurrently on
+      // two connections, so an index update landing between them leaves the
+      // two describing different snapshots. Trusting the count is wrong in
+      // both directions, and the first direction is the dangerous one: it
+      // passes the rule and runs the entry against whichever row came first.
+      let twoRows = stub({
+        matches: [`${REALM}activities/a`, `${REALM}activities/b`],
+        reportedTotal: 1,
+      });
+      let error = await refusal(() =>
+        resolve(
+          twoRows,
+          invoke({ 'boxel:target': { query: openActivities() } }),
+        ),
+      );
+      assert.strictEqual(
+        error.code,
+        'invalid-params',
+        'two rows beside a count of one is refused, not run against the first',
+      );
+      assert.true(error.detail?.includes('2 cards answer to it'), error.detail);
+
+      // The other direction: a count of one with nothing to target would have
+      // passed the rule and left the entry carrying no href at all.
+      let noRows = stub({ matches: [], reportedTotal: 1 });
+      let empty = await refusal(() =>
+        resolve(
+          noRows,
+          invoke({ 'boxel:target': { query: openActivities() } }),
+        ),
+      );
+      assert.true(empty.detail?.includes('matched no card'), empty.detail);
+    });
+
+    test('a refusal still names the whole count when the page could not hold it', async function (assert) {
+      // The rows decide, but two rows cannot say how many there are — so the
+      // number a refusal reports comes from the count, and never as less than
+      // the rows themselves.
+      let stubbed = stub({
+        matches: [`${REALM}activities/a`, `${REALM}activities/b`],
+        reportedTotal: 17,
+      });
+      let error = await refusal(() =>
+        resolve(
+          stubbed,
+          invoke({ 'boxel:target': { query: openActivities() } }),
+        ),
+      );
+      assert.true(
+        error.detail?.includes('17 cards answer to it'),
+        `names the whole count, not the page: ${error.detail}`,
       );
     });
 
