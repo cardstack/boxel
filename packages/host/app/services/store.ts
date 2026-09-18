@@ -3703,11 +3703,17 @@ export default class StoreService extends Service implements StoreInterface {
   // and the batch is the only thing that holds more than one, so there is no
   // second holder to deadlock against — and folding keeps this the same
   // primitive a save takes rather than a second kind of lock.
+  //
+  // Each id is taken once. A caller naming the same card twice would otherwise
+  // have the inner acquisition wait on the deferred the outer one is still
+  // holding, and a batch that names one card twice is a batch that deadlocks
+  // before the realm ever gets to refuse it for saying the same card is two
+  // cards.
   async withMutationLocks<T>(
     localIds: readonly string[],
     fn: () => Promise<T>,
   ): Promise<T> {
-    let [first, ...rest] = localIds;
+    let [first, ...rest] = [...new Set(localIds)];
     if (first === undefined) {
       return await fn();
     }

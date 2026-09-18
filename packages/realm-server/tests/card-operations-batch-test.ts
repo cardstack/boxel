@@ -516,9 +516,9 @@ module(basename(import.meta.filename), function () {
         { clientRequestId: 'req-1' },
       );
 
-      assert.strictEqual(
+      assert.deepEqual(
         commits[0].clientAuthored,
-        undefined,
+        [],
         'a create that named no card of its own left the realm to name it, so no caller is holding it',
       );
     });
@@ -553,10 +553,58 @@ module(basename(import.meta.filename), function () {
         { clientRequestId: 'req-1' },
       );
 
-      assert.strictEqual(
+      assert.deepEqual(
         commits[0].clientAuthored,
-        undefined,
+        [],
         "the commit claims only the cards it minted under a caller's name",
+      );
+    });
+
+    // The distinction the store reads: a batch that authored nothing is a
+    // batch every card of which wants re-reading, and it has to be able to say
+    // so. Reported as an empty list rather than by omission, because omission
+    // is what a writer that does not answer the question looks like — and a
+    // client reading "I authored none of this" as "no information" skips the
+    // very cards only the realm can tell it about.
+    test('a batch that authored nothing says so, rather than saying nothing', async function (assert) {
+      let { core, commits } = stub({
+        stored: {
+          'Person/existing.json': JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Mango' },
+              meta: { adoptsFrom: PERSON },
+            },
+          }),
+        },
+      });
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'update',
+            href: `${REALM}Person/existing`,
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Van Gogh' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        { clientRequestId: 'req-1' },
+      );
+
+      let answered = Array.isArray(commits[0].clientAuthored);
+      assert.true(
+        answered,
+        'the commit answered the question rather than leaving it open',
+      );
+      assert.strictEqual(
+        commits[0].clientAuthored?.length,
+        0,
+        'and its answer is that it authored none of what it wrote',
       );
     });
   });

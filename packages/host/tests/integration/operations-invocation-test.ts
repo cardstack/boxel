@@ -359,8 +359,7 @@ module('Integration | operations invocation', function (hooks) {
       // Registered locally, which is what lets the store recognize the echo as
       // its own. Recognizing it is not the same as skipping it: the store skips
       // only the cards the event says carried this client's content, and a
-      // transform's result is computed on the server — so this card is named
-      // nowhere and is re-read like any other.
+      // transform's result is computed on the server.
       let added = [...clientRequestIds.values()].filter(
         (id) => !before.has(id),
       );
@@ -369,13 +368,23 @@ module('Integration | operations invocation', function (hooks) {
         ids,
         'the id the realm received is the one registered here',
       );
+
+      // Empty, and present. The emptiness is the report — this write authored
+      // none of what it wrote — and reporting it by omission instead would
+      // read as a write that said nothing about the question, which is what
+      // makes a client skip the whole pass.
       let claimed = broadcast
         .map((event) => event?.clientAuthored)
-        .filter(Boolean);
+        .filter((named) => named !== undefined);
+      assert.strictEqual(
+        claimed.length,
+        1,
+        'the write answered which of its cards carried our content',
+      );
       assert.deepEqual(
-        claimed,
+        claimed[0],
         [],
-        'and the write claimed no card as carrying content this client sent, so nothing about it is skipped',
+        'and answered that none of them did, so nothing about this pass is skipped',
       );
     });
 

@@ -495,9 +495,12 @@ export interface IncrementalIndexEventContent {
   // flight — so re-reading them is how an edit gets lost. Every other
   // invalidation in the same pass reports state only the realm has.
   //
-  // Absent when the writer named none, which means nothing in the pass can be
-  // ruled out and a client with fresher state to protect has only the request
-  // id to go on, as it had before this member existed.
+  // Empty and absent mean different things. Empty is a writer reporting that
+  // it authored none of what it wrote — a batch that only transformed cards,
+  // say — so every card in the pass holds state the realm computed and every
+  // one of them wants re-reading. Absent is a writer that does not report on
+  // the question at all, which leaves a client with only the request id to go
+  // on, as it had before this member existed.
   clientAuthored?: string[];
   // The realm generation the indexing pass committed. Lets a consumer correlate
   // this search-doc update with the prerendered HTML that belongs to it.

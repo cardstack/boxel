@@ -1821,6 +1821,12 @@ async function commitStaged(
   // may have moved on since — so the event says so, and re-reading them is
   // that caller's to decline. Every other card the batch touches took state
   // the realm computed, which no caller holds and every one of them wants.
+  //
+  // Reported even when it is empty, and the emptiness is the report: a batch
+  // that only transformed cards authored none of them, which is a different
+  // statement from a writer that said nothing about the question. Collapsing
+  // the two would have a client read "I supplied none of this" as "no
+  // information" and skip the whole pass — the cards it most needs to re-read.
   let clientAuthored = staged
     .filter((change): change is StagedChange => Boolean(change?.lid))
     .map((change) => change.id);
@@ -1828,7 +1834,7 @@ async function commitStaged(
     { writes, appends, deletes },
     {
       clientRequestId: opts.clientRequestId ?? null,
-      ...(clientAuthored.length ? { clientAuthored } : {}),
+      clientAuthored,
       waitForIndex: opts.waitForIndex ?? true,
       // The batch's index job is tagged with the user whose request produced
       // it, the same as every other write path, so a reader draining its own

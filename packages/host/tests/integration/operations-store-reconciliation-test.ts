@@ -122,6 +122,7 @@ function realmContents() {
     'report-racing.json': reportFile('Racing'),
     'report-foreign.json': reportFile('Foreign'),
     'report-conflicting.json': reportFile('Conflicting'),
+    'report-transformed.json': reportFile('Transformed'),
   };
 }
 
@@ -452,6 +453,41 @@ module('Integration | operations store reconciliation', function (hooks) {
     assert.false(
       reads.some((url) => url.startsWith(created.id)),
       'while the card we described was not, because we are the ones holding what it says',
+    );
+  });
+
+  test('a write that authored nothing re-reads everything it touched', async function (assert) {
+    // The case the per-card rule exists to protect, from the other side. A
+    // transform's new state is computed on the server, so this client holds
+    // none of it and the event is the only word it gets — and the write is
+    // still its own, under its own request id. Recognizing the echo has to
+    // stop short of skipping it.
+    let reportURL = `${testRealmURL}report-transformed`;
+    let report = await cardAt('report-transformed');
+
+    let { reads, restore } = recordReads();
+    let announced = realmEventFor(reportURL);
+    let event: any;
+    try {
+      await (operations(report) as any).escalate();
+      event = await announced;
+      await settled();
+    } finally {
+      restore();
+    }
+
+    assert.true(
+      getService('card-service').clientRequestIds.has(event.clientRequestId),
+      'the event carries a request id this client registered, so the echo is recognized as ours',
+    );
+    assert.deepEqual(
+      event.clientAuthored,
+      [],
+      'and the write reports that it authored none of what it wrote',
+    );
+    assert.true(
+      reads.some((url) => url.startsWith(reportURL)),
+      `so the card is re-read rather than skipped: ${JSON.stringify(reads)}`,
     );
   });
 

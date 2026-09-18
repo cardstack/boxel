@@ -2731,6 +2731,7 @@ export class Realm {
     let clientAuthored = opts?.clientAuthored?.filter((url) =>
       invalidations.includes(url),
     );
+    let authorshipReported = clientAuthored !== undefined;
     this.broadcastRealmEvent({
       eventName: 'index',
       indexType: 'incremental',
@@ -2738,7 +2739,7 @@ export class Realm {
       ...(opts && Object.prototype.hasOwnProperty.call(opts, 'clientRequestId')
         ? { clientRequestId: opts.clientRequestId }
         : {}),
-      ...(clientAuthored?.length ? { clientAuthored } : {}),
+      ...(authorshipReported ? { clientAuthored } : {}),
       ...(opts?.generation !== undefined
         ? { generation: opts.generation }
         : {}),
@@ -3448,9 +3449,10 @@ export class Realm {
     let invalidatedTypes = makeInvalidatedTypeAccumulator();
     let indexGeneration: number | undefined;
     let clientRequestId: string | null = options?.clientRequestId ?? null;
-    let clientAuthored: string[] | undefined = options?.clientAuthored?.length
-      ? options.clientAuthored
-      : undefined;
+    // Passed through as supplied. An empty list is a writer saying it authored
+    // none of what it wrote, which is not the same as a writer that said
+    // nothing — so the two stay distinguishable all the way to the event.
+    let clientAuthored: string[] | undefined = options?.clientAuthored;
     let initiatingUser: string | null = options?.initiatingUser ?? null;
     // The module→instance flush below runs an index pass whose invalidation
     // set is every dependent of the modules written so far — including the

@@ -495,9 +495,14 @@ module(basename(import.meta.filename), function () {
     // only have to survive the request. Which is why the suite asserts they
     // differ between batches: a name reused across batches is a create refused
     // for writing a file an earlier batch already wrote.
-    function mintingHarness(opts?: { resources?: Record<string, unknown> }) {
+    function mintingHarness(opts?: {
+      resources?: Record<string, unknown>;
+      answer?: OperationsAnswer;
+    }) {
       return harness({
-        answer: { 'atomic:results': [{ data: { type: 'card', id: 'a' } }] },
+        answer: opts?.answer ?? {
+          'atomic:results': [{ data: { type: 'card', id: 'a' } }],
+        },
         subjects: {
           ACTIVITY: activityType(),
           UNSAVED: {
@@ -634,6 +639,40 @@ module(basename(import.meta.filename), function () {
         sent[0].opts?.adopted,
         undefined,
         'nothing holds a card minted from data, so there is nothing to promote',
+      );
+    });
+
+    test('one card named twice is reported once to the transport', async function (assert) {
+      // The transport takes a lock per name before the write, one nesting
+      // inside the last. A name arriving twice would have the inner
+      // acquisition wait on the lock the outer one still holds, so the batch
+      // would hang here rather than reaching the realm — which refuses a card
+      // claimed twice, and is the answer the caller should get.
+      let { sent, env } = mintingHarness({
+        answer: {
+          'atomic:results': [
+            { data: { type: 'card', id: 'a' } },
+            { data: { type: 'card', id: 'b' } },
+          ],
+        },
+      });
+      let bucket = buildOperations(reportInstance(), env);
+      await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
+        (b: any) => {
+          b.create('UNSAVED');
+          b.create('UNSAVED');
+        },
+      );
+
+      assert.deepEqual(
+        sent[0].opts?.adopted,
+        ['held-by-the-caller', 'held-by-the-caller'],
+        'the batch reports the name once per entry that used it',
+      );
+      assert.strictEqual(
+        new Set(sent[0].opts?.adopted).size,
+        1,
+        'and they are the same name, which is what the realm refuses the batch for',
       );
     });
 
