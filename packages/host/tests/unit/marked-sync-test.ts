@@ -299,6 +299,111 @@ more plan te`;
     );
   });
 
+  test('a patch that closed its fence without a REPLACE marker keeps its fence', function (assert) {
+    // The model wrote the block, left the closing marker out, closed the
+    // fence, and went on with prose. Widening the opener would count that
+    // fence as inner content and leave the block open to the end of the
+    // message, with the fence and the prose rendered inside it.
+    let unterminated = `Now an instance of the card:
+
+\`\`\`json
+https://example.com/realm/HelloWorld/hello.json (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+{
+  "data": { "type": "card" }
+}
+\`\`\`
+
+Apply these two changes and I'll open the card for you.
+`;
+    assert.strictEqual(
+      widenFencesAroundCodePatches(unterminated),
+      unterminated,
+      'nothing is widened',
+    );
+    let blocks = renderBodyToCodeData(unterminated);
+    assert.strictEqual(blocks.length, 1, 'one code block');
+    assert.strictEqual(
+      blocks[0].fileUrl,
+      'https://example.com/realm/HelloWorld/hello.json',
+    );
+    assert.false(
+      (blocks[0].searchReplaceBlock ?? blocks[0].code ?? '').includes(
+        'Apply these two changes',
+      ),
+      'the prose after the fence is not part of the block',
+    );
+  });
+
+  test('a patch that closed its fence without a REPLACE marker does not swallow the patch after it', function (assert) {
+    // The next block's REPLACE marker is the first one after this opener;
+    // taking it as this block's would merge the two into one patch and write
+    // the second file's content into the first.
+    let twoBlocks = `\`\`\`gts
+https://example.com/realm/hello-world.gts (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+import { CardDef } from '@cardstack/base/card-api';
+export class HelloWorld extends CardDef {}
+\`\`\`
+
+And an instance of it:
+
+\`\`\`json
+https://example.com/realm/HelloWorld/hello.json (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+{
+  "data": { "type": "card" }
+}
+${REPLACE_MARKER}
+\`\`\`
+`;
+    assert.strictEqual(
+      widenFencesAroundCodePatches(twoBlocks),
+      twoBlocks,
+      'nothing is widened',
+    );
+    let blocks = renderBodyToCodeData(twoBlocks);
+    assert.deepEqual(
+      blocks.map((b) => b.fileUrl),
+      [
+        'https://example.com/realm/hello-world.gts',
+        'https://example.com/realm/HelloWorld/hello.json',
+      ],
+      'two blocks, each with its own url',
+    );
+    assert.true(
+      blocks[1].searchReplaceBlock!.includes('"data": { "type": "card" }'),
+      'the second patch survives intact',
+    );
+    assert.false(
+      (blocks[0].searchReplaceBlock ?? blocks[0].code ?? '').includes(
+        'hello.json',
+      ),
+      'the first block ends at its own fence',
+    );
+  });
+
+  test('widenFencesAroundCodePatches still widens a streaming patch whose inner fence has closed', function (assert) {
+    let streaming = `\`\`\`md
+https://example.com/realm/plan.md (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+# Plan
+
+\`\`\`text
+box
+\`\`\`
+
+more plan te`;
+    assert.true(
+      widenFencesAroundCodePatches(streaming).startsWith('````md\n'),
+      'an inner opener and closer pair does not read as the patch closing',
+    );
+  });
+
   test('markedSync converts markdown to HTML', function (assert) {
     const markdown = '# Hello\n**Bold text**';
     const result = markedSync(markdown);

@@ -175,7 +175,9 @@ function normalizeDecorativeBullets(markdown: string): string {
 // Only the two fence lines change. The patch text between the markers, which
 // the applier matches against the target file, is not touched. A patch whose
 // REPLACE marker has not streamed in yet gets only its opener widened, so a
-// partially received plan file already renders as one block.
+// partially received plan file already renders as one block. A patch that
+// closed its fence without ever writing the REPLACE marker is left alone, so
+// the model's omission costs that one block and not the blocks after it.
 const FILE_URL_LINE_PATTERN = /^\s*https?:\/\/\S+(\s*\(\s*new\s*\))?\s*\r?$/;
 
 // A fence opens a code block only at the start of a line. A model that ends a
@@ -251,6 +253,19 @@ export function widenFencesAroundCodePatches(markdown: string): string {
     let replaceIndex = indexOfLine(lines, i + 3, (line) =>
       REPLACE_MARKER_PATTERN.test(line),
     );
+    // A block whose own closing fence comes before any REPLACE marker is a
+    // finished patch with the marker left out, not one still streaming. Its
+    // fence is the only bound it has: widening past it would count that
+    // fence as inner content, leave the block open to the end of the message,
+    // and hand the next patch's REPLACE marker to this one, so the two blocks
+    // become one and the file after this one is written into it. Leave the
+    // block as written; the parser reports it as malformed, bounded by its
+    // fence, and the patch after it stays its own block.
+    let ownClose = indexOfPatchClosingFence(lines, i + 1, fenceLength);
+    if (ownClose !== -1 && (replaceIndex === -1 || replaceIndex > ownClose)) {
+      i = ownClose + 1;
+      continue;
+    }
     let contentEnd = replaceIndex === -1 ? lines.length : replaceIndex;
     let longestInnerRun = 0;
     for (let j = i + 1; j < contentEnd; j++) {
@@ -304,6 +319,32 @@ function indexOfLine(
     if (predicate(lines[i])) {
       return i;
     }
+  }
+  return -1;
+}
+
+// The bare fence that closes a patch, with the fenced blocks inside its
+// content skipped over. Inner fences come in pairs, an opener and its closer,
+// so a bare fence met after an odd number of inner fence lines is closing an
+// inner block and a bare fence met after an even number is the patch's own.
+// -1 when the text ends first, which is what a patch still streaming looks
+// like.
+function indexOfPatchClosingFence(
+  lines: string[],
+  from: number,
+  fenceLength: number,
+): number {
+  let innerFences = 0;
+  for (let j = from; j < lines.length; j++) {
+    let m = lines[j].match(CODE_FENCE_PATTERN);
+    if (!m || m[2][0] !== '`') {
+      continue;
+    }
+    let bare = m[3].trim() === '' && m[2].length >= fenceLength;
+    if (bare && innerFences % 2 === 0) {
+      return j;
+    }
+    innerFences++;
   }
   return -1;
 }
