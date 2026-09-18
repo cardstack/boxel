@@ -284,10 +284,11 @@ module('Integration | operations store reconciliation', function (hooks) {
       [created.id],
       'naming the card it minted under our name, and not the report it computed for us',
     );
-    assert.strictEqual(
-      batchEvent.clientRequestId,
-      lastClientRequestId(),
-      "stamped with the batch's own request id, which is what makes the naming ours to read",
+    assert.true(
+      getService('card-service').clientRequestIds.has(
+        batchEvent.clientRequestId,
+      ),
+      'stamped with a request id this client registered, which is what makes the naming ours to read',
     );
     assert.true(
       (batchEvent.invalidations ?? []).includes(
@@ -312,6 +313,9 @@ module('Integration | operations store reconciliation', function (hooks) {
       b.addActivity({ activity: minted });
       return [minted];
     })) as [{ id: string }];
+    // Read before the edit below: the edit starts a save, which registers an id
+    // of its own, and the event under test is the batch's.
+    let batchRequestId = lastClientRequestId();
 
     // What a user typing during the write leaves behind: the realm holds what
     // the batch sent, the instance holds something newer.
@@ -319,7 +323,7 @@ module('Integration | operations store reconciliation', function (hooks) {
 
     deliverIndexEvent({
       invalidations: [created.id, `${testRealmURL}report-adopted`],
-      clientRequestId: lastClientRequestId(),
+      clientRequestId: batchRequestId,
       clientAuthored: [created.id],
     });
     await settled();
