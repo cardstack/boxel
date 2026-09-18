@@ -27,6 +27,7 @@ import {
   createJWT,
   setupMatrixRoom,
   setupPermissionedRealmCached,
+  waitUntil,
   withRealmPath,
   type RealmRequest,
 } from '../helpers/index.ts';
@@ -68,6 +69,26 @@ function invoke(
   rest: { href?: string; data?: unknown } = {},
 ): Record<string, unknown> {
   return { op: 'invoke', 'boxel:name': name, ...rest };
+}
+
+function parallel(...operations: unknown[]): Record<string, unknown> {
+  return { op: 'parallel', 'boxel:operations': operations };
+}
+
+function serial(...operations: unknown[]): Record<string, unknown> {
+  return { op: 'serial', 'boxel:operations': operations };
+}
+
+function person(lid: string, firstName: string, friend?: string) {
+  return {
+    lid,
+    type: 'card',
+    attributes: { firstName },
+    ...(friend
+      ? { relationships: { friend: { data: { lid: friend, type: 'card' } } } }
+      : {}),
+    meta: { adoptsFrom: PERSON },
+  };
 }
 
 function reportFile(): LooseSingleCardDocument {
@@ -146,6 +167,14 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
           set: { headline: params('headline') },
         };
 
+        @operation static openOnly = {
+          base: 'transform',
+          transformations: bxl\`
+            assert(.status == "open"; "Report is not open");
+            .status = "escalated";
+          \`,
+        };
+
         @operation static knownReviewers = {
           base: 'query',
           query: { filter: { on: Person, eq: { firstName: 'Reviewer' } } },
@@ -220,10 +249,37 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         'report-query',
         'report-unserved',
         'report-position',
+        // One per group test, for the same reason.
+        'report-parallel-1',
+        'report-parallel-2',
+        'report-parallel-3',
+        'report-abandoned-1',
+        'report-abandoned-2',
+        'report-conflict',
+        'report-nested-1',
+        'report-nested-2',
+        'report-nested-3',
+        'report-shape',
+        'report-tree-write',
       ].map((name) => [`${name}.json`, reportFile()]),
     ),
+    // The one report that is not open, so an operation asserting that it is
+    // refuses the batch it sits in.
+    'report-closed.json': {
+      data: {
+        type: 'card',
+        attributes: {
+          headline: 'Quarterly Review',
+          status: 'closed',
+          comments: [],
+        },
+        relationships: { owner: { links: { self: './reviewer' } } },
+        meta: { adoptsFrom: EXTERNAL_REPORT },
+      },
+    },
     'notes.md': '# Notes\n',
     'positions.log': 'boot\n',
+    'group.log': 'boot\n',
     // A stored file the registered-extension table does not name, so its URL
     // classifies as a card and the executor is what tells the two apart.
     'telemetry.log': 'boot\n',
@@ -480,17 +536,108 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         );
       });
 
-      test('an entry that is not an invocation is refused', async function (assert) {
+      test('an entry naming no verb the envelope carries is refused', async function (assert) {
         let response = await post(
-          envelope({ op: 'parallel', 'boxel:operations': [] }),
+          envelope({ op: 'add', href: '/report-kept' }),
         );
 
         assert.strictEqual(response.status, 400, 'HTTP 400 status');
         let [error] = response.body.errors;
         assert.strictEqual(error.meta.entry, 0);
-        assert.true(
-          error.detail.includes('invoke'),
-          `detail names the verb this endpoint carries: ${error.detail}`,
+        for (let verb of ['invoke', 'parallel', 'serial']) {
+          assert.true(
+            error.detail.includes(verb),
+            `detail names the "${verb}" verb: ${error.detail}`,
+          );
+        }
+      });
+
+      test('a group holding no members is refused', async function (assert) {
+        let response = await post(
+          envelope(invoke('escalate', { href: '/report-kept' }), parallel()),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.meta.entry, 1);
+        assert.strictEqual(
+          storedCard('report-kept.json').data.attributes?.status,
+          'open',
+          'and the entry beside it wrote nothing',
+        );
+      });
+
+      test("a group carrying an invocation's members is refused", async function (assert) {
+        for (let [member, value] of [
+          ['boxel:name', 'escalate'],
+          ['href', '/report-kept'],
+          ['data', { body: 'x' }],
+        ] as [string, unknown][]) {
+          let response = await post(
+            envelope({
+              op: 'serial',
+              [member]: value,
+              'boxel:operations': [
+                invoke('escalate', { href: '/report-kept' }),
+              ],
+            }),
+          );
+
+          assert.strictEqual(response.status, 400, `"${member}" is refused`);
+          assert.true(
+            response.body.errors[0].detail.includes(member),
+            `detail names the member: ${response.body.errors[0].detail}`,
+          );
+        }
+      });
+
+      test('a refusal inside a group names the path down to the entry', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('escalate', { href: '/report-kept' }),
+            parallel(
+              invoke('escalate', { href: '/report-kept' }),
+              serial(
+                invoke('escalate', {
+                  href: 'http://127.0.0.1:4999/other/report-x',
+                }),
+              ),
+            ),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(
+          error.meta.entry,
+          '[1].boxel:operations[1].boxel:operations[0]',
+          'the path through the tree, since no single number reaches it',
+        );
+      });
+
+      test('a QUERY batch carrying a write anywhere in the tree is refused', async function (assert) {
+        let response = await query(
+          envelope(
+            invoke('read', { href: '/report-kept' }),
+            parallel(
+              invoke('read', { href: '/report-kept' }),
+              serial(invoke('escalate', { href: '/report-tree-write' })),
+            ),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.code, 'wrong-entry-point');
+        assert.strictEqual(
+          error.meta.entry,
+          '[1].boxel:operations[1].boxel:operations[0]',
+          'the write is named wherever in the tree it sits',
+        );
+        assert.strictEqual(
+          storedCard('report-tree-write.json').data.attributes?.status,
+          'open',
+          'nothing was written',
         );
       });
 
@@ -945,6 +1092,329 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(read.status, 200, 'HTTP 200 status');
         assert.strictEqual(read.get('Cache-Control'), 'no-store');
         assert.strictEqual(read.get('ETag'), undefined);
+      });
+    });
+
+    module('groups', function () {
+      test('a parallel group commits its members together, under one job and one event', async function (assert) {
+        let jobsBefore = await indexJobIds();
+        let since = Date.now();
+
+        // Tagged so the batch's own broadcast can be told from the ones this
+        // realm makes for the rest of the file's tests: it is shared, and a
+        // straggler from an earlier test can land inside the window.
+        let response = await post(
+          envelope(
+            parallel(
+              invoke('escalate', { href: '/report-parallel-1' }),
+              invoke('escalate', { href: '/report-parallel-2' }),
+              invoke('escalate', { href: '/report-parallel-3' }),
+            ),
+          ),
+        ).set('X-Boxel-Client-Request-Id', 'parallel-group');
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        for (let card of [
+          'report-parallel-1',
+          'report-parallel-2',
+          'report-parallel-3',
+        ]) {
+          assert.strictEqual(
+            storedCard(`${card}.json`).data.attributes?.status,
+            'escalated',
+            `${card} was written`,
+          );
+        }
+        assert.strictEqual(
+          (await indexJobIds()).length - jobsBefore.length,
+          1,
+          'the whole group indexed under one job',
+        );
+        // The realm broadcasts out of band from the commit, so the event is
+        // waited for rather than read off the window the response returned in.
+        await waitUntil(
+          async () =>
+            (await incrementalIndexEventsSince(since)).some(
+              (event) => event.clientRequestId === 'parallel-group',
+            ),
+          {
+            timeout: 30_000,
+            timeoutMessage: "the group's index event never arrived",
+          },
+        );
+        let announced = (await incrementalIndexEventsSince(since)).filter(
+          (event) => event.clientRequestId === 'parallel-group',
+        );
+        assert.strictEqual(
+          announced.length,
+          1,
+          `the group announced itself once (got ${announced.length})`,
+        );
+        // By containment: what a write invalidates is the card plus whatever
+        // depends on it, so an exact list would pin the fixture's link graph
+        // rather than the claim, which is that one event covers all three.
+        for (let card of [
+          'report-parallel-1',
+          'report-parallel-2',
+          'report-parallel-3',
+        ]) {
+          assert.true(
+            (announced[0].invalidations ?? []).includes(
+              `${testRealmHref}${card}`,
+            ),
+            `the one event names ${card}`,
+          );
+        }
+      });
+
+      test('a member whose precondition does not hold leaves the whole group unwritten', async function (assert) {
+        let jobsBefore = await indexJobIds();
+
+        let response = await post(
+          envelope(
+            parallel(
+              invoke('escalate', { href: '/report-abandoned-1' }),
+              invoke('openOnly', { href: '/report-closed' }),
+              invoke('escalate', { href: '/report-abandoned-2' }),
+            ),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.code, 'assertion-failed');
+        assert.strictEqual(
+          error.meta.entry,
+          '[0].boxel:operations[1]',
+          'the member whose assertion did not hold',
+        );
+        for (let card of ['report-abandoned-1', 'report-abandoned-2']) {
+          assert.strictEqual(
+            storedCard(`${card}.json`).data.attributes?.status,
+            'open',
+            `${card} staged successfully and was still not written`,
+          );
+        }
+        assert.strictEqual(
+          storedCard('report-closed.json').data.attributes?.status,
+          'closed',
+        );
+        // The job is the whole of what is checked here, and it is checked
+        // rather than the broadcast because the broadcast cannot be: the realm
+        // announces out of band, which is why the positive case above waits up
+        // to 30s for its own event. Read with no wait, an empty window says
+        // only that nothing has arrived yet — it would be empty for a batch
+        // that did commit — so asserting it would be asserting nothing. No job
+        // is the same claim made in a form that can fail: the announcement
+        // follows the job, and this batch enqueued none.
+        assert.deepEqual(
+          await indexJobIds(),
+          jobsBefore,
+          'no index job was enqueued, so there is nothing to announce',
+        );
+      });
+
+      test('two members of one parallel group changing a card are refused, naming both', async function (assert) {
+        let response = await post(
+          envelope(
+            parallel(
+              invoke('escalate', { href: '/report-conflict' }),
+              invoke('addComment', {
+                href: '/report-conflict',
+                data: { body: 'at the same time' },
+              }),
+            ),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.code, 'conflicting-targets');
+        assert.strictEqual(error.meta.entry, '[0].boxel:operations[1]');
+        assert.strictEqual(error.meta.conflictsWith, '[0].boxel:operations[0]');
+        for (let path of [
+          '[0].boxel:operations[0]',
+          '[0].boxel:operations[1]',
+        ]) {
+          assert.true(
+            error.detail.includes(path),
+            `the prose names ${path}: ${error.detail}`,
+          );
+        }
+        assert.strictEqual(
+          storedCard('report-conflict.json').data.attributes?.status,
+          'open',
+          'and neither of them was written',
+        );
+      });
+
+      test('the same two entries in serial order compose instead', async function (assert) {
+        let response = await post(
+          envelope(
+            serial(
+              invoke('escalate', { href: '/report-conflict' }),
+              invoke('addComment', {
+                href: '/report-conflict',
+                data: { body: 'after it' },
+              }),
+            ),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let stored = storedCard('report-conflict.json');
+        assert.strictEqual(
+          stored.data.attributes?.status,
+          'escalated',
+          'the first entry landed',
+        );
+        assert.deepEqual(
+          stored.data.attributes?.comments,
+          [{ body: 'after it', postedBy: TESTER }],
+          'and the second composed over it rather than replacing it',
+        );
+      });
+
+      test('groups nest, and the results mirror the shape of the request', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('read', { href: '/report-shape' }),
+            parallel(
+              serial(
+                invoke('create', { data: person('writer', 'Mango') }),
+                invoke('create', {
+                  data: person('note', 'Van Gogh', 'writer'),
+                }),
+              ),
+              invoke('appendLine', {
+                href: '/group.log',
+                data: { line: 'elsewhere' },
+              }),
+            ),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let [read, group] = response.body['atomic:results'];
+        assert.strictEqual(
+          read.data.attributes.status,
+          'open',
+          'the read answers with the pre-batch document, where the entry sat',
+        );
+        assert.strictEqual(
+          group.length,
+          2,
+          "a group's position holds its members' results",
+        );
+        let [branch, appended] = group;
+        assert.deepEqual(
+          branch.map((result: { data: { lid: string } }) => result.data.lid),
+          ['writer', 'note'],
+          'the serial branch answers in request order, nested one deeper',
+        );
+        assert.strictEqual(
+          appended.data.id,
+          `${testRealmHref}group.log`,
+          'and the other branch answers beside it',
+        );
+        assert.strictEqual(
+          readFileSync(realmFile('group.log'), 'utf8'),
+          'boot\nelsewhere\n',
+          'the append landed',
+        );
+        let note = JSON.parse(
+          readFileSync(
+            realmFile(`${branch[1].data.id.slice(testRealmHref.length)}.json`),
+            'utf8',
+          ),
+        );
+        assert.strictEqual(
+          new URL(note.data.relationships.friend.links.self, branch[1].data.id)
+            .href,
+          branch[0].data.id,
+          'and the second create links to the card the first one minted',
+        );
+      });
+
+      test('a parallel member links to a card an earlier serial step creates', async function (assert) {
+        // Every local id in the tree is resolved once, before any of it
+        // stages, so which entry mints a card and which link to it is not a
+        // question about the schedule.
+        let response = await post(
+          envelope(
+            invoke('create', { data: person('tree-author', 'Author') }),
+            parallel(
+              invoke('create', {
+                data: person('tree-fan-1', 'Fan One', 'tree-author'),
+              }),
+              invoke('create', {
+                data: person('tree-fan-2', 'Fan Two', 'tree-author'),
+              }),
+            ),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let [author, fans] = response.body['atomic:results'];
+        for (let fan of fans) {
+          let stored = JSON.parse(
+            readFileSync(
+              realmFile(`${fan.data.id.slice(testRealmHref.length)}.json`),
+              'utf8',
+            ),
+          );
+          assert.strictEqual(
+            new URL(stored.data.relationships.friend.links.self, fan.data.id)
+              .href,
+            author.data.id,
+            `${fan.data.lid} links to the card the serial step minted`,
+          );
+        }
+      });
+
+      test('groups three deep commit together', async function (assert) {
+        let jobsBefore = await indexJobIds();
+
+        let response = await post(
+          envelope(
+            parallel(
+              serial(
+                parallel(
+                  invoke('escalate', { href: '/report-nested-1' }),
+                  invoke('escalate', { href: '/report-nested-2' }),
+                ),
+                invoke('addComment', {
+                  href: '/report-nested-1',
+                  data: { body: 'after the inner group' },
+                }),
+              ),
+              invoke('escalate', { href: '/report-nested-3' }),
+            ),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        for (let card of [
+          'report-nested-1',
+          'report-nested-2',
+          'report-nested-3',
+        ]) {
+          assert.strictEqual(
+            storedCard(`${card}.json`).data.attributes?.status,
+            'escalated',
+            `${card} was written`,
+          );
+        }
+        assert.deepEqual(
+          storedCard('report-nested-1.json').data.attributes?.comments,
+          [{ body: 'after the inner group', postedBy: TESTER }],
+          'the entry after the innermost group composed over what it staged',
+        );
+        assert.strictEqual(
+          (await indexJobIds()).length - jobsBefore.length,
+          1,
+          'and the whole tree indexed under one job',
+        );
       });
     });
 

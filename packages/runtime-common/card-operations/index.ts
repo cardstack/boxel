@@ -21,10 +21,12 @@ export type {
 } from './dispatch.ts';
 export { readOperation, erroredTargetRow } from './read.ts';
 export type { ErroredTargetRow } from './read.ts';
-export { commitBatch } from './coordinator.ts';
+export { commitBatch, STAGING_WIDTH } from './coordinator.ts';
 export type {
   BatchCore,
   BatchEntryResult,
+  BatchGroup,
+  BatchNode,
   CommitBatchOptions,
 } from './coordinator.ts';
 export {
@@ -80,22 +82,28 @@ export {
 export type { CardSourceLayout, StoredContainer } from './json-splice.ts';
 export { readSourceOperation } from './read-source.ts';
 export {
-  answered,
   assertTravelsInEnvelope,
   atEntry,
   batchEntryFor,
   carriesOperationsExt,
   errorsDocument,
+  invocationsIn,
+  isGroup,
   needsActor,
   paramsFor,
   parseOperationsEnvelope,
   readResult,
+  resultsTree,
+  stagedTree,
   targetFor,
   writeResult,
 } from './envelope.ts';
 export type {
   EnvelopeEntry,
+  EnvelopeGroup,
+  EnvelopeNode,
   EnvelopeResult,
+  EnvelopeResults,
   ResolvedEnvelopeEntry,
 } from './envelope.ts';
 export { lowerQueryOperation } from './query.ts';
@@ -113,6 +121,7 @@ export {
 } from './types.ts';
 export type {
   BaseOperation,
+  EntryPosition,
   LowerOperationDeclarationsResult,
   OperationDefinition,
   OperationDocumentResult,
