@@ -4,7 +4,20 @@ import { logger, trimExecutableExtension } from './index.ts';
 export type ModuleLike = Record<string, any>;
 export type ModuleDescriptor =
   | { prefix: `${string}/`; resolve: (rest: string) => Promise<ModuleLike> }
-  | { id: string; resolve: () => Promise<ModuleLike> };
+  | {
+      id: string;
+      resolve: () => Promise<ModuleLike>;
+      // What this module would have reported as consumed had the loader
+      // fetched and evaluated it. A shim carries no dependency chain of its
+      // own, so anything that reads a module's dependencies — the indexer
+      // interning scoped CSS, most of all — sees nothing unless the registrar
+      // says otherwise.
+      //
+      // Read when the module is served, not when it is registered: a
+      // registrar may only learn what the module consumed once the module has
+      // been evaluated.
+      deps?: () => string[];
+    };
 
 function trimModuleIdentifier(moduleIdentifier: string): string {
   return trimExecutableExtension(rri(moduleIdentifier));
@@ -412,6 +425,9 @@ export class PackageShimHandler {
   // lives on a *different* shim. Best-effort: an async shim that hasn't
   // been served yet won't be searchable until it has.
   private resolvedExports = new Map<string, ModuleLike>();
+  // Declared dependencies per shimmed module, keyed the same way as
+  // `moduleIds`.
+  private moduleDeps = new Map<string, () => string[]>();
   private log = logger('shim-handler');
 
   constructor(resolveImport: (moduleIdentifier: string) => string) {
@@ -512,11 +528,62 @@ export class PackageShimHandler {
     } else {
       let moduleIdentifier = this.resolveImport(descriptor.id);
       let label = `id:${descriptor.id}`;
-      this.moduleIds.set(
-        trimModuleIdentifier(moduleIdentifier),
-        withResolveRetry(label, this.log, descriptor.resolve, retryDeps),
+      let resolver = withResolveRetry(
+        label,
+        this.log,
+        descriptor.resolve,
+        retryDeps,
       );
+      // Registered under both the URL the identifier resolves to now and the
+      // identifier itself. A realm prefix can be re-pointed after a shim is
+      // installed, and a lookup resolves through whatever mapping is current —
+      // so the resolved key goes stale on a remap while the identifier does
+      // not, and `lookupModule` tries the unresolved spelling too.
+      for (let key of new Set([
+        trimModuleIdentifier(moduleIdentifier),
+        trimModuleIdentifier(descriptor.id),
+      ])) {
+        this.moduleIds.set(key, resolver);
+        if (descriptor.deps) {
+          this.moduleDeps.set(key, descriptor.deps);
+        }
+      }
     }
+  }
+
+  // Module lookup for the Loader's module-fetch path. That path sees the URL
+  // an identifier resolves to — for a realm-mapped prefix such as
+  // `@cardstack/base/`, the realm URL — which is also the key a shim for such
+  // an identifier is registered under. `handle` only answers on the fake
+  // packages origin because, in the general fetch pipeline, a realm URL may
+  // name a card instance as well as a module; the Loader knows it is asking
+  // for a module, so it may be served a shim registered under any URL.
+  //
+  // `identifier` is the same request written the way the shim was registered,
+  // which the caller derives from the mapping in force now. It is what finds a
+  // shim whose realm prefix has been re-pointed since it was installed.
+  async lookupModule(
+    url: string,
+    identifier?: string,
+  ): Promise<ModuleLike | undefined> {
+    let module =
+      (await this.getModule(url)) ??
+      (identifier ? await this.getModule(identifier) : undefined) ??
+      (await this.getModuleByPrefix(url));
+    return module
+      ? wrapWithStrictNamespace(url, module, this.findExportSources)
+      : undefined;
+  }
+
+  // The dependencies declared for a shimmed module, in the same lookup terms
+  // as `lookupModule`. Empty for a shim registered without them.
+  lookupModuleDeps(url: string, identifier?: string): string[] {
+    let deps =
+      this.moduleDeps.get(trimModuleIdentifier(url)) ??
+      (identifier
+        ? this.moduleDeps.get(trimModuleIdentifier(identifier))
+        : undefined);
+    return deps?.() ?? [];
   }
 
   private async getModule(url: string): Promise<ModuleLike | undefined> {

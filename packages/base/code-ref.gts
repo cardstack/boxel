@@ -9,6 +9,7 @@ import {
   CardURLContextName,
   fieldSerializer,
   CodeRefSerializer,
+  Loader,
 } from '@cardstack/runtime-common';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
@@ -75,7 +76,12 @@ class EditView extends Component<typeof CodeRefField> {
         module = new URL(module, new URL(this.cardURL)).href;
       }
       try {
-        let code = (await import(module))[name];
+        // Through the loader, not a bare `import()`: the specifier is a realm
+        // module, which only the loader can resolve. A bare dynamic import is
+        // rewritten to the loader when the realm transpiles this file, but when
+        // this module is compiled into the host bundle the bundler owns that
+        // call instead and the specifier reaches the platform unresolved.
+        let code = (await myLoader().import<Record<string, any>>(module))[name];
         if (code) {
           this.validationState = 'valid';
           if (!opts?.checkOnly) {
@@ -128,6 +134,22 @@ export default class CodeRefField extends FieldDef {
     }
     <template>{{this.text}}</template>
   };
+}
+
+function myLoader(): Loader {
+  // A Loader that evaluates this module injects `import.meta.loader`. A module
+  // compiled into the host bundle is evaluated by the platform instead, and
+  // uses the loader the host publishes for bundled modules.
+
+  // When type-checking realm-server, tsc sees this file as CommonJS output and
+  // so complains about import.meta.
+  // @ts-ignore
+  let injected = (import.meta as any).loader;
+  let loader = injected ?? Loader.forBundledModules();
+  if (!loader) {
+    throw new Error('no Loader is available to this module');
+  }
+  return loader;
 }
 
 export class AbsoluteCodeRefField extends CodeRefField {

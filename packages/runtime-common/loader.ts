@@ -523,6 +523,21 @@ export class Loader {
     return undefined;
   }
 
+  // A module a Loader evaluates discovers its loader through
+  // `import.meta.loader`, which the Loader injects at eval time. A module
+  // compiled into the host bundle is evaluated by the platform instead, so it
+  // has no such injection; the host publishes its active loader here for those
+  // modules to fall back to. Read only when `import.meta.loader` is absent.
+  static #forBundledModules: Loader | undefined;
+
+  static setForBundledModules(loader: Loader) {
+    Loader.#forBundledModules = loader;
+  }
+
+  static forBundledModules(): Loader | undefined {
+    return Loader.#forBundledModules;
+  }
+
   async import<T extends object>(
     moduleIdentifier: string,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
@@ -1139,16 +1154,23 @@ export class Loader {
     init?: RequestInit,
   ): Promise<MaybeCachedResponse> => {
     try {
-      let shimmedModule = this.moduleShims.get(
-        this.asRequest(urlOrRequest, init).url,
-      );
+      let request = this.asRequest(urlOrRequest, init);
+      // A module shimmed on the virtual network is keyed by the URL its
+      // identifier resolves to, and the network's fetch pipeline only answers
+      // shims on the fake packages origin. This is the one path that knows a
+      // request is for a module (not a card instance that may live at the same
+      // realm URL), so the lookup belongs here, ahead of any fetch.
+      let shimmedModule =
+        this.moduleShims.get(request.url) ??
+        (await this.virtualNetwork?.getShimmedModule(request.url));
       if (shimmedModule) {
         let response = new Response();
         (response as any)[Symbol.for('shimmed-module')] = shimmedModule;
+        (response as any)[Symbol.for('shimmed-module-deps')] =
+          this.virtualNetwork?.getShimmedModuleDeps(request.url) ?? [];
         return response;
       }
 
-      let request = this.asRequest(urlOrRequest, init);
       return await cachedFetch(this.fetchImplementation, request);
     } catch (err: any) {
       let url =
@@ -1323,7 +1345,12 @@ export class Loader {
 
     let loaded:
       | { type: 'source'; source: string; url: string }
-      | { type: 'shimmed'; module: Record<string, unknown>; url: string };
+      | {
+          type: 'shimmed';
+          module: Record<string, unknown>;
+          url: string;
+          deps: string[];
+        };
 
     try {
       loaded = await this.load(moduleURL);
@@ -1376,7 +1403,20 @@ export class Loader {
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
         moduleInstance: loaded.module,
-        consumedModules: new Set(),
+        // A shim has no dependency chain the loader can observe, so what it
+        // consumed is whatever its registrar declared. Declared deps are
+        // written as the module itself spells them — relative — and are
+        // resolved here against the module's own URL, so they read the same as
+        // the deps of a module this loader fetched.
+        consumedModules: new Set(
+          loaded.deps.map((dep) => {
+            try {
+              return new URL(dep, canonicalURL).href;
+            } catch {
+              return dep;
+            }
+          }),
+        ),
       });
       module.deferred.fulfill();
       return;
@@ -1552,11 +1592,14 @@ export class Loader {
     }
   }
 
-  private async load(
-    moduleURL: URL,
-  ): Promise<
+  private async load(moduleURL: URL): Promise<
     | { type: 'source'; source: string; url: string }
-    | { type: 'shimmed'; module: Record<string, unknown>; url: string }
+    | {
+        type: 'shimmed';
+        module: Record<string, unknown>;
+        url: string;
+        deps: string[];
+      }
   > {
     let response: MaybeCachedResponse;
     try {
@@ -1620,6 +1663,7 @@ export class Loader {
         type: 'shimmed',
         module: (response as any)[Symbol.for('shimmed-module')],
         url: canonicalURL,
+        deps: (response as any)[Symbol.for('shimmed-module-deps')] ?? [],
       };
     }
     let source = await response.text();
