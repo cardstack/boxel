@@ -501,6 +501,41 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test('an object that merely resembles a marker filters as the data it is', async function (assert) {
+      // A filter operand is a literal JSON value and a card field may store an
+      // object, so the marker check has to be narrow enough not to make
+      // ordinary data unfilterable. Each of these carries a `$ref` and is not
+      // a marker: an unknown name, or a member no marker takes.
+      for (let [label, operand] of [
+        ['a JSON Schema fragment', { $ref: '#/definitions/Person' }],
+        ['a name no marker uses', { $ref: 'owner' }],
+        [
+          'a marker name beside data a marker never carries',
+          { $ref: 'actor', label: 'mine' },
+        ],
+      ] as [string, Record<string, unknown>][]) {
+        let stubbed = stub({ matches: [`${REALM}activities/a`] });
+        let tree = await resolve(
+          stubbed,
+          invoke({
+            'boxel:target': {
+              query: { 'item.on': ACTIVITY, eq: { 'item.config': operand } },
+            },
+          }),
+        );
+        assert.strictEqual(
+          entryIn(tree[0]).href,
+          `${REALM}activities/a`,
+          `${label} reached the index`,
+        );
+        assert.deepEqual(
+          stubbed.queries[0].itemQuery.filter,
+          { on: ACTIVITY, eq: { config: operand } },
+          `${label} was passed through as the value it is`,
+        );
+      }
+    });
+
     test('a query the realm does not accept is refused against the entry', async function (assert) {
       let stubbed = stub({ matches: [] });
       let error = await refusal(() =>

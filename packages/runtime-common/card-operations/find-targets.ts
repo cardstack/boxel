@@ -353,6 +353,12 @@ async function runFilter(
   };
 }
 
+// The names a declared query's markers are written under, and the members one
+// carries besides `$ref`. Read off the resolver those markers go through, so
+// what is refused here is exactly what would have been resolved there.
+const MARKER_NAMES = ['params', 'actor', 'card', 'instance', 'realmConfig'];
+const MARKER_MEMBERS = ['$ref', 'key', 'value'];
+
 // The first marker anywhere in a filter, named the way an author writes it, or
 // undefined when the filter carries none.
 //
@@ -360,6 +366,15 @@ async function runFilter(
 // branch of an `any` — because that is how the resolver that *does* resolve
 // markers recognizes one, and a check that looked in fewer places than the
 // thing it guards would pass exactly the payloads worth refusing.
+//
+// Narrow on purpose, though: a filter operand is a literal JSON value, and a
+// card field may legitimately store an object. So an object is read as a
+// marker only when it is one — a `$ref` naming a marker this runtime resolves,
+// and no member beyond the ones such a marker carries. `{ "$ref": "#/defs/x" }`
+// is somebody's JSON Schema fragment and filters for it as data; a field
+// storing `{ "$ref": "actor" }` and nothing else is indistinguishable from the
+// marker and is the one shape this makes unfilterable from a query target,
+// which `href` and the search endpoint both still reach.
 function markerIn(node: unknown): string | undefined {
   if (Array.isArray(node)) {
     for (let member of node) {
@@ -374,10 +389,15 @@ function markerIn(node: unknown): string | undefined {
     return undefined;
   }
   let record = node as Record<string, unknown>;
-  if (typeof record.$ref === 'string') {
+  let ref = record.$ref;
+  if (
+    typeof ref === 'string' &&
+    MARKER_NAMES.includes(ref) &&
+    Object.keys(record).every((member) => MARKER_MEMBERS.includes(member))
+  ) {
     return typeof record.key === 'string'
-      ? `${record.$ref}("${record.key}")`
-      : `${record.$ref}()`;
+      ? `${ref}("${record.key}")`
+      : `${ref}()`;
   }
   for (let value of Object.values(record)) {
     let found = markerIn(value);
