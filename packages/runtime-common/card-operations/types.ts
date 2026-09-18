@@ -275,6 +275,28 @@ export function isDefinitionFreeBaseOperation(name: string): boolean {
   return (DEFINITION_FREE_BASE_OPERATIONS as readonly string[]).includes(name);
 }
 
+// The behaviors that change stored state, which is what decides the permission
+// the request needed and therefore which method may carry the batch.
+//
+// Exhaustive over the base operations on purpose: a further behavior has to
+// say here whether it writes, rather than defaulting to "read" and reaching a
+// commit from a request that was only authorized to read.
+const WRITES: Readonly<Record<BaseOperation, boolean>> = {
+  read: false,
+  readSource: false,
+  query: false,
+  create: true,
+  update: true,
+  delete: true,
+  transform: true,
+  appendContainsMany: true,
+  appendLine: true,
+};
+
+export function isWrite(base: BaseOperation): boolean {
+  return WRITES[base];
+}
+
 // What an operation runs against. An `instance` target is an existing card or
 // file, addressed by URL — the identity of a thing that already has stored
 // state. A `type` target names a class instead, for the operations that have

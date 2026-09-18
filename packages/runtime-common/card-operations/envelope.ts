@@ -295,28 +295,6 @@ export interface ResolvedEnvelopeEntry {
   definition: OperationDefinition;
 }
 
-// The behaviors that change stored state, which is what decides the permission
-// the request needed and therefore which method may carry the batch.
-//
-// Exhaustive over the base operations on purpose: a further behavior has to
-// say here whether it writes, rather than defaulting to "read" and reaching a
-// commit from a request that was only authorized to read.
-const WRITES: Readonly<Record<BaseOperation, boolean>> = {
-  read: false,
-  readSource: false,
-  query: false,
-  create: true,
-  update: true,
-  delete: true,
-  transform: true,
-  appendContainsMany: true,
-  appendLine: true,
-};
-
-export function isWrite(base: BaseOperation): boolean {
-  return WRITES[base];
-}
-
 // The two behaviors that are reached somewhere other than here.
 //
 // Both are refusals about the entry point rather than about the operation: a

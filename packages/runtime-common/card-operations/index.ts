@@ -86,7 +86,6 @@ export {
   batchEntryFor,
   carriesOperationsExt,
   errorsDocument,
-  isWrite,
   needsActor,
   paramsFor,
   parseOperationsEnvelope,
@@ -110,6 +109,7 @@ export {
   isIdentityResult,
   isOperationFailure,
   isSourceResult,
+  isWrite,
 } from './types.ts';
 export type {
   BaseOperation,
