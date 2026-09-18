@@ -227,6 +227,7 @@ import {
   type EnvelopeResult,
   type ResolvedEnvelopeEntry,
 } from './card-operations/envelope.ts';
+import { resolveQueryTargets } from './card-operations/find-targets.ts';
 import {
   OperationFailure,
   isDocumentResult,
@@ -4409,15 +4410,29 @@ export class Realm {
     // be a group whose members are entries in their own right. The tree is
     // what the answer mirrors and what the coordinator schedules staging by;
     // everything between reads the entries in it, in the order they were sent.
-    let tree = parseOperationsEnvelope(body, this.url, {
-      resolveIdentifier: (href) => this.#resolveAtomicHref(href),
-    });
+    let envelopeOptions = {
+      resolveIdentifier: (href: string) => this.#resolveAtomicHref(href),
+    };
+    let parsed = parseOperationsEnvelope(body, this.url, envelopeOptions);
+    // One row peek per target for the whole request: entries often name the
+    // same card, and which behavior a name resolves to is read off the
+    // target's stored type.
+    let scope = newOperationScope(this.operationCore);
+    // An entry may describe the card it runs against with a query instead of
+    // naming one, and this is where such a query becomes cards — against the
+    // index as it stands now, which is the pre-batch state every other part of
+    // a batch is evaluated against. Everything after it reads a tree whose
+    // entries all name an href, so a found target takes the write lock,
+    // collides with a parallel sibling and rolls back exactly as a named one
+    // does.
+    let tree = await resolveQueryTargets(
+      this.operationCore,
+      scope,
+      parsed,
+      envelopeOptions,
+    );
     let entries = invocationsIn(tree);
     let caller = this.#callerOf(request, requestContext);
-    // One row peek per target for the whole resolution pass: entries often
-    // name the same card, and which behavior a name resolves to is read off
-    // the target's stored type.
-    let scope = newOperationScope(this.operationCore);
     // Settled rather than raced, so the entry a refusal names is the earliest
     // one the caller got wrong rather than whichever index read came back
     // first. A batch with two bad entries would otherwise report a different
