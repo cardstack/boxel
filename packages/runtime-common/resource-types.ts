@@ -124,6 +124,8 @@ export type CardResourceMeta = Meta & {
 };
 
 export type FileMetaResourceResourceMeta = Meta & {
+  // Produced by trusted JSON FileDef processing, not authored card metadata.
+  latticeSource?: import('./lattice-json-source.ts').LatticeJsonSourceFingerprint;
   // A file's server-managed timestamps (epoch seconds), stamped here at
   // serialization under the same key names a card uses (see CardResourceMeta),
   // so `getCardMeta` / FileDef's getters read them uniformly for both kinds.

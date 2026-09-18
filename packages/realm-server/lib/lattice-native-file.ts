@@ -15,6 +15,7 @@ import type {
 } from '@cardstack/runtime-common/lattice-native-index';
 import type { LatticeNativeCardAdmission } from './lattice-native-card-indexer.ts';
 import type { LatticeDefinitionSnapshot } from './lattice-card-data.ts';
+import type { LatticeJsonSourceFingerprint } from '@cardstack/runtime-common/lattice-json-source';
 
 // An operator-reviewed binding to the shared base JSON extractor. Merely
 // exporting a FileDef or an SVG is not permission to replace custom code.
@@ -30,6 +31,7 @@ export async function extractLatticeJsonFile(
   request: LatticeNativeCardIndexRequest,
   admission: LatticeNativeFileAdmission,
   typeKey: (ref: CodeRef) => string,
+  sourceFingerprint?: LatticeJsonSourceFingerprint,
 ): Promise<NonNullable<LatticeNativeCardIndexResult['file']>> {
   const metadata = admission.snapshot.definition.nativeFileIndex;
   if (
@@ -57,6 +59,7 @@ export async function extractLatticeJsonFile(
       createdAt: request.resourceCreatedAt,
     },
   );
+  if (sourceFingerprint) resource.meta.latticeSource = sourceFingerprint;
   return {
     extract: {
       id: request.url,

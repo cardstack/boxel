@@ -33,6 +33,7 @@ import { createLatticeQueryInputResolver } from './lattice-query-input-plan.ts';
 import type { PublicationReceipt } from '@cardstack/runtime-common/lattice-materialization';
 import type { LatticeCodeReference } from '@cardstack/runtime-common/lattice-code-reference';
 import type { LatticeWorkScope } from '@cardstack/runtime-common/lattice-work';
+import type { LatticePreparedJsonSource } from './lattice-json-source.ts';
 
 export interface LatticeNativeCardAdmission {
   // Issued only after validating constructor/default/input semantics and the
@@ -47,6 +48,7 @@ export interface LatticeNativeCardAdmission {
   inputActor?: string;
   codeReference?: LatticeCodeReference;
   file?: LatticeNativeFileAdmission;
+  preparedSource?: LatticePreparedJsonSource;
   assertCurrent(
     tx: Querier,
     receipt: {
@@ -155,9 +157,26 @@ export function createLatticeNativeCardIndexer({
       throw new Error('Incomplete native card admission');
     }
     const id = request.url.replace(/\.json$/, '');
-    const sourceHash = createHash('sha256')
-      .update(request.sourceJSON)
-      .digest('hex');
+    const sourceHash =
+      admission.preparedSource?.fingerprint.digest ??
+      createHash('sha256').update(request.sourceJSON).digest('hex');
+    if (admission.preparedSource)
+      trace?.event('source-fingerprint', {
+        reused: admission.preparedSource.reused,
+        bytes: admission.preparedSource.fingerprint.contentSize,
+        ms: admission.preparedSource.elapsedMs,
+      });
+    // File data is prepared first. Materialization consumes its fingerprint
+    // without recreating or replacing the source-file artifact.
+    const file =
+      !request.inputSnapshot && admission.file
+        ? await extractLatticeJsonFile(
+            request,
+            admission.file,
+            admission.typeKey,
+            admission.preparedSource?.fingerprint,
+          )
+        : undefined;
     if (
       request.inputSnapshot &&
       (request.inputSnapshot.realmURL !== request.realmURL ||
@@ -282,14 +301,6 @@ export function createLatticeNativeCardIndexer({
             }
           : {}),
       });
-      const file =
-        !request.inputSnapshot && admission.file
-          ? await extractLatticeJsonFile(
-              request,
-              admission.file,
-              admission.typeKey,
-            )
-          : undefined;
       const serialized = result.serialized;
       work?.signal.throwIfAborted();
       trace?.stage('query-preparation');

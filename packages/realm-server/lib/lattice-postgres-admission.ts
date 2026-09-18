@@ -1,4 +1,5 @@
 import type { LatticeGtsAnalysis } from '@cardstack/runtime-common/lattice-gts-analysis-contract';
+import { prepareLatticeJsonSource } from './lattice-json-source.ts';
 import { createHash } from 'node:crypto';
 import { baseRealm } from '@cardstack/runtime-common';
 import stringify from 'safe-stable-stringify';
@@ -100,6 +101,7 @@ interface FileReceipt {
   version: string;
   content_hash: string;
   content_size: number;
+  source_fingerprint?: unknown;
 }
 interface ModuleReceipt {
   realm_url: string;
@@ -178,13 +180,30 @@ function createPostgresAdmission(
   async function readFile(
     realmURL: string,
     path: string,
+    fingerprintURL?: string,
   ): Promise<FileReceipt | undefined> {
-    const [row] = await query(db, [
-      'SELECT realm_url,file_path,xmin::text AS version,content_hash,content_size FROM realm_file_meta WHERE realm_url =',
-      param(realmURL),
-      'AND file_path =',
-      param(path),
-    ]);
+    const [row] = await query(
+      db,
+      [
+        'SELECT f.realm_url,f.file_path,f.xmin::text AS version,f.content_hash,f.content_size',
+        ...(fingerprintURL
+          ? [", i.pristine_doc->'meta'->'latticeSource' AS source_fingerprint"]
+          : []),
+        'FROM realm_file_meta f',
+        ...(fingerprintURL
+          ? [
+              'LEFT JOIN boxel_index i ON i.realm_url=f.realm_url AND i.url =',
+              param(fingerprintURL),
+              "AND i.type='file' AND i.is_deleted IS NOT TRUE AND i.error_doc IS NULL",
+            ]
+          : []),
+        'WHERE f.realm_url =',
+        param(realmURL),
+        'AND f.file_path =',
+        param(path),
+      ],
+      { source_fingerprint: 'JSON' },
+    );
     if (!row?.content_hash || row.content_size == null) {
       if (process.env.LATTICE_NATIVE_ADMISSION_DEBUG)
         console.warn(
@@ -534,11 +553,25 @@ function createPostgresAdmission(
     const permissions = new Map([
       [JSON.stringify([actor.realm_url, actor.username]), actor],
     ]);
-    const sourceReceipt = await readFile(policy.realmURL, path);
+    const sourceReceipt = await readFile(
+      policy.realmURL,
+      path,
+      mode === 'card' && request.inputSnapshot ? request.url : undefined,
+    );
+    const preparedSource =
+      mode === 'card' && sourceReceipt
+        ? prepareLatticeJsonSource(
+            request.sourceJSON,
+            sourceReceipt,
+            sourceReceipt.source_fingerprint,
+          )
+        : undefined;
     if (
       !sourceReceipt ||
-      sourceReceipt.content_hash !== md5(request.sourceJSON) ||
-      sourceReceipt.content_size !== Buffer.byteLength(request.sourceJSON)
+      (mode === 'card'
+        ? !preparedSource
+        : sourceReceipt.content_hash !== md5(request.sourceJSON) ||
+          sourceReceipt.content_size !== Buffer.byteLength(request.sourceJSON))
     )
       return refuse(
         `source bytes differ from realm_file_meta (stored ${sourceReceipt?.content_hash}/${sourceReceipt?.content_size}, read ${md5(request.sourceJSON)}/${Buffer.byteLength(request.sourceJSON)})`,
@@ -807,9 +840,9 @@ function createPostgresAdmission(
       codeRef: item.definition.codeRef,
       revision: item.revision,
     }));
-    const sourceSHA256 = createHash('sha256')
-      .update(request.sourceJSON)
-      .digest('hex');
+    const sourceSHA256 =
+      preparedSource?.fingerprint.digest ??
+      createHash('sha256').update(request.sourceJSON).digest('hex');
     const requestIdentity = {
       url: request.url,
       realmURL: request.realmURL,
@@ -818,6 +851,7 @@ function createPostgresAdmission(
     };
     return {
       root,
+      ...(preparedSource ? { preparedSource } : {}),
       lookup: async (ref) => {
         const found = findDefinition(ref);
         if (!found)

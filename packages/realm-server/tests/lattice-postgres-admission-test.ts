@@ -1367,6 +1367,10 @@ module(basename(import.meta.filename), function (hooks) {
       base + 'file-api',
     ]);
     assert.strictEqual(result.file?.render.iconHTML, svg);
+    assert.strictEqual(
+      result.file?.extract.resource?.meta.latticeSource?.digest,
+      createHash('sha256').update(request.sourceJSON).digest('hex'),
+    );
     await validate(result);
     await db.execute('UPDATE modules SET deps=$1 WHERE url=$2', {
       bind: [JSON.stringify([base + 'icons/new-json']), ref.module],
@@ -1375,6 +1379,50 @@ module(basename(import.meta.filename), function (hooks) {
       validate(result),
       /definition cache changed/,
       'changing even dependency metadata invalidates the entire result',
+    );
+  });
+
+  test('materialization reuses JSON FileDef source identity and still fences changed source', async (assert) => {
+    await reviewJsonFile();
+    const first = await candidate();
+    const resource = first.file!.extract.resource!;
+    await db.execute(
+      "INSERT INTO boxel_index (realm_url,url,file_alias,generation,type,pristine_doc) VALUES ($1,$2,$2,0,'file',$3)",
+      { bind: [realm, request.url, JSON.stringify(resource)] },
+    );
+    request.inputSnapshot = { realmURL: realm, generation: 0 };
+    const admit = createPostgresLatticeAdmission({
+      db,
+      network,
+      policies: [policy],
+      runtimeRevision: () => runtime,
+    });
+    const admitted = (await admit(request))!;
+    assert.true(admitted.preparedSource!.reused);
+    assert.deepEqual(
+      admitted.preparedSource!.fingerprint,
+      resource.meta.latticeSource,
+    );
+    await db.execute(
+      'UPDATE realm_file_meta SET content_hash=content_hash WHERE realm_url=$1 AND file_path=$2',
+      { bind: [realm, 'Score/one.json'] },
+    );
+    assert.false(
+      (await admit(request))!.preparedSource!.reused,
+      'a new source row revision invalidates the receipt even with identical bytes',
+    );
+    await assert.rejects(validate(first), /source or reviewed code changed/);
+    const changed = request.sourceJSON.replace('"amount":3', '"amount":4');
+    assert.strictEqual(
+      await admit({ ...request, sourceJSON: changed }),
+      undefined,
+    );
+    await db.execute('DELETE FROM boxel_index WHERE realm_url=$1', {
+      bind: [realm],
+    });
+    assert.false(
+      (await admit(request))!.preparedSource!.reused,
+      'legacy/missing FileDef computes the full fingerprint safely',
     );
   });
 
