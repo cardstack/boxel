@@ -1,6 +1,8 @@
 import QUnit from 'qunit';
 import { basename } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
+import { latticeMaterializationReadySQL } from '@cardstack/runtime-common/jobs/lattice';
+import { latticeRenderRetryReadySQL } from '@cardstack/runtime-common/jobs/lattice-render';
 import {
   rri,
   type Realm,
@@ -119,7 +121,10 @@ module(basename(import.meta.filename), function (hooks) {
       async () =>
         !(
           await db.execute(
-            "SELECT 1 FROM jobs WHERE status='unfulfilled' LIMIT 1",
+            `SELECT 1 FROM jobs j WHERE status='unfulfilled'
+              AND args->>'realmURL'=$1 AND ${latticeMaterializationReadySQL}
+              AND ${latticeRenderRetryReadySQL} LIMIT 1`,
+            { bind: [realmURL] },
           )
         ).length,
       {

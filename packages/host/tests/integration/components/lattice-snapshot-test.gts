@@ -442,6 +442,74 @@ module('Integration | Lattice snapshot', function (hooks) {
     );
   });
 
+  test('guarded publication refuses invalid computed numbers without changing ordinary serialization', async function (assert) {
+    let api = await getService('card-service').getAPI();
+    let output: unknown = { amount: 1 };
+    class Summary extends CardDef {
+      @field count = contains(NumberField, {
+        computeVia: () => output as number,
+      });
+    }
+    class Series extends CardDef {
+      @field counts = containsMany(NumberField, {
+        computeVia: () => output as number[],
+      });
+    }
+    getService('loader-service').loader.shimModule(
+      `${testRealmURL}computed-number-output`,
+      { Summary, Series },
+    );
+    let globals = globalThis as any;
+    let renderContext = globals.__boxelRenderContext;
+    let inputSnapshot = globals.__latticeInputSnapshot;
+    let serialize = (card: InstanceType<typeof CardDef>) =>
+      api.serializeCard(card, { includeComputeds: true }).data.attributes;
+    try {
+      globals.__boxelRenderContext = false;
+      assert.deepEqual(
+        serialize(new Summary())?.count,
+        { amount: 1 },
+        'ordinary serialization retains its existing behavior',
+      );
+      globals.__boxelRenderContext = true;
+      globals.__latticeInputSnapshot = undefined;
+      assert.deepEqual(
+        serialize(new Summary())?.count,
+        { amount: 1 },
+        'ordinary prerender serialization also retains its behavior',
+      );
+      globals.__latticeInputSnapshot = {
+        realmURL: testRealmURL,
+        generation: 1,
+      };
+      for (output of [{ amount: 1 }, '1', NaN, Infinity]) {
+        assert.throws(
+          () => serialize(new Summary()),
+          /Lattice output for 'count' must be a finite number/,
+          `refuses ${String(output)}`,
+        );
+      }
+      output = [1, { amount: 2 }];
+      assert.throws(
+        () => serialize(new Series()),
+        /Lattice output for 'counts' must be a finite number/,
+        'array members have the same number contract',
+      );
+      output = 4;
+      assert.strictEqual(serialize(new Summary())?.count, 4);
+      output = [1, null, 2];
+      assert.deepEqual(serialize(new Series())?.counts, [1, null, 2]);
+      output = null;
+      assert.notOk(
+        serialize(new Summary())?.count,
+        'nullable numbers remain valid',
+      );
+    } finally {
+      globals.__boxelRenderContext = renderContext;
+      globals.__latticeInputSnapshot = inputSnapshot;
+    }
+  });
+
   test('failed nested inputs cannot become a ready-looking Lattice aggregate', function (assert) {
     class Input extends CardDef {
       @field name = contains(StringField);

@@ -1,5 +1,6 @@
 import {
   currentLatticeInputSnapshot,
+  fieldSerializer,
   getField,
   isBaseInstance,
   isCardInstance,
@@ -1185,6 +1186,27 @@ export function serializedGet<CardT extends BaseDefConstructor>(
     opts,
   );
   if (field.computeVia && currentLatticeInputSnapshot()) {
+    // Primitive codecs serialize without validating computed values. A Number
+    // output must pass the same finite-number contract as the native producer
+    // before it can become an authoritative indexed snapshot.
+    if (
+      fieldSerializer in field.card &&
+      field.card[fieldSerializer] === 'number'
+    ) {
+      const output = resource.attributes?.[fieldName];
+      const values =
+        field.fieldType === 'containsMany' ? (output ?? []) : [output];
+      for (const value of values) {
+        if (
+          value != null &&
+          (typeof value !== 'number' || !Number.isFinite(value))
+        ) {
+          throw new Error(
+            `Lattice output for '${fieldName}' must be a finite number`,
+          );
+        }
+      }
+    }
     // Check after the field's serializer, before merging/stringifying can turn
     // live instances in JSON-valued computations into apparently valid {}.
     assertLatticeOutputData(resource.attributes, 'attributes', new WeakSet());
