@@ -512,11 +512,48 @@ export class PackageShimHandler {
     } else {
       let moduleIdentifier = this.resolveImport(descriptor.id);
       let label = `id:${descriptor.id}`;
-      this.moduleIds.set(
-        trimModuleIdentifier(moduleIdentifier),
-        withResolveRetry(label, this.log, descriptor.resolve, retryDeps),
+      let resolver = withResolveRetry(
+        label,
+        this.log,
+        descriptor.resolve,
+        retryDeps,
       );
+      // Registered under both the URL the identifier resolves to now and the
+      // identifier itself. A realm prefix can be re-pointed after a shim is
+      // installed, and a lookup resolves through whatever mapping is current —
+      // so the resolved key goes stale on a remap while the identifier does
+      // not, and `lookupModule` tries the unresolved spelling too.
+      for (let key of new Set([
+        trimModuleIdentifier(moduleIdentifier),
+        trimModuleIdentifier(descriptor.id),
+      ])) {
+        this.moduleIds.set(key, resolver);
+      }
     }
+  }
+
+  // Module lookup for the Loader's module-fetch path. That path sees the URL
+  // an identifier resolves to — for a realm-mapped prefix such as
+  // `@cardstack/base/`, the realm URL — which is also the key a shim for such
+  // an identifier is registered under. `handle` only answers on the fake
+  // packages origin because, in the general fetch pipeline, a realm URL may
+  // name a card instance as well as a module; the Loader knows it is asking
+  // for a module, so it may be served a shim registered under any URL.
+  //
+  // `identifier` is the same request written the way the shim was registered,
+  // which the caller derives from the mapping in force now. It is what finds a
+  // shim whose realm prefix has been re-pointed since it was installed.
+  async lookupModule(
+    url: string,
+    identifier?: string,
+  ): Promise<ModuleLike | undefined> {
+    let module =
+      (await this.getModule(url)) ??
+      (identifier ? await this.getModule(identifier) : undefined) ??
+      (await this.getModuleByPrefix(url));
+    return module
+      ? wrapWithStrictNamespace(url, module, this.findExportSources)
+      : undefined;
   }
 
   private async getModule(url: string): Promise<ModuleLike | undefined> {
