@@ -453,6 +453,27 @@ CI runs `apply.sh --env staging` on merge to main (workflow:
 `apply.sh --env production` on the production workflow
 (CS-10936).
 
+A PR that changes anything under `grafanactl/resources/dashboards/` also gets
+a live preview of just the dashboards it touches, pushed to **both** the
+staging and the production Grafana under `pr<n>-`-prefixed UIDs in a per-PR
+folder, so it coexists with the canonical copies rather than overwriting them.
+One sticky PR comment links each changed dashboard in both environments, and
+both previews are deleted when the PR closes.
+`.github/workflows/observability-preview-sweep.yml` sweeps both environments
+daily for any the close hook missed.
+
+The preview is split across two workflows, and **the split is a security
+boundary**. `observability-preview.yml` runs on `pull_request`, so GitHub
+loads it — and every script it calls — from the PR, where a contributor
+controls both; it therefore holds **staging credentials only**.
+`observability-preview-production.yml` runs on `workflow_run`, which GitHub
+always loads from the default branch, out of a PR's reach. It restores every
+script from the default branch and takes only `grafanactl/resources` from the
+PR, as data, with `render-preview.sh` rewriting every UID it emits so a
+crafted manifest cannot address a canonical dashboard. Never move a production
+role, a production SSM read, or a production Grafana push into the
+`pull_request` workflow.
+
 ## Operator actions
 
 Some dashboards carry buttons that POST to a realm-server operator endpoint —

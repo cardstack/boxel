@@ -1,10 +1,11 @@
 name: Observability — preview sweep
 
 # Daily sweep that removes stale preview folders + dashboards from the
-# staging Grafana. Safety net for observability-preview.yml's cleanup-on-
-# close job: a missed `closed` webhook, a job that errored mid-delete, or a
-# preview pushed against a PR that was later deleted from GitHub all leave
-# orphan `pr<n>-*` resources behind. This workflow notices and cleans up.
+# staging and production Grafanas. Safety net for
+# observability-preview.yml's cleanup-on-close job: a missed `closed`
+# webhook, a job that errored mid-delete, or a preview pushed against a PR
+# that was later deleted from GitHub all leave orphan `pr<n>-*` resources
+# behind. This workflow notices and cleans up.
 #
 # Decision rule per PR number (derived from the `pr<n>-` UID prefix):
 #   - PR is open                → keep
@@ -41,14 +42,41 @@ concurrency:
 
 env:
   AWS_REGION: us-east-1
-  AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-observability-apply
 
 jobs:
   sweep:
-    name: Sweep stale previews from staging
+    name: Sweep stale previews from ${{ matrix.env }}
     runs-on: ubuntu-latest
 
+    strategy:
+      # One environment's Grafana being unreachable shouldn't stop the other
+      # from being swept — the two legs share nothing but this workflow file.
+      fail-fast: false
+      matrix:
+        include:
+          - env: staging
+            role_arn: arn:aws:iam::680542703984:role/boxel-observability-apply
+          - env: production
+            role_arn: arn:aws:iam::120317779495:role/boxel-observability-apply
+
     steps:
+      - name: Refuse to sweep production from a non-main ref
+        # `schedule` always runs the default branch, but
+        # `workflow_dispatch` lets an operator choose any ref — including
+        # one whose copy of this workflow was rewritten to do something
+        # else with the production role. Mirrors the guard in
+        # observability-apply-production.yml.
+        if: matrix.env == 'production'
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          set -eo pipefail
+          if [[ "$REF" != "refs/heads/main" ]]; then
+            echo "::error::The production sweep may only run from refs/heads/main. Got: $REF" >&2
+            exit 1
+          fi
+          echo "Confirmed run from main."
+
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -58,13 +86,15 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
         with:
-          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          role-to-assume: ${{ matrix.role_arn }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Source GRAFANA_TOKEN
+        env:
+          ENV_NAME: ${{ matrix.env }}
         run: |
           GRAFANA_TOKEN="$(aws ssm get-parameter \
-            --name /staging/grafana/grafanactl_token \
+            --name "/${ENV_NAME}/grafana/grafanactl_token" \
             --with-decryption \
             --query 'Parameter.Value' \
             --output text)"
@@ -77,19 +107,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
+          ENV_NAME: ${{ matrix.env }}
         run: |
           set -eo pipefail
           remote="$(mktemp -d)"
-          cfg="$(./scripts/render-config.sh staging)"
+          cfg="$(./scripts/render-config.sh "$ENV_NAME")"
           trap 'rm -rf "$remote"; rm -f "$cfg"' EXIT
 
-          grafanactl --config "$cfg" --context staging \
+          grafanactl --config "$cfg" --context "$ENV_NAME" \
             resources pull dashboards folders --path "$remote" >/dev/null
 
           # Extract the set of unique PR numbers present in preview UIDs.
           # `grep ... || true` because `set -eo pipefail` would otherwise
           # abort the step when grep finds no matches — that's the legitimate
-          # "no previews live in staging" path, not an error.
+          # "no previews live in this environment" path, not an error.
           pr_numbers="$(find "$remote" -type f -name '*.json' \
             -exec jq -r '.metadata.name // ""' {} \; \
             | { grep -E '^pr[0-9]+-' || true; } \
@@ -161,11 +192,12 @@ jobs:
         working-directory: packages/observability
         env:
           STALE_PRS: ${{ steps.identify.outputs.stale_prs }}
+          ENV_NAME: ${{ matrix.env }}
         run: |
           set -eo pipefail
           for pr in $STALE_PRS; do
             echo "::group::Cleanup PR #${pr}"
-            ./scripts/cleanup-preview.sh --pr "$pr" --env staging
+            ./scripts/cleanup-preview.sh --pr "$pr" --env "$ENV_NAME"
             echo "::endgroup::"
           done
 
@@ -173,9 +205,10 @@ jobs:
         if: always()
         env:
           STALE_PRS: ${{ steps.identify.outputs.stale_prs }}
+          ENV_NAME: ${{ matrix.env }}
         run: |
           {
-            echo "## Preview sweep"
+            echo "## Preview sweep (${ENV_NAME})"
             echo ""
             if [[ -z "${STALE_PRS:-}" ]]; then
               echo "No stale previews."

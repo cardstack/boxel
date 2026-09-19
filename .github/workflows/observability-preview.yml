@@ -7,6 +7,18 @@ name: Observability — PR preview
 # (observability-preview-sweep.yml) is the safety net for closes the
 # preview-cleanup job missed.
 #
+# This workflow runs on `pull_request`, so GitHub loads it — and every script
+# it calls — from the pull request's own merge ref, where a contributor can
+# change both. It therefore handles STAGING CREDENTIALS ONLY. The production
+# preview lives in observability-preview-production.yml, which GitHub starts
+# with `workflow_run` and always loads from the default branch, out of a pull
+# request's reach. Never add a production role, a production SSM read, or a
+# production Grafana push to this file.
+#
+# That production workflow rewrites the sticky comment below into one that
+# covers both environments. While it is still running, or when it fails, the
+# staging-only comment stands on its own.
+#
 # Scope: dashboards + folders only. Data sources, alert rules, and the
 # home-dashboard preference are file-provisioned at Grafana startup and
 # can't be previewed per-PR — the existing observability-diff.yml comment
@@ -39,7 +51,8 @@ env:
   AWS_REGION: us-east-1
   # Reuses the apply role from cardstack/infra#665 (same role
   # observability-apply-staging.yml uses). Permissions cover every SSM path
-  # below — see that workflow's header for the up-to-date list.
+  # ci-apply-preview.sh reads — see that workflow's header for the up-to-date
+  # list.
   AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-observability-apply
   PREVIEW_MARKER: "<!-- observability-preview -->"
   STAGING_GRAFANA_BASE_URL: "https://dashboard-staging.stack.cards"
@@ -83,70 +96,14 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Source preview-time secrets from SSM
-        # Subset of what observability-apply-staging.yml fetches. The preview
-        # only touches dashboards + folders, so we don't need the LOKI_URL /
-        # BOXEL_DB_* / WORKER_LOG_* set — those are read by apply-datasources
-        # / apply-alerting, which apply-preview.sh never invokes.
-        run: |
-          GRAFANA_TOKEN="$(aws ssm get-parameter \
-            --name /staging/grafana/grafanactl_token \
-            --with-decryption \
-            --query 'Parameter.Value' \
-            --output text)"
-          echo "::add-mask::$GRAFANA_TOKEN"
-          echo "GRAFANA_TOKEN=$GRAFANA_TOKEN" >> "$GITHUB_ENV"
-
-          REALM_SERVER_URL="$(aws ssm get-parameter \
-            --name /staging/boxel-grafana/realm_server_url \
-            --query 'Parameter.Value' \
-            --output text)"
-          echo "REALM_SERVER_URL=$REALM_SERVER_URL" >> "$GITHUB_ENV"
-
-          GRAFANA_SECRET="$(aws ssm get-parameter \
-            --name /staging/boxel/GRAFANA_SECRET \
-            --with-decryption \
-            --query 'Parameter.Value' \
-            --output text)"
-          echo "::add-mask::$GRAFANA_SECRET"
-          echo "GRAFANA_SECRET=$GRAFANA_SECRET" >> "$GITHUB_ENV"
-
       - name: Apply preview
         id: apply
         working-directory: packages/observability
         env:
+          ENV_NAME: staging
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
-        run: |
-          set -eo pipefail
-          OUT_FILE="$(mktemp)"
-          ./scripts/apply-preview.sh \
-            --pr "$PR_NUMBER" \
-            --base-ref "origin/${PR_BASE_REF}" \
-            --env staging \
-            > "$OUT_FILE"
-          echo "out_file=$OUT_FILE" >> "$GITHUB_OUTPUT"
-          if [[ -s "$OUT_FILE" ]]; then
-            echo "empty=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "empty=true" >> "$GITHUB_OUTPUT"
-          fi
-          echo "::group::Preview summary"
-          cat "$OUT_FILE"
-          echo "::endgroup::"
-
-      - name: Cleanup stale preview (no changes left)
-        # When the current head of the PR has no dashboard changes vs base,
-        # apply-preview emits empty output and pushes nothing. But a prior
-        # push to the same PR may have already applied a preview that's
-        # still live in staging — revert/rebase scenarios. Run cleanup so
-        # the PR's staging footprint matches its current head; otherwise
-        # the daily sweep wouldn't catch this until PR close.
-        if: steps.apply.outputs.empty == 'true'
-        working-directory: packages/observability
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: ./scripts/cleanup-preview.sh --pr "$PR_NUMBER" --env staging
+        run: ./scripts/ci-apply-preview.sh
 
       - name: Post sticky PR comment
         # Pinned to SHA (matches observability-diff.yml's reasoning):
@@ -161,7 +118,10 @@ jobs:
             const grafanaBase = process.env.STAGING_GRAFANA_BASE_URL;
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
 
-            const raw = fs.readFileSync(process.env.OUT_FILE, 'utf8').trim();
+            const outFile = process.env.OUT_FILE;
+            const raw = outFile && fs.existsSync(outFile)
+              ? fs.readFileSync(outFile, 'utf8').trim()
+              : '';
 
             // Find any prior preview sticky on this PR; we either update or
             // delete it based on whether there's anything to preview now.
@@ -183,7 +143,7 @@ jobs:
               // to see" comment — if a prior push left a sticky behind,
               // delete it so the PR's comment stream matches its current
               // state. (Stale preview *resources* from a prior push are
-              // handled by the "Cleanup stale preview" step above.)
+              // handled by ci-apply-preview.sh.)
               if (existing) {
                 await github.rest.issues.deleteComment({
                   owner: context.repo.owner,
@@ -226,6 +186,8 @@ jobs:
               '**Dashboards:**',
               ...dashboardLines,
               '',
+              'The production preview runs next and rewrites this comment with a link for each environment.',
+              '',
               'Preview is torn down automatically when this PR is closed or merged.',
               '',
               `_(Run: ${runUrl})_`,
@@ -253,6 +215,9 @@ jobs:
     name: Cleanup preview from staging
     # Cleanup runs on the `closed` action (covers both merge and close-
     # without-merge). Same fork-PR guard — cleanup hits staging.
+    #
+    # The production preview is torn down by
+    # observability-preview-production.yml, which this run triggers.
     if: >-
       github.event.action == 'closed'
       && github.event.pull_request.head.repo.full_name == github.repository

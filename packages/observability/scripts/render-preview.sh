@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# render-preview.sh — Render a per-PR preview tree for staging Grafana.
+# render-preview.sh — Render a per-PR preview tree for a Grafana environment.
 #
 # Output: prints a tempdir path on stdout. The tree contains only the
 # dashboards the PR changed (vs --base-ref) plus the folder(s) they live in,
 # with `metadata.name` (UID), `spec.title`, and each dashboard's
 # `metadata.annotations["grafana.app/folder"]` rewritten so the resources
-# can coexist with the canonical staging copies. Push or delete the result
-# with `grafanactl resources push|delete --path <out>`.
+# can coexist with the canonical copies in whichever environment they are
+# pushed to. Push or delete the result with
+# `grafanactl resources push|delete --path <out>`.
 #
 # When the PR doesn't change any dashboards, exits 0 with no stdout.
 #
@@ -24,9 +25,9 @@
 #
 # Cross-dashboard drill-through links inside the dashboard JSON (`/d/<uid>/`
 # strings) are intentionally NOT rewritten — they stay pointing at the
-# canonical staging dashboards (CS-11106 design call). UID references inside
-# `datasource.uid` fields are data-source UIDs, not dashboard UIDs, and are
-# also left alone.
+# canonical dashboards of whichever environment the preview lands in
+# (CS-11106 design call). UID references inside `datasource.uid` fields are
+# data-source UIDs, not dashboard UIDs, and are also left alone.
 set -eo pipefail
 
 usage_error() { echo "error: $1" >&2; exit 2; }
@@ -244,5 +245,27 @@ if [[ -z "$(find "$rendered/dashboards" -type f -name '*.json' 2>/dev/null)" ]];
   rm -rf "$rendered"
   exit 0
 fi
+
+# Fail closed if any emitted manifest kept a canonical UID. The rewrites
+# above already guarantee the `pr<n>-` prefix on every dashboard, every
+# folder, and every dashboard's folder pointer; this check makes that
+# guarantee explicit so a future change to them cannot silently produce a
+# tree that overwrites a real dashboard. The tree is pushed to production as
+# well as staging, so losing the prefix would cost a live production
+# dashboard.
+while IFS= read -r -d '' f; do
+  uid="$(jq -r '.metadata.name // ""' "$f")"
+  if [[ "$uid" != "pr${pr_number}-"* ]]; then
+    echo "error: $f carries UID '$uid', which lacks the pr${pr_number}- prefix" >&2
+    rm -rf "$rendered"
+    exit 1
+  fi
+  folder="$(jq -r '(.metadata.annotations // {})["grafana.app/folder"] // ""' "$f")"
+  if [[ -n "$folder" && "$folder" != "pr${pr_number}-"* ]]; then
+    echo "error: $f points at folder '$folder', which lacks the pr${pr_number}- prefix" >&2
+    rm -rf "$rendered"
+    exit 1
+  fi
+done < <(find "$rendered" -type f -name '*.json' -print0)
 
 echo "$rendered"

@@ -21,7 +21,11 @@
 #   - apply-preview.sh runs this before every push, so a PR that shrinks
 #     its changed-dashboard set (e.g. reverts one of two prior edits)
 #     gets the old preview resources removed before the new tree lands.
-#   - observability-preview.yml runs this on pull_request `closed`.
+#   - ci-apply-preview.sh runs this when a PR stops changing dashboards
+#     altogether, to clear a preview an earlier push left behind.
+#   - observability-preview.yml runs this for staging on pull_request
+#     `closed`, and observability-preview-production.yml runs it for
+#     production once that close event has been observed.
 #   - observability-preview-sweep.yml runs this for PRs the daily sweep
 #     has decided are stale.
 set -eo pipefail
