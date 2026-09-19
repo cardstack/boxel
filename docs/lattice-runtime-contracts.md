@@ -44,9 +44,12 @@ attempt cannot donate output to another wave or to primary indexing merely
 because their tentative generation numbers coincide. Equal output may retain
 an existing revision only when its publication provenance still agrees.
 
-Both inline and queued materialization select the ready dependency frontier.
-Queued waves consider a bounded candidate set and use the existing owner/time
-budget and commit tick; they do not create one job per owner. Convergence is
+Enabled source indexing requires a secondary queue identity before it reads
+source files or creates a batch. There is no synchronous materialization
+fallback. Queued waves select the ready dependency frontier, consider at most
+24 candidates and by default admit at most eight owners within a one-second cooperative
+budget, with a commit tick. Overflow remains dirty and a successor is coalesced
+transactionally; this does not create one job per owner. Convergence is
 not bounded by a quadratic realm-wide wave counter. Owner failures retain
 bounded, obligation-specific retry budgets. Supersession instead applies a
 250 ms–2 s cooldown, cleared by genuinely new source work, without consuming
@@ -60,10 +63,14 @@ refresh is separate and cannot substitute for rebuilding their search data.
 Instance dependencies accept both extensionless and `.json` identities in
 readiness and invalidation.
 
-Native source discovery records dependencies and scheduling metadata without
-executing query aggregation. The subsequent materialization performs that
-computation. Browser-only definitions may still need discovery rendering;
-removing that cost requires a separate admission path, not weakening provenance.
+Native and browser source discovery register materialized owners without
+executing their query aggregations. Browser discovery loads the definition and
+hydrates authored fields, then inspects field metadata to create a pending
+stub. It skips computed getters, query expansion, search-document traversal
+and card-icon rendering. Only the subsequent guarded materialization computes
+and captures the output and its receipts. Unsupported nested query definitions
+retain ordinary indexing behavior. This reduces duplicate computation; it does
+not eliminate the browser startup or definition-loading cost.
 
 ## Worker capacity and notifications
 

@@ -298,6 +298,62 @@ module('lattice-opt-in-test.ts | writer', function (hooks) {
     );
   });
 
+  test('enabled source indexing requires its queue identity before reading or writing', async function (assert) {
+    const writer = new IndexWriter(db, {
+      lattice: new LatticeRealmConfig([enabledRealm]),
+    });
+    let reads = 0;
+    const makeRunner = () =>
+      new IndexRunner({
+        realmURL: new URL(enabledRealm),
+        indexWriter: writer,
+        virtualNetwork: network,
+        definitionLookup: {
+          ...lookup,
+          forRealm() {
+            return this;
+          },
+        } as unknown as DefinitionLookup,
+        reader: {
+          mtimes: async () => {
+            reads++;
+            return {};
+          },
+          readFile: async () => {
+            reads++;
+            return undefined;
+          },
+          readStream: async () => undefined,
+        },
+        prerenderer: {} as Prerenderer,
+        auth: 'test',
+        fetch: globalThis.fetch,
+        realmOwnerUserId: '@test:matrix.example',
+      });
+    await assert.rejects(
+      IndexRunner.fromScratch(makeRunner()),
+      /secondary queue identity/,
+    );
+    await assert.rejects(
+      IndexRunner.incremental(makeRunner(), {
+        changes: [
+          { url: new URL(enabledRealm + 'card.json'), operation: 'update' },
+        ],
+      }),
+      /secondary queue identity/,
+    );
+    assert.strictEqual(reads, 0);
+    assert.strictEqual(
+      (
+        await db.execute('SELECT 1 FROM realm_generations WHERE realm_url=$1', {
+          bind: [enabledRealm],
+        })
+      ).length,
+      0,
+      'no primary batch or generation exists',
+    );
+  });
+
   test('successful full indexing refreshes PostgreSQL planner statistics only for enabled realms', async function (assert) {
     let writer = new IndexWriter(db, {
       lattice: new LatticeRealmConfig([enabledRealm]),

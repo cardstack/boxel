@@ -889,6 +889,9 @@ export default class RenderRoute extends Route<Model> {
             doNotPersist: true,
             hydrateFieldsMs,
             latticeUseSnapshot,
+            ...(parsedOptions.latticeDiscovery && !latticeInput && !checkpoint
+              ? { latticeDiscovery: true as const }
+              : {}),
           });
           // What the settle drains is attributed the same way module
           // evaluations are: the store's completed-load histories are

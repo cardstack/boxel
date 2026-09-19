@@ -128,10 +128,23 @@ export default class RenderMetaRoute extends Route<Model> {
     let searchableLoadStart = performance.now();
     let lattice = (instance.constructor as typeof CardDef).materialized;
     let latticeInput = currentLatticeInputSnapshot();
+    const discoveryManifest =
+      renderModel.renderOptions.latticeDiscovery && !latticeInput
+        ? api.publicationDiscoveryManifest(instance)
+        : undefined;
+    const discoveryDoc = discoveryManifest
+      ? (api.serializeCard(instance, {
+          includeComputeds: false,
+          includeLinkedResources: false,
+          omitQueryFields: true,
+        }) as SingleCardDocument)
+      : undefined;
     let queryPreparationStart = performance.now();
     if (lattice && latticeInput) await api.preparePublicationQueries(instance);
     let latticeQueryPreparationMs = performance.now() - queryPreparationStart;
-    let searchable = await this.cardService.getSearchable();
+    let searchable = discoveryDoc
+      ? undefined
+      : await this.cardService.getSearchable();
     let searchableLoadMs = performance.now() - searchableLoadStart;
 
     // Produce the search doc by walking until the store's load state is
@@ -178,7 +191,21 @@ export default class RenderMetaRoute extends Route<Model> {
       settleMs: searchDocSettleMs,
       settlePasses,
       passes: searchDocPasses,
-    } = await this.#searchDocUntilSettled(instance, searchable, api);
+    } = discoveryDoc
+      ? {
+          searchDoc: {
+            ...discoveryDoc.data.attributes,
+            id: instance.id,
+          } as Record<string, any>,
+          searchableDeps: new Set<string>(),
+          fieldsMs: {},
+          linkLoads: [],
+          searchDocMs: 0,
+          settleMs: 0,
+          settlePasses: 0,
+          passes: [],
+        }
+      : await this.#searchDocUntilSettled(instance, searchable!, api);
     let getterFiredLoads = newLoadEntries(recentLoadsBefore, [
       ...this.store.recentCardDocLoads(),
       ...this.store.recentFileMetaLoads(),
@@ -201,7 +228,7 @@ export default class RenderMetaRoute extends Route<Model> {
     // load-hook timing.
     let deps = [
       ...new Set([
-        SEARCHABLE_MODULE_URL,
+        ...(discoveryDoc ? [] : [SEARCHABLE_MODULE_URL]),
         ...(renderModel?.capturedDeps ?? []),
         ...snapshotRuntimeDependencies({ excludeQueryOnly: !lattice }).deps,
         ...searchableDeps,
@@ -236,26 +263,28 @@ export default class RenderMetaRoute extends Route<Model> {
     try {
       let serializeStart = performance.now();
       let vn = this.network.virtualNetwork;
-      serialized = api.serializeCard(instance, {
-        includeComputeds: true,
-        // Publish only this card identity. Its computeds may consume linked
-        // inputs, but serialization must not evaluate neighboring cards merely
-        // to construct included resources that this route discards below.
-        ...(lattice && latticeInput ? { includeLinkedResources: false } : {}),
-        // A query-backed field is resolved live and the index can't invalidate
-        // it, so its serialized value would always be stale — and deep-
-        // serializing the query closure into `included[]` is what wedges a
-        // densely cross-linked realm. Membership comes from the file's own
-        // relationships, so omit query fields here (the relationship data is
-        // stripped below regardless).
-        omitQueryFields: true,
-        maybeRelativeReference: (reference: string) =>
-          maybeRelativeReference(
-            vn.toURL(reference),
-            vn.toURL(instance.id),
-            instance[realmURL],
-          ),
-      }) as SingleCardDocument;
+      serialized =
+        discoveryDoc ??
+        (api.serializeCard(instance, {
+          includeComputeds: true,
+          // Publish only this card identity. Its computeds may consume linked
+          // inputs, but serialization must not evaluate neighboring cards merely
+          // to construct included resources that this route discards below.
+          ...(lattice && latticeInput ? { includeLinkedResources: false } : {}),
+          // A query-backed field is resolved live and the index can't invalidate
+          // it, so its serialized value would always be stale — and deep-
+          // serializing the query closure into `included[]` is what wedges a
+          // densely cross-linked realm. Membership comes from the file's own
+          // relationships, so omit query fields here (the relationship data is
+          // stripped below regardless).
+          omitQueryFields: true,
+          maybeRelativeReference: (reference: string) =>
+            maybeRelativeReference(
+              vn.toURL(reference),
+              vn.toURL(instance.id),
+              instance[realmURL],
+            ),
+        }) as SingleCardDocument);
       serializeMs = performance.now() - serializeStart;
       // Emulate the on-disk file serialization: a card file holds only the
       // card's own resource — relationship slots keep their `links` but drop
@@ -270,13 +299,15 @@ export default class RenderMetaRoute extends Route<Model> {
         delete relationship.data;
       }
       delete serialized.included;
-      let latticeManifest = lattice
-        ? api.publicationManifest(
-            instance,
-            serialized,
-            latticeInput?.generation,
-          )
-        : undefined;
+      let latticeManifest =
+        discoveryManifest ??
+        (lattice
+          ? api.publicationManifest(
+              instance,
+              serialized,
+              latticeInput?.generation,
+            )
+          : undefined);
       delete serialized.data.meta.publication;
       if (latticeManifest) serialized.data.meta.publication = latticeManifest;
     } finally {

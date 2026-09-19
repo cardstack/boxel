@@ -86,6 +86,8 @@ export interface SerializeOpts {
 }
 
 export interface DeserializeOpts {
+  // Explicit source-discovery mode; never inferred from document metadata.
+  latticeDiscovery?: true;
   ignoreBrokenLinks?: true;
   dependencyTrackingContext?: RuntimeDependencyTrackingContext;
   // Opt-in per-field hydration timing. When a caller supplies the collector,

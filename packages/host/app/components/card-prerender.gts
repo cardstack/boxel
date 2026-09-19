@@ -445,7 +445,13 @@ export default class CardPrerender extends Component {
               subsequentRenderOptions,
             );
           }
-          if (runIndexSteps) {
+          if (
+            runIndexSteps &&
+            !(
+              baseOptions.latticeDiscovery &&
+              meta.serialized?.data.meta.publication
+            )
+          ) {
             iconHTML = await this.renderIcon.perform(
               url,
               subsequentRenderOptions,

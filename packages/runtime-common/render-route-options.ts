@@ -15,6 +15,8 @@ export interface RenderRouteOptions {
   cardRender?: true;
   // HTML-only Lattice visits consume the published output, never recompute it.
   latticeUseSnapshot?: true;
+  // Primary indexing registers materialized owners without evaluating inputs.
+  latticeDiscovery?: true;
   // An explicit producer pass. A pooled tab may retain the input global, but
   // ordinary card, module and file renders must never consume it implicitly.
   latticeRenderCheckpoint?: true;
@@ -50,6 +52,9 @@ export function parseRenderRouteOptions(
     }
     if (parsed.captureModuleSources === true) {
       options.captureModuleSources = true;
+    }
+    if (parsed.latticeDiscovery === true) {
+      options.latticeDiscovery = true;
     }
     if (parsed.latticeUseSnapshot === true) {
       options.latticeUseSnapshot = true;
@@ -102,6 +107,9 @@ export function serializeRenderRouteOptions(
   }
   if (options.captureModuleSources === true) {
     serialized.captureModuleSources = true;
+  }
+  if (options.latticeDiscovery) {
+    serialized.latticeDiscovery = true;
   }
   if (options.latticeUseSnapshot) {
     serialized.latticeUseSnapshot = true;

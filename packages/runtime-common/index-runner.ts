@@ -404,6 +404,7 @@ export class IndexRunner {
   }
 
   static async fromScratch(current: IndexRunner): Promise<FromScratchResult> {
+    current.#assertLatticeSourceQueue();
     current.#dependencyResolver.reset();
     let start = Date.now();
     // Between-visit phase walls, assembled onto the job result's `phaseTimings`
@@ -546,8 +547,6 @@ export class IndexRunner {
         );
       swapMs = Date.now() - finalizeStart;
       current.#latticeSourceWriteMs = current.batch.writeMs;
-      if (!current.#latticeRealmUsername)
-        invalidations.push(...(await current.#drainLattice()));
       current.#perfLog.debug(
         `${jobIdentity(current.#jobInfo)} completed index finalization in ${swapMs} ms`,
       );
@@ -611,6 +610,7 @@ export class IndexRunner {
       changes: { url: URL; operation: 'update' | 'delete' }[];
     },
   ): Promise<IncrementalResult> {
+    current.#assertLatticeSourceQueue();
     current.#dependencyResolver.reset();
     let start = Date.now();
     // Between-visit phase walls, assembled onto the job result's `phaseTimings`
@@ -794,8 +794,6 @@ export class IndexRunner {
         );
       swapMs = Date.now() - finalizeStart;
       current.#latticeSourceWriteMs = current.batch.writeMs;
-      if (!current.#latticeRealmUsername)
-        invalidations.push(...(await current.#drainLattice()));
       current.stats.totalIndexEntries = totalIndexEntries;
     } finally {
       current.#onProgress?.({
@@ -851,7 +849,7 @@ export class IndexRunner {
     };
   }
 
-  // One outbox chunk or one owner per job. A successor is committed with
+  // One outbox chunk or one bounded frontier wave per job. A successor commits with
   // the checkpoint/output, allowing queued source jobs to run between chunks.
   static async materialize(
     current: IndexRunner,
@@ -937,10 +935,18 @@ export class IndexRunner {
     }
   }
 
-  // Queued waves own the secondary lane and attempt-scoped candidates. Legacy
-  // inline drains remain inside their indexing job. A retry discovers durable
-  // dirty work; it never resumes another attempt's unfinished output.
-  async #drainLattice(followup?: {
+  // Source tasks must supply their existing queue identity. Never infer an
+  // actor or fall back to an unbounded synchronous drain after a source commit.
+  #assertLatticeSourceQueue() {
+    if (this.#lattice && !this.#latticeRealmUsername)
+      throw new Error(
+        'Lattice source indexing requires a secondary queue identity',
+      );
+  }
+
+  // Every wave is bounded and leaves overflow in durable dirty obligations.
+  // Batch.done coalesces a successor in the same transaction as publication.
+  async #drainLattice(followup: {
     realmUsername: string;
     wave: number;
     overdueOnly?: boolean;
@@ -969,24 +975,21 @@ export class IndexRunner {
     let latestServiceState:
       | import('./lattice-stride.ts').LatticeServiceState
       | undefined;
-    const serviceState = followup
-      ? ((await publication.registry.schedulingState(this.realmURL.href)) ?? {
-          version: 1 as const,
-          pools: {},
-        })
-      : undefined;
-    let pending = followup
-      ? await publication.registry.ready(this.realmURL.href, {
-          overdueOnly: followup.overdueOnly,
-          candidates: { limit: 24, state: serviceState! },
-          trace: waveTrace,
-        })
-      : await publication.registry.ready(this.realmURL.href);
+    const serviceState = (await publication.registry.schedulingState(
+      this.realmURL.href,
+    )) ?? {
+      version: 1 as const,
+      pools: {},
+    };
+    const pending = await publication.registry.ready(this.realmURL.href, {
+      overdueOnly: followup.overdueOnly,
+      candidates: { limit: 24, state: serviceState },
+      trace: waveTrace,
+    });
     waveTrace?.stage('execute-wave');
-    if (followup)
-      this.#log.debug(
-        `${jobIdentity(this.#jobInfo)} Lattice ready frontier: ${Date.now() - startedAt}ms, ${pending.length} eligible owners`,
-      );
+    this.#log.debug(
+      `${jobIdentity(this.#jobInfo)} Lattice ready frontier: ${Date.now() - startedAt}ms, ${pending.length} eligible owners`,
+    );
     // A queued wake-up is an obligation to inspect current work, not a frozen
     // owner list. Publication or retirement may already have satisfied it.
     // An old wave number must not reject an empty current work set.
@@ -998,7 +1001,7 @@ export class IndexRunner {
     // pending owner, so one wave can publish a batch of them; a batch never
     // reads its own members. The cap keeps one job's duration and input
     // residency bounded.
-    if (followup && !pending.length) {
+    if (!pending.length) {
       if (serviceState && this.#jobInfo.jobId > 0) {
         await publication.registry.saveSchedulingState(
           this.realmURL.href,
@@ -1020,13 +1023,8 @@ export class IndexRunner {
           `${jobIdentity(this.#jobInfo)} Lattice wave found only owners in their settle window for ${this.realmURL.href}; queued a later wave`,
         );
     }
-    let maxWaves = followup
-      ? 1
-      : pending.length
-        ? (await publication.registry.activeOwnerCount(this.realmURL.href)) + 1
-        : 0;
     try {
-      for (let wave = 0; pending.length && wave < maxWaves; wave++) {
+      if (pending.length) {
         this.#latticeTimings.latticeWaves++;
         // No job resume seed: previous source-pass working rows have the same
         // job id, but must never be re-promoted by a materialization wave.
@@ -1038,8 +1036,7 @@ export class IndexRunner {
           this.#virtualNetwork,
           undefined,
           {
-            latticeMaterialization:
-              this.#batch?.splitPrerenderHtml ?? Boolean(followup),
+            latticeMaterialization: true,
           },
         );
         this.#latticeTimings.latticeBatchSetupMs += Date.now() - setupStartedAt;
@@ -1052,8 +1049,7 @@ export class IndexRunner {
         // Intermediate cards already tolerate a moved realm generation. Give
         // each completed identity its own guarded swap; ordinary waves retain
         // their shared generation fence and publication transaction.
-        const streamPublications =
-          Boolean(followup) && pending.every((row) => row.stale);
+        const streamPublications = pending.every((row) => row.stale);
         this.#dependencyResolver.reset();
         this.#indexingInstances.clear();
         let succeeded = 0;
@@ -1112,13 +1108,11 @@ export class IndexRunner {
             }, serviceState?.governor?.commitTickMs ?? 400)
           : undefined;
         const renderStartedAt = Date.now();
-        const queue = [...pending];
-        const scheduler = followup
-          ? new LatticeStride(pending, serviceState)
-          : undefined;
-        const budget = followup
-          ? new LatticeWaveBudget(LATTICE_WAVE_BATCH, LATTICE_WAVE_BUDGET_MS)
-          : undefined;
+        const scheduler = new LatticeStride(pending, serviceState);
+        const budget = new LatticeWaveBudget(
+          LATTICE_WAVE_BATCH,
+          LATTICE_WAVE_BUDGET_MS,
+        );
         const materializeOwner = async ({
           ownerURL,
           generation,
@@ -1183,44 +1177,38 @@ export class IndexRunner {
           };
           // Priority can prevent admission; it must not discard work already
           // admitted if its captured source/input/code receipts still hold.
-          const admit = followup
-            ? () =>
-                publication.registry.assertWorkCurrent(work, undefined, {
-                  lockGroup: false,
-                  deferSourceYield: committedOwners === 0,
-                })
-            : undefined;
-          const check = followup
-            ? (tx?: Querier) =>
-                publication.registry.assertWorkCurrent(work, tx, {
-                  lockGroup: false,
-                  phase: 'continuation',
-                })
-            : undefined;
-          if (admit) await admit();
+          const admit = () =>
+            publication.registry.assertWorkCurrent(work, undefined, {
+              lockGroup: false,
+              deferSourceYield: committedOwners === 0,
+            });
+          const check = (tx?: Querier) =>
+            publication.registry.assertWorkCurrent(work, tx, {
+              lockGroup: false,
+              phase: 'continuation',
+            });
+          await admit();
           trace?.stage('render');
           let warmMs = 0;
           let outcome = await this.#renderVisit(
             new URL(ownerURL),
-            admit
-              ? async (runtime) => {
-                  await admit();
-                  if (runtime !== 'browser') return;
-                  let warmStartedAt = Date.now();
-                  await publication.registry.warmOwnerQueries(
-                    this.realmURL.href,
-                    ownerURL,
-                  );
-                  warmMs = Date.now() - warmStartedAt;
-                  this.#latticeTimings.latticeQueryWarmMs += warmMs;
-                  await admit();
-                }
-              : undefined,
+            async (runtime) => {
+              await admit();
+              if (runtime !== 'browser') return;
+              let warmStartedAt = Date.now();
+              await publication.registry.warmOwnerQueries(
+                this.realmURL.href,
+                ownerURL,
+              );
+              warmMs = Date.now() - warmStartedAt;
+              this.#latticeTimings.latticeQueryWarmMs += warmMs;
+              await admit();
+            },
             { stale, batch: ownerBatch, inputSnapshot: ownerSnapshot },
           );
           reading.end(ownerURL);
           trace?.stage('continuation-check');
-          if (check) await check();
+          await check();
           if (
             outcome.status === 'error' &&
             outcome.error instanceof LatticeWorkSuperseded
@@ -1245,7 +1233,7 @@ export class IndexRunner {
                 : `Lattice visit ${outcome.status}`,
             )}`;
             failures.push(failure);
-            if (followup) {
+            {
               // Record this owner's failure (which also re-enqueues the wave)
               // and let the rest of the batch publish; a wave with no success
               // still fails the job below.
@@ -1268,12 +1256,10 @@ export class IndexRunner {
               this.#batch = ownerBatch;
               this.#dependencyResolver.reset();
             }
-            if (check) {
-              this.batch.registerLatticePublicationCheck(ownerURL, check);
-              this.batch.registerLatticeCommitCheck(ownerURL, (tx) =>
-                publication.registry.assertReservationCurrent(work, tx),
-              );
-            }
+            this.batch.registerLatticePublicationCheck(ownerURL, check);
+            this.batch.registerLatticeCommitCheck(ownerURL, (tx) =>
+              publication.registry.assertReservationCurrent(work, tx),
+            );
             let finishStartedAt = Date.now();
             await this.#finishVisit(rendered);
             this.#latticeTimings.latticeFinishVisitMs +=
@@ -1295,15 +1281,15 @@ export class IndexRunner {
         };
         const lanes = this.#nativeCardIndexer ? LATTICE_WAVE_CONCURRENCY : 1;
         const outcomes = await Promise.allSettled(
-          Array.from({ length: Math.min(lanes, queue.length) }, async () => {
+          Array.from({ length: Math.min(lanes, pending.length) }, async () => {
             while (
-              (scheduler ? scheduler.remaining : queue.length) &&
+              scheduler.remaining &&
               !superseded &&
               !yielded &&
-              (!budget || budget.take())
+              budget.take()
             ) {
-              const service = scheduler?.take();
-              const next = service ? service.row : queue.shift()!;
+              const service = scheduler.take()!;
+              const next = service.row;
               const ownerStartedAt = performance.now();
               try {
                 await materializeOwner(next);
@@ -1360,9 +1346,7 @@ export class IndexRunner {
         latestServiceState = scheduler?.state;
         for (const outcome of outcomes)
           if (outcome.status === 'rejected') throw outcome.reason;
-        this.#latticeTimings.latticeOwnersDeferred += scheduler
-          ? scheduler.remaining
-          : queue.length;
+        this.#latticeTimings.latticeOwnersDeferred += scheduler.remaining;
         if (waveTrace)
           waveTrace.entries(
             'deferred',
@@ -1384,7 +1368,7 @@ export class IndexRunner {
           if (withheld && !failures.length)
             throw new LatticeInputsPending('waiting for input publications');
           const message = `Lattice could not materialize pending owners: ${failures.join(', ')}`;
-          throw followup && recordedFailures
+          throw recordedFailures
             ? new LatticeWorkFailed(message)
             : new Error(message);
         }
@@ -1426,19 +1410,7 @@ export class IndexRunner {
         } else {
           await renderBatch.discardLatticeCandidates();
         }
-        pending = followup
-          ? await publication.registry.pending(this.realmURL.href, {
-              runnableOnly: true,
-            })
-          : await publication.registry.ready(this.realmURL.href);
       }
-      if (
-        !followup &&
-        (await publication.registry.pending(this.realmURL.href)).length
-      )
-        throw new Error(
-          'Lattice feeder graph did not converge; owners remain pending',
-        );
       waveTrace?.event('published', { owners: [...published] });
       return [...published].map((url) => new URL(url));
     } finally {

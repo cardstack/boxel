@@ -1504,7 +1504,13 @@ export class RenderRunner {
             // broken link — takes this path on every visit.)
             cardShortCircuit = true;
           }
-          if (!cardShortCircuit) {
+          if (
+            !cardShortCircuit &&
+            !(
+              baseOptions.latticeDiscovery &&
+              meta.serialized?.data.meta.publication
+            )
+          ) {
             let iconMemo = this.#iconMemoFor(
               affinityKey,
               jobId,

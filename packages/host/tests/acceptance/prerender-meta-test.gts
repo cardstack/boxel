@@ -744,3 +744,107 @@ module('Acceptance | prerender | meta', function (hooks) {
     );
   });
 });
+
+module('Acceptance | prerender | Lattice discovery', function (hooks) {
+  setupApplicationTest(hooks);
+  setupLocalIndexing(hooks);
+  const mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+  });
+
+  for (const discovery of [true, false]) {
+    test(
+      discovery
+        ? 'registration never evaluates queries or computed output'
+        : 'ordinary indexing still evaluates the same definition',
+      async function (assert) {
+        const api = await getService('card-service').getAPI();
+        const {
+          CardDef,
+          field,
+          contains,
+          linksToMany,
+          StringField,
+          NumberField,
+        } = api;
+        let computations = 0;
+        class Entry extends CardDef {
+          @field name = contains(StringField);
+        }
+        class Summary extends CardDef {
+          static materialized = true;
+          static queryInputs = { entries: {} };
+          @field name = contains(StringField);
+          @field entries = linksToMany(Entry, { query: {} });
+          @field count = contains(NumberField, {
+            computeVia: function (this: Summary) {
+              computations++;
+              return this.entries.length;
+            },
+          });
+        }
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          contents: {
+            'summary.gts': { Summary, Entry },
+            'Summary/one.json': {
+              data: {
+                attributes: { name: 'Source name' },
+                meta: { adoptsFrom: { module: '../summary', name: 'Summary' } },
+              },
+            },
+            'Entry/one.json': {
+              data: {
+                attributes: { name: 'Member' },
+                meta: { adoptsFrom: { module: '../summary', name: 'Entry' } },
+              },
+            },
+          },
+        });
+        computations = 0;
+        const options: RenderRouteOptions = {
+          cardRender: true,
+          ...(discovery ? { latticeDiscovery: true } : {}),
+        };
+        await visit(
+          `/render/${encodeURIComponent(testRealmURL + 'Summary/one.json')}/1/${encodeURIComponent(JSON.stringify(options))}/meta`,
+        );
+        const { value } = await capturePrerenderResult('textContent');
+        const result: PrerenderMeta = JSON.parse(value);
+        assert.strictEqual(
+          result.serialized?.data.attributes?.name,
+          'Source name',
+        );
+        if (discovery) {
+          assert.strictEqual(computations, 0, 'no computed getter executed');
+          assert.strictEqual(
+            result.serialized?.data.attributes?.count,
+            undefined,
+          );
+          assert.strictEqual(result.searchDoc?.count, undefined);
+          assert.strictEqual(
+            result.serialized?.data.meta.publication?.state,
+            'pending',
+          );
+          assert.deepEqual(
+            result.serialized?.data.meta.publication?.queryFields,
+            ['entries'],
+          );
+          assert.deepEqual(
+            result.serialized?.data.meta.publication?.watches,
+            [],
+            'queries are bound during guarded materialization',
+          );
+          assert.strictEqual(
+            getService('render-store').recentQueryLoads().length,
+            0,
+            'hydration did not start an eager query',
+          );
+        } else {
+          assert.true(computations > 0, 'the opt-out control still computes');
+          assert.true(Object.hasOwn(result.searchDoc ?? {}, 'count'));
+        }
+      },
+    );
+  }
+});

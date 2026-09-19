@@ -5900,7 +5900,13 @@ async function _applySerialized<T extends BaseDefConstructor>({
     // here costs a full prototype walk on every deserialize. Whether a class
     // declares any query-backed field is a property of the definition, so it is
     // computed once and every card without one skips the walk entirely.
-    if (hasQueryFields(instance)) {
+    if (
+      hasQueryFields(instance) &&
+      !(
+        opts?.latticeDiscovery &&
+        (instance.constructor as typeof CardDef).materialized
+      )
+    ) {
       let store = getStore(instance);
       // A document's `data` is what it is about; its `included` carries the
       // cards its links name. `resourceFrom` hands a link's target on by
@@ -6287,6 +6293,60 @@ declare module 'ember-provide-consume-context/context-registry' {
   export default interface ContextRegistry {
     [CardContextName]: CardContext;
   }
+}
+
+// A discovery stamp registers an obligation, never an output. Inspect field
+// metadata and already-deserialized contained values without touching getters,
+// normalizing query parameters, loading links, or running user computations.
+export function publicationDiscoveryManifest(
+  instance: CardDef,
+): PublicationReceipt | undefined {
+  if (!(instance.constructor as typeof CardDef).materialized) return;
+  const computedFields: string[] = [];
+  const queryFields: string[] = [];
+  let supported = true;
+  const seen = new Set<BaseDef>();
+  const visit = (value: BaseDef, prefix = '') => {
+    if (seen.has(value)) {
+      supported = false;
+      return;
+    }
+    seen.add(value);
+    for (const [name, field] of Object.entries(
+      getFields(value, { includeComputeds: true }),
+    )) {
+      if (name === 'id') continue;
+      const path = prefix + name;
+      if (field.queryDefinition) {
+        if (prefix || field.fieldType !== 'linksToMany') supported = false;
+        else queryFields.push(path);
+        continue;
+      }
+      if (field.fieldType !== 'contains' && field.fieldType !== 'containsMany')
+        continue;
+      if (field.computeVia) {
+        computedFields.push(path);
+        continue;
+      }
+      if (primitive in field.card) continue;
+      const child = getDataBucket(value).get(name);
+      if (Array.isArray(child)) {
+        for (const item of child)
+          if (isCardOrField(item)) visit(item, path + '.*.');
+      } else if (isCardOrField(child)) visit(child, path + '.');
+    }
+    seen.delete(value);
+  };
+  visit(instance);
+  if (!supported) return;
+  return {
+    version: 1,
+    state: 'pending',
+    validatedThrough: 0,
+    computedFields: [...new Set(computedFields)],
+    queryFields: [...new Set(queryFields)],
+    watches: [],
+  };
 }
 
 // Pull a materialized owner's declared query inputs before collecting its

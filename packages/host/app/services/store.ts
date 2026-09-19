@@ -238,6 +238,7 @@ const queryFieldSeedFromSearchSymbol = Symbol.for(
 
 type PersistOptions = CreateOptions & { clientRequestId?: string };
 type DependencyTrackingOptions = {
+  latticeDiscovery?: true;
   latticeUseSnapshot?: true;
   dependencyTrackingContext?: RuntimeDependencyTrackingContext;
 };
@@ -935,6 +936,9 @@ export default class StoreService
         opts?.dependencyTrackingContext,
         opts?.hydrateFieldsMs,
         opts?.latticeUseSnapshot,
+        undefined,
+        undefined,
+        opts?.latticeDiscovery,
       );
       if (
         opts?.latticeUseSnapshot &&
@@ -2224,6 +2228,7 @@ export default class StoreService
     latticeUseSnapshot?: true,
     publicationStore = this.store,
     readConnection = this.latticeConnection,
+    latticeDiscovery?: true,
   ): Promise<T> {
     let hydration =
       latticeUseSnapshot &&
@@ -2254,6 +2259,11 @@ export default class StoreService
           store: hydration?.store ?? this.store,
           dependencyTrackingContext,
           ...(hydrateFieldsMs ? { hydrateFieldsMs } : {}),
+          ...(latticeDiscovery &&
+          (this.isRenderStore ||
+            (globalThis as any).__boxelPrerenderApp === true)
+            ? { latticeDiscovery: true as const }
+            : {}),
           ...(latticeUseSnapshot
             ? {
                 latticePublication:

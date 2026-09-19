@@ -81,6 +81,11 @@ module(basename(import.meta.filename), function (hooks) {
   let bxl: LatticeBxlWorker;
   let native: LatticeNativeCardIndexer | undefined;
   let nativeURLs: string[] = [];
+  const nativeAttempts: Array<{
+    url: string;
+    inputGeneration?: number;
+    generation: number;
+  }> = [];
   let heldOwner:
     | { entered: Deferred<void>; release: Deferred<void> }
     | undefined;
@@ -150,7 +155,14 @@ module(basename(import.meta.filename), function (hooks) {
         await heldOwner.release.promise;
       }
       const result = await native?.(request);
-      if (result) nativeURLs.push(request.url);
+      if (result) {
+        nativeURLs.push(request.url);
+        nativeAttempts.push({
+          url: request.url,
+          inputGeneration: request.inputSnapshot?.generation,
+          generation: request.generation,
+        });
+      }
       return result;
     },
     onRealmSetup({ dbAdapter, virtualNetwork, testRealm }) {
@@ -1109,7 +1121,7 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(
       nativeURLs.filter((url) => url === owner + '.json').length,
       nativeOwnersBeforeDelete + 1,
-      'one native owner publication completes deletion recovery',
+      `one native owner publication completes deletion recovery: ${JSON.stringify(nativeAttempts)}`,
     );
     console.log(
       'LATTICE_TWO_STORE_CONFIRMED',

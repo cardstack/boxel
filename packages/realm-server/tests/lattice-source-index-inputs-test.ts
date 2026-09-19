@@ -302,6 +302,7 @@ module(`${basename(import.meta.filename)} | native batch`, function (hooks) {
       auth: '',
       fetch: globalThis.fetch,
       realmOwnerUserId: '@fixture:example',
+      latticeRealmUsername: 'fixture',
       reader: {
         readFile: async (path) => {
           const url = new URL(path, realm).href;
@@ -334,9 +335,10 @@ module(`${basename(import.meta.filename)} | native batch`, function (hooks) {
       });
       return batch;
     };
-    return IndexRunner.incremental(runner, {
+    await IndexRunner.incremental(runner, {
       changes: urls.map((url) => ({ url: new URL(url), operation: 'update' })),
     });
+    return runner;
   }
   for (const order of [
     [sourceURL, ownerURL],
@@ -447,7 +449,8 @@ module(`${basename(import.meta.filename)} | native batch`, function (hooks) {
       `INSERT INTO lattice_owners(realm_url,owner_url,published_generation,input_generation,dirty_generation,definition_revision,retired) VALUES($1,$2,1,1,1,'old-review',FALSE)`,
       { bind: [realm, ownerURL] },
     );
-    await run([ownerURL]);
+    const runner = await run([ownerURL]);
+    await IndexRunner.materialize(runner, 'fixture', 0);
     const [owner] = await db.execute(
       'SELECT retired,dirty_generation FROM lattice_owners WHERE realm_url=$1 AND owner_url=$2',
       { bind: [realm, ownerURL] },

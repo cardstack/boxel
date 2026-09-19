@@ -405,6 +405,9 @@ export async function renderFileForIndexing({
     fileDefCodeRef,
     loaderEpoch: batch.loaderEpoch,
     ...(needCardRender ? { cardRender: true } : {}),
+    ...(batch.latticeEnabled && needCardRender && !inputSnapshot
+      ? { latticeDiscovery: true as const }
+      : {}),
     ...(needFileExtract ? { fileExtract: true } : {}),
     ...(needFileRender ? { fileRender: true } : {}),
     ...(clearCache ? { clearCache } : {}),
