@@ -213,10 +213,11 @@ module(basename(import.meta.filename), function (hooks) {
       await waitUntil(
         async () => {
           const jobs = await db.execute(
-            "SELECT 1 FROM jobs WHERE status='unfulfilled' LIMIT 1",
+            "SELECT 1 FROM jobs WHERE status='unfulfilled' AND args->>'realmURL'=$1 LIMIT 1",
+            { bind: [realmURL] },
           );
           const dirty = await db.execute(
-            'SELECT 1 FROM lattice_owners WHERE realm_url=$1 AND retired=FALSE AND (published_generation IS NULL OR dirty_generation > published_generation) LIMIT 1',
+            'SELECT 1 FROM lattice_owners WHERE realm_url=$1 AND retired=FALSE AND (published_generation IS NULL OR dirty_generation IS NOT NULL) LIMIT 1',
             { bind: [realmURL] },
           );
           return jobs.length === 0 && dirty.length === 0;
@@ -226,7 +227,7 @@ module(basename(import.meta.filename), function (hooks) {
       console.log(`LATTICE_L1B settled ${label}`);
     } catch (error) {
       const owners = await db.execute(
-        'SELECT owner_url,dirty_generation,published_generation FROM lattice_owners WHERE realm_url=$1 AND retired=FALSE AND (published_generation IS NULL OR dirty_generation > published_generation)',
+        'SELECT owner_url,dirty_generation,published_generation FROM lattice_owners WHERE realm_url=$1 AND retired=FALSE AND (published_generation IS NULL OR dirty_generation IS NOT NULL)',
         { bind: [realmURL] },
       );
       const errors = await db.execute(

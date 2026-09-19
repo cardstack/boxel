@@ -2523,8 +2523,12 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  for (const queueSource of [false, true])
-    test(`bounded native waves preserve completed owners with queued source=${queueSource}`, async (assert) => {
+  for (const { queueSource, routeInWave } of [
+    { queueSource: false, routeInWave: false },
+    { queueSource: true, routeInWave: false },
+    { queueSource: false, routeInWave: true },
+  ])
+    test(`bounded native waves preserve completed owners with queued source=${queueSource}, routing=${routeInWave}`, async (assert) => {
       assert.timeout(30_000);
       const owners = Array.from(
         { length: 9 },
@@ -2533,8 +2537,10 @@ module(basename(import.meta.filename), function (hooks) {
       for (const ownerURL of owners) {
         await (await candidate('A', undefined, false, { ownerURL })).publish();
       }
-      while (await publication.matchPending(realm, 'reader')) {
-        /* settle fixture routing */
+      if (!routeInWave) {
+        while (await publication.matchPending(realm, 'reader')) {
+          /* settle fixture routing */
+        }
       }
       await db.execute(
         "UPDATE jobs SET status='resolved',finished_at=now() WHERE status='unfulfilled'",
@@ -2543,6 +2549,34 @@ module(basename(import.meta.filename), function (hooks) {
         `UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{attributes,amount}','6'),search_doc=jsonb_set(search_doc,'{amount}','6') WHERE url=$1`,
         { bind: [realm + 'Person/one.json'] },
       );
+      if (routeInWave) {
+        const id = rri(realm + 'Person/one');
+        const sourceBatch = await writer.createBatch(new URL(realm), network);
+        await sourceBatch.updateEntry(new URL(realm + 'Person/one.json'), {
+          type: 'instance',
+          resource: {
+            id,
+            type: 'card',
+            attributes: { amount: 6, group: 'B' },
+            meta: { adoptsFrom: recordRef },
+          },
+          searchData: { id, amount: 6, group: 'B' },
+          types: [internalKeyFor(recordRef, undefined, network)],
+          displayNames: ['Record'],
+          deps: new Set(),
+          lastModified: 2,
+          resourceCreatedAt: 1,
+        } as InstanceEntry);
+        await sourceBatch.done({
+          lattice: publication,
+          latticeRealmUsername: 'reader',
+          countIndexEntries: false,
+        });
+        assert.true(
+          await publication.hasUnmatched(realm),
+          'a real source batch awaits routing',
+        );
+      }
       await db.execute(
         'UPDATE lattice_owners SET dirty_generation=(SELECT current_generation FROM realm_generations WHERE realm_url=$1) WHERE realm_url=$1',
         { bind: [realm] },
@@ -2626,8 +2660,24 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(
         await remaining(),
         owners.length - completed,
-        'unstarted owners retain their obligations',
+        'only unstarted owners retain obligations; drained routing does not force stale attempts',
       );
+      if (routeInWave) {
+        assert.true(
+          first.matchingComplete,
+          'the wave consumed all pending routing',
+        );
+        const published = await db.execute(
+          `SELECT pristine_doc->'meta'->'publication' AS publication FROM boxel_index
+           WHERE url = ANY($1::text[]) AND pristine_doc->'attributes'->>'total'='6'`,
+          { bind: ['{' + owners.join(',') + '}'] },
+        );
+        assert.strictEqual(published.length, completed);
+        assert.true(
+          published.every((row) => !(row.publication as any)?.stale),
+          'one ordinary publication covers each completed owner',
+        );
+      }
       assert.true(
         (
           await db.execute(

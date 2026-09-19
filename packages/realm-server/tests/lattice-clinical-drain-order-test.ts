@@ -109,7 +109,8 @@ module(basename(import.meta.filename), function (hooks) {
       async () =>
         (
           await db.execute(
-            "SELECT 1 FROM jobs WHERE status='unfulfilled' LIMIT 1",
+            "SELECT 1 FROM jobs WHERE status='unfulfilled' AND args->>'realmURL'=$1 LIMIT 1",
+            { bind: [realmURL] },
           )
         ).length === 0,
       { timeout: 240_000, interval: 500 },
@@ -155,7 +156,7 @@ module(basename(import.meta.filename), function (hooks) {
     try {
       await idle();
       const dirty = await db.execute(
-        'SELECT 1 FROM lattice_owners WHERE realm_url=$1 AND retired=FALSE AND (published_generation IS NULL OR dirty_generation > published_generation) LIMIT 1',
+        'SELECT 1 FROM lattice_owners WHERE realm_url=$1 AND retired=FALSE AND (published_generation IS NULL OR dirty_generation IS NOT NULL) LIMIT 1',
         { bind: [realmURL] },
       );
       settledInTime = dirty.length === 0;

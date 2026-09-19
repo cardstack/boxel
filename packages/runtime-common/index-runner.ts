@@ -871,8 +871,11 @@ export class IndexRunner {
       // own queue lane); an ordinary attempt beside them would
       // yield to that backlog and take the wave down with it, so the wave
       // is composed of stale attempts alone.
+      // Processing a routing chunk is not evidence that routing remains.
+      // Otherwise a fully drained change gets a stale publication followed by
+      // a redundant ordinary computation just to clear its obligation.
       const backlog =
-        matched ||
+        (await current.#lattice.hasUnmatched(current.realmURL.href)) ||
         (await current.#lattice.registry.hasSourceBacklog(
           current.realmURL.href,
         ));

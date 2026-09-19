@@ -6297,13 +6297,45 @@ declare module 'ember-provide-consume-context/context-registry' {
 
 // A discovery stamp registers an obligation, never an output. Inspect field
 // metadata and already-deserialized contained values without touching getters,
-// normalizing query parameters, loading links, or running user computations.
+// loading links or running user computations. Queries whose parameters are
+// authored contained values can register dependencies before the first output.
 export function publicationDiscoveryManifest(
   instance: CardDef,
 ): PublicationReceipt | undefined {
   if (!(instance.constructor as typeof CardDef).materialized) return;
   const computedFields: string[] = [];
   const queryFields: string[] = [];
+  const watches: NonNullable<PublicationReceipt['watches']> = [];
+  // Refuse paths that would cross an identity or execute a getter. Reading the
+  // bucket also distinguishes an absent source value from a computed value.
+  const unavailable = Symbol('query parameter requires evaluation');
+  const sourceValue = (path: string): unknown => {
+    let value: unknown = instance;
+    for (const segment of path.split('.')) {
+      if (value == null) return undefined;
+      if (Array.isArray(value)) {
+        if (!/^\d+$/.test(segment)) throw unavailable;
+        value = value[Number(segment)];
+      } else if (isCardOrField(value)) {
+        const fields: Record<string, Field> = getFields(value, {
+          includeComputeds: true,
+        });
+        const field = fields[segment];
+        if (
+          !field ||
+          field.computeVia ||
+          field.queryDefinition ||
+          (field.fieldType !== 'contains' && field.fieldType !== 'containsMany')
+        )
+          throw unavailable;
+        value = getDataBucket(value).get(segment);
+        if (value === undefined) throw unavailable;
+      } else {
+        throw unavailable;
+      }
+    }
+    return value;
+  };
   let supported = true;
   const seen = new Set<BaseDef>();
   const visit = (value: BaseDef, prefix = '') => {
@@ -6319,7 +6351,23 @@ export function publicationDiscoveryManifest(
       const path = prefix + name;
       if (field.queryDefinition) {
         if (prefix || field.fieldType !== 'linksToMany') supported = false;
-        else queryFields.push(path);
+        else {
+          queryFields.push(path);
+          try {
+            watches.push(
+              publicationQueryWatch(
+                getStore(instance),
+                instance,
+                field,
+                sourceValue,
+              ),
+            );
+          } catch (error) {
+            if (error !== unavailable) throw error;
+            // The existing guarded preparation resolves computed/linked
+            // parameters; discovery must never execute them to register a watch.
+          }
+        }
         continue;
       }
       if (field.fieldType !== 'contains' && field.fieldType !== 'containsMany')
@@ -6345,7 +6393,7 @@ export function publicationDiscoveryManifest(
     validatedThrough: 0,
     computedFields: [...new Set(computedFields)],
     queryFields: [...new Set(queryFields)],
-    watches: [],
+    watches,
   };
 }
 

@@ -868,6 +868,7 @@ function resolveQueryAndRealm(
   instance: BaseDef,
   field: Field,
   fieldDefinition: FieldDefinition,
+  resolvePathValue = (path: string) => resolveInstancePathValue(instance, path),
 ): { realmHrefs: string[]; searchURL: string; query: Query } | undefined {
   let realmURL: URL | undefined = (instance as any)[realmURLSymbol];
   if (!realmURL) {
@@ -889,7 +890,7 @@ function resolveQueryAndRealm(
       realmURL,
       fieldName: field.name,
       fieldPath,
-      resolvePathValue: (path) => resolveInstancePathValue(instance, path),
+      resolvePathValue,
       relativeTo: (instance as CardDef).id
         ? rri((instance as CardDef).id)
         : realmURL,
@@ -960,11 +961,18 @@ export function publicationQueryWatch(
   store: CardStore,
   instance: BaseDef,
   field: Field,
+  resolvePathValue?: (path: string) => unknown,
 ) {
   let definition = buildFieldDefinition(field);
   if (!definition)
     throw new Error(`Lattice cannot resolve query field '${field.name}'`);
-  let normalized = resolveQueryAndRealm(store, instance, field, definition);
+  let normalized = resolveQueryAndRealm(
+    store,
+    instance,
+    field,
+    definition,
+    resolvePathValue,
+  );
   if (!normalized)
     throw new Error(
       `Lattice cannot resolve query parameters for '${field.name}'`,

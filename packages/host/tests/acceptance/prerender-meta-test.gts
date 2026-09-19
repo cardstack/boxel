@@ -773,9 +773,20 @@ module('Acceptance | prerender | Lattice discovery', function (hooks) {
         }
         class Summary extends CardDef {
           static materialized = true;
-          static queryInputs = { entries: {} };
+          static queryInputs = { entries: {}, derivedEntries: {} };
           @field name = contains(StringField);
-          @field entries = linksToMany(Entry, { query: {} });
+          @field entries = linksToMany(Entry, {
+            query: { filter: { eq: { name: '$this.name' } } },
+          });
+          @field derivedName = contains(StringField, {
+            computeVia: function (this: Summary) {
+              computations++;
+              return this.name;
+            },
+          });
+          @field derivedEntries = linksToMany(Entry, {
+            query: { filter: { eq: { name: '$this.derivedName' } } },
+          });
           @field count = contains(NumberField, {
             computeVia: function (this: Summary) {
               computations++;
@@ -802,6 +813,7 @@ module('Acceptance | prerender | Lattice discovery', function (hooks) {
           },
         });
         computations = 0;
+        const queryLoadsBefore = getService('render-store').recentQueryLoads();
         const options: RenderRouteOptions = {
           cardRender: true,
           ...(discovery ? { latticeDiscovery: true } : {}),
@@ -828,17 +840,23 @@ module('Acceptance | prerender | Lattice discovery', function (hooks) {
           );
           assert.deepEqual(
             result.serialized?.data.meta.publication?.queryFields,
-            ['entries'],
+            ['entries', 'derivedEntries'],
           );
           assert.deepEqual(
-            result.serialized?.data.meta.publication?.watches,
-            [],
-            'queries are bound during guarded materialization',
+            result.serialized?.data.meta.publication?.watches?.map((watch) => ({
+              fieldPath: watch.fieldPath,
+              eq:
+                watch.query.filter && 'eq' in watch.query.filter
+                  ? watch.query.filter.eq
+                  : undefined,
+            })),
+            [{ fieldPath: 'entries', eq: { name: 'Source name' } }],
+            'source parameters register without searching; computed parameters wait for guarded evaluation',
           );
-          assert.strictEqual(
-            getService('render-store').recentQueryLoads().length,
-            0,
-            'hydration did not start an eager query',
+          assert.deepEqual(
+            getService('render-store').recentQueryLoads(),
+            queryLoadsBefore,
+            'hydration did not start an eager query after fixture indexing',
           );
         } else {
           assert.true(computations > 0, 'the opt-out control still computes');
