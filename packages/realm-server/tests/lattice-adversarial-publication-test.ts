@@ -2,6 +2,8 @@ import QUnit from 'qunit';
 import { basename } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
 import { latticeMaterializationReadySQL } from '@cardstack/runtime-common/jobs/lattice';
+import { latticeCodeReadySQL } from '@cardstack/runtime-common/jobs/lattice-code';
+import { latticeRenderRetryReadySQL } from '@cardstack/runtime-common/jobs/lattice-render';
 import type {
   Prerenderer as Renderer,
   VirtualNetwork,
@@ -207,6 +209,15 @@ module(basename(import.meta.filename), function (hooks) {
       jobs: await db.execute(
         'SELECT id,job_type,status,left(result::text,300) AS result FROM jobs ORDER BY id DESC LIMIT 8',
       ),
+      waiting: await db.execute(
+        `SELECT id,job_type,args,
+          ${latticeMaterializationReadySQL} AS materialization_ready,
+          ${latticeRenderRetryReadySQL} AS render_ready,
+          ${latticeCodeReadySQL} AS code_ready
+          FROM jobs j WHERE status='unfulfilled' AND args->>'realmURL'=$1
+          ORDER BY id`,
+        { bind: [realmURL] },
+      ),
       errors: await db.execute(
         'SELECT url,left(error_doc::text,300) AS error FROM boxel_index WHERE realm_url=$1 AND has_error=TRUE',
         { bind: [realmURL] },
@@ -226,9 +237,11 @@ module(basename(import.meta.filename), function (hooks) {
         async () => {
           // Parked obligations are intentionally unfulfilled. Wait for this
           // realm's runnable work, then require all healthy owners to be clean.
+          // HTML retries for deliberately invalid owners are parked too.
           const jobs = await db.execute(
             `SELECT 1 FROM jobs j WHERE status='unfulfilled'
-              AND args->>'realmURL'=$1 AND ${latticeMaterializationReadySQL} LIMIT 1`,
+              AND args->>'realmURL'=$1 AND ${latticeMaterializationReadySQL}
+              AND ${latticeRenderRetryReadySQL} AND ${latticeCodeReadySQL} LIMIT 1`,
             { bind: [realmURL] },
           );
           if (jobs.length) return false;

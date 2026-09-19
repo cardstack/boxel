@@ -1383,10 +1383,13 @@ module('Integration | operator-mode | card chooser', function (hooks) {
 
     await click('[data-test-create-new-card-button]');
     await waitFor(`[data-test-item-button]`);
-    await fillIn(`[data-test-search-field]`, `Skill`);
-    await click(
-      '[data-test-item-button="https://cardstack.com/base/cards/skill"]',
-    );
+    // This tests indexing-driven type filters, not full-text ranking across
+    // the catalogue. Select the exact fixture even as other skills are added.
+    let skillURL = `${baseRealm.url}cards/skill`;
+    let skillResult = `[data-test-item-button="${skillURL}"]`;
+    await fillIn(`[data-test-search-field]`, skillURL);
+    await waitFor(skillResult, { timeout: 10000 });
+    await click(skillResult);
     await click('[data-test-card-chooser-go-button]');
 
     await fillIn('[data-test-field="cardTitle"] input', 'New Skill');
