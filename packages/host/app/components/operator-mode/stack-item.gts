@@ -5,10 +5,6 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
-import type { SafeString } from '@ember/template';
-import { htmlSafe } from '@ember/template';
-
-import { isTesting } from '@embroider/macros';
 
 import Component from '@glimmer/component';
 
@@ -21,6 +17,7 @@ import { restartableTask, timeout, dropTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { provide, consume } from 'ember-provide-consume-context';
 
+import { motion } from 'glimmer-motion';
 import pluralize from 'pluralize';
 import { TrackedSet } from 'tracked-built-ins';
 
@@ -96,7 +93,6 @@ import type {
 export interface StackItemComponentAPI {
   clearSelections: () => void;
   scrollIntoView: (selector: string) => Promise<void>;
-  startAnimation: (type: 'closing' | 'movingForward') => Promise<void>;
 }
 
 interface Signature {
@@ -153,11 +149,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @tracked private numberOfCardsToDelete = 0;
   @tracked private isDeletingCards = false;
   @tracked private deleteError: string | undefined;
-  @tracked private animationType:
-    | 'opening'
-    | 'closing'
-    | 'movingForward'
-    | undefined = 'opening';
   @tracked private cardResource: ReturnType<getCard> | undefined;
   private contentEl: HTMLElement | undefined;
   private containerEl: HTMLElement | undefined;
@@ -185,7 +176,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.args.setupStackItem(this.args.item, {
       clearSelections: this.clearSelections,
       scrollIntoView: this.scrollIntoViewTask.perform,
-      startAnimation: this.startAnimation.perform,
     });
   }
 
@@ -222,7 +212,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return !this.isBuried && this.isWideFormat;
   }
 
-  private get styleForStackedCard(): SafeString {
+  private get styleForStackedCard() {
     const stackItemMaxWidth = 50; // unit: rem, 800px for 16px base
     const RATIO = 1.2;
     //  top card: 800px / (1.2 ^ 0) = 800px;
@@ -239,7 +229,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
     // without fighting inline !important overrides. Mirrors host-mode
     // pattern: parent constrains height, children inherit.
     if (this.isExpanded) {
-      return htmlSafe(`z-index: calc(${this.args.index} + 1);`);
+      return {
+        zIndex: this.args.index + 1,
+        height: '100%',
+        width: '100%',
+        maxWidth: '100%',
+        marginTop: 0,
+      };
     }
 
     let marginTopPx = 0;
@@ -261,18 +257,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
       ? '100%'
       : `${stackItemMaxWidth / Math.pow(RATIO, invertedIndex)}rem`;
 
-    let styles = `
-      height: calc(100% - ${marginTopPx}px);
-      width: ${width};
-      max-width: ${maxWidthPercent}%;
-      z-index: calc(${this.args.index} + 1);
-      margin-top: ${marginTopPx}px;
-    `; // using margin-top instead of padding-top to hide scrolled content from view
-    // Transition (280ms ease-out, all geometric props) is on the .item
-    // CSS rule below — no inline override here, so expand/collapse
-    // morph + stacked-layout shifts all use the same curve.
-
-    return htmlSafe(styles);
+    // Choreo owns transforms; keep layout styles on its modifier so a
+    // rerender cannot overwrite a tween's in-flight inline styles.
+    return {
+      height: `calc(100% - ${marginTopPx}px)`,
+      width,
+      maxWidth: `${maxWidthPercent}%`,
+      zIndex: this.args.index + 1,
+      marginTop: marginTopPx,
+    };
   }
 
   private get isBuried() {
@@ -330,46 +323,24 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private get isExpanded(): boolean {
     return this.isTopCard && this.isExpandedIntent;
   }
+  private get isCoveredByExpandedCard(): boolean {
+    let top = this.args.stackItems.at(-1);
+    return Boolean(
+      this.isBuried &&
+      top &&
+      this.operatorModeStateService.isStackItemExpanded(top.instanceId),
+    );
+  }
   private toggleExpanded = () => {
     if (!this.isTopCard) return;
-    const cardEl = this.itemEl;
-    const cardFrom = cardEl?.getBoundingClientRect();
-
     this.operatorModeStateService.setStackItemExpanded(
       this.itemExpandKey,
       !this.isExpandedIntent,
     );
 
-    // FLIP via Web Animations on the card body: measure rect before
-    // state change, animate inverse transform back to identity after
-    // re-render. Works around CSS transitions not firing when changing
-    // properties cross from inline-style to CSS-rule sources mid-frame.
-    if (!cardEl || !cardFrom) return;
-    this.pendingFlipEl = cardEl;
-    this.pendingFlipFrom = cardFrom;
-    scheduleOnce('afterRender', this, this.runExpandAnimation);
-  };
-
-  private pendingFlipEl: HTMLElement | null = null;
-  private pendingFlipFrom: DOMRect | null = null;
-
-  private runExpandAnimation() {
-    const cardEl = this.pendingFlipEl;
-    const cardFrom = this.pendingFlipFrom;
-    this.pendingFlipEl = null;
-    this.pendingFlipFrom = null;
-    if (!cardEl || !cardFrom) return;
-    this.playFlip(cardEl, cardFrom, {
-      duration: 280,
-      easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
-    });
-    // Header gets a lightweight fade + small Y slide — suggests
-    // direction without the full FLIP's visual noise. Expand: pill
-    // slides UP into the bar (starts 10px below). Restore: header
-    // slides DOWN onto the card (starts 10px above). A second afterRender
-    // pass lets {{#in-element}} settle before measuring.
+    // Choreo measures the card's layout change in the same render pass.
     scheduleOnce('afterRender', this, this.animateHeaderTransition);
-  }
+  };
 
   private animateHeaderTransition() {
     const headerTo = this.findHeaderEl();
@@ -401,38 +372,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
       (this.itemEl?.querySelector(
         '.stack-item-header',
       ) as HTMLElement | null) ?? null
-    );
-  }
-
-  private playFlip(
-    el: HTMLElement,
-    fromRect: DOMRect,
-    opts: { duration: number; easing: string },
-  ) {
-    const toRect = el.getBoundingClientRect();
-    const dx = fromRect.left - toRect.left;
-    const dy = fromRect.top - toRect.top;
-    // Guard against zero target dimensions (e.g., during unmount or
-    // before layout settles) — Web Animations would NaN out otherwise.
-    if (toRect.width === 0 || toRect.height === 0) return;
-    const sx = fromRect.width / toRect.width;
-    const sy = fromRect.height / toRect.height;
-    el.animate(
-      [
-        {
-          transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`,
-          transformOrigin: 'top left',
-        },
-        {
-          transform: 'translate(0, 0) scale(1, 1)',
-          transformOrigin: 'top left',
-        },
-      ],
-      {
-        duration: opts.duration,
-        easing: opts.easing,
-        fill: 'none',
-      },
     );
   }
 
@@ -789,75 +728,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.containerEl.scrollTop = 0;
   });
 
-  private startAnimation = dropTask(
-    async (animationType: 'closing' | 'movingForward') => {
-      this.animationType = animationType;
-      await new Promise<void>((resolve) => {
-        scheduleOnce(
-          'afterRender',
-          this,
-          this.handleAnimationCompletion,
-          animationType,
-          resolve,
-        );
-      });
-    },
-  );
-
-  private handleAnimationCompletion(
-    animationName: 'opening' | 'closing' | 'movingForward',
-    resolve?: () => void,
-  ) {
-    if (!this.itemEl) {
-      this.clearAnimationType(animationName);
-      resolve?.();
-      return;
-    }
-    const animations = this.itemEl.getAnimations?.() ?? [];
-    if (animations.length === 0) {
-      this.clearAnimationType(animationName);
-      resolve?.();
-      return;
-    }
-    Promise.all(animations.map((animation) => animation.finished))
-      .then(() => {
-        this.clearAnimationType(animationName);
-        resolve?.();
-      })
-      .catch((e) => {
-        // AbortError is expected in two scenarios:
-        // 1. Multiple stack items are animating in parallel (eg. closing and moving forward)
-        //    and some elements get removed before their animations complete
-        // 2. Tests running with animation-duration: 0s can cause
-        //    animations to abort before they're properly tracked
-        if (e.name === 'AbortError') {
-          this.clearAnimationType(animationName);
-          resolve?.();
-        } else {
-          console.error(e);
-        }
-      });
-  }
-
-  private clearAnimationType(
-    animationName: 'opening' | 'closing' | 'movingForward',
-  ) {
-    if (this.animationType === animationName) {
-      this.animationType = undefined;
-    }
-  }
-
-  private trackOpeningAnimation = () => {
-    if (this.animationType !== 'opening') {
-      return;
-    }
-    scheduleOnce('afterRender', this, this.finishOpeningAnimation);
-  };
-
-  private finishOpeningAnimation = () => {
-    this.handleAnimationCompletion('opening');
-  };
-
   private setupContentEl = (el: HTMLElement) => {
     this.contentEl = el;
   };
@@ -922,28 +792,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private setupItemEl = (el: HTMLElement) => {
     this.itemEl = el;
-    this.trackOpeningAnimation();
   };
 
   private get doOpeningAnimation() {
     return (
       this.isTopCard &&
-      this.animationType === 'opening' &&
       !this.isEditing &&
       !(this.args.item.format === 'isolated' && this.args.item.request) // Skip animation if we have a request and we're in isolated format, it means we're completing an edit operation
     );
-  }
-
-  private get doClosingAnimation() {
-    return this.animationType === 'closing';
-  }
-
-  private get doMovingForwardAnimation() {
-    return this.animationType === 'movingForward';
-  }
-
-  private get isTesting() {
-    return isTesting();
   }
 
   private setWindowTitle = () => {
@@ -966,21 +822,18 @@ export default class OperatorModeStackItem extends Component<Signature> {
   <template>
     {{consumeContext this.makeCardResource}}
     <div
-      class={{cn
-        'item'
-        buried=this.isBuried
-        expanded=this.isExpanded
-        opening-animation=this.doOpeningAnimation
-        closing-animation=this.doClosingAnimation
-        move-forward-animation=this.doMovingForwardAnimation
-        testing=this.isTesting
-      }}
+      class={{cn 'item' buried=this.isBuried expanded=this.isExpanded}}
       data-test-stack-card-index={{@index}}
       data-test-stack-card={{this.cardIdentifier}}
       {{! In order to support scrolling cards into view
       we use a selector that is not pruned out in production builds }}
       data-stack-card={{this.cardIdentifier}}
-      style={{this.styleForStackedCard}}
+      data-stack-covered={{this.isCoveredByExpandedCard}}
+      {{motion
+        id=@item.instanceId
+        role=(if this.doOpeningAnimation 'opening-card' 'stack-card')
+        style=this.styleForStackedCard
+      }}
       {{ContentElement onSetup=this.setupItemEl}}
     >
       <CardContainer
@@ -1165,38 +1018,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         --stack-card-footer-height: 6rem;
       }
 
-      @keyframes scaleIn {
-        from {
-          transform: scale(0.1);
-          opacity: 0;
-        }
-        to {
-          transform: scale(1);
-          opacity: 1;
-        }
-      }
-      @keyframes fadeOut {
-        from {
-          opacity: 1;
-          transform: translateY(0);
-        }
-        to {
-          opacity: 0;
-          transform: translateY(100%);
-        }
-      }
-
-      @keyframes moveForward {
-        from {
-          transform: translateY(0);
-          opacity: 0.8;
-        }
-        to {
-          transform: translateY(25px);
-          opacity: 1;
-        }
-      }
-
       .item {
         --stack-item-header-height: 3rem;
         justify-self: center;
@@ -1205,29 +1026,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         height: inherit;
         z-index: 0;
         pointer-events: none;
-        transition:
-          margin-top var(--boxel-transition),
-          width var(--boxel-transition);
       }
-      .item.opening-animation {
-        animation: scaleIn 0.2s forwards;
-      }
-      .item.closing-animation {
-        animation: fadeOut 0.2s forwards;
-      }
-      .item.move-forward-animation {
-        animation: moveForward 0.2s none;
-      }
-      .item.opening-animation.testing {
-        animation-duration: 0s;
-      }
-      .item.closing-animation.testing {
-        animation-duration: 0s;
-      }
-      .item.move-forward-animation.testing {
-        animation-duration: 0s;
-      }
-
       .item.buried {
         --stack-item-header-height: 2.5rem;
         --realm-icon-border-radius: 4px;
@@ -1274,7 +1073,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
          DOM (top card = last in DOM order). */
       .item:not(.expanded):has(~ .item.expanded) {
         opacity: 0;
-        transition: opacity 380ms ease;
       }
 
       .stack-item-card {

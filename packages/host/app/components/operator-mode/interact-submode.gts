@@ -81,6 +81,7 @@ import NeighborStackTriggerButton, {
 } from './interact-submode/neighbor-stack-trigger';
 import OperatorModeStack from './stack';
 
+import StackMotion from './stack-motion';
 import SubmodeLayout from './submode-layout';
 
 import type { NewFileOptions } from './new-file-button';
@@ -944,7 +945,9 @@ export default class InteractSubmode extends Component {
             }}
           />
         {{/if}}
-        <div class={{cn 'stacks' is-multi-stack=(gt this.stacks.length 1)}}>
+        <StackMotion
+          class={{cn 'stacks' is-multi-stack=(gt this.stacks.length 1)}}
+        >
           {{#each this.stacks as |stack stackIndex|}}
             {{#let
               (get
@@ -990,7 +993,7 @@ export default class InteractSubmode extends Component {
             @copy={{fn (perform this.copy)}}
             @isCopying={{this.copy.isRunning}}
           />
-        </div>
+        </StackMotion>
         {{#if this.canCreateNeighborStack}}
           <NeighborStackTriggerButton
             class='neighbor-stack-trigger stack-trigger-right'
