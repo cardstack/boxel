@@ -32,9 +32,15 @@ import { tracked } from '@glimmer/tracking';
 import { commandData } from './resources/command-data';
 import type { GetAllRealmMetasResult, RealmMetaField } from './command';
 
+// '' leaves the parameter out, so the model runs at its provider's default,
+// which for a thinking model means thinking. 'none' is the explicit off
+// switch: the bot sends it as `reasoning: { enabled: false }`, the form every
+// OpenRouter provider understands, for models whose thinking is on or off
+// with no levels in between (Moonshot's Kimi, for one).
 const ReasoningEffortField = enumField(StringField, {
   options: [
-    { value: '', label: 'None' },
+    { value: '', label: 'Not specified' },
+    { value: 'none', label: 'Off (no thinking)' },
     { value: 'minimal', label: 'Minimal' },
     { value: 'low', label: 'Low' },
     { value: 'medium', label: 'Medium' },

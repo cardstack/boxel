@@ -4,6 +4,11 @@ import type {
   Tool,
 } from '@cardstack/base/matrix-event';
 import type { ReasoningEffort } from 'openai/resources/shared';
+
+// What a room's active-llm event may carry: OpenAI's effort levels, plus
+// 'xhigh' for the models that grade one step higher, plus 'none' — the
+// explicit off switch for models whose thinking is on or off with no levels.
+export type RoomReasoningEffort = ReasoningEffort | 'xhigh' | 'none';
 import type { ToolChoice } from '../helpers/ai.ts';
 import type { CardResource } from '../resource-types.ts';
 
@@ -22,7 +27,7 @@ export interface PromptParts {
   toolChoice: ToolChoice | undefined;
   model: string | undefined;
   toolsSupported?: boolean;
-  reasoningEffort?: ReasoningEffort;
+  reasoningEffort?: RoomReasoningEffort;
   shouldRespond: boolean;
   history: DiscreteMatrixEvent[];
   pendingCodePatchCorrectnessChecks?: PendingCodePatchCorrectnessCheck;
