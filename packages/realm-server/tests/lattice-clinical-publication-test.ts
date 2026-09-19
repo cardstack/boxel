@@ -236,6 +236,7 @@ module(basename(import.meta.filename), function (hooks) {
     const { data } = await response.json();
     return {
       attributes: data.attributes as Record<string, unknown>,
+      relationships: data.relationships as Record<string, any>,
       state: data.meta?.publication?.state as string | undefined,
     };
   }
@@ -369,19 +370,12 @@ module(basename(import.meta.filename), function (hooks) {
       );
       for (const write of writes) await apply(write);
       current = next;
-      const incomplete = new Set(scenario.incomplete?.(ids) ?? []);
+      const paged = new Set(scenario.paged?.(ids) ?? []);
       const settleStart = traceTiming ? performance.now() : 0;
-      await settled(
-        scenario.key,
-        [...incomplete].map((path) => realmURL + path),
-      );
+      await settled(scenario.key);
       const settleMs = traceTiming
         ? Math.round(performance.now() - settleStart)
         : 0;
-      if (incomplete.size)
-        console.log(
-          `LATTICE_CLINICAL withheld owner probe: ${JSON.stringify(await probeFirstDirtyOwner())}`,
-        );
       const generationsAfter = await generations();
       const republished = [...generationsAfter]
         .filter(
@@ -402,19 +396,35 @@ module(basename(import.meta.filename), function (hooks) {
           })}`,
         );
       for (const path of affected) {
-        const { attributes, state } = await served(path);
-        if (incomplete.has(path)) {
-          // The page bound is smaller than the membership. Either the system
-          // withholds a ready publication, or it publishes the true total.
-          console.log(
-            `LATTICE_CLINICAL truncated owner ${path}: state=${state} vitalsCount=${attributes.vitalsCount} oracle=${after.get(path)!.vitalsCount}`,
+        const { attributes, state, relationships } = await served(path);
+        if (paged.has(path)) {
+          const membership = relationships.vitals;
+          assert.strictEqual(
+            state,
+            'ready',
+            `${path} publishes a complete page`,
           );
-          const withheldOrExact =
-            state !== 'ready' ||
-            attributes.vitalsCount === after.get(path)!.vitalsCount;
+          assert.strictEqual(
+            attributes.vitalsCount,
+            8,
+            'the formula counts its declared page',
+          );
+          assert.strictEqual(
+            membership.data.length,
+            8,
+            'every member of the page is captured',
+          );
+          assert.deepEqual(
+            membership.meta,
+            {
+              total: after.get(path)!.vitalsCount,
+              returned: 8,
+            },
+            'the receipt distinguishes page membership from all matching readings',
+          );
           assert.true(
-            withheldOrExact,
-            `${path} does not serve a complete-looking count from a truncated page (state ${state}, count ${attributes.vitalsCount})`,
+            republished.includes(path),
+            'the bounded owner republished',
           );
           continue;
         }

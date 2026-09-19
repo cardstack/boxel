@@ -280,13 +280,13 @@ module(basename(import.meta.filename), function (hooks) {
     assert.ok((await rows())[0].delivered_at);
   });
 
-  test('a mismatched stored identity waits for repair without sending or acknowledging', async (assert) => {
-    const id = await publish(enabled);
+  test('a mismatched stored identity becomes terminal without sending or acknowledging', async (assert) => {
     const instance = dispatcher(lattice);
     for (const [field, value] of [
       ['realmURL', ordinary],
       ['publicationId', randomUUID()],
     ]) {
+      const id = await publish(enabled);
       await db.execute(
         `UPDATE lattice_publication_events SET payload=jsonb_set(
           jsonb_set(payload,'{realmURL}',to_jsonb(realm_url)),ARRAY[$1],to_jsonb($2::text)) WHERE id=$3`,
@@ -297,24 +297,33 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.strictEqual(await instance.drain(), 1);
       assert.deepEqual(sent, []);
-      const [row] = await rows();
+      const row = (await rows()).find((row) => row.publication_id === id)!;
       assert.strictEqual(row.delivered_at, null);
-      assert.strictEqual(row.terminal_reason, null);
-      assert.strictEqual(row.lease_token, null, 'failed send is retryable');
+      assert.strictEqual(row.terminal_reason, 'invalid publication payload');
+      assert.strictEqual(
+        row.lease_token,
+        null,
+        'invalid work releases its lease',
+      );
+      assert.strictEqual(
+        await instance.drain(),
+        0,
+        'terminal work is not retried',
+      );
     }
-    await db.execute(
-      `UPDATE lattice_publication_events SET payload=jsonb_set(payload,'{publicationId}',to_jsonb(id::text)) WHERE id=$1`,
-      { bind: [id] },
+    const id = await publish(enabled);
+    assert.strictEqual(
+      await instance.drain(),
+      1,
+      'a new valid event can still deliver',
     );
-    await db.execute(
-      `UPDATE lattice_publication_deliveries SET next_attempt_at=now()-interval '1 second'`,
-    );
-    assert.strictEqual(await instance.drain(), 1);
     assert.deepEqual(
       sent.map((s) => s.realm),
       [enabled],
     );
     assert.strictEqual(sent[0].event.publicationId, id);
-    assert.ok((await rows())[0].delivered_at);
+    assert.ok(
+      (await rows()).find((row) => row.publication_id === id)!.delivered_at,
+    );
   });
 });

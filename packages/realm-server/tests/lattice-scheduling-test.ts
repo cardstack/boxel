@@ -26,7 +26,7 @@ const { module, test } = QUnit;
 const realm = 'https://demand.example/';
 const scope = 'a'.repeat(64);
 
-module(basename(import.meta.filename), (hooks) => {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   setupDB(hooks, {
     beforeEach: async (adapter) => {

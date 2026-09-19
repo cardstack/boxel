@@ -201,10 +201,10 @@ module(basename(import.meta.filename), function () {
           changed.includes(path),
           `${scenario.key}: unaffected owner ${path} is unchanged by the oracle`,
         );
-      for (const path of scenario.incomplete?.(ids) ?? [])
+      for (const path of scenario.paged?.(ids) ?? [])
         assert.true(
           changed.includes(path),
-          `${scenario.key}: an owner the system must mark incomplete does change in the oracle`,
+          `${scenario.key}: an owner with a bounded page also changes in the full-membership oracle`,
         );
       // Writes must be applicable in the stated order and idempotent as a set.
       assert.deepEqual(

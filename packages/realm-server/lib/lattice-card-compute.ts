@@ -22,8 +22,8 @@ import type {
   LatticeBxlValue,
 } from './lattice-bxl-derivation.ts';
 
-// Static shape admission can decline source-mode execution before a value
-// exists. Ordinary runtime errors and stale authority are never this signal.
+// An uncovered input or unsupported output shape declines source-mode
+// execution. Ordinary runtime errors and stale authority are never this signal.
 export class LatticeUnsupportedComputation extends Error {}
 
 export interface LatticeCardComputePlan {
@@ -284,7 +284,9 @@ function protectedInputs(
       if (key === 'toJSON' && !Object.hasOwn(object, key)) return undefined;
       if (typeof key === 'string' && !Object.hasOwn(object, key)) {
         missing.add(`${path}.${key}`);
-        throw new Error(`Unadmitted computed input: ${path}.${key}`);
+        throw new LatticeUnsupportedComputation(
+          `Unadmitted computed input: ${path}.${key}`,
+        );
       }
       if (typeof key === 'string' && reads)
         reads.add(readPath(`${path}.${key}`));
@@ -295,6 +297,15 @@ function protectedInputs(
     ownKeys(object) {
       reads?.add(readPath(`${path}.*`));
       return Reflect.ownKeys(object);
+    },
+    getOwnPropertyDescriptor(object, key) {
+      // BXL checks own-property coverage before reading a JSON key. An
+      // optional path must not bypass the missing-input guard via that check.
+      if (typeof key === 'string') {
+        if (!Object.hasOwn(object, key)) missing.add(`${path}.${key}`);
+        reads?.add(readPath(`${path}.${key}`));
+      }
+      return Reflect.getOwnPropertyDescriptor(object, key);
     },
     has(object, key) {
       if (typeof key === 'string' && reads)
@@ -605,7 +616,9 @@ export function prepareLatticeCardCompute(plan: LatticeCardComputePlan) {
         enumerable: true,
         get() {
           missing.add(`$.${name}`);
-          throw new Error(`Unadmitted computed input: $.${name}`);
+          throw new LatticeUnsupportedComputation(
+            `Unadmitted computed input: $.${name}`,
+          );
         },
       });
     }
@@ -666,7 +679,7 @@ export function prepareLatticeCardCompute(plan: LatticeCardComputePlan) {
             // Optional-path operators may catch an evaluator error. They must
             // not turn an unresolved projected input into a confirmed blank.
             if (missing.size) {
-              throw new Error(
+              throw new LatticeUnsupportedComputation(
                 `Unadmitted computed input: ${[...missing].join(', ')}`,
               );
             }
@@ -675,7 +688,11 @@ export function prepareLatticeCardCompute(plan: LatticeCardComputePlan) {
             return value;
           } catch (error) {
             finishTiming();
-            throw new Error(
+            const Failure =
+              missing.size || error instanceof LatticeUnsupportedComputation
+                ? LatticeUnsupportedComputation
+                : Error;
+            throw new Failure(
               `Lattice computation ${plan.definition.name}.${name} ` +
                 `[${timing.evaluator}/${timing.phase}, ` +
                 `wall=${timing.elapsedMs.toFixed(2)}ms, ` +

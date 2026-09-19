@@ -3981,7 +3981,10 @@ export class Batch {
         "AND i.type = 'instance' WHERE o.realm_url =",
         param(this.realmURL.href),
         "AND o.retired = FALSE AND i.is_deleted = FALSE AND i.pristine_doc->'meta'->'publication' IS NOT NULL",
-        ...(urls.every((url) => url.href.endsWith('.json'))
+        ...(urls.every(
+          (url) =>
+            url.href.endsWith('.json') || seeds.includes(url.href + '.json'),
+        )
           ? []
           : ['AND o.code_bound = TRUE']),
       ]);

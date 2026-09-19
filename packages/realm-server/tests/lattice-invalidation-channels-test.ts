@@ -326,6 +326,28 @@ module(basename(import.meta.filename), function (hooks) {
     return stamp;
   }
 
+  test('an extensionless source deletion defers the same materialized owner as its JSON alias', async function (assert) {
+    await seedOwner();
+    const writer = new IndexWriter(db, {
+      lattice: new LatticeRealmConfig([realm]),
+    });
+    const batch = await writer.createBatch(
+      new URL(realm),
+      new VirtualNetwork(),
+    );
+    await batch.invalidate([new URL(realm + 'input')], {
+      latticeDeferOwners: true,
+    });
+    assert.false(
+      batch.invalidations.includes(realm + 'owner.json'),
+      'the published owner waits for secondary propagation instead of being rediscovered',
+    );
+    assert.true(
+      batch.invalidations.includes(realm + 'input.json'),
+      'the actual source row is still invalidated',
+    );
+  });
+
   test('dependency-only deletion retains the published snapshot and secondary matching marks it pending', async function (assert) {
     const stamp = await seedOwner();
     const writer = new IndexWriter(db, {

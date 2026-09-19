@@ -52,6 +52,7 @@ function resolveWhere(
 export interface LatticeResolvedQueryInput {
   values: Record<string, any>[];
   identities: string[];
+  total: number;
   query: Query;
   searchURL: string;
 }
@@ -264,6 +265,7 @@ export function createLatticeQueryInputResolver({
           resolved.set(name, {
             values: projected,
             identities,
+            total: result.meta.page.total,
             query,
             searchURL: buildQuerySearchURL(normalized.realms, normalized.query),
           });

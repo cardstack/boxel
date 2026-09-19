@@ -105,7 +105,7 @@ function receipt(url = sourceURL, generation = 1): LatticeNativeSourceInput {
     assertCurrent: async () => {},
   };
 }
-module(basename(import.meta.filename) + ' capability', () => {
+module(`${basename(import.meta.filename)} | capability`, function () {
   test('deduplicates demand, rejects foreign inputs, and expires at batch end', async (assert) => {
     let calls = 0;
     const frame = new LatticeSourceIndexInputs(realm, 1, async (url) => {
@@ -150,7 +150,7 @@ module(basename(import.meta.filename) + ' capability', () => {
   });
 });
 
-module(basename(import.meta.filename) + ' native batch', (hooks) => {
+module(`${basename(import.meta.filename)} | native batch`, function (hooks) {
   let db: PgAdapter,
     writer: IndexWriter,
     network: VirtualNetwork,

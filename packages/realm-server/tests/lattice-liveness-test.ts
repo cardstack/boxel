@@ -18,7 +18,7 @@ const boards: LatticeLivenessOwner[] = Array.from({ length: 9 }, (_, i) => ({
   publishedAt: 0,
   dirty: false,
 }));
-module(basename(import.meta.filename), () => {
+module(basename(import.meta.filename), function () {
   test('headroom removes early refresh before saturation; clean viewed cards still cost liveness', (assert) => {
     const slow = latticeLiveness(boards, () => 300, 0, undefined, 1000, 2);
     assert.strictEqual(slow.factors.visible, 1);

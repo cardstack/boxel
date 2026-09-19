@@ -3,6 +3,7 @@ import { compileBxl, assertValidBxlProfile, prepareBxl } from '@cardstack/bxl';
 import type { PreparedBxl } from '@cardstack/bxl';
 import {
   prepareLatticeCardCompute,
+  LatticeUnsupportedComputation,
   assertLatticeShape as assertShape,
   assertNativeBxlLibraries,
   latticeBxlOutputLimit,
@@ -155,6 +156,7 @@ parentPort?.on(
     } catch (error) {
       parentPort!.postMessage({
         error: error instanceof Error ? error.message : String(error),
+        unsupportedComputation: error instanceof LatticeUnsupportedComputation,
       });
     }
   },

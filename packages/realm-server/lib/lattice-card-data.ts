@@ -746,7 +746,10 @@ export async function assembleLatticeCardData({
         relationships[name] = {
           links: { self: null, search: membership.searchURL },
           data: membership.identities.map((id) => ({ type: 'card', id })),
-          meta: { total: membership.identities.length },
+          meta: {
+            total: membership.total,
+            returned: membership.identities.length,
+          },
         };
         continue;
       }

@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'node:path';
 import {
   ensureFullMatrixUserId,
   userIdFromUsername,
@@ -6,7 +7,7 @@ import {
 
 const { module, test } = QUnit;
 
-module('Matrix user identity configuration', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let originalURL: string | undefined;
   let originalName: string | undefined;
   hooks.beforeEach(function () {

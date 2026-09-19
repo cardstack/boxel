@@ -8,6 +8,7 @@ import { LatticeBxlWorker } from '../lib/lattice-bxl-derivation.ts';
 import {
   makeLatticeCardComputePlan,
   makeLatticeCardPrerequisitePlan,
+  LatticeUnsupportedComputation,
 } from '../lib/lattice-card-compute.ts';
 import type { LatticeCardComputePlan } from '../lib/lattice-card-compute.ts';
 
@@ -464,7 +465,10 @@ module(basename(import.meta.filename), function (hooks) {
     const plan = makeLatticeCardComputePlan(def, 'v1', shape, outputs);
     await assert.rejects(
       worker.evaluateCard(plan, [input({ rows: [{ score: 3 }] })]),
-      /Unadmitted computed input/,
+      (error: Error) =>
+        error instanceof LatticeUnsupportedComputation &&
+        /Unadmitted computed input/.test(error.message),
+      'missing coverage retains its typed refusal across the worker boundary',
     );
   });
 });

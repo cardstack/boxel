@@ -79,25 +79,33 @@ module(basename(import.meta.filename), function (hooks) {
     return scope;
   }
 
-  test('new source jobs cancel active work; another realm does not', async (assert) => {
+  test('queued source work blocks admission but only changed inputs cancel admitted work', async (assert) => {
     assert.timeout(5000);
     const publisher = new PgQueuePublisher(db);
     const scope = await open();
-    await publisher.publish({
-      jobType: 'incremental-index',
-      concurrencyGroup: 'indexing:https://other.example/',
-      priority: 10,
-      timeout: 10,
-      args: {},
-    });
-    const barrier = new Deferred<void>();
-    const sub = await db.subscribe('lattice_work_barrier', () =>
-      barrier.fulfill(),
-    );
+    const execute = db.execute.bind(db);
+    const inspectedPending = new Deferred<void>();
+    // Observe an actual recovery inspection, not just receipt of NOTIFY. The
+    // queued job has to be seen by the guard before we check continuation.
+    db.execute = async (sql, opts) => {
+      const rows = await execute(sql, opts);
+      if (rows[0]?.source_pending === true) inspectedPending.fulfill();
+      return rows;
+    };
     try {
-      await db.notify('lattice_work_barrier', '');
-      await barrier.promise;
-      assert.false(scope.signal.aborted);
+      await publisher.publish({
+        jobType: 'incremental-index',
+        concurrencyGroup: 'indexing:https://other.example/',
+        priority: 10,
+        timeout: 10,
+        args: {},
+      });
+      const unrelated = await open();
+      assert.false(
+        unrelated.signal.aborted,
+        'another realm does not block admission',
+      );
+      await unrelated.close();
       await publisher.publish({
         jobType: 'incremental-index',
         concurrencyGroup: 'indexing:' + realm,
@@ -105,11 +113,25 @@ module(basename(import.meta.filename), function (hooks) {
         timeout: 10,
         args: {},
       });
+      await inspectedPending.promise;
+      assert.false(
+        scope.signal.aborted,
+        'queued work alone leaves captured inputs usable',
+      );
+      await assert.rejects(
+        open(),
+        /new source work has priority/,
+        'new admission waits for source work',
+      );
+      await db.execute(
+        'UPDATE realm_generations SET current_generation=6 WHERE realm_url=$1',
+        { bind: [realm] },
+      );
       const reason = await aborted(scope);
       assert.true(reason instanceof LatticeWorkSuperseded);
-      assert.strictEqual(reason.reason, 'new source work has priority');
+      assert.strictEqual(reason.reason, 'input or module revision changed');
     } finally {
-      await sub.unsubscribe();
+      db.execute = execute;
       await publisher.destroy();
     }
   });
@@ -183,7 +205,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('cancelling BXL releases the real realm writer slot for the new source job', async (assert) => {
+  test('source indexing proceeds beside BXL and changed inputs cancel obsolete work', async (assert) => {
     assert.timeout(15000);
     const worker = new LatticeBxlWorker();
     const publisher = new PgQueuePublisher(db);
@@ -200,7 +222,7 @@ module(basename(import.meta.filename), function (hooks) {
       priority: 10,
     });
     const entered = new Deferred<void>();
-    const sourceEntered = new Deferred<number>();
+    const sourceEntered = new Deferred<void>();
     const manifest: LatticeBxlManifest = {
       version: 1,
       definition: { module: realm + 'day', name: 'Day', revision: 'v1' },
@@ -238,19 +260,24 @@ module(basename(import.meta.filename), function (hooks) {
       }
     });
     sourceRunner.register('incremental-index', async () => {
-      assert.true(
+      assert.false(
         workStopped,
-        'the old worker exited before the source job claims its slot',
+        'the independent source lane can run while captured BXL work is active',
       );
       order.push('source');
-      sourceEntered.fulfill(performance.now());
+      await db.execute(
+        'UPDATE lattice_owners SET dirty_generation=6 WHERE owner_url=$1',
+        { bind: [owner] },
+      );
+      await db.notify('realm_index_updated', realm);
+      sourceEntered.fulfill();
       return {};
     });
     try {
       await worker.evaluate(manifest, inputs.slice(0, 1));
       const old = await publisher.publish({
         jobType: 'lattice-materialize',
-        concurrencyGroup: 'indexing:' + realm,
+        concurrencyGroup: 'lattice:' + realm,
         priority: 8,
         timeout: 10,
         args: { realmURL: realm },
@@ -258,7 +285,6 @@ module(basename(import.meta.filename), function (hooks) {
       await ownerRunner.start();
       await sourceRunner.start();
       await entered.promise;
-      const start = performance.now();
       const source = await publisher.publish({
         jobType: 'incremental-index',
         concurrencyGroup: 'indexing:' + realm,
@@ -266,22 +292,17 @@ module(basename(import.meta.filename), function (hooks) {
         timeout: 10,
         args: { realmURL: realm },
       });
-      const sourceStartedAt = await sourceEntered.promise;
+      await sourceEntered.promise;
       await Promise.all([old.done, source.done]);
-      assert.deepEqual(order, ['cancelled', 'source']);
+      assert.deepEqual(order, ['source', 'cancelled']);
       const [row] = await db.execute(
         'SELECT dirty_generation FROM lattice_owners WHERE owner_url=$1',
         { bind: [owner] },
       );
       assert.strictEqual(
         Number(row.dirty_generation),
-        5,
+        6,
         'cancellation did not clear the dirty obligation',
-      );
-      console.log(
-        JSON.stringify({
-          latticeCancellationSourceClaimMs: sourceStartedAt - start,
-        }),
       );
       assert.strictEqual(
         (await worker.evaluate(manifest, inputs.slice(0, 1))).artifacts[0]

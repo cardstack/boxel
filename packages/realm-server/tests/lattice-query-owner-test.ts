@@ -2121,6 +2121,14 @@ module(basename(import.meta.filename), function (hooks) {
       [realm + 'Record/three'],
       'the owner reads only the page',
     );
+    const membership = result.card.serialized!.data.relationships!.members;
+    if (Array.isArray(membership))
+      throw new Error('Expected one query relationship');
+    assert.deepEqual(
+      membership.meta,
+      { total: 3, returned: 1 },
+      'the receipt distinguishes the returned page from the full match count',
+    );
     await publish();
     const [row] = await db.execute(
       'SELECT query FROM lattice_query_watches WHERE owner_url=$1 AND field_path=$2',

@@ -1,4 +1,5 @@
 import { Worker } from 'node:worker_threads';
+import { LatticeUnsupportedComputation } from './lattice-card-compute.ts';
 import type {
   LatticeCardComputeInput,
   LatticeCardComputePlan,
@@ -217,9 +218,16 @@ export class LatticeBxlWorker {
         };
         let onAbort = () =>
           finish(signal?.reason ?? new Error('BXL work aborted'));
-        let onMessage = (message: { result?: T; error?: string }) => {
+        let onMessage = (message: {
+          result?: T;
+          error?: string;
+          unsupportedComputation?: boolean;
+        }) => {
           if (message.error || !message.result) {
-            finish(new Error(message.error ?? 'Missing BXL result'));
+            const Failure = message.unsupportedComputation
+              ? LatticeUnsupportedComputation
+              : Error;
+            finish(new Failure(message.error ?? 'Missing BXL result'));
           } else {
             finish(undefined, message.result);
           }

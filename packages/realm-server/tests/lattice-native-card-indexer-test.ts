@@ -522,13 +522,35 @@ module(basename(import.meta.filename), function (hooks) {
       lastModified: 1,
       resourceCreatedAt: 1,
     };
-    for (const kind of ['input', 'output'] as const) {
+    for (const kind of ['input', 'nested input', 'output'] as const) {
       const snapshot = structuredClone(root);
       const doubled = snapshot.definition.fieldDefs.doubled;
       if (kind === 'input') doubled.bxl = formula('.undeclared');
-      else doubled.type = 'linksToMany';
+      else if (kind === 'nested input') {
+        snapshot.definition.fields.person = 'person';
+        snapshot.definition.fieldDefs.person = {
+          type: 'linksTo',
+          isComputed: false,
+          isPrimitive: false,
+          fieldOrCard: codeRef,
+          nativeCodec: { kind: 'compound', resourceType: 'card' },
+        };
+        doubled.bxl = formula('.person.amount // 0');
+      } else doubled.type = 'linksToMany';
+      const document = JSON.parse(sourceJSON);
+      if (kind === 'nested input')
+        document.data.relationships = {
+          person: { links: { self: './other' } },
+        };
+      await db.execute(
+        "UPDATE lattice_native_test_revisions SET revision=$1 WHERE identity='source'",
+        { bind: [hash(JSON.stringify(document))] },
+      );
       assert.strictEqual(
-        await nativeIndexer(snapshot)(request),
+        await nativeIndexer(snapshot)({
+          ...request,
+          sourceJSON: JSON.stringify(document),
+        }),
         undefined,
         `unadmitted computed ${kind} yields no source candidate`,
       );

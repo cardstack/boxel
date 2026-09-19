@@ -806,7 +806,7 @@ export function changedOwners(
 // sequence on one realm, and each claim must hold at its point in the
 // sequence (the oracle test checks this). Value-changing scenarios come
 // first, then the structural ones (transfer, discharge, board re-date), then
-// the truncation case, whose owner the system must leave incomplete.
+// the page-bound case, whose receipt distinguishes page size from full total.
 
 export interface ClinicalWrite {
   op: 'POST' | 'PATCH' | 'DELETE';
@@ -833,8 +833,8 @@ export interface ClinicalScenario {
   cutoff?: (ids: ClinicalIds) => string[];
   // Owners the registry must not route to at all.
   unaffected?: (ids: ClinicalIds) => string[];
-  // The system cannot publish a complete-looking result for these owners.
-  incomplete?: (ids: ClinicalIds) => string[];
+  // These owners deliberately compute over a page, with its full total in the receipt.
+  paged?: (ids: ClinicalIds) => string[];
 }
 
 const j = (path: string) => path + '.json';
@@ -1216,7 +1216,8 @@ export const CLINICAL_SCENARIOS: ClinicalScenario[] = [
     title:
       'More readings arrive than the query page can hold (discharged patient, so no board row changes)',
     parallel: 'A day with more observations than the loader’s page limit',
-    proves: 'a truncated membership cannot publish a complete-looking count',
+    proves:
+      'a completed query page publishes its count and preserves the full match total',
     writes: (ids) =>
       Array.from({ length: 9 }, (_, index) => ({
         op: 'POST' as const,
@@ -1236,7 +1237,7 @@ export const CLINICAL_SCENARIOS: ClinicalScenario[] = [
     affected: (ids) => [j(ids.summary(ids.discharged[0], ids.dates[1]))],
     cutoff: (ids) => [j(ids.board('cardiology', ids.dates[1]))],
     unaffected: (ids) => [j(ids.census(ids.dates[1]))],
-    incomplete: (ids) => [j(ids.summary(ids.discharged[0], ids.dates[1]))],
+    paged: (ids) => [j(ids.summary(ids.discharged[0], ids.dates[1]))],
   },
 ];
 

@@ -6,7 +6,7 @@ import {
   startLatticeTrace,
 } from '@cardstack/runtime-common/lattice-trace';
 const { module, test } = QUnit;
-module(basename(import.meta.filename), (hooks) => {
+module(basename(import.meta.filename), function (hooks) {
   hooks.afterEach(() => configureLatticeTrace());
   test('disabled diagnostics do not instantiate traces or evaluate payloads', (assert) => {
     configureLatticeTrace();

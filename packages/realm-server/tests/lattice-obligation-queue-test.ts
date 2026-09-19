@@ -64,6 +64,8 @@ module(basename(import.meta.filename), function (hooks) {
       realmUsername: 'reader',
       wave: 0,
       attempt: 0,
+      supersessions: 0,
+      latticeNotBefore: 0,
     });
   });
 
