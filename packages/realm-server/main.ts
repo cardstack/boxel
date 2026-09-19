@@ -14,7 +14,6 @@ import {
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
   DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
-  LinkShapePolicy,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm.ts';
 import yargs from 'yargs';
@@ -48,10 +47,7 @@ import { ModuleCacheCoordinator } from './lib/module-cache-coordination.ts';
 import { JobsFinishedListener } from './lib/jobs-finished-listener.ts';
 import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import { startHealthSampler } from './health-sampler.ts';
-import {
-  getSearchAdmissionLimit,
-  getSearchSustainedInFlight,
-} from './search-inflight.ts';
+import { buildLinkShapePolicy } from './search-inflight.ts';
 import { startEventLoopHeartbeat } from './liveness/event-loop-heartbeat.ts';
 import { startLivenessResponder } from './liveness/index.ts';
 import { resolveFullIndexOnStartup } from './lib/full-index-on-startup.ts';
@@ -190,20 +186,9 @@ const PRERENDER_COALESCE_ACROSS_PROCESSES =
   process.env.PRERENDER_COALESCE_ACROSS_PROCESSES === 'true';
 
 // How much of a card's link graph each live read carries, chosen per realm
-// from the load this process is under. It reads the same in-flight count
-// admission control already computes — in its sustained form, since a shape
-// that flapped per request would fragment every validator it is folded into —
-// and degrades a response one rung before admission control would refuse the
-// request outright.
-//
-// This is the process's only control over the shape. There is deliberately no
-// environment variable beside it: an operator-set flag cannot express "depends
-// on concurrency", and two mechanisms deciding one thing is how they come to
-// disagree.
-const linkShapePolicy = new LinkShapePolicy({
-  readLoad: getSearchSustainedInFlight,
-  limit: getSearchAdmissionLimit(),
-});
+// from the load this process is under. The construction, and why it is not an
+// operator setting, live beside the gate it reads in `search-inflight.ts`.
+const linkShapePolicy = buildLinkShapePolicy();
 
 let {
   port,

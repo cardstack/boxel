@@ -55,6 +55,9 @@ module(basename(import.meta.filename), function () {
         async getColumnNames() {
           return [];
         },
+        async withFileWriteLocks(_url, _paths, fn) {
+          return await fn();
+        },
         async withWriteLock(_url, fn) {
           return await fn(undefined);
         },

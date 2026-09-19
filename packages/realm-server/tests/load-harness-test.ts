@@ -23,6 +23,13 @@ import {
   describeConnectionSetup,
   measureConnectionSetup,
 } from '../scripts/load-harness/lib/connection.ts';
+import { LINK_SHAPE_LOAD_HALF_LIFE_MS } from '@cardstack/runtime-common';
+import {
+  DEFAULT_LOAD_HALF_LIFE_MS,
+  describeInFlight,
+  InFlightReading,
+  inFlightProgressLabel,
+} from '../scripts/load-harness/lib/in-flight.ts';
 import {
   readOnlyReason,
   workloadFromCardTypeSummary,
@@ -1195,6 +1202,253 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         ensureTrailingSlash('https://example.test/o/r/'),
         'https://example.test/o/r/',
+      );
+    });
+  });
+
+  // The concurrency a run holds, which is the only figure in a summary that
+  // can be compared against a realm server's own thresholds. Getting it wrong
+  // is silent in the direction that matters: a mean that tracked the
+  // instantaneous count would report every burst as sustained load and put a
+  // run over a rung it never approached.
+  module('driver concurrency', function () {
+    test('the mean is time-weighted, so a request only counts for as long as it is open', function (assert) {
+      let clock = 0;
+      let reading = new InFlightReading({
+        halfLifeMs: 10_000,
+        now: () => clock,
+      });
+      assert.strictEqual(reading.mean, 0, 'a driver that has sent nothing');
+
+      let close = reading.open();
+      assert.strictEqual(reading.inFlight, 1);
+      assert.strictEqual(
+        reading.mean,
+        0,
+        'a request that has only just been sent has contributed no time',
+      );
+
+      clock += 10_000; // one half-life held at 1
+      assert.ok(
+        Math.abs(reading.mean - 0.5) < 0.01,
+        `after one half-life at 1 the mean is ~0.5, got ${reading.mean}`,
+      );
+      close();
+    });
+
+    test('a burst moves the mean far less than the same count held', function (assert) {
+      let clock = 0;
+      function meanAfter(burstMs: number, totalMs: number): number {
+        clock = 0;
+        let reading = new InFlightReading({
+          halfLifeMs: DEFAULT_LOAD_HALF_LIFE_MS,
+          now: () => clock,
+        });
+        let closes = [];
+        for (let i = 0; i < 30; i++) {
+          closes.push(reading.open());
+        }
+        clock += burstMs;
+        for (let close of closes) {
+          close();
+        }
+        clock += totalMs - burstMs;
+        return reading.peakMean;
+      }
+      // The same peak count over the same wall clock, held for 5s against 10
+      // minutes. This separation is the whole reason a run reports a mean: a
+      // reader firing its whole query set at once produces the first shape,
+      // and a policy tuned against the second must not see it as such.
+      let burst = meanAfter(5_000, 600_000);
+      let sustained = meanAfter(600_000, 600_000);
+      assert.ok(
+        burst < 1,
+        `30 requests open for 5s over 10 minutes peak under 1, got ${burst}`,
+      );
+      assert.ok(
+        sustained > 25,
+        `the same 30 held for 10 minutes peak above 25, got ${sustained}`,
+      );
+    });
+
+    test('the peak mean outlives the quiet stretch at the end of a run', function (assert) {
+      let clock = 0;
+      let reading = new InFlightReading({
+        halfLifeMs: 10_000,
+        now: () => clock,
+      });
+      let closes = [reading.open(), reading.open(), reading.open()];
+      clock += 100_000; // ten half-lives held at 3
+      assert.ok(
+        reading.mean > 2.9,
+        `held at 3 for ten half-lives, got ${reading.mean}`,
+      );
+
+      for (let close of closes) {
+        close();
+      }
+      clock += 100_000;
+      assert.ok(
+        reading.mean < 0.01,
+        `the mean decays back toward zero unattended, got ${reading.mean}`,
+      );
+      assert.ok(
+        reading.peakMean > 2.9,
+        `while the peak the run reached is still reportable, got ${reading.peakMean}`,
+      );
+    });
+
+    test('the peak count keeps the burst the mean flattens', function (assert) {
+      let clock = 0;
+      let reading = new InFlightReading({
+        halfLifeMs: DEFAULT_LOAD_HALF_LIFE_MS,
+        now: () => clock,
+      });
+      let closes = [];
+      for (let i = 0; i < 12; i++) {
+        closes.push(reading.open());
+      }
+      clock += 50;
+      for (let close of closes) {
+        close();
+      }
+      clock += 600_000;
+      // The admission gate acts on the instantaneous count, so a burst that
+      // leaves the mean at nothing is still the thing a 429 would have come
+      // from. Both numbers are reported for that reason.
+      assert.strictEqual(reading.peakInFlight, 12);
+      assert.ok(
+        reading.peakMean < 0.1,
+        `while the mean barely registers it, got ${reading.peakMean}`,
+      );
+    });
+
+    test('a request closed twice is only returned once', function (assert) {
+      let clock = 0;
+      let reading = new InFlightReading({
+        halfLifeMs: 10_000,
+        now: () => clock,
+      });
+      let first = reading.open();
+      let second = reading.open();
+      first();
+      first();
+      assert.strictEqual(
+        reading.inFlight,
+        1,
+        'the second request is still open',
+      );
+      second();
+      assert.strictEqual(reading.inFlight, 0);
+    });
+
+    // The harness is copied to the box that runs it and imports nothing from
+    // the repo, so its copy of the server's smoothing window can only be kept
+    // honest from here. A drift would be silent in the worst way: the run would
+    // still print a mean, and the mean would describe a different measurement
+    // from the one the policy takes.
+    test('the driver smooths over the window the server ships', function (assert) {
+      assert.strictEqual(
+        DEFAULT_LOAD_HALF_LIFE_MS,
+        LINK_SHAPE_LOAD_HALF_LIFE_MS,
+        'the harness default follows the constant the realm server defaults to',
+      );
+    });
+
+    // A figure quoted without its window is not comparable to the server's, and
+    // the window is a per-deployment setting rather than a constant.
+    test('the summary names the window it measured over', function (assert) {
+      let clock = 0;
+      let shipped = new InFlightReading({
+        halfLifeMs: DEFAULT_LOAD_HALF_LIFE_MS,
+        now: () => clock,
+      });
+      assert.ok(
+        describeInFlight(shipped).includes(
+          `(${Math.round(DEFAULT_LOAD_HALF_LIFE_MS / 1000)}s mean)`,
+        ),
+        'the shipped window is named',
+      );
+      assert.ok(
+        describeInFlight(shipped).includes('shipped default'),
+        'and said to be the default, so a mismatched target is visible',
+      );
+
+      let retuned = new InFlightReading({
+        halfLifeMs: 30_000,
+        now: () => clock,
+      });
+      let summary = describeInFlight(retuned);
+      assert.ok(
+        summary.includes('(30s mean)'),
+        `a reading over another window says so: ${summary}`,
+      );
+      assert.notOk(
+        summary.includes('120s'),
+        'and does not also claim the shipped one',
+      );
+    });
+
+    // The progress line is what a long run is steered by, and it is the figure
+    // most likely to be quoted away from the summary that would otherwise say
+    // which window it was taken over.
+    test('the live figure carries its window too', function (assert) {
+      let clock = 0;
+      let reading = new InFlightReading({
+        halfLifeMs: DEFAULT_LOAD_HALF_LIFE_MS,
+        now: () => clock,
+      });
+      let closes = [];
+      for (let i = 0; i < 4; i++) {
+        closes.push(reading.open());
+      }
+      clock += 10 * DEFAULT_LOAD_HALF_LIFE_MS;
+      assert.strictEqual(inFlightProgressLabel(reading), '4.0@120s');
+
+      clock = 0;
+      let retuned = new InFlightReading({
+        halfLifeMs: 30_000,
+        now: () => clock,
+      });
+      let close = retuned.open();
+      clock += 10 * 30_000;
+      assert.strictEqual(
+        inFlightProgressLabel(retuned),
+        '1.0@30s',
+        'a run against a target that smooths differently says so on every line',
+      );
+      close();
+      for (let c of closes) {
+        c();
+      }
+    });
+
+    test('the summary states both figures, and which is which', function (assert) {
+      let clock = 0;
+      let reading = new InFlightReading({
+        halfLifeMs: 10_000,
+        now: () => clock,
+      });
+      let closes = [];
+      for (let i = 0; i < 7; i++) {
+        closes.push(reading.open());
+      }
+      clock += 100_000;
+      for (let close of closes) {
+        close();
+      }
+      let summary = describeInFlight(reading);
+      assert.ok(
+        summary.includes('peak 7.0 searches in flight (10s mean)'),
+        `the mean is reported as the mean, over its own window: ${summary}`,
+      );
+      assert.ok(
+        summary.includes('7 at once'),
+        `and the count as the count: ${summary}`,
+      );
+      assert.ok(
+        summary.includes('boxel:link-shape-policy'),
+        'and the reader is sent to the server figure this one bounds',
       );
     });
   });

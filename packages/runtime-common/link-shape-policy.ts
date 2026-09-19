@@ -87,12 +87,12 @@
 
 import { logger } from './log.ts';
 import {
-  LINK_SHAPE_ALL_ENGAGE,
-  LINK_SHAPE_ALL_RELEASE,
+  LINK_SHAPE_ALL_ENGAGE_THRESHOLD,
+  LINK_SHAPE_ALL_RELEASE_THRESHOLD,
   LINK_SHAPE_HEARTBEAT_MS,
   LINK_SHAPE_MIN_DWELL_MS,
-  LINK_SHAPE_MULTI_ROW_ENGAGE,
-  LINK_SHAPE_MULTI_ROW_RELEASE,
+  LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD,
+  LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD,
   SERVER_MAX_IN_FLIGHT_SEARCHES,
 } from './search-bounds.ts';
 
@@ -259,12 +259,12 @@ export class LinkShapePolicy {
     this.#limit = opts.limit ?? SERVER_MAX_IN_FLIGHT_SEARCHES;
     let { engage, release } = normalizeThresholds(
       [
-        opts.multiRowEngage ?? LINK_SHAPE_MULTI_ROW_ENGAGE,
-        opts.allEngage ?? LINK_SHAPE_ALL_ENGAGE,
+        opts.multiRowEngage ?? LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD,
+        opts.allEngage ?? LINK_SHAPE_ALL_ENGAGE_THRESHOLD,
       ],
       [
-        opts.multiRowRelease ?? LINK_SHAPE_MULTI_ROW_RELEASE,
-        opts.allRelease ?? LINK_SHAPE_ALL_RELEASE,
+        opts.multiRowRelease ?? LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD,
+        opts.allRelease ?? LINK_SHAPE_ALL_RELEASE_THRESHOLD,
       ],
       this.#limit,
     );

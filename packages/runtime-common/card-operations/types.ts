@@ -535,6 +535,18 @@ export type OperationErrorCode =
   // The request named a `baseVersion` the target is no longer at, on an
   // operation that requires the base to match.
   | 'version-conflict'
+  // A conditional request could not be decided, as distinct from being
+  // decided against: the realm could not establish that the state it would
+  // compare is current, so it refused rather than answer from state it knows
+  // may be behind. Carries a 5xx rather than a 412 because nothing about the
+  // caller's request is wrong and repeating it unchanged is the remedy.
+  //
+  // Internal taxonomy on the card verbs. Those refusals reach a client as a
+  // status and a sentence — `#cardWriteRefusal` carries the status and the
+  // detail, not this — so a caller there tells this from any other 5xx by
+  // what the detail says. It is on the wire only where an operation result
+  // carries its own error, which is the envelope.
+  | 'precondition-unverifiable'
   // The operation reads the invoking actor and the request authenticated
   // nobody. Distinct from `invalid-params` because nothing the caller sent is
   // wrong: the remedy is credentials, which is what its 401 says.
@@ -548,10 +560,25 @@ export type OperationErrorCode =
   // it is planned and run on the search engine, so reaching the operation core
   // with one means the caller used the wrong entry point.
   | 'wrong-entry-point'
+  // Two entries of one parallel group stage a change to the same file. The
+  // members of a parallel group are evaluated against the state the group
+  // started from, so neither of the two composes over the other and only one
+  // of them could land. Serial order is how a batch says that two entries
+  // touch the same target.
+  | 'conflicting-targets'
   // The operation could not be carried out for a reason that is not the
   // caller's — an unreadable definition, an errored index row, a failure
   // inside the executor.
   | 'internal-error';
+
+// Where an entry sits in the batch the caller composed.
+//
+// A batch is a tree: the top-level list is a serial group, and an entry in it
+// may be a group whose members are entries in their own right. A top-level
+// entry is named by its index, which is what a caller that sent a flat list
+// means by "the third one"; a nested one is named by the path down to it —
+// `[2].boxel:operations[0]` — since no single number reaches it.
+export type EntryPosition = number | string;
 
 // A refusal, shaped like a JSON:API error object so an HTTP surface can put it
 // straight into an `errors` array. `status` is the number the realm's own

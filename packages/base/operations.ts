@@ -240,10 +240,10 @@ export function instance(key?: string): InstanceReference {
 // declared once and its cards live in whatever realms hold them, so which
 // settings exist is only known where the operation runs.
 //
-// Where the realm keeps those settings, and the builtin that reads them, are
-// being added separately — this is the declaration spelling ahead of them, so
-// a marker written today lowers and stores but is refused when an invocation
-// tries to resolve it.
+// The realm keeps them on its RealmConfig card at `realm.json`, under
+// `config`; a program reads one with the `realmConfig("key")` builtin, and a
+// declaration reads one through this marker. A realm that configures no such
+// setting refuses the invocation rather than resolving the marker to nothing.
 export function realmConfig<Key extends string>(
   key?: Key,
 ): RealmConfigReference<Key> {

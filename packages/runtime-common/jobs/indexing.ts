@@ -6,7 +6,12 @@ import type {
   IncrementalDoneResult,
   IncrementalResult,
 } from '../tasks/indexer.ts';
-import { param, query, type PgPrimitive } from '../expression.ts';
+import {
+  param,
+  query,
+  type Expression,
+  type PgPrimitive,
+} from '../expression.ts';
 import type { DBAdapter } from '../db.ts';
 import { baseRealm, baseRealmRRI } from '../constants.ts';
 import { systemInitiatedPriority, userInitiatedPriority } from '../queue.ts';
@@ -200,10 +205,38 @@ export async function unbuiltIndexFailure(
   return typeof result === 'string' ? result : JSON.stringify(result);
 }
 
+// The indexing jobs that can leave a card's index row describing bytes the
+// realm no longer stores — which is the only thing a reader comparing an
+// index-derived validator against the stored file needs to wait for.
+//
+// Derived from what moves BYTES, not from what the write-path drain happens to
+// wait for. Only a write moves a card's stored file, and a write's indexing is
+// one of these two. A `from-scratch-index` re-derives rows from files nobody
+// changed, so it moves `indexed_at` without moving content — and the one case
+// where it follows a real content change, a realm republish, cannot matter
+// here: a published realm is created with `['read', 'realm-owner']` and
+// `'*': ['read']` and grants write to nobody, so no conditional write can
+// reach one. `scoped-css-gc` shares the lane too and only deletes unreferenced
+// stylesheet rows.
+//
+// Narrow on purpose: this list decides who WAITS, and the lane is shared with
+// passes that run fleet-wide for an hour at a time.
+export const CONTENT_MOVING_INDEX_JOB_TYPES = [
+  'incremental-index',
+  'copy-index',
+];
+
 export async function awaitRealmIndexSettled(
   dbAdapter: DBAdapter,
   realmURL: string,
-  opts?: { timeoutMs?: number; pollIntervalMs?: number },
+  opts?: {
+    timeoutMs?: number;
+    pollIntervalMs?: number;
+    // Narrows the lane to particular job types. Absent means the whole
+    // `indexing:<realm>` lane, which is what a caller wanting "all indexing
+    // has settled" — a readiness probe, a publish — asks for.
+    jobTypes?: string[];
+  },
 ): Promise<boolean> {
   if (dbAdapter.kind !== 'pg') {
     return true;
@@ -212,12 +245,25 @@ export async function awaitRealmIndexSettled(
   let timeoutMs = opts?.timeoutMs ?? 10_000;
   let pollIntervalMs = opts?.pollIntervalMs ?? 1000;
 
+  let jobTypes = opts?.jobTypes;
+
   let hasSettled = async () => {
-    let rows = await query(dbAdapter, [
+    let expression: Expression = [
       `SELECT 1 FROM jobs WHERE status = 'unfulfilled' AND concurrency_group =`,
       param(indexingConcurrencyGroup(realmURL)),
-      'LIMIT 1',
-    ]);
+    ];
+    if (jobTypes?.length) {
+      expression.push('AND job_type IN', '(');
+      jobTypes.forEach((jobType, index) => {
+        if (index > 0) {
+          expression.push(',');
+        }
+        expression.push(param(jobType));
+      });
+      expression.push(')');
+    }
+    expression.push('LIMIT 1');
+    let rows = await query(dbAdapter, expression);
     return rows.length === 0;
   };
 

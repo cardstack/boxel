@@ -55,7 +55,7 @@ function stub(stored: Record<string, string> = {}): Stub {
 
   let core: BatchCore = {
     realmURL: REALM,
-    async withWriteLock(fn) {
+    async withWriteLocks(_localPaths, fn) {
       return await fn();
     },
     async fileExists(localPath) {
@@ -156,6 +156,11 @@ function stub(stored: Record<string, string> = {}): Stub {
     },
     async lookupDefinition() {
       return undefined;
+    },
+    async realmConfig() {
+      // No entry in these suites reads a realm setting; an empty map is the
+      // realm that configures none.
+      return {};
     },
   };
   return { core, commits, readPaths: () => readPaths };

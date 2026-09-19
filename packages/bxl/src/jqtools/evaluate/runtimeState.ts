@@ -181,6 +181,7 @@ export interface NativeRequestContext {
   readonly params?: unknown;
   readonly actor?: unknown;
   readonly instance?: unknown;
+  readonly realmConfig?: unknown;
 }
 
 const requestContextStack: NativeRequestContext[] = [];

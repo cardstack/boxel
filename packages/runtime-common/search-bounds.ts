@@ -276,25 +276,133 @@ const DEFAULT_LINK_SHAPE_LOAD_HALF_LIFE_MS = 120_000;
 // signal happens to behave.
 const DEFAULT_LINK_SHAPE_MIN_DWELL_MS = 60_000;
 
-// Engage/release pairs for the two rungs, as sustained in-flight counts.
+// Engage/release pairs for the two rungs.
+//
+// Each value is a **threshold on the load reading** — the time-weighted mean
+// of in-flight searches this process is serving, per replica — and not a
+// setting that selects a link shape. Crossing one moves a realm's rung; which
+// shape a rung then serves is fixed by the ladder, not by these. Hence the
+// `_THRESHOLD` suffix: a bare `…_ENGAGE` reads as a switch that turns a shape
+// on, which is the one thing these do not do.
 //
 // The lower rung degrades only reads that may return more than one row; the
 // upper one degrades every live read. The gap between each engage and its
 // release is the hysteresis band.
 //
-// Measured against two 12-hour production windows — one containing a genuine
-// 2.5-hour saturation episode (30-minute means of 21-23 in-flight), one
-// containing only transient spikes (30-minute means of 1-5, raw samples
-// reaching the cap). At these values the policy spent 14.8% of the saturation
-// window fully degraded and 0.2% of the control window, changing level 0.93
-// times per replica-hour in the first and 0.25 in the second. Lowering the
-// upper rung's engage to 8 raised the control window's degraded time from
-// 0.3% to 3.8% — degrading a fleet whose half-hour means never left single
-// digits — which is what fixes the upper rung at 12 rather than lower.
-const DEFAULT_LINK_SHAPE_MULTI_ROW_ENGAGE = 8;
-const DEFAULT_LINK_SHAPE_MULTI_ROW_RELEASE = 4;
-const DEFAULT_LINK_SHAPE_ALL_ENGAGE = 12;
-const DEFAULT_LINK_SHAPE_ALL_RELEASE = 6;
+// # Each value is per replica, and the fleet size is part of the number
+//
+// The reading is fed only by the admissions one process served, and the ladder
+// is a `Map` in that process's memory with no shared store. So the fleet-wide
+// load a rung corresponds to is the threshold multiplied by the number of
+// tasks. These are fitted against a **two-task** realm-server fleet, which is
+// what production ran across every window below. Doubling the fleet halves
+// each replica's share of the same traffic, so it does not make the rungs more
+// sensitive — it makes them take twice the fleet-wide load to reach. A
+// threshold carried to a fleet of a different size is a different policy, and
+// the count to read is distinct containers *concurrently*, not distinct
+// container ids seen over a window, which a deployment inflates.
+//
+// # Where the lower rung sits, and why
+//
+// Event-loop lag is the mechanism by which searches on one realm slow requests
+// on every other one, so it is the signal the rung is placed against. Pairing
+// each health sample's lag with the sustained reading from that same sample on
+// that same process, lag p99 climbs off the 20 ms histogram floor as the
+// reading leaves idle, reaches roughly 55-80 ms by a reading of about 3, and
+// then stops climbing: it is flat from there through 4, 5, 8 and 12, out to a
+// reading of 20. So the rung is placed where the loop's cost *begins*, which
+// is where the association exists, rather than where it is worst, which this
+// says nothing about.
+//
+// Past 20 the association does not merely flatten, it reverses — the samples
+// above 20 sit back on the 20 ms floor. That is the range the upper rung and
+// the admission cap act in, so it is a different regime rather than a
+// continuation of this one, and it is not evidence for where this rung goes.
+// The likely reading is that a process that deep is queueing rather than
+// computing, but nothing here establishes that.
+//
+// Two things that observation does not establish, both worth holding onto
+// before it gets quoted for more than it says. Lag and the reading are both
+// downstream of the traffic, so a rung moving does not follow as a way to
+// reduce lag — only as a way to act before the loop has finished slowing.
+// And a curve that is flat from 3 through 20 means the reading barely
+// discriminates across the whole range both rungs live in, so it is a weak
+// control signal exactly where the ladder leans on it. That is the same
+// conclusion the count-versus-cost point below reaches by another route, and
+// the reason a cost-aware signal would beat retuning this one again.
+//
+// 4 rather than 3 is bought by the quiet side. Replaying the production
+// reading through this ladder over 71 covered replica-hours of ordinary
+// traffic, the sustained reading peaks at 2.06 — so 4 leaves about a factor of
+// two of headroom over the busiest quiet window, where 3 would leave under
+// one, and 3 buys only another 1-2 points of degraded time on the busy
+// windows.
+//
+// On that replay's quiet windows every candidate spends 0.0% of its time
+// degraded, at 3, 4, 5 and 8 alike, because the reading never reaches any of
+// them. That is not in tension with the 3.8% the upper rung's note records
+// for an engage of 8, which came from a different and far busier window: the
+// control window fitted against there had raw samples at the cap of 30 and a
+// smoothed peak of 17, where these peak at 2.06. A quiet window is only as
+// informative as the load it actually carried, so both figures need their
+// window named, and neither is stale.
+//
+// What the busy windows buy, and pay, is the other half. Over the two busiest
+// replayed stretches, degraded time goes from 42.5% and 36.2% at 8/4 to 88.7%
+// and 88.8% at 4/2 — so this roughly doubles the time a loaded realm spends
+// shedding multi-row closures, which is the point and also the cost.
+//
+// Level changes do not follow that in either direction cleanly. Inside those
+// same stretches the rate at 4/2 is at or below 8/4 (0.81 against 1.63; 1.01
+// against 1.01), while over all replayed time it rises, 0.19 to 0.28 per
+// replica-hour. Both remain far below what the mechanism permits — the dwell
+// floor bounds a realm to one change a minute, so a ceiling of 60 per
+// realm-hour, and more than that across realms. Note this whole estimate is
+// open-loop: the replayed reading was recorded by a process on which this
+// policy never engaged, so it cannot show the feedback by which degrading
+// lowers service time and therefore lowers the reading that chose it. The
+// quiet-window figures are unaffected, since nothing engages there; these busy
+// ones are estimates awaiting a run with the rung reachable.
+//
+// The release keeps the engage/release ratio the ladder already used at both
+// rungs, which puts it at 2. Replaying the alternatives at this engage, a
+// release of 1 holds a realm degraded noticeably longer for a slightly lower
+// change rate (15.0% of all replayed time against 11.8%, at 0.23 changes per
+// replica-hour against 0.28), and a release of 3 gives most of that time back
+// at the highest change rate of the three (10.7% at 0.40). 2 is the middle of
+// that, and the one that leaves the band two wide.
+//
+// One consequence of halving both numbers together is worth being explicit
+// about, because it is easy to read as an oversight. The engage at 4 sits
+// clear of the 2.06 that quiet traffic peaks at, but the release at 2 sits
+// just *under* it — so a realm that has engaged must fall below the busiest
+// ordinary reading before it carries closures again, where at 8/4 both ends of
+// the band were clear of it. That asymmetry is deliberate: degraded is the
+// cheaper side to be wrong on, since a shed closure costs a caller extra
+// fetches while a carried one under load costs every other caller on the
+// process. It does mean a realm coming off a busy stretch lingers at
+// `multi-row` longer than the engage alone suggests.
+//
+// What this rung is not is a defence against the cost of any one search. The
+// reading counts admitted searches and says nothing about what each is doing,
+// so the same number covers very different amounts of work — an expensive
+// derived workload reaches a given reading with far fewer requests than
+// ordinary traffic does. Two readings are comparable only within a similar
+// mix.
+const DEFAULT_LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD = 4;
+const DEFAULT_LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD = 2;
+
+// The upper rung sheds the closure from single-row reads too, which is the
+// last thing a live read has left to give up, so it is placed against the
+// process falling over rather than against the loop slowing down. It stays
+// well clear of the lower rung and below the admission cap: a reading of 12
+// against a cap of 30 leaves the ladder a band to act in before shedding
+// starts, which is the ordering the policy exists to create. Lowering it to 8
+// degrades a fleet whose half-hour means never leave single digits — measured
+// at the time it was set, that cost a quiet window 3.8% of its time degraded
+// against 0.3% — so it is held above the range ordinary busy traffic reaches.
+const DEFAULT_LINK_SHAPE_ALL_ENGAGE_THRESHOLD = 12;
+const DEFAULT_LINK_SHAPE_ALL_RELEASE_THRESHOLD = 6;
 
 // How often a process that is serving live reads records the decision it is
 // making, even when that decision is "no change". Without it, a policy that
@@ -313,27 +421,27 @@ export const LINK_SHAPE_MIN_DWELL_MS = parsePositiveInt(
   0,
 );
 
-export const LINK_SHAPE_MULTI_ROW_ENGAGE = parsePositiveInt(
-  env.LINK_SHAPE_MULTI_ROW_ENGAGE,
-  DEFAULT_LINK_SHAPE_MULTI_ROW_ENGAGE,
+export const LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD = parsePositiveInt(
+  env.LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD,
+  DEFAULT_LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD,
   1,
 );
 
-export const LINK_SHAPE_MULTI_ROW_RELEASE = parsePositiveInt(
-  env.LINK_SHAPE_MULTI_ROW_RELEASE,
-  DEFAULT_LINK_SHAPE_MULTI_ROW_RELEASE,
+export const LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD = parsePositiveInt(
+  env.LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD,
+  DEFAULT_LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD,
   0,
 );
 
-export const LINK_SHAPE_ALL_ENGAGE = parsePositiveInt(
-  env.LINK_SHAPE_ALL_ENGAGE,
-  DEFAULT_LINK_SHAPE_ALL_ENGAGE,
+export const LINK_SHAPE_ALL_ENGAGE_THRESHOLD = parsePositiveInt(
+  env.LINK_SHAPE_ALL_ENGAGE_THRESHOLD,
+  DEFAULT_LINK_SHAPE_ALL_ENGAGE_THRESHOLD,
   1,
 );
 
-export const LINK_SHAPE_ALL_RELEASE = parsePositiveInt(
-  env.LINK_SHAPE_ALL_RELEASE,
-  DEFAULT_LINK_SHAPE_ALL_RELEASE,
+export const LINK_SHAPE_ALL_RELEASE_THRESHOLD = parsePositiveInt(
+  env.LINK_SHAPE_ALL_RELEASE_THRESHOLD,
+  DEFAULT_LINK_SHAPE_ALL_RELEASE_THRESHOLD,
   0,
 );
 

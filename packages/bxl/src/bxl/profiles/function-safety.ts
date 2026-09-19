@@ -304,10 +304,16 @@ export const BXL_METADATA_CALLS = names([
 
 /**
  * The request-context builtins. They read state that belongs to one request —
- * the payload, the caller, the stored document — so they are only meaningful
- * where a program runs once per request, which is the `mutation` profile.
+ * the payload, the caller, the stored document, the settings of the realm the
+ * edit lands in — so they are only meaningful where a program runs once per
+ * request, which is the `mutation` profile.
  */
-export const BXL_REQUEST_CONTEXT_CALLS = names(['actor', 'instance', 'params']);
+export const BXL_REQUEST_CONTEXT_CALLS = names([
+  'actor',
+  'instance',
+  'params',
+  'realmConfig',
+]);
 
 export const BXL_PREDICATE_LOWERABLE_CALLS = names([
   'IN',
