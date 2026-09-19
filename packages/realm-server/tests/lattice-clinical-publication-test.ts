@@ -125,7 +125,7 @@ module(basename(import.meta.filename), function (hooks) {
   // error the drain swallows ("incomplete Lattice materialization") is visible.
   async function probeFirstDirtyOwner() {
     const [dirty] = await db.execute(
-      'SELECT owner_url FROM lattice_owners WHERE realm_url=$1 AND retired=FALSE AND (published_generation IS NULL OR dirty_generation > published_generation) ORDER BY owner_url LIMIT 1',
+      'SELECT owner_url FROM lattice_owners WHERE realm_url=$1 AND retired=FALSE AND (published_generation IS NULL OR dirty_generation IS NOT NULL) ORDER BY owner_url LIMIT 1',
       { bind: [realmURL] },
     );
     if (!dirty) return undefined;
@@ -189,11 +189,12 @@ module(basename(import.meta.filename), function (hooks) {
       await waitUntil(
         async () => {
           const jobs = await db.execute(
-            "SELECT 1 FROM jobs WHERE status='unfulfilled' LIMIT 1",
+            "SELECT 1 FROM jobs WHERE status='unfulfilled' AND args->>'realmURL'=$1 LIMIT 1",
+            { bind: [realmURL] },
           );
           if (jobs.length) return false;
           const dirty = await db.execute(
-            'SELECT owner_url FROM lattice_owners WHERE realm_url=$1 AND retired=FALSE AND (published_generation IS NULL OR dirty_generation > published_generation)',
+            'SELECT owner_url FROM lattice_owners WHERE realm_url=$1 AND retired=FALSE AND (published_generation IS NULL OR dirty_generation IS NOT NULL)',
             { bind: [realmURL] },
           );
           return dirty.every((row) =>

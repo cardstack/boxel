@@ -1,6 +1,7 @@
 import QUnit from 'qunit';
 import { basename } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
+import { latticeMaterializationReadySQL } from '@cardstack/runtime-common/jobs/lattice';
 import type {
   Prerenderer as Renderer,
   VirtualNetwork,
@@ -146,7 +147,6 @@ module(basename(import.meta.filename), function (hooks) {
   // Owners the fixture expects to stay withheld on today's branch, with the
   // reason the catalog records for each.
   const withheldToday = () => [
-    ids.bucketCount[ids.manyBucket], // page 50 over 55 entries: truncated
     ids.cycleA,
     ids.cycleB, // each waits for the other
     ids.bad.BadType, // string + number errors
@@ -193,7 +193,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   async function dirtyOwners(): Promise<string[]> {
     const rows = await db.execute(
-      'SELECT owner_url FROM lattice_owners WHERE realm_url=$1 AND retired=FALSE AND (published_generation IS NULL OR dirty_generation > published_generation) ORDER BY owner_url',
+      'SELECT owner_url FROM lattice_owners WHERE realm_url=$1 AND retired=FALSE AND (published_generation IS NULL OR dirty_generation IS NOT NULL) ORDER BY owner_url',
       { bind: [realmURL] },
     );
     return rows.map((row) => String(row.owner_url).slice(realmURL.length));
@@ -218,22 +218,19 @@ module(basename(import.meta.filename), function (hooks) {
     label: string,
     allowDirty: string[] = [],
     perOwnerMs = 6_000,
-    // After a source edit every owner is dirty again, the permanently
-    // failing ones included, and the drain's retry job for them stays
-    // unfulfilled (catalog finding 8). Callers that only need the healthy
-    // owners settled pass true.
-    ignoreJobs = false,
   ): Promise<number> {
     const started = performance.now();
     const timeout = Math.max(240_000, ownersOf(current).length * perOwnerMs);
     try {
       await waitUntil(
         async () => {
-          const jobs = ignoreJobs
-            ? []
-            : await db.execute(
-                "SELECT 1 FROM jobs WHERE status='unfulfilled' LIMIT 1",
-              );
+          // Parked obligations are intentionally unfulfilled. Wait for this
+          // realm's runnable work, then require all healthy owners to be clean.
+          const jobs = await db.execute(
+            `SELECT 1 FROM jobs j WHERE status='unfulfilled'
+              AND args->>'realmURL'=$1 AND ${latticeMaterializationReadySQL} LIMIT 1`,
+            { bind: [realmURL] },
+          );
           if (jobs.length) return false;
           const dirty = await dirtyOwners();
           return dirty.every((path) => allowDirty.includes(path));
@@ -275,6 +272,7 @@ module(basename(import.meta.filename), function (hooks) {
       return {
         status: response.status,
         attributes: {} as Record<string, unknown>,
+        relationships: {} as Record<string, any>,
         state: undefined as string | undefined,
         body: text.slice(0, 300),
       };
@@ -282,6 +280,7 @@ module(basename(import.meta.filename), function (hooks) {
     return {
       status: response.status,
       attributes: data.attributes as Record<string, unknown>,
+      relationships: data.relationships as Record<string, any>,
       state: data.meta?.publication?.state as string | undefined,
       body: '',
     };
@@ -385,30 +384,51 @@ module(basename(import.meta.filename), function (hooks) {
       `LATTICE_ADVERSARIAL timing ${JSON.stringify({ scenario: 'boot', depth, owners: ownersOf(current).length, withheld: withheld.length, settleMs: ms })}`,
     );
     for (const path of ownersOf(current)) {
-      if (withheld.includes(path) || publishesWrongValue[path]) continue;
+      if (
+        withheld.includes(path) ||
+        publishesWrongValue[path] ||
+        path === ids.bucketCount[ids.manyBucket]
+      )
+        continue;
       await assertOracle(assert, path, 'boot');
     }
+    const page = await served(ids.bucketCount[ids.manyBucket]);
+    assert.strictEqual(page.status, 200, 'the bounded owner is served');
+    assert.strictEqual(page.state, 'ready', 'the complete page is ready');
+    assert.strictEqual(
+      page.attributes.count,
+      50,
+      'the formula counts its page',
+    );
+    const members = page.relationships.entries.data as Array<{ id: string }>;
+    assert.strictEqual(members.length, 50);
+    assert.strictEqual(new Set(members.map(({ id }) => id)).size, 50);
+    const pageEntries = members.map(({ id }) => {
+      const path = id.slice(realmURL.length).replace(/\.json$/, '') + '.json';
+      assert.true(
+        ids.manyEntries.includes(path),
+        'each member matches the query',
+      );
+      return current.get(path)!.data.attributes;
+    });
+    assert.strictEqual(
+      page.attributes.sum,
+      pageEntries.reduce((sum, entry) => sum + Number(entry.n), 0),
+      'the sum covers exactly the captured page',
+    );
+    assert.deepEqual(
+      page.relationships.entries.meta,
+      { total: ids.manyEntries.length, returned: 50 },
+      'the receipt distinguishes all matches from the captured page',
+    );
     // Every withheld owner is withheld for a reason the system can name, and
     // never serves a ready publication.
     for (const path of withheld) {
       const { state, status } = await served(path);
-      const expected = expectedOwner(current, path);
       const reason = await probeOwner(path);
       console.log(
         `LATTICE_ADVERSARIAL withheld ${path}: http ${status} state ${state} reason ${JSON.stringify(reason).slice(0, 240)}`,
       );
-      if (expected && path === ids.bucketCount[ids.manyBucket]) {
-        // Truncation: either withheld, or the exact count. Never a page-sized
-        // count presented as complete.
-        const { attributes } = await served(path);
-        const withheldOrExact =
-          state !== 'ready' || attributes.count === expected.count;
-        assert.true(
-          withheldOrExact,
-          `${path} never serves a page-sized count as complete (state ${state}, count ${attributes.count})`,
-        );
-        continue;
-      }
       assert.notStrictEqual(
         state,
         'ready',
@@ -570,17 +590,14 @@ module(basename(import.meta.filename), function (hooks) {
     await assertOracle(assert, ids.bulkRollup, 'big-data');
   });
 
-  test('many-relief: deleting entries below the page bound lets the truncated owner publish the exact count', async function (assert) {
+  test('many-relief: deleting entries below the page bound updates the page to the full count', async function (assert) {
     assert.timeout(1_800_000);
     await applyAll(
       ids.manyEntries
         .slice(0, 12)
         .map((path) => ({ op: 'DELETE' as const, path })),
     );
-    const stillWithheld = withheldToday().filter(
-      (path) => path !== ids.bucketCount[ids.manyBucket],
-    );
-    const ms = await settled('many-relief', stillWithheld);
+    const ms = await settled('many-relief', withheldToday());
     console.log(
       `LATTICE_ADVERSARIAL timing ${JSON.stringify({ scenario: 'many-relief', remaining: ids.manyEntries.length - 12, settleMs: ms })}`,
     );
@@ -726,7 +743,6 @@ module(basename(import.meta.filename), function (hooks) {
       'final',
       [...withheldToday(), ...Object.keys(publishesWrongValue)],
       6_000,
-      true,
     );
     for (const path of ownersOf(current)) {
       if (withheldToday().includes(path) || publishesWrongValue[path]) continue;
