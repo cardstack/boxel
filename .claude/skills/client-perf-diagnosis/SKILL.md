@@ -322,6 +322,71 @@ The rule is deliberately narrow: a token of four or more word characters contain
 
 **What this channel does not carry.** Errors from a prerender tab. A render that throws is an expected indexing outcome — a card with a broken link or a bad module — and the instrument stays dormant in a render context, so nothing here is server-side render noise. For those, use the `indexing-diagnostics` skill.
 
+## Mode I — did a change help? Comparing two windows
+
+The modes above answer "is this user having a bad time". This one answers
+"did what we shipped move anything", which is a different question: it needs
+the same measurements taken twice and differenced.
+
+```bash
+cd packages/observability
+./scripts/compare-client-perf.sh --env production \
+  --before 2026-09-14T14:00:00Z..2026-09-14T20:00:00Z \
+  --after  2026-09-16T14:00:00Z..2026-09-16T20:00:00Z
+```
+
+It prints one table: the pinned metric set for both windows and the change
+between them. `--user` scopes it to one account, `--json` emits the raw
+numbers for a script to consume.
+
+**Everything it reports is a rate per session, not a count.** Absolute counts
+track how many people happened to be using the app, which is not what a deploy
+changes; dividing by the distinct sessions in each window is what makes two
+windows comparable. A window with twice the users and twice the requests
+correctly reads as unchanged.
+
+**Choose windows that differ only by the deploy.** This is real user traffic,
+so a school-hours window and an overnight window differ for reasons that have
+nothing to do with the change between them. Same hours, comparable days.
+
+Which metric answers which kind of change:
+
+| the change                                                              | the metric                                                                                                                                                |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| live-search fan-out — does a write re-run queries it cannot have moved? | `reloads triggered per index event`, and its `... on someone else's write` split, which isolates peer-inflicted churn from a tab reacting to its own save |
+| request count per screen — N+1s in link or card loading                 | `server requests per session`, read against `card loads per session`                                                                                      |
+| server-side search cost                                                 | `card settle time p50/p90` — the user-visible outcome, the "Loading card…" window                                                                         |
+| payload size                                                            | `response bytes deserialized p50`, read against `deserialize p50`                                                                                         |
+| any of the above, as a regression guard                                 | `main-thread freezes per session`, `client errors per session`                                                                                            |
+
+**Know the noise floor before reading a difference.** Two pre-change
+production windows a day apart, same hours, differ by this much on the
+per-session rates:
+
+| metric                               | day-to-day change, no deploy between |
+| ------------------------------------ | ------------------------------------ |
+| `server requests per session`        | +72%                                 |
+| `index events processed per session` | +79%                                 |
+| `card loads per session`             | +37%                                 |
+| `reloads triggered per index event`  | **+5%**                              |
+| `... on someone else's write`        | **-1%**                              |
+
+The per-session rates swing wildly because session length and what people do
+in them varies; the ratio metrics barely move because they divide two
+quantities that scale together. So a ratio is sensitive enough to read from a
+single day-pair, and a per-session rate is not — for those, either compare
+several day-pairs or expect to detect only large effects.
+
+**What it cannot tell you.** It reports that something moved, never why. A
+change in `server requests per session` can as easily be people using the app
+differently as code sending fewer requests. Treat a difference as a question
+to take back to the single-user modes above, not as an answer — and confirm a
+headline number against a specific session before quoting it.
+
+A metric printed as `—` means no events of that type landed in that window; a
+rate over zero sessions prints `n/a`. Neither is a zero, and neither should be
+read as an improvement.
+
 ## Reading raw lines
 
 Aggregations can't show you array fields (`loaf_scripts`, `slowest_loads`, `top_frames`, `correlation_id` on a specific event). To read the full JSON of specific events, query the lines directly instead of an aggregation — in Grafana Explore, or via the API:
