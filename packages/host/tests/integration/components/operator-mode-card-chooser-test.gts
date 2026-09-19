@@ -1386,7 +1386,10 @@ module('Integration | operator-mode | card chooser', function (hooks) {
     // This tests indexing-driven type filters, not full-text ranking across
     // the catalogue. Select the exact fixture even as other skills are added.
     let skillURL = `${baseRealm.url}cards/skill`;
-    let skillResult = `[data-test-item-button="${skillURL}"]`;
+    // URL-paste results are live Store instances with canonical realm IDs,
+    // unlike search-entry rows, which carry transport URLs.
+    let skillId = getService('network').virtualNetwork.unresolveURL(skillURL);
+    let skillResult = `[data-test-item-button="${skillId}"]`;
     await fillIn(`[data-test-search-field]`, skillURL);
     await waitFor(skillResult, { timeout: 10000 });
     await click(skillResult);
