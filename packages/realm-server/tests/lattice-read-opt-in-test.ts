@@ -230,11 +230,15 @@ module(basename(import.meta.filename), function (hooks) {
       }),
     ))!;
     assert.strictEqual(firstHead.status, 200);
-    assert.strictEqual(firstHead.headers.get('cache-control'), 'no-store');
+    const firstEtag = first.headers.get('etag');
+    assert.ok(
+      firstEtag,
+      'a settled realm has a reusable publication validator',
+    );
     assert.strictEqual(
       firstHead.headers.get('etag'),
-      null,
-      'HEAD does not issue a root-only validator either',
+      firstEtag,
+      'HEAD uses the same publication-aware validator as GET',
     );
     assert.strictEqual(await firstHead.text(), '');
     await publishChild(initialGeneration + 1, 9);
@@ -247,8 +251,13 @@ module(basename(import.meta.filename), function (hooks) {
       'a child publication cannot receive a root-only 304',
     );
     assert.strictEqual((await second.json()).included[0].attributes.value, 9);
-    assert.strictEqual(second.headers.get('cache-control'), 'no-store');
-    assert.strictEqual(second.headers.get('etag'), null);
+    const secondEtag = second.headers.get('etag');
+    assert.ok(secondEtag);
+    assert.notEqual(
+      secondEtag,
+      firstEtag,
+      'the child publication moves the validator',
+    );
     const secondHead = (await enabled.handle(
       new Request(enabledURL + 'root', {
         method: 'HEAD',
@@ -264,7 +273,12 @@ module(basename(import.meta.filename), function (hooks) {
       200,
       'a changed child cannot receive a root-only HEAD 304',
     );
-    assert.strictEqual(secondHead.headers.get('cache-control'), 'no-store');
+    assert.strictEqual(secondHead.headers.get('etag'), secondEtag);
+    assert.strictEqual(
+      (await read(enabled, 'root', { 'If-None-Match': secondEtag! })).status,
+      304,
+      'an unchanged settled publication can be revalidated',
+    );
     assert.deepEqual(
       await db.execute(
         'SELECT generation,indexed_at,pristine_doc FROM boxel_index WHERE file_alias=$1',
@@ -286,8 +300,21 @@ module(basename(import.meta.filename), function (hooks) {
       'files.0': { links: { self: peer.url + 'guide.md' } },
     };
     await db.execute(
-      `UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{relationships}',$1::jsonb) WHERE file_alias=$2 AND type='instance'`,
-      { bind: [JSON.stringify(relationships), consumer.url + 'root'] },
+      `UPDATE boxel_index SET pristine_doc=jsonb_set(pristine_doc,'{relationships}',$1::jsonb),deps=$3::jsonb WHERE file_alias=$2 AND type='instance'`,
+      {
+        bind: [
+          JSON.stringify(relationships),
+          consumer.url + 'root',
+          // Match an indexed source edit: relationship targets and the
+          // dependency facts used by the response validator move together.
+          JSON.stringify([
+            peer.url + 'child.json',
+            consumer.url + 'child.json',
+            peer.url + 'healthy.json',
+            peer.url + 'guide.md',
+          ]),
+        ],
+      },
     );
   }
 

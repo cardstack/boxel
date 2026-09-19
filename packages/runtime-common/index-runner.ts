@@ -1226,8 +1226,8 @@ export class IndexRunner {
               outcome.status === 'error'
                 ? outcome.error
                 : outcome.status === 'rendered'
-                  ? (outcome.result.card?.error ??
-                    outcome.result.pageUnusableError)
+                  ? (outcome.result.card?.error?.error ??
+                    outcome.result.pageUnusableError?.error)
                   : undefined;
             const failure = `${ownerURL}: ${coerceErrorMessage(
               error,

@@ -187,7 +187,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   for (const placement of ['native', 'chrome'])
     for (const [reason, change] of Object.entries(changes))
-      test(`${reason} after source read prevents ${placement} execution`, async (assert) => {
+      test(`${reason} after source read ${reason === 'source' ? 'allows one bounded progress attempt in' : 'prevents'} ${placement} execution`, async (assert) => {
         let calls = 0;
         const trip = async (): Promise<never> => {
           calls++;
@@ -205,7 +205,13 @@ module(basename(import.meta.filename), function (hooks) {
           'reader',
           0,
         ).catch((error: unknown) => ({ error }));
-        assert.strictEqual(calls, 0, 'obsolete work never enters a producer');
+        assert.strictEqual(
+          calls,
+          reason === 'source' ? 1 : 0,
+          reason === 'source'
+            ? 'queued priority alone cannot starve the first owner in a wave'
+            : 'obsolete work never enters a producer',
+        );
         assert.true(
           Boolean('superseded' in result ? result.superseded : undefined),
           'a scheduling outcome, not a computation failure',
@@ -429,13 +435,62 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('file-owned code revisions renew retry eligibility without moving the realm clock', async (assert) => {
     const fileURL = realm + 'cards.gts';
+    const reference = {
+      version: 1,
+      realmURL: realm,
+      fileURL,
+      exportName: 'Dashboard',
+      actorUserId: actor,
+      runtimeRevision: 'runtime',
+      policyRevision: 'policy',
+      fingerprint: 'reviewed-dashboard',
+    };
     await db.execute(
-      "INSERT INTO lattice_code_artifacts(realm_url,file_url,realm_username,dirty) VALUES($1,$2,'reader',FALSE)",
-      { bind: [realm, fileURL] },
+      `INSERT INTO lattice_code_realms(realm_url,actor_user_id,runtime_revision,policy_revision)
+       VALUES($1,$2,'runtime','policy')`,
+      { bind: [realm, actor] },
+    );
+    await db.execute(
+      `INSERT INTO realm_file_meta(realm_url,file_path,created_at,content_hash,content_size)
+       VALUES($1,'cards.gts',1,'source-hash',1)`,
+      { bind: [realm] },
+    );
+    await db.execute(
+      `INSERT INTO lattice_code_artifacts(realm_url,file_url,realm_username,dirty,actor_user_id,runtime_revision,scope,receipt)
+       VALUES($1,$2,'reader',FALSE,$3,'runtime',$4,$5)`,
+      {
+        bind: [
+          realm,
+          fileURL,
+          actor,
+          JSON.stringify([
+            {
+              realm,
+              path: 'cards.gts',
+              username: actor,
+              hash: 'source-hash',
+              size: 1,
+            },
+          ]),
+          JSON.stringify({
+            version: 1,
+            fileId: fileURL,
+            state: 'analyzed',
+            exports: {
+              Dashboard: {
+                state: 'requires-admission',
+                runtimeRevision: reference.runtimeRevision,
+                root: { fileId: fileURL, name: reference.exportName },
+                fingerprint: reference.fingerprint,
+              },
+            },
+          }),
+        ],
+      },
     );
     await db.execute(
       'INSERT INTO lattice_owner_code(realm_url,owner_url,generation,reference) VALUES($1,$2,4,$3)',
-      { bind: [realm, owner, JSON.stringify({ fileURL })] },
+      { bind: [realm, owner, JSON.stringify(reference)] },
     );
     const publication = writer.latticePublication(lookup, network);
     const [selected] = await publication.registry.ready(realm);
