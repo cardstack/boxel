@@ -1,5 +1,4 @@
-// Pretui — IconButton: a square Button whose label is the icon, not text.
-// The accessible name rides aria-label / title; the face is the yielded glyph.
+// IconButton: a square Button whose label is the yielded icon; the accessible name rides aria-label / title.
 import Component from '@glimmer/component';
 import { firstDefined } from '../pretui-primitives';
 import type { PretuiSizeArg } from '../pretui-primitives';

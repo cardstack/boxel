@@ -15,13 +15,12 @@ Flat, dot-suffixed, one name per component:
 components/button.gts          the component, its signature, its scoped CSS
 components/button.test.gts     the component's tests (run through the host test harness)
 components/button.md           the component's write-up
-components/button-spec.json    the component's Spec instance
 pretui-primitives.gts          shared axis types and resolvers
 ```
 
 Names are kebab-case. No folders: the realm loader resolves file extensions only and has no directory-implies-index fallback. A component file reaches the package root with `../`; a sibling component is `./select`.
 
-Instance ids are dot-free, so the Spec instance is `<name>-spec.json` with a hyphen while files fetched by extension take dot suffixes.
+Spec cards for these components live in the catalog realm, not here.
 
 ## Development
 

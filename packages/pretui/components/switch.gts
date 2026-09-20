@@ -1,4 +1,4 @@
-// Pretui — Switch: immediate on/off. A checked setting, not a Toggle press.
+// Switch: immediate on/off. A checked setting, not a Toggle press.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
@@ -11,9 +11,7 @@ export interface SwitchSignature {
     disabled?: boolean;
     controlId?: string;
     onCheckedChange?: (checked: boolean) => void;
-    /** aliases — React Aria's `isSelected`, the plain `selected`. A Switch
-     * is a checked thing, so both land on @checked; @pressed (Toggle) and
-     * @value (radio/select/tabs) stay separate props on purpose. */
+    /** aliases of @checked — React Aria's `isSelected` and plain `selected` */
     isSelected?: boolean;
     selected?: boolean;
     /** alias — React Aria / Base UI spelling of @disabled */

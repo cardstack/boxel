@@ -1,7 +1,5 @@
-// Pretui — Button: the kit's action primitive. A native <button> with the
-// two-axis treatment grid (@tone × @appearance), em-scaled sizing and a
-// built-in busy state. Everything that performs an action is this or wraps
-// it (IconButton, CopyButton, ButtonGroup, FormFooter, ApprovalFooter).
+// Button: a native <button> on the two-axis treatment grid (@tone × @appearance),
+// em-scaled, with a built-in busy state. Everything that performs an action wraps it.
 import Component from '@glimmer/component';
 import {
   PRETUI_APPEARANCES,
@@ -18,11 +16,7 @@ import type {
   PretuiToneArg,
 } from '../pretui-primitives';
 
-// `@variant` is the single-axis spelling boxel-ui and shadcn callers pass,
-// resolved onto the two axes. The extra rows are the shadcn / Mantine
-// spellings for recipes the grid already has, and the
-// `?? DEFAULT_AXES` fallback removes a real crash: an unrecognised variant
-// used to index the table to `undefined` and then read `[0]` off it.
+// @variant is the single-axis spelling (boxel-ui, shadcn, Mantine) resolved onto the two axes.
 export type ButtonVariant =
   | 'primary'
   | 'secondary'
@@ -35,9 +29,7 @@ export type ButtonVariant =
   | 'filled'
   | 'link';
 const DEFAULT_AXES: [PretuiTone, PretuiAppearance] = ['primary', 'accent'];
-// Null-prototype: a plain object answers `constructor` with an inherited
-// function, which is not undefined, so `?? DEFAULT_AXES` would be skipped and
-// the button would paint with no tone and no recipe.
+// Null-prototype so a variant like 'constructor' misses the table instead of hitting Object.prototype.
 const VARIANT_AXES: Record<string, [PretuiTone, PretuiAppearance]> =
   Object.assign(
     Object.create(null) as Record<string, [PretuiTone, PretuiAppearance]>,
@@ -148,8 +140,7 @@ export class Button extends Component<ButtonSignature> {
       .pretui-btn:active {
         transform: translateY(0.5px);
       }
-      /* The appearances paint their own box-shadow, so the UA default ring is
-         not reliably visible on top of them. */
+      /* the appearances paint their own box-shadow, which hides the UA focus ring */
       .pretui-btn:focus-visible {
         outline: 2px solid var(--ring);
         outline-offset: 2px;
@@ -208,7 +199,7 @@ export class Button extends Component<ButtonSignature> {
         --pretui-tone: var(--pretui-attention, var(--boxel-fuschia));
         --pretui-tone-on: var(--pretui-on-attention, var(--background));
       }
-      /* appearance recipes — written once, read the tone vars (Law 2 generalized) */
+      /* appearance recipes — written once, read the tone vars */
       .pretui-btn[data-appearance='accent'] {
         background: var(--pretui-button-bg, var(--pretui-tone));
         color: var(--pretui-button-fg, var(--pretui-tone-on));

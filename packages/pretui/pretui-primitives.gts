@@ -1,13 +1,7 @@
-// Pretui — shared control vocabulary: the two-axis treatment grid and the
-// React-dialect alias resolvers. Per-component modules under components/
-// import these directly; nothing here imports a component, so there is no
-// cycle.
-
-// Vocabulary (Appendix E): the two-axis treatment grid. @tone picks the hue
-// (sets --pretui-tone/--pretui-tone-on); @appearance picks the recipe (written
-// once, reads those vars). @size sets host font-size only — everything inside
-// is em, so m stays pixel-identical to the pre-scale cut (2.24em = 28px at
-// 12.5px). @variant is legacy sugar over the axes.
+// Shared control vocabulary: the two-axis treatment grid and the React-dialect
+// alias resolvers. @tone picks the hue (sets --pretui-tone/--pretui-tone-on),
+// @appearance picks the recipe that reads those vars, @size sets host font-size
+// only (everything inside is em), and @variant is sugar over the two axes.
 export type PretuiTone =
   | 'neutral'
   | 'primary'
@@ -42,32 +36,13 @@ export const PRETUI_APPEARANCES = [
 ] as const;
 export const PRETUI_SIZES = ['xs', 's', 'm', 'l', 'xl'] as const;
 
-// ── React-dialect alias layer ────────────────────────────────────────────
-// (react-ecosystem-gap.md, "Enhancement pass" step 1.)
-//
-// An agent trained on shadcn / Radix / Mantine / MUI / React Aria emits a
-// different vocabulary for the same knobs. Every control, overlay and
-// feedback component ACCEPTS those names and resolves them in a getter. The
-// canonical name is unchanged and is still the only one the `<:api>` tables,
-// the usage pages and the Freestyle knobs teach: the alias is accepted, not
-// taught. No existing caller moves.
-//
-// Three rules kept the layer cheap:
-//   · resolution is a getter, never a wrapper component and never a new
-//     function identity per render (which would re-install `{{on}}`
-//     listeners every re-render);
-//   · `...attributes` still carries `name` / `id` / `aria-*` — no native
-//     attribute is ever promoted to an `@arg` just to pass it through;
-//   · a widget keeps its own selection noun. `@checked`, `@pressed` and
-//     `@value` stay three props; React Aria's single `isSelected` is the one
-//     thing deliberately not copied.
-//
-// **Callback grammar is Scheme A** — values notify through the HTML-shaped
-// `@onChange`, layers through Radix's `@onOpenChange` — with the Radix
-// `on<Noun>Change` spellings accepted as aliases. Every notify goes through
-// `emit()` with the canonical handler FIRST, so flipping the house name to
-// all-B later is a rename inside each signature plus a re-ordering of one
-// array literal: no call site, template or consumer changes.
+// React-dialect alias layer. Agents trained on shadcn / Radix / Mantine / MUI /
+// React Aria emit other names for the same knobs; components accept those and
+// resolve them in a getter, never a wrapper. The canonical name is the taught one.
+// @checked, @pressed and @value stay three props; React Aria's single isSelected
+// is deliberately not copied. Values notify through HTML-shaped @onChange and
+// layers through Radix's @onOpenChange, with on<Noun>Change accepted as aliases;
+// emit() always fires the canonical handler first.
 
 /** First value the caller actually supplied. Canonical name goes first. */
 export function firstDefined<T>(...values: (T | undefined)[]): T | undefined {
@@ -79,12 +54,7 @@ export function firstDefined<T>(...values: (T | undefined)[]): T | undefined {
   return undefined;
 }
 
-/**
- * Fire every notify handler the caller supplied — canonical name first,
- * aliases after. A caller normally passes exactly one; passing two fires
- * both rather than silently dropping one, which is the failure mode an
- * alias layer must not have.
- */
+/** Fire every notify handler supplied, canonical first; two handlers fire both rather than dropping one. */
 export function emit<A extends unknown[]>(
   handlers: readonly (((...args: A) => void) | undefined)[],
   ...args: A
@@ -94,12 +64,8 @@ export function emit<A extends unknown[]>(
   }
 }
 
-// Size: the house enum stays `xs|s|m|l|xl` (Appendix E.2) — em-scaled, and
-// not up for renegotiation. These are the spellings other kits use for the
-// same three middle steps.
-// Null-prototype: an alias table is indexed with whatever a card author typed,
-// and a plain object answers `constructor` / `toString` with an inherited
-// function, which then defeats the `?? fallback` and reaches `data-size`.
+// Other kits' spellings for the middle steps of the house scale xs|s|m|l|xl.
+// Null-prototype so a typed 'constructor' misses the table instead of hitting Object.prototype.
 const SIZE_ALIASES: Record<string, PretuiSize> = Object.assign(
   Object.create(null) as Record<string, PretuiSize>,
   {
@@ -135,11 +101,7 @@ export function resolveSize(
   return (size ? SIZE_ALIASES[size] : undefined) ?? fallback;
 }
 
-// Tone: `danger`, not `destructive` — HTML/role language rather than
-// shadcn's. The alias table is how an agent's `destructive` still lands.
-// Null-prototype for the same reason as SIZE_ALIASES. Here the allow-list in
-// resolveTone would already reject an inherited function, so this is defence
-// in depth rather than a fix.
+// House tone is 'danger', not shadcn's 'destructive'; the table lands the alias. Null-prototype as SIZE_ALIASES.
 const TONE_ALIASES: Record<string, string> = Object.assign(
   Object.create(null) as Record<string, string>,
   {
@@ -165,11 +127,7 @@ export type PretuiToneArg =
   | 'notice'
   | 'caution';
 
-/**
- * Narrow a tone to the subset a given component actually paints. Alerts and
- * Cues carry four/five of the seven; an unsupported tone falls back rather
- * than emitting a `data-tone` no stylesheet matches.
- */
+/** Narrow a tone to the subset a component paints; an unsupported tone falls back rather than emitting a data-tone no stylesheet matches. */
 export function resolveTone<T extends string>(
   tone: string | undefined,
   allowed: readonly T[],
@@ -185,26 +143,16 @@ export function resolveTone<T extends string>(
 }
 
 /**
- * The value-notify aliases an agent reaches for first, on any control
- * whatever its value type — `T` is what the control emits.
- *
- * `@onChange` maps to the INPUT event, not to blur: React's `onChange` fires
- * per keystroke, so that is what an agent writing it means. A caller who
- * genuinely wants blur semantics still has `{{on 'change'}}` through
- * `...attributes`.
+ * Value-notify aliases for any control; `T` is what it emits. `@onChange` maps
+ * to the input event, matching React's per-keystroke meaning; blur semantics
+ * remain reachable with `{{on 'change'}}` through `...attributes`.
  */
 export interface ControlNotifyArgs<T = string> {
   onChange?: (value: T) => void;
   onValueChange?: (value: T) => void;
 }
 
-/**
- * The notify pair plus the boolean aliases a text-shaped control accepts.
- *
- * Spread this only where the component wires all four booleans — one that
- * accepts `@isReadOnly` and ignores it is worse than one that never offered
- * it. Other controls take `ControlNotifyArgs<T>` and declare their own.
- */
+/** The notify pair plus the boolean aliases a text-shaped control accepts; spread it only where all four booleans are wired. */
 export interface ControlAliasArgs<T = string> extends ControlNotifyArgs<T> {
   /** alias — React Aria / Base UI spelling of @disabled */
   isDisabled?: boolean;

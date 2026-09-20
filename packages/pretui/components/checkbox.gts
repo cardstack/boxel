@@ -1,4 +1,4 @@
-// Pretui — Checkbox: native binary choice in Pretui cloth.
+// Checkbox: a native binary choice in Pretui cloth.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
