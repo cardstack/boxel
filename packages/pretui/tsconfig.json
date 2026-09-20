@@ -1,0 +1,52 @@
+{
+  "compilerOptions": {
+    "target": "es2020",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "allowSyntheticDefaultImports": true,
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "noEmitOnError": false,
+    "strict": true,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "strictNullChecks": true,
+    "strictPropertyInitialization": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "experimentalDecorators": true,
+    "baseUrl": ".",
+    "paths": {
+      "@cardstack/base/*": [
+        "../base/*.gts",
+        "../base/*.ts",
+        "../base/*.d.ts",
+        "../base/*"
+      ],
+      "https://cardstack.com/base/*": [
+        "../base/*.gts",
+        "../base/*.ts",
+        "../base/*.d.ts",
+        "../base/*"
+      ],
+      "@cardstack/pretui/*": ["./*"],
+      "@cardstack/host/*": ["../host/app/*"],
+      "@cardstack/host/tests/*": ["../host/tests/*"],
+      "@cardstack/boxel-host/tools/*": ["../host/app/tools/*"],
+      "@cardstack/boxel-host/commands/*": ["../host/app/tools/*"],
+      "@cardstack/boxel-ui": ["../boxel-ui"],
+      "@cardstack/boxel-ui/*": ["../boxel-ui/*"],
+      "*": ["../host/types/*"]
+    },
+    "types": ["@cardstack/local-types", "qunit", "qunit-dom"],
+    "resolveJsonModule": true,
+    "allowJs": true
+  },
+  "include": ["../host/types/**/*", "**/*.d.ts", "**/*.ts", "**/*.gts"],
+  "exclude": ["node_modules"]
+}

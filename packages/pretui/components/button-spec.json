@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "```ts\nimport { Button } from '@cardstack/pretui/components/button';\n```\n\nThe write-up for this component is `button.md` in this directory.",
+      "ref": {
+        "module": "./button",
+        "name": "Button"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "cardTitle": "Button",
+      "cardDescription": "The two-axis action: tone × appearance × size",
+      "cardInfo": {
+        "name": "Button",
+        "summary": "The two-axis action: tone × appearance × size",
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

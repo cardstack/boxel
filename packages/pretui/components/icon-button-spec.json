@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "```ts\nimport { IconButton } from '@cardstack/pretui/components/icon-button';\n```\n\nThe write-up for this component is `icon-button.md` in this directory.",
+      "ref": {
+        "module": "./icon-button",
+        "name": "IconButton"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "cardTitle": "IconButton",
+      "cardDescription": "Square icon-only action",
+      "cardInfo": {
+        "name": "IconButton",
+        "summary": "Square icon-only action",
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

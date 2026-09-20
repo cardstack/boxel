@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "```ts\nimport { Switch } from '@cardstack/pretui/components/switch';\n```\n\nThe write-up for this component is `switch.md` in this directory.",
+      "ref": {
+        "module": "./switch",
+        "name": "Switch"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "cardTitle": "Switch",
+      "cardDescription": "Immediate on/off toggle",
+      "cardInfo": {
+        "name": "Switch",
+        "summary": "Immediate on/off toggle",
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

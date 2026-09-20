@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "```ts\nimport { Checkbox } from '@cardstack/pretui/components/checkbox';\n```\n\nThe write-up for this component is `checkbox.md` in this directory.",
+      "ref": {
+        "module": "./checkbox",
+        "name": "Checkbox"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "cardTitle": "Checkbox",
+      "cardDescription": "Binary choice with label",
+      "cardInfo": {
+        "name": "Checkbox",
+        "summary": "Binary choice with label",
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
