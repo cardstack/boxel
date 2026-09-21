@@ -104,8 +104,11 @@ export type {
   EnvelopeNode,
   EnvelopeResult,
   EnvelopeResults,
+  ParseEnvelopeOptions,
+  QueryTarget,
   ResolvedEnvelopeEntry,
 } from './envelope.ts';
+export { resolveQueryTargets } from './find-targets.ts';
 export { lowerQueryOperation, lowerQueryTemplate } from './query.ts';
 export type {
   QueryDefinition,
