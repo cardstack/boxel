@@ -5,6 +5,8 @@ import type { PgAdapter } from '@cardstack/postgres';
 import {
   awaitRealmIndexSettled,
   indexingConcurrencyGroup,
+  outstandingIndexJobs,
+  INDEX_WRITING_JOB_TYPES,
 } from '@cardstack/runtime-common/jobs/indexing';
 import {
   awaitPublishedHtmlReady,
@@ -16,21 +18,25 @@ const realmURL = 'http://localhost:4201/test/';
 const otherRealmURL = 'http://localhost:4201/other/';
 
 // Insert a queue row into a realm's index lane. `status` defaults to
-// 'unfulfilled', which is the state the gate is looking for.
+// 'unfulfilled', which is the state the gate is looking for, and `jobType` to
+// an index-writing member — pass another to seed a job that shares the lane
+// for mutual exclusion without writing the index.
 async function enqueueIndexJob(
   dbAdapter: PgAdapter,
   url: string,
   status: 'unfulfilled' | 'resolved' | 'rejected' = 'unfulfilled',
+  jobType = 'from-scratch-index',
 ): Promise<number> {
   let [{ id }] = (await dbAdapter.execute(
     `INSERT INTO jobs (job_type, concurrency_group, timeout, priority, args, status)
-       VALUES ('from-scratch-index', $1, 3600, 10, $2, $3)
+       VALUES ($4, $1, 3600, 10, $2, $3)
        RETURNING id`,
     {
       bind: [
         indexingConcurrencyGroup(url),
         JSON.stringify({ realmURL: url }),
         status,
+        jobType,
       ],
     },
   )) as { id: number }[];
@@ -147,6 +153,54 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    // The lane is shared by work that must not overlap a running pass but does
+    // not write the index — today the daily scoped-css GC, which enqueues one
+    // job per realm. On a backed-up queue that leaves one sitting in every
+    // realm's lane, and a gate reading the bare lane calls every one of those
+    // realms mid-index for as long as it takes to drain.
+    test('a queued job that does not write the index is excluded by narrowing', async function (assert) {
+      await enqueueIndexJob(
+        dbAdapter,
+        realmURL,
+        'unfulfilled',
+        'scoped-css-gc',
+      );
+      // Asserted first so a narrowing that quietly stopped matching anything
+      // could not carry the test: the row has to be capable of holding a gate.
+      assert.false(
+        await awaitRealmIndexSettled(dbAdapter, realmURL, {
+          timeoutMs: 200,
+          pollIntervalMs: 50,
+        }),
+        'the bare lane still reads the job as outstanding',
+      );
+      assert.true(
+        await awaitRealmIndexSettled(dbAdapter, realmURL, {
+          timeoutMs: 200,
+          jobTypes: INDEX_WRITING_JOB_TYPES,
+        }),
+        'narrowing to the index-writing types leaves the lane clear',
+      );
+    });
+
+    // Ties the allow-list to behaviour rather than to its own spelling:
+    // dropping a type from it turns this red instead of silently letting that
+    // job type pass a readiness gate.
+    test('every index-writing type holds the narrowed gate', async function (assert) {
+      for (let jobType of INDEX_WRITING_JOB_TYPES) {
+        let url = `http://localhost:4201/${jobType}/`;
+        await enqueueIndexJob(dbAdapter, url, 'unfulfilled', jobType);
+        assert.false(
+          await awaitRealmIndexSettled(dbAdapter, url, {
+            timeoutMs: 200,
+            pollIntervalMs: 50,
+            jobTypes: INDEX_WRITING_JOB_TYPES,
+          }),
+          `a queued ${jobType} holds the gate`,
+        );
+      }
+    });
+
     // The prerender-html channel is a separate lane on purpose, gated
     // separately via awaitPrerenderHtml. Index readiness must not wait on it.
     test('the prerender-html lane does not hold the index gate', async function (assert) {
@@ -220,6 +274,103 @@ module(basename(import.meta.filename), function (hooks) {
 
       await waiting;
       assert.true(settled, 'the gate releases once the lane drains');
+    });
+  });
+
+  // The gate answers yes/no; this is what an operator reads when the answer was
+  // no. A readiness 503 from a lane that never drained looks identical to one
+  // from the in-process gates above it, so without the job ids there is nothing
+  // in the log to tell an operator which gate held the realm.
+  module('outstandingIndexJobs', function () {
+    test('an empty lane reports nothing', async function (assert) {
+      assert.deepEqual(
+        await outstandingIndexJobs(dbAdapter, realmURL),
+        [],
+        'no jobs to name',
+      );
+    });
+
+    test('names the unfulfilled jobs holding the lane, oldest first', async function (assert) {
+      let first = await enqueueIndexJob(dbAdapter, realmURL);
+      let second = await enqueueIndexJob(
+        dbAdapter,
+        realmURL,
+        'unfulfilled',
+        'incremental-index',
+      );
+      assert.deepEqual(
+        await outstandingIndexJobs(dbAdapter, realmURL),
+        [
+          { id: first, jobType: 'from-scratch-index' },
+          { id: second, jobType: 'incremental-index' },
+        ],
+        'both jobs, in the order a worker will claim them',
+      );
+    });
+
+    // The same three exclusions the gate makes, so the explanation cannot name
+    // a job the gate was not waiting on.
+    test('excludes terminal jobs, other realms and other lanes', async function (assert) {
+      let held = await enqueueIndexJob(dbAdapter, realmURL);
+      await enqueueIndexJob(dbAdapter, realmURL, 'resolved');
+      await enqueueIndexJob(dbAdapter, realmURL, 'rejected');
+      await enqueueIndexJob(dbAdapter, otherRealmURL);
+      await dbAdapter.execute(
+        `INSERT INTO jobs (job_type, concurrency_group, timeout, priority, args)
+           VALUES ('prerender_html', $1, 3600, 9, $2)`,
+        {
+          bind: [
+            prerenderHtmlConcurrencyGroup(realmURL),
+            JSON.stringify({ realmURL }),
+          ],
+        },
+      );
+      assert.deepEqual(
+        await outstandingIndexJobs(dbAdapter, realmURL),
+        [{ id: held, jobType: 'from-scratch-index' }],
+        'only this realm’s unfulfilled index-lane job',
+      );
+    });
+
+    test('narrows by job type like the gate it explains', async function (assert) {
+      let writing = await enqueueIndexJob(dbAdapter, realmURL);
+      await enqueueIndexJob(
+        dbAdapter,
+        realmURL,
+        'unfulfilled',
+        'scoped-css-gc',
+      );
+      assert.deepEqual(
+        (await outstandingIndexJobs(dbAdapter, realmURL)).map(
+          ({ jobType }) => jobType,
+        ),
+        ['from-scratch-index', 'scoped-css-gc'],
+        'unnarrowed, it reports the whole lane',
+      );
+      assert.deepEqual(
+        await outstandingIndexJobs(
+          dbAdapter,
+          realmURL,
+          INDEX_WRITING_JOB_TYPES,
+        ),
+        [{ id: writing, jobType: 'from-scratch-index' }],
+        'narrowed, only what a readiness gate waits on',
+      );
+    });
+
+    // Matches `awaitRealmIndexSettled`, which reports settled without touching
+    // `jobs` on an adapter that has no queue. Naming jobs there would mean
+    // querying a table that need not exist.
+    test('an adapter with no job queue reports nothing', async function (assert) {
+      await enqueueIndexJob(dbAdapter, realmURL);
+      let queueless = Object.create(dbAdapter, {
+        kind: { value: 'sqlite' },
+      }) as PgAdapter;
+      assert.deepEqual(
+        await outstandingIndexJobs(queueless, realmURL),
+        [],
+        'no query, so nothing to report',
+      );
     });
   });
 

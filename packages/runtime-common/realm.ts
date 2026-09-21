@@ -2,6 +2,8 @@ import { Deferred } from './deferred.ts';
 import { resolveRangeHeader } from './http-range.ts';
 import {
   awaitRealmIndexSettled,
+  INDEX_WRITING_JOB_TYPES,
+  outstandingIndexJobs,
   indexingConcurrencyGroup,
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
   CONTENT_MOVING_INDEX_JOB_TYPES,
@@ -2334,15 +2336,45 @@ export class Realm {
     // `curl --max-time 15`, and a request that spent its budget on startup and
     // then started another full budget here would blow past that and hand the
     // probe a connection timeout instead of a status it can read.
+    //
+    // Narrowed to the jobs that write the index. The lane also carries work
+    // that only has to stay off a running pass — `scoped-css-gc` — and such a
+    // job says nothing about whether the index is behind its source. Gating on
+    // the bare lane makes any backlog in front of that job read as an
+    // unfinished index, and the daily GC cron enqueues one job per realm: on a
+    // slow background queue that is every realm at once, for as long as the
+    // sweep takes to drain.
+    let laneWaitStartedAt = Date.now();
     if (
       !(await awaitRealmIndexSettled(this.#dbAdapter, this.url, {
         timeoutMs: Math.max(0, requestDeadline - Date.now()),
+        jobTypes: INDEX_WRITING_JOB_TYPES,
       }))
     ) {
       // The lane never drained within budget — a job queued behind a long
       // backlog, or one whose worker died and has yet to be reaped. Keep the
       // caller polling instead of reporting a realm ready whose index is
       // knowably behind its source.
+      //
+      // Name the jobs. This is the one gate here that can hold a realm for
+      // hours on state no part of this process owns, and without the ids an
+      // operator cannot tell it from the two in-process gates above — they
+      // differ only in which log line is absent. The read is after the fact, so
+      // a lane that drained between the gate expiring and this query is a real
+      // outcome rather than a missing answer.
+      let holders = await outstandingIndexJobs(
+        this.#dbAdapter,
+        this.url,
+        INDEX_WRITING_JOB_TYPES,
+      );
+      this.#log.warn(
+        `readiness check for ${this.url} is still waiting on queued index work after ${Date.now() - laneWaitStartedAt}ms: ` +
+          (holders.length
+            ? holders
+                .map(({ id, jobType }) => `job ${id} (${jobType})`)
+                .join(', ')
+            : 'the lane drained after the gate expired'),
+      );
       return notReady('index');
     }
 

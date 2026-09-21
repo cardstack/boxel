@@ -7,7 +7,11 @@ import {
   SupportedMimeType,
   type DBAdapter,
 } from '@cardstack/runtime-common';
-import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
+import {
+  indexingConcurrencyGroup,
+  jobTypeFilter,
+  INDEX_WRITING_JOB_TYPES,
+} from '@cardstack/runtime-common/jobs/indexing';
 import {
   prerenderHtmlConcurrencyGroup,
   publishedHtmlHasCaughtUp,
@@ -163,6 +167,11 @@ async function readPublishProgress(
   let indexJob = await currentJobProgress(
     dbAdapter,
     indexingConcurrencyGroup(realmURL),
+    // Only the index-writing members of the lane. Readiness narrows the same
+    // way, and this endpoint exists to agree with readiness — a queued
+    // `scoped-css-gc` reported as `queued` here would show a publish stalled
+    // that readiness had already passed.
+    INDEX_WRITING_JOB_TYPES,
   );
   if (indexJob) {
     return indexJob.has_worker
@@ -212,6 +221,7 @@ async function readPublishProgress(
 async function currentJobProgress(
   dbAdapter: DBAdapter,
   concurrencyGroup: string,
+  jobTypes?: string[],
 ): Promise<PublishProgressRow | undefined> {
   let [row] = (await query(dbAdapter, [
     `SELECT jp.total_files, jp.files_completed,`,
@@ -221,6 +231,7 @@ async function currentJobProgress(
     `LEFT JOIN job_progress jp ON jp.job_id = j.id`,
     `WHERE j.status = 'unfulfilled' AND j.concurrency_group =`,
     param(concurrencyGroup),
+    ...jobTypeFilter(jobTypes, 'j.job_type'),
     `ORDER BY has_worker DESC, j.id ASC LIMIT 1`,
   ])) as PublishProgressRow[];
   return row;
