@@ -23,7 +23,8 @@ const SOURCE_EXT = /\.(gts|ts|js)$/;
 // `from '<specifier>'` and bare side-effect `import '<specifier>'`. Anchored on
 // the import/export keyword so a specifier-shaped string in prose or in a
 // template literal is not mistaken for one.
-const FROM_IMPORT = /^\s*(?:import|export)\b[^;'"]*?\bfrom\s*['"]([^'"]+)['"]/gm;
+const FROM_IMPORT =
+  /^\s*(?:import|export)\b[^;'"]*?\bfrom\s*['"]([^'"]+)['"]/gm;
 const SIDE_EFFECT_IMPORT = /^\s*import\s*['"]([^'"]+)['"]/gm;
 // `import('<specifier>')` with a literal argument. A dynamic import reaches the
 // same module graph, so an undeclared package hides here just as well — and
@@ -44,7 +45,8 @@ const EXEMPT = [
   {
     // Host tools and commands reach card code through the virtual network's
     // shim. Declaring it would be a cycle: host already depends on base.
-    test: (s) => s === '@cardstack/boxel-host' || s.startsWith('@cardstack/boxel-host/'),
+    test: (s) =>
+      s === '@cardstack/boxel-host' || s.startsWith('@cardstack/boxel-host/'),
     why: 'resolved by the host shim; declaring it would be a dependency cycle',
   },
   {
@@ -77,7 +79,9 @@ function packageOf(specifier) {
   return specifier.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
 }
 
-const manifest = JSON.parse(readFileSync(join(baseDir, 'package.json'), 'utf8'));
+const manifest = JSON.parse(
+  readFileSync(join(baseDir, 'package.json'), 'utf8'),
+);
 const declared = new Set([
   ...Object.keys(manifest.dependencies ?? {}),
   ...Object.keys(manifest.devDependencies ?? {}),
@@ -116,4 +120,6 @@ if (undeclared.size > 0) {
   );
   process.exit(1);
 }
-console.log(`ok: every package base imports is declared (${declared.size} declared)`);
+console.log(
+  `ok: every package base imports is declared (${declared.size} declared)`,
+);
