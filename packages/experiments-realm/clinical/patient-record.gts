@@ -437,7 +437,7 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
       <div class='columns'>
         <div class='column'>
           <section class='panel'>
-            <h2>Rhythm events</h2>
+            <h2>Rhythm events <span class='op'>transform</span></h2>
             <FieldContainer
               @label='Findings recorded with an escalation'
               @vertical={{true}}
@@ -480,7 +480,7 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
           </section>
 
           <section class='panel'>
-            <h2>Medications</h2>
+            <h2>Medications <span class='op'>transform</span></h2>
             <ul class='rows'>
               {{#each @model.medications as |medication|}}
                 <li class='row' data-test-medication={{medication.name}}>
@@ -513,7 +513,7 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
           </section>
 
           <section class='panel'>
-            <h2>Vitals</h2>
+            <h2>Vitals <span class='op'>appendContainsMany</span></h2>
             <div class='vitals-form'>
               <FieldContainer
                 @label='Heart rate'
@@ -586,7 +586,7 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
 
         <div class='column'>
           <section class='panel'>
-            <h2>Consult team</h2>
+            <h2>Consult team <span class='op'>transform · parallel batch</span></h2>
             <@fields.consultTeam @format='fitted' />
             <h3>Available on this unit</h3>
             <ul class='rows'>
@@ -623,7 +623,7 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
           </section>
 
           <section class='panel'>
-            <h2>Consults</h2>
+            <h2>Consults <span class='op'>create · atomic batch</span></h2>
             <FieldContainer
               @label='Question for the consulting service'
               @vertical={{true}}
@@ -655,9 +655,13 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
           </section>
 
           <section class='panel'>
-            <h2>Audit log</h2>
-            <p class='row-note'>Every batch above appends one line to this file
-              in the same commit as the card change.</p>
+            <h2>Audit log <span class='op'>appendLine</span></h2>
+            <p class='row-note'>A text file in this realm. The two batch
+              actions — <em>Request and list it here</em> and
+              <em>Transfer to ICU</em> — append one line to it in the same
+              commit as the card changes they make, so the log cannot record
+              something the cards did not do. The single-operation buttons
+              write no line.</p>
             <@fields.auditLog @format='embedded' />
           </section>
         </div>
@@ -754,6 +758,13 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
         text-transform: uppercase;
         letter-spacing: 0.08em;
         color: var(--muted-foreground);
+      }
+      .op {
+        margin-left: var(--boxel-sp-xxs);
+        font-family: var(--font-mono, monospace);
+        text-transform: none;
+        letter-spacing: 0;
+        color: var(--primary);
       }
       .panel h3 {
         margin: var(--boxel-sp-xs) 0 0;

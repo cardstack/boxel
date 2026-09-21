@@ -58,7 +58,14 @@
           "diastolic": 74,
           "recordedBy": "@jordan.blake:boxel.ai"
         }
-      ]
+      ],
+      "transferReason": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
     },
     "relationships": {
       "facility": {
@@ -99,6 +106,11 @@
       "consultTeam.1": {
         "links": {
           "self": "../Clinician/theo-martin"
+        }
+      },
+      "consults.0": {
+        "links": {
+          "self": "../../ConsultRequest/163c5796-8616-41e7-a13f-1afcbb50f133_1"
         }
       }
     },
