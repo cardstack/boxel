@@ -15,6 +15,7 @@ import type { BatchEntryResult, BatchNode } from './coordinator.ts';
 import type { BatchEntry } from './executors.ts';
 import { isCodeRef } from '../card-document-shape.ts';
 import type { CardResource } from '../resource-types.ts';
+import type { SearchEntryWireFilter } from '../search-entry.ts';
 
 // ============================================================================
 // The operations envelope: reading a batch off the wire, and writing its
@@ -70,6 +71,30 @@ export function carriesOperationsExt(contentType: string | null): boolean {
   return false;
 }
 
+// An entry that says which card it runs against by describing it rather than
+// by naming it: the filter that finds it, and optionally one link to follow
+// from what the filter matched.
+//
+// It stands in the same slot `href` does, and it resolves into one — see
+// `find-targets.ts`, which runs the filter against the realm's index before
+// anything stages. What is here is only the grammar.
+export interface QueryTarget {
+  // A `SearchEntryWireFilter`, the filter member of the query the realm's
+  // search endpoints take. The filter alone, not a whole query: the rest of
+  // that grammar addresses realms, pages and projections, none of which an
+  // entry chooses. The realm decides all three, which is what makes a result
+  // outside the endpoint realm impossible rather than merely refused.
+  query: SearchEntryWireFilter;
+  // A link to follow from each matched card, whose target the entry then runs
+  // against. One immediate field name — the hop is one link, so there is no
+  // path to walk.
+  field?: string;
+  // Whether this entry names one card or a set of them. `one` is the default,
+  // and the count is held to exactly one; `many` expands the entry into one
+  // per target and answers with an array, which an empty set answers as empty.
+  expect: 'one' | 'many';
+}
+
 // One `invoke` entry, with the parts the wire spells resolved into the terms
 // the core takes: an `href` that has been resolved against this realm and
 // found to be inside it, and the local id read out of the payload.
@@ -82,6 +107,16 @@ export interface EnvelopeEntry {
   // Absolute, and inside this realm. Absent on an entry that names no existing
   // resource, which is a create of a card that does not exist yet.
   href?: string;
+  // The query this entry's target is described by, before it has been run.
+  // Gone once it has: resolution answers entries carrying `href`, so nothing
+  // downstream of it distinguishes a target that was found from one that was
+  // named.
+  find?: QueryTarget;
+  // Set on an entry whose `href` a query produced. The one thing downstream
+  // still asks about a found target: a create mints a card, so there is
+  // nothing for a query to have found, and the refusal has to say that rather
+  // than report the href the caller never wrote.
+  found?: true;
   data?: Record<string, unknown>;
   // The caller's own id for a card this batch mints, read from `data.lid` —
   // the resource-level member JSON:API already reserves for exactly this, and
@@ -234,7 +269,12 @@ function parseNode(
 // refusal rather than ignored: a group with an `href` on it is a caller that
 // believes the group targets something, and carrying it out would run its
 // members against targets they never named.
-const INVOCATION_MEMBERS = ['boxel:name', 'href', 'data'] as const;
+const INVOCATION_MEMBERS = [
+  'boxel:name',
+  'href',
+  'boxel:target',
+  'data',
+] as const;
 
 function parseGroup(
   operation: Record<string, unknown>,
@@ -333,6 +373,18 @@ function parseInvocation(
       position,
     );
   }
+  if (operation.href !== undefined && operation['boxel:target'] !== undefined) {
+    // Both spellings of the same slot. Refused rather than resolved by a
+    // precedence rule, because the two disagree about something the caller
+    // knows and this does not: an href is the card the caller already has,
+    // and a query is the caller saying it does not know which card it means.
+    throw refuse(
+      `entry ${position} carries both an "href" and a "boxel:target"; an ` +
+        `entry either names the card it runs against or describes it, and ` +
+        `not both`,
+      position,
+    );
+  }
   return {
     op: 'invoke',
     position,
@@ -340,8 +392,76 @@ function parseInvocation(
     ...(operation.href === undefined
       ? {}
       : { href: hrefIn(operation.href, position, paths, opts) }),
+    ...(operation['boxel:target'] === undefined
+      ? {}
+      : { find: queryTargetIn(operation['boxel:target'], position) }),
     ...(data ? { data } : {}),
     ...(lid === undefined ? {} : { lid }),
+  };
+}
+
+// The members a query target carries. Read as a closed set, unlike `data`,
+// whose unread members are the operation's own params: nothing here is passed
+// through to anything, so a member this does not know is a member nobody
+// reads — and the one a caller is likeliest to write, `expects`, would
+// silently leave the entry demanding exactly one match.
+const QUERY_TARGET_MEMBERS = ['query', 'field', 'expect'] as const;
+
+function queryTargetIn(target: unknown, position: EntryPosition): QueryTarget {
+  if (!isPlainRecord(target)) {
+    throw refuse(
+      `entry ${position} carries a "boxel:target" that is not an object`,
+      position,
+    );
+  }
+  for (let member of Object.keys(target)) {
+    if (!(QUERY_TARGET_MEMBERS as readonly string[]).includes(member)) {
+      throw refuse(
+        `entry ${position} carries "${member}" in its "boxel:target", which ` +
+          `describes a target with ${QUERY_TARGET_MEMBERS.map(
+            (known) => `"${known}"`,
+          ).join(', ')}`,
+        position,
+      );
+    }
+  }
+  // The filter's own grammar is the realm's, and it is checked where the
+  // query is assembled — here there is no realm to check it against, and
+  // restating the search parser's rules would be a second grammar to keep in
+  // step with the first.
+  if (!isPlainRecord(target.query)) {
+    throw refuse(
+      `entry ${position} carries a "boxel:target" with no "query" filter ` +
+        `saying which card it runs against`,
+      position,
+    );
+  }
+  if (
+    target.field !== undefined &&
+    (typeof target.field !== 'string' || target.field.length === 0)
+  ) {
+    throw refuse(
+      `entry ${position} carries a "boxel:target" whose "field" is not the ` +
+        `name of a field`,
+      position,
+    );
+  }
+  if (
+    target.expect !== undefined &&
+    target.expect !== 'one' &&
+    target.expect !== 'many'
+  ) {
+    throw refuse(
+      `entry ${position} carries a "boxel:target" expecting ` +
+        `${JSON.stringify(target.expect)}; an entry expects "one" card or ` +
+        `"many"`,
+      position,
+    );
+  }
+  return {
+    query: target.query as SearchEntryWireFilter,
+    ...(target.field === undefined ? {} : { field: target.field as string }),
+    expect: (target.expect as 'one' | 'many') ?? 'one',
   };
 }
 
@@ -453,28 +573,6 @@ export interface ResolvedEnvelopeEntry {
   definition: OperationDefinition;
 }
 
-// The behaviors that change stored state, which is what decides the permission
-// the request needed and therefore which method may carry the batch.
-//
-// Exhaustive over the base operations on purpose: a further behavior has to
-// say here whether it writes, rather than defaulting to "read" and reaching a
-// commit from a request that was only authorized to read.
-const WRITES: Readonly<Record<BaseOperation, boolean>> = {
-  read: false,
-  readSource: false,
-  query: false,
-  create: true,
-  update: true,
-  delete: true,
-  transform: true,
-  appendContainsMany: true,
-  appendLine: true,
-};
-
-export function isWrite(base: BaseOperation): boolean {
-  return WRITES[base];
-}
-
 // The two behaviors that are reached somewhere other than here.
 //
 // Both are refusals about the entry point rather than about the operation: a
@@ -542,6 +640,20 @@ export function batchEntryFor(
   let common = { definition, label: position };
   switch (definition.base) {
     case 'create': {
+      if (entry.found) {
+        // A query says which existing card the entry runs against, and a
+        // create has none — the card it acts on is the one it is about to
+        // mint. Refused here rather than at parse, because the wire never
+        // says an entry creates: the operation's name does, and what that
+        // name means is read off the type the entry resolved against, which
+        // is a card the query had to find first.
+        throw refuse(
+          `entry ${position} invokes "${name}", which mints a card, and ` +
+            `takes its target from a query; a create has no existing card ` +
+            `for one to find`,
+          position,
+        );
+      }
       if (definition.of) {
         // A named create stages its card from the type and template its
         // declaration carries, so its payload is the operation's params and

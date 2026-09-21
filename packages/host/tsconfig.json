@@ -54,6 +54,7 @@
     "../openrouter-realm/**/*",
     "../test-realm-cards/contents/**/*",
     "app/**/*",
+    "support/**/*",
     "tests/**/*",
     "types/**/*"
   ],

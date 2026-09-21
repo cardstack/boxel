@@ -151,6 +151,13 @@ function stub(opts: StubOptions = {}): Stub {
       },
     },
     indexQueryEngine: {
+      // A query is how an entry that describes its target finds one. Dispatch
+      // is handed a target that is already settled, so reaching this is the
+      // stub reporting that something asked the index a question it had no
+      // business asking.
+      async searchEntries() {
+        throw new Error('dispatch searched the index');
+      },
       async cardDocument(url) {
         calls.push('cardDocument');
         if (document === 'missing' || !isCanonicalKey(url)) {

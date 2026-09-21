@@ -4,7 +4,11 @@ import { cached, tracked } from '@glimmer/tracking';
 import { TrackedArray } from 'tracked-built-ins';
 
 import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
-import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
+import {
+  markdownToHtml,
+  splitCodePatchFencesGluedToProse,
+  widenFencesAroundCodePatches,
+} from '@cardstack/runtime-common/marked-sync';
 
 import {
   parseHtmlContent,
@@ -229,10 +233,17 @@ export class Message implements RoomMessageInterface {
     if (!this.body) {
       return this.body;
     }
-    return markdownToHtml(escapeHtmlOutsideCodeBlocks(this.body), {
-      sanitize: false,
-      escapeHtmlInCodeBlocks: true,
-    });
+    return markdownToHtml(
+      widenFencesAroundCodePatches(
+        splitCodePatchFencesGluedToProse(
+          escapeHtmlOutsideCodeBlocks(this.body)!,
+        ),
+      ),
+      {
+        sanitize: false,
+        escapeHtmlInCodeBlocks: true,
+      },
+    );
   }
 
   /*

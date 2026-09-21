@@ -2,6 +2,8 @@ import VideoIcon from '@cardstack/boxel-icons/file-video';
 import { NumberField, contains, field } from './card-api';
 import { FileDef } from './file-api';
 import { MediaEncodingField } from './file-formats/metadata-fields';
+import type { FilePreviewComponent } from './file-formats/file-preview-stage';
+import { VideoPreview } from './file-formats/video-preview';
 import { displayDimensions, type VideoEncoding } from './video-metadata';
 
 // The video family. Like `AudioDef` it sits directly under `FileDef` and keeps
@@ -16,6 +18,11 @@ export class VideoDef extends FileDef {
   static displayName = 'Video';
   static icon = VideoIcon;
   static acceptTypes = 'video/*';
+
+  // The family renderer the shared shells mount through `FilePreviewStage`; the
+  // mp4/mov/webm subclasses inherit it. Without it the video family fell through
+  // to the generic file pane instead of a native player.
+  static previewComponent: FilePreviewComponent = VideoPreview;
 
   @field duration = contains(NumberField);
 

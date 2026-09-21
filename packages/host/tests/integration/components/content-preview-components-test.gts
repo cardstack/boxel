@@ -15,6 +15,7 @@ import type * as CardApiModule from '@cardstack/base/card-api';
 import type * as FileFormatsModule from '@cardstack/base/file-formats/index';
 import type * as MetadataFieldsModule from '@cardstack/base/file-formats/metadata-fields';
 import type * as MarkdownDefModule from '@cardstack/base/markdown-file-def';
+import type * as VideoDefModule from '@cardstack/base/video-file-def';
 
 // The content-only preview components: a card author imports one from the
 // `file-formats/index` barrel, passes the FileDef instance, and gets just the
@@ -29,6 +30,7 @@ module('Integration | content-only file preview components', function (hooks) {
   let MarkdownDef: typeof MarkdownDefModule.MarkdownDef;
   let ImageDef: typeof CardApiModule.ImageDef;
   let AudioDef: typeof AudioDefModule.AudioDef;
+  let VideoDef: typeof VideoDefModule.VideoDef;
   let WaveformMetadataField: typeof MetadataFieldsModule.WaveformMetadataField;
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
@@ -46,6 +48,9 @@ module('Integration | content-only file preview components', function (hooks) {
     ));
     ({ AudioDef } = await loader.import<typeof AudioDefModule>(
       `${baseRealm.url}audio-file-def`,
+    ));
+    ({ VideoDef } = await loader.import<typeof VideoDefModule>(
+      `${baseRealm.url}video-file-def`,
     ));
     ({ WaveformMetadataField } = await loader.import<
       typeof MetadataFieldsModule
@@ -82,6 +87,7 @@ module('Integration | content-only file preview components', function (hooks) {
     assert.ok(fileFormats.MarkdownPreview, 'MarkdownPreview is exported');
     assert.ok(fileFormats.ImagePreview, 'ImagePreview is exported');
     assert.ok(fileFormats.AudioPreview, 'AudioPreview is exported');
+    assert.ok(fileFormats.VideoPreview, 'VideoPreview is exported');
     assert.ok(
       fileFormats.filePreviewComponentFor,
       'filePreviewComponentFor is exported',
@@ -105,6 +111,53 @@ module('Integration | content-only file preview components', function (hooks) {
       fileFormats.ImagePreview,
       'an image file dispatches to ImagePreview',
     );
+    assert.strictEqual(
+      fileFormats.filePreviewComponentFor(
+        new VideoDef({ name: 'demo.mp4', contentType: 'video/mp4' }),
+      ),
+      fileFormats.VideoPreview,
+      'a video file dispatches to VideoPreview',
+    );
+  });
+
+  test('VideoPreview mounts a native player from a bare FileDef instance', async function (assert) {
+    let { VideoPreview } = fileFormats;
+    let file = new VideoDef({
+      id: 'http://example.com/clips/demo.mp4',
+      url: 'http://example.com/clips/demo.mp4',
+      sourceUrl: 'http://example.com/clips/demo.mp4',
+      name: 'demo.mp4',
+      contentType: 'video/mp4',
+    });
+    await renderComponent(
+      <template><VideoPreview @model={{file}} /></template>,
+    );
+    assert
+      .dom('[data-test-video-player]')
+      .exists('mounts a native video player');
+    assert
+      .dom('[data-test-video-preview]')
+      .hasAttribute('data-mode', 'embedded', "mode defaults to 'embedded'");
+    assertNoShellChrome(assert);
+  });
+
+  test('VideoPreview in fitted mode shows the glyph fallback, not a player', async function (assert) {
+    let { VideoPreview } = fileFormats;
+    let file = new VideoDef({
+      id: 'http://example.com/clips/demo.mp4',
+      url: 'http://example.com/clips/demo.mp4',
+      sourceUrl: 'http://example.com/clips/demo.mp4',
+      name: 'demo.mp4',
+      contentType: 'video/mp4',
+    });
+    await renderComponent(
+      <template><VideoPreview @model={{file}} @format='fitted' /></template>,
+    );
+    assert.dom('[data-test-video-fitted]').exists();
+    assert
+      .dom('[data-test-video-player]')
+      .doesNotExist('a fitted cell never mounts a player');
+    assertNoShellChrome(assert);
   });
 
   test('MarkdownPreview renders the file content from a bare FileDef instance', async function (assert) {

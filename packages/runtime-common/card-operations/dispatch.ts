@@ -25,12 +25,14 @@ import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import type { Definition } from '../definitions.ts';
 import type { JsonValue } from '../json-validation.ts';
 import type {
+  EntryCollectionDocument,
   SingleCardDocument,
   SingleFileMetaDocument,
 } from '../document-types.ts';
 import type { LooseCardResource, FileMetaResource } from '../resource-types.ts';
 import type { InstanceOrError, IndexedFile } from '../index-query-engine.ts';
 import type { SearchResult } from '../realm-index-query-engine.ts';
+import type { SearchEntryQuery } from '../search-entry.ts';
 
 // ============================================================================
 // Running an operation.
@@ -191,6 +193,17 @@ export interface OperationIndexQueryEngine {
     opts?: { includeErrors?: true },
   ): Promise<InstanceOrError | undefined>;
   file(url: URL): Promise<IndexedFile | undefined>;
+  // The entries matching a parsed query, which is how an entry that describes
+  // its target rather than naming one finds the cards it runs against. Scoped
+  // to this realm by the engine itself — a `RealmIndexQueryEngine` is one
+  // realm's — which is what makes a found target inside this realm a property
+  // of the machinery rather than a check.
+  searchEntries(
+    query: SearchEntryQuery,
+    // The wall-clock budget's signal, so an abandoned search stops rather
+    // than running on under a request that has already been answered.
+    opts?: { signal?: AbortSignal },
+  ): Promise<EntryCollectionDocument>;
 }
 
 export interface RunOperationOptions {

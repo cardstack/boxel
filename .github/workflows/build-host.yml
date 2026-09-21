@@ -34,6 +34,15 @@ jobs:
       - name: Build host
         run: pnpm deploy:boxel-host build-only --verbose
 
+      # Re-runs the deploy cache-control suite against the dist that is about to
+      # be uploaded, which is the one place the `assets/` claim the directives
+      # rest on can be checked against real output rather than asserted.
+      - name: Check deploy cache-control against the built dist
+        run: pnpm test:deploy-cache-control
+        working-directory: packages/host
+        env:
+          HOST_DIST_DIR: tmp/deploy-dist
+
       - name: Save dist
         uses: ./.github/actions/upload-artifact-retry
         with:

@@ -218,6 +218,8 @@ module(basename(import.meta.filename), function () {
             return core.indexQueryEngine.instance(...args);
           },
           file: (...args) => core.indexQueryEngine.file(...args),
+          searchEntries: (...args) =>
+            core.indexQueryEngine.searchEntries(...args),
         },
       };
 
