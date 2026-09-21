@@ -334,7 +334,7 @@ module('Integration | tools | invoke-card-operation', function (hooks) {
     });
 
     assert.true(
-      message.includes('"openReports" is a query'),
+      message.includes('"openReports" is a query operation'),
       `the refusal says what the name is: ${message}`,
     );
     assert.true(

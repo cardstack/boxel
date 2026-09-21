@@ -58,30 +58,40 @@ export default class InvokeCardOperationTool extends HostBaseTool<
     let bucketFor = operationsModule.operations as (
       target: unknown,
     ) => OperationsBucket;
-    // The two scopes a name can be invocable in, and the order they are
-    // consulted in. An instance-scoped member acts on the card the caller
-    // named; a type-scoped one — the plain `create` — acts on that card's
-    // class, which is how a single card id names a type.
-    let onInstance = bucketFor(card);
-    let onType = bucketFor(card.constructor);
     let declarations = operationsModule.getDeclaredOperations(card);
-
+    let onInstance = bucketFor(card);
     let name = input.operation;
-    let scope = scopeOf(name, onInstance, onType);
-    if (!scope) {
-      throw new Error(
-        `"${name}" is not an operation ${displayNameOf(card)} carries. It carries: ${invocableNames(
-          onInstance,
-          onType,
-          declarations,
-        ).join(', ')}`,
-      );
+
+    // The two scopes a name can be invocable in. An instance-scoped member
+    // acts on the card the caller named; a type-scoped one — the plain
+    // `create` — acts on that card's class, which is how a single card id
+    // names a type.
+    //
+    // The class's bucket is built only once the instance's turns out not to
+    // carry the name, because building it means naming the class, which a
+    // card whose type no module exports cannot do: asking eagerly would turn
+    // that into a refusal of an instance-scoped call that had no need of a
+    // class at all.
+    let scope: 'instance' | 'type' = 'instance';
+    let bucket = onInstance;
+    if (name === BATCH_MEMBER || typeof onInstance[name] !== 'function') {
+      scope = 'type';
+      bucket = bucketFor(card.constructor);
+      if (typeof bucket[name] !== 'function') {
+        throw new Error(
+          `"${name}" is not an operation ${defNameOf(card)} carries. It carries: ${invocableNames(
+            onInstance,
+            bucket,
+            declarations,
+          ).join(', ')}`,
+        );
+      }
     }
 
     let base = baseOf(name, declarations);
     if (base === 'query') {
       throw new Error(
-        `"${name}" is a query, which answers a live set of search results rather than a value, so it is not invoked through this tool. Search with search-entries instead.`,
+        `"${name}" is a query operation: it answers a live set of search results that re-runs as realms index, not a value this tool can hand back. Search with search-entries instead; a card reads the same search by handing the query to its search results component.`,
       );
     }
     if (scope === 'instance' && input.realm) {
@@ -93,7 +103,7 @@ export default class InvokeCardOperationTool extends HostBaseTool<
     let payload = payloadOf(input);
     assertPayloadSuppliesParams(name, declarations[name], payload);
 
-    let member = (scope === 'instance' ? onInstance : onType)[name] as (
+    let member = bucket[name] as (
       payload?: unknown,
       opts?: unknown,
     ) => Promise<OperationWriteResult | Record<string, unknown> | null>;
@@ -129,24 +139,6 @@ export default class InvokeCardOperationTool extends HostBaseTool<
       '@cardstack/base/operations',
     );
   }
-}
-
-// Which bucket carries the name, if either. A declared create is carried in
-// both — invoked on the class it mints a card outright, invoked on an instance
-// that instance is the context its declaration reads — and the instance
-// reading is what a caller naming a card asked for.
-function scopeOf(
-  name: string,
-  onInstance: OperationsBucket,
-  onType: OperationsBucket,
-): 'instance' | 'type' | undefined {
-  if (name !== BATCH_MEMBER && typeof onInstance[name] === 'function') {
-    return 'instance';
-  }
-  if (typeof onType[name] === 'function') {
-    return 'type';
-  }
-  return undefined;
 }
 
 // The behavior a name is built on. An author's declaration says which one; a
@@ -227,7 +219,10 @@ function own(
   return record[key];
 }
 
-function displayNameOf(card: CardDef): string {
+// The def as a refusal names it. The class's own name first: `displayName` is
+// declared on `CardDef` itself, so a type that does not set one of its own
+// reports as "Card", which tells a caller nothing about the card they named.
+function defNameOf(card: CardDef): string {
   let owner = card.constructor as { displayName?: string; name?: string };
-  return owner.displayName || owner.name || 'this card';
+  return owner.name || owner.displayName || 'this card';
 }
