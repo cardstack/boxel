@@ -6,7 +6,8 @@ const SELECTOR = `[data-boxel-theme-scope="${SCOPE}"]`;
 // Scheme islands the card stamps below its scope element, bounded by the
 // next themed card
 const ISLANDS = `@scope (${SELECTOR}) to ([data-boxel-theme-scope])`;
-const lightIsland = (decls: string) => `:scope [data-theme="light"]{${decls}}`;
+const rootIsland = (decls: string) =>
+  `:scope :is([data-theme="light"],.dark,[data-theme="dark"]){${decls}}`;
 const darkIsland = (decls: string) =>
   `:scope :is(.dark,[data-theme="dark"]){${decls}}`;
 
@@ -19,7 +20,7 @@ module('Unit | theme-scoped-css', function () {
     assert.strictEqual(
       css,
       `${SELECTOR}{--background: #fff; --primary: #112233}` +
-        `${ISLANDS}{${lightIsland('--background: #fff; --primary: #112233')}${darkIsland('--background: #fff; --primary: #112233')}}`,
+        `${ISLANDS}{${rootIsland('--background: #fff; --primary: #112233')}}`,
     );
   });
 
@@ -32,11 +33,11 @@ module('Unit | theme-scoped-css', function () {
       css,
       `${SELECTOR}{--primary: #112233}` +
         `@container style(--boxel-color-scheme: dark){${SELECTOR}{--primary: #445566}}` +
-        `${ISLANDS}{${lightIsland('--primary: #112233')}${darkIsland('--primary: #112233; --primary: #445566')}}`,
+        `${ISLANDS}{${rootIsland('--primary: #112233')}${darkIsland('--primary: #445566')}}`,
     );
   });
 
-  test('a dark-only theme emits only the container query block', function (assert) {
+  test('a dark-only theme emits the container query and dark island rules', function (assert) {
     let css = themeScopedCss(SCOPE, '.dark { --primary: #445566; }').toString();
     assert.strictEqual(
       css,
@@ -56,17 +57,15 @@ module('Unit | theme-scoped-css', function () {
       'the island rules are scoped to this theme and stop at a nested themed card',
     );
     assert.true(
-      islands.includes(lightIsland('--accent: #abcdef; --primary: #112233')),
-      'a light island gets the root palette',
+      islands.includes(rootIsland('--accent: #abcdef; --primary: #112233')),
+      'both light and dark islands get the root palette',
     );
     assert.true(
-      islands.includes(
-        darkIsland('--accent: #abcdef; --primary: #112233; --primary: #445566'),
-      ),
+      islands.includes(darkIsland('--primary: #445566')),
       'a dark island gets the root palette with the dark declarations on top, so a root-only token survives there',
     );
     assert.true(
-      islands.indexOf(':scope [data-theme="light"]') <
+      islands.indexOf(':scope :is([data-theme="light"]') <
         islands.indexOf(':scope :is(.dark'),
       'the dark rule comes last, matching theme.css precedence for an element carrying both markers',
     );
@@ -103,7 +102,7 @@ module('Unit | theme-scoped-css', function () {
     assert.strictEqual(
       css,
       `${SELECTOR}{--primary: #112233}` +
-        `${ISLANDS}{${lightIsland('--primary: #112233')}${darkIsland('--primary: #112233')}}`,
+        `${ISLANDS}{${rootIsland('--primary: #112233')}}`,
     );
   });
 
@@ -147,7 +146,7 @@ module('Unit | theme-scoped-css', function () {
     let css = themeScopedCss(SCOPE, '--safe: blue; --x} body: red').toString();
     assert.strictEqual(
       css,
-      `${SELECTOR}{--safe: blue}${ISLANDS}{${lightIsland('--safe: blue')}${darkIsland('--safe: blue')}}`,
+      `${SELECTOR}{--safe: blue}${ISLANDS}{${rootIsland('--safe: blue')}}`,
     );
   });
 

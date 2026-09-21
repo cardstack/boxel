@@ -34,6 +34,9 @@ import { SOFT_POP_VARS } from '../helpers/theme-fixtures';
 // theme.css `--canvas` defaults, which the themes here leave undefined
 const BOXEL_CANVAS_LIGHT = '#f8f7fa';
 const BOXEL_CANVAS_DARK = '#1e1b26';
+// theme.css font default, which Meadow leaves undefined
+const BOXEL_FONT_MONO =
+  "'IBM Plex Mono', 'Menlo', 'Courier New', Courier, ui-monospace, monospace";
 
 // The `:root` / `.dark` blocks of a pasted stylesheet as ThemeVarField
 // attributes, so a fixture can carry the full theme without a paste step
@@ -527,9 +530,9 @@ module('Acceptance | theme scheme islands', function (hooks) {
       stacks: [[{ id: cardId, format: 'isolated' }]],
     });
     let rootSelector = `[data-test-card="${cardId}"] [data-test-scheme-island-root]`;
-    // the light island is the interesting position: the outer theme's dark
-    // island rule would repaint this element if it reached past the nested
-    // card's boundary
+    // Without the scope limit, the outer theme's dark island rule reaches
+    // this element. Scoping proximity protects Meadow's own tokens, but
+    // tokens Meadow omits (such as font-mono) would leak from Soft Pop.
     let stamped = `${rootSelector} [data-test-light-island] [data-test-card="${nestedId}"] [data-test-nested-stamped-island]`;
     assert.strictEqual(
       computedProperty(stamped, '--primary'),
@@ -546,10 +549,10 @@ module('Acceptance | theme scheme islands', function (hooks) {
       MEADOW_THEME_VARS.accent,
       'a token the nested theme defines only at the root keeps its value in the dark island, as on a dark card root',
     );
-    assert.notStrictEqual(
-      MEADOW_DARK_VARS.primary,
-      SOFT_POP_DARK_VARS.primary,
-      'the two dark palettes differ, so the assertion above rules out a leak',
+    assert.strictEqual(
+      computedProperty(stamped, '--font-mono'),
+      BOXEL_FONT_MONO,
+      'a font token the nested theme omits resolves to the Boxel default without leaking from the outer theme',
     );
     assertChromeKnobsReset(assert, stamped);
   });

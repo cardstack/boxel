@@ -104,13 +104,10 @@ export function themeScopedCss(
   // the nested card stamps: its own stylesheet covers those, or leaves them to
   // the theme.css defaults.
   let lightDeclarations = light ? sanitizeDeclarations(light) : '';
-  let darkDeclarations = [light, dark]
-    .filter(Boolean)
-    .map((declarations) => sanitizeDeclarations(declarations!))
-    .join('; ');
+  let darkDeclarations = dark ? sanitizeDeclarations(dark) : '';
   let islands = '';
   if (lightDeclarations) {
-    islands += `:scope [data-theme="light"]{${lightDeclarations}}`;
+    islands += `:scope :is([data-theme="light"],.dark,[data-theme="dark"]){${lightDeclarations}}`;
   }
   if (darkDeclarations) {
     islands += `:scope :is(.dark,[data-theme="dark"]){${darkDeclarations}}`;
