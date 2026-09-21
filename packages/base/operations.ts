@@ -2157,6 +2157,35 @@ export type BatchOperations<Type> =
         UncheckedBatchOperations
     : WithDeclared<CardBatchBaseOperations, BatchMembers<Type>>;
 
+// A file's, in the batch. Its writes work on the file's bytes, which is what
+// puts a log line and the card change that produced it in one commit.
+export interface FileBatchBaseOperations {
+  read(): BatchHandle<OperationDocument>;
+  update(payload: { content: string }): BatchHandle<OperationWriteResult>;
+  appendLine(payload: { line: string }): BatchHandle<OperationWriteResult>;
+}
+
+export type FileBatchOperations<Type> =
+  NamesNoClass<Type, FileDefConstructor> extends true
+    ? WithDeclared<FileBatchBaseOperations, BatchMembers<Type>> &
+        UncheckedBatchOperations
+    : WithDeclared<FileBatchBaseOperations, BatchMembers<Type>>;
+
+// A file named by its path, whose type nothing here knows. A path says where
+// the bytes are and not what they are, so what it carries is what every file
+// carries and nothing more — a name a `FileDef` subclass declares is not
+// reachable this way.
+//
+// Deliberately not the unchecked fallback a call that named no class gets.
+// That fallback is honest where a `Proxy` passes every name to the realm to
+// resolve, as a query target's does; the bucket behind a path is a plain
+// object built from the operations above, so a name outside them would type-
+// check and then arrive as a bare `TypeError` rather than as a sentence. And
+// the realm could not resolve one anyway: it types a file by its *registered*
+// extension, so the unregistered ones a log tends to use resolve as a card and
+// carry no declared file operation at all.
+export type PathBatchOperations = FileBatchBaseOperations;
+
 // The operations of whatever a search reached. Which ones those cards carry is
 // their own types' to say and the realm resolves each name against the card it
 // reached, so a name is not knowable here — and for the same reason the result
@@ -2180,6 +2209,31 @@ export type BatchBuilder<Type> = BatchOperations<Type> & {
   on<Other extends CardDefConstructor>(
     instance: InstanceType<Other>,
   ): BatchOperations<Other>;
+  // A file in this batch's realm. It is reached the same way a card is, and
+  // for the same reason: an entry that appends to a log has to commit with the
+  // card change it records, or the two can disagree.
+  //
+  // `Other` is never inferred here — `InstanceType<Other>` is not an inference
+  // site — so each overload's parameter is its constraint's instance type, and
+  // which one a value selects is decided by assignability to that. A card and
+  // a file are assignable to neither the other's, so their order carries
+  // nothing.
+  on<Other extends FileDefConstructor>(
+    instance: InstanceType<Other>,
+  ): FileBatchOperations<Other>;
+  // A file named by its path in this batch's realm, for the file no instance
+  // can stand for: one the realm does not hold yet. A `FileDef` is hydrated
+  // from a stored file, so a log that has never been written has nothing to
+  // pass here — and an `appendLine` creates the file it appends to, which is
+  // the whole reason a card needs to be able to name one.
+  //
+  // Written the way the realm addresses it: `'logs/lot-114.txt'`, or with a
+  // leading slash for the realm's root. An absolute URL works too, and one
+  // outside this batch's realm is refused — a batch commits under one realm's
+  // write lock. A realm addressed by a registered prefix is refused rather
+  // than resolved: resolving a prefix means reading the virtual network, which
+  // is no part of what a card module can see.
+  on(path: string): PathBatchOperations;
   on<Expect extends 'one' | 'many'>(
     target: QueryTarget<Expect>,
   ): QueriedOperations<Expect>;
@@ -2270,6 +2324,19 @@ function adoptedResource(instance: unknown): Record<string, unknown> {
 // declarations and an instance's identity are only readable from inside a card
 // module, which is where this runs.
 function subjectFor(target: unknown): OperationsSubject {
+  if (typeof target === 'string') {
+    // A file named by its path. Which operations it carries is the file
+    // family's to say and is answered here, where `FileDef` is in scope; where
+    // the path points is the batch's to say, since a path alone names no
+    // realm. So the path travels as the id and the batch resolves it.
+    return {
+      scope: 'instance',
+      family: 'file',
+      displayName: `file ${target}`,
+      operations: carriedOperations(FileDef),
+      id: target,
+    };
+  }
   if (isDefConstructor(target)) {
     let codeRef = identifyCard(target);
     if (!codeRef) {
