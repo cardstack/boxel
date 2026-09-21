@@ -4,6 +4,7 @@ import { basename } from 'path';
 
 import {
   buildOperations,
+  mintedIdentities,
   rri,
   type CarriedOperationInfo,
   type CarriedQueryDeclaration,
@@ -187,6 +188,7 @@ interface Sent {
   realmURL: string;
   method: OperationsMethod;
   envelope: OperationsEnvelope;
+  opts?: { clientRequestId?: string; adopted?: string[] };
 }
 
 // One search a query asked the session for: the wire query it resolved to, the
@@ -256,6 +258,7 @@ function harness(opts?: {
   // outside a host: a saved search answers with a live resource, and building
   // one is the host's.
   noSearch?: true;
+  resources?: Record<string, Record<string, unknown>>;
 }): Harness {
   let sent: Sent[] = [];
   let searched: Searched[] = [];
@@ -266,8 +269,8 @@ function harness(opts?: {
     realmsKnown: true,
   };
   let transport: OperationsTransport = {
-    async send(realmURL, method, envelope) {
-      sent.push({ realmURL, method, envelope });
+    async send(realmURL, method, envelope, sendOpts) {
+      sent.push({ realmURL, method, envelope, opts: sendOpts });
       return opts?.answer ?? { 'atomic:results': [] };
     },
     defaultWritableRealm() {
@@ -293,8 +296,22 @@ function harness(opts?: {
           ? (value as () => CodeRef)()
           : undefined;
       },
+      resourceFor(instance: unknown) {
+        let named = opts?.resources?.[instance as string];
+        if (!named) {
+          throw new Error(
+            `the test did not describe a resource for ${String(instance)}`,
+          );
+        }
+        return named;
+      },
     },
   };
+}
+
+// The local id a batch gave the card its first entry mints.
+function mintedLid(sent: Sent): string {
+  return entries(sent)[0].data?.lid as string;
 }
 
 function writeAnswer(
@@ -588,6 +605,259 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  module('naming the cards a batch mints', function () {
+    // The realm names a created card's file after the local id its entry
+    // carried, so these names are URL tails the cards keep — not tokens that
+    // only have to survive the request. Which is why the suite asserts they
+    // differ between batches: a name reused across batches is a create refused
+    // for writing a file an earlier batch already wrote.
+    function mintingHarness(opts?: {
+      resources?: Record<string, unknown>;
+      answer?: OperationsAnswer;
+    }) {
+      return harness({
+        answer: opts?.answer ?? {
+          'atomic:results': [{ data: { type: 'card', id: 'a' } }],
+        },
+        subjects: {
+          ACTIVITY: activityType(),
+          UNSAVED: {
+            scope: 'instance',
+            family: 'card',
+            displayName: 'Activity',
+            localId: 'held-by-the-caller',
+            realmURL: REALM,
+            codeRef: ACTIVITY,
+            operations: carried({ create: ['create', false] }),
+          },
+          SAVED: {
+            scope: 'instance',
+            family: 'card',
+            displayName: 'Activity',
+            id: `${REALM}Activity/7`,
+            localId: 'held-by-the-caller',
+            realmURL: REALM,
+            codeRef: ACTIVITY,
+            operations: carried({ create: ['create', false] }),
+          },
+          NAMELESS: {
+            scope: 'instance',
+            family: 'card',
+            displayName: 'Activity',
+            realmURL: REALM,
+            codeRef: ACTIVITY,
+            operations: carried({ create: ['create', false] }),
+          },
+        },
+        resources: (opts?.resources ?? {
+          UNSAVED: {
+            attributes: { headline: 'Lab safety' },
+            meta: { adoptsFrom: ACTIVITY },
+          },
+        }) as Record<string, Record<string, unknown>>,
+      });
+    }
+
+    async function mint(
+      env: OperationsEnvironment,
+      target: string,
+      attributes?: Record<string, unknown>,
+    ) {
+      let bucket = buildOperations(reportInstance(), env);
+      return await (
+        bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>
+      )((b: any) => {
+        if (attributes === undefined) {
+          b.create(target);
+        } else {
+          b.create(target, attributes);
+        }
+      });
+    }
+
+    test('two batches in the same realm mint cards under different names', async function (assert) {
+      let { sent, env } = mintingHarness();
+      await mint(env, 'ACTIVITY', { headline: 'One' });
+      await mint(env, 'ACTIVITY', { headline: 'Two' });
+
+      let [first, second] = sent.map(mintedLid);
+      assert.notStrictEqual(
+        first,
+        second,
+        `two batches named their cards differently: ${first} and ${second}`,
+      );
+      for (let lid of [first, second]) {
+        assert.ok(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_1$/.test(
+            lid,
+          ),
+          `the name is the batch's own, and the card's position in it: ${lid}`,
+        );
+      }
+    });
+
+    test('one batch names each card it mints by its position', async function (assert) {
+      let { sent, env } = harness({
+        answer: {
+          'atomic:results': [
+            { data: { type: 'card', id: 'a' } },
+            { data: { type: 'card', id: 'b' } },
+          ],
+        },
+        subjects: { ACTIVITY: activityType() },
+      });
+      let bucket = buildOperations(reportInstance(), env);
+      await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
+        (b: any) => {
+          b.create('ACTIVITY', { headline: 'One' });
+          b.create('ACTIVITY', { headline: 'Two' });
+        },
+      );
+
+      let [one, two] = entries(sent[0]).map((entry) => entry.data?.lid);
+      assert.notStrictEqual(one, two, 'the two cards are named apart');
+      assert.strictEqual(
+        String(one).replace(/_1$/, ''),
+        String(two).replace(/_2$/, ''),
+        'and both under the name of the batch that minted them',
+      );
+    });
+
+    test('a create hands an unsaved card the name its holder already knows it by', async function (assert) {
+      let { sent, env } = mintingHarness();
+      await mint(env, 'UNSAVED');
+
+      assert.deepEqual(
+        entries(sent[0])[0].data,
+        {
+          attributes: { headline: 'Lab safety' },
+          meta: { adoptsFrom: ACTIVITY },
+          lid: 'held-by-the-caller',
+        },
+        "the entry says what the instance holds, under the instance's own name",
+      );
+    });
+
+    test('an adopted create tells the transport whose card it is', async function (assert) {
+      let { sent, env } = mintingHarness();
+      await mint(env, 'UNSAVED');
+      assert.deepEqual(
+        sent[0].opts?.adopted,
+        ['held-by-the-caller'],
+        'so the transport can lock and promote the instance behind it',
+      );
+    });
+
+    test('a create from plain data reports no instance to the transport', async function (assert) {
+      let { sent, env } = mintingHarness();
+      await mint(env, 'ACTIVITY', { headline: 'Lab safety' });
+      assert.strictEqual(
+        sent[0].opts?.adopted,
+        undefined,
+        'nothing holds a card minted from data, so there is nothing to promote',
+      );
+    });
+
+    test('one card named twice is reported once to the transport', async function (assert) {
+      // The transport takes a lock per name before the write, one nesting
+      // inside the last. A name arriving twice would have the inner
+      // acquisition wait on the lock the outer one still holds, so the batch
+      // would hang here rather than reaching the realm — which refuses a card
+      // claimed twice, and is the answer the caller should get.
+      let { sent, env } = mintingHarness({
+        answer: {
+          'atomic:results': [
+            { data: { type: 'card', id: 'a' } },
+            { data: { type: 'card', id: 'b' } },
+          ],
+        },
+      });
+      let bucket = buildOperations(reportInstance(), env);
+      await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
+        (b: any) => {
+          b.create('UNSAVED');
+          b.create('UNSAVED');
+        },
+      );
+
+      assert.deepEqual(
+        sent[0].opts?.adopted,
+        ['held-by-the-caller', 'held-by-the-caller'],
+        'the batch reports the name once per entry that used it',
+      );
+      assert.strictEqual(
+        new Set(sent[0].opts?.adopted).size,
+        1,
+        'and they are the same name, which is what the realm refuses the batch for',
+      );
+    });
+
+    test('a create of a card that is already stored is refused', async function (assert) {
+      let { sent, env } = mintingHarness();
+      await assert.rejects(
+        mint(env, 'SAVED'),
+        /already stored at/,
+        'a create mints a card rather than reaching one',
+      );
+      assert.strictEqual(sent.length, 0, 'and nothing was sent');
+    });
+
+    test('a create given both an instance and field values is refused', async function (assert) {
+      let { sent, env } = mintingHarness();
+      await assert.rejects(
+        mint(env, 'UNSAVED', { headline: 'Lab safety' }),
+        /not both/,
+        'the same card described twice is refused rather than resolved silently',
+      );
+      assert.strictEqual(sent.length, 0);
+    });
+
+    test('a create of an instance nothing names is refused', async function (assert) {
+      let { sent, env } = mintingHarness();
+      await assert.rejects(
+        mint(env, 'NAMELESS'),
+        /nothing names the card it would mint/,
+        'an instance with neither a URL nor a local id names no card',
+      );
+      assert.strictEqual(sent.length, 0);
+    });
+  });
+
+  module('reading what a batch minted', function () {
+    test('every minted card is reported as its name beside its URL', function (assert) {
+      assert.deepEqual(
+        mintedIdentities({
+          'atomic:results': [
+            { data: { type: 'card', id: `${REALM}a`, lid: 'one' } },
+            { data: { type: 'card', id: `${REALM}report-1` } },
+            [
+              { data: { type: 'card', id: `${REALM}b`, lid: 'two' } },
+              [{ data: { type: 'card', id: `${REALM}c`, lid: 'three' } }],
+            ],
+            { data: null },
+          ],
+        }),
+        [
+          { lid: 'one', id: `${REALM}a` },
+          { lid: 'two', id: `${REALM}b` },
+          { lid: 'three', id: `${REALM}c` },
+        ],
+        'including the ones nested in a group, and excluding the writes that minted nothing',
+      );
+    });
+
+    test('an answer that minted nothing reports nothing', function (assert) {
+      assert.deepEqual(
+        mintedIdentities({
+          'atomic:results': [
+            { data: { type: 'card', id: `${REALM}report-1` } },
+          ],
+        }),
+        [],
+      );
+    });
+  });
+
   module('a batch', function () {
     function batchHarness(answer: OperationsAnswer) {
       return harness({
@@ -626,6 +896,7 @@ module(basename(import.meta.filename), function () {
         return [activity];
       })) as any[];
 
+      let lid = mintedLid(sent[0]);
       assert.deepEqual(
         entries(sent[0]),
         [
@@ -633,7 +904,7 @@ module(basename(import.meta.filename), function () {
             op: 'invoke',
             'boxel:name': 'create',
             data: {
-              lid: 'l1',
+              lid,
               attributes: { headline: 'Lab safety' },
               meta: { adoptsFrom: ACTIVITY },
             },
@@ -642,13 +913,17 @@ module(basename(import.meta.filename), function () {
             op: 'invoke',
             'boxel:name': 'addActivity',
             href: `${REALM}report-1`,
-            data: { activity: { lid: 'l1' } },
+            data: { activity: { lid } },
           },
         ],
         'the handle became the local id the later entry links the new card by',
       );
       assert.strictEqual(created.id, `${REALM}Activity/9`);
-      assert.strictEqual(created.lid, 'l1');
+      assert.strictEqual(
+        created.lid,
+        'l1',
+        'and the answer reports the local id back as the realm echoed it',
+      );
     });
 
     test('a handle stands in wherever a link sits in the payload', async function (assert) {
@@ -673,7 +948,9 @@ module(basename(import.meta.filename), function () {
         entries(sent[0])[1].data,
         {
           field: 'comments',
-          items: [{ body: 'see activity', activity: { lid: 'l1' } }],
+          items: [
+            { body: 'see activity', activity: { lid: mintedLid(sent[0]) } },
+          ],
         },
         'a link can sit inside an appended item as readily as in the payload',
       );

@@ -315,6 +315,82 @@ tally is the expected shape.
 shapes, so a single run measures the same question asked both ways — the
 cheapest available demonstration that moving a filter server-side is worth doing.
 
+## The deploy pin
+
+A run's numbers describe one build of one fleet. A non-production deployment
+moves on its own schedule, and a window long enough to measure anything is long
+enough for a deploy to land inside it — during one 55-minute session the
+staging host bundle changed twice. A window that straddles a deploy holds two
+runs averaged together, and a moved number cannot be told from a moved
+deployment.
+
+So the driver reads the deployment before and after the run, and **refuses to
+print a summary if it moved**. Both readings come from the host app's boot
+document at `<realm server>/_standby`, over plain HTTP, with no AWS session:
+
+- **The host build** — the entry bundle the document loads
+  (`assets/main-<hash>.js`) and the host's own build version from its config
+  meta (`0.0.0+<sha>`). Either moving means the client half of a measurement
+  changed underneath it.
+- **Which replica answered** — the container id in
+  `X-ECS-Container-Metadata-URI-v4`. A fleet that turned over is visible even
+  when the task definition did not change, and a replaced task is a cold one.
+
+A run opens with the reading printed:
+
+```
+Deploy pin: host build main-CowsK790.js (0.0.0+969ffde0), 2 replicas over 8 probes.
+```
+
+**Reading the fleet is a sampling problem**, and the sampling decides what the
+comparison may conclude: a replica missed at the start reads as an arrival at
+the close, one missed at the close reads as a departure, and either would
+refuse a run that nothing happened to. Three properties keep the sample honest.
+Probes within a wave are concurrent; **every probe opens its own connection**,
+because undici prefers a free socket to a new one and a reading otherwise
+converges on the handful of connections its first wave opened (measured against
+a server reporting the socket each request arrived on: 4, 5, 5 distinct sockets
+over three waves of four with keep-alive, and 4, 8, 12 without it); and the
+closing reading keeps probing while any replica the opening one saw has yet to
+answer.
+
+Two outcomes end a run early rather than late:
+
+- **The fleet is already serving two builds** — refused before authentication,
+  so it costs a probe rather than the window. Each replica fetches the boot
+  document once and caches it for the life of its process, so replicas that
+  started either side of a host deploy serve different builds at the same
+  moment and a browser gets whichever answers. This is caught even on a target
+  that identifies no replicas, because the builds a reading saw are kept apart
+  from the replicas that served them.
+- **The build moved, or the fleet changed, by the close.** The summary is
+  replaced by what moved. A replica that arrived served part of the window
+  cold; one that left means the rest of the fleet carried a different share of
+  the load partway through. Both are reported, and a replaced task is both.
+
+Two more outcomes leave the run intact and say what is not known about it,
+because neither is evidence that anything moved:
+
+- **Nothing named a build at the start** — `build: not pinned`. A run cannot be
+  refused for failing a check it never passed.
+- **Nothing brought back a boot document at the close** — `build: … NOT
+CONFIRMED at the close`. Silence, or a fleet answering only errors, says the
+  pin is unknown rather than that the deployment moved — and the likeliest
+  target to go quiet at the close is the one the harness has just spent an hour
+  saturating. Throwing that hour away over a question the probe could not ask
+  is the wrong trade; quoting the numbers as one build's without saying so
+  would be worse.
+
+An answer that identifies its replica but carries no usable document — a
+transient `502` from a replica that is still there — keeps the replica and
+drops only the build. Discarding the id with the document would report that
+replica as departed and refuse the run over an error it recovered from.
+
+Nothing here replaces checking that a deploy has finished before a comparison —
+`aws ecs describe-services … deployments[0].rolloutState` must read `COMPLETED`
+with `updatedAt` earlier than the run — but a revision that lands mid-run
+always replaces tasks, and that is what the pin sees.
+
 ## Measuring invalidation rather than modelling it
 
 By default a reader re-runs its queries whenever this driver makes a write. That
@@ -571,8 +647,9 @@ purpose; doing that to production is an outage for real users.
 - `lib/workload.ts` — workload loading, the wire grammar, substitution
 - `lib/realm-events.ts` — Matrix `/sync` subscription and the host's skip test
 - `lib/in-flight.ts` — the concurrency this driver holds, as a mean and a peak
+- `lib/deploy-pin.ts` — what the fleet is serving, and whether it held still
 - `lib/common.ts` — credential reading, the production guard, arg parsing, stats
 
 `tests/load-harness-test.ts` in this package covers the pure logic: credential
 parsing, the production guard, argument parsing, workload validation and
-derivation, and the skip test.
+derivation, the skip test, and the deploy pin's parsing and drift rules.

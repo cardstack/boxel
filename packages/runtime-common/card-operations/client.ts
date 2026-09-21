@@ -1,3 +1,5 @@
+import { v4 as uuidV4 } from 'uuid';
+
 import { moduleFrom } from '../code-ref.ts';
 import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import type { EntryCollectionDocument } from '../document-types.ts';
@@ -118,7 +120,15 @@ export interface OperationsTransport {
     realmURL: string,
     method: OperationsMethod,
     envelope: OperationsEnvelope,
-    opts?: { clientRequestId?: string },
+    opts?: {
+      clientRequestId?: string;
+      // The local ids of the cards this batch mints that the caller already
+      // holds an instance of. What holding one means — a lock to take before
+      // the write, an identity to assign after it — is the transport's to
+      // know; this module knows only which names came from a caller rather
+      // than from the batch.
+      adopted?: string[];
+    },
   ): Promise<OperationsAnswer>;
   defaultWritableRealm(): string | undefined;
   search?: OperationsSearch;
@@ -311,6 +321,10 @@ export interface InstanceSubject extends SubjectCommon {
   // What the entry targets, and the realm a batch anchored on it commits to.
   id?: string;
   realmURL?: string;
+  // What the caller knows an unsaved card by until the realm names it. A
+  // batch that mints such a card names it by this, so the URL the realm mints
+  // ends in the id its holder is already using.
+  localId?: string;
   // The instance's own type, for the one entry that names it: a patch of a
   // card's document is a card resource, which says what the card is.
   codeRef?: CodeRef;
@@ -332,6 +346,11 @@ export interface OperationsEnvironment {
   // A def class, or a thunk deferring one, as the code ref that names it —
   // the same reading a declaration's type clauses get when they are lowered.
   codeRef(value: unknown): CodeRef | undefined;
+  // The resource a card the caller already holds would be minted from: its
+  // field values and the type it adopts, in the terms the wire reads. Reading
+  // an instance's fields means reading a card module, which is the one thing
+  // this module never does.
+  resourceFor(instance: unknown): Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -912,6 +931,37 @@ function valueResult(
   return writeResult(data, name);
 }
 
+// Every card a committed batch minted, as the name the caller gave it beside
+// the URL the realm answered with.
+//
+// Read off the whole answer rather than through the handles, because the
+// caller that needs these pairs is not the one that built the batch: a
+// transport holding cards by local id has an answer and no handles, and the
+// pairing is the same whichever entry a create sat in — including one nested
+// in a group, which is why this walks the tree rather than its top level.
+export function mintedIdentities(
+  answer: OperationsAnswer,
+): { lid: string; id: string }[] {
+  let pairs: { lid: string; id: string }[] = [];
+  let walk = (results: WireResults) => {
+    for (let result of results) {
+      if (Array.isArray(result)) {
+        walk(result);
+        continue;
+      }
+      let data = (result as { data?: Record<string, unknown> | null })?.data;
+      if (!data) {
+        continue;
+      }
+      if (typeof data.lid === 'string' && typeof data.id === 'string') {
+        pairs.push({ lid: data.lid, id: data.id });
+      }
+    }
+  };
+  walk(answer['atomic:results'] ?? []);
+  return pairs;
+}
+
 function writeResult(
   data: Record<string, unknown>,
   name: string,
@@ -990,7 +1040,15 @@ interface BatchMember {
 
 interface BatchState {
   realmURL: string;
+  // What this batch is called. Every card it mints is named under it, so two
+  // batches cannot name the same card, and the name is what the realm's write
+  // is tracked by.
+  name: string;
   lids: number;
+  // The local ids of the cards the batch mints that the caller already holds
+  // an instance of. Reported to the transport, which is the only layer that
+  // can know what holding one means.
+  adopted: string[];
 }
 
 interface BatchScope {
@@ -1022,7 +1080,9 @@ async function runAtomic(
   }
   let batch: BatchState = {
     realmURL: instanceRealm(subject, 'atomic'),
+    name: uuidV4(),
     lids: 0,
+    adopted: [],
   };
   let root: BatchScope = { batch, path: [], members: [], writes: false };
   let returned = (build as (builder: unknown) => unknown)(
@@ -1049,6 +1109,9 @@ async function sendBatch(
     root.batch.realmURL,
     root.writes ? 'POST' : 'QUERY',
     { 'boxel:operations': root.members.map((member) => member.wire) },
+    root.batch.adopted.length
+      ? { adopted: [...root.batch.adopted] }
+      : undefined,
   );
   let results = answer['atomic:results'] ?? [];
   return answered(projection ?? handlesOf(root.members), results);
@@ -1297,23 +1360,28 @@ function queriedMembers(
 // entry links the new card by, so a link to a card that does not exist yet is
 // a value the caller holds rather than a token they have to invent and keep
 // consistent by hand.
+//
+// Two things can be minted, and which one decides the card's name. A class is
+// a card that does not exist anywhere yet, so the batch names it. An unsaved
+// instance is a card its holder already has — already rendered, already
+// linked to, already being edited — so it keeps the name that holder knows it
+// by, and the URL the realm mints from that name is one the holder can pair
+// with what it is holding.
 function registerCreate(
   scope: BatchScope,
   env: OperationsEnvironment,
-  cls: unknown,
+  target: unknown,
   attributes: unknown,
   opts: InvokeOptions | undefined,
 ): OperationHandle {
-  let type = env.subject(cls);
-  if (type.scope !== 'type') {
+  let subject = env.subject(target);
+  if (subject.family !== 'card') {
     throw new Error(
-      `create() takes the class of the card to mint, not an instance of one`,
+      `create() mints a card; a ${subject.displayName} is created through the realm's file routes`,
     );
   }
-  if (type.family !== 'card') {
-    throw new Error(
-      `create() mints a card; a ${type.displayName} is created through the realm's file routes`,
-    );
+  if (subject.scope === 'instance') {
+    return registerAdoptedCreate(scope, env, subject, target, attributes);
   }
   let lid = mintLid(scope);
   return registerEntry(scope, {
@@ -1321,10 +1389,49 @@ function registerCreate(
     kind: 'write',
     writes: true,
     data: linkHandles(
-      createResource(type, 'create', attributes, opts?.relationships, lid),
+      createResource(subject, 'create', attributes, opts?.relationships, lid),
       'create',
       scope.batch,
     ),
+    lid,
+  });
+}
+
+// A create of a card the caller is already holding.
+//
+// The instance is the whole of what the entry says: its field values are the
+// card's, and its local id is the card's name — so an entry that also carried
+// attributes would be describing the same card twice, and is refused rather
+// than resolved in one of the two directions silently.
+function registerAdoptedCreate(
+  scope: BatchScope,
+  env: OperationsEnvironment,
+  subject: InstanceSubject,
+  instance: unknown,
+  attributes: unknown,
+): OperationHandle {
+  if (subject.id) {
+    throw new Error(
+      `create() mints a card that does not exist yet, and this ${subject.displayName} is already stored at ${subject.id} — reach a stored card's operations through operations(card), or b.on(card) inside a batch`,
+    );
+  }
+  if (!subject.localId) {
+    throw new Error(
+      `create() was handed a ${subject.displayName} that is neither stored nor held under a local id, so nothing names the card it would mint`,
+    );
+  }
+  if (attributes !== undefined) {
+    throw new Error(
+      `create() takes the field values of the card to mint, or the unsaved ${subject.displayName} holding them — not both`,
+    );
+  }
+  let lid = subject.localId;
+  scope.batch.adopted.push(lid);
+  return registerEntry(scope, {
+    name: 'create',
+    kind: 'write',
+    writes: true,
+    data: { ...env.resourceFor(instance), lid },
     lid,
   });
 }
@@ -1529,13 +1636,20 @@ function registerEntry(
   return { [HANDLE]: handle };
 }
 
-// Every card the batch mints needs a local id no other entry uses, and the
-// tokens appear in the request — so they are the batch's own sequence rather
-// than anything derived from the card, which has nothing to derive one from
-// yet.
+// The local id a card the batch mints is named by.
+//
+// It is not a token that only has to survive the request: the realm names the
+// new card's file after it, so this is the tail of the URL the card keeps.
+// Which is why it is the batch's name and a position under it rather than a
+// counter — a counter alone would have every batch in a realm claim the same
+// names, and the second batch to mint a card of a type would be refused for
+// writing a file the first one already wrote.
+//
+// A card the caller already holds is named by its own local id instead, so
+// the tail of the URL the realm mints matches the id that caller knows it by.
 function mintLid(scope: BatchScope): string {
   scope.batch.lids += 1;
-  return `l${scope.batch.lids}`;
+  return `${scope.batch.name}_${scope.batch.lids}`;
 }
 
 // A handle passed where a value is expected is a link to the card its entry

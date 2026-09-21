@@ -49,6 +49,7 @@ interface RenderFileForIndexingOptions {
   prerenderer: Prerenderer;
   virtualNetwork: VirtualNetwork;
   consumeClearCacheForRender(): boolean;
+  consumeResetStoreForRender(): boolean;
   logDebug(message: string): void;
   logWarn(message: string): void;
 }
@@ -140,6 +141,7 @@ export async function renderFileForIndexing({
   prerenderer,
   virtualNetwork,
   consumeClearCacheForRender,
+  consumeResetStoreForRender,
   logDebug,
   logWarn,
 }: RenderFileForIndexingOptions): Promise<IndexVisitRenderResult | undefined> {
@@ -214,6 +216,7 @@ export async function renderFileForIndexing({
   let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL), virtualNetwork);
 
   let clearCache = consumeClearCacheForRender();
+  let resetStore = consumeResetStoreForRender();
 
   // The file-extract pass runs `FileDef.extractAttributes` in the prerenderer,
   // which otherwise buffers the entire file just to MD5 it and measure its
@@ -248,8 +251,9 @@ export async function renderFileForIndexing({
     ...(jobInfo ? { jobId: `${jobInfo.jobId}.${jobInfo.reservationId}` } : {}),
   };
 
-  // The index visit runs first and carries the one-shot clearCache. Every
-  // visit also threads the pass's loader epoch, so each prerender tab this
+  // The index visit runs first and carries both one-shots: the store reset
+  // every pass sends, and the loader drop only a pass that changed a module
+  // sends. Every visit also threads the pass's loader epoch, so each prerender tab this
   // pass touches resets its loader exactly once when the realm's module
   // surface changed — the one-shot boolean can only sanitize the single tab
   // its visit lands on.
@@ -260,6 +264,7 @@ export async function renderFileForIndexing({
     ...(needFileExtract ? { fileExtract: true } : {}),
     ...(needFileRender ? { fileRender: true } : {}),
     ...(clearCache ? { clearCache } : {}),
+    ...(resetStore ? { resetStore } : {}),
     ...(fileContentHash !== undefined ? { fileContentHash } : {}),
     ...(fileContentSize !== undefined ? { fileContentSize } : {}),
     // The timestamps this visit writes to the file's index row. The extract

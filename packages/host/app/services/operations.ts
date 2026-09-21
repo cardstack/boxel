@@ -5,6 +5,7 @@ import Service, { service } from '@ember/service';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
+  mintedIdentities,
   OperationsError,
   rri,
   SupportedMimeType,
@@ -19,9 +20,11 @@ import {
 
 import { getSearchEntriesResource } from '../resources/search-entries';
 
+import type CardService from './card-service';
 import type MatrixService from './matrix-service';
 import type NetworkService from './network';
 import type RealmService from './realm';
+import type StoreService from './store';
 
 // ============================================================================
 // The transport a card's operations are carried out over.
@@ -50,9 +53,11 @@ export default class OperationsService
   extends Service
   implements OperationsTransport
 {
+  @service declare private cardService: CardService;
   @service declare private matrixService: MatrixService;
   @service declare private network: NetworkService;
   @service declare private realm: RealmService;
+  @service declare private store: StoreService;
 
   constructor(owner: Owner) {
     super(owner);
@@ -133,36 +138,61 @@ export default class OperationsService
     realmURL: string,
     method: OperationsMethod,
     envelope: OperationsEnvelope,
-    opts?: { clientRequestId?: string },
+    opts?: { clientRequestId?: string; adopted?: string[] },
   ): Promise<OperationsAnswer> {
     this.assertMayWrite(method);
     let headers: Record<string, string> = {
       Accept: SupportedMimeType.BoxelOperations,
       'Content-Type': SupportedMimeType.BoxelOperations,
     };
-    if (method === 'POST') {
-      // Every write carries an id identifying who asked for it: the realm
-      // stamps it on the index event the write produces, which is what lets a
-      // client tell its own write's echo from anyone else's. The `instance:`
-      // prefix is the convention the store's own writes use.
-      //
-      // Deliberately NOT registered with `cardService.clientRequestIds`. That
-      // set is what makes the store *skip* reloading a card when the event
-      // arrives, and the store may skip it because a save has already applied
-      // the document it sent. An operation's answer carries identity and
-      // version only — the new state was computed on the server — so
-      // suppressing the event here would leave a transformed or appended card
-      // showing pre-write values with nothing left to correct it. Until
-      // something applies an operation's outcome locally, the event is the
-      // only thing that refreshes the card, and it has to run.
-      let clientRequestId = opts?.clientRequestId ?? `instance:${uuidv4()}`;
-      headers['X-Boxel-Client-Request-Id'] = clientRequestId;
-    } else {
+    if (method !== 'POST') {
       // A read-only batch is sent as a `QUERY`, which is the method the realm
       // reads as "authorized to read" — spelled the way every other QUERY the
       // host sends is, since a browser request cannot carry the method itself.
+      // It takes no lock and mints nothing, so none of what follows applies.
       headers['X-HTTP-Method-Override'] = 'QUERY';
+      return await this.fetchAnswer(realmURL, headers, envelope);
     }
+    // Every write carries an id identifying who asked for it: the realm stamps
+    // it on the index event the write produces, which is what lets a client
+    // tell its own write's echo from anyone else's. The `instance:` prefix is
+    // the convention the store's own writes use.
+    //
+    // Registering it is what lets the store recognize the echo as ours. The
+    // store does not read that as "skip this pass": the event names which of
+    // the cards it carries were written from content this client sent, and
+    // only those are skipped — the rest of the batch took state the realm
+    // computed, which nothing here holds and the event is the only word of.
+    // So a card this batch minted from an instance keeps whatever was typed
+    // into it while the batch was in flight, and a card the batch transformed
+    // or appended to still refreshes.
+    let clientRequestId = opts?.clientRequestId ?? `instance:${uuidv4()}`;
+    this.cardService.clientRequestIds.add(clientRequestId);
+    headers['X-Boxel-Client-Request-Id'] = clientRequestId;
+
+    // The cards this batch mints that the store is already holding instances
+    // of. Their saves and this write are the same card being written, so they
+    // queue behind one another: an autosave that starts while the batch is in
+    // flight waits for the realm to name the card and then PATCHes it, rather
+    // than posting a second one.
+    let adopted = opts?.adopted ?? [];
+    return await this.store.withMutationLocks(adopted, async () => {
+      let answer = await this.fetchAnswer(realmURL, headers, envelope);
+      // Held instances take their names from the answer rather than from the
+      // event that follows it: the answer is the first and the certain word,
+      // and the promotion it drives — the identity map, the realm
+      // subscription, autosave, consumers in other realms — is what the store
+      // does for any card it learns a URL for.
+      await this.store.adoptMintedIdentities(mintedIdentities(answer));
+      return answer;
+    });
+  }
+
+  private async fetchAnswer(
+    realmURL: string,
+    headers: Record<string, string>,
+    envelope: OperationsEnvelope,
+  ): Promise<OperationsAnswer> {
     let response = await this.network.authedFetch(`${realmURL}_operations`, {
       method: 'POST',
       headers,
