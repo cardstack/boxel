@@ -702,15 +702,26 @@ export async function runGlintCheck(
     let totalDiagnosticLines = 0;
     let lines = output.split('\n');
 
+    // tsc elaborates many diagnostics ("Types of property 'x' are
+    // incompatible.", "Type 'A' is not assignable to type 'B'.") as indented
+    // continuation lines under the error line. Those name the actual
+    // incompatibility, so fold them into the error's message instead of
+    // dropping them.
+    let current: ParseErrorData | null = null;
+
     for (let line of lines) {
       let match = line.match(
         /^(.+?)\((\d+),(\d+)\):\s*error\s+(TS\d+):\s*(.+)/,
       );
       if (!match) {
+        if (current && /^\s+\S/.test(line)) {
+          current.message += `\n${line.trimEnd()}`;
+        }
         continue;
       }
 
       totalDiagnosticLines++;
+      current = null;
 
       let [, filePath, lineStr, colStr, tsCode, message] = match;
 
@@ -729,12 +740,13 @@ export async function runGlintCheck(
         continue;
       }
 
-      errors.push({
+      current = {
         file: originalFile.path,
         line: parseInt(lineStr, 10),
         column: parseInt(colStr, 10),
         message,
-      });
+      };
+      errors.push(current);
     }
 
     if (exitedWithError && errors.length === 0 && totalDiagnosticLines === 0) {
