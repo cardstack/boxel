@@ -44,7 +44,9 @@ and time targets are multiplied by the number of prompts.
   `credits_ledger` rows and a top-up is one `extra_credit` row. The
   `/run-ai-assistant-eval` command's preflight carries the query.
 - The local matrix users `ai-assistant-eval-user-1` to `ai-assistant-eval-user-5` / `password` exist (see
-  `EVAL_USERS` below). For evaluations, `pnpm eval:setup` has created the
+  `EVAL_USERS` below). `pnpm eval:users` registers whoever is missing, and
+  `pnpm eval` refuses to start without them rather than failing on the first
+  browser action of a paid run. For evaluations, `pnpm eval:setup` has created the
   AI Assistant Evaluations workspace of the writer user (`user` locally), at
   the endpoint `evals`, and pushed the cards.
 - Every model you name has a ModelConfiguration card in the SystemCard the host

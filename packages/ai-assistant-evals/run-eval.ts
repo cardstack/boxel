@@ -25,6 +25,7 @@ import { RealmClient, type CardDocument } from './realm-api.ts';
 import { loadEvaluationBundle, type Evaluation } from './eval-card.ts';
 import { WRITER_PASSWORD, WRITER_USER } from './eval-config.ts';
 import { grade, type RunResult } from './run-result.ts';
+import { canLogIn, evalUsers } from './ensure-users.ts';
 
 // One frontier model per lab that graded GOOD or ROUGH in the last sweep.
 // Override with the second argument.
@@ -310,6 +311,24 @@ async function main() {
     .split(',')
     .map((m) => m.trim())
     .filter(Boolean);
+
+  // One browser per model signs in as its own matrix user. A missing account
+  // only shows up on that browser's first action, by which point the session
+  // has a report card and the other models are already spending, so it is
+  // worth the few logins to find out here instead.
+  let evalPassword = process.env.EVAL_PASSWORD ?? 'password';
+  let missing: string[] = [];
+  for (let username of evalUsers().slice(0, models.length)) {
+    if (!(await canLogIn(username, evalPassword))) {
+      missing.push(username);
+    }
+  }
+  if (missing.length > 0) {
+    throw new Error(
+      `cannot sign in as ${missing.join(', ')}. Register them with ` +
+        '`pnpm eval:users`, or name accounts that exist with EVAL_USERS',
+    );
+  }
 
   console.log(`[eval] signing in as @${writer} to read ${args.evalCardUrl}`);
   let credentials = await loginWithPassword(writer, password);

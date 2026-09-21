@@ -79,10 +79,10 @@ Skip this question when the invocation already settled it — `headless` or
   (endpoint `evals`) if needed and pushes
   `eval-realm/` into it; it is safe to run every time and takes seconds. Run
   it whenever the URL answers `404` or a file under `eval-realm/` changed.
-- The eval users exist (`ai-assistant-eval-user-1` to `ai-assistant-eval-user-5`, password `password`). If the
-  run fails at login, register them once from `packages/matrix`:
-  `MATRIX_USERNAME=ai-assistant-eval-user-1 MATRIX_PASSWORD=password node ./scripts/register-test-user.ts`,
-  per user.
+- The eval users exist. `pnpm eval:users` signs in as each one and registers
+  whoever is missing, and is safe to run every time. `pnpm eval` refuses to
+  start if any is missing, so this is only ever a time saver, never the
+  difference between a run that works and one that does not.
 - Every eval user holds at least 3000 credits. A user that runs out mid-session
   gets "There was an error processing your request" from the assistant and the
   run is wasted, so top up before starting rather than after a failure. The

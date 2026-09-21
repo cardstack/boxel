@@ -10,6 +10,7 @@
     "eval:models:headed": "EVAL_WORKERS=1 playwright test -c playwright.config.ts --headed",
     "eval:models:tabs": "EVAL_TABS=1 EVAL_WORKERS=1 playwright test -c playwright.config.ts --headed",
     "eval:setup": "node eval-setup.ts",
+    "eval:users": "node ensure-users.ts",
     "eval": "node run-eval.ts",
     "eval:judge": "node judge-result.ts",
     "lint": "tsc --noEmit -p tsconfig.json"
