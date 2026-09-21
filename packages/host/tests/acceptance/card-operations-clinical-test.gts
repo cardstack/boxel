@@ -179,10 +179,18 @@ module('Acceptance | card operations | clinical example', function (hooks) {
       'resolved',
       'and the realm wrote nothing',
     );
+    // The whole document rather than a single member: a refusal that wrote
+    // nothing has to leave every field where it was, and `lastModified` is
+    // what says the file itself was never rewritten.
+    assert.deepEqual(
+      after.attributes,
+      before.attributes,
+      'no field of the card moved',
+    );
     assert.strictEqual(
-      after.meta.version,
-      before.meta.version,
-      'the card is at the version it was at before the refusal',
+      after.meta.lastModified,
+      before.meta.lastModified,
+      'and the stored file was never written',
     );
   });
 });

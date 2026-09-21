@@ -312,8 +312,8 @@ caller left out. `output` projects or reshapes the result.
 
 Both are expressions rather than mutation programs, and both may read the
 request context. An `output` that reads `actor()` makes the response
-per-caller, which on a `read` means the card's plain `GET` can no longer be
-cached or answered with a `304`.
+per-caller, which on a `read` means the card's plain `GET` is served uncached
+and is never answered with a `304`.
 
 `output` is **not** an access boundary. See the posture section.
 
