@@ -174,13 +174,16 @@ function cardFile(attributes: Record<string, unknown>) {
   );
 }
 
-// What a batch refused, as the caller sees it: the status, the code, and which
-// entry produced it. A batch that commits instead answers undefined, which is
-// what a test asserting a refusal fails on.
-async function refusal(
+// What a batch refused, as the caller sees it, with the sentence it carries. A
+// batch that commits instead answers undefined, which is what a test asserting
+// a refusal fails on.
+async function refusedWith(
   core: BatchCore,
   entries: BatchEntry[],
-): Promise<{ status: number; code: string; entry: unknown } | undefined> {
+): Promise<
+  | { status: number; code: string; entry: unknown; detail: string | undefined }
+  | undefined
+> {
   try {
     await commitBatch(core, entries, {});
   } catch (err: unknown) {
@@ -191,9 +194,25 @@ async function refusal(
       status: err.error.status,
       code: err.error.code,
       entry: err.error.meta?.entry,
+      detail: err.error.detail,
     };
   }
   return undefined;
+}
+
+// The same, without the sentence, for the cases where which branch refused is
+// not in question. Several refusals share one status and one code, so a test
+// that has to pin its own branch reaches for `refusedWith` instead.
+async function refusal(
+  core: BatchCore,
+  entries: BatchEntry[],
+): Promise<{ status: number; code: string; entry: unknown } | undefined> {
+  let failed = await refusedWith(core, entries);
+  if (!failed) {
+    return undefined;
+  }
+  let { detail: _detail, ...rest } = failed;
+  return rest;
 }
 
 module(basename(import.meta.filename), function () {
@@ -755,22 +774,57 @@ module(basename(import.meta.filename), function () {
     // holds, and before there was a stored file behind that name; now there is
     // not, and the only thing standing between a caller and a file of their
     // choosing at a path of their choosing is the refusal itself.
-    for (let { what, href } of [
-      { what: 'binary content', href: `${REALM}chart.png` },
-      { what: 'a json document', href: `${REALM}data.json` },
-      { what: 'a module', href: `${REALM}person.gts` },
-      { what: 'a card', href: `${REALM}Person/mango` },
-    ]) {
+    //
+    // Each case names the sentence its own branch answers with. They share a
+    // status and a code, so asserting only those would be one assertion made
+    // four times — and the card case in particular is reached by a check that
+    // fires on a *sibling* file, so it only stands in front of the binary
+    // branch when that sibling is there to be found.
+    let refusedCases: {
+      what: string;
+      href: string;
+      stored: Record<string, string>;
+      refusedFor: string;
+    }[] = [
+      {
+        what: 'binary content',
+        href: `${REALM}chart.png`,
+        stored: {},
+        refusedFor: 'holds image/png',
+      },
+      {
+        what: 'a json document',
+        href: `${REALM}data.json`,
+        stored: {},
+        refusedFor: 'holds application/json',
+      },
+      {
+        what: 'a module',
+        href: `${REALM}person.gts`,
+        stored: {},
+        refusedFor: 'is a module',
+      },
+      {
+        what: 'a card',
+        href: `${REALM}Person/mango`,
+        stored: { 'Person/mango.json': cardFile({ firstName: 'Mango' }) },
+        refusedFor: 'names a card',
+      },
+    ];
+    for (let { what, href, stored, refusedFor } of refusedCases) {
       test(`${what} is not created by a line refused for it`, async function (assert) {
-        let { core, commits } = stub();
-        let failed = await refusal(core, [
+        let { core, commits } = stub(stored);
+        let failed = await refusedWith(core, [
           { op: 'appendLine', href, params: { line: 'deploy 41' } },
         ]);
-        assert.deepEqual(failed, {
-          status: 405,
-          code: 'operation-not-allowed',
-          entry: 0,
-        });
+        assert.strictEqual(failed?.status, 405);
+        assert.strictEqual(failed?.code, 'operation-not-allowed');
+        assert.strictEqual(failed?.entry, 0);
+        assert.ok(
+          failed?.detail?.includes(refusedFor),
+          `the refusal is the one this case is about, not another that ` +
+            `shares its status (got: ${failed?.detail})`,
+        );
         assert.strictEqual(
           commits.length,
           0,

@@ -1217,6 +1217,69 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(sent.length, 0);
     });
 
+    test('a realm addressed by a registered prefix is refused rather than resolved', async function (assert) {
+      // The spelling that would otherwise fail silently: it is not a URL, so
+      // it would resolve as a relative path, land inside the caller's own
+      // realm, pass containment, and create a file at a nonsense path instead
+      // of refusing a target in another realm. Resolving it properly means
+      // reading the virtual network, which a card module cannot see.
+      let { sent, env } = batchHarness({ 'atomic:results': [] });
+      let bucket = buildOperations(reportInstance(), env);
+      await assert.rejects(
+        (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
+          (b: any) => {
+            b.on('@cardstack/base/notes.txt').appendLine({ line: 'x' });
+          },
+        ),
+        /registered prefix/,
+        'the refusal names what it cannot do rather than inventing a path',
+      );
+      assert.strictEqual(sent.length, 0);
+    });
+
+    test('a directory is refused where the caller can see the path they wrote', async function (assert) {
+      // Each of these reaches the realm as the realm root or a directory, and
+      // comes back describing the bytes it did not find rather than the path
+      // the caller wrote.
+      let { sent, env } = batchHarness({ 'atomic:results': [] });
+      let bucket = buildOperations(reportInstance(), env);
+      let atomic = bucket.atomic as (
+        build: (b: any) => unknown,
+      ) => Promise<unknown>;
+      for (let path of ['/', '.', 'logs/']) {
+        await assert.rejects(
+          atomic((b: any) => {
+            b.on(path).appendLine({ line: 'x' });
+          }),
+          /names a directory/,
+          `${path} names no file`,
+        );
+      }
+      assert.strictEqual(sent.length, 0);
+    });
+
+    test('repeated slashes in a path name one file, not two', async function (assert) {
+      // The realm maps every spelling onto one file but addresses them as
+      // different local paths, so two entries that differ only in a doubled
+      // separator would take two write locks over one file and read as
+      // unrelated to each other.
+      let { sent, env } = batchHarness({
+        'atomic:results': [{ data: null }, { data: null }],
+      });
+      let bucket = buildOperations(reportInstance(), env);
+      await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
+        (b: any) => {
+          b.on('logs//lot-114.txt').appendLine({ line: 'first' });
+          b.on('logs/lot-114.txt').appendLine({ line: 'second' });
+        },
+      );
+      assert.deepEqual(
+        entries(sent[0]).map((entry: any) => entry.href),
+        [`${REALM}logs/lot-114.txt`, `${REALM}logs/lot-114.txt`],
+        'both entries name the one file',
+      );
+    });
+
     test('the batch refuses what it cannot carry out', async function (assert) {
       let { sent, env } = batchHarness({ 'atomic:results': [] });
       let bucket = buildOperations(reportInstance(), env);

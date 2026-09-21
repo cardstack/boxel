@@ -960,11 +960,22 @@ async function stageFileUpdate(
 // append-only file the first write and every later one are the same act, and
 // an author with no way to spell the first cannot own a log at all: creating
 // one would mean reaching the realm's file-write routes, which card code
-// cannot call. What keeps that from being a way to put arbitrary bytes at an
-// arbitrary path is the name checks below, which a created path passes only
-// by being text the realm already serves as text — a path with no registered
-// extension resolves to binary content and is refused, as is one a card, a
-// JSON document or a module answers to.
+// cannot call.
+//
+// What keeps that from being a way to put arbitrary bytes at an arbitrary path
+// is the name checks below, and the rule they add up to is exactly this: a
+// created path is one the realm already serves as text. No extension, an
+// unknown extension, a dotfile, a dot mid-segment and a card's own id all
+// resolve to binary content and are refused; so does a card's stored source,
+// and so does anything whose type is JSON.
+//
+// Stated that narrowly on purpose, because the check that reads as "and not a
+// module" does not cover every spelling of one. `hasExecutableExtension` names
+// `.js`, `.gjs`, `.ts` and `.gts` and exempts `.d.ts`, so `.mjs`, `.cjs`,
+// `.jsx` and `.d.ts` are creatable here — inert to the realm, which evaluates
+// none of them, but not refused either. Anyone deciding whether some new
+// spelling is safe to create should read that helper rather than this
+// sentence.
 export async function stageAppendLine(
   entry: AppendLineEntry,
   ctx: StagingContext,
