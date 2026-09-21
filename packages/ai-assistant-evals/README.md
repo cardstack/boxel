@@ -46,7 +46,7 @@ endpoint is the URL.
 Two evaluations ship. `hello-world` is the smallest build there is, one
 definition and one instance shown on screen — the one to start from, and the
 one to reach for when checking that a change did not break the basics.
-`cookbook-then-restyle` is the substantial one: two definitions linked by a
+`cookbook-computeds-links-instances-restyle` is the substantial one: two definitions linked by a
 `linksToMany`, a computed field on each, three instances, and then a follow-up
 prompt in the same room that changes only the look, so it also grades whether
 the assistant edits its own work in place instead of writing it again.

@@ -294,6 +294,19 @@ export class RealmClient {
     }
   }
 
+  async deleteFile(realmUrl: string, fileUrl: string) {
+    let response = await this.#fetch(realmUrl, fileUrl, {
+      method: 'DELETE',
+      headers: { accept: MIME.cardSource },
+    });
+    // A file that is already gone is the state the caller wanted.
+    if (!response.ok && response.status !== 404) {
+      throw new Error(
+        `delete of ${fileUrl} failed: ${response.status} ${await response.text()}`,
+      );
+    }
+  }
+
   async putBinary(realmUrl: string, fileUrl: string, body: Uint8Array) {
     let response = await this.#fetch(realmUrl, fileUrl, {
       method: 'POST',

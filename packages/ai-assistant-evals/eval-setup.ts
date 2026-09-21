@@ -137,6 +137,27 @@ async function main() {
   for (let card of cards) {
     await waitForCard(client, realm.url, card);
   }
+  // Files the workspace still holds from an earlier setup. An evaluation that
+  // was renamed or deleted locally would otherwise linger here under its old
+  // URL and sit in the list beside its replacement.
+  //
+  // Confined to the top-level names `eval-realm/` itself provides. The rest of
+  // the workspace belongs to the runner — a session's EvaluationResult and
+  // EvaluationReport cards and their screenshots accumulate there and are the
+  // record of every run ever made. A prune that went by "not in eval-realm/"
+  // alone would delete all of it.
+  let wanted = new Set(
+    files.map((file) => relative(EVAL_REALM_DIR, file).split('\\').join('/')),
+  );
+  let owned = new Set([...wanted].map((path) => path.split('/')[0]));
+  let stale = (await client.listFiles(realm.url)).filter(
+    (path) => !wanted.has(path) && owned.has(path.split('/')[0]),
+  );
+  for (let path of stale) {
+    await client.deleteFile(realm.url, `${realm.url}${path}`);
+    console.log(`[setup] removed ${path}, no longer in eval-realm/`);
+  }
+
   console.log(`\n[setup] ${cards.length} cards indexed. Evaluations:`);
   for (let card of cards.filter((c) => c.includes('/Evaluation/'))) {
     console.log(`  ${card}`);

@@ -8,8 +8,8 @@
       ],
       "successCriteria": "1. Two definitions exist: a Recipe with `title`, `servings`, a containsMany ingredient field (name, amount, unit), containsMany steps, `prepMinutes` and `cookMinutes`; and a Cookbook with `title` and a `linksToMany` field holding recipes.\n2. Both computed fields are `computeVia`, not stored numbers: the recipe's total time is prep plus cook, and the cookbook's count comes from the linked recipes.\n3. Three instances exist: two recipes and one cookbook named Weeknight Favourites that links to both. The cookbook is open on screen with no error boundary, and shows both recipe titles and a count of 2.\n4. After the follow-up: the same `.gts` files were edited in place with SEARCH/REPLACE blocks. No second Recipe or Cookbook definition was written, and no instance was recreated.\n5. The follow-up changed templates and styles only. Every field, computed field and instance from the first prompt still exists, and the cookbook still renders both recipes with their total times.\n6. Every patch applied, the assistant did not ask a question or wait for confirmation before acting, and the whole flow took at most 14 turns.",
       "cardInfo": {
-        "name": "Cookbook, then restyle it",
-        "summary": "Two linked definitions with computed fields and three instances, then a follow-up that changes only the look.",
+        "name": "Cookbook \u2014 computed fields, links, instances, restyle",
+        "summary": "Exercises computed fields, a link field between two definitions, creating several instances, and a follow-up prompt that restyles what was built without touching the data.",
         "notes": null,
         "cardThumbnailURL": null
       }
