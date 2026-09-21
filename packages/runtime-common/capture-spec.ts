@@ -1261,28 +1261,48 @@ export function canonicalDeclaredCaptureString(
   name: string,
   payload: DeclaredScreenshotSpecPayload,
 ): string {
+  // Destructure the whole payload so a field added to
+  // `DeclaredScreenshotSpecPayload` later fails to compile here — the one
+  // function that turns a payload into a ledger key — instead of being
+  // silently dropped from the identity and aliasing two distinct captures onto
+  // one hash. `useAsThumbnail` and `keyBy` steer consumption and invalidation,
+  // not pixels, so they are deliberate discards; `rest` must stay empty.
+  let {
+    width,
+    height,
+    deviceScaleFactor,
+    background,
+    type,
+    format,
+    render,
+    useAsThumbnail: _useAsThumbnail,
+    keyBy: _keyBy,
+    ...rest
+  } = payload;
+  rest satisfies Record<string, never>;
+
   // A pdf entry has no raster geometry — no capture box, no device scale, no
   // painted background — so its identity is the slot name, its source, and
   // the `print` media it paginates under. `type: 'pdf'` alone already keeps it
   // distinct from any raster spelling; `media` is folded in explicitly so the
   // identity states the axis rather than leaving it implied by `type`.
   let canonical: Record<string, unknown> =
-    payload.type === 'pdf'
+    type === 'pdf'
       ? {
           declared: name,
           media: 'print',
-          source: payload.render ? 'render' : payload.format,
+          source: render ? 'render' : format,
           type: 'pdf',
         }
       : {
-          background: payload.background ?? SCREENSHOT_DEFAULT_BACKGROUND,
+          background: background ?? SCREENSHOT_DEFAULT_BACKGROUND,
           declared: name,
           deviceScaleFactor:
-            payload.deviceScaleFactor ?? SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
-          height: payload.height,
-          source: payload.render ? 'render' : payload.format,
-          type: payload.type ?? SCREENSHOT_DEFAULT_IMAGE_TYPE,
-          width: payload.width,
+            deviceScaleFactor ?? SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
+          height,
+          source: render ? 'render' : format,
+          type: type ?? SCREENSHOT_DEFAULT_IMAGE_TYPE,
+          width,
         };
   return JSON.stringify(
     Object.fromEntries(

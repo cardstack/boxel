@@ -2319,11 +2319,12 @@ export async function captureDeclaredScreenshots(
       name: resolved.name,
       specHash: resolved.specHash,
       // Raster captures carry pixel dimensions; a pdf carries a page count and
-      // no single pixel extent. The item reflects which one this render made.
+      // no single pixel extent — and no device scale, matching the manifest and
+      // the carry-forward branch, which both omit it for a pdf. The item
+      // reflects which one this render made.
       ...(resolved.outputType === 'pdf'
         ? {
             pageCount: item.pageCount,
-            deviceScaleFactor: item.deviceScaleFactor,
           }
         : {
             width: item.width!,
