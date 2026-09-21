@@ -16,7 +16,7 @@ import type {
   PretuiToneArg,
 } from '../pretui-primitives';
 
-// @variant is the single-axis spelling (boxel-ui, shadcn, Mantine) resolved onto the two axes.
+// @variant is the single-axis spelling, resolved onto the two axes.
 export type ButtonVariant =
   | 'primary'
   | 'secondary'
@@ -49,16 +49,16 @@ const VARIANT_AXES: Record<string, [PretuiTone, PretuiAppearance]> =
 
 export interface ButtonSignature {
   Args: {
-    /** single-axis alias over @tone + @appearance — the boxel-ui / shadcn spelling */
+    /** single-axis alias over @tone + @appearance */
     variant?: ButtonVariant;
     tone?: PretuiToneArg;
     appearance?: PretuiAppearance;
     size?: PretuiSizeArg;
     busy?: boolean;
     disabled?: boolean;
-    /** alias — React Aria / Base UI spelling of @disabled */
+    /** alias of @disabled */
     isDisabled?: boolean;
-    /** aliases — shadcn/MUI `loading`, Aria's `isPending`, of @busy */
+    /** aliases of @busy */
     loading?: boolean;
     isLoading?: boolean;
     isPending?: boolean;

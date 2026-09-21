@@ -1,7 +1,5 @@
-// Pretui — Button unit tests. Imports the component from its own module, so
-// the test holds as the unit contract independent of any barrel. No assertion
-// touches a computed style: the host test harness stamps the scoped-css
-// attribute and delivers no stylesheet.
+// Button unit tests. No assertion touches a computed style: the host test
+// harness stamps the scoped-css attribute and delivers no stylesheet.
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
@@ -58,10 +56,7 @@ module('Pretui | components/button', function (hooks) {
     assert.true(el.classList.contains('checkout'));
   });
 
-  // ── React-dialect aliases (moved from controls.test.gts) ───────────────
-  // Written in the vocabulary an agent trained on shadcn / Radix / Mantine /
-  // MUI / React Aria emits, NOT the house names — the point of the alias
-  // layer is that markup written from React muscle memory works.
+  // Alias vocabulary: markup written with other kits' names must work unchanged.
   test('Button accepts isDisabled / loading / sm / destructive', async function (assert) {
     await render(
       <template>
@@ -85,7 +80,7 @@ module('Pretui | components/button', function (hooks) {
     assert.true(el.disabled, 'a busy button is not actionable');
   });
 
-  test('Button variant accepts the shadcn spellings and never crashes on an unknown one', async function (assert) {
+  test('Button variant accepts the alias spellings and never crashes on an unknown one', async function (assert) {
     await render(
       <template>
         <Button @variant='outline' data-test-outline>Outline</Button>
@@ -97,7 +92,7 @@ module('Pretui | components/button', function (hooks) {
     assert.strictEqual(
       outline.dataset['appearance'],
       'outlined',
-      'shadcn outline → neutral × outlined',
+      'outline → neutral × outlined',
     );
     assert.true(
       btn('[data-test-aria-disabled]').disabled,
@@ -105,9 +100,7 @@ module('Pretui | components/button', function (hooks) {
     );
   });
 
-  // Prototype-key hazard: an alias table is indexed with whatever a card
-  // author typed, and a plain object answers `constructor` with an inherited
-  // function rather than undefined.
+  // A plain object answers `constructor` with an inherited function, so alias tables are null-prototype.
   test('a variant, size or appearance naming an Object.prototype member falls back', async function (assert) {
     await render(
       <template>

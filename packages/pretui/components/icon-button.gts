@@ -11,7 +11,7 @@ export interface IconButtonSignature {
     variant?: ButtonVariant;
     size?: PretuiSizeArg;
     disabled?: boolean;
-    /** alias — React Aria / Base UI spelling of @disabled */
+    /** alias of @disabled */
     isDisabled?: boolean;
   };
   Blocks: { default: [] };

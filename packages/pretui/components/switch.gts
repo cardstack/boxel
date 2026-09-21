@@ -11,10 +11,10 @@ export interface SwitchSignature {
     disabled?: boolean;
     controlId?: string;
     onCheckedChange?: (checked: boolean) => void;
-    /** aliases of @checked — React Aria's `isSelected` and plain `selected` */
+    /** aliases of @checked */
     isSelected?: boolean;
     selected?: boolean;
-    /** alias — React Aria / Base UI spelling of @disabled */
+    /** alias of @disabled */
     isDisabled?: boolean;
     /** alias — the HTML notify name for a checked control */
     onChange?: (checked: boolean) => void;
