@@ -3188,6 +3188,9 @@ export function realmConfigCardJSON(
     backgroundURL?: string;
     includePrerenderedDefaultRealmIndex?: boolean;
     allowArbitraryScreenshots?: boolean;
+    // The realm's own settings, which a card operation reads with
+    // `realmConfig("key")`.
+    config?: Record<string, unknown>;
   } = {},
 ): string {
   let attrs: Record<string, unknown> = {};
@@ -3206,6 +3209,9 @@ export function realmConfigCardJSON(
   }
   if (config.allowArbitraryScreenshots !== undefined) {
     attrs.allowArbitraryScreenshots = config.allowArbitraryScreenshots;
+  }
+  if (config.config !== undefined) {
+    attrs.config = config.config;
   }
   return JSON.stringify({
     data: {

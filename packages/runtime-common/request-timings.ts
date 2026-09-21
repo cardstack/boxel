@@ -47,6 +47,22 @@ export class RequestTimings {
     this.#stages.set(stage, (this.#stages.get(stage) ?? 0) + ms);
   }
 
+  // A moving cursor over the sequential timeline, for a stage that is marked
+  // as it passes rather than wrapped around a call. `time()` needs the stage
+  // to be a function it can hand a boundary to; a stage whose boundary is a
+  // point inside a longer call — the commit's durable write, which begins in
+  // the batch coordinator and ends several frames down inside the realm —
+  // has none. Each `mark` attributes the time since the previous mark, or
+  // since the cursor was taken, to the stage it names.
+  //
+  // Stages a cursor marks and stages `time()` wraps land in the same bucket,
+  // so a timeline can be built from both. What they share is the invariant:
+  // each records a window no other stage also records, so the stages still
+  // sum to the request rather than over it.
+  cursor(): StageCursor {
+    return new StageCursor(this);
+  }
+
   // Time CONCURRENT work — accumulates into the separate busy bucket. Use for
   // ops launched together in a `Promise.all` (their elapsed times overlap, so
   // the sum is busy-time, not wall-clock).
@@ -97,6 +113,25 @@ export class RequestTimings {
       out += ` | ${[...this.#counters].map(([k, v]) => `${k}=${v}`).join(' ')}`;
     }
     return out;
+  }
+}
+
+export class StageCursor {
+  #timings: RequestTimings;
+  #at = Date.now();
+
+  constructor(timings: RequestTimings) {
+    this.#timings = timings;
+  }
+
+  // Close the window that ended here and attribute it to `stage`. Repeated
+  // names accumulate, which is what a stage reached more than once in one
+  // request means — a commit that flushes the index mid-batch enqueues and
+  // waits twice, and the two waits are one span of wall-clock spent waiting.
+  mark(stage: string): void {
+    let now = Date.now();
+    this.#timings.add(stage, now - this.#at);
+    this.#at = now;
   }
 }
 

@@ -140,6 +140,21 @@ check('§11 expression factory enforces derive profile at construction', () => {
   ok(message.includes('now'));
 });
 
+// A computed field is stored and reused on later reads, so a value that
+// depended on whichever request last wrote the card would be wrong for every
+// reader after that one — which is what the derive profile denies the
+// request-context builtins for, `realmConfig` among them.
+check('§11 expression factory rejects a realm-setting read', () => {
+  let message = '';
+  try {
+    expression(jq`realmConfig("approver")`);
+  } catch (error) {
+    message = (error as Error).message;
+  }
+  ok(message.includes('derive-call-banned'), message);
+  ok(message.includes('realmConfig'), message);
+});
+
 check('§11 expression factory rejects raw jq error()', () => {
   let message = '';
   try {

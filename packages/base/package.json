@@ -24,7 +24,7 @@
     "ember-concurrency": "catalog:",
     "ember-css-url": "^1.0.0",
     "ember-eslint-parser": "catalog:",
-    "ember-modifier": "^3.2.1",
+    "ember-modifier": "^4.1.0",
     "ember-resources": "catalog:",
     "ember-template-lint": "catalog:",
     "eslint": "catalog:",
@@ -41,7 +41,7 @@
     "yaml": "catalog:"
   },
   "peerDependencies": {
-    "ember-provide-consume-context": "^0.8.0",
+    "ember-provide-consume-context": "catalog:",
     "ember-source": "catalog:",
     "lodash-es": "catalog:"
   },

@@ -111,6 +111,28 @@ import {
 // uses the same depth for repeated card types).
 const RECURSING_DEPTH = 3;
 
+// One query-backed field the walk found, at the path it sits at in the type's
+// field tree. The walk reads definitions only, so an entry describes the type
+// and not the resource it is later applied to.
+//
+// Every resource of a type is handed this same entry, so an entry is read-only
+// to its consumers. `queryDefinition` in particular is a template rather than
+// a query — a `$this.` token in it resolves against whichever resource is
+// being served — and `normalizeQueryDefinition` is what keeps that safe, by
+// copying before it substitutes. Substituting in place would answer the first
+// resource's query and then hand that answer to the rest.
+interface QueryFieldPlanEntry {
+  fieldName: string;
+  fieldDefinition: FieldDefinition;
+  queryDefinition: Query;
+}
+
+// A single assembly pass's memo of those walks, keyed by the type's internal
+// key. It holds the in-flight promise rather than the finished plan, so the
+// concurrent roots of one pass share one walk instead of each starting their
+// own before the first has settled.
+type QueryFieldPlanCache = Map<string, Promise<QueryFieldPlanEntry[]>>;
+
 type Options = {
   loadLinks?: true;
   linkFields?: string[];
@@ -947,7 +969,8 @@ export class RealmIndexQueryEngine {
   private async populateQueryFields(
     resource: LooseCardResource | FileMetaResource,
     realmURL: URL,
-    opts?: Options,
+    opts: Options | undefined,
+    plans: QueryFieldPlanCache,
   ): Promise<void> {
     if (!resource.meta?.adoptsFrom) {
       return;
@@ -965,41 +988,101 @@ export class RealmIndexQueryEngine {
     if (!isResolvedCodeRef(codeRef)) {
       return;
     }
-    let definition = await this.lookupDefinitionForOpts(codeRef, opts);
-    if (!definition) {
-      return;
+    let plan = await this.queryFieldPlan(codeRef, opts, plans);
+    for (let { fieldName, fieldDefinition, queryDefinition } of plan) {
+      // The caller's narrowing is applied per resource rather than inside the
+      // walk, so the plan stays a function of the type alone and the cache
+      // key describes the whole of what it holds. Same place
+      // `populateQueryFieldsFromMeta` applies it.
+      if (opts?.linkFields && !opts.linkFields.includes(fieldName)) {
+        continue;
+      }
+      let { results, errors, searchURL, total } =
+        await this.executeQueryForField({
+          fieldDefinition,
+          fieldName,
+          queryDefinition,
+          resource,
+          realmURL,
+          opts,
+        });
+      this.applyQueryResults({
+        fieldDefinition,
+        fieldName,
+        resource,
+        results,
+        errors,
+        searchURL,
+        total,
+        opts,
+      });
     }
-    await this.walkAndPopulateQueryFields(
-      resource,
-      definition,
-      '',
-      realmURL,
-      opts,
-      [
-        internalKeyFor(
-          definition.codeRef,
-          undefined,
-          this.#realm.virtualNetwork,
-        ),
-      ],
-    );
   }
 
-  // Walk the field tree from `definition` looking for computed
-  // linksTo / linksToMany fields and running their queries. Recurses
+  // Which query-backed fields a type has, and where they sit in its field
+  // tree. This is a property of the type alone — the walk that finds them
+  // reads definitions and never the card — so it is computed once per type
+  // and shared by every resource adopting it, through the `plans` cache the
+  // caller owns. Without that sharing the walk runs per resource, and since
+  // it descends into every `contains` / `containsMany` field to find out
+  // whether anything under it is query-backed, a search over N rows of a type
+  // with C composite fields issues N × (C + 1) definition lookups to reach a
+  // conclusion that is the same every time. Only the ones still in flight
+  // together coalesce, so most of them reach the definition cache.
+  //
+  // The cache is scoped to one assembly pass rather than held across
+  // requests, so a plan is never read under a definition set other than the
+  // one it was built from, and the concurrent roots of a single pass still
+  // share one walk — which is where the repetition was.
+  private async queryFieldPlan(
+    codeRef: import('./code-ref.ts').ResolvedCodeRef,
+    opts: Options | undefined,
+    plans: QueryFieldPlanCache,
+  ): Promise<QueryFieldPlanEntry[]> {
+    let key = internalKeyFor(codeRef, undefined, this.#realm.virtualNetwork);
+    let cached = plans.get(key);
+    if (cached) {
+      return await cached;
+    }
+    let pending = (async () => {
+      let definition = await this.lookupDefinitionForOpts(codeRef, opts);
+      if (!definition) {
+        return [];
+      }
+      let plan: QueryFieldPlanEntry[] = [];
+      await this.collectQueryFields(
+        definition,
+        '',
+        opts,
+        [
+          internalKeyFor(
+            definition.codeRef,
+            undefined,
+            this.#realm.virtualNetwork,
+          ),
+        ],
+        plan,
+      );
+      return plan;
+    })();
+    plans.set(key, pending);
+    return await pending;
+  }
+
+  // Walk the field tree from `definition` collecting computed
+  // linksTo / linksToMany fields whose queries the caller will run. Recurses
   // through `contains` / `containsMany` of non-primitive fieldOrCards
   // because the new top-level-only `Definition.fields` shape no longer
   // pre-materializes nested paths. Visited-card-type counting matches
   // `getFieldDefinitions`'s `RECURSING_DEPTH = 3`-per-cycle policy so
   // the field set we visit matches the schema the host originally
   // emitted.
-  private async walkAndPopulateQueryFields(
-    resource: LooseCardResource | FileMetaResource,
+  private async collectQueryFields(
     definition: import('./definitions.ts').Definition,
     prefix: string,
-    realmURL: URL,
     opts: Options | undefined,
     visited: string[],
+    into: QueryFieldPlanEntry[],
   ): Promise<void> {
     for (let [fieldName, defId] of Object.entries(definition.fields)) {
       let fieldDefinition = definition.fieldDefs[defId];
@@ -1014,27 +1097,10 @@ export class RealmIndexQueryEngine {
         (fieldDefinition.type === 'linksTo' ||
           fieldDefinition.type === 'linksToMany')
       ) {
-        if (opts?.linkFields && !opts.linkFields.includes(fullFieldName)) {
-          continue;
-        }
-        let { results, errors, searchURL, total } =
-          await this.executeQueryForField({
-            fieldDefinition,
-            fieldName: fullFieldName,
-            queryDefinition,
-            resource,
-            realmURL,
-            opts,
-          });
-        this.applyQueryResults({
-          fieldDefinition,
+        into.push({
           fieldName: fullFieldName,
-          resource,
-          results,
-          errors,
-          searchURL,
-          total,
-          opts,
+          fieldDefinition,
+          queryDefinition,
         });
         continue;
       }
@@ -1064,13 +1130,12 @@ export class RealmIndexQueryEngine {
       if (!childDef) {
         continue;
       }
-      await this.walkAndPopulateQueryFields(
-        resource,
+      await this.collectQueryFields(
         childDef,
         fullFieldName,
-        realmURL,
         opts,
         [...visited, childCardKey],
+        into,
       );
     }
   }
@@ -1079,6 +1144,14 @@ export class RealmIndexQueryEngine {
     codeRef: import('./code-ref.ts').ResolvedCodeRef,
     opts: Options | undefined,
   ): Promise<import('./definitions.ts').Definition | undefined> {
+    // Calls into the definition lookup — one per distinct composite field a
+    // type's walk descends into, per pass. What each call costs varies: one
+    // that joins an in-flight populate waits on it and reads nothing, while a
+    // miss can drive a prerender. Reported per request rather than per result
+    // because a type with a large composite field tree makes more of these
+    // calls per row than a type with a small one, which is a difference
+    // neither the response's size nor its result count shows.
+    opts?.timings?.incr('defLookups');
     if (opts?.cacheOnlyDefinitions) {
       return await this.#definitionLookup.lookupCachedDefinition(codeRef);
     }
@@ -1721,6 +1794,10 @@ export class RealmIndexQueryEngine {
     let invocationId = `${Date.now().toString(36)}-${Math.random()
       .toString(36)
       .slice(2, 8)}`;
+    // Which query-backed fields each root type has, walked once per type for
+    // the whole pass. Every root of one type asks the same question of the
+    // same definitions, and the walk is what reads them.
+    let queryFieldPlans: QueryFieldPlanCache = new Map();
     let vnForIdentity = this.#realm.virtualNetwork;
     let realmPath = new RealmPaths(realmURL, vnForIdentity);
     // `omit`/root ids may arrive in either resolved-URL or registered-alias
@@ -1880,7 +1957,12 @@ export class RealmIndexQueryEngine {
                     storedDefs,
                     opts,
                   )
-                : this.populateQueryFields(resource, realmURL, opts);
+                : this.populateQueryFields(
+                    resource,
+                    realmURL,
+                    opts,
+                    queryFieldPlans,
+                  );
             if (timings) {
               await timings.busyTime('populate', runPopulate);
             } else {

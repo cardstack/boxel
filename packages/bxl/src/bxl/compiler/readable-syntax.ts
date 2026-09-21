@@ -482,8 +482,11 @@ const TRAILING_ARRAY_PACKED_VARIADIC_FORMULAS = new Map<string, number>([
  *
  * `actor` is absent because it has no keyed form: `actor()` is the caller's
  * user id, so there is no key to hold literal.
+ *
+ * The match is against the lower-cased name, so each entry is spelled that
+ * way — `realmConfig` appears here as `realmconfig`.
  */
-const KEY_NAME_ARGUMENT_CALLS = new Set(['instance', 'params']);
+const KEY_NAME_ARGUMENT_CALLS = new Set(['instance', 'params', 'realmconfig']);
 
 const CASE_INSENSITIVE_JQ_FUNCTIONS = new Set([
   'add',

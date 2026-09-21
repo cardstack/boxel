@@ -7,18 +7,52 @@ import { logger } from './log.ts';
 // Each stage can be the whole of a slow write, and they are not
 // distinguishable from outside:
 //
-//   lock      waiting for the realm's write lock, i.e. queueing behind the
-//             realm's other writers
-//   drain     waiting for indexing already in flight
-//   stage     reading the pre-state and running the entries' executors
-//   write     committing the bytes, plus this write's own indexing unless
-//             the caller opted out
-//   readback  reading the written card back out of the index
-//   stringify serializing the response document
+//   lock        waiting for the write lock over the files this write touches,
+//               i.e. queueing behind another writer of those files
+//   drain       waiting for indexing already in flight, at either of the two
+//               gates that wait for it
+//   stage       reading the pre-state and running the entries' executors
+//   persist     making the write durable — the bytes, the removals, and the
+//               rows describing them
+//   enqueue     queueing this write's own index job
+//   awaitIndex  waiting for a worker to run that job. Absent when the caller
+//               opted out of waiting — which is what that opt-out buys — and
+//               absent on a write whose index pass threw, where the wait it
+//               did spend is in `commit` instead. `status` tells those apart
+//   invalidate  dropping the caches the index pass invalidated, and
+//               announcing it to readers and subscribers
+//   commit      assembling the file list the commit writes, and reporting
+//               what landed. Reached on both sides of the realm's own stages,
+//               so it appears ahead of them on the line and accumulates the
+//               work after them
+//   readback    reading the written card back out of the index
+//   stringify   serializing the response document
 //
 // A write whose duration exceeds its own indexing job's is explained by
 // which of these it spent the difference in; without them the remainder is
 // unattributable.
+//
+// Every line also carries `status` — the code the write answered with, or
+// `failed` where it threw instead of answering.
+//
+// No stage contains another: each records a window no other stage records, so
+// they sum to the handler rather than over it, and a stage's share is readable
+// straight off the line. The sum falls short of `handler` by the work outside
+// the stages at either end — reading the request and deciding what it asks
+// for, and releasing the write lock before the answer is built.
+//
+// A write that did not finish is short by more than that, and deliberately so.
+// The stage it was in never closed, so its elapsed time lands in `commit`
+// rather than being reported as a stage that ran to completion: a `persist`
+// that threw partway is not a persist, and a number that could mean either
+// would be worse than a residual. `status` is what says to read it that way.
+//
+// A stage reached more than once accumulates. A commit that indexes twice —
+// a batch writing a module and an instance together, where the module has to
+// be indexed before the instance can be serialized against it — reports each
+// pass's files under `persist` and each pass's queue insert and wait under
+// `enqueue` and `awaitIndex`. Stage names appear in the order the write first
+// reached them, which for such a batch is not the order above.
 //
 // Unlike search timing this is not gated on the caller sending a correlation
 // id. Writes are a small fraction of a realm's requests — hundreds an hour
