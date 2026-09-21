@@ -108,7 +108,7 @@ export class HospitalFacility extends CardDef {
           column-gap: var(--boxel-sp-xs);
           min-width: 0;
         }
-        .facility-embedded > :global(svg) {
+        .facility-embedded > :deep(svg) {
           grid-row: 1 / span 2;
           color: var(--muted-foreground);
         }

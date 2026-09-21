@@ -10,6 +10,7 @@ import {
   FittedCard,
   Pill,
 } from '@cardstack/boxel-ui/components';
+import { formatDateTime } from '@cardstack/boxel-ui/helpers';
 import ClipboardIcon from '@cardstack/boxel-icons/clipboard-list';
 import HeartPulseIcon from '@cardstack/boxel-icons/heart-pulse';
 import {
@@ -455,7 +456,10 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
                   <span class='row-key'>{{event.eventId}}</span>
                   <span class='row-main'>
                     <span class='row-title'>{{event.rhythm}}</span>
-                    <span class='row-note'>{{event.detectedAt}}</span>
+                    <span class='row-note'>{{formatDateTime
+                        event.detectedAt
+                        size='medium'
+                      }}</span>
                   </span>
                   <Pill
                     @variant={{this.eventVariant event.status}}
@@ -562,7 +566,10 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
               {{#each this.recentVitals as |reading|}}
                 <li class='row' data-test-vitals-reading={{reading.recordedAt}}>
                   <span class='row-main'>
-                    <span class='row-note'>{{reading.recordedAt}}</span>
+                    <span class='row-note'>{{formatDateTime
+                        reading.recordedAt
+                        size='medium'
+                      }}</span>
                     <span class='row-note'>{{reading.recordedBy}}</span>
                   </span>
                   <span class='row-value'>{{reading.heartRate}} bpm</span>
@@ -699,10 +706,11 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
         gap: var(--boxel-sp-xxs);
       }
       .attribution {
+        flex: 0 1 20rem;
+        min-width: 14rem;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
-        min-width: 0;
       }
       .posture {
         margin: 0;
@@ -805,6 +813,10 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
         flex-wrap: wrap;
         align-items: flex-end;
         gap: var(--boxel-sp-xs);
+      }
+      .vitals-form > :deep(.boxel-field) {
+        flex: 1 1 6rem;
+        min-width: 5rem;
       }
       @container chart (min-width: 56rem) {
         .columns {

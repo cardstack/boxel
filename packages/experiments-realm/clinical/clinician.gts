@@ -157,7 +157,7 @@ export class Clinician extends CardDef {
           column-gap: var(--boxel-sp-xs);
           min-width: 0;
         }
-        .clinician-embedded > :global(svg) {
+        .clinician-embedded > :deep(svg) {
           grid-row: 1 / span 2;
           color: var(--muted-foreground);
         }

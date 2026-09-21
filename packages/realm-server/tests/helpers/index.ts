@@ -196,6 +196,9 @@ export type RealmRequest = {
   patch(path: string): Test;
   delete(path: string): Test;
   head(path: string): Test;
+  // A CORS preflight, which a browser sends before any cross-origin request
+  // carrying a header outside the safelist.
+  options(path: string): Test;
 };
 
 export function withRealmPath(
@@ -222,6 +225,7 @@ export function withRealmPath(
     patch: (path: string) => request.patch(prefixPath(path)),
     delete: (path: string) => request.delete(prefixPath(path)),
     head: (path: string) => request.head(prefixPath(path)),
+    options: (path: string) => request.options(prefixPath(path)),
   };
 }
 
