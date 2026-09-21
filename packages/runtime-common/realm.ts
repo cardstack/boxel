@@ -232,6 +232,7 @@ import type {
 } from './card-operations/dispatch.ts';
 import {
   assertTravelsInEnvelope,
+  assertVersionableEntry,
   atEntry,
   batchEntryFor,
   carriesOperationsExt,
@@ -864,18 +865,29 @@ function boundedInvalidatedTypes(invalidatedTypes: string[] | undefined): {
   return { invalidatedTypes };
 }
 
-// The same budget, for the same reason, over the versions a write reports. This
-// member is bounded by the commit's own file count rather than by the
-// invalidation fan-out, so an ordinary write is nowhere near it — but a bulk
-// import writing thousands of files should not be what makes its event
-// undeliverable, and this member is the additive one, so it is what gives way.
+// The same budget, for the same reason, over the versions a write reports:
+// bounded by the commit's own file count rather than by the invalidation
+// fan-out, and the additive member, so it is the one that gives way rather than
+// making an event undeliverable.
+//
+// The capacity is worth stating rather than leaving to intuition, because this
+// is the member's own drop condition and the number is smaller than "a bulk
+// import" suggests. Each entry costs `len(url) + 38` encoded bytes — two quote
+// pairs, a colon, a comma, and a 32-character hex digest, which is what every
+// card carries since none reaches the whole-file sampling threshold under the
+// card size ceiling. So at the 50-to-70-character URLs a realm's cards
+// actually have, this budget holds roughly 300 to 400 files in one commit.
+// Neither the operations envelope nor `writeMany` caps how many files a commit
+// carries, so a larger import than that loses the member — and by then
+// `invalidations` is carrying the same URLs at comparable cost, so the event is
+// near its own ceiling regardless.
 //
 // Dropped whole rather than trimmed to fit. A subscriber cannot tell a partial
 // map from a complete one, so a trimmed one would have it read a missing key as
 // "the realm computed this card's state" — the opposite of what a dropped key
 // means — and act on it by keeping a stale local copy. Absent, it re-reads,
 // which is what it did before the member existed.
-const MAX_BROADCAST_VERSIONS_BYTES = 8 * 1024;
+const MAX_BROADCAST_VERSIONS_BYTES = 32 * 1024;
 
 function boundedVersions(versions: Record<string, string> | undefined): {
   versions?: Record<string, string>;
@@ -4146,9 +4158,13 @@ export class Realm {
       //
       // The versions are still reported, and they are still the file's own: a
       // write that found the bytes it staged already there left the file
-      // holding exactly what it would have written. So a client that sent this
-      // write learns the version it is now on, which is the answer it needs
-      // most here — it changed nothing, and nothing will tell it so again.
+      // holding exactly what it would have written.
+      //
+      // This is the branch where the member and `invalidations` come apart
+      // most visibly — nothing was queued for indexing, so the set holds only
+      // whatever a mid-loop flush put there, and usually nothing at all. That
+      // is why the member is documented as describing what the request wrote
+      // rather than as a companion to the list beside it.
       this.broadcastIncrementalInvalidationEvent([...invalidations], {
         clientRequestId,
         ...(clientAuthored ? { clientAuthored } : {}),
@@ -4987,6 +5003,7 @@ export class Realm {
         scope,
       );
       assertTravelsInEnvelope(canonical, definition);
+      assertVersionableEntry(canonical, definition);
       return { entry: canonical, target, definition };
     } catch (err: unknown) {
       throw atEntry(err, entry.position);

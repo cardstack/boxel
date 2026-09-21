@@ -132,6 +132,18 @@ export type CardResourceMeta = Meta & {
   // last-touched watermark and moves when a dependent invalidation touches the
   // row. This moves only when the card's own bytes do.
   //
+  // It describes the bytes the write stored, and NOT the document it arrives
+  // beside. The two are separate channels and a write response can pair them
+  // from different moments in both directions: the commit records the file's
+  // metadata before it indexes, and it releases its write locks at that same
+  // boundary — so a response assembled from the index can carry a concurrent
+  // writer's document next to this commit's version, and a response that
+  // deferred its indexing carries a version for bytes the index has not read
+  // yet. Neither is a defect to route around; the pairing is simply not a
+  // promise, which is the same reason the card+json `GET` reports no version at
+  // all. A caller reconciling on it compares it against a version, never
+  // against the body it came with.
+  //
   // Never persisted into the source file and stripped from incoming writes,
   // like `realmInfo` / `realmURL` / `screenshots`.
   version?: string;

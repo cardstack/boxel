@@ -508,12 +508,19 @@ export interface IncrementalIndexEventContent {
   // already applied, or one that describes state older than what it holds.
   //
   // Keyed exactly as `invalidations` keys a card — the realm href with a
-  // trailing `.json` removed — so the two are joinable by construction. That
-  // is deliberately NOT how a write *response* spells the same card: response
-  // ids are canonicalized to registered-prefix form, so a client that reads an
-  // id off a write and looks it up here would miss on any realm reached
-  // through a prefix. Look versions up by the spelling found in
-  // `invalidations`, which is the list this member is a companion to.
+  // trailing `.json` removed — so where a URL appears in both, the two join by
+  // construction. That is deliberately NOT how a write *response* spells the
+  // same card: response ids are canonicalized to registered-prefix form, so a
+  // client that reads an id off a write and looks it up here would miss on any
+  // realm reached through a prefix.
+  //
+  // This is not a subset of `invalidations`, and a consumer that iterates that
+  // list to read this one will miss entries. What the two lists describe comes
+  // apart in both directions: a card re-indexed as a dependency is invalidated
+  // with no version, and a file written with the bytes it already held has a
+  // version while invalidating nothing — the commit leaves such a file alone,
+  // so no pass touches it. Read this map on its own terms: it names what the
+  // request wrote, and `invalidations` names what the index moved.
   //
   // Only the files the request wrote. A dependent re-indexed because something
   // it depends on changed is in `invalidations` and not here, which is the

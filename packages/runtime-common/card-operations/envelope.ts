@@ -4,6 +4,7 @@ import {
   OperationFailure,
   isDocumentResult,
   isOperationFailure,
+  isWrite,
   type BaseOperation,
   type EntryPosition,
   type OperationDefinition,
@@ -657,6 +658,40 @@ export function assertTravelsInEnvelope(
           `engine rather than in a batch`
         : `operation "${entry.name}" reads stored bytes, which the card ` +
           `source and byte routes serve rather than a JSON batch`,
+    meta: { entry: entry.position },
+  });
+}
+
+// A base version names the state a write is computed on top of, so an entry
+// that does not write has nothing to compare one against.
+//
+// Refused rather than ignored, and refused here rather than left to the
+// coordinator, because the coordinator only ever sees the entries that write:
+// a read, a query or a head is answered before the batch is staged. An ignored
+// base version answers with no `baseMatched` at all, which is exactly the
+// reading a caller cannot distinguish from "the realm does not report on
+// this" — so a well-formed value on a read would be silently dropped while a
+// malformed one on the same read is a refusal, which is the inconsistency the
+// shape check exists to avoid.
+//
+// Which *writing* behaviors carry a base stays the coordinator's rule, since
+// it owns the comparison; this covers only the entries that never reach it.
+export function assertVersionableEntry(
+  entry: EnvelopeEntry,
+  definition: OperationDefinition,
+): void {
+  if (entry.baseVersion === undefined || isWrite(definition.base)) {
+    return;
+  }
+  throw new OperationFailure({
+    ...(entry.href ? { id: entry.href } : {}),
+    status: 400,
+    code: 'invalid-params',
+    title: 'Invalid base version',
+    detail:
+      `entry ${entry.position} invokes "${entry.name}", which is a ` +
+      `"${definition.base}" and writes nothing, and names a base version; ` +
+      `a base version describes the state a write is computed on top of`,
     meta: { entry: entry.position },
   });
 }

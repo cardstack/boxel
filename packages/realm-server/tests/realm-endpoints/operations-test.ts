@@ -2142,6 +2142,36 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       // has none left to report a match on, so naming one is a caller that
       // believes it is writing conditionally when nothing is comparing
       // anything. Refused rather than ignored, for that reason.
+      // A read never reaches the coordinator — it is answered before the batch
+      // is staged — so the refusal for an entry that cannot use a base version
+      // has to be made where every entry's definition is known. Without it a
+      // well-formed base version on a read is silently dropped, which is the
+      // same answer as a realm that does not report on bases at all, while a
+      // malformed one on the same read is a refusal.
+      test('a base version on an entry that writes nothing is refused, naming the entry', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('read', {
+              href: '/report-base-absent',
+              data: { meta: { baseVersion: 'a-version-a-read-cannot-use' } },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.meta.entry, 0, 'the entry is named');
+        assert.true(
+          error.detail.includes('base version'),
+          `the refusal says a read has no base version: ${error.detail}`,
+        );
+        assert.strictEqual(
+          response.body['atomic:results'],
+          undefined,
+          'the batch answered nothing',
+        );
+      });
+
       test('a base version on a create is refused, naming the entry', async function (assert) {
         let response = await post(
           envelope(

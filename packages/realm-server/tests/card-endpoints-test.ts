@@ -5320,51 +5320,52 @@ module(basename(import.meta.filename), function () {
         // key must not reach the stored file, and — because the merge is what
         // decides whether a patch changed anything — it must not turn a save
         // that changes nothing into a rewrite.
+        //
+        // Run against `person-2`, which nothing else in this file touches, so
+        // its stored bytes are still the hand-authored fixture. That matters
+        // for the test to be able to fail at all: the fixture spells its type
+        // `./person.gts`, and a write that re-serializes the card stores the
+        // trimmed `./person`. So the two arms of the merge's unchanged check
+        // produce visibly different files here — the verbatim arm leaves the
+        // fixture's bytes, the re-serializing arm canonicalizes them and moves
+        // the modification time. Against a card some earlier write already
+        // canonicalized, both arms produce identical bytes and the commit
+        // leaves the file alone either way, which is green whether or not the
+        // strip ran.
         test('a patch that echoes back the served version changes nothing', async function (assert) {
-          let patch = {
-            data: {
-              type: 'card',
-              attributes: { firstName: 'Hassan Echoed' },
-              meta: {
-                adoptsFrom: { module: rri('./friend.gts'), name: 'Friend' },
-              },
-            },
-          };
-          let first = await request
-            .patch('/hassan')
-            .send(patch)
-            .set('Accept', 'application/vnd.card+json');
-          assert.strictEqual(
-            first.status,
-            200,
-            `HTTP 200 status: ${first.text}`,
-          );
-
-          let version = first.body.data.meta.version;
-          assert.ok(version, 'the first patch reported a version');
-
           let cardFile = join(
             dir.name,
             'realm_server_1',
             'test',
-            'hassan.json',
+            'person-2.json',
           );
           let before = readFileSync(cardFile, 'utf8');
           let modifiedBefore = statSync(cardFile).mtimeMs;
+          // Read off the bytes rather than from a warm-up write, so the value
+          // echoed is the one this file actually holds and no write has run
+          // before the one under test.
+          let version = computeContentHash(before);
 
-          let second = await request
-            .patch('/hassan')
+          let response = await request
+            .patch('/person-2')
             .send({
               data: {
-                ...patch.data,
-                meta: { ...patch.data.meta, version },
+                type: 'card',
+                // Exactly what the fixture stores, so the merge is a semantic
+                // no-op and the only thing that can move the comparison is the
+                // echoed `version`.
+                attributes: { firstName: 'Jackie' },
+                meta: {
+                  adoptsFrom: { module: rri('./person.gts'), name: 'Person' },
+                  version,
+                },
               },
             })
             .set('Accept', 'application/vnd.card+json');
           assert.strictEqual(
-            second.status,
+            response.status,
             200,
-            `HTTP 200 status: ${second.text}`,
+            `HTTP 200 status: ${response.text}`,
           );
 
           assert.strictEqual(
@@ -5378,9 +5379,9 @@ module(basename(import.meta.filename), function () {
             'the file was not rewritten, so the echoed version did not read as a change',
           );
           assert.strictEqual(
-            second.body.data.meta.version,
+            response.body.data.meta.version,
             version,
-            'the second patch reports the version the file still holds',
+            'the response reports the version the file still holds',
           );
         });
 
