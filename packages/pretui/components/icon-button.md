@@ -6,7 +6,7 @@ A square **Button** carrying an icon instead of text, with a mandatory label. Us
 
 ```
 @label: string   (required)
-@variant?: 'primary' | 'secondary' | 'ghost' | 'destructive'   (default 'secondary')
+@variant?: ButtonVariant   (default 'secondary'; the same spellings Button accepts)
 @size?: 'xs' | 's' | 'm' | 'l' | 'xl'   (default 'm', forwarded to Button)
 @disabled?, @isDisabled?
 <:default>   — the icon
