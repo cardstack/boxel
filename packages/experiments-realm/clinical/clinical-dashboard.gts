@@ -1,6 +1,7 @@
 import { CardDef, Component, contains, field } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
 import { operations } from '@cardstack/base/operations';
+import LayoutDashboardIcon from '@cardstack/boxel-icons/layout-dashboard';
 
 import { PatientRecord } from './patient-record';
 
@@ -139,6 +140,8 @@ class ClinicalDashboardIsolated extends Component<typeof ClinicalDashboard> {
 // operations that write it.
 export class ClinicalDashboard extends CardDef {
   static displayName = 'Clinical Dashboard';
+  static icon = LayoutDashboardIcon;
+  static prefersWideFormat = true;
 
   @field unitName = contains(StringField);
 
