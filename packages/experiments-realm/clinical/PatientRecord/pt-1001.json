@@ -95,6 +95,11 @@
         "links": {
           "self": "../Clinician/jordan-blake"
         }
+      },
+      "consultTeam.1": {
+        "links": {
+          "self": "../Clinician/theo-martin"
+        }
       }
     },
     "meta": {

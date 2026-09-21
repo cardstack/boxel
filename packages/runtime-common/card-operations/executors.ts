@@ -2275,10 +2275,8 @@ async function resourceFromTemplate(
 
 // The card a named create is anchored on, as `instance(…)` reads it: the
 // target's stored document, never a live card instance.
-// The stored source an `instance(...)` marker reads: the card the entry is
-// anchored on. A named create reads the card it was invoked from; a declared
-// append reads the card it appends to. Typed by the member it uses rather than
-// by either entry kind, since both anchor the same way.
+// The stored source an `instance(...)` marker reads: the card a named create
+// was invoked from. Typed by the member it uses rather than by the entry kind.
 function anchorResource(
   entry: { href?: string },
   ctx: StagingContext,
@@ -2482,7 +2480,7 @@ function resolveMarker(
           title: 'No instance in scope',
           detail:
             `\`${path}\` reads the target's stored document, and this ` +
-            `invocation names no target`,
+            `invocation has none in scope`,
         });
       }
       if (marker.key === undefined || marker.key === 'id') {
@@ -2918,9 +2916,12 @@ async function declaredItems(
     }
   }
   let templates = definition.items ?? {};
-  // The target is the card being appended to, so `instance()` reads its stored
-  // source — the same anchor a create anchored on a card reads.
-  let anchor = anchorResource(entry, ctx);
+  // No anchor: an append edits the card's stored bytes without ever loading
+  // the document, which is the whole reason the behavior exists. Offering
+  // `instance()` here would mean reading the very thing the operation avoids
+  // reading, so an item that needs the card's own values belongs on a
+  // `transform` instead.
+  let anchor = undefined;
   // Only a declaration that names a setting waits for one.
   let realmConfig = templateNamesRealmConfig(templates)
     ? await ctx.realmConfig()
