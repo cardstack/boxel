@@ -21,6 +21,10 @@
  * consumer which must not import `PREFIX_REALMS` can pass its own literals.
  */
 
+// `supported-mime-type.ts` is itself import-free, so pulling in the one MIME
+// constant keeps this module's dependency-light guarantee intact.
+import { SupportedMimeType } from './supported-mime-type.ts';
+
 /** A module's source, keyed by its path relative to the cache root. */
 export type RealmSourceModules = Map<string, string>;
 
@@ -67,22 +71,25 @@ const DEFAULT_MAX_DEPTH = 10;
 /**
  * Extensions to try when a specifier carries none. Card code imports
  * `./author`, and the realm serves `./author.gts`.
+ *
+ * The same set as `PREFERRED_EXECUTABLE_EXTENSIONS` (`definition-lookup.ts`) and
+ * `executableExtensions` (`index.ts`) — copied rather than imported because
+ * both of those sources are barrel-heavy and would cost this module its
+ * dependency-light property. A new executable extension has to be added here
+ * too, or a specifier using it silently goes unprobed.
  */
 const MODULE_EXTENSIONS = ['.gts', '.ts', '.gjs', '.js'];
-
-/**
- * A realm serves two different things at one module URL: a plain GET returns
- * the module *transpiled* — decorators lowered, templates compiled — which
- * resolves and type-checks as though it were the source while describing
- * different types. This header is what asks for the bytes on disk.
- */
-const SOURCE_ACCEPT = 'application/vnd.card+source';
 
 /**
  * Cross-call memo of fetched sources, keyed by absolute module URL. A run
  * type-checks many cards against the same handful of realm modules, and the
  * validators run repeatedly against a realm whose modules rarely change, so a
  * repeat fetch revalidates with the stored validator instead of re-downloading.
+ *
+ * The key is the URL alone, with no auth context. That is safe while every
+ * fetch is anonymous; the day a caller passes `authorization`, two users
+ * reading the same private module URL would share an entry — fold the auth into
+ * the key before wiring an authenticated caller.
  */
 const sourceCache = new Map<
   string,
@@ -202,8 +209,24 @@ async function fetchModuleSource(
 
   for (let candidate of candidates) {
     let url = new URL(candidate, realmURL).href;
+    // Constrain the resolved URL to the realm. A specifier can carry `..`, a
+    // protocol-relative `//host`, or an absolute `https://host` that `new URL`
+    // honors — walking the fetch to a sibling realm or an arbitrary host. This
+    // runs server-side over agent-authored code, so an unconstrained fetch is a
+    // blind SSRF primitive. `realmURL` ends in a slash, so a prefix match is a
+    // true containment check.
+    if (!url.startsWith(realmURL)) {
+      errors.push(`${candidate}: resolves outside the realm`);
+      continue;
+    }
     let cached = sourceCache.get(url);
-    let headers: Record<string, string> = { Accept: SOURCE_ACCEPT };
+    let headers: Record<string, string> = {
+      // A plain GET returns the module *transpiled* — decorators lowered,
+      // templates compiled — which resolves and type-checks as though it were
+      // the source while describing different types. CardSource asks for the
+      // bytes on disk.
+      Accept: SupportedMimeType.CardSource,
+    };
     if (authorization) {
       headers.Authorization = authorization;
     }

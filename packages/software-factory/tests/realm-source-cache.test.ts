@@ -284,4 +284,77 @@ module('realm-source-cache > fetchRealmSources', function (hooks) {
       'a 304 still yields the source',
     );
   });
+
+  // A realm-prefixed specifier can carry `..`, a protocol-relative `//host`, or
+  // an absolute `https://host` that `new URL` honors — walking the fetch to a
+  // sibling realm or an arbitrary host. This runs server-side over agent-
+  // authored code, so an unconstrained fetch is a blind SSRF primitive.
+  test('rejects specifiers that resolve outside the realm', async function (assert) {
+    let realm = makeRealm({});
+    let vectors = [
+      '@cardstack/catalog/https://evil.com/x',
+      '@cardstack/catalog///evil.com/x',
+      '@cardstack/catalog/../other-realm/secret',
+    ];
+    let result = await fetchRealmSources({
+      entries: vectors.map((specifier, i) => ({
+        path: `v${i}.gts`,
+        content: `import { X } from '${specifier}';`,
+      })),
+      prefixRealmURLs: { [CATALOG]: CATALOG_URL },
+      fetch: stubFetch(realm),
+    });
+
+    assert.strictEqual(
+      realm.requests.length,
+      0,
+      'no fetch escaped the realm origin',
+    );
+    assert.strictEqual(
+      result.modules.size,
+      0,
+      'nothing outside the realm was staged',
+    );
+    assert.strictEqual(
+      result.failures.length,
+      vectors.length,
+      'each escaping specifier is reported as a failure',
+    );
+  });
+
+  // The staging layer hands the full prefix set to the fetch, not just the
+  // prefixes the entry files name, so a fetched module that imports a *different*
+  // registered prefix is followed rather than left unresolved.
+  test('follows a transitive import into a different registered prefix', async function (assert) {
+    const SKILLS = '@cardstack/skills/';
+    const SKILLS_URL = 'https://realms.example.test/skills/';
+    let files: Record<string, string> = {
+      [`${CATALOG_URL}blog/author.gts`]: `import { Tone } from '@cardstack/skills/writing/tone';\nexport class Author {}`,
+      [`${SKILLS_URL}writing/tone.gts`]: `export class Tone {}`,
+    };
+    let fetchFn = (async (input: string | URL) => {
+      let source = files[String(input)];
+      return source === undefined
+        ? new Response('not found', { status: 404 })
+        : new Response(source, { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    let result = await fetchRealmSources({
+      entries: [
+        {
+          path: 'contributor.gts',
+          content: `import { Author } from '@cardstack/catalog/blog/author';`,
+        },
+      ],
+      prefixRealmURLs: { [CATALOG]: CATALOG_URL, [SKILLS]: SKILLS_URL },
+      fetch: fetchFn,
+    });
+
+    assert.deepEqual(
+      [...result.modules.keys()].sort(),
+      ['catalog/blog/author.gts', 'skills/writing/tone.gts'],
+      'a catalog module importing a skills module pulls both',
+    );
+    assert.deepEqual(result.resolvedPrefixes.sort(), [CATALOG, SKILLS]);
+  });
 });
