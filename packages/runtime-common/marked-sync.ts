@@ -175,7 +175,9 @@ function normalizeDecorativeBullets(markdown: string): string {
 // Only the two fence lines change. The patch text between the markers, which
 // the applier matches against the target file, is not touched. A patch whose
 // REPLACE marker has not streamed in yet gets only its opener widened, so a
-// partially received plan file already renders as one block.
+// partially received plan file already renders as one block. A patch that
+// closed its fence without ever writing the REPLACE marker is left alone, so
+// the model's omission costs that one block and not the blocks after it.
 const FILE_URL_LINE_PATTERN = /^\s*https?:\/\/\S+(\s*\(\s*new\s*\))?\s*\r?$/;
 
 // A fence opens a code block only at the start of a line. A model that ends a
@@ -251,6 +253,24 @@ export function widenFencesAroundCodePatches(markdown: string): string {
     let replaceIndex = indexOfLine(lines, i + 3, (line) =>
       REPLACE_MARKER_PATTERN.test(line),
     );
+    // A block whose own closing fence comes before any REPLACE marker is a
+    // finished patch with the marker left out, not one still streaming. Its
+    // fence is the only bound it has: widening past it would count that
+    // fence as inner content, leave the block open to the end of the message,
+    // and hand the next patch's REPLACE marker to this one, so the two blocks
+    // become one and the file after this one is written into it. Leave the
+    // block as written; the parser reports it as malformed, bounded by its
+    // fence, and the patch after it stays its own block.
+    let ownClose = indexOfPatchClosingFence(
+      lines,
+      i + 1,
+      fenceLength,
+      replaceIndex,
+    );
+    if (ownClose !== -1) {
+      i = ownClose + 1;
+      continue;
+    }
     let contentEnd = replaceIndex === -1 ? lines.length : replaceIndex;
     let longestInnerRun = 0;
     for (let j = i + 1; j < contentEnd; j++) {
@@ -306,6 +326,70 @@ function indexOfLine(
     }
   }
   return -1;
+}
+
+// The bare fence that closes a patch before its REPLACE marker, or -1 when
+// the patch runs on to the marker (or to the end of a message still
+// streaming). Fenced blocks inside the patch's content are skipped: an opener
+// with an info string is unmistakably inner, and the next bare fence closes
+// it. A bare fence met while no inner block is open is either the patch's own
+// close or a bare inner opener, and what follows it tells them apart: the
+// patch's own close is followed by no fenced text at all, or by another
+// patch's opener before any REPLACE marker; a bare inner opener is followed
+// by its closer and then the rest of the patch.
+function indexOfPatchClosingFence(
+  lines: string[],
+  from: number,
+  fenceLength: number,
+  replaceIndex: number,
+): number {
+  let end = replaceIndex === -1 ? lines.length : replaceIndex;
+  let openInnerBlocks = 0;
+  for (let j = from; j < lines.length; j++) {
+    let m = lines[j].match(CODE_FENCE_PATTERN);
+    if (!m || m[2][0] !== '`') {
+      continue;
+    }
+    if (j >= end) {
+      return -1;
+    }
+    let bare = m[3].trim() === '' && m[2].length >= fenceLength;
+    if (!bare) {
+      openInnerBlocks++;
+      continue;
+    }
+    if (openInnerBlocks > 0) {
+      openInnerBlocks--;
+      continue;
+    }
+    if (
+      hasPatchOpener(lines, j + 1, end) ||
+      indexOfLine(lines, j + 1, (line) => CODE_FENCE_PATTERN.test(line)) === -1
+    ) {
+      return j;
+    }
+    openInnerBlocks++;
+  }
+  return -1;
+}
+
+// Whether a patch opens between `from` and `to`: a fence line followed by a
+// file url line and the SEARCH marker.
+function hasPatchOpener(lines: string[], from: number, to: number): boolean {
+  for (let j = from; j + 2 < Math.min(to, lines.length); j++) {
+    let open =
+      lines[j].match(CODE_FENCE_PATTERN) ??
+      lines[j].match(LIST_PREFIXED_CODE_FENCE_PATTERN);
+    if (
+      open &&
+      open[2][0] === '`' &&
+      FILE_URL_LINE_PATTERN.test(lines[j + 1]) &&
+      SEARCH_MARKER_PATTERN.test(lines[j + 2])
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function indexOfClosingFence(
