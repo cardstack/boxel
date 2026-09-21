@@ -26,7 +26,25 @@ on:
       # Traefik's static config: every env-mode job routes through it and
       # reads its access log in the diagnostics.
       - "traefik/**"
+  # Runnable by hand on any branch; `paths:` filters do not apply, so a
+  # dispatch always runs.
+  #
+  # The inputs exist because the jobs below otherwise read "not a pull request"
+  # as "push to main", and a hand-run branch is neither: Percy runs against a
+  # limited quota and the index cache is skipped, which together make a
+  # hand-run build both expensive and not comparable with the PR runs it would
+  # usually be measured against. Both default to the push-to-main behaviour, so
+  # a dispatch that sets nothing behaves exactly as before.
   workflow_dispatch:
+    inputs:
+      use_index_cache:
+        description: "Seed the realms from the cached index, the way a pull_request run does. Turn this on to compare timings against PR runs: from-scratch indexing costs roughly 1.5x per test, and unevenly, so a default dispatch run is not comparable with a PR run."
+        type: boolean
+        default: false
+      run_percy:
+        description: "Take Percy snapshots. Off by default because the quota is 10k snapshots/month and a hand-run build is usually a probe — the same reason draft PRs skip them."
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-host-${{ github.head_ref || github.run_id }}
@@ -56,6 +74,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "percy_needed=${{ inputs.run_percy }}" >> "$GITHUB_OUTPUT"
+            echo "Hand-run build — Percy is ${{ inputs.run_percy }} (the run_percy input)"
+            exit 0
+          fi
+
           if [[ "${{ github.event_name }}" != "pull_request" ]]; then
             echo "percy_needed=true" >> "$GITHUB_OUTPUT"
             echo "Not a pull request — Percy will always run"
@@ -105,10 +129,15 @@ jobs:
     # signals that they'd index differently now. Those paths fall back to
     # from-scratch indexing.
     #
-    # Push-to-main and workflow_dispatch runs never use the cache: the
-    # freshest artifact predates the commit under test, and main runs feed
-    # the memory-baseline update, which shouldn't be measured against a
-    # differently-seeded index.
+    # Push-to-main runs never use the cache: the freshest artifact predates
+    # the commit under test, and main runs feed the memory-baseline update,
+    # which shouldn't be measured against a differently-seeded index.
+    #
+    # A hand-run build defaults to the same, and says so in its log. It can opt
+    # in with the `use_index_cache` input, because the reason above is about
+    # main specifically: for a branch, the cached artifact is exactly as fresh
+    # as it would be for a pull request on that branch. Anything comparing
+    # timings with PR runs wants it on.
     name: Check if cached index is usable
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -120,6 +149,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "use_cache=${{ inputs.use_index_cache }}" >> "$GITHUB_OUTPUT"
+            echo "Hand-run build — index cache is ${{ inputs.use_index_cache }} (the use_index_cache input)"
+            exit 0
+          fi
+
           if [[ "${{ github.event_name }}" != "pull_request" ]]; then
             echo "use_cache=false" >> "$GITHUB_OUTPUT"
             echo "Not a pull request — realms will index from scratch"
