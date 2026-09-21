@@ -14,15 +14,15 @@
 
 const CHANNEL = 'boxel:actions-queue';
 
-// One sample costs two run-list requests plus one per active run, so the hourly
-// spend scales with how busy the repository is, against the 5,000 requests an
-// hour a token is allowed. Measured over this collector's own history: 4 active
-// runs at the median, 43 at p95, 51 at peak.
+// One sample costs three run-list requests plus one per active run, so the
+// hourly spend scales with how busy the repository is, against the 5,000
+// requests an hour a token is allowed. Measured over this collector's own
+// history: 4 active runs at the median, 43 at p95, 51 at peak.
 //
 //   active runs   at 60s      at 30s
-//             4    360/hr      720/hr
-//            43   2,700/hr   5,400/hr
-//            51   3,180/hr   6,360/hr
+//             4    420/hr      840/hr
+//            43   2,760/hr   5,520/hr
+//            51   3,240/hr   6,480/hr
 //
 // A minute is comfortable across that range and doubles the resolution. Thirty
 // seconds exceeds the budget above roughly forty concurrent runs — which is
@@ -209,11 +209,11 @@ async function sample(opts: Options): Promise<void> {
   const observedAt = Date.now();
   const observed_at = new Date(observedAt).toISOString();
 
-  // Only queued and in_progress runs can hold or want a runner, so completed
-  // history is deliberately not fetched — it would dominate the request budget
-  // without informing the queue.
+  // Only queued, pending and in_progress runs can hold or want a runner, so
+  // completed history is deliberately not fetched — it would dominate the
+  // request budget without informing the queue.
   const runs: Run[] = [];
-  for (const status of ['queued', 'in_progress']) {
+  for (const status of ['queued', 'in_progress', 'pending']) {
     runs.push(
       ...(await paginate<Run>(
         `${base}/runs?status=${status}`,
@@ -244,13 +244,17 @@ async function sample(opts: Options): Promise<void> {
 
   let queuedJobs = 0;
   let runningJobs = 0;
+  // GitHub reports a job as pending while a concurrency group holds it, and as
+  // queued while it waits for a runner. The two are counted apart so a
+  // self-imposed hold never reads as pool saturation.
+  let pendingJobs = 0;
   // Grouped depth is emitted as its own lines rather than as nested objects on
   // the snapshot, because LogQL flattens nested JSON into one label per key —
   // which for dynamic keys like branch names yields an unqueryable label per
   // branch instead of a series grouped by branch.
   const groups: Record<
     string,
-    Map<string, { queued: number; running: number }>
+    Map<string, { queued: number; running: number; pending: number }>
   > = {
     workflow: new Map(),
     branch: new Map(),
@@ -295,7 +299,13 @@ async function sample(opts: Options): Promise<void> {
     }
 
     for (const job of jobs) {
-      if (job.status !== 'queued' && job.status !== 'in_progress') continue;
+      if (
+        job.status !== 'queued' &&
+        job.status !== 'in_progress' &&
+        job.status !== 'pending'
+      ) {
+        continue;
+      }
 
       const meta = runById.get(job.run_id);
       const actor = meta?.triggering_actor?.login ?? meta?.actor?.login ?? null;
@@ -303,16 +313,14 @@ async function sample(opts: Options): Promise<void> {
       const workflow = job.workflow_name ?? meta?.name ?? null;
 
       // While a job is queued GitHub reports started_at equal to created_at, so
-      // it cannot be used to tell waiting from running. Queue wait is therefore
+      // it cannot be used to tell waiting from running. Wait is therefore
       // measured from created_at, and only a job that has actually left the
-      // queue reports a running duration.
-      const queued_seconds =
-        job.status === 'queued'
-          ? seconds(job.created_at, observedAt)
-          : seconds(
-              job.created_at,
-              Date.parse(job.started_at ?? job.created_at),
-            );
+      // queue reports a running duration. A pending job has not started either,
+      // so its wait is still open-ended.
+      const waiting = job.status === 'queued' || job.status === 'pending';
+      const queued_seconds = waiting
+        ? seconds(job.created_at, observedAt)
+        : seconds(job.created_at, Date.parse(job.started_at ?? job.created_at));
       const running_seconds =
         job.status === 'in_progress'
           ? seconds(job.started_at, observedAt)
@@ -321,13 +329,15 @@ async function sample(opts: Options): Promise<void> {
       const step = job.steps?.find((s) => s.status === 'in_progress');
 
       if (job.status === 'queued') queuedJobs++;
+      else if (job.status === 'pending') pendingJobs++;
       else runningJobs++;
 
       const bump = (dimension: string, key: string | null) => {
         if (!key) return;
         const m = groups[dimension];
-        const entry = m.get(key) ?? { queued: 0, running: 0 };
+        const entry = m.get(key) ?? { queued: 0, running: 0, pending: 0 };
         if (job.status === 'queued') entry.queued++;
+        else if (job.status === 'pending') entry.pending++;
         else entry.running++;
         m.set(key, entry);
       };
@@ -370,7 +380,8 @@ async function sample(opts: Options): Promise<void> {
         key,
         queued: counts.queued,
         running: counts.running,
-        total: counts.queued + counts.running,
+        pending: counts.pending,
+        total: counts.queued + counts.running + counts.pending,
       });
     }
   }
@@ -385,7 +396,8 @@ async function sample(opts: Options): Promise<void> {
     active_runs: runs.length,
     queued_jobs: queuedJobs,
     running_jobs: runningJobs,
-    total_jobs: queuedJobs + runningJobs,
+    pending_jobs: pendingJobs,
+    total_jobs: queuedJobs + runningJobs + pendingJobs,
     rate_limit_remaining: rateLimitRemaining,
   });
 }

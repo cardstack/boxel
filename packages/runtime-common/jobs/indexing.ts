@@ -234,7 +234,8 @@ export async function awaitRealmIndexSettled(
     pollIntervalMs?: number;
     // Narrows the lane to particular job types. Absent means the whole
     // `indexing:<realm>` lane, which is what a caller wanting "all indexing
-    // has settled" — a readiness probe, a publish — asks for.
+    // has settled" — a readiness probe, a publish — asks for. Empty is a
+    // filter naming no job rather than no filter, so it settles at once.
     jobTypes?: string[];
     // Narrows the lane to passes this writer has a stake in. Reading your own
     // write matters; being made to read someone else's does not, and serving
@@ -272,6 +273,14 @@ export async function awaitRealmIndexSettled(
   let initiatedBy = opts?.initiatedBy;
 
   let hasSettled = async () => {
+    // An absent `jobTypes` is no filter; an empty one is a filter that names
+    // no job, which no row can match. Collapsing the two is cheap to do and
+    // expensive to have done — it turns "wait for nothing" into "wait for
+    // every job in the realm's lane", which is how a caller whose list came
+    // out empty ends up queued behind a full reindex rather than proceeding.
+    if (jobTypes && jobTypes.length === 0) {
+      return true;
+    }
     let expression: Expression = [
       `SELECT 1 FROM jobs WHERE status = 'unfulfilled' AND concurrency_group =`,
       param(indexingConcurrencyGroup(realmURL)),
@@ -290,7 +299,7 @@ export async function awaitRealmIndexSettled(
         `))`,
       );
     }
-    if (jobTypes?.length) {
+    if (jobTypes) {
       expression.push('AND job_type IN', '(');
       jobTypes.forEach((jobType, index) => {
         if (index > 0) {

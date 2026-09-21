@@ -1201,6 +1201,17 @@ export function ifNoneMatchMatches(headerValue: string, etag: string): boolean {
     .some((token) => token.trim().replace(/^W\//, '') === normalizedEtag);
 }
 
+// Whether a conditional header names anything to compare against. RFC 9110
+// §5.6.1.2 has a recipient parse and ignore empty elements in a comma list, so
+// a value that is empty, whitespace, or only commas is a well-formed list of
+// no validators rather than a malformed one. Kept beside `ifNoneMatchMatches`
+// and splitting the same way, so the question "does this name a validator" and
+// the question "does this match" cannot answer from different readings of the
+// same header.
+export function namesAValidator(headerValue: string): boolean {
+  return headerValue.split(',').some((token) => token.trim() !== '');
+}
+
 // A handle's content fingerprint, read in bounded ranges rather than by
 // streaming the file.
 //
@@ -9066,7 +9077,10 @@ export class Realm {
     url: URL,
   ): (() => Promise<void>) | undefined {
     let ifMatch = request.headers.get('if-match');
-    if (!ifMatch || ifMatch.trim() === '*') {
+    // `null` is an absent header, `''` a present one whose value is empty.
+    // Only the first asks for nothing, so they cannot share a test — see the
+    // refusal below for what the second means.
+    if (ifMatch === null || ifMatch.trim() === '*') {
       return undefined;
     }
     let refuse = (): never => {
@@ -9081,6 +9095,46 @@ export class Realm {
       });
     };
     return async () => {
+      // A present `If-Match` that names no validator — empty, whitespace, or
+      // bare commas — is a caller that asked for the check and gave nothing to
+      // check against, which is what a client does when it interpolates an
+      // ETag it never read. Zero listed validators means none of them matches,
+      // so RFC 9110 §13.1.1 makes the condition false. Refusing is what makes
+      // that visible: treated as an absent header it would write
+      // unconditionally, and the caller would be told its conditional write
+      // succeeded while the lost update it asked to be protected from is
+      // exactly what happened.
+      //
+      // A 412 rather than a 400, because the recovery it asks for is the one
+      // that works — re-read the card and retry with the validator that read
+      // hands back, which is precisely what the caller failed to send.
+      //
+      // Ahead of the lane check, and not only to save the work: this refusal
+      // is decided by the request alone, so letting it reach a query that can
+      // fail closed would let an unsatisfiable precondition come back as the
+      // lane's 503 — "retry this", for a request no retry can fix.
+      //
+      // "Ahead of the lane check" is as early as it gets, not as early as it
+      // could be. This runs inside the precondition closure, so a request the
+      // realm can answer from the header alone still takes the batch's file
+      // locks and waits out the coordinator's drain before being told 412.
+      // That is latency and lock-holding rather than a wrong answer, and it
+      // buys a single error path: hoisting the check to where `ifMatch` is
+      // first read would put the throw outside `commitBatch`, which both call
+      // sites reach without a `try`, so their refusal handling would have to
+      // grow a second entry point to catch it.
+      if (!namesAValidator(ifMatch)) {
+        throw new OperationFailure({
+          id: url.href,
+          status: 412,
+          code: 'version-conflict',
+          title: 'Precondition Failed',
+          detail:
+            `${request.method} of ${url.href} sent an If-Match naming no ` +
+            `validator, so nothing can match it; re-read the card and send ` +
+            `the ETag that read returns`,
+        });
+      }
       // The validator is built from the index, and the index lags the bytes:
       // a commit records a file's hash before it indexes, and a write that
       // deferred its indexing releases the lock without having indexed at all.
@@ -9109,6 +9163,14 @@ export class Realm {
       // refuse. The refusal is a 5xx rather than a 412 because nothing about
       // the caller's request is wrong and repeating it is the remedy.
       if (this.#dbAdapter) {
+        // Scoped by job type and deliberately not by writer. The gate also
+        // narrows to passes a given user initiated, which is right for asking
+        // "have my own writes landed" and wrong here: what can move this
+        // card's row out from under the comparison is *any* writer's pending
+        // pass, and a concurrent writer is the whole case `If-Match` exists
+        // to catch. Narrowing to the requesting user would report settled
+        // while someone else's incremental index was about to change the
+        // answer — the silent accept this refusal is here to prevent.
         let settled = await awaitRealmIndexSettled(this.#dbAdapter, this.url, {
           jobTypes: CONTENT_MOVING_INDEX_JOB_TYPES,
           timeoutMs: CONDITIONAL_WRITE_INDEX_SETTLE_BUDGET_MS,
