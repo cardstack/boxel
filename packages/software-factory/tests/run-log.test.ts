@@ -805,9 +805,17 @@ module('run-log > seeded module', function () {
   test('passes the parse gate', async function (assert) {
     // ember-tsc caps itself at 120s; match that rather than QUnit's default.
     assert.timeout(120_000);
-    let errors = await runGlintCheck([
-      { path: 'run-log.gts', content: RUN_LOG_GTS },
-    ]);
+    // TEMPORARY: dump program-membership evidence while diagnosing a
+    // CI-environment-only failure of this gate. Remove once diagnosed.
+    process.env.SF_PARSE_DEBUG = '1';
+    let errors;
+    try {
+      errors = await runGlintCheck([
+        { path: 'run-log.gts', content: RUN_LOG_GTS },
+      ]);
+    } finally {
+      delete process.env.SF_PARSE_DEBUG;
+    }
     assert.deepEqual(
       errors.map((e) => `${e.line}:${e.column} ${e.message}`),
       [],

@@ -669,13 +669,22 @@ export async function runGlintCheck(
       '.bin',
       'ember-tsc',
     );
+    // SF_PARSE_DEBUG dumps the raw compiler output plus the program-membership
+    // ("--explainFiles") entries for the packages whose duplication produces
+    // nominal type mismatches. For diagnosing environment-specific gate
+    // failures; off in normal operation.
+    let debug = !!process.env.SF_PARSE_DEBUG;
+    let tscArgs = ['--noEmit', '--project', join(tempDir, 'tsconfig.json')];
+    if (debug) {
+      tscArgs.push('--explainFiles');
+    }
     let { output, exitedWithError } = await new Promise<{
       output: string;
       exitedWithError: boolean;
     }>((resolvePromise, reject) => {
       let child = execFile(
         emberTscBin,
-        ['--noEmit', '--project', join(tempDir, 'tsconfig.json')],
+        tscArgs,
         {
           cwd: tempDir,
           timeout: 120_000,
@@ -697,6 +706,23 @@ export async function runGlintCheck(
         },
       );
     });
+
+    if (debug) {
+      // Non-indented lines are either diagnostics or (--explainFiles) program
+      // file paths; indented lines belong to the preceding one (elaboration or
+      // inclusion reason). Print every diagnostic and the entries for the
+      // packages prone to duplicate-copy mismatches.
+      let interesting = /@glint|@glimmer|card-api|ember-provide-consume/;
+      let keep = false;
+      for (let line of output.split('\n')) {
+        if (/^\S/.test(line)) {
+          keep = /error TS/.test(line) || interesting.test(line);
+        }
+        if (keep && line.trim()) {
+          console.error(`[SF_PARSE_DEBUG] ${line}`);
+        }
+      }
+    }
 
     let errors: ParseErrorData[] = [];
     let totalDiagnosticLines = 0;
