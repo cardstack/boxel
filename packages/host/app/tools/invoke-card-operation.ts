@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { isCardInstance } from '@cardstack/runtime-common';
+import { isCardInstance, realmURL } from '@cardstack/runtime-common';
 import type {
   BaseOperation,
   OperationWriteResult,
@@ -34,7 +34,15 @@ export default class InvokeCardOperationTool extends HostBaseTool<
 
   static actionVerb = 'Invoke';
 
-  description = `Invoke an operation that a card's type declares. An operation is a named action an author defined on the type — "addComment", "invite", "archive" — that the realm carries out in one authorized request, applying the author's own rules. Prefer it over patching a card by hand whenever the type declares one for the change you want. To learn which names a type carries, read its source: they are its "@operation" declarations. Naming one the card does not carry is refused with the full list of the names it does, so a wrong guess costs one call and answers the question. "payload" supplies the operation's params, and its keys must match the names the operation declares exactly — a missing one is refused before anything is sent. "realm" and "relationships" are read only when the operation is the plain "create", which mints a new card of the target card's type: "realm" says where it lands, and "relationships" gives the cards it is created linking to, as JSON:API relationship objects such as {"author": {"links": {"self": "<card id>"}}}. A declared operation names the cards it links among its params instead. An operation that acts on the card at "cardId" always runs in that card's own realm. A write answers the card it wrote plus its version; a read answers the document.`;
+  description = `Invoke an operation that a card's type declares - a named action its author defined, such as "addComment" or "archive", that the realm carries out in one authorized request applying the author's own rules. Prefer it over patching a card by hand whenever the type declares one for the change you want.
+
+Naming an operation a card does not carry is refused with the list of the ones it does, so a wrong guess costs one call and answers the question. The card's source shows the same names, written as its "@operation" declarations, together with the "params" each one takes.
+
+"payload" supplies those params, keyed exactly as the declaration names them. A param the declaration requires and the payload omits is refused before anything is sent.
+
+Besides a type's declared operations, the plain "create" mints a new card of the type of the card at "cardId". It alone reads the other two inputs: "payload" as the new card's field values, "relationships" as the cards it is created linking to - JSON:API relationship objects such as {"author": {"links": {"self": "<card id>"}}} - and "realm" as where it lands, which defaults to the realm holding the card at "cardId". Every other operation acts on that card and runs in that card's own realm, so it takes neither "realm" nor "relationships".
+
+A write answers the card it wrote and the version that card now holds; a read answers the document.`;
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
@@ -99,6 +107,13 @@ export default class InvokeCardOperationTool extends HostBaseTool<
         `"${name}" is a query operation: it answers a live set of search results that re-runs as realms index, not a value this tool can hand back. Search with search-entries instead; a card reads the same search by handing the query to its search results component.`,
       );
     }
+    if (!offeredHere(name, scope, base, declarations)) {
+      throw new Error(
+        `"${name}" is a behavior every card carries rather than an operation ${defNameOf(card)} declares, and this tool invokes what a type declares plus the plain "create".${
+          ELSEWHERE[base] ? ` ${ELSEWHERE[base]}` : ''
+        }`,
+      );
+    }
     if (scope === 'instance' && input.realm) {
       throw new Error(
         `"${name}" acts on ${input.cardId} and runs in the realm that holds it, so it cannot be given a realm to run in. A realm names where a card a "create" mints lands.`,
@@ -121,7 +136,7 @@ export default class InvokeCardOperationTool extends HostBaseTool<
       payload?: unknown,
       opts?: unknown,
     ) => Promise<OperationWriteResult | Record<string, unknown> | null>;
-    let answer = await member(payload, invokeOptions(input, mintsACard));
+    let answer = await member(payload, invokeOptions(input, card, mintsACard));
 
     let commandModule = await this.loadToolModule();
     const { InvokeCardOperationResult } = commandModule;
@@ -162,42 +177,91 @@ function baseOf(
   return (declarations[name]?.base ?? name) as BaseOperation;
 }
 
+// Which names this tool invokes: the operations a type's author declared, and
+// the plain `create`.
+//
+// The behaviors every card carries - reading it, patching it, removing it,
+// appending to a collection - are left out although `operations()` offers
+// them, because each is already the job of a tool that describes its own
+// payload, and one of them removes a card. Offering them here would put a
+// delete of any card behind a name the caller supplies, on a tool whose
+// approval is decided once for every operation it carries rather than per
+// invocation. A `delete` an author declared stays reachable: that is a named
+// action its type published, which is what this tool is for.
+//
+// A query is left out for a different reason - it answers a live set of search
+// results rather than a value - and the batch member is not an operation at
+// all.
+function offeredHere(
+  name: string,
+  scope: 'instance' | 'type',
+  base: BaseOperation,
+  declarations: Record<string, OperationsModule.OperationDeclaration>,
+): boolean {
+  if (declarations[name]) {
+    return base !== 'query';
+  }
+  return base === 'create' && scope === 'type';
+}
+
+// Where a behavior this tool does not invoke is reached instead.
+const ELSEWHERE: Partial<Record<BaseOperation, string>> = {
+  read: 'Read a card with get-card.',
+  update: 'Change a card with patch-fields or patch-card-instance.',
+};
+
 // Every name this tool will invoke on the card, for a caller that named one it
-// will not. A query is left out rather than listed and then refused, and so is
-// the batch member, which is not an operation.
+// will not.
 function invocableNames(
   onInstance: OperationsBucket,
   onType: OperationsBucket,
   declarations: Record<string, OperationsModule.OperationDeclaration>,
 ): string[] {
   let names = new Set<string>();
-  for (let bucket of [onInstance, onType]) {
+  for (let [scope, bucket] of [
+    ['instance', onInstance],
+    ['type', onType],
+  ] as const) {
     for (let name of Object.keys(bucket)) {
-      if (name === BATCH_MEMBER || baseOf(name, declarations) === 'query') {
+      if (name === BATCH_MEMBER) {
         continue;
       }
-      names.add(name);
+      if (offeredHere(name, scope, baseOf(name, declarations), declarations)) {
+        names.add(name);
+      }
     }
   }
   return [...names].sort();
 }
 
-// What the call carries beside its payload. Both members belong to a minted
-// card rather than to the invocation, so neither is passed for anything else —
-// which is also what makes the refusals above the only place they can be
-// silently dropped.
+// What a minted card is given beside its field values: where it lands, and the
+// cards it is created linking to. Both belong to a card being created rather
+// than to the invocation, so neither is passed for anything else - which is
+// what makes the refusals above the only place they could be silently dropped.
+//
+// A realm the caller did not name is the realm holding the card that named the
+// type, rather than whichever realm the session happens to write to by
+// default. The caller named one card and asked for another of its type; that
+// card is the only realm they have said anything about, and a create landing
+// anywhere else would be a write to a realm nobody mentioned.
 function invokeOptions(
   input: BaseToolModule.InvokeCardOperationInput,
+  card: CardDef,
   mintsACard: boolean,
 ): { realm?: string; relationships?: Record<string, unknown> } | undefined {
-  if (!input.realm && !(mintsACard && input.relationships)) {
+  if (!mintsACard) {
+    return undefined;
+  }
+  let realm = input.realm || card[realmURL]?.href;
+  let relationships = input.relationships as
+    | Record<string, unknown>
+    | undefined;
+  if (!realm && !relationships) {
     return undefined;
   }
   return {
-    ...(input.realm ? { realm: input.realm } : {}),
-    ...(mintsACard && input.relationships
-      ? { relationships: input.relationships as Record<string, unknown> }
-      : {}),
+    ...(realm ? { realm } : {}),
+    ...(relationships ? { relationships } : {}),
   };
 }
 

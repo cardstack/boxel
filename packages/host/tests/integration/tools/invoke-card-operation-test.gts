@@ -71,6 +71,14 @@ const REPORT_MODULE = `
       set: { headline: params('headline') },
     };
 
+    @operation static details = {
+      base: 'read',
+    };
+
+    @operation static retire = {
+      base: 'delete',
+    };
+
     @operation static openReports = {
       base: 'query',
       query: { filter: { on: () => Report, eq: { status: 'open' } } },
@@ -104,6 +112,10 @@ function realmContents() {
     'report-created-from.json': reportFile('Creator'),
     'report-linked-from.json': reportFile('Linker'),
     'report-relationships-refused.json': reportFile('Relationships Refused'),
+    'report-retired.json': reportFile('Going Away'),
+    'report-not-offered.json': reportFile('Not Offered'),
+    'report-realm-forwarded.json': reportFile('Realm Forwarded'),
+    'report-realm-defaulted.json': reportFile('Realm Defaulted'),
     'activity-lab-safety.json': {
       data: {
         type: 'card',
@@ -132,17 +144,29 @@ interface SentRequest {
   envelope: OperationsEnvelope;
 }
 
+// The realm this session would write to if nothing said otherwise. It is
+// deliberately not the realm the fixtures live in: a create that fell back to
+// the session default would be indistinguishable from one that took the target
+// card's realm if the two were the same value, which is what makes an
+// assertion about where a create was sent able to fail.
+const SESSION_DEFAULT_REALM = 'http://test-realm/somewhere-else/';
+
 // A transport that records instead of reaching the realm, for the cases about
-// a refusal that has to happen before a request is sent at all.
+// what a call puts on the wire, and about a refusal that has to happen before
+// a request is sent at all.
 function recordingTransport(): { sent: SentRequest[] } {
   let sent: SentRequest[] = [];
   let transport: OperationsTransport = {
     async send(realmURL, method, envelope): Promise<OperationsAnswer> {
       sent.push({ realmURL, method, envelope });
-      return { 'atomic:results': [] };
+      return {
+        'atomic:results': [
+          { data: { type: 'card', id: `${testRealmURL}minted`, meta: {} } },
+        ],
+      };
     },
     defaultWritableRealm() {
-      return testRealmURL;
+      return SESSION_DEFAULT_REALM;
     },
   };
   (globalThis as any)._CARDSTACK_OPERATIONS_TRANSPORT = transport;
@@ -231,10 +255,10 @@ module('Integration | tools | invoke-card-operation', function (hooks) {
     );
   });
 
-  test('a read answers the document rather than a lean result', async function (assert) {
+  test('a declared read answers the document rather than a lean result', async function (assert) {
     let result = await invoke({
       cardId: `${testRealmURL}report-read`,
-      operation: 'read',
+      operation: 'details',
     });
 
     let document = result.document as any;
@@ -337,6 +361,76 @@ module('Integration | tools | invoke-card-operation', function (hooks) {
     assert.strictEqual(sent.length, 0, 'and nothing was sent to the realm');
   });
 
+  test('a declared delete answers with nothing left to describe', async function (assert) {
+    let result = await invoke({
+      cardId: `${testRealmURL}report-retired`,
+      operation: 'retire',
+    });
+
+    assert.notOk(result.cardId, 'a delete names no card it wrote');
+    assert.notOk(result.version, 'and no version it left behind');
+    assert.notOk(result.document, 'and no document');
+    assert.false(
+      await adapter.exists('report-retired.json'),
+      'and the card is gone from the realm',
+    );
+  });
+
+  test('a behavior every card carries is not invoked here', async function (assert) {
+    let { sent } = recordingTransport();
+
+    let message = await refusal({
+      cardId: `${testRealmURL}report-not-offered`,
+      operation: 'update',
+      payload: { attributes: { headline: 'Patched' } },
+    });
+
+    assert.true(
+      message.includes('is a behavior every card carries'),
+      `the refusal says what "update" is: ${message}`,
+    );
+    assert.true(
+      message.includes('patch-fields'),
+      `and where a card is changed instead: ${message}`,
+    );
+    assert.strictEqual(sent.length, 0, 'and nothing was sent to the realm');
+  });
+
+  test('a create is sent to the realm it was given', async function (assert) {
+    let { sent } = recordingTransport();
+
+    await invoke({
+      cardId: `${testRealmURL}report-realm-forwarded`,
+      operation: 'create',
+      payload: { headline: 'Elsewhere' },
+      realm: SESSION_DEFAULT_REALM,
+    });
+
+    assert.strictEqual(sent.length, 1, 'one batch was sent');
+    assert.strictEqual(
+      sent[0].realmURL,
+      SESSION_DEFAULT_REALM,
+      'to the realm the caller named rather than the one holding the card',
+    );
+  });
+
+  test('a create with no realm is sent to the realm holding the card that named its type', async function (assert) {
+    let { sent } = recordingTransport();
+
+    await invoke({
+      cardId: `${testRealmURL}report-realm-defaulted`,
+      operation: 'create',
+      payload: { headline: 'Beside It' },
+    });
+
+    assert.strictEqual(sent.length, 1, 'one batch was sent');
+    assert.strictEqual(
+      sent[0].realmURL,
+      testRealmURL,
+      'to the realm holding the target card, not to the realm this session writes to by default',
+    );
+  });
+
   test('an unknown operation is refused, naming the ones the card carries', async function (assert) {
     let message = await refusal({
       cardId: `${testRealmURL}report-unknown`,
@@ -347,7 +441,7 @@ module('Integration | tools | invoke-card-operation', function (hooks) {
       message.includes('"escalate" is not an operation Report carries'),
       `the refusal names what was asked for: ${message}`,
     );
-    for (let name of ['addComment', 'restate', 'create', 'read', 'update']) {
+    for (let name of ['addComment', 'restate', 'details', 'retire', 'create']) {
       assert.true(
         message.includes(name),
         `the refusal offers "${name}": ${message}`,
@@ -355,7 +449,11 @@ module('Integration | tools | invoke-card-operation', function (hooks) {
     }
     assert.false(
       message.includes('openReports'),
-      'and does not offer a query, which this tool will not invoke',
+      'and does not offer a query, which answers a live set of results',
+    );
+    assert.false(
+      message.includes('update'),
+      'nor a behavior every card carries, which has its own tool',
     );
     assert.false(
       message.includes('atomic'),
