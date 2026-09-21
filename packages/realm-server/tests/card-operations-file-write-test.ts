@@ -688,22 +688,96 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a line has nothing to be appended to when the file is not there', async function (assert) {
-      let { core, commits } = stub();
-      let failed = await refusal(core, [
-        {
-          op: 'appendLine',
-          href: `${REALM}telemetry.log`,
-          params: { line: 'deploy 41' },
-        },
-      ]);
-      assert.deepEqual(failed, {
-        status: 404,
-        code: 'target-not-found',
-        entry: 0,
-      });
-      assert.strictEqual(commits.length, 0, 'nothing is committed');
+    test('the first line creates the file it is appended to', async function (assert) {
+      let { core, commits, readPaths } = stub();
+      let results = await commitBatch(
+        core,
+        [
+          {
+            op: 'appendLine',
+            href: `${REALM}telemetry.log`,
+            params: { line: 'deploy 41' },
+          },
+        ],
+        {},
+      );
+      assert.deepEqual(
+        commits[0].appends,
+        { 'telemetry.log': 'deploy 41\n' },
+        'the line is staged for a path holding nothing, the same as for one ' +
+          'already holding something',
+      );
+      assert.deepEqual(
+        commits[0].writes,
+        {},
+        'and it is staged as an append rather than as a write, so the realm ' +
+          'creates the file by adding to it',
+      );
+      assert.notOk(
+        readPaths().includes('telemetry.log'),
+        'the path is not read to find out whether it holds anything',
+      );
+      assert.ok(
+        results[0]?.meta.version,
+        'the result reports the version the created file holds',
+      );
     });
+
+    test('two lines reach a file the batch itself creates, in order', async function (assert) {
+      let { core, commits } = stub();
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'appendLine',
+            href: `${REALM}telemetry.log`,
+            params: { line: 'first' },
+          },
+          {
+            op: 'appendLine',
+            href: `${REALM}telemetry.log`,
+            params: { line: 'second' },
+          },
+        ],
+        {},
+      );
+      assert.strictEqual(commits.length, 1, 'one commit');
+      assert.deepEqual(
+        commits[0].appends,
+        { 'telemetry.log': 'first\nsecond\n' },
+        'the entry that creates the file and the one that follows it are ' +
+          'joined the same way two appends to a stored file are',
+      );
+    });
+
+    // Creating on the first append is what makes these worth asking a second
+    // time. Every one of them is refused on what the path's name says it
+    // holds, and before there was a stored file behind that name; now there is
+    // not, and the only thing standing between a caller and a file of their
+    // choosing at a path of their choosing is the refusal itself.
+    for (let { what, href } of [
+      { what: 'binary content', href: `${REALM}chart.png` },
+      { what: 'a json document', href: `${REALM}data.json` },
+      { what: 'a module', href: `${REALM}person.gts` },
+      { what: 'a card', href: `${REALM}Person/mango` },
+    ]) {
+      test(`${what} is not created by a line refused for it`, async function (assert) {
+        let { core, commits } = stub();
+        let failed = await refusal(core, [
+          { op: 'appendLine', href, params: { line: 'deploy 41' } },
+        ]);
+        assert.deepEqual(failed, {
+          status: 405,
+          code: 'operation-not-allowed',
+          entry: 0,
+        });
+        assert.strictEqual(
+          commits.length,
+          0,
+          'nothing is committed, so the refusal leaves no file behind',
+        );
+      });
+    }
 
     test('a failing sibling leaves a line with nothing to append to', async function (assert) {
       let { core, commits } = stub({ 'telemetry.log': 'boot\n' });
