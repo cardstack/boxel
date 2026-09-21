@@ -7,6 +7,10 @@
 //   node eval-setup.ts                     # workspace "evals" for EVAL_WRITER_USER
 //   node eval-setup.ts --endpoint my-evals --name "My evaluations"
 //
+// The display name is applied on every run, so renaming here renames a
+// workspace that already exists; _create-realm only sets a name when it
+// creates one.
+//
 // Env: EVAL_WRITER_USER / EVAL_WRITER_PASSWORD (default user / password),
 // EVAL_MATRIX_URL, EVAL_REALM_SERVER_URL (default https://localhost:4201).
 
@@ -25,7 +29,7 @@ const EVAL_REALM_DIR = join(import.meta.dirname, 'eval-realm');
 
 function parseArgs(argv: string[]) {
   let endpoint = 'evals';
-  let name = 'Evaluations';
+  let name = 'AI Assistant Evaluations';
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--endpoint') {
       endpoint = argv[++i];
@@ -53,6 +57,43 @@ async function walk(dir: string): Promise<string[]> {
   return out.sort();
 }
 
+// The workspace's display name lives in `realm.json` at its root, as
+// cardInfo.name. Patch that one field rather than writing the file fresh, so a
+// hand-set icon or background survives.
+async function renameRealm(
+  client: RealmClient,
+  realmUrl: string,
+  name: string,
+): Promise<boolean> {
+  let fileUrl = `${realmUrl}realm.json`;
+  let config: {
+    data?: {
+      attributes?: { cardInfo?: { name?: string } };
+      meta?: { adoptsFrom: { module: string; name: string } };
+    };
+  };
+  try {
+    let { body } = await client.getSource(realmUrl, fileUrl);
+    config = JSON.parse(new TextDecoder().decode(body));
+  } catch {
+    // A workspace with no readable realm.json gets one from the write below.
+    config = {};
+  }
+  let cardInfo = (((config.data ??= {}).attributes ??= {}).cardInfo ??= {});
+  if (cardInfo.name === name) {
+    return false;
+  }
+  cardInfo.name = name;
+  config.data!.meta ??= {
+    adoptsFrom: {
+      module: '@cardstack/base/realm-config',
+      name: 'RealmConfig',
+    },
+  };
+  await client.putSource(realmUrl, fileUrl, JSON.stringify(config));
+  return true;
+}
+
 async function main() {
   let { endpoint, name } = parseArgs(process.argv.slice(2));
   let credentials = await loginWithPassword(WRITER_USER, WRITER_PASSWORD);
@@ -62,6 +103,9 @@ async function main() {
   console.log(
     `[setup] ${realm.created ? 'created' : 'using'} workspace ${realm.url}`,
   );
+  if (!realm.created && (await renameRealm(client, realm.url, name))) {
+    console.log(`[setup] renamed it to "${name}"`);
+  }
   if (
     await addRealmToAccountData(
       credentials.userId,

@@ -82,8 +82,13 @@ function parseArgs(argv: string[]): Args {
     let arg = argv[i];
     if (arg === '--headed') {
       args.headed = true;
+      args.tabs = false;
     } else if (arg === '--tabs') {
       args.tabs = true;
+      args.headed = false;
+    } else if (arg === '--headless') {
+      args.headed = false;
+      args.tabs = false;
     } else if (arg === '--no-cards') {
       args.writeCards = false;
     } else if (arg === '--session') {
@@ -96,7 +101,7 @@ function parseArgs(argv: string[]): Args {
   }
   if (!positional[0]) {
     throw new Error(
-      'usage: node run-eval.ts <evaluation-card-url> [comma,separated,models] [--headed|--tabs] [--session <id>] [--no-cards]',
+      'usage: node run-eval.ts <evaluation-card-url> [comma,separated,models] [--tabs|--headed|--headless] [--session <id>] [--no-cards]',
     );
   }
   args.evalCardUrl = positional[0];

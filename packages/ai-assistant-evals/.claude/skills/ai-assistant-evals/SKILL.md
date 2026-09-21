@@ -24,7 +24,8 @@ the same browser flow fed by an EvaluationCard: the card's prompt and
 follow-up prompts, its initial cards and files copied into the test workspace
 first, a per-session results directory, and one EvaluationResultCard per
 model plus one EvaluationReportCard written into the workspace the evaluation
-lives in (the writer's `evals` workspace, made by `pnpm eval:setup`). The
+lives in (the writer's AI Assistant Evaluations workspace, at the endpoint
+`evals`, made by `pnpm eval:setup`). The
 quality score on a result is a judge's, not the runner's: the
 `/run-ai-assistant-eval` command in `.claude/commands` walks through running,
 judging against the card's success criteria, and recording the score with
@@ -39,7 +40,8 @@ and time targets are multiplied by the number of prompts.
   prints `200`.
 - The local matrix users `ai-assistant-eval-user-1` to `ai-assistant-eval-user-5` / `password` exist (see
   `EVAL_USERS` below). For evaluations, `pnpm eval:setup` has created the
-  `evals` workspace of the writer user (`user` locally) and pushed the cards.
+  AI Assistant Evaluations workspace of the writer user (`user` locally), at
+  the endpoint `evals`, and pushed the cards.
 - Every model you name has a ModelConfiguration card in the SystemCard the host
   uses (`packages/catalog/contents/SystemCard/default.json`), or the picker
   will not offer it.
@@ -60,6 +62,13 @@ EVAL_MODELS="Claude Sonnet 4.6,Claude Opus 4.8" pnpm eval:models          # head
 EVAL_MODELS="Claude Sonnet 4.6" pnpm eval:models:headed                   # watch it
 EVAL_MODELS="Claude Sonnet 4.6,Claude Opus 4.8" pnpm eval:models:tabs     # watch several, one tab each
 ```
+
+An evaluation run takes the same choice as a flag: `pnpm eval <url> [models]`
+with `--tabs` (watch, one window per model, still side by side), `--headed`
+(watch, one model at a time) or `--headless` (show nothing). Without a flag it
+is headless; the `/run-ai-assistant-eval` command passes `--tabs` unless the
+user asked for `--headless`, because a run takes minutes and what the
+assistant does on screen is most of what there is to see.
 
 Knobs (env vars):
 
@@ -310,4 +319,5 @@ changes a selector the run ends as `runner-failure` with the step name.
 `pnpm lint` type-checks the package. The three cards are in
 `eval-realm/evaluation.gts`; the evaluations themselves are JSON under
 `eval-realm/Evaluation/`, fixtures they copy under `eval-realm/eval-fixtures/`;
-`pnpm eval:setup` pushes them into the writer's `evals` workspace.
+`pnpm eval:setup` pushes them into the writer's AI Assistant Evaluations
+workspace.

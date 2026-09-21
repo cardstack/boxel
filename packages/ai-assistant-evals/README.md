@@ -16,12 +16,15 @@ one fresh workspace and room per model. Two entry points share the flow:
 
 An evaluation is three cards, defined in `eval-realm/evaluation.gts`. They
 live in a workspace of the person running them, not in a shared realm:
-`pnpm eval:setup` creates a workspace named `evals` for the writer user (the
-same create-realm call the app's "new workspace" dialog makes) and pushes
-everything under `eval-realm/` into it. Locally the writer is `user`, so the
-workspace is `https://localhost:4201/user/evals/` and shows up in that
-account's workspace chooser. Setup can run again at any time; it writes every
-file over.
+`pnpm eval:setup` creates a workspace at the endpoint `evals`, shown as
+"AI Assistant Evaluations", for the writer user (the same create-realm call
+the app's "new workspace" dialog makes) and pushes everything under
+`eval-realm/` into it. Locally the writer is `user`, so the workspace is
+`https://localhost:4201/user/evals/` and shows up in that account's workspace
+chooser under that name. Setup can run again at any time; it writes every file
+over, and it reapplies the display name, so `--name` renames a workspace that
+already exists. `--endpoint` only takes effect on a new one, since the
+endpoint is the URL.
 
 - **Evaluation** (`Evaluation/*.json`): `assistantPrompt`, optional
   `followUpPrompts` sent one at a time once the bot is idle, `successCriteria`
@@ -50,7 +53,7 @@ under `eval-realm/eval-fixtures/`.
 ```sh
 pnpm eval:setup                                    # once, and after editing eval-realm/
 pnpm eval https://localhost:4201/user/evals/Evaluation/hello-world
-pnpm eval https://localhost:4201/user/evals/Evaluation/hello-world "Claude Sonnet 4.6,GPT-5.5" --headed
+pnpm eval https://localhost:4201/user/evals/Evaluation/hello-world "Claude Sonnet 4.6,GPT-5.5" --tabs
 pnpm eval:judge https://localhost:4201/user/evals/EvaluationResultCard/<id> --score 8 --analysis-file notes.md
 ```
 
@@ -59,7 +62,15 @@ initial cards and files into a bundle (`eval-results/<session-id>/evaluation.jso
 creates a session id, writes the report card, runs the spec with
 `EVAL_BUNDLE` and `EVAL_SESSION_ID` set and the per-session results directory,
 then writes one result card per model, uploading the screenshot into the
-workspace. `--no-cards` skips every write. The eval users that drive the
+workspace. `--no-cards` skips every write.
+
+How the browsers show up is one flag. `--tabs` is the one to reach for: a
+single headed browser with a window per model, all still running side by side,
+so watching costs no wall-clock. `--headed` gives a plain window but runs one
+model at a time, which makes a sweep as long as the sum of its models.
+`--headless` shows nothing and is the default when no flag is given; the
+`/run-ai-assistant-eval` command inverts that and passes `--tabs` unless asked
+for `--headless`. The eval users that drive the
 browsers never touch the evaluations workspace: they get the bundle. The
 writer is `EVAL_WRITER_USER` / `EVAL_WRITER_PASSWORD` (default `user` /
 `password`); `EVAL_REALM_SERVER_URL` (default `https://localhost:4201`) is

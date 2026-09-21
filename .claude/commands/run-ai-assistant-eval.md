@@ -1,5 +1,5 @@
 ---
-description: Run one EvaluationCard against one or more models through the real assistant, judge each result against the card's success criteria, and record everything as cards. Asks which evaluation and which models when they are not given. Usage /run-ai-assistant-eval [evaluation-card-url] [comma,separated,models]
+description: Run one EvaluationCard against one or more models through the real assistant, judge each result against the card's success criteria, and record everything as cards. Asks which evaluation and which models when they are not given, and shows the browser as it works unless told otherwise. Usage /run-ai-assistant-eval [evaluation-card-url] [comma,separated,models] [headless]
 ---
 
 Run an AI assistant evaluation end to end: `$ARGUMENTS`
@@ -37,6 +37,15 @@ fifteen minutes and dollars.
 Take an answer the user typed into "Other" as given — it is a picker name or
 an evaluation file name, not a new question.
 
+**Watching the browser is the default**, because a run takes minutes and what
+the assistant does on screen is most of what there is to see. Pass `--tabs`:
+one headed browser with a window per model, all of them still running side by
+side, so watching costs no wall-clock. Do not ask about this — only drop the
+flag when the invocation says `headless`, `--headless`, `no browser` or the
+like, and then pass `--headless` instead. `--headed` is the third option, one
+model at a time in a plain window; use it only when asked for it by name,
+since it serializes a sweep.
+
 Every model run spends real money and takes minutes. Run each model once per
 session. Never rerun a model whose result you have not read, and never loop.
 
@@ -46,7 +55,8 @@ session. Never rerun a model whose result you have not read, and never loop.
   prints `200`. If not, tell the user to start it (`mise run dev-all` with
   `OPENROUTER_API_KEY` set) and stop.
 - The evaluations workspace exists and is current. From `packages/ai-assistant-evals`,
-  `pnpm eval:setup` creates the writer's `evals` workspace if needed and pushes
+  `pnpm eval:setup` creates the writer's AI Assistant Evaluations workspace
+  (endpoint `evals`) if needed and pushes
   `eval-realm/` into it; it is safe to run every time and takes seconds. Run
   it whenever the URL answers `404` or a file under `eval-realm/` changed.
 - The eval users exist (`ai-assistant-eval-user-1` to `ai-assistant-eval-user-5`, password `password`). If the
@@ -59,11 +69,13 @@ session. Never rerun a model whose result you have not read, and never loop.
 From `packages/ai-assistant-evals`:
 
 ```sh
-pnpm eval <evaluation-card-url> ["Model A,Model B"]
+pnpm eval <evaluation-card-url> ["Model A,Model B"] --tabs
 ```
 
 Run it in the background and follow its output; a session with four models
-takes five to fifteen minutes. The runner:
+takes five to fifteen minutes. The browser opens on the user's screen, so say
+in one line that it is running and that the windows are the run, not something
+to click. The runner:
 
 - creates a session id and an EvaluationReportCard in the evaluation's realm,
 - per model, in parallel: logs in as its own matrix user, creates a fresh
