@@ -25,9 +25,10 @@ class ClinicalDashboardIsolated extends Component<typeof ClinicalDashboard> {
       <header>
         <h1>{{@model.unitName}}</h1>
         <p class='posture' data-test-posture>
-          This list is scoped to the signed-in clinician because the search
-          says so, not because the realm enforces it. Any caller who can read
-          this realm can read every record in it.
+          <span class='posture-stamp'>Not access controlled</span>
+          This list is scoped to the signed-in clinician because the search says
+          so, not because the realm enforces it. Any caller who can read this
+          realm can read every record in it.
         </p>
       </header>
 
@@ -98,10 +99,18 @@ class ClinicalDashboardIsolated extends Component<typeof ClinicalDashboard> {
       .posture {
         margin: var(--boxel-sp-xs) 0 0;
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        border-left: 0.25rem solid var(--primary);
-        background-color: var(--muted);
+        background-color: var(--foreground);
+        color: var(--background);
         font-size: var(--boxel-font-size-sm);
         line-height: var(--boxel-line-height-sm);
+      }
+      .posture-stamp {
+        margin-right: var(--boxel-sp-xxs);
+        font-family: var(--font-mono, monospace);
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        white-space: nowrap;
       }
       .rows {
         list-style: none;

@@ -11,9 +11,7 @@ import {
   Pill,
 } from '@cardstack/boxel-ui/components';
 import ClipboardIcon from '@cardstack/boxel-icons/clipboard-list';
-import GaugeIcon from '@cardstack/boxel-icons/gauge';
 import HeartPulseIcon from '@cardstack/boxel-icons/heart-pulse';
-import PillsIcon from '@cardstack/boxel-icons/pills';
 import {
   CardDef,
   Component,
@@ -418,6 +416,7 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
       </header>
 
       <p class='posture' data-test-posture>
+        <span class='posture-stamp'>Not access controlled</span>
         Anyone who can write this realm can run every action on this page. These
         operations record who acted; they do not check whether that person
         should be allowed to act. Do not copy this example as a model for access
@@ -433,7 +432,7 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
       <div class='columns'>
         <div class='column'>
           <section class='panel'>
-            <h2><HeartPulseIcon width='16' height='16' />Rhythm events</h2>
+            <h2>Rhythm events</h2>
             <FieldContainer
               @label='Findings recorded with an escalation'
               @vertical={{true}}
@@ -473,7 +472,7 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
           </section>
 
           <section class='panel'>
-            <h2><PillsIcon width='16' height='16' />Medications</h2>
+            <h2>Medications</h2>
             <ul class='rows'>
               {{#each @model.medications as |medication|}}
                 <li class='row' data-test-medication={{medication.name}}>
@@ -506,7 +505,7 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
           </section>
 
           <section class='panel'>
-            <h2><GaugeIcon width='16' height='16' />Vitals</h2>
+            <h2>Vitals</h2>
             <div class='vitals-form'>
               <FieldContainer
                 @label='Heart rate'
@@ -613,7 +612,7 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
           </section>
 
           <section class='panel'>
-            <h2><ClipboardIcon width='16' height='16' />Consults</h2>
+            <h2>Consults</h2>
             <FieldContainer
               @label='Question for the consulting service'
               @vertical={{true}}
@@ -683,9 +682,10 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
       }
       .identity h1 {
         margin: 0 0 var(--boxel-sp-xs);
-        font-size: var(--boxel-font-size-xl);
-        line-height: var(--boxel-line-height-xl);
-        letter-spacing: -0.02em;
+        font-size: clamp(1.75rem, 4cqi, 2.75rem);
+        line-height: 1.05;
+        font-weight: 400;
+        letter-spacing: -0.03em;
       }
       .status-row,
       .actions,
@@ -703,10 +703,18 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
       .posture {
         margin: 0;
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        border-left: 0.1875rem solid var(--primary);
-        background-color: var(--muted);
+        background-color: var(--foreground);
+        color: var(--background);
         font-size: var(--boxel-font-size-sm);
         line-height: var(--boxel-line-height-sm);
+      }
+      .posture-stamp {
+        margin-right: var(--boxel-sp-xxs);
+        font-family: var(--font-mono, monospace);
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        white-space: nowrap;
       }
       .columns {
         display: grid;
@@ -726,9 +734,6 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
         min-width: 0;
       }
       .panel h2 {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
         margin: 0;
         padding-bottom: var(--boxel-sp-xxs);
         border-bottom: 0.0625rem solid var(--border, var(--muted));
