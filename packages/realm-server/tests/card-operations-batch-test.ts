@@ -54,6 +54,7 @@ interface Commit {
   writes: Record<string, string>;
   deletes: string[];
   clientRequestId: string | null | undefined;
+  clientAuthored: string[] | undefined;
   waitForIndex: boolean | undefined;
 }
 
@@ -245,6 +246,7 @@ function stub(opts: StubOptions = {}): Stub {
         writes,
         deletes: [...(batch.deletes ?? [])],
         clientRequestId: options?.clientRequestId,
+        clientAuthored: options?.clientAuthored,
         waitForIndex: options?.waitForIndex,
       });
       lockSpan.push('commit');
@@ -488,6 +490,185 @@ async function refusal(
 }
 
 module(basename(import.meta.filename), function () {
+  // Which cards a commit says it wrote from content its caller supplied.
+  //
+  // The distinction reaches the client as a member of the invalidation event,
+  // and it is the whole of what lets a client tell the cards it is already
+  // holding the state of from the ones the realm computed for it. A card
+  // reported here that the realm in fact computed would have its client
+  // decline to read state only the realm has; one not reported that the client
+  // did supply would have a client re-read a card over an edit made while the
+  // write was in flight.
+  module('what a commit says its caller wrote', function () {
+    test("a card minted under a name its caller chose is the caller's content", async function (assert) {
+      let { core, commits } = stub();
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'create',
+            lid: 'mango',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Mango' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        { clientRequestId: 'req-1', reportAuthorship: true },
+      );
+
+      assert.deepEqual(
+        commits[0].clientAuthored,
+        [`${REALM}Person/mango`],
+        'named as the invalidation event names it, so the two can be matched',
+      );
+    });
+
+    test("a card the realm named is nobody else's to hold", async function (assert) {
+      let { core, commits } = stub();
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'create',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Mango' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        { clientRequestId: 'req-1', reportAuthorship: true },
+      );
+
+      assert.deepEqual(
+        commits[0].clientAuthored,
+        [],
+        'a create that named no card of its own left the realm to name it, so no caller is holding it',
+      );
+    });
+
+    test('a card the batch only changed is state the realm computed', async function (assert) {
+      let { core, commits } = stub({
+        stored: {
+          'Person/existing.json': JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Mango' },
+              meta: { adoptsFrom: PERSON },
+            },
+          }),
+        },
+      });
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'update',
+            href: `${REALM}Person/existing`,
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Van Gogh' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        { clientRequestId: 'req-1', reportAuthorship: true },
+      );
+
+      assert.deepEqual(
+        commits[0].clientAuthored,
+        [],
+        "the commit claims only the cards it minted under a caller's name",
+      );
+    });
+
+    // The distinction the store reads: a batch that authored nothing is a
+    // batch every card of which wants re-reading, and it has to be able to say
+    // so. Reported as an empty list rather than by omission, because omission
+    // is what a writer that does not answer the question looks like — and a
+    // client reading "I authored none of this" as "no information" skips the
+    // very cards only the realm can tell it about.
+    test('a front door that does not ask is told nothing about authorship', async function (assert) {
+      // The card and source routes write one card each, and their events have
+      // always been read as being about that card. Answering a question they
+      // never asked would change what every one of their events carries.
+      let { core, commits } = stub();
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'create',
+            lid: 'mango',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Mango' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        { clientRequestId: 'req-1' },
+      );
+
+      assert.strictEqual(
+        commits[0].clientAuthored,
+        undefined,
+        'the commit says nothing about which of its cards the caller wrote',
+      );
+    });
+
+    test('a batch that authored nothing says so, rather than saying nothing', async function (assert) {
+      let { core, commits } = stub({
+        stored: {
+          'Person/existing.json': JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Mango' },
+              meta: { adoptsFrom: PERSON },
+            },
+          }),
+        },
+      });
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'update',
+            href: `${REALM}Person/existing`,
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Van Gogh' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        { clientRequestId: 'req-1', reportAuthorship: true },
+      );
+
+      let answered = Array.isArray(commits[0].clientAuthored);
+      assert.true(
+        answered,
+        'the commit answered the question rather than leaving it open',
+      );
+      assert.strictEqual(
+        commits[0].clientAuthored?.length,
+        0,
+        'and its answer is that it authored none of what it wrote',
+      );
+    });
+  });
+
   module('card operations batch', function () {
     test('a create is staged at the path its local id names', async function (assert) {
       let { core, commits } = stub();

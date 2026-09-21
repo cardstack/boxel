@@ -4,6 +4,7 @@ import {
   getOperationsTransport,
   identifyCard,
   InvalidQueryError,
+  localId,
   realmURL,
   type CarriedOperationInfo,
   type CodeRef,
@@ -21,6 +22,7 @@ import {
   CardDef,
   FieldDef,
   FileDef,
+  serializeCard,
   type BaseDefConstructor,
   type BaseInstanceType,
   type CardDefConstructor,
@@ -2127,6 +2129,12 @@ export type BatchBuilder<Type> = BatchOperations<Type> & {
     attributes?: Record<string, unknown>,
     opts?: { relationships?: Record<string, unknown> },
   ): BatchHandle<OperationWriteResult>;
+  // A card the caller is already holding, minted under the name they hold it
+  // by. The instance is the whole of what the entry says, so there are no
+  // attributes to pass beside it.
+  create<NewCard extends CardDefConstructor>(
+    instance: InstanceType<NewCard>,
+  ): BatchHandle<OperationWriteResult>;
   find(
     filter: OperationFilter,
     opts?: { field?: string; expect?: 'one' },
@@ -2176,7 +2184,23 @@ export function operations(target: unknown): any {
     transport: getOperationsTransport(),
     subject: (other: unknown) => subjectFor(other),
     codeRef: (value: unknown) => identifyDef(value),
+    resourceFor: (instance: unknown) => adoptedResource(instance),
   });
+}
+
+// The resource a card the caller is already holding would be minted from.
+//
+// The same document the card's own save sends, minus the parts a batch entry
+// has nowhere to put: no linked graph rides along, because an entry carries a
+// resource rather than a document, so a card the batch is to co-create is
+// registered as its own `create` entry and linked by the handle that answers.
+function adoptedResource(instance: unknown): Record<string, unknown> {
+  let { id: _id, ...resource } = serializeCard(instance as CardDef, {
+    useAbsoluteURL: true,
+    omitQueryFields: true,
+    includedScope: 'none',
+  }).data;
+  return resource as unknown as Record<string, unknown>;
 }
 
 // What `operations()` was handed, in the terms the client core works in. The
@@ -2219,6 +2243,7 @@ function subjectFor(target: unknown): OperationsSubject {
     displayName: defName(owner),
     operations: carriedOperations(owner),
     ...(instance.id ? { id: instance.id } : {}),
+    ...(instance[localId] ? { localId: instance[localId] } : {}),
     ...(realm ? { realmURL: realm.href } : {}),
     ...(codeRef ? { codeRef } : {}),
   };
