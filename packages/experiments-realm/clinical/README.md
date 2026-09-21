@@ -103,10 +103,29 @@ Two things about them are worth knowing before copying the pattern:
 
 ## Running it
 
-The realm is mounted as part of the `experiments` realm in the development
-stack, so these cards are at `…/experiments/clinical/…`. Start from
-`PatientRecord/pt-1001.json` for the operations and
-`ClinicalDashboard/cardiology-ward-round.json` for the saved searches.
+These cards are part of the `experiments` realm, so bring the stack up with
+`mise run dev-all` — the `test-services:realm-server` flavor sets
+`SKIP_EXPERIMENTS=true` and does not mount this realm at all.
+
+```
+https://localhost:4201/experiments/clinical/PatientRecord/pt-1001
+https://localhost:4201/experiments/clinical/ClinicalDashboard/cardiology-ward-round
+```
+
+Two things about a **cold** stack, both of which make a working button look
+broken:
+
+- The realm indexes from scratch on first boot, and until a card's row exists
+  the page says it is still being prepared.
+- A write's response waits on its own index job, and index passes are
+  serialized per realm — so behind a full-realm pass a button can sit in flight
+  for minutes with the bytes already on disk. `http://localhost:4210/_indexing-dashboard`
+  shows what is queued.
+
+Invoking an operation writes to the realm, which here is this folder in the
+working tree. `git checkout -- packages/experiments-realm/clinical` puts the
+fixtures back; a named `create` also leaves a new card behind, under
+`clinical/ConsultRequest/`.
 
 The authoring guide for everything used here is `docs/card-operations.md` at
 the root of this repository.

@@ -5,7 +5,7 @@
       "mrn": "PT-1001",
       "patientName": "Margaret Okonkwo",
       "status": "admitted",
-      "severity": "Moderate",
+      "severity": "Critical",
       "careUnit": "Cardiology",
       "medications": [
         {
@@ -32,8 +32,8 @@
           "eventId": "RE-4471",
           "detectedAt": "2026-09-18T02:14:00Z",
           "rhythm": "Atrial fibrillation with RVR",
-          "status": "open",
-          "findings": null
+          "status": "escalated",
+          "findings": "Rate control started, cardiology paged"
         },
         {
           "eventId": "RE-4469",
@@ -74,10 +74,6 @@
       "auditLog": {
         "links": {
           "self": "../audit/pt-1001.txt"
-        },
-        "data": {
-          "type": "file-meta",
-          "id": "../audit/pt-1001.txt"
         }
       },
       "unitRoster.0": {
