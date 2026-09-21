@@ -436,7 +436,8 @@ jobs:
       # The browser revision must match the CLI's own @playwright/test pin,
       # so install through the CLI's nested playwright binary.
       - name: Install Chromium
-        run: '"$(npm root -g)/@cardstack/boxel-cli/node_modules/.bin/playwright" install --with-deps chromium'
+        run: |
+          "$(npm root -g)/@cardstack/boxel-cli/node_modules/.bin/playwright" install --with-deps chromium
       - name: Run tests
         run: boxel test .
         working-directory: packages/pretui
