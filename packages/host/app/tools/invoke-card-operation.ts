@@ -34,7 +34,7 @@ export default class InvokeCardOperationTool extends HostBaseTool<
 
   static actionVerb = 'Invoke';
 
-  description = `Invoke an operation that a card's type declares. An operation is a named action an author defined on the type — "addComment", "invite", "archive" — that the realm carries out in one authorized request, applying the author's own rules. Prefer it over patching a card by hand whenever the type declares one for the change you want; use get-card-type-schema or the card's source to see which names a type carries. "payload" supplies the operation's params and its keys must match the names the operation declares exactly — a missing one is refused before anything is sent. "realm" is read only when the operation creates a card of the target card's type, naming where that new card lands; an operation that acts on the card at "cardId" runs in that card's own realm. A write answers the card it wrote plus its version; a read answers the document.`;
+  description = `Invoke an operation that a card's type declares. An operation is a named action an author defined on the type — "addComment", "invite", "archive" — that the realm carries out in one authorized request, applying the author's own rules. Prefer it over patching a card by hand whenever the type declares one for the change you want. To learn which names a type carries, read its source: they are its "@operation" declarations. Naming one the card does not carry is refused with the full list of the names it does, so a wrong guess costs one call and answers the question. "payload" supplies the operation's params, and its keys must match the names the operation declares exactly — a missing one is refused before anything is sent. "realm" and "relationships" are read only when the operation is the plain "create", which mints a new card of the target card's type: "realm" says where it lands, and "relationships" gives the cards it is created linking to, as JSON:API relationship objects such as {"author": {"links": {"self": "<card id>"}}}. A declared operation names the cards it links among its params instead. An operation that acts on the card at "cardId" always runs in that card's own realm. A write answers the card it wrote plus its version; a read answers the document.`;
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
@@ -89,6 +89,11 @@ export default class InvokeCardOperationTool extends HostBaseTool<
     }
 
     let base = baseOf(name, declarations);
+    // The plain `create` is the one behavior that mints a card the caller
+    // describes outright, and so the one that reads where it lands and what it
+    // links to. Everything else either acts on a card that already exists, or
+    // — a declared create — describes the new card from its own params.
+    let mintsACard = base === 'create' && !declarations[name];
     if (base === 'query') {
       throw new Error(
         `"${name}" is a query operation: it answers a live set of search results that re-runs as realms index, not a value this tool can hand back. Search with search-entries instead; a card reads the same search by handing the query to its search results component.`,
@@ -99,6 +104,15 @@ export default class InvokeCardOperationTool extends HostBaseTool<
         `"${name}" acts on ${input.cardId} and runs in the realm that holds it, so it cannot be given a realm to run in. A realm names where a card a "create" mints lands.`,
       );
     }
+    if (input.relationships && !mintsACard) {
+      throw new Error(
+        `"${name}" is not the plain "create", so it has no new card for "relationships" to describe. ${
+          base === 'create'
+            ? `"${name}" declares what it creates, so the cards it links to are named among its params, in "payload".`
+            : `Links on an existing card are changed by an operation its type declares for that, or by "update" in "payload".`
+        }`,
+      );
+    }
 
     let payload = payloadOf(input);
     assertPayloadSuppliesParams(name, declarations[name], payload);
@@ -107,10 +121,7 @@ export default class InvokeCardOperationTool extends HostBaseTool<
       payload?: unknown,
       opts?: unknown,
     ) => Promise<OperationWriteResult | Record<string, unknown> | null>;
-    let answer = await member(
-      payload,
-      input.realm ? { realm: input.realm } : undefined,
-    );
+    let answer = await member(payload, invokeOptions(input, mintsACard));
 
     let commandModule = await this.loadToolModule();
     const { InvokeCardOperationResult } = commandModule;
@@ -169,6 +180,25 @@ function invocableNames(
     }
   }
   return [...names].sort();
+}
+
+// What the call carries beside its payload. Both members belong to a minted
+// card rather than to the invocation, so neither is passed for anything else —
+// which is also what makes the refusals above the only place they can be
+// silently dropped.
+function invokeOptions(
+  input: BaseToolModule.InvokeCardOperationInput,
+  mintsACard: boolean,
+): { realm?: string; relationships?: Record<string, unknown> } | undefined {
+  if (!input.realm && !(mintsACard && input.relationships)) {
+    return undefined;
+  }
+  return {
+    ...(input.realm ? { realm: input.realm } : {}),
+    ...(mintsACard && input.relationships
+      ? { relationships: input.relationships as Record<string, unknown> }
+      : {}),
+  };
 }
 
 // The payload as the operation reads it. A field the caller left unset arrives

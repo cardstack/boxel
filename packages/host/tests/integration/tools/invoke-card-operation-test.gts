@@ -37,6 +37,7 @@ const REPORT_MODULE = `
     contains,
     containsMany,
     field,
+    linksTo,
     CardDef,
     FieldDef,
   } from "@cardstack/base/card-api";
@@ -47,10 +48,15 @@ const REPORT_MODULE = `
     @field body = contains(StringField);
   }
 
+  export class Activity extends CardDef {
+    @field headline = contains(StringField);
+  }
+
   export class Report extends CardDef {
     @field headline = contains(StringField);
     @field status = contains(StringField);
     @field comments = containsMany(ReportComment);
+    @field activity = linksTo(() => Activity);
 
     @operation static addComment = {
       base: 'transform',
@@ -96,6 +102,17 @@ function realmContents() {
     'report-queried.json': reportFile('Queried'),
     'report-realm-given.json': reportFile('Realm Given'),
     'report-created-from.json': reportFile('Creator'),
+    'report-linked-from.json': reportFile('Linker'),
+    'report-relationships-refused.json': reportFile('Relationships Refused'),
+    'activity-lab-safety.json': {
+      data: {
+        type: 'card',
+        attributes: { headline: 'Lab safety' },
+        meta: {
+          adoptsFrom: { module: `${testRealmURL}report`, name: 'Activity' },
+        },
+      },
+    },
   };
 }
 
@@ -106,6 +123,7 @@ interface ToolInput {
   operation: string;
   payload?: Record<string, unknown>;
   realm?: string;
+  relationships?: Record<string, unknown>;
 }
 
 interface SentRequest {
@@ -264,6 +282,56 @@ module('Integration | tools | invoke-card-operation', function (hooks) {
       'Report',
       'and its type came from the card the call named',
     );
+  });
+
+  test('a create is minted holding the links it was given', async function (assert) {
+    let result = await invoke({
+      cardId: `${testRealmURL}report-linked-from`,
+      operation: 'create',
+      payload: { headline: 'Linked' },
+      relationships: {
+        activity: { links: { self: `${testRealmURL}activity-lab-safety` } },
+      },
+      realm: testRealmURL,
+    });
+
+    let stored = await storedCard(
+      `${result.cardId.slice(testRealmURL.length)}.json`,
+    );
+    assert.strictEqual(
+      stored.data.relationships?.activity?.links?.self,
+      `${testRealmURL}activity-lab-safety`,
+      'the new card holds the link the caller named, which it could not if links travelled as attributes',
+    );
+    assert.strictEqual(
+      stored.data.attributes.headline,
+      'Linked',
+      'and its field values arrived beside them',
+    );
+    assert.strictEqual(
+      stored.data.attributes.activity,
+      undefined,
+      'with nothing written under the link field as an attribute',
+    );
+  });
+
+  test('relationships are refused for an operation that mints no card', async function (assert) {
+    let { sent } = recordingTransport();
+
+    let message = await refusal({
+      cardId: `${testRealmURL}report-relationships-refused`,
+      operation: 'addComment',
+      payload: { body: 'Somewhere else' },
+      relationships: {
+        activity: { links: { self: `${testRealmURL}activity-lab-safety` } },
+      },
+    });
+
+    assert.true(
+      message.includes('no new card for "relationships" to describe'),
+      `the refusal says why they have nowhere to go: ${message}`,
+    );
+    assert.strictEqual(sent.length, 0, 'and nothing was sent to the realm');
   });
 
   test('an unknown operation is refused, naming the ones the card carries', async function (assert) {
