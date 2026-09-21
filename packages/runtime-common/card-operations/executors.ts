@@ -905,10 +905,17 @@ async function stageFileUpdate(
     }
   }
   if (!meta && !entry.rawSource) {
-    // Creating a file is not an operation — the realm's write routes own
-    // that — so an update has a file to replace or it has nothing to do. A
+    // An update has a file to replace or it has nothing to do: what it names
+    // is the content that should stand in place of the content already there,
+    // and at a path holding nothing there is no replacement to describe. A
     // verbatim replacement is the exception, since the routes it stands in
     // for create the files they write.
+    //
+    // An `appendLine` at a path holding nothing does create the file, and the
+    // two do not disagree. What an append names is the line, which is the
+    // whole of what the file is to hold when nothing is there yet — so the
+    // first append and every later one describe the same act, while a first
+    // replacement would be describing an act that has not happened.
     throw new OperationFailure({
       id: url.href,
       status: 404,
@@ -946,8 +953,29 @@ async function stageFileUpdate(
 // the realm's adapter adds it at the end of the file without reading it.
 //
 // So every check below is one that can be made without the bytes: what the
-// file's name says it holds, and whether anything is stored at the path, which
-// is a stat rather than a read.
+// file's name says it holds, and — where a check needs it — whether anything
+// is stored at the path, which is a stat rather than a read.
+//
+// The first line appended to a path holding nothing creates the file. For an
+// append-only file the first write and every later one are the same act, and
+// an author with no way to spell the first cannot own a log at all: creating
+// one would mean reaching the realm's file-write routes, which card code
+// cannot call.
+//
+// What keeps that from being a way to put arbitrary bytes at an arbitrary path
+// is the name checks below, and the rule they add up to is exactly this: a
+// created path is one the realm already serves as text. No extension, an
+// unknown extension, a dotfile, a dot mid-segment and a card's own id all
+// resolve to binary content and are refused; so does a card's stored source,
+// and so does anything whose type is JSON.
+//
+// Stated that narrowly on purpose, because the check that reads as "and not a
+// module" does not cover every spelling of one. `hasExecutableExtension` names
+// `.js`, `.gjs`, `.ts` and `.gts` and exempts `.d.ts`, so `.mjs`, `.cjs`,
+// `.jsx` and `.d.ts` are creatable here — inert to the realm, which evaluates
+// none of them, but not refused either. Anyone deciding whether some new
+// spelling is safe to create should read that helper rather than this
+// sentence.
 export async function stageAppendLine(
   entry: AppendLineEntry,
   ctx: StagingContext,
@@ -1030,21 +1058,14 @@ export async function stageAppendLine(
         `source endpoint, not by appending a line`,
     );
   }
-  // An earlier entry may have staged this file's content without it being on
-  // disk yet — a verbatim source write creates the file it writes — which is
-  // as good as stored for an append that lands after it in the same commit.
-  let staged = ctx.stored.has(path) || ctx.storedMeta.has(path);
-  if (!staged && !(await ctx.fileExists(path))) {
-    // Appending to a path holding nothing would create the file, and creating
-    // a file is not an operation.
-    throw new OperationFailure({
-      id: url.href,
-      status: 404,
-      code: 'target-not-found',
-      title: 'Not found',
-      detail: `${url.href} does not exist in realm ${ctx.realmURL}`,
-    });
-  }
+  // Nothing is asked about the path itself. A file already there is appended
+  // to and a path holding nothing is created, so the answer would not change
+  // what this stages — and the commit already tells the two apart on its own,
+  // announcing a created path as an added file rather than an updated one.
+  //
+  // Which is also why a path this creates is no mint. A mint is the claim
+  // that a path must be free, and the batch is refused where it is not; an
+  // append claims the opposite, being satisfied either way.
   return {
     writes: [],
     appends: [{ path, content: `${line}\n` }],
