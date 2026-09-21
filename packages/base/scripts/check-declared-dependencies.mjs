@@ -4,8 +4,11 @@
 // Nothing else asks this question. TypeScript resolves modules by walking up to
 // the workspace root, where a package hoisted for some other consumer resolves
 // fine, so it checks that a module exists and never that this package declared
-// it. eslint's `import/no-extraneous-dependencies` would ask it, but base has no
-// eslint config, and the rule cannot model the four import idioms below.
+// it. eslint's `import/no-extraneous-dependencies` would ask it, but it
+// early-returns on any specifier it cannot resolve, and under pnpm an
+// undeclared package is precisely the unresolvable case — so it reports nothing
+// on exactly the files this check exists to flag. Measured: enabled on base it
+// finds zero, including on a file importing a package that does not exist.
 //
 // An undeclared import works until something compiles base's source against
 // base's own dependencies — pnpm links only declared packages, so the package is
@@ -18,13 +21,19 @@ import { fileURLToPath } from 'node:url';
 
 const baseDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'declarations', '__boxel']);
-const SOURCE_EXT = /\.(gts|ts|js)$/;
+// Matches `executableExtensions` in runtime-common: a card may be authored in
+// any of these, and base's own eslint config already provisions for `.gjs`.
+const SOURCE_EXT = /\.(gts|gjs|ts|js)$/;
 
-// `from '<specifier>'` and bare side-effect `import '<specifier>'`. Anchored on
-// the import/export keyword so a specifier-shaped string in prose or in a
-// template literal is not mistaken for one.
+// Run over source with comments and template-literal bodies blanked out, so a
+// specifier-shaped string in prose cannot be mistaken for an import. The line
+// anchor alone is not enough: the gap before `from` crosses newlines, so an
+// `export class …` line followed by a comment would otherwise match whatever
+// quoted text came next. `<` and `>` are excluded from that gap for the same
+// reason in Glimmer templates, which are not JS strings and so survive the
+// blanking above — no real import carries an angle bracket before its `from`.
 const FROM_IMPORT =
-  /^\s*(?:import|export)\b[^;'"]*?\bfrom\s*['"]([^'"]+)['"]/gm;
+  /^\s*(?:import|export)\b[^;'"<>]*?\bfrom\s*['"]([^'"]+)['"]/gm;
 const SIDE_EFFECT_IMPORT = /^\s*import\s*['"]([^'"]+)['"]/gm;
 // `import('<specifier>')` with a literal argument. A dynamic import reaches the
 // same module graph, so an undeclared package hides here just as well — and
@@ -61,6 +70,54 @@ const EXEMPT = [
   },
 ];
 
+// Blanks out what is not executable: line and block comments, and the inside of
+// template literals. Ordinary quoted strings are preserved, because that is
+// where specifiers live.
+//
+// Written as a scan rather than a regex because the two interact: `//` inside a
+// string starts no comment, and base imports from URLs (`https://esm.run/…`),
+// so a naive comment strip would truncate a real specifier.
+function blankNonExecutable(source) {
+  let out = '';
+  let i = 0;
+  while (i < source.length) {
+    const rest = source.slice(i);
+    if (rest.startsWith('//')) {
+      const end = source.indexOf('\n', i);
+      const stop = end === -1 ? source.length : end;
+      out += ' '.repeat(stop - i);
+      i = stop;
+    } else if (rest.startsWith('/*')) {
+      const end = source.indexOf('*/', i + 2);
+      const stop = end === -1 ? source.length : end + 2;
+      // Keep newlines so line-anchored matches still see line boundaries.
+      out += source.slice(i, stop).replace(/[^\n]/g, ' ');
+      i = stop;
+    } else if (source[i] === '`') {
+      let j = i + 1;
+      while (j < source.length && source[j] !== '`') {
+        if (source[j] === '\\') j++;
+        j++;
+      }
+      out += '`' + source.slice(i + 1, j).replace(/[^\n]/g, ' ') + '`';
+      i = Math.min(j + 1, source.length);
+    } else if (source[i] === "'" || source[i] === '"') {
+      const quote = source[i];
+      let j = i + 1;
+      while (j < source.length && source[j] !== quote && source[j] !== '\n') {
+        if (source[j] === '\\') j++;
+        j++;
+      }
+      out += source.slice(i, Math.min(j + 1, source.length));
+      i = j + 1;
+    } else {
+      out += source[i];
+      i++;
+    }
+  }
+  return out;
+}
+
 function* walk(dir) {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
@@ -90,7 +147,7 @@ const declared = new Set([
 
 const undeclared = new Map();
 for (const file of walk(baseDir)) {
-  const source = readFileSync(file, 'utf8');
+  const source = blankNonExecutable(readFileSync(file, 'utf8'));
   const specifiers = [
     ...source.matchAll(FROM_IMPORT),
     ...source.matchAll(SIDE_EFFECT_IMPORT),
