@@ -471,6 +471,13 @@ export default class RenderRoute extends Route<Model> {
     // residency midway through the render that follows it.
     this.store.observeIndexingJob();
     this.cardContextStore.observeIndexingJob();
+    // Which synchronization dropped this tab's loader, for the row's
+    // diagnostics. A dropped loader is the difference between a build that
+    // evaluates the whole module graph and one that evaluates nothing, so a
+    // reader looking at `moduleEvaluationCount` needs to know whether this
+    // visit caused it.
+    let loaderResetReason: BuildModelDiagnostics['loaderResetReason'];
+
     // Loader-epoch synchronization: indexing renders thread the realm's
     // loader epoch (re-minted whenever an index pass invalidates executable
     // modules — see RealmGenerationsTable.loader_epoch). When it differs
@@ -490,18 +497,31 @@ export default class RenderRoute extends Route<Model> {
         });
         this.store.resetCache();
         (globalThis as any).__boxelLoaderEpoch = parsedOptions.loaderEpoch;
+        loaderResetReason = 'loaderEpoch';
       }
     }
     if (parsedOptions.clearCache) {
+      // Never overwrites: the two fire together on the first visit of a pass
+      // that invalidated an executable, because the condition that mints a
+      // fresh epoch is the condition that arms the flag. The epoch is the
+      // reset that reached every other tab serving that pass, so it is the
+      // one the row should name.
+      loaderResetReason ??= 'clearCache';
       this.loaderService.resetLoader({
         clearFetchCache: true,
         reason: 'render-route clearCache',
       });
-      let resetKey = `${id}:${nonce}`;
-      if (this.lastStoreResetKey !== resetKey) {
-        this.store.resetCache();
-        this.lastStoreResetKey = resetKey;
-      }
+      this.#resetStoreOnce(id, nonce);
+    }
+    // The store half on its own. An index pass sends this on its first render
+    // whether or not it changed a module, because a pass must never be handed
+    // an instance, a cached document, or a local-id pairing another pass left
+    // resident on this tab — and the render scope that would otherwise move
+    // that boundary (`store.observeIndexingJob` above) is only tagged onto
+    // visits by the out-of-process prerender server, so an in-browser index
+    // pass has nothing else that moves it.
+    if (parsedOptions.resetStore) {
+      this.#resetStoreOnce(id, nonce);
     }
     // A fused index render carries both `fileExtract` and `cardRender`; the
     // card branch below serves it (hydration + settle) and the render.meta
@@ -809,6 +829,7 @@ export default class RenderRoute extends Route<Model> {
       moduleEvaluationTotalMs: roundMs(
         moduleTotalsAfter.totalMs - moduleTotalsBefore.totalMs,
       ),
+      ...(loaderResetReason ? { loaderResetReason } : {}),
       ...(moduleEvaluationsMs ? { moduleEvaluationsMs } : {}),
       ...(prunedHydrateFieldsMs
         ? { hydrateFieldsMs: prunedHydrateFieldsMs }
@@ -822,6 +843,19 @@ export default class RenderRoute extends Route<Model> {
     (globalThis as any).__renderModel = model;
     this.currentTransition = undefined;
     return model;
+  }
+
+  // The parent `render` route's model hook runs twice per format capture (the
+  // transition normalizes through `render` before entering the child route),
+  // so a reset keyed on nothing would run twice and throw away what the first
+  // one loaded. Keyed on the card + nonce, it runs once per visit.
+  #resetStoreOnce(id: string, nonce: string) {
+    let resetKey = `${id}:${nonce}`;
+    if (this.lastStoreResetKey === resetKey) {
+      return;
+    }
+    this.store.resetCache();
+    this.lastStoreResetKey = resetKey;
   }
 
   // Fetch the card's source document, retrying once when the first attempt

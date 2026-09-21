@@ -366,6 +366,130 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('lets the next writer of one file in as soon as the section releases', async function (assert) {
+      // The section's own return is not what the next writer of these files is
+      // waiting for — the release is. A write is durable well before it is
+      // indexed, and the index wait that follows needs no exclusivity over the
+      // files at all; held across it, the Nth concurrent writer of one card
+      // waits N index passes rather than one.
+      //
+      // Both coordination layers have to honour it. The advisory lock is what
+      // another replica blocks on, and the in-process queue is what a writer
+      // on this one blocks on — a queue that still chained on the whole
+      // section would put the same serialization back in memory, invisible to
+      // postgres.
+      await runInsideWindow(assert, {
+        what: 'a second writer of one card runs while the first is still working',
+        openOuter: (onEntered, released) =>
+          dbAdapter.withFileWriteLocks(
+            REALM,
+            ['Widget/one.json'],
+            async (releaseLocks) => {
+              releaseLocks();
+              onEntered();
+              // Stands in for the index wait: work the section still has to
+              // do, with nothing left for the files to protect.
+              await released;
+            },
+          ),
+        runInner: () =>
+          dbAdapter.withFileWriteLocks(
+            REALM,
+            ['Widget/one.json'],
+            async () => 'ok',
+          ),
+      });
+    });
+
+    test('a released section still reports its own outcome', async function (assert) {
+      // Releasing hands the files to the next writer; it does not hand over
+      // the section's result. A caller whose write is durable but whose
+      // indexing then fails must still hear about the failure, and one that
+      // succeeds must still get its value back rather than whatever the
+      // transaction returned at release time.
+      const value = await dbAdapter.withFileWriteLocks(
+        REALM,
+        ['Widget/one.json'],
+        async (releaseLocks) => {
+          releaseLocks();
+          await new Promise((r) => setTimeout(r, 25));
+          return 42;
+        },
+      );
+      assert.strictEqual(value, 42, 'the value produced after the release');
+
+      let caught: string | undefined;
+      try {
+        await dbAdapter.withFileWriteLocks(
+          REALM,
+          ['Widget/one.json'],
+          async (releaseLocks) => {
+            releaseLocks();
+            await new Promise((r) => setTimeout(r, 25));
+            throw new Error('indexing blew up');
+          },
+        );
+      } catch (e: any) {
+        caught = e?.message;
+      }
+      assert.strictEqual(
+        caught,
+        'indexing blew up',
+        'and the failure it hit after releasing',
+      );
+
+      // The chain is what the next writer of these files waits on, so a
+      // section that failed after releasing must have left it resolved rather
+      // than holding the queue open behind a rejection nobody consumes.
+      assert.strictEqual(
+        await dbAdapter.withFileWriteLocks(
+          REALM,
+          ['Widget/one.json'],
+          async () => 'after',
+        ),
+        'after',
+        'and the next writer of the same file is not stranded behind it',
+      );
+    });
+
+    test('a section that fails before releasing excludes the next writer until it unwinds', async function (assert) {
+      // The release is the only thing that ends the section early. A failure
+      // on the way to it — a refusal while staging, a write that cannot open
+      // its file — unwinds through the same rollback it always did, and the
+      // next writer of the file sees the realm as that section left it rather
+      // than part-way through.
+      const events: string[] = [];
+      let signalEntered!: () => void;
+      const entered = new Promise<void>((r) => {
+        signalEntered = r;
+      });
+      const first = dbAdapter
+        .withFileWriteLocks(REALM, ['Widget/one.json'], async () => {
+          events.push('1-start');
+          signalEntered();
+          await new Promise((r) => setTimeout(r, 150));
+          events.push('1-threw');
+          throw new Error('staging refused');
+        })
+        .catch(() => undefined);
+      await Promise.race([entered, first]);
+      const second = dbAdapter.withFileWriteLocks(
+        REALM,
+        ['Widget/one.json'],
+        async () => {
+          events.push('2-start');
+        },
+      );
+
+      await Promise.all([first, second]);
+
+      assert.deepEqual(
+        events,
+        ['1-start', '1-threw', '2-start'],
+        'the next writer waits for the whole of a section that never released',
+      );
+    });
+
     test('runs writers of different files in the same realm in parallel', async function (assert) {
       // The property the per-file scope exists for: one card's write, however
       // long it holds, does not stall the writer of another card in the same

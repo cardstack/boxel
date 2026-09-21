@@ -378,6 +378,29 @@ export async function awaitRealmIndexSettled(
     // exclusion with a pass — which is a stronger claim than any caller here
     // wants, so both readiness and the write-path drain pass a list.
     jobTypes?: string[];
+    // Narrows the lane to passes this writer has a stake in. Reading your own
+    // write matters; being made to read someone else's does not, and serving
+    // another user a stale version of the card you are updating is the
+    // intended behaviour rather than a compromise. So a caller that names
+    // itself waits for its own indexing and lets every other writer's pass go
+    // by, where one naming nobody waits for the lane — which is what a
+    // readiness probe or a publish means.
+    //
+    // A pass no HTTP write produced records no user, and reads as the realm
+    // owner rather than as nobody: a row written before the column existed, a
+    // file-watcher echo, a GC sweep still gate somebody, and the owner is the
+    // identity such a pass is closest to. The consequence is that the owner
+    // pays for those passes and no other writer does, which is the intended
+    // reading — it fails closed for exactly one identity.
+    //
+    // One option rather than two, because the owner is what decides an
+    // untagged pass and a scope missing it would silently let every one of
+    // them through — the gate would then report settled for exactly the
+    // passes this arm exists to cover. Both are full matrix ids, as
+    // `initiated_by` records them: `Realm` answers with one from
+    // `getRealmOwnerUserId()`, while `getRealmOwnerUsername()` strips the
+    // sigil and the server and can never match an entry.
+    initiatedBy?: { user: string; realmOwner: string };
   },
 ): Promise<boolean> {
   if (dbAdapter.kind !== 'pg') {
@@ -388,14 +411,30 @@ export async function awaitRealmIndexSettled(
   let pollIntervalMs = opts?.pollIntervalMs ?? 1000;
 
   let jobTypes = opts?.jobTypes;
+  let initiatedBy = opts?.initiatedBy;
 
   let hasSettled = async () => {
-    let rows = await query(dbAdapter, [
+    let expression: Expression = [
       `SELECT 1 FROM jobs WHERE status = 'unfulfilled' AND concurrency_group =`,
       param(indexingConcurrencyGroup(realmURL)),
-      ...jobTypeFilter(jobTypes),
-      'LIMIT 1',
-    ]);
+    ];
+    if (initiatedBy) {
+      // Containment over the recorded set, since a coalesced pass carries
+      // every caller that merged into it. The null arm is the untagged pass,
+      // which gates the realm owner alone.
+      expression.push(
+        `AND (initiated_by @> to_jsonb(`,
+        param(initiatedBy.user),
+        `::text) OR (initiated_by IS NULL AND`,
+        param(initiatedBy.user),
+        `=`,
+        param(initiatedBy.realmOwner),
+        `))`,
+      );
+    }
+    expression.push(...jobTypeFilter(jobTypes));
+    expression.push('LIMIT 1');
+    let rows = await query(dbAdapter, expression);
     return rows.length === 0;
   };
 
@@ -552,9 +591,10 @@ export interface IncrementalIndexEnqueueArgs {
   realmUsername: string;
   changes: IncrementalChange[];
   ignoreData: Record<string, string>;
-  // See IncrementalArgs for both of these.
+  // See IncrementalArgs for all three of these.
   deferPrerenderHtml?: boolean;
   carriedPrerenderHtmlChanges?: IncrementalChange[];
+  readsOwnWrite?: boolean;
 }
 
 export function makeIncrementalArgsWithCallerMetadata(
@@ -571,6 +611,7 @@ export function makeIncrementalArgsWithCallerMetadata(
     coalescedCallers,
     deferPrerenderHtml: args.deferPrerenderHtml === true,
     carriedPrerenderHtmlChanges: args.carriedPrerenderHtmlChanges ?? [],
+    readsOwnWrite: args.readsOwnWrite === true,
   };
 }
 

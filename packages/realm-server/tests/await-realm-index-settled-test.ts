@@ -19,25 +19,35 @@ const realmURL = 'http://localhost:4201/test/';
 const otherRealmURL = 'http://localhost:4201/other/';
 
 // Insert a queue row into a realm's index lane. `status` defaults to
-// 'unfulfilled', which is the state the gate is looking for, and `jobType` to
-// an index-writing member — pass another to seed a job that shares the lane
-// for mutual exclusion without writing the index.
+// 'unfulfilled', which is the state the gate is looking for.
 async function enqueueIndexJob(
   dbAdapter: PgAdapter,
   url: string,
   status: 'unfulfilled' | 'resolved' | 'rejected' = 'unfulfilled',
-  jobType = 'from-scratch-index',
+  // Both extras are optional and neither is the common case, so they are named
+  // rather than positional — a bare array or a bare string in fourth place
+  // reads as neither at the call site.
+  opts: {
+    // Defaults to an index-writing member. Pass another to seed a job that
+    // shares the lane for mutual exclusion without writing the index.
+    jobType?: string;
+    // The writers whose work the row carries. Omitted leaves the column null,
+    // which is the untagged pass — a row from before the column existed, or one
+    // no HTTP write produced.
+    initiatedBy?: string[];
+  } = {},
 ): Promise<number> {
   let [{ id }] = (await dbAdapter.execute(
-    `INSERT INTO jobs (job_type, concurrency_group, timeout, priority, args, status)
-       VALUES ($4, $1, 3600, 10, $2, $3)
+    `INSERT INTO jobs (job_type, concurrency_group, timeout, priority, args, status, initiated_by)
+       VALUES ($4, $1, 3600, 10, $2, $3, $5)
        RETURNING id`,
     {
       bind: [
         indexingConcurrencyGroup(url),
         JSON.stringify({ realmURL: url }),
         status,
-        jobType,
+        opts.jobType ?? 'from-scratch-index',
+        opts.initiatedBy ? JSON.stringify(opts.initiatedBy) : null,
       ],
     },
   )) as { id: number }[];
@@ -175,12 +185,9 @@ module(basename(import.meta.filename), function (hooks) {
     // realm's lane, and a gate reading the bare lane calls every one of those
     // realms mid-index for as long as it takes to drain.
     test('a queued job that does not write the index is excluded by narrowing', async function (assert) {
-      await enqueueIndexJob(
-        dbAdapter,
-        realmURL,
-        'unfulfilled',
-        'scoped-css-gc',
-      );
+      await enqueueIndexJob(dbAdapter, realmURL, 'unfulfilled', {
+        jobType: 'scoped-css-gc',
+      });
       // Asserted first so a narrowing that quietly stopped matching anything
       // could not carry the test: the row has to be capable of holding a gate.
       assert.false(
@@ -205,7 +212,7 @@ module(basename(import.meta.filename), function (hooks) {
     test('every index-writing type holds the narrowed gate', async function (assert) {
       for (let jobType of INDEX_WRITING_JOB_TYPES) {
         let url = `http://localhost:4201/${jobType}/`;
-        await enqueueIndexJob(dbAdapter, url, 'unfulfilled', jobType);
+        await enqueueIndexJob(dbAdapter, url, 'unfulfilled', { jobType });
         assert.false(
           await awaitRealmIndexSettled(dbAdapter, url, {
             timeoutMs: 200,
@@ -215,6 +222,126 @@ module(basename(import.meta.filename), function (hooks) {
           `a queued ${jobType} holds the gate`,
         );
       }
+    });
+
+    // Reading your own write matters; being made to read someone else's does
+    // not. A writer that names itself waits for its own indexing and lets
+    // every other writer's pass go by — serving another user a stale version
+    // of the card you are updating is the intended behaviour, not a
+    // compromise.
+    module('scoped to one writer', function () {
+      const writer = '@writer:localhost';
+      const someoneElse = '@someone-else:localhost';
+      const owner = '@owner:localhost';
+
+      test("another writer's pass does not hold this writer", async function (assert) {
+        await enqueueIndexJob(dbAdapter, realmURL, 'unfulfilled', {
+          initiatedBy: [someoneElse],
+        });
+        assert.true(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            initiatedBy: { user: writer, realmOwner: owner },
+          }),
+          'the lane is occupied, but by work this writer has no stake in',
+        );
+        assert.false(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            pollIntervalMs: 50,
+          }),
+          'and a caller naming nobody still waits for the lane',
+        );
+      });
+
+      test("a writer's own pass holds it", async function (assert) {
+        await enqueueIndexJob(dbAdapter, realmURL, 'unfulfilled', {
+          initiatedBy: [writer],
+        });
+        assert.false(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            pollIntervalMs: 50,
+            initiatedBy: { user: writer, realmOwner: owner },
+          }),
+          'a pass indexing bytes this writer wrote is one it must wait for',
+        );
+      });
+
+      // A pass carries every caller that merged into it, so a writer absorbed
+      // into someone else's job is still waiting on its own bytes. Recording
+      // only whoever got there first would let this writer past a pass that
+      // has not indexed its write yet.
+      test('a coalesced pass holds every writer it carries', async function (assert) {
+        await enqueueIndexJob(dbAdapter, realmURL, 'unfulfilled', {
+          initiatedBy: [someoneElse, writer],
+        });
+        assert.false(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            pollIntervalMs: 50,
+            initiatedBy: { user: writer, realmOwner: owner },
+          }),
+          'the writer that merged in waits for the merged pass',
+        );
+        assert.false(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            pollIntervalMs: 50,
+            initiatedBy: { user: someoneElse, realmOwner: owner },
+          }),
+          'and so does the one that started it',
+        );
+      });
+
+      // A pass no HTTP write produced records nobody. Reading that as nobody's
+      // would let every writer past work that may well be indexing their
+      // bytes, so it reads as the realm owner instead: it gates somebody, and
+      // the owner is the identity such a pass is closest to.
+      test('an untagged pass gates the realm owner alone', async function (assert) {
+        await enqueueIndexJob(dbAdapter, realmURL);
+        assert.false(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            pollIntervalMs: 50,
+            initiatedBy: { user: owner, realmOwner: owner },
+          }),
+          'the owner waits for a pass with no writer recorded',
+        );
+        assert.true(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            initiatedBy: { user: writer, realmOwner: owner },
+          }),
+          'and no other writer does',
+        );
+      });
+
+      // The two scopes are independent conditions on one query, so a writer
+      // whose own pass is of a type the caller did not ask about is still let
+      // through.
+      test('the writer scope composes with the job-type scope', async function (assert) {
+        await enqueueIndexJob(dbAdapter, realmURL, 'unfulfilled', {
+          initiatedBy: [writer],
+        });
+        assert.true(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            initiatedBy: { user: writer, realmOwner: owner },
+            jobTypes: ['incremental-index'],
+          }),
+          'this writer has a pass in the lane, but not one of these types',
+        );
+        assert.false(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            pollIntervalMs: 50,
+            initiatedBy: { user: writer, realmOwner: owner },
+            jobTypes: ['from-scratch-index'],
+          }),
+          'and it does hold when the type is one the caller asked about',
+        );
+      });
     });
 
     // The prerender-html channel is a separate lane on purpose, gated
@@ -308,12 +435,9 @@ module(basename(import.meta.filename), function (hooks) {
 
     test('names the unfulfilled jobs holding the lane, oldest first', async function (assert) {
       let first = await enqueueIndexJob(dbAdapter, realmURL);
-      let second = await enqueueIndexJob(
-        dbAdapter,
-        realmURL,
-        'unfulfilled',
-        'incremental-index',
-      );
+      let second = await enqueueIndexJob(dbAdapter, realmURL, 'unfulfilled', {
+        jobType: 'incremental-index',
+      });
       assert.deepEqual(
         await outstandingIndexJobs(dbAdapter, realmURL),
         [
@@ -350,12 +474,9 @@ module(basename(import.meta.filename), function (hooks) {
 
     test('narrows by job type like the gate it explains', async function (assert) {
       let writing = await enqueueIndexJob(dbAdapter, realmURL);
-      await enqueueIndexJob(
-        dbAdapter,
-        realmURL,
-        'unfulfilled',
-        'scoped-css-gc',
-      );
+      await enqueueIndexJob(dbAdapter, realmURL, 'unfulfilled', {
+        jobType: 'scoped-css-gc',
+      });
       assert.deepEqual(
         (await outstandingIndexJobs(dbAdapter, realmURL)).map(
           ({ jobType }) => jobType,
@@ -381,12 +502,9 @@ module(basename(import.meta.filename), function (hooks) {
     test('separates a claimed job from one waiting behind it', async function (assert) {
       let running = await enqueueIndexJob(dbAdapter, realmURL);
       await claimJob(dbAdapter, running);
-      let waiting = await enqueueIndexJob(
-        dbAdapter,
-        realmURL,
-        'unfulfilled',
-        'incremental-index',
-      );
+      let waiting = await enqueueIndexJob(dbAdapter, realmURL, 'unfulfilled', {
+        jobType: 'incremental-index',
+      });
       assert.deepEqual(
         await outstandingIndexJobs(dbAdapter, realmURL),
         [

@@ -89,7 +89,6 @@ export {
   errorsDocument,
   invocationsIn,
   isGroup,
-  isWrite,
   needsActor,
   paramsFor,
   parseOperationsEnvelope,
@@ -105,8 +104,11 @@ export type {
   EnvelopeNode,
   EnvelopeResult,
   EnvelopeResults,
+  ParseEnvelopeOptions,
+  QueryTarget,
   ResolvedEnvelopeEntry,
 } from './envelope.ts';
+export { resolveQueryTargets } from './find-targets.ts';
 export { lowerQueryOperation } from './query.ts';
 export type { QueryInvocation } from './query.ts';
 export {
@@ -118,6 +120,7 @@ export {
   isIdentityResult,
   isOperationFailure,
   isSourceResult,
+  isWrite,
 } from './types.ts';
 export type {
   BaseOperation,
