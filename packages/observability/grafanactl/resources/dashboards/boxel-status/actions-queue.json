@@ -180,7 +180,7 @@
           "textMode": "auto",
           "wideLayout": true
         },
-        "description": "Workflow runs in queued or in_progress state.",
+        "description": "Workflow runs in queued, pending or in_progress state.",
         "interval": "5m"
       },
       {
@@ -230,6 +230,17 @@
             "refId": "C",
             "queryType": "range",
             "legendFormat": "active runs"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"snapshot\" | unwrap pending_jobs [$__interval]) by ()",
+            "refId": "D",
+            "queryType": "range",
+            "legendFormat": "pending"
           }
         ],
         "fieldConfig": {
@@ -257,7 +268,7 @@
             "sort": "desc"
           }
         },
-        "description": "Queued depth rising while running stays flat means the pool is saturated rather than slow.\n\nCarries the same three values as the stat tiles beside it, because a stat panel has no hover tooltip — read the headline there, hover here.",
+        "description": "Queued depth rising while running stays flat means the pool is saturated rather than slow. Pending is counted apart: those jobs are held by a concurrency group, not by the runner pool.\n\nCarries the same three values as the stat tiles beside it, because a stat panel has no hover tooltip — read the headline there, hover here.",
         "interval": "5m"
       },
       {
