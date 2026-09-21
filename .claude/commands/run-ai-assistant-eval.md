@@ -41,17 +41,26 @@ cheapest and the one to start from) and the rest by ascending cost, and say in
 the question that "Other" takes any name from the list. An evaluation's URL is
 `https://localhost:4201/user/evals/Evaluation/<file name without .json>`.
 
-**Which models.** Ask as a multi-select. Build the options from the
-ModelConfiguration cards the SystemCard offers
+**Which models.** Read every model the SystemCard offers
 (`packages/catalog/contents/SystemCard/default.json` →
-`relationships.modelConfigurations.*` → each card's `cardInfo.name`), because a
-model the SystemCard does not list is not in the picker and the run fails at
-model selection. Offer `Claude Sonnet 4.6` first as the recommended single
-model, then the current `DEFAULT_MODELS` set from
-`packages/ai-assistant-evals/run-eval.ts` as one option for a full cross-lab
-sweep, then two other frontier models. Name the cost of each option in its
-description: one model is minutes and cents, the four-model sweep is five to
-fifteen minutes and dollars.
+`relationships.modelConfigurations.*` → each card's `cardInfo.name`) and list
+all of them in the reply, grouped by lab. A model the SystemCard does not list
+is not in the picker and the run fails at model selection, so that list is the
+whole of what can be asked for.
+
+Then ask as a multi-select, four options:
+
+- `Claude Sonnet 4.6` first, the recommended single model — minutes and cents.
+- **every model the SystemCard offers**, the full sweep. Give the real count
+  and say it costs dollars and the better part of an hour for one evaluation,
+  twice that for a two-prompt one.
+- the current `DEFAULT_MODELS` set from
+  `packages/ai-assistant-evals/run-eval.ts`, described as the sample it is —
+  name the labs it covers and the count, never "all" or "full".
+- one other frontier model.
+
+Say in the question that "Other" takes any names from the list above,
+comma-separated.
 
 Take an answer the user typed into "Other" as given — it is a picker name or
 an evaluation file name, not a new question.
