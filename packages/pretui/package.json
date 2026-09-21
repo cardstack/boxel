@@ -3,9 +3,6 @@
   "version": "0.0.0",
   "private": true,
   "description": "Pret UI component kit. Served by the realm-server as the realm @cardstack/pretui/ and consumed by the host as a workspace dependency; both resolve the same source through package.json#exports.",
-  "keywords": [
-    "ember-addon"
-  ],
   "license": "MIT",
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
@@ -14,7 +11,6 @@
     "lint:types": "ember-tsc --noEmit"
   },
   "dependencies": {
-    "@embroider/addon-shim": "^1.8.9",
     "ember-modifier": "catalog:"
   },
   "devDependencies": {
@@ -37,18 +33,7 @@
   "peerDependencies": {
     "ember-source": "catalog:"
   },
-  "ember": {
-    "edition": "octane"
-  },
-  "ember-addon": {
-    "app-js": {},
-    "main": "addon-main.cjs",
-    "public-assets": {},
-    "type": "addon",
-    "version": 2
-  },
   "exports": {
-    "./*": "./*.gts",
-    "./addon-main.js": "./addon-main.cjs"
+    "./*": "./*.gts"
   }
 }
