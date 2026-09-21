@@ -75,7 +75,11 @@ function parseArgs(argv: string[]): Args {
     evalCardUrl: '',
     models: DEFAULT_MODELS,
     headed: false,
-    tabs: false,
+    // A run takes minutes and what the assistant does on screen is most of
+    // what there is to see, so the browser is shown unless --headless says
+    // otherwise. Tabs rather than --headed: one window per model, still side
+    // by side, so watching costs no wall-clock.
+    tabs: true,
     writeCards: true,
   };
   for (let i = 0; i < argv.length; i++) {
@@ -101,7 +105,7 @@ function parseArgs(argv: string[]): Args {
   }
   if (!positional[0]) {
     throw new Error(
-      'usage: node run-eval.ts <evaluation-card-url> [comma,separated,models] [--tabs|--headed|--headless] [--session <id>] [--no-cards]',
+      'usage: node run-eval.ts <evaluation-card-url> [comma,separated,models] [--headless|--headed] [--session <id>] [--no-cards]',
     );
   }
   args.evalCardUrl = positional[0];

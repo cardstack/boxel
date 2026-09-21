@@ -16,7 +16,7 @@ import MarkdownField from '@cardstack/base/markdown';
 import NumberField from '@cardstack/base/number';
 import StringField from '@cardstack/base/string';
 import TextAreaField from '@cardstack/base/text-area';
-import { eq, gt } from '@cardstack/boxel-ui/helpers';
+import { gt } from '@cardstack/boxel-ui/helpers';
 import ClipboardCheck from '@cardstack/boxel-icons/clipboard-check';
 import ChartBar from '@cardstack/boxel-icons/chart-bar';
 import FlaskConical from '@cardstack/boxel-icons/flask-conical';
@@ -63,6 +63,24 @@ function seconds(value: number | undefined | null) {
 
 const TIERS = ['pending', 'failed', 'rough', 'good', 'great'] as const;
 export type EffectivenessTier = (typeof TIERS)[number];
+
+// The one place the score-to-tier thresholds live: the result card computes
+// its own tier with it, and the report tints its headline number with it.
+function tierForScore(score: number | undefined | null): EffectivenessTier {
+  if (score == null || Number.isNaN(score)) {
+    return 'pending';
+  }
+  if (score < 40) {
+    return 'failed';
+  }
+  if (score < 70) {
+    return 'rough';
+  }
+  if (score < 85) {
+    return 'good';
+  }
+  return 'great';
+}
 
 export class EvaluationCard extends CardDef {
   static displayName = 'Evaluation';
@@ -302,20 +320,7 @@ export class EvaluationResultCard extends CardDef {
     enumField(StringField, { options: [...TIERS] }),
     {
       computeVia: function (this: EvaluationResultCard): EffectivenessTier {
-        let score = this.effectivenessScore;
-        if (score == null) {
-          return 'pending';
-        }
-        if (score < 40) {
-          return 'failed';
-        }
-        if (score < 70) {
-          return 'rough';
-        }
-        if (score < 85) {
-          return 'good';
-        }
-        return 'great';
+        return tierForScore(this.effectivenessScore);
       },
     },
   );
@@ -522,48 +527,180 @@ export class EvaluationResultCard extends CardDef {
     get tierClass() {
       return `tier tier-${this.args.model.effectivenessTier ?? 'pending'}`;
     }
+    get verdictClass() {
+      return this.args.model.verdict === 'pass'
+        ? 'verdict verdict-pass'
+        : 'verdict verdict-off';
+    }
+    get hasScore() {
+      return this.args.model.effectivenessScore != null;
+    }
+    get qualityText() {
+      return this.args.model.qualityScore == null
+        ? '–'
+        : `${this.args.model.qualityScore}/10`;
+    }
+    get turnsText() {
+      return this.args.model.turnsCount == null
+        ? '–'
+        : String(this.args.model.turnsCount);
+    }
     get costText() {
       return money(this.args.model.cost);
     }
+    get cacheText() {
+      return percent(this.args.model.cachingRate);
+    }
+    get durationText() {
+      return seconds(this.args.model.durationSeconds);
+    }
     <template>
-      <div class='result-embedded'>
-        <span class={{this.tierClass}}>{{@model.effectivenessTier}}</span>
-        <strong>{{@model.modelName}}</strong>
-        <span class='meta'>{{@model.verdict}}
-          ·
-          {{@model.turnsCount}}
-          turns ·
-          {{this.costText}}</span>
+      <div class='row'>
+        <div class={{this.tierClass}}>
+          {{#if this.hasScore}}
+            <span class='tier-score'>{{@model.effectivenessScore}}</span>
+          {{/if}}
+          <span class='tier-name'>{{@model.effectivenessTier}}</span>
+        </div>
+
+        <div class='who'>
+          <span class='model'>{{@model.modelName}}</span>
+          <span class={{this.verdictClass}}>
+            {{@model.verdict}}
+            {{#if @model.reasoningEffort}}
+              <span class='effort'>· {{@model.reasoningEffort}} effort</span>
+            {{/if}}
+          </span>
+        </div>
+
+        <dl class='metrics'>
+          <div><dd>{{this.qualityText}}</dd><dt>Quality</dt></div>
+          <div><dd>{{this.turnsText}}</dd><dt>Turns</dt></div>
+          <div><dd>{{this.costText}}</dd><dt>Cost</dt></div>
+          <div><dd>{{this.cacheText}}</dd><dt>Cache</dt></div>
+          <div><dd>{{this.durationText}}</dd><dt>Time</dt></div>
+        </dl>
       </div>
+
       <style scoped>
-        .result-embedded {
+        .row {
+          --ink: #16151a;
+          --ink-soft: #6b6976;
+          --line: #e7e5ee;
+
+          box-sizing: border-box;
+          width: 100%;
+          height: 100%;
+          padding: 0.75rem 1rem;
           display: flex;
+          flex-wrap: wrap;
           align-items: center;
-          gap: var(--boxel-sp-sm);
-          padding: var(--boxel-sp-sm);
+          gap: 0.75rem 1rem;
+          background: #fff;
+          color: var(--ink);
+          font-size: 0.875rem;
+          line-height: 1.4;
         }
-        .meta {
-          color: var(--boxel-450);
-          font: var(--boxel-font-sm);
-        }
+
         .tier {
-          padding: 0 var(--boxel-sp-xs);
-          border-radius: var(--boxel-border-radius-sm);
-          background: var(--boxel-200);
-          font: 600 var(--boxel-font-xs);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          min-width: 3.75rem;
+          padding: 0.25rem 0.5rem;
+          border-radius: 0.5rem;
+          background: #eeedf3;
+          color: var(--ink-soft);
+        }
+        .tier-score {
+          font-size: 1.125rem;
+          font-weight: 700;
+          font-variant-numeric: tabular-nums;
+          line-height: 1.1;
+        }
+        .tier-name {
+          font-size: 0.5625rem;
+          font-weight: 700;
+          letter-spacing: 0.1em;
           text-transform: uppercase;
         }
         .tier-great {
-          background: #d3f5e2;
+          background: #e2f7ea;
+          color: #14663a;
         }
         .tier-good {
-          background: #e6f5d3;
+          background: #ecf6dd;
+          color: #47661a;
         }
         .tier-rough {
-          background: #fff0c2;
+          background: #fdf1d1;
+          color: #7a5400;
         }
         .tier-failed {
-          background: #ffd6d6;
+          background: #fde4e2;
+          color: #8d231f;
+        }
+
+        .who {
+          flex: 1 1 11rem;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.0625rem;
+        }
+        .model {
+          font-weight: 600;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .verdict {
+          display: flex;
+          align-items: center;
+          gap: 0.375rem;
+          font-size: 0.75rem;
+        }
+        .verdict::before {
+          content: '';
+          width: 0.4375rem;
+          height: 0.4375rem;
+          border-radius: 50%;
+          background: currentcolor;
+        }
+        .verdict-pass {
+          color: #1f7a4a;
+        }
+        .verdict-off {
+          color: #b3312b;
+        }
+        .effort {
+          color: var(--ink-soft);
+        }
+
+        .metrics {
+          margin: 0;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.25rem 1.25rem;
+        }
+        .metrics > div {
+          display: flex;
+          flex-direction: column;
+          min-width: 3.25rem;
+          text-align: right;
+        }
+        .metrics dd {
+          margin: 0;
+          font-weight: 600;
+          font-variant-numeric: tabular-nums;
+        }
+        .metrics dt {
+          color: var(--ink-soft);
+          font-size: 0.625rem;
+          font-weight: 600;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
         }
       </style>
     </template>
@@ -604,165 +741,294 @@ export class EvaluationReportCard extends CardDef {
   });
 
   static isolated = class Isolated extends Component<typeof this> {
+    get results() {
+      return this.args.model.results ?? [];
+    }
+    get evalName() {
+      return this.args.model.evalCard?.cardTitle ?? 'Evaluation report';
+    }
+    get passText() {
+      let passed = this.results.filter(
+        (result) => result.verdict === 'pass',
+      ).length;
+      return `${passed}/${this.results.length}`;
+    }
+    get meanScore() {
+      let scored = this.results.filter(
+        (result) => result.effectivenessScore != null,
+      );
+      if (!scored.length) {
+        return undefined;
+      }
+      return Math.round(
+        scored.reduce(
+          (sum, result) => sum + (result.effectivenessScore ?? 0),
+          0,
+        ) / scored.length,
+      );
+    }
+    get meanScoreText() {
+      return this.meanScore == null ? '–' : String(this.meanScore);
+    }
+    get leadClass() {
+      return `stat stat-lead tier-${tierForScore(this.meanScore)}`;
+    }
     get totalCostText() {
       return money(this.args.model.totalCost);
     }
-    get rows() {
-      return (this.args.model.results ?? []).map((result) => ({
-        result,
-        tierClass: `tier tier-${result.effectivenessTier ?? 'pending'}`,
-        cost: money(result.cost),
-        cache: percent(result.cachingRate),
-        time: seconds(result.durationSeconds),
-        quality:
-          result.qualityScore == null ? '–' : String(result.qualityScore),
-        score:
-          result.effectivenessScore == null
-            ? '–'
-            : String(result.effectivenessScore),
-      }));
+    get totalTimeText() {
+      let total = this.results.reduce(
+        (sum, result) => sum + (result.durationSeconds ?? 0),
+        0,
+      );
+      return total ? seconds(total) : '–';
     }
     <template>
       <article class='report'>
-        <header>
-          <h1><@fields.cardTitle /></h1>
-          <p class='meta'>
-            {{#if @model.startedAt}}<@fields.startedAt @format='atom' />
-              ·
-            {{/if}}
-            {{@model.results.length}}
-            results · total cost
-            <strong>{{this.totalCostText}}</strong>
-          </p>
+        <header class='head'>
+          <div class='head-text'>
+            <h1>{{this.evalName}}</h1>
+            <p class='session'>
+              {{#if @model.startedAt}}<@fields.startedAt @format='atom' />
+                <span class='dot'>·</span>
+              {{/if}}
+              <code>{{@model.sessionId}}</code>
+            </p>
+          </div>
           {{#if @model.evalCard}}
-            <p class='meta'>Evaluation: <@fields.evalCard @format='atom' /></p>
+            <div class='head-link'>
+              <span class='label'>Evaluation</span>
+              <@fields.evalCard @format='atom' />
+            </div>
           {{/if}}
         </header>
 
-        {{#if (gt @model.results.length 0)}}
-          <div class='table-wrap'>
-            <table>
-              <thead>
-                <tr>
-                  <th>Tier</th>
-                  <th>Model</th>
-                  <th>Verdict</th>
-                  <th>Quality</th>
-                  <th>Score</th>
-                  <th>Turns</th>
-                  <th>Cost</th>
-                  <th>Cache</th>
-                  <th>Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {{#each this.rows as |row|}}
-                  <tr>
-                    <td><span
-                        class={{row.tierClass}}
-                      >{{row.result.effectivenessTier}}</span></td>
-                    <td>
-                      <strong>{{row.result.modelName}}</strong>
-                      {{#if row.result.reasoningEffort}}
-                        <span
-                          class='meta'
-                        >({{row.result.reasoningEffort}})</span>
-                      {{/if}}
-                    </td>
-                    <td>{{row.result.verdict}}</td>
-                    <td>{{row.quality}}</td>
-                    <td>{{row.score}}</td>
-                    <td>{{row.result.turnsCount}}</td>
-                    <td>{{row.cost}}</td>
-                    <td>{{row.cache}}</td>
-                    <td>{{row.time}}</td>
-                  </tr>
-                {{/each}}
-              </tbody>
-            </table>
+        <dl class='stats'>
+          <div class={{this.leadClass}}>
+            <dd>{{this.meanScoreText}}</dd>
+            <dt>Mean score</dt>
           </div>
-          <section class='details'>
+          <div class='stat'>
+            <dd>{{this.results.length}}</dd>
+            <dt>Models</dt>
+          </div>
+          <div class='stat'>
+            <dd>{{this.passText}}</dd>
+            <dt>Passed</dt>
+          </div>
+          <div class='stat'>
+            <dd>{{this.totalCostText}}</dd>
+            <dt>Total cost</dt>
+          </div>
+          <div class='stat'>
+            <dd>{{this.totalTimeText}}</dd>
+            <dt>Total time</dt>
+          </div>
+        </dl>
+
+        {{#if (gt @model.results.length 0)}}
+          <section class='results'>
             <h2>Results</h2>
-            <@fields.results @format='embedded' />
+            <div class='result-list'><@fields.results
+                @format='embedded'
+              /></div>
           </section>
         {{else}}
-          <p class='meta'>No results for session
-            <code>{{@model.sessionId}}</code>
-            yet.</p>
+          <p class='empty'>
+            No results for this session yet. The runner writes one result card
+            per model as each run ends.
+          </p>
         {{/if}}
 
         {{#if (gt @model.requestedModels.length 0)}}
-          <p class='meta'>Requested models:
-            {{#each @model.requestedModels as |name index|}}{{if
-                (eq index 0)
-                ''
-                ', '
-              }}{{name}}{{/each}}</p>
+          <footer class='requested'>
+            <span class='label'>Requested</span>
+            <ul class='chips'>
+              {{#each @model.requestedModels as |name|}}
+                <li>{{name}}</li>
+              {{/each}}
+            </ul>
+          </footer>
         {{/if}}
       </article>
 
       <style scoped>
         .report {
-          padding: var(--boxel-sp-lg);
-          display: grid;
-          gap: var(--boxel-sp);
+          --ink: #16151a;
+          --ink-soft: #6b6976;
+          --ink-faint: #9b98a4;
+          --line: #e7e5ee;
+          --sunken: #f7f6fa;
+          --radius: 0.75rem;
+          --radius-sm: 0.375rem;
+
+          box-sizing: border-box;
+          min-height: 100%;
+          padding: 2rem;
+          display: flex;
+          flex-direction: column;
+          gap: 1.5rem;
+          background: #fff;
+          color: var(--ink);
+          font-size: 0.875rem;
+          line-height: 1.5;
+        }
+
+        .head {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 1rem;
         }
         h1 {
           margin: 0;
-          font: 700 var(--boxel-font-lg);
+          font-size: 1.625rem;
+          font-weight: 700;
+          letter-spacing: -0.02em;
+          line-height: 1.2;
         }
-        h2 {
-          margin: 0 0 var(--boxel-sp-xs);
-          font: 600 var(--boxel-font);
+        .session {
+          margin: 0.375rem 0 0;
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 0.375rem;
+          color: var(--ink-soft);
         }
-        .meta {
+        .session code {
+          padding: 0.0625rem 0.375rem;
+          border-radius: var(--radius-sm);
+          background: var(--sunken);
+          font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+          font-size: 0.8125rem;
+        }
+        .dot {
+          color: var(--ink-faint);
+        }
+        .head-link {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+        .label {
+          color: var(--ink-faint);
+          font-size: 0.6875rem;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
+        .stats {
           margin: 0;
-          color: var(--boxel-450);
-          font: var(--boxel-font-sm);
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+          gap: 0.75rem;
         }
-        .table-wrap {
-          overflow-x: auto;
+        .stat {
+          display: flex;
+          flex-direction: column;
+          gap: 0.125rem;
+          padding: 0.875rem 1rem;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          background: var(--sunken);
         }
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          font: var(--boxel-font-sm);
+        .stat dd {
+          margin: 0;
+          font-size: 1.375rem;
+          font-weight: 700;
+          font-variant-numeric: tabular-nums;
+          letter-spacing: -0.01em;
         }
-        th,
-        td {
-          padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-          border-bottom: 1px solid var(--boxel-200);
-          text-align: left;
-          white-space: nowrap;
-        }
-        th {
-          color: var(--boxel-450);
-          font: 600 var(--boxel-font-xs);
+        .stat dt {
+          color: var(--ink-soft);
+          font-size: 0.6875rem;
+          font-weight: 600;
+          letter-spacing: 0.08em;
           text-transform: uppercase;
-          letter-spacing: 0.05em;
         }
-        .tier {
-          padding: 0 var(--boxel-sp-xs);
-          border-radius: var(--boxel-border-radius-sm);
-          background: var(--boxel-200);
-          font: 600 var(--boxel-font-xs);
-          text-transform: uppercase;
+        .stat-lead {
+          border-color: transparent;
+        }
+        .stat-lead dd {
+          font-size: 1.75rem;
+        }
+        .stat-lead dt {
+          color: inherit;
+          opacity: 0.75;
         }
         .tier-great {
-          background: #d3f5e2;
+          background: #e2f7ea;
+          color: #14663a;
         }
         .tier-good {
-          background: #e6f5d3;
+          background: #ecf6dd;
+          color: #47661a;
         }
         .tier-rough {
-          background: #fff0c2;
+          background: #fdf1d1;
+          color: #7a5400;
         }
         .tier-failed {
-          background: #ffd6d6;
+          background: #fde4e2;
+          color: #8d231f;
         }
-        .details {
-          display: grid;
-          gap: var(--boxel-sp-xs);
+        .tier-pending {
+          background: var(--sunken);
+          color: var(--ink-soft);
+        }
+
+        .results {
+          display: flex;
+          flex-direction: column;
+          gap: 0.625rem;
+        }
+        h2 {
+          margin: 0;
+          color: var(--ink-soft);
+          font-size: 0.6875rem;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+        .result-list {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .empty {
+          margin: 0;
+          padding: 1.5rem;
+          border: 1px dashed var(--line);
+          border-radius: var(--radius);
+          color: var(--ink-soft);
+          text-align: center;
+        }
+
+        .requested {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 0.5rem;
+          padding-top: 1rem;
+          border-top: 1px solid var(--line);
+        }
+        .chips {
+          margin: 0;
+          padding: 0;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.375rem;
+          list-style: none;
+        }
+        .chips li {
+          padding: 0.125rem 0.5rem;
+          border: 1px solid var(--line);
+          border-radius: 1rem;
+          color: var(--ink-soft);
+          font-size: 0.75rem;
         }
       </style>
     </template>

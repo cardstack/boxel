@@ -9,9 +9,28 @@ The first token is the EvaluationCard URL, for example
 optional, token is a comma-separated list of models as the picker names them
 (`"Claude Sonnet 4.6,GPT-5.5"`).
 
-Both are asked for when they are missing. Ask before the preflight, in one
-`AskUserQuestion` call carrying whichever of the two questions is unanswered,
-so the user answers once and the run proceeds without further interruption.
+Every model run spends real money and takes minutes. Run each model once per
+session. Never rerun a model whose result you have not read, and never loop.
+
+## 1. Ask what to run
+
+**Ask before anything else.** The only work that comes first is reading the
+files the options are built from, named below. Nothing else happens until the
+answer comes back — no `curl` of the stack, no `pnpm eval:setup`, no run. The
+preflight is step 2 for a reason: starting it first burns time on a run that
+may not be the one the user wanted, and a stack that is down is worth
+reporting after the choice, not instead of it.
+
+Look at `$ARGUMENTS`. Ask with one `AskUserQuestion` call carrying every
+question it leaves unanswered:
+
+- no EvaluationCard URL and no evaluation name → ask which evaluation
+- no model list → ask which models
+- nothing about the browser → ask whether to watch it
+
+If it answers all three, skip straight to the preflight. Otherwise every
+unanswered one goes in the same call, so the user answers once and the run
+proceeds without further interruption.
 
 **Which evaluation.** Read every `eval-realm/Evaluation/*.json` under
 `packages/ai-assistant-evals` and take `data.attributes.cardInfo.name` and
@@ -37,19 +56,20 @@ fifteen minutes and dollars.
 Take an answer the user typed into "Other" as given — it is a picker name or
 an evaluation file name, not a new question.
 
-**Watching the browser is the default**, because a run takes minutes and what
-the assistant does on screen is most of what there is to see. Pass `--tabs`:
-one headed browser with a window per model, all of them still running side by
-side, so watching costs no wall-clock. Do not ask about this — only drop the
-flag when the invocation says `headless`, `--headless`, `no browser` or the
-like, and then pass `--headless` instead. `--headed` is the third option, one
-model at a time in a plain window; use it only when asked for it by name,
-since it serializes a sweep.
+**Whether to watch the browser.** Three options, watching first as the
+default, because a run takes minutes and what the assistant does on screen is
+most of what there is to see:
 
-Every model run spends real money and takes minutes. Run each model once per
-session. Never rerun a model whose result you have not read, and never loop.
+- **Watch it** — pass no flag. One headed browser with a window per model, all
+  still running side by side, so watching costs no wall-clock.
+- **Headless** — pass `--headless`. Nothing on screen.
+- **One at a time** — pass `--headed`. A plain window, one model per turn; say
+  in the description that this makes a sweep as long as the sum of its models.
 
-## 1. Preflight
+Skip this question when the invocation already settled it — `headless` or
+`no browser` in `$ARGUMENTS` means `--headless`, `headed` means `--headed`.
+
+## 2. Preflight
 
 - The dev stack is up: `curl -sk -o /dev/null -w '%{http_code}' https://localhost:4200/`
   prints `200`. If not, tell the user to start it (`mise run dev-all` with
@@ -64,12 +84,12 @@ session. Never rerun a model whose result you have not read, and never loop.
   `MATRIX_USERNAME=ai-assistant-eval-user-1 MATRIX_PASSWORD=password node ./scripts/register-test-user.ts`,
   per user.
 
-## 2. Run
+## 3. Run
 
 From `packages/ai-assistant-evals`:
 
 ```sh
-pnpm eval <evaluation-card-url> ["Model A,Model B"] --tabs
+pnpm eval <evaluation-card-url> ["Model A,Model B"] [--headless]
 ```
 
 Run it in the background and follow its output; a session with four models
@@ -93,7 +113,7 @@ Watch the console for the irregularities the `ai-assistant-evals` skill lists (a
 failed pill, git-style markers, a repeated tool call, a stuck pill). The runner
 stops such a run itself; do not stop a run for being slow or expensive.
 
-## 3. Judge every result
+## 4. Judge every result
 
 The runner cannot tell whether the work was right. That is your job, per
 model, from three sources:
@@ -134,7 +154,7 @@ The card computes its effectiveness score (half the quality score, the rest
 turns, cost, cache and time) and its tier: `failed` under 40, `rough` under
 70, `good` under 85, `great` from 85.
 
-## 4. Report
+## 5. Report
 
 Reply with the report card URL, then one markdown table (not in a code
 fence), one row per model:

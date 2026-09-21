@@ -43,17 +43,23 @@ endpoint is the URL.
 - **EvaluationReport**: one per session, with a query-backed `results` table
   and the total cost.
 
-Five evaluations ship: `hello-world`, `add-email-to-contact` (edits a
-pre-copied card and definition), `pet-with-computed-age`,
-`invoice-from-catalog` (catalog reuse first), `recipe-then-scale` (two
-prompts in one room). Add one by adding a JSON file under
-`eval-realm/Evaluation/` and running setup again; fixtures it copies live
-under `eval-realm/eval-fixtures/`.
+Two evaluations ship. `hello-world` is the smallest build there is, one
+definition and one instance shown on screen — the one to start from, and the
+one to reach for when checking that a change did not break the basics.
+`cookbook-then-restyle` is the substantial one: two definitions linked by a
+`linksToMany`, a computed field on each, three instances, and then a follow-up
+prompt in the same room that changes only the look, so it also grades whether
+the assistant edits its own work in place instead of writing it again.
+
+Add one by adding a JSON file under `eval-realm/Evaluation/` and running setup
+again. An evaluation that wants a card or a file already in the test workspace
+puts it in `initialCards` / `initialFiles`; the runner copies those in before
+the prompt.
 
 ```sh
 pnpm eval:setup                                    # once, and after editing eval-realm/
 pnpm eval https://localhost:4201/user/evals/Evaluation/hello-world
-pnpm eval https://localhost:4201/user/evals/Evaluation/hello-world "Claude Sonnet 4.6,GPT-5.5" --tabs
+pnpm eval https://localhost:4201/user/evals/Evaluation/hello-world "Claude Sonnet 4.6,GPT-5.5" --headless
 pnpm eval:judge https://localhost:4201/user/evals/EvaluationResultCard/<id> --score 8 --analysis-file notes.md
 ```
 
@@ -64,13 +70,11 @@ creates a session id, writes the report card, runs the spec with
 then writes one result card per model, uploading the screenshot into the
 workspace. `--no-cards` skips every write.
 
-How the browsers show up is one flag. `--tabs` is the one to reach for: a
-single headed browser with a window per model, all still running side by side,
-so watching costs no wall-clock. `--headed` gives a plain window but runs one
-model at a time, which makes a sweep as long as the sum of its models.
-`--headless` shows nothing and is the default when no flag is given; the
-`/run-ai-assistant-eval` command inverts that and passes `--tabs` unless asked
-for `--headless`. The eval users that drive the
+How the browsers show up is one flag. The default is to show them: a single
+headed browser with a window per model, all still running side by side, so
+watching costs no wall-clock (`--tabs` names that explicitly). `--headless`
+shows nothing. `--headed` gives a plain window but runs one model at a time,
+which makes a sweep as long as the sum of its models. The eval users that drive the
 browsers never touch the evaluations workspace: they get the bundle. The
 writer is `EVAL_WRITER_USER` / `EVAL_WRITER_PASSWORD` (default `user` /
 `password`); `EVAL_REALM_SERVER_URL` (default `https://localhost:4201`) is

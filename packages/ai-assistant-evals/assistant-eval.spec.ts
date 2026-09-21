@@ -139,6 +139,25 @@ async function loginViaLocalStorage(page: Page, username: string) {
   return credentials;
 }
 
+// An endpoint the realm server has not seen before. The name has a 60
+// character budget, so the cut falls on the label and never on the tail: the
+// model, the time and the session suffix are what make the name unique, and a
+// cut that reached them left every run of one evaluation on one day asking for
+// the name the first run already took.
+const ENDPOINT_MAX = 60;
+
+function workspaceEndpoint(label: string, modelSlug: string, stamp: string) {
+  let session = (SESSION_ID ?? '').split('-').pop() ?? '';
+  let suffix = slugify(session) || Math.random().toString(36).slice(2, 6);
+  let tail = `${modelSlug}-${slugify(stamp)}-${suffix}`.slice(0, ENDPOINT_MAX);
+  let room = ENDPOINT_MAX - tail.length - 1;
+  if (room <= 0) {
+    return tail;
+  }
+  let head = slugify(label).slice(0, room).replace(/-+$/, '');
+  return head ? `${head}-${tail}` : tail;
+}
+
 async function createWorkspace(
   page: Page,
   displayName: string,
@@ -160,17 +179,25 @@ async function createWorkspace(
   await page.locator('[data-test-create-workspace-submit]').click();
   // Provisioning blocks until the new realm is indexed; the modal closes on
   // success and shows an error otherwise.
-  let tile = page.locator(
-    `[data-test-workspace-list] [data-test-workspace="${displayName}"]`,
-  );
-  let error = page.locator(
-    '[data-test-create-workspace-modal] [data-test-error-message]',
-  );
+  // `.first()` on both: two runs of one model in one minute get the same
+  // display name, and a second tile with that name would otherwise end the run
+  // on a strict-mode violation. The endpoint is what keeps the realms apart.
+  let tile = page
+    .locator(
+      `[data-test-workspace-list] [data-test-workspace="${displayName}"]`,
+    )
+    .first();
+  let error = page
+    .locator('[data-test-create-workspace-modal] [data-test-error-message]')
+    .first();
   await expect(tile.or(error).first()).toBeVisible({ timeout: 120_000 });
   if (await error.isVisible()) {
     throw new Error(`workspace creation failed: ${await error.textContent()}`);
   }
-  await page.locator(`[data-test-workspace-button="${displayName}"]`).click();
+  await page
+    .locator(`[data-test-workspace-button="${displayName}"]`)
+    .first()
+    .click();
   let indexCard = page
     .locator('[data-test-operator-mode-stack="0"] [data-test-stack-card]')
     .first();
@@ -366,7 +393,31 @@ interface Activity {
   irregularities: string[];
 }
 
+// The host reloads the page whenever a write changes a module the page holds,
+// which is what a `.gts` patch does. A poll that lands in that moment loses its
+// execution context. That is the app working, not the run failing, so wait for
+// the page to come back and read again.
+const LOST_CONTEXT =
+  /Execution context was destroyed|Execution context is not available|frame was detached|frame got detached/i;
+
 async function readActivity(page: Page): Promise<Activity> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await readActivityOnce(page);
+    } catch (error) {
+      let message = error instanceof Error ? error.message : String(error);
+      if (attempt >= 5 || !LOST_CONTEXT.test(message)) {
+        throw error;
+      }
+      await page
+        .waitForLoadState('domcontentloaded', { timeout: 60_000 })
+        .catch(() => {});
+      await page.waitForTimeout(1000);
+    }
+  }
+}
+
+async function readActivityOnce(page: Page): Promise<Activity> {
   return page.evaluate(() => {
     let q = (sel: string) => document.querySelectorAll(sel).length;
     let settled = q('[data-test-room-settled]') > 0;
@@ -760,7 +811,7 @@ async function runModel(
     result.realmUrl = await createWorkspace(
       page,
       `${label} ${requestedModel} ${stamp}`,
-      `${slugify(label)}-${slug}-${slugify(stamp)}`.slice(0, 60),
+      workspaceEndpoint(label, slug, stamp),
     );
     if (evaluation) {
       step = 'copy the initial cards and files into the workspace';

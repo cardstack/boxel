@@ -64,11 +64,10 @@ EVAL_MODELS="Claude Sonnet 4.6,Claude Opus 4.8" pnpm eval:models:tabs     # watc
 ```
 
 An evaluation run takes the same choice as a flag: `pnpm eval <url> [models]`
-with `--tabs` (watch, one window per model, still side by side), `--headed`
-(watch, one model at a time) or `--headless` (show nothing). Without a flag it
-is headless; the `/run-ai-assistant-eval` command passes `--tabs` unless the
-user asked for `--headless`, because a run takes minutes and what the
-assistant does on screen is most of what there is to see.
+shows one window per model, still side by side, unless `--headless` (show
+nothing) or `--headed` (watch, one model at a time) says otherwise. Showing is
+the default because a run takes minutes and what the assistant does on screen
+is most of what there is to see, and `--tabs` costs no wall-clock.
 
 Knobs (env vars):
 
@@ -318,6 +317,8 @@ evaluation reader and workspace pre-population, `run-eval.ts` and
 changes a selector the run ends as `runner-failure` with the step name.
 `pnpm lint` type-checks the package. The three cards are in
 `eval-realm/evaluation.gts`; the evaluations themselves are JSON under
-`eval-realm/Evaluation/`, fixtures they copy under `eval-realm/eval-fixtures/`;
+`eval-realm/Evaluation/`. An evaluation that wants a card or file already in
+the test workspace names it in `initialCards` / `initialFiles` and keeps it
+under `eval-realm/`; the runner copies those in before the prompt.
 `pnpm eval:setup` pushes them into the writer's AI Assistant Evaluations
 workspace.
