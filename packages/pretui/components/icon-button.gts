@@ -37,7 +37,7 @@ export class IconButton extends Component<IconButtonSignature> {
       ...attributes
     >{{yield}}</Button>
     <style scoped>
-      :deep(.pretui-iconbtn) {
+      .pretui-iconbtn {
         padding: 0;
         width: var(--pretui-button-h, 2.24em);
       }

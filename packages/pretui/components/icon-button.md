@@ -7,6 +7,8 @@ A square **Button** carrying an icon instead of text, with a mandatory label. Us
 ```
 @label: string   (required)
 @variant?: 'primary' | 'secondary' | 'ghost' | 'destructive'   (default 'secondary')
+@size?: 'xs' | 's' | 'm' | 'l' | 'xl'   (default 'm', forwarded to Button)
+@disabled?, @isDisabled?
 <:default>   — the icon
 Element: HTMLButtonElement
 ```
@@ -15,7 +17,7 @@ Element: HTMLButtonElement
 
 The default variant is `secondary`, not `primary` — icon buttons are almost always secondary chrome, and defaulting the other way would fill toolbars with accent fills.
 
-Sizing is one rule: `padding: 0; width: var(--control-h, 28px)`. Height and radius come from the underlying Button, so the result is a square at the kit's control height. Note this is applied through a `:deep(.pretui-iconbtn)` selector because the styling has to cross into the composed Button's scoped stylesheet — a rare, deliberate use of the escape hatch, and the reason the class name exists.
+Sizing is one rule: `padding: 0; width: var(--pretui-button-h, 2.24em)`, the same em-scaled metric Button uses for its height, so the result is a square at every `@size`. The rule targets `.pretui-iconbtn` directly: the class and this template's scope attribute both ride `...attributes` onto the composed Button's root element, so a plain compound selector is what matches it.
 
 ## Prior art
 
@@ -23,7 +25,7 @@ Sizing is one rule: `padding: 0; width: var(--control-h, 28px)`. Height and radi
 
 Pretui's improvement over both is small and real: **the label cannot be forgotten.** Web Awesome catches it at runtime in the console, shadcn does not catch it at all, and here it is a required arg. Making the mistake unrepresentable beats warning about it.
 
-The deliberate limitation versus the field: **`@variant` only, no `@tone`/`@appearance`/`@size` axes.** The parent Button has seven tones, five appearances and five sizes; IconButton exposes the four legacy variants and no size. So there is no `xs` icon button and no `warning`-toned one without dropping to `Button` and doing the square sizing yourself. That is an inconsistency in the control family rather than a considered restriction, and it is the obvious next version.
+The deliberate limitation versus the field: **`@variant` and `@size`, no `@tone`/`@appearance` axes.** The parent Button has seven tones and five appearances; IconButton exposes the four legacy variants. So there is no `warning`-toned icon button without dropping to `Button` and doing the square sizing yourself. That is an inconsistency in the control family rather than a considered restriction, and it is the obvious next version.
 
 ## Accessibility
 
@@ -37,11 +39,11 @@ Gaps and cautions:
 - **No `aria-pressed` support.** An icon button used as a toggle (bold, pin, favourite) has no way to report state; you would have to pass `aria-pressed` through `...attributes`, which works but is undiscoverable. APG is explicit that a toggle button's _label must not change with state_ — so `@label` stays fixed and `aria-pressed` carries the state. Worth a first-class arg.
 - **No `@busy`.** Button has one; IconButton does not forward it, so there is no loading state on the most common place to need one (a row action that saves).
 - **Target size**: 28×28 CSS px clears WCAG 2.5.8's 24×24 minimum, but only just, and adjacent icon buttons in a toolbar with no gap will have touching targets.
-- **No focus-visible ring**, inherited from Button — the control relies on the UA outline. Likely WCAG 2.4.7 failure, and it is more visible here because there is no text to underline or shift.
+- **Focus-visible ring inherited from Button**: `outline: 2px solid var(--ring)` with a 2px offset, which matters more here because there is no text to underline or shift.
 - The icon child itself should be `aria-hidden` or a `<title>`-less SVG; nothing enforces that, so an icon component that emits its own `<title>` will produce a doubled name.
 
 ## Theming
 
-Everything comes from **Button** — `--pretui-tone`/`--pretui-tone-on` per variant, `--radius`, `--hover`, `--border`, `--pretui-edge-highlight`, `--shadow-ink-mid` — plus `--control-h` (default 28px) for the square width.
+Everything comes from **Button** — `--pretui-tone`/`--pretui-tone-on` per variant, `--radius`, `--hover`, `--border`, `--pretui-edge-highlight`, `--shadow-ink-mid` — plus `--pretui-button-h` (default `2.24em`) for the square width.
 
-A season retuning `--control-h` moves IconButton's width but **not** Button's height, which is `2.24em` off the font size. Set both together or icon buttons will stop being square.
+A season retuning `--pretui-button-h` moves IconButton's width and Button's height together, so icon buttons stay square.

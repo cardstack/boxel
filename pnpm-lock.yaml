@@ -2849,10 +2849,6 @@ importers:
         version: 5.9.3
 
   packages/pretui:
-    dependencies:
-      ember-modifier:
-        specifier: ^4.1.0
-        version: 4.3.0(@babel/core@7.29.7)
     devDependencies:
       '@cardstack/boxel-icons':
         specifier: workspace:*

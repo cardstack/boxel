@@ -41,6 +41,8 @@ export class Checkbox extends Component<CheckboxSignature> {
       this.internal = next;
     }
     emit([this.args.onCheckedChange, this.args.onChange], next);
+    // a controlled parent that declines the change must not leave the box toggled
+    (ev.target as HTMLInputElement).checked = this.on;
   };
   <template>
     <label class='pretui-choice' data-test-pretui-checkbox ...attributes>

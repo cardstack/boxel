@@ -38,7 +38,7 @@ Honest gaps:
 - **`@label` is optional and nothing enforces a name.** `<Checkbox />` with no `@label` and no `aria-label` on the label element produces an unnamed control. It is easy to reach for in a table row's select column and end up with a grid full of unlabelled checkboxes.
 - **`@disabled` uses the native attribute**, removing the control from the tab order — so a disabled checkbox cannot be discovered or read by a keyboard user scanning the form. Spectrum and Web Awesome behave the same way, so this is conventional, but `aria-disabled` would be kinder in a long form.
 - **`opacity: 0.45` for disabled** will fail text contrast against most seasons' backgrounds.
-- **No visible focus ring is defined.** The custom face uses `box-shadow` for its hairline and nothing paints `:focus-visible`; the control relies on the UA outline over an `appearance: none` box, which is inconsistent across browsers. This is a likely WCAG 2.4.7 failure and the single highest-value fix.
+- **Focus-visible paints its own ring**: `outline: 2px solid var(--ring)` with a 2px offset, since `appearance: none` discards the UA ring.
 - The `clip-path` tick has no `forced-colors` treatment, so in Windows High Contrast mode the checked state may render as an empty box.
 
 ## Theming

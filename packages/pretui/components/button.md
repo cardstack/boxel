@@ -9,7 +9,8 @@ The kit's action primitive: a native `<button>` with a two-axis treatment system
 @appearance? 'accent' | 'filled' | 'outlined' | 'filled-outlined' | 'plain'
 @size?      'xs' | 's' | 'm' | 'l' | 'xl'   (default 'm')
 @busy?, @disabled?
-@variant?   deprecated sugar: primary|secondary|ghost|destructive
+@variant?   single-axis alias resolved onto @tone × @appearance:
+            primary|secondary|ghost|destructive|default|outline|outlined|subtle|filled|link
 ```
 
 **Two axes, not a variant enum.** This is the kit's central control decision. `@tone` picks the hue and sets exactly two custom properties (`--pretui-tone`, `--pretui-tone-on`); `@appearance` picks the recipe and _reads_ those properties. Seven tones × five appearances is thirty-five looks from twelve CSS rules, and adding a tone is a two-line block. `@variant` is a lookup table into the same grid (`destructive` → `['danger','accent']`) — the single-axis spelling boxel-ui (`kind`) and shadcn callers pass.
@@ -25,7 +26,7 @@ The kit's action primitive: a native `<button>` with a two-axis treatment system
 Where Pretui improves:
 
 - **Tone is a token indirection, not a colour.** Because tones only write `--pretui-tone`/`--pretui-tone-on`, an appearance recipe is written once and works for every current _and future_ tone. shadcn's `cva` map has to enumerate each combination.
-- **`color-mix` hover derivation.** Hover is `color-mix(in srgb, --foreground 10%, <bg>)` rather than a second hard-coded colour per variant, so a season that changes `--primary` gets a correct hover for free.
+- **`color-mix` hover derivation.** Hover is `color-mix(in oklch, --foreground 10%, <bg>)` rather than a second hard-coded colour per variant, so a season that changes `--primary` gets a correct hover for free.
 - **Uniform `em` sizing** (above) — Web Awesome and shadcn both restate padding/height per size.
 - Per-instance escapes (`--pretui-button-h`, `--pretui-button-px`, `--pretui-button-radius`, `--pretui-button-bg`, `--pretui-button-fg`) are custom properties, so a call site can deviate without `:deep()`.
 
@@ -38,9 +39,9 @@ No APG pattern is required: this is a native `<button>`, which is the whole poin
 Gaps worth knowing:
 
 - **`@busy` sets the native `disabled` attribute**, which removes the button from the tab order. A user who tabbed to a button and pressed it loses focus to `<body>` for the duration. Spectrum's `isPending` deliberately uses `aria-disabled` instead so focus is retained. This is a real regression against best practice.
-- **`@busy` sets no `aria-busy` and announces nothing.** A screen-reader user gets no signal that anything is happening; they will just find the control gone. Adding `aria-busy="true"` plus a visually-hidden live region would close it.
+- **`@busy` sets `aria-busy="true"` but announces nothing.** A screen-reader user gets the state on the control and no live-region message; a visually-hidden live region would close that half.
 - The spinner `<span>` is decorative and empty, so it contributes nothing to the accessible name — correct, though an explicit `aria-hidden="true"` would be more obviously intentional.
-- **No focus-visible ring is defined.** The component relies on the UA default outline; `:active` translates the button 0.5px but nothing paints a focus indicator, and appearances that set `box-shadow` will not visually distinguish focus from rest in every season. This is the most likely WCAG 2.4.7 failure in the kit.
+- **Focus-visible paints its own ring**: `outline: 2px solid var(--ring)` with a 2px offset, because the appearances' own `box-shadow` would otherwise hide the UA outline.
 - Disabled uses `opacity: 0.45`, which will fail contrast for label text in most seasons. That is conventional, and conventionally wrong.
 - Icon-only usage must go through **IconButton**, which requires `@label` and applies it as `aria-label` _and_ `title`. A bare `<Button>` with only an icon child has no accessible name and nothing warns you.
 
@@ -64,6 +65,6 @@ shadcn CVA names and Aria pending flags.
 | `asChild`                                                       | yield or an anchor — do not port Slot                         |
 | `type=submit`                                                   | ...attributes, already wins                                   |
 
-- [ ] Accept `sm`/`md`/`lg` as `@size` aliases.
-- [ ] Accept `isDisabled` / `isPending` / `loading`.
-- [ ] Fix `@busy` to `aria-disabled` + `aria-busy` (already in the a11y writeup).
+- [x] Accept `sm`/`md`/`lg` as `@size` aliases.
+- [x] Accept `isDisabled` / `isPending` / `loading`.
+- [ ] Move `@busy` from `disabled` to `aria-disabled` so focus is retained (`aria-busy` is already set).
