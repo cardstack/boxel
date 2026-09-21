@@ -2291,11 +2291,20 @@ function matchRealmEvent(events: MatrixEvent[], event: any) {
 // test: the committed realm generation, and the adoption chains the pass
 // touched. Matching and content comparison ignore both; the generation's
 // shape is asserted separately, and the chains have their own coverage.
+// The members of an index event whose values this fixture's own content
+// decides, rather than the sequence of events under test here: the generation
+// depends on the realm's indexing history, the touched types on the fixture's
+// card defs, and each version on the exact bytes a write stored. What those
+// members report is pinned where it is the subject — `versions` in
+// `card-endpoints-test.ts`, which compares the reported hash against the bytes
+// on disk and pins that a dependent re-indexed by the same pass is invalidated
+// without one.
 function withoutFixtureVaryingMembers(content: any) {
   if (content && typeof content === 'object') {
     let {
       generation: _generation,
       invalidatedTypes: _invalidatedTypes,
+      versions: _versions,
       ...rest
     } = content;
     return rest;

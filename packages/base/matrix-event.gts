@@ -502,11 +502,18 @@ export interface IncrementalIndexEventContent {
   // the question at all, which leaves a client with only the request id to go
   // on, as it had before this member existed.
   clientAuthored?: string[];
-  // The version each card this request wrote directly now holds, keyed the way
-  // `invalidations` names a card: URL → the content hash of the bytes the
-  // commit stored. A client holding a card can compare its own version against
-  // the one here and recognize an event it has already applied, or one that
-  // describes state older than what it holds.
+  // The version each card this request wrote directly now holds: URL → the
+  // content hash of the bytes the commit stored. A client holding a card can
+  // compare its own version against the one here and recognize an event it has
+  // already applied, or one that describes state older than what it holds.
+  //
+  // Keyed exactly as `invalidations` keys a card — the realm href with a
+  // trailing `.json` removed — so the two are joinable by construction. That
+  // is deliberately NOT how a write *response* spells the same card: response
+  // ids are canonicalized to registered-prefix form, so a client that reads an
+  // id off a write and looks it up here would miss on any realm reached
+  // through a prefix. Look versions up by the spelling found in
+  // `invalidations`, which is the list this member is a companion to.
   //
   // Only the files the request wrote. A dependent re-indexed because something
   // it depends on changed is in `invalidations` and not here, which is the
