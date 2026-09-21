@@ -1,11 +1,11 @@
 ---
-name: model-e2e
-description: Run and read the end-to-end model smoke runner in packages/e2e — a Playwright script that drives the real local stack (host, realm server, synapse, the real ai-bot and provider) and asks each LLM to build a hello-world card and show it, one fresh workspace and room per model. Use when someone asks "which models work with the assistant", "does model X work", "test model X", "run the smoke", when a skill-text, prompt, or effort change needs a before/after on real models, or when a smoke run failed and the room must be explained. Covers running it, the env knobs, reading summary.md, what each verdict means, the benchmarks and their targets, and how to follow a failed row into the room with inspect-ai-room.
+name: ai-assistant-evals
+description: Run and read the AI assistant evals in packages/ai-assistant-evals — a Playwright script that drives the real local stack (host, realm server, synapse, the real ai-bot and provider) and asks each LLM to build something, one fresh workspace and room per model. Two entry points, a bare prompt per model (`pnpm eval:models`) and EvaluationCard runs (`pnpm eval`, driven by the /run-ai-assistant-eval command, which also covers judging). Use when someone asks "which models work with the assistant", "does model X work", "test model X", "run the model evals", "run the eval", when a skill-text, prompt, or effort change needs a before/after on real models, or when a run failed and the room must be explained. Covers running it, the env knobs, reading summary.md, what each verdict means, the benchmarks and their targets, how an evaluation differs from a bare-prompt run, and how to follow a failed row into the room with inspect-ai-room.
 ---
 
-# Model e2e runner
+# AI assistant evals
 
-`packages/e2e` holds a Playwright spec that does, per model, what a person did
+`packages/ai-assistant-evals` holds a Playwright spec that does, per model, what a person did
 by hand all week: log in, create a workspace, open a room, pick the model, send
 "create a hello world card and show it", wait until the bot is idle, check a
 card rendered, and read the room's events for the numbers. One row per model.
@@ -16,17 +16,35 @@ leaves a workspace and a room behind on the local synapse and realm server.
 Do not run it to "see what happens", do not loop it, and do not rerun a model
 whose result you have not read yet.
 
+## Bare prompt or evaluation
+
+`pnpm eval:models` is the fixed hello-world prompt, graded mechanically, nothing
+written anywhere but `eval-results/`. `pnpm eval <evaluation-card-url>` is
+the same browser flow fed by an EvaluationCard: the card's prompt and
+follow-up prompts, its initial cards and files copied into the test workspace
+first, a per-session results directory, and one EvaluationResultCard per
+model plus one EvaluationReportCard written into the workspace the evaluation
+lives in (the writer's `evals` workspace, made by `pnpm eval:setup`). The
+quality score on a result is a judge's, not the runner's: the
+`/run-ai-assistant-eval` command in `.claude/commands` walks through running,
+judging against the card's success criteria, and recording the score with
+`pnpm eval:judge`. Everything below about watching a run, grades, verdicts and
+benchmarks applies to both. For an evaluation with follow-up prompts the turn
+and time targets are multiplied by the number of prompts.
+
 ## Prerequisites
 
 - The dev stack is up: `mise run dev-all` with `OPENROUTER_API_KEY` set for the
   ai-bot. Check: `curl -sk -o /dev/null -w '%{http_code}' https://localhost:4200/`
   prints `200`.
-- The local matrix user `user` / `password` exists (dev-all registers it).
+- The local matrix users `ai-assistant-eval-user-1` to `ai-assistant-eval-user-5` / `password` exist (see
+  `EVAL_USERS` below). For evaluations, `pnpm eval:setup` has created the
+  `evals` workspace of the writer user (`user` locally) and pushed the cards.
 - Every model you name has a ModelConfiguration card in the SystemCard the host
   uses (`packages/catalog/contents/SystemCard/default.json`), or the picker
   will not offer it.
 - Playwright's Chromium is installed (`pnpm exec playwright install chromium`
-  in `packages/e2e` if a run complains).
+  in `packages/ai-assistant-evals` if a run complains).
 
 Nothing needs a restart for skill, prompt-file, or catalog-card changes: the
 realm server reads those from disk. A NEW room is required for a skill change
@@ -35,30 +53,30 @@ need the stack restarted.
 
 ## Run
 
-From `packages/e2e`:
+From `packages/ai-assistant-evals`:
 
 ```sh
-SMOKE_MODELS="Claude Sonnet 4.6,Claude Opus 4.8" pnpm smoke          # headless
-SMOKE_MODELS="Claude Sonnet 4.6" pnpm smoke:headed                   # watch it
-SMOKE_MODELS="Claude Sonnet 4.6,Claude Opus 4.8" pnpm smoke:tabs     # watch several, one tab each
+EVAL_MODELS="Claude Sonnet 4.6,Claude Opus 4.8" pnpm eval:models          # headless
+EVAL_MODELS="Claude Sonnet 4.6" pnpm eval:models:headed                   # watch it
+EVAL_MODELS="Claude Sonnet 4.6,Claude Opus 4.8" pnpm eval:models:tabs     # watch several, one tab each
 ```
 
 Knobs (env vars):
 
-| var                                       | default                                            | meaning                                                                                                                                                                                                                                            |
-| ----------------------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SMOKE_MODELS`                            | `Claude Sonnet 4.6`                                | comma-separated model names **as the picker shows them**; substring, case-insensitive, must match exactly one option (the picker keys options by ModelConfiguration card id, not model id — the model id actually used is read back from the room) |
-| `SMOKE_PROMPT`                            | `create a hello world card and show it`            | the prompt                                                                                                                                                                                                                                         |
-| `SMOKE_MAX_MINUTES`                       | 15                                                 | safety net only; a run still going after that is stopped. Pace is graded, never a reason to stop                                                                                                                                                   |
-| `SMOKE_USERS` / `SMOKE_PASSWORD`          | `smoke1,…,smoke5` / `password`                     | one local matrix user per model, comma-separated, same password. Register once: `MATRIX_USERNAME=smoke1 MATRIX_PASSWORD=password pnpm register-test-user` in `packages/matrix`, per user. Two models on the same user take turns (see below)       |
-| `SMOKE_HOST_URL` / `SMOKE_MATRIX_URL`     | `https://localhost:4200` / `http://localhost:8008` | stack endpoints                                                                                                                                                                                                                                    |
-| `SMOKE_BOT_USER`                          | `@aibot:localhost`                                 | the ai-bot's matrix id                                                                                                                                                                                                                             |
-| `SMOKE_WORKERS` / `SMOKE_STAGGER_SECONDS` | 5 / 40                                             | parallel workers, and the gap between their starts                                                                                                                                                                                                 |
+| var                                     | default                                            | meaning                                                                                                                                                                                                                                                                     |
+| --------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EVAL_MODELS`                           | `Claude Sonnet 4.6`                                | comma-separated model names **as the picker shows them**; substring, case-insensitive, must match exactly one option (the picker keys options by ModelConfiguration card id, not model id — the model id actually used is read back from the room)                          |
+| `EVAL_PROMPT`                           | `create a hello world card and show it`            | the prompt                                                                                                                                                                                                                                                                  |
+| `EVAL_MAX_MINUTES`                      | 15                                                 | safety net only; a run still going after that is stopped. Pace is graded, never a reason to stop                                                                                                                                                                            |
+| `EVAL_USERS` / `EVAL_PASSWORD`          | `ai-assistant-eval-user-1` … `-5` / `password`     | one local matrix user per model, comma-separated, same password. Register once: `MATRIX_USERNAME=ai-assistant-eval-user-1 MATRIX_PASSWORD=password node ./scripts/register-test-user.ts` in `packages/matrix`, per user. Two models on the same user take turns (see below) |
+| `EVAL_HOST_URL` / `EVAL_MATRIX_URL`     | `https://localhost:4200` / `http://localhost:8008` | stack endpoints                                                                                                                                                                                                                                                             |
+| `EVAL_BOT_USER`                         | `@aibot:localhost`                                 | the ai-bot's matrix id                                                                                                                                                                                                                                                      |
+| `EVAL_WORKERS` / `EVAL_STAGGER_SECONDS` | 5 / 40                                             | parallel workers, and the gap between their starts                                                                                                                                                                                                                          |
 
-Models run in parallel, `SMOKE_WORKERS` at a time (default 5), starting
-`SMOKE_STAGGER_SECONDS` apart (default 40) so the dev server's first page
+Models run in parallel, `EVAL_WORKERS` at a time (default 5), starting
+`EVAL_STAGGER_SECONDS` apart (default 40) so the dev server's first page
 loads do not pile up. A sweep takes about as long as its slowest model.
-`smoke:headed` runs one worker; `smoke:tabs` opens one incognito window per
+`eval:models:headed` runs one worker; `eval:models:tabs` opens one incognito window per
 model in one browser.
 
 Every model must run as a different matrix user until the ai-bot change that
@@ -103,7 +121,7 @@ When one appears:
 
 ## Read the result
 
-`smoke-results/` (git-ignored) holds `summary.md`, one `<model>.json` and one
+`eval-results/` (git-ignored) holds `summary.md`, one `<model>.json` and one
 `<model>.png` per model, and a Playwright trace for each failed run. The table
 is also printed at the end of the run.
 
@@ -278,12 +296,18 @@ Check these before blaming the model. Status as of 2026-09-08.
 - Why the host froze, when it did. That needs the tab's console; the runner
   keeps the room and the trace.
 - Anything about a second turn in the same room (edits, follow-ups). One prompt
-  per run, on purpose. Add a second `SMOKE_PROMPT` mode if that is ever needed.
+  per run, on purpose. Add a second `EVAL_PROMPT` mode if that is ever needed.
 
 ## Changing the runner
 
-`model-smoke.spec.ts` is the flow, `room-analysis.ts` the numbers,
-`matrix-api.ts` the two matrix calls. Selectors are the host's `data-test-*`
-attributes, used inline in each helper of the spec. If
-the host changes a selector the run ends as `runner-failure` with the step name.
-`pnpm lint` type-checks the package.
+`assistant-eval.spec.ts` is the flow, `run-result.ts` the result shape and the
+grade, `room-analysis.ts` the numbers, `matrix-api.ts` the two matrix calls,
+`realm-api.ts` the realm session and reads and writes, `eval-card.ts` the
+evaluation reader and workspace pre-population, `run-eval.ts` and
+`judge-result.ts` the evaluation entry points. Selectors are the host's
+`data-test-*` attributes, used inline in each helper of the spec. If the host
+changes a selector the run ends as `runner-failure` with the step name.
+`pnpm lint` type-checks the package. The three cards are in
+`eval-realm/evaluation.gts`; the evaluations themselves are JSON under
+`eval-realm/Evaluation/`, fixtures they copy under `eval-realm/eval-fixtures/`;
+`pnpm eval:setup` pushes them into the writer's `evals` workspace.

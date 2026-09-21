@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "Add an email field to the Contact card definition and show it in both the isolated and embedded views. Then set Ada Lovelace's email to ada@example.com and show her card.",
+      "followUpPrompts": [],
+      "successCriteria": "1. The existing `eval-fixtures/contact.gts` was changed in place with SEARCH/REPLACE blocks, not replaced by a new file or a second Contact definition.\n2. The definition gains an `email` field, and both the isolated and the embedded template render it. The existing `firstName`, `lastName`, `phone` and computed `cardTitle` fields are still there.\n3. The existing instance `eval-fixtures/Contact/ada-lovelace.json` was updated (not a new instance) and carries `\"email\": \"ada@example.com\"`.\n4. Ada's card is on screen with the email visible and no error boundary.\n5. The assistant read the contact definition before editing it, and every patch applied on the first try.",
+      "cardInfo": {
+        "name": "Add email to Contact",
+        "summary": "Change an existing definition and its instance with targeted edits; the card is open in the stack when the prompt goes out.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "initialCards.0": {
+        "links": {
+          "self": "../eval-fixtures/Contact/ada-lovelace"
+        }
+      },
+      "initialFiles.0": {
+        "links": {
+          "self": "../eval-fixtures/contact.gts"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../eval-fixtures/contact.gts"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

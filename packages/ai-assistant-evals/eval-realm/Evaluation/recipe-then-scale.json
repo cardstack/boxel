@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "Create a Recipe card with a title, a servings count, a list of ingredients (each with a name, an amount and a unit) and numbered steps. Add a pancake recipe for 4 servings with at least four ingredients and four steps, and show it.",
+      "followUpPrompts": [
+        "Now add a scaling feature: a `desiredServings` field and a computed list of the ingredients with their amounts scaled from `servings` to `desiredServings`. Show the scaled list under the original one. Set the pancake recipe's desiredServings to 8 and show it again."
+      ],
+      "successCriteria": "1. After the first prompt: a Recipe definition with `title`, `servings`, a containsMany ingredient field (name, amount, unit) and containsMany steps exists, plus one pancake instance for 4 servings with at least four ingredients and four steps, rendered on screen without an error boundary.\n2. After the follow-up: the same `.gts` file was edited in place with SEARCH/REPLACE blocks (no second Recipe definition), gaining a `desiredServings` field and a computed scaled-ingredients field.\n3. The pancake instance was updated, not recreated, with desiredServings 8, and its card shows the scaled amounts as exactly double the originals.\n4. The original ingredient list, steps and title still render after the change.\n5. Every patch applied, the assistant did not ask before acting, and the whole flow took at most 14 turns.",
+      "cardInfo": {
+        "name": "Recipe, then scale it",
+        "summary": "Two prompts in one room: build a card, then extend the same definition and instance.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

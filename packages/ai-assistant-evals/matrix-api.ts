@@ -1,10 +1,9 @@
-// Minimal Matrix client-server calls for the smoke runner. The suite helpers
+// Minimal Matrix client-server calls for the eval runner. The suite helpers
 // in ../helpers are bound to the isolated test stack's context; these talk to
-// whatever homeserver SMOKE_MATRIX_URL names (the dev stack's synapse by
+// whatever homeserver EVAL_MATRIX_URL names (the dev stack's synapse by
 // default) and need nothing else.
 
-export const matrixUrl =
-  process.env.SMOKE_MATRIX_URL ?? 'http://localhost:8008';
+export const matrixUrl = process.env.EVAL_MATRIX_URL ?? 'http://localhost:8008';
 
 export interface Credentials {
   accessToken: string;
@@ -89,4 +88,36 @@ export async function allRoomEvents(
     from = json.end;
   }
   return events;
+}
+
+// The realm URLs the workspace chooser lists for a user live in matrix
+// account data. Creating a realm through the realm server does not add it
+// there; the app does that itself, so a script that creates one must too.
+export async function addRealmToAccountData(
+  userId: string,
+  accessToken: string,
+  realmUrl: string,
+) {
+  let url = `${matrixUrl}/_matrix/client/v3/user/${encodeURIComponent(userId)}/account_data/app.boxel.realms`;
+  let headers = { authorization: `Bearer ${accessToken}` };
+  let current = await fetch(url, { headers });
+  let realms: string[] = [];
+  if (current.ok) {
+    let json = (await current.json()) as { realms?: string[] };
+    realms = json.realms ?? [];
+  }
+  if (realms.includes(realmUrl)) {
+    return false;
+  }
+  let response = await fetch(url, {
+    method: 'PUT',
+    headers: { ...headers, 'content-type': 'application/json' },
+    body: JSON.stringify({ realms: [...realms, realmUrl] }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `could not add ${realmUrl} to the account data of ${userId}: ${response.status} ${await response.text()}`,
+    );
+  }
+  return true;
 }

@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "Create a Pet card with a name, a species, a birth date, and a computed age in whole years. Give it an isolated view and a compact embedded view. Add two example pets, a dog born in 2019 and a cat born in 2023, and show the dog.",
+      "followUpPrompts": [],
+      "successCriteria": "1. One Pet definition exists with `name`, `species` and a date-typed `birthDate` field, plus an `age` field computed from `birthDate` (a `computeVia` field, not a stored number).\n2. The definition has both an isolated and an embedded template, and the embedded one is visibly more compact.\n3. Two instances exist, one dog born in 2019 and one cat born in 2023, both indexing without error.\n4. The dog's card is on screen, shows its species and an age that is correct for today's date, with no error boundary.\n5. The definition and both instances were written with box-style SEARCH/REPLACE markers, every patch applied, and the assistant did not ask before writing.",
+      "cardInfo": {
+        "name": "Pet with computed age",
+        "summary": "A definition from scratch with a computed field, two views and two instances.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

@@ -7,37 +7,64 @@ import {
   loginWithPassword,
   type MatrixEvent,
 } from './matrix-api.ts';
-import { analyzeRoom, type RoomAnalysis } from './room-analysis.ts';
+import { analyzeRoom } from './room-analysis.ts';
+import { grade, type RunResult, type Verdict } from './run-result.ts';
+import { RealmClient } from './realm-api.ts';
+import { prepopulate, type EvaluationBundle } from './eval-card.ts';
 
 // One Playwright test per model. Each test: fresh workspace, new room, pick the
 // model, send the prompt, wait for the bot to go idle, check a card rendered,
-// then read the room's events for the numbers. Results go to smoke-results/.
+// then read the room's events for the numbers. Results go to eval-results/
+// (or EVAL_RESULTS_DIR, which run-eval.ts sets per session).
+//
+// Two ways to say what to send. EVAL_PROMPT is one prompt and no evaluation card (`pnpm eval:models`). With
+// EVAL_BUNDLE (a JSON file run-eval.ts writes from an EvaluationCard) the
+// prompts, the success criteria, and the cards and files the workspace starts
+// with come from the evaluation, and the result JSON carries what run-eval.ts
+// needs to write an EvaluationResultCard. The bundle holds the file bytes, so
+// the eval users need no access to the workspace the evaluation lives in.
 
-const RESULTS_DIR = join(import.meta.dirname, 'smoke-results');
-const PROMPT =
-  process.env.SMOKE_PROMPT ?? 'create a hello world card and show it';
+const RESULTS_DIR =
+  process.env.EVAL_RESULTS_DIR ?? join(import.meta.dirname, 'eval-results');
+const EVAL_BUNDLE = process.env.EVAL_BUNDLE;
+const SESSION_ID = process.env.EVAL_SESSION_ID;
+const EVAL_PROMPT =
+  process.env.EVAL_PROMPT ?? 'create a hello world card and show it';
+let evaluationPromise: Promise<EvaluationBundle | undefined> | undefined;
+async function loadPrompts() {
+  if (!EVAL_BUNDLE) {
+    return { evaluation: undefined, prompts: [EVAL_PROMPT] };
+  }
+  evaluationPromise ??= readFile(EVAL_BUNDLE, 'utf8').then(
+    (text) => JSON.parse(text) as EvaluationBundle,
+  );
+  let evaluation = await evaluationPromise;
+  return { evaluation, prompts: evaluation!.prompts };
+}
 // One matrix user per model. The ai-bot runs every generation of one user
 // inside a per-user cost lock that spans all of that user's rooms, so two
 // models prompted as the same user take turns: the second waits, showing
 // "Thinking...", until the first model's turn ends. The users come from
-// `pnpm register-test-user` in packages/matrix (MATRIX_USERNAME=smoke1 ...).
+// `node ./scripts/register-test-user.ts` in packages/matrix
+// (MATRIX_USERNAME=ai-assistant-eval-user-1 MATRIX_PASSWORD=password ...); the `pnpm
+// register-test-user` script hardcodes its own username and ignores the env.
 const USERS = (
-  process.env.SMOKE_USERS ??
-  process.env.SMOKE_USER ??
-  'smoke1,smoke2,smoke3,smoke4,smoke5'
+  process.env.EVAL_USERS ??
+  process.env.EVAL_USER ??
+  'ai-assistant-eval-user-1,ai-assistant-eval-user-2,ai-assistant-eval-user-3,ai-assistant-eval-user-4,ai-assistant-eval-user-5'
 )
   .split(',')
   .map((u) => u.trim())
   .filter(Boolean);
-const PASSWORD = process.env.SMOKE_PASSWORD ?? 'password';
+const PASSWORD = process.env.EVAL_PASSWORD ?? 'password';
 function userForModel(index: number): string {
   return USERS[index % USERS.length];
 }
-const BOT_USER_ID = process.env.SMOKE_BOT_USER ?? '@aibot:localhost';
+const BOT_USER_ID = process.env.EVAL_BOT_USER ?? '@aibot:localhost';
 // The only time-based stop, and a safety net rather than a benchmark: a run
 // that is still going after this long is not going to finish. Slow runs are
 // graded afterwards, never cut short.
-const MAX_MINUTES = Number(process.env.SMOKE_MAX_MINUTES ?? 15);
+const MAX_MINUTES = Number(process.env.EVAL_MAX_MINUTES ?? 15);
 // A pill that stays in "applying" this long is a stuck host, not a slow tool:
 // the host's own tool timeout is two minutes.
 const STUCK_APPLYING_MS = 150_000;
@@ -61,46 +88,13 @@ const QUIET_WINDOW_MS = 10_000;
 // the host opens that user's most recent room; if it is empty the runner uses
 // it. Two tabs reaching that step at the same moment would share a room, so
 // the starts are staggered to keep the room steps apart.
-const STAGGER_MS = Number(process.env.SMOKE_STAGGER_SECONDS ?? 40) * 1000;
+const STAGGER_MS = Number(process.env.EVAL_STAGGER_SECONDS ?? 40) * 1000;
 let staggered = false;
 
-const MODELS = (process.env.SMOKE_MODELS ?? 'Claude Sonnet 4.6')
+const MODELS = (process.env.EVAL_MODELS ?? 'Claude Sonnet 4.6')
   .split(',')
   .map((m) => m.trim())
   .filter(Boolean);
-
-type Verdict =
-  | 'pass'
-  | 'model-failure'
-  | 'host-failure'
-  | 'bot-failure'
-  | 'runner-failure';
-
-interface RunResult {
-  requestedModel: string;
-  modelId: string | undefined;
-  reasoningEffort: string | null | undefined;
-  roomId: string | undefined;
-  realmUrl: string | undefined;
-  verdict: Verdict;
-  reasons: string[];
-  cardRendered: string | undefined;
-  renderedIn: 'stack' | 'preview' | undefined;
-  durationSeconds: number;
-  stoppedBy:
-    | 'idle'
-    | 'wall-clock'
-    | 'stuck'
-    | 'stalled'
-    | 'no-reply'
-    | 'irregularity'
-    | 'error';
-  irregularities: string[];
-  analysis: RoomAnalysis | undefined;
-  screenshot: string | undefined;
-  consoleErrors: string[];
-  error?: string;
-}
 
 function slugify(s: string) {
   return s
@@ -278,21 +272,43 @@ async function ensureActMode(page: Page, requestedModel: string) {
     /selected/,
     { timeout: 30_000 },
   );
-  console.log(`[smoke] ${requestedModel}: mode toggle shows act`);
+  console.log(`[eval] ${requestedModel}: mode toggle shows act`);
 }
 
 // The prompt must go out while the tab is inside the new workspace: the host
 // stamps the current realm and open cards onto the message, and a model that
 // is told "workspace chooser, no realm" picks any workspace from the list.
-async function ensureInsideWorkspace(page: Page, realmUrl: string) {
+// `openCards` are stacked on top of the index, so an evaluation's initial
+// cards are open cards in the message context, the way a person would have
+// the card they are talking about in front of them.
+async function ensureInsideWorkspace(
+  page: Page,
+  realmUrl: string,
+  openCards: string[] = [],
+) {
   let chooser = page.locator('[data-test-workspace-chooser]');
   let indexCard = page.locator(`[data-test-stack-card="${realmUrl}index"]`);
-  if ((await chooser.count()) > 0 || (await indexCard.count()) === 0) {
+  let missingOpenCard = false;
+  for (let id of openCards) {
+    if ((await page.locator(`[data-test-stack-card="${id}"]`).count()) === 0) {
+      missingOpenCard = true;
+    }
+  }
+  if (
+    (await chooser.count()) > 0 ||
+    (await indexCard.count()) === 0 ||
+    missingOpenCard
+  ) {
     // Re-enter through the URL rather than the tile, so this works whatever
     // state the chooser is in.
     let state = encodeURIComponent(
       JSON.stringify({
-        stacks: [[{ id: `${realmUrl}index`, format: 'isolated' }]],
+        stacks: [
+          [
+            { id: `${realmUrl}index`, format: 'isolated' },
+            ...openCards.map((id) => ({ id, format: 'isolated' })),
+          ],
+        ],
         submode: 'interact',
         workspaceChooserOpened: false,
         aiAssistantOpen: true,
@@ -300,13 +316,23 @@ async function ensureInsideWorkspace(page: Page, realmUrl: string) {
     );
     await page.goto(`/?operatorModeState=${state}`);
     await indexCard.waitFor({ timeout: 60_000 });
+    for (let id of openCards) {
+      await page
+        .locator(`[data-test-stack-card="${id}"]`)
+        .waitFor({ timeout: 60_000 });
+    }
     await page.locator('[data-test-room-settled]').waitFor({ timeout: 60_000 });
   }
   await expect(chooser).toHaveCount(0);
   await expect(indexCard).toBeVisible();
 }
 
-async function sendPrompt(page: Page, roomId: string, prompt: string) {
+async function sendPrompt(
+  page: Page,
+  roomId: string,
+  prompt: string,
+  expectedUserMessages = 1,
+) {
   // Session preparation (skills context) can take a while on a new room.
   await expect(page.locator('[data-test-session-preparation]')).toHaveCount(0, {
     timeout: 90_000,
@@ -320,7 +346,9 @@ async function sendPrompt(page: Page, roomId: string, prompt: string) {
   // With parallel workers on one account, a second tab could have landed in
   // this same empty room. Then two prompts share it and neither result means
   // anything; fail the run rather than grade a mixed room.
-  await expect(page.locator('[data-test-user-message]')).toHaveCount(1);
+  await expect(page.locator('[data-test-user-message]')).toHaveCount(
+    expectedUserMessages,
+  );
 }
 
 interface Activity {
@@ -427,10 +455,13 @@ async function stopGeneration(page: Page) {
 // block the host cannot apply, a repeated identical tool call, a pill stuck
 // past the host's own tool timeout, or the safety wall clock. Long, slow, or
 // expensive runs are not stopped; they are graded afterwards.
+// `botMessagesBefore` is how many finished bot turns the room already had
+// when the prompt went out; a follow-up prompt waits for a new one.
 async function waitForIdle(
   page: Page,
+  deadline: number,
+  botMessagesBefore = 0,
 ): Promise<{ stoppedBy: RunResult['stoppedBy']; irregularities: string[] }> {
-  let deadline = Date.now() + MAX_MINUTES * 60_000;
   let idleSince: number | undefined;
   let applyingSince: number | undefined;
   let flatSince: number | undefined;
@@ -440,7 +471,7 @@ async function waitForIdle(
     let now = Date.now();
     let activity = await readActivity(page);
     if (
-      activity.botMessages === 0 &&
+      activity.botMessages <= botMessagesBefore &&
       !activity.generating &&
       now - startedAt > NO_REPLY_MS
     ) {
@@ -473,7 +504,7 @@ async function waitForIdle(
         irregularities: activity.irregularities,
       };
     }
-    if (activity.idle && activity.botMessages > 0) {
+    if (activity.idle && activity.botMessages > botMessagesBefore) {
       idleSince ??= now;
       if (now - idleSince >= QUIET_WINDOW_MS) {
         return { stoppedBy: 'idle', irregularities: [] };
@@ -553,6 +584,23 @@ async function findRenderedCard(page: Page, realmUrl: string) {
   };
 }
 
+function skillsUsed(events: MatrixEvent[]): string[] {
+  let latest = [...events]
+    .filter((e) => e.type === 'app.boxel.room.skills')
+    .sort((a, b) => b.origin_server_ts - a.origin_server_ts)[0];
+  let enabled = (latest?.content?.enabledSkillCards ?? []) as {
+    sourceUrl?: string;
+    url?: string;
+  }[];
+  return [
+    ...new Set(
+      enabled
+        .map((f) => f.sourceUrl ?? f.url ?? '')
+        .filter((url) => /^https?:\/\//.test(url)),
+    ),
+  ];
+}
+
 function activeLLM(events: MatrixEvent[]) {
   let latest = [...events]
     .filter((e) => e.type === 'app.boxel.active-llm')
@@ -567,7 +615,9 @@ function classify(
   irregularities: string[],
   cardReasons: string[],
   cardId: string | undefined,
-  analysis: RoomAnalysis,
+  analysis: RunResult['analysis'] & object,
+  promptsSent: number,
+  promptsTotal: number,
 ): { verdict: Verdict; reasons: string[] } {
   let reasons: string[] = [];
   if (stoppedBy === 'irregularity') {
@@ -616,55 +666,20 @@ function classify(
   } else if (cardReasons.length) {
     reasons.push(...cardReasons);
   }
-  if (cardId && cardReasons.length === 0 && analysis.patchBlocks > 0) {
+  if (promptsSent < promptsTotal) {
+    reasons.push(
+      `only ${promptsSent} of ${promptsTotal} prompts were sent before the run ended`,
+    );
+  }
+  if (
+    cardId &&
+    cardReasons.length === 0 &&
+    analysis.patchBlocks > 0 &&
+    promptsSent === promptsTotal
+  ) {
     return { verdict: 'pass', reasons };
   }
   return { verdict: 'model-failure', reasons };
-}
-
-// The one-word answer per model. GOOD: passed and inside every benchmark.
-// ROUGH: passed, but a benchmark was missed (more turns, switches, or time
-// than a good run needs). FAIL: no card, or the run had to be stopped. Cost is
-// reported in its own column but does not grade: it tracks the model's price
-// class more than its behaviour, and an Opus run would be ROUGH for doing the
-// same work as a Sonnet run.
-type Grade = '✅ GOOD' | '🟡 ROUGH' | '❌ FAIL';
-
-const BENCHMARKS = {
-  maxTurns: 8,
-  maxModeSwitches: 1,
-  maxSeconds: 120,
-};
-
-function grade(result: RunResult): { grade: Grade; misses: string[] } {
-  if (result.verdict !== 'pass' || !result.analysis) {
-    return { grade: '❌ FAIL', misses: [] };
-  }
-  let a = result.analysis;
-  let misses: string[] = [];
-  if (a.turns > BENCHMARKS.maxTurns) {
-    misses.push(`${a.turns} turns (target ≤ ${BENCHMARKS.maxTurns})`);
-  }
-  let switches = Object.entries(a.toolCalls)
-    .filter(([name]) => name.startsWith('switch-submode'))
-    .reduce((sum, [, count]) => sum + count, 0);
-  if (switches > BENCHMARKS.maxModeSwitches) {
-    misses.push(
-      `${switches} mode switches (target ≤ ${BENCHMARKS.maxModeSwitches})`,
-    );
-  }
-  if (result.durationSeconds > BENCHMARKS.maxSeconds) {
-    misses.push(
-      `${result.durationSeconds}s (target ≤ ${BENCHMARKS.maxSeconds}s)`,
-    );
-  }
-  if (a.patchResults.failed > 0 || a.failedToolCalls.length > 0) {
-    misses.push('a patch or tool call failed along the way');
-  }
-  if (a.cacheMisses > 0) {
-    misses.push(`${a.cacheMisses} turn(s) missed the prompt cache`);
-  }
-  return { grade: misses.length ? '🟡 ROUGH' : '✅ GOOD', misses };
 }
 
 // Not `serial`: serial mode skips every remaining test after one failure, and
@@ -693,6 +708,7 @@ async function runModel(
   );
   let result: RunResult = {
     requestedModel,
+    modelName: undefined,
     modelId: undefined,
     reasoningEffort: undefined,
     roomId: undefined,
@@ -702,6 +718,16 @@ async function runModel(
     cardRendered: undefined,
     renderedIn: undefined,
     durationSeconds: 0,
+    startedAt: new Date(startedAt).toISOString(),
+    endedAt: undefined,
+    prompts: [],
+    promptsSent: 0,
+    evalCardUrl: undefined,
+    sessionId: SESSION_ID,
+    initialCards: [],
+    initialFiles: [],
+    skillsUsed: [],
+    username,
     stoppedBy: 'error',
     irregularities: [],
     analysis: undefined,
@@ -712,9 +738,17 @@ async function runModel(
   let step = 'start';
   try {
     step = 'login';
-    console.log(`[smoke] ${requestedModel} runs as @${username}`);
+    console.log(`[eval] ${requestedModel} runs as @${username}`);
     credentials = await loginViaLocalStorage(page, username);
-    // Human-readable stamp so the workspace list reads "Smoke Claude Opus
+    let realmClient = new RealmClient(
+      credentials.accessToken,
+      credentials.userId,
+    );
+    step = 'read the evaluation';
+    let { evaluation, prompts } = await loadPrompts();
+    result.prompts = prompts;
+    result.evalCardUrl = evaluation?.url;
+    // Human-readable stamp so the workspace list reads "Models Claude Opus
     // 4.8 2026-09-07 12:43"; the endpoint gets the same stamp, slug-safe.
     let now = new Date();
     let pad = (n: number) => String(n).padStart(2, '0');
@@ -722,25 +756,50 @@ async function runModel(
       now.getHours(),
     )}:${pad(now.getMinutes())}`;
     step = 'create workspace';
+    let label = evaluation ? `Eval ${slugify(evaluation.name)}` : 'Models';
     result.realmUrl = await createWorkspace(
       page,
-      `Smoke ${requestedModel} ${stamp}`,
-      `smoke-${slug}-${slugify(stamp)}`.slice(0, 60),
+      `${label} ${requestedModel} ${stamp}`,
+      `${slugify(label)}-${slug}-${slugify(stamp)}`.slice(0, 60),
     );
+    if (evaluation) {
+      step = 'copy the initial cards and files into the workspace';
+      let copied = await prepopulate(
+        realmClient,
+        evaluation,
+        result.realmUrl,
+        (line) => console.log(`[eval] ${requestedModel}: ${line}`),
+      );
+      result.initialCards = copied.cards;
+      result.initialFiles = copied.files;
+    }
     step = 'open room';
     result.roomId = await openRoom(page);
     step = 'select model';
-    await selectModel(page, requestedModel);
+    result.modelName = await selectModel(page, requestedModel);
     step = 'set act mode';
     await ensureActMode(page, requestedModel);
     step = 'confirm the tab is inside the new workspace';
-    await ensureInsideWorkspace(page, result.realmUrl);
-    step = 'send prompt';
-    await sendPrompt(page, result.roomId, PROMPT);
-    step = 'wait for idle';
-    let waited = await waitForIdle(page);
-    result.stoppedBy = waited.stoppedBy;
-    result.irregularities = waited.irregularities;
+    await ensureInsideWorkspace(page, result.realmUrl, result.initialCards);
+    // One safety clock for the whole run, follow-ups included.
+    let deadline = Date.now() + MAX_MINUTES * 60_000;
+    let botMessagesBefore = 0;
+    for (let [index, prompt] of prompts.entries()) {
+      step = index === 0 ? 'send prompt' : `send follow-up prompt ${index + 1}`;
+      await sendPrompt(page, result.roomId, prompt, index + 1);
+      result.promptsSent = index + 1;
+      step =
+        index === 0
+          ? 'wait for idle'
+          : `wait for idle after prompt ${index + 1}`;
+      let waited = await waitForIdle(page, deadline, botMessagesBefore);
+      result.stoppedBy = waited.stoppedBy;
+      result.irregularities = waited.irregularities;
+      if (waited.stoppedBy !== 'idle') {
+        break;
+      }
+      botMessagesBefore = (await readActivity(page)).botMessages;
+    }
     step = 'check render';
 
     let rendered = await findRenderedCard(page, result.realmUrl);
@@ -753,6 +812,7 @@ async function runModel(
     let llm = activeLLM(events);
     result.modelId = llm?.model;
     result.reasoningEffort = llm?.reasoningEffort;
+    result.skillsUsed = skillsUsed(events);
     result.analysis = analyzeRoom(events, BOT_USER_ID);
     let verdict = classify(
       result.stoppedBy,
@@ -760,6 +820,8 @@ async function runModel(
       rendered.reasons,
       rendered.cardId,
       result.analysis,
+      result.promptsSent,
+      prompts.length,
     );
     result.verdict = verdict.verdict;
     result.reasons = verdict.reasons;
@@ -782,11 +844,13 @@ async function runModel(
         );
         result.analysis = analyzeRoom(events, BOT_USER_ID);
         result.modelId = activeLLM(events)?.model;
+        result.skillsUsed = skillsUsed(events);
       } catch {
         // best effort
       }
     }
   } finally {
+    result.endedAt = new Date().toISOString();
     result.durationSeconds = Math.round((Date.now() - startedAt) / 1000);
     result.consoleErrors = consoleErrors.slice(0, 50);
     await writeFile(
@@ -795,7 +859,7 @@ async function runModel(
     );
     let graded = grade(result);
     console.log(
-      `[smoke] ${graded.grade} ${requestedModel}: ${result.verdict}` +
+      `[eval] ${graded.grade} ${requestedModel}: ${result.verdict}` +
         (result.reasons.length ? ` — ${result.reasons.join('; ')}` : '') +
         (graded.misses.length ? ` — ${graded.misses.join('; ')}` : '') +
         (result.roomId ? ` (room ${result.roomId})` : ''),
@@ -808,16 +872,19 @@ async function runModel(
 // parallel workers, each in its own browser (headless). Tabs: one test that
 // opens every model as a tab of one browser, for watching a sweep in a single
 // headed window. Same flow either way.
-const TABS_MODE = ['1', 'true'].includes(process.env.SMOKE_TABS ?? '');
+const TABS_MODE = ['1', 'true'].includes(process.env.EVAL_TABS ?? '');
+const RUN_LABEL = EVAL_BUNDLE
+  ? `evaluation ${process.env.EVAL_NAME ?? EVAL_BUNDLE}`
+  : EVAL_PROMPT;
 
 if (MODELS.length > USERS.length) {
   console.warn(
-    `[smoke] ${MODELS.length} models but only ${USERS.length} users (SMOKE_USERS): models sharing a user run one after the other, not side by side`,
+    `[eval] ${MODELS.length} models but only ${USERS.length} users (EVAL_USERS): models sharing a user run one after the other, not side by side`,
   );
 }
 
 if (TABS_MODE) {
-  test(`${MODELS.length} models in tabs: ${PROMPT}`, async ({
+  test(`${MODELS.length} models in tabs: ${RUN_LABEL}`, async ({
     browser,
     baseURL,
   }) => {
@@ -843,7 +910,7 @@ if (TABS_MODE) {
   });
 } else {
   MODELS.forEach((requestedModel, index) => {
-    test(`${requestedModel}: ${PROMPT}`, async ({ page }) => {
+    test(`${requestedModel}: ${RUN_LABEL}`, async ({ page }) => {
       if (!staggered) {
         staggered = true;
         await page.waitForTimeout(test.info().parallelIndex * STAGGER_MS);
@@ -855,8 +922,12 @@ if (TABS_MODE) {
 }
 
 test.afterAll(async () => {
+  // One JSON per model; run-eval.ts keeps its own files next to them.
   let files = (await readdir(RESULTS_DIR)).filter(
-    (f) => f.endsWith('.json') && f !== 'playwright.json',
+    (f) =>
+      f.endsWith('.json') &&
+      !['playwright.json', 'evaluation.json', 'session.json'].includes(f) &&
+      !f.endsWith('.card.json'),
   );
   let rows: RunResult[] = [];
   for (let file of files) {
@@ -894,7 +965,9 @@ test.afterAll(async () => {
       } | ${[...r.reasons, ...graded.misses, r.roomId ? `room ${r.roomId}` : ''].filter(Boolean).join('; ')} |`;
     })
     .join('\n');
-  let summary = `# Model smoke results\n\nPrompt: \`${PROMPT}\`\n\n${header}${body}\n`;
+  let summary = `# Model eval results\n\n${
+    EVAL_BUNDLE ? `Evaluation: ${RUN_LABEL}` : `Prompt: \`${EVAL_PROMPT}\``
+  }${SESSION_ID ? `\nSession: ${SESSION_ID}` : ''}\n\n${header}${body}\n`;
   await writeFile(join(RESULTS_DIR, 'summary.md'), summary);
   console.log(`\n${summary}`);
 });

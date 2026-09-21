@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "I need to track invoices. An invoice has a customer name, an issue date, line items with a description, a quantity and a unit price, and a computed total. Before you write anything, check the catalog for something I can reuse and prefer installing it over writing from scratch. Then create one example invoice with three line items and show it.",
+      "followUpPrompts": [],
+      "successCriteria": "1. The assistant searched the catalog for an invoice or billing listing before writing any code.\n2. If a fitting listing exists, it was installed into the test workspace and used; if none exists, the assistant said so and then wrote its own definition. Writing from scratch without looking is a failure of criterion 1, not of this one.\n3. An invoice instance exists with a customer name, an issue date and exactly three line items, each with a description, a quantity and a unit price.\n4. The card on screen shows a total equal to the sum of quantity times unit price over the three lines, with no error boundary.\n5. Every patch applied, and the assistant did not ask before acting.",
+      "cardInfo": {
+        "name": "Invoice from the catalog",
+        "summary": "Reuse over rewrite: search the catalog, install what fits, only then build.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

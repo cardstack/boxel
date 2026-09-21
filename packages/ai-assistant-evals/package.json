@@ -1,0 +1,25 @@
+{
+  "name": "@cardstack/ai-assistant-evals",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "AI assistant evals: drives the real local Boxel stack through Playwright — a bare prompt per model (`pnpm eval:models`) or an EvaluationCard run that records its results as cards (`pnpm eval`). See README.md.",
+  "scripts": {
+    "eval:models": "playwright test -c playwright.config.ts",
+    "eval:models:headed": "EVAL_WORKERS=1 playwright test -c playwright.config.ts --headed",
+    "eval:models:tabs": "EVAL_TABS=1 EVAL_WORKERS=1 playwright test -c playwright.config.ts --headed",
+    "eval:setup": "node eval-setup.ts",
+    "eval": "node run-eval.ts",
+    "eval:judge": "node judge-result.ts",
+    "lint": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@playwright/test": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  }
+}
