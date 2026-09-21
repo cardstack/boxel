@@ -139,7 +139,18 @@ export const BUNDLED_BASE_MODULES: Record<
     import('@cardstack/base/default-templates/missing-template'),
   'field-component': () => import('@cardstack/base/field-component'),
   'field-support': () => import('@cardstack/base/field-support'),
-  'file-api': () => import('@cardstack/base/file-api'),
+  // `file-api` is deliberately NOT bundled. It declares nothing: it re-exports
+  // `FileDef` and friends from card-api. A loader credits a class to the first
+  // module it serves that exposes it, and a bundled module is served without
+  // its re-export source being loaded first — so serving this one would make
+  // every `FileDef` code ref name `@cardstack/base/file-api`, and the
+  // adoption-chain walk, which stops at the module the family root names,
+  // walks past it. Card code importing it keeps fetching it from the realm,
+  // where evaluation loads card-api first and the identity comes out right.
+  //
+  // Nothing bundled imports it at runtime — card-serialization's import is
+  // `import type`, which erases — so leaving it out keeps the bundled set
+  // closed under imports.
   'file-formats/file-image': () =>
     import('@cardstack/base/file-formats/file-image'),
   'file-formats/file-presentation': () =>
