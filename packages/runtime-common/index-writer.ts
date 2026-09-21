@@ -52,10 +52,12 @@ import type { DeclaredScreenshotError, Diagnostics } from './index.ts';
 import {
   ALL_TYPES_KEY,
   coerceTypes,
+  normalizeRealmMetaValue,
   type BoxelIndexTable,
   type CardTypeSummary,
   type PrerenderedHtmlTable,
   type RealmGenerationsTable,
+  type RealmMetaValue,
 } from './index-structure.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
 import { md5 } from 'super-fast-md5';
@@ -322,6 +324,13 @@ const WRITE_BUFFER_FLUSH_THRESHOLD = 100;
 // a realm with an unusually large one inside the driver's bound-parameter
 // ceiling.
 const TYPE_STAMP_CHUNK = 200;
+
+// Touched types past which a pass rebuilds its whole type summary instead of
+// recomputing the touched entries and carrying the rest forward. A pass that
+// moved this many types is recomputing most of the realm's vocabulary anyway,
+// so the scoped form stops being a saving while still binding one parameter
+// per key — the same bound-parameter ceiling `TYPE_STAMP_CHUNK` keeps clear of.
+const SCOPED_TYPE_SUMMARY_MAX_TYPES = 200;
 
 // One `boxel_index` row as `existingIndexTypes` reads it back.
 interface ExistingIndexRowType {
@@ -2067,11 +2076,28 @@ export class Batch {
   }
 
   // Re-stamp the current committed generation's realm_meta value at this
-  // batch's generation. Runs inside done()'s transaction before
-  // applyBatchUpdates advances realm_generations, so the JOIN-anchored read
-  // still resolves the prior row here. Falls back to a fresh compute when no
-  // prior row exists (a realm that has never completed a pass).
+  // batch's generation. Falls back to a fresh compute when no prior row exists
+  // (a realm that has never completed a pass).
   private async carryForwardRealmMeta(): Promise<void> {
+    let value = await this.currentRealmMetaValue();
+    if (value === undefined) {
+      await this.updateRealmMeta();
+      return;
+    }
+    await this.writeRealmMeta(value);
+  }
+
+  // The realm_meta value at the realm's current committed generation, or
+  // undefined for a realm that has never completed a pass.
+  //
+  // Anchored on `realm_generations.current_generation` rather than on the
+  // highest-numbered row, which a from-scratch reindex leaves behind — the
+  // same JOIN the read side uses. Callers run inside done()'s transaction
+  // before applyBatchUpdates advances the generation, so this resolves the row
+  // the pass is about to publish over.
+  private async currentRealmMetaValue(): Promise<
+    RealmMetaTable['value'] | undefined
+  > {
     let [row] = (await this.#query([
       `SELECT rm.value
        FROM realm_meta rm
@@ -2082,15 +2108,15 @@ export class Batch {
       ...every([['rm.realm_url =', param(this.realmURL.href)]]),
       `LIMIT 1`,
     ] as Expression)) as unknown as { value: RealmMetaTable['value'] }[];
-    if (!row) {
-      await this.updateRealmMeta();
-      return;
-    }
+    return row?.value;
+  }
+
+  private async writeRealmMeta(value: RealmMetaTable['value']): Promise<void> {
     let { nameExpressions, valueExpressions } = asExpressions(
       {
         realm_url: this.realmURL.href,
         generation: this.generation,
-        value: row.value,
+        value,
         indexed_at: unixTime(new Date().getTime()),
       } as Omit<RealmMetaTable, 'indexed_at'> & {
         indexed_at: number;
@@ -2184,33 +2210,59 @@ export class Batch {
   }
 
   private async updateRealmMeta() {
-    let instances = await this.#fetchTypeSummary('instance');
-    let files = await this.#fetchTypeSummary('file');
+    let value =
+      (await this.scopedRealmMetaValue()) ?? (await this.fullRealmMetaValue());
+    await this.writeRealmMeta(value);
+  }
 
-    let value = { instances, files };
+  private async fullRealmMetaValue(): Promise<RealmMetaValue> {
+    return {
+      instances: await this.#fetchTypeSummary('instance'),
+      files: await this.#fetchTypeSummary('file'),
+    };
+  }
 
-    let { nameExpressions, valueExpressions } = asExpressions(
-      {
-        realm_url: this.realmURL.href,
-        generation: this.generation,
-        value,
-        indexed_at: unixTime(new Date().getTime()),
-      } as Omit<RealmMetaTable, 'indexed_at'> & {
-        indexed_at: number;
-      },
-      {
-        jsonFields: ['value'],
-      },
-    );
-
-    await this.#query([
-      ...upsert(
-        'realm_meta',
-        'realm_meta_pkey',
-        nameExpressions,
-        valueExpressions,
+  // The summary this pass publishes, built from the types it moved and the
+  // previous generation's entries for everything else — or undefined when this
+  // pass cannot be published that way and has to rebuild the whole summary.
+  //
+  // `typeSetIsComplete` is the condition that matters. It asks whether every
+  // URL the swap promotes had its prior adoption chain read before the pass
+  // wrote over it, which is exactly what makes `#touchedTypes` a complete
+  // account of the groups whose counts could have moved. A row written without
+  // that read can be leaving a type nothing else in the pass names, and this
+  // path would carry that type's now-stale count forward as if it were still
+  // current. Same polarity as the `bumpAllTypes` decision below: absence reads
+  // as "unknown", never as "unaffected".
+  //
+  // The other two are cost, not correctness. A realm that has never completed a
+  // pass has no prior entries to carry, and a pass that moved more types than
+  // the scoped form is worth binding parameters for rebuilds instead.
+  private async scopedRealmMetaValue(): Promise<RealmMetaValue | undefined> {
+    if (!this.typeSetIsComplete) {
+      return undefined;
+    }
+    let touchedTypes = this.touchedTypes;
+    if (touchedTypes.length > SCOPED_TYPE_SUMMARY_MAX_TYPES) {
+      return undefined;
+    }
+    let priorValue = await this.currentRealmMetaValue();
+    if (priorValue === undefined) {
+      return undefined;
+    }
+    let prior = normalizeRealmMetaValue(priorValue);
+    return {
+      instances: await this.#fetchMergedTypeSummary(
+        'instance',
+        touchedTypes,
+        prior.instances,
       ),
-    ]);
+      files: await this.#fetchMergedTypeSummary(
+        'file',
+        touchedTypes,
+        prior.files,
+      ),
+    };
   }
 
   // Aggregates per-type summaries (count, display name, code-ref key, icon)
@@ -2228,11 +2280,20 @@ export class Batch {
   // entries for the same type — one labeled "Markdown", one labeled
   // "MarkdownDef" (the CodeRef-name fallback) — that resolve to identical
   // searches and confuse users during the transition window.
+  //
+  // `count(i.url)` counts rows, not distinct URLs, because the two are the
+  // same thing here: the table's primary key is `(url, realm_url, type)` and
+  // this query fixes `realm_url` and `type`, so no URL can appear twice in a
+  // group. Asking for the distinct count instead is not free — it makes the
+  // aggregate order its whole input by `(types->>0, url)`, which under a
+  // locale collation is the most expensive thing in the swap: both keys are
+  // long URLs that share a per-realm prefix, so the comparison cannot use
+  // abbreviated keys and runs at full length on every pair.
   async #fetchTypeSummary(
     indexType: BoxelIndexTable['type'],
   ): Promise<CardTypeSummary[]> {
     let results = await this.#query([
-      `SELECT CAST(count(DISTINCT i.url) AS INTEGER) as total, MAX(i.display_names->>0) as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
+      `SELECT CAST(count(i.url) AS INTEGER) as total, MAX(i.display_names->>0) as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
        FROM boxel_index_working as i
           WHERE`,
       ...every([
@@ -2249,6 +2310,81 @@ export class Batch {
       ]),
       `GROUP BY i.types->>0`,
       `ORDER BY MAX(i.display_names->>0) ASC NULLS LAST`,
+    ] as Expression);
+    return results as unknown as CardTypeSummary[];
+  }
+
+  // `#fetchTypeSummary` restricted to the types this pass moved, unioned with
+  // the entries the previous generation already held for every other type.
+  // Same result, without reading the whole realm's working set to produce it.
+  //
+  // The union and its ordering stay in SQL. `realm_meta.value` is ordered by
+  // display name, and what that ordering means belongs to whichever adapter
+  // holds the rows — a locale collation under Postgres, BINARY under SQLite.
+  // Merging in JS would have to reproduce that to leave the order the sidebar
+  // renders unchanged; letting the database order the merged set keeps this
+  // byte-identical to a full rebuild on each adapter without naming a
+  // collation at all.
+  //
+  // The carried arm is filtered by the touched set rather than merged under
+  // the recomputed one, so a type whose last row this pass removed — recomputed
+  // to nothing, and therefore absent from both arms — drops out of the summary
+  // instead of keeping its stale count.
+  async #fetchMergedTypeSummary(
+    indexType: BoxelIndexTable['type'],
+    touchedTypes: string[],
+    priorEntries: CardTypeSummary[],
+  ): Promise<CardTypeSummary[]> {
+    let touched = new Set(touchedTypes);
+    let carried = priorEntries.filter((entry) => !touched.has(entry.code_ref));
+    if (touched.size === 0) {
+      // Nothing moved, so the previous generation's entries are already the
+      // answer — and already in the order the database put them in.
+      return carried;
+    }
+    let carriedJSON = JSON.stringify(carried);
+    let results = await this.#query([
+      `SELECT total, display_name, code_ref, icon_html FROM (
+         SELECT CAST(count(i.url) AS INTEGER) as total, MAX(i.display_names->>0) as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
+         FROM boxel_index_working as i
+            WHERE`,
+      ...every([
+        ['i.realm_url =', param(this.realmURL.href)],
+        ['i.type = ', param(indexType)],
+        ['i.types IS NOT NULL'],
+        [
+          dbExpression({
+            pg: `(i.types->>0)`,
+            sqlite: `json_extract(i.types, '$[0]')`,
+          }),
+          `IN`,
+          ...addExplicitParens(
+            separatedByCommas([...touched].map((type) => [param(type)])),
+          ),
+        ],
+        any([['i.is_deleted = false'], ['i.is_deleted IS NULL']]),
+      ]),
+      `GROUP BY i.types->>0
+       UNION ALL`,
+      dbExpression({
+        pg: [
+          `SELECT p.total, p.display_name, p.code_ref, p.icon_html
+           FROM jsonb_to_recordset(`,
+          param(carriedJSON),
+          `::jsonb) AS p(total integer, display_name text, code_ref text, icon_html text)`,
+        ],
+        sqlite: [
+          `SELECT json_extract(p.value, '$.total') AS total,
+                  json_extract(p.value, '$.display_name') AS display_name,
+                  json_extract(p.value, '$.code_ref') AS code_ref,
+                  json_extract(p.value, '$.icon_html') AS icon_html
+           FROM json_each(`,
+          param(carriedJSON),
+          `) AS p`,
+        ],
+      }),
+      `) AS summary
+       ORDER BY display_name ASC NULLS LAST`,
     ] as Expression);
     return results as unknown as CardTypeSummary[];
   }

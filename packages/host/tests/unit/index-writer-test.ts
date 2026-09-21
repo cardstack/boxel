@@ -83,6 +83,49 @@ const makeCardTypeSummary = (
   icon_html: iconHTML,
 });
 
+const writeInstance = async (
+  batch: Awaited<ReturnType<IndexWriter['createBatch']>>,
+  opts: {
+    id: string;
+    name: string;
+    adoptsFrom: { module: RealmResourceIdentifier; name: string };
+    displayNames: string[];
+    types: string[];
+    iconHTML: string;
+  },
+) => {
+  let timestamp = Date.now();
+  await batch.updateEntry(new URL(`${testRealmURL}${opts.id}.json`), {
+    type: 'instance',
+    resource: makeCardResource(opts.id, opts.name, opts.adoptsFrom),
+    lastModified: timestamp,
+    resourceCreatedAt: timestamp,
+    searchData: { name: opts.name },
+    deps: new Set([`${testRealmURL}${opts.adoptsFrom.name.toLowerCase()}`]),
+    displayNames: opts.displayNames,
+    types: opts.types,
+    iconHTML: opts.iconHTML,
+  });
+};
+
+const plantRealmMeta = async (
+  adapter: SQLiteAdapter,
+  generation: number,
+  value: { instances: RealmMetaValue[]; files: RealmMetaValue[] },
+) =>
+  adapter.execute(
+    `INSERT INTO realm_meta (realm_url, generation, value, indexed_at)
+     VALUES ($1, $2, $3, $4)`,
+    {
+      bind: [
+        testRealmURL,
+        generation,
+        JSON.stringify(value),
+        String(Date.now()),
+      ],
+    },
+  );
+
 const fetchRealmMetaRows = async (adapter: SQLiteAdapter) =>
   adapter.execute(`SELECT value FROM realm_meta r WHERE r.realm_url = $1`, {
     bind: [testRealmURL],
@@ -2925,6 +2968,363 @@ module('Unit | index-writer', function (hooks) {
         makeCardTypeSummary(`${testRealmURL}pet/Pet`, 'Pet', iconHTML, 1),
       ],
       'correct card type summary after indexing is done',
+    );
+  });
+
+  test('update realm meta carries forward the types a pass did not touch', async function (assert) {
+    // The rollup that publishes a pass recomputes only the types the pass
+    // moved and reuses the previous generation's entries for the rest. The
+    // planted Person entry is deliberately impossible — nothing in the
+    // working table would ever aggregate to 42 — so it can only survive by
+    // being carried, which is what tells these assertions apart from a pass
+    // that quietly rebuilt the whole summary.
+    let iconHTML = '<svg>test icon</svg>';
+    let personRef = { module: rri('./person'), name: 'Person' };
+    let petRef = { module: rri('./pet'), name: 'Pet' };
+    let personTypes = internalKeysFor(virtualNetwork, personRef, baseCardRef);
+    let petTypes = internalKeysFor(virtualNetwork, petRef, baseCardRef);
+
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource(
+            '1',
+            'Mango',
+            personRef,
+          ) as LooseCardResource,
+          search_doc: { name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          types: personTypes,
+          icon_html: iconHTML,
+        },
+      ],
+    );
+    await plantRealmMeta(adapter, 1, {
+      instances: [
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          42,
+        ),
+      ],
+      files: [
+        makeCardTypeSummary(
+          `${testRealmURL}markdown-file-def/MarkdownDef`,
+          'Markdown',
+          iconHTML,
+          7,
+        ),
+      ],
+    });
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.invalidate([new URL(`${testRealmURL}2.json`)]);
+    await writeInstance(batch, {
+      id: '2',
+      name: 'Ringo',
+      adoptsFrom: petRef,
+      displayNames: ['Pet', 'Card'],
+      types: petTypes,
+      iconHTML,
+    });
+    await batch.done();
+
+    let realmMeta = await fetchRealmMeta(adapter);
+    assert.deepEqual(
+      realmMeta.value,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          42,
+        ),
+        makeCardTypeSummary(`${testRealmURL}pet/Pet`, 'Pet', iconHTML, 1),
+      ],
+      'Person keeps the entry the previous generation held and Pet is recomputed, both in display-name order',
+    );
+    assert.deepEqual(
+      realmMeta.files,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}markdown-file-def/MarkdownDef`,
+          'Markdown',
+          iconHTML,
+          7,
+        ),
+      ],
+      'the file arm carries forward too, on a pass that touched no file rows',
+    );
+  });
+
+  test('update realm meta publishes the same value whether or not the pass could scope its rollup', async function (assert) {
+    // A pass that read the prior adoption chain of every URL it promotes can
+    // scope the rollup; one that did not has to rebuild the whole summary.
+    // Both are run here over the same realm state, and they have to agree —
+    // the failure mode of getting this wrong is a summary that is quietly
+    // inaccurate rather than one that errors.
+    let iconHTML = '<svg>test icon</svg>';
+    let personRef = { module: rri('./person'), name: 'Person' };
+    let petRef = { module: rri('./pet'), name: 'Pet' };
+    let personTypes = internalKeysFor(virtualNetwork, personRef, baseCardRef);
+    let petTypes = internalKeysFor(virtualNetwork, petRef, baseCardRef);
+    let markdownTypes = internalKeysFor(
+      virtualNetwork,
+      { module: rri('./markdown-file-def'), name: 'MarkdownDef' },
+      { module: rri('./card-api'), name: 'FileDef' },
+    );
+
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource(
+            '1',
+            'Mango',
+            personRef,
+          ) as LooseCardResource,
+          search_doc: { name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          types: personTypes,
+          icon_html: iconHTML,
+        },
+        {
+          url: `${testRealmURL}notes/a.md`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'file',
+          search_doc: { name: 'a.md', url: `${testRealmURL}notes/a.md` },
+          display_names: ['Markdown', 'File'],
+          types: markdownTypes,
+          icon_html: iconHTML,
+        },
+      ],
+    );
+
+    // Nothing to carry forward on the first pass, so it rebuilds in full and
+    // leaves the row the next pass merges over.
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.done();
+
+    batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.invalidate([new URL(`${testRealmURL}2.json`)]);
+    await writeInstance(batch, {
+      id: '2',
+      name: 'Ringo',
+      adoptsFrom: petRef,
+      displayNames: ['Pet', 'Card'],
+      types: petTypes,
+      iconHTML,
+    });
+    await batch.done();
+    let scoped = await fetchRealmMeta(adapter);
+
+    // The same row written again, this time without reading it first, which
+    // leaves the realm in the state it was already in and forces the rebuild.
+    batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await writeInstance(batch, {
+      id: '2',
+      name: 'Ringo',
+      adoptsFrom: petRef,
+      displayNames: ['Pet', 'Card'],
+      types: petTypes,
+      iconHTML,
+    });
+    await batch.done();
+    let rebuilt = await fetchRealmMeta(adapter);
+
+    assert.deepEqual(
+      scoped.value,
+      rebuilt.value,
+      'the instance summaries are identical',
+    );
+    assert.deepEqual(
+      scoped.files,
+      rebuilt.files,
+      'the file summaries are identical',
+    );
+    assert.deepEqual(
+      scoped.value,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          1,
+        ),
+        makeCardTypeSummary(`${testRealmURL}pet/Pet`, 'Pet', iconHTML, 1),
+      ],
+      'and both describe the realm as it now stands',
+    );
+  });
+
+  test('update realm meta drops a type whose last instance the pass deleted', async function (assert) {
+    // A deletion is the case the scoped rollup has to get right by reading
+    // the chain the row is leaving: the type it leaves behind is recomputed
+    // to nothing, so its entry has to disappear rather than be carried.
+    let iconHTML = '<svg>test icon</svg>';
+    let personRef = { module: rri('./person'), name: 'Person' };
+    let petRef = { module: rri('./pet'), name: 'Pet' };
+    let personTypes = internalKeysFor(virtualNetwork, personRef, baseCardRef);
+    let petTypes = internalKeysFor(virtualNetwork, petRef, baseCardRef);
+
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource(
+            '1',
+            'Mango',
+            personRef,
+          ) as LooseCardResource,
+          search_doc: { name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          types: personTypes,
+          icon_html: iconHTML,
+        },
+        {
+          url: `${testRealmURL}2.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource(
+            '2',
+            'Ringo',
+            petRef,
+          ) as LooseCardResource,
+          search_doc: { name: 'Ringo' },
+          display_names: ['Pet'],
+          deps: [`${testRealmURL}pet`],
+          types: petTypes,
+          icon_html: iconHTML,
+        },
+      ],
+    );
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.done();
+    assert.deepEqual(
+      (await fetchRealmMeta(adapter)).value.map((s) => s.display_name),
+      ['Person', 'Pet'],
+      'both types are summarized before the deletion',
+    );
+
+    // Invalidating without writing the URL back is a deletion: the pass
+    // tombstones the row and the swap promotes the tombstone.
+    batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.invalidate([new URL(`${testRealmURL}2.json`)]);
+    await batch.done();
+
+    assert.deepEqual(
+      (await fetchRealmMeta(adapter)).value,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          1,
+        ),
+      ],
+      'the emptied type is gone and the untouched one is unchanged',
+    );
+  });
+
+  test('update realm meta moves a count when a card changes what it adopts from', async function (assert) {
+    // The type a card leaves is only in the pass's touched set because
+    // `invalidate` read the production chain before the write overwrote it.
+    // Without that read the old type would keep a count it no longer has.
+    let iconHTML = '<svg>test icon</svg>';
+    let personRef = { module: rri('./person'), name: 'Person' };
+    let petRef = { module: rri('./pet'), name: 'Pet' };
+    let personTypes = internalKeysFor(virtualNetwork, personRef, baseCardRef);
+    let petTypes = internalKeysFor(virtualNetwork, petRef, baseCardRef);
+
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource(
+            '1',
+            'Mango',
+            personRef,
+          ) as LooseCardResource,
+          search_doc: { name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          types: personTypes,
+          icon_html: iconHTML,
+        },
+      ],
+    );
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.done();
+
+    batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
+    await writeInstance(batch, {
+      id: '1',
+      name: 'Mango',
+      adoptsFrom: petRef,
+      displayNames: ['Pet', 'Card'],
+      types: petTypes,
+      iconHTML,
+    });
+    await batch.done();
+
+    assert.deepEqual(
+      (await fetchRealmMeta(adapter)).value,
+      [makeCardTypeSummary(`${testRealmURL}pet/Pet`, 'Pet', iconHTML, 1)],
+      'the count moved onto the new type and the type it left is gone',
     );
   });
 
