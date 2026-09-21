@@ -25,6 +25,11 @@ exports.shorthands = undefined;
 // This column is a write stamp. Nothing that decides whether a row is live may
 // read it — filtering row selection on a stamp hides live rows, which is the
 // mistake `generation` already exists as a warning about.
+//
+// Adding the columns only. A nullable column with no default is a catalog
+// edit, so this is instant whatever the table holds; the indexes over them are
+// not, and are built separately and concurrently so the build cannot hold a
+// write lock on these two tables while the previous revision is still serving.
 exports.up = (pgm) => {
   pgm.addColumn('boxel_index', {
     host_shell_generation: { type: 'integer' },
@@ -32,28 +37,9 @@ exports.up = (pgm) => {
   pgm.addColumn('boxel_index_working', {
     host_shell_generation: { type: 'integer' },
   });
-
-  // Partial, because the predicate never matches NULL and the unstamped rows
-  // are the majority until a full pass has run against every realm. Indexing
-  // them would size the index by the table rather than by the rows the repair
-  // query can actually return.
-  pgm.createIndex('boxel_index', 'host_shell_generation', {
-    name: 'boxel_index_host_shell_generation_index',
-    where: 'host_shell_generation IS NOT NULL',
-  });
-  pgm.createIndex('boxel_index_working', 'host_shell_generation', {
-    name: 'boxel_index_working_host_shell_generation_index',
-    where: 'host_shell_generation IS NOT NULL',
-  });
 };
 
 exports.down = (pgm) => {
-  pgm.dropIndex('boxel_index', 'host_shell_generation', {
-    name: 'boxel_index_host_shell_generation_index',
-  });
-  pgm.dropIndex('boxel_index_working', 'host_shell_generation', {
-    name: 'boxel_index_working_host_shell_generation_index',
-  });
   pgm.dropColumn('boxel_index', 'host_shell_generation');
   pgm.dropColumn('boxel_index_working', 'host_shell_generation');
 };

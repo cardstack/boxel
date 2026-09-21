@@ -2113,6 +2113,100 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
+  // An error row for a URL that already has a published row carries that row's
+  // whole shape forward, its generation included. Which of the two numbers the
+  // row should keep depends on whose content it ends up serving, and the two
+  // error paths differ — so both are driven here.
+  module('an error row over a published row', function (hooks) {
+    const PUBLISHED_GENERATION = 3;
+    const RENDER_GENERATION = 9;
+
+    hooks.beforeEach(async function () {
+      await setupIndex(
+        adapter,
+        [{ realm_url: testRealmURL, current_generation: 1 }],
+        [
+          {
+            url: `${testRealmURL}1.json`,
+            generation: 1,
+            realm_url: testRealmURL,
+            host_shell_generation: PUBLISHED_GENERATION,
+            pristine_doc: {
+              id: `${testRealmURL}1.json`,
+              type: 'card',
+              attributes: { name: 'Mango' },
+              meta: {
+                adoptsFrom: { module: rri(`./person`), name: 'Person' },
+              },
+            } as LooseCardResource,
+            search_doc: { name: 'Mango' },
+          },
+        ],
+      );
+    });
+
+    let generationOnRow = async () => {
+      let [row] = (await adapter.execute(
+        `SELECT host_shell_generation FROM boxel_index WHERE url = $1`,
+        { bind: [`${testRealmURL}1.json`] },
+      )) as unknown as { host_shell_generation: number | null }[];
+      return row.host_shell_generation;
+    };
+
+    // The case a repair most needs to find. The error is this render's own
+    // output, so the row has to name the bundle that produced it — carrying
+    // the published row's number forward would make a failure on the current
+    // shell read as one from a bundle already replaced.
+    test("a published error takes the render's generation", async function (assert) {
+      let batch = await indexWriter.createBatch(
+        new URL(testRealmURL),
+        virtualNetwork,
+      );
+      await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+        type: 'instance-error',
+        error: { message: 'boom', status: 500, additionalErrors: [] },
+        diagnostics: { warmedHostShellGeneration: RENDER_GENERATION },
+      });
+      await batch.done();
+      assert.strictEqual(await generationOnRow(), RENDER_GENERATION);
+    });
+
+    // A withheld failure republishes the last good render untouched, so the
+    // row still shows that bundle's work. Restamping it with this render's
+    // number would claim the withheld attempt produced content it did not.
+    test('a withheld failure keeps the published generation', async function (assert) {
+      let batch = await indexWriter.createBatch(
+        new URL(testRealmURL),
+        virtualNetwork,
+      );
+      await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+        type: 'instance-error',
+        error: { message: 'boom', status: 500, additionalErrors: [] },
+        diagnostics: {
+          warmedHostShellGeneration: RENDER_GENERATION,
+          staleShellFailure: ['instance'],
+        },
+      });
+      await batch.done();
+      let [row] = (await adapter.execute(
+        `SELECT host_shell_generation, has_error FROM boxel_index WHERE url = $1`,
+        {
+          bind: [`${testRealmURL}1.json`],
+          coerceTypes: { has_error: 'BOOLEAN' },
+        },
+      )) as unknown as {
+        host_shell_generation: number | null;
+        has_error: boolean;
+      }[];
+      assert.false(row.has_error, 'the failure was withheld');
+      assert.strictEqual(
+        row.host_shell_generation,
+        PUBLISHED_GENERATION,
+        'the row still serves the published render, so it keeps its generation',
+      );
+    });
+  });
+
   test('error entry does not include last known good state when not available', async function (assert) {
     await setupIndex(
       adapter,

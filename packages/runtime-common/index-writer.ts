@@ -1536,6 +1536,22 @@ export class Batch {
             ? null
             : (errorEntry?.error ?? entry.error),
           has_error: !withholdFailure,
+          // Restated after `...production`, which carries the previous row's
+          // whole shape — its generation included — and would otherwise win
+          // over the one assigned below, since `entryPayload` is spread last.
+          //
+          // Which of the two is right depends on whose content this row ends
+          // up serving, and the two error paths differ. A withheld failure
+          // republishes the last good render untouched, so the row still shows
+          // that bundle's work and keeps its generation: restamping it with
+          // this render's would claim the withheld attempt produced content it
+          // did not. A published error is this render's own output, so it
+          // takes this render's generation — and that is the case a repair
+          // most needs to find, which carrying the previous number forward
+          // would hide.
+          host_shell_generation: withholdFailure
+            ? (production.host_shell_generation ?? null)
+            : (diagnostics.warmedHostShellGeneration ?? null),
           diagnostics: diagnostics,
         };
         break;

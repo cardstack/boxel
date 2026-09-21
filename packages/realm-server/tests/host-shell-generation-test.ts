@@ -8,6 +8,7 @@ import {
   dbAdapterQuerier,
   NO_HOST_SHELL_OBSERVED,
   param,
+  reportableHostShellGeneration,
   type HostShellGeneration,
   type Querier,
 } from '@cardstack/runtime-common';
@@ -276,6 +277,59 @@ module(basename(import.meta.filename), function (hooks) {
       /host_shell_generation_singleton/,
       'the table holds the current shell, so a second row is a bug not a record',
     );
+  });
+
+  // The filter between a claim and what gets reported. The claim deliberately
+  // answers rather than throwing when it cannot order anything, and that
+  // answer is a well-formed number that would otherwise travel the whole path
+  // unnoticed.
+  module('reportableHostShellGeneration', function () {
+    test('a real claim is reported as it stands', function (assert) {
+      assert.strictEqual(
+        reportableHostShellGeneration(
+          { generation: 4, shellHash: 'aaaaaaaa' },
+          'aaaaaaaa',
+        ),
+        4,
+      );
+    });
+
+    // The bug this exists to stop. Generation 0 is the seeded "no shell
+    // observed" sentinel, returned when the table is absent or its row has
+    // gone. Reported as a number it would be stamped onto rows, and every
+    // later `host_shell_generation < current` repair would treat them as older
+    // than everything there is.
+    test('the no-observation sentinel is reported as nothing, not as zero', function (assert) {
+      assert.strictEqual(
+        reportableHostShellGeneration(
+          { generation: NO_HOST_SHELL_OBSERVED, shellHash: '' },
+          'aaaaaaaa',
+        ),
+        undefined,
+      );
+    });
+
+    // Should not happen — the claim returns the row it observed under the lock
+    // — but a number that orders a bundle this render did not run is worse
+    // than no number at all.
+    test('a claim describing another shell is not reported', function (assert) {
+      assert.strictEqual(
+        reportableHostShellGeneration(
+          { generation: 4, shellHash: 'bbbbbbbb' },
+          'aaaaaaaa',
+        ),
+        undefined,
+      );
+    });
+
+    test('the value a real claim returns passes its own filter', async function (assert) {
+      let claimed = await claimHostShellGeneration(dbAdapter, 'aaaaaaaa', 1000);
+      assert.strictEqual(
+        reportableHostShellGeneration(claimed, 'aaaaaaaa'),
+        1,
+        'the filter must not reject the ordinary case it sits in front of',
+      );
+    });
   });
 
   // What the ordering exists for: selecting the index rows a bundle that is no

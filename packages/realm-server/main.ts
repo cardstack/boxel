@@ -11,6 +11,7 @@ import {
   Deferred,
   CachingDefinitionLookup,
   claimHostShellGeneration,
+  reportableHostShellGeneration,
   DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
@@ -443,8 +444,10 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     // rather than carrying a wrong one.
     let generation: number | undefined;
     try {
-      generation = (await claimHostShellGeneration(dbAdapter, hash, Date.now()))
-        .generation;
+      generation = reportableHostShellGeneration(
+        await claimHostShellGeneration(dbAdapter, hash, Date.now()),
+        hash,
+      );
     } catch (e: any) {
       console.warn(
         `Failed to claim a generation for host shell token ${hash}: ${e?.message ?? e}`,
