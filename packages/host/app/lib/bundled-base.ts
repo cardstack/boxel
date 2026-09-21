@@ -245,9 +245,22 @@ export const BUNDLED_BASE_MODULES: Record<
     import('@cardstack/base/color-field/util/color-utils'),
   'color-field/util/css-color-parsers': () =>
     import('@cardstack/base/color-field/util/css-color-parsers'),
-  command: () => import('@cardstack/base/command'),
-  'commands/search-card-result': () =>
-    import('@cardstack/base/commands/search-card-result'),
+  // `command` and `commands/search-card-result` are deliberately NOT bundled,
+  // for the two reasons `file-api` is not.
+  //
+  // `command` imports `./commands/search-entry-result`, which is not in this
+  // table, so bundling it would compile that module into `command`'s chunk
+  // while a direct import of it still fetched a separate copy — the closure
+  // rule above, broken.
+  //
+  // Both also re-export classes they do not declare: `command` re-exports the
+  // search input and result fields from `commands/*`, and
+  // `commands/search-card-result` re-exports `JsonField` from `json-field`.
+  // A loader credits a class to the first module it serves that exposes it,
+  // and a bundled module is served without its re-export source being loaded
+  // first, so serving either would make those classes name the wrong module.
+  // Fetched from the realm they are correct, because evaluation loads the
+  // declaring module first.
   'components/markdown-editor-mode-select': () =>
     import('@cardstack/base/components/markdown-editor-mode-select'),
   'components/time-slots': () =>
