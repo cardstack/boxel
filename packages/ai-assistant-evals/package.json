@@ -15,6 +15,8 @@
     "lint": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
+    "@cardstack/boxel-icons": "workspace:*",
+    "@cardstack/boxel-ui": "workspace:*",
     "@playwright/test": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:"
