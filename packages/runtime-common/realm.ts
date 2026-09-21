@@ -864,6 +864,38 @@ function boundedInvalidatedTypes(invalidatedTypes: string[] | undefined): {
   return { invalidatedTypes };
 }
 
+// The same budget, for the same reason, over the versions a write reports. This
+// member is bounded by the commit's own file count rather than by the
+// invalidation fan-out, so an ordinary write is nowhere near it — but a bulk
+// import writing thousands of files should not be what makes its event
+// undeliverable, and this member is the additive one, so it is what gives way.
+//
+// Dropped whole rather than trimmed to fit. A subscriber cannot tell a partial
+// map from a complete one, so a trimmed one would have it read a missing key as
+// "the realm computed this card's state" — the opposite of what a dropped key
+// means — and act on it by keeping a stale local copy. Absent, it re-reads,
+// which is what it did before the member existed.
+const MAX_BROADCAST_VERSIONS_BYTES = 8 * 1024;
+
+function boundedVersions(versions: Record<string, string> | undefined): {
+  versions?: Record<string, string>;
+} {
+  // Emitted only when it reports something. An empty map and an absent one say
+  // the same thing to a subscriber — no version for any card it holds — so
+  // unlike `clientAuthored`, whose emptiness is itself a statement, there is
+  // nothing here for the distinction to carry.
+  if (versions === undefined || Object.keys(versions).length === 0) {
+    return {};
+  }
+  // Measure what goes on the wire — the JSON encoding, not the character count
+  // of the keys and values inside it.
+  let encodedLength = new TextEncoder().encode(JSON.stringify(versions)).length;
+  if (encodedLength > MAX_BROADCAST_VERSIONS_BYTES) {
+    return {};
+  }
+  return { versions };
+}
+
 // Emit `NOTIFY realm_index_updated, '<realmURL>'`. Called from every
 // post-update site inside Realm (Realm.update's onInvalidation, the
 // deferred variant, and Realm.fullReindex). Adapters without pub/sub
@@ -2806,6 +2838,7 @@ export class Realm {
     opts?: {
       clientRequestId?: string | null;
       clientAuthored?: string[];
+      versions?: Record<string, string>;
       generation?: number;
       invalidatedTypes?: string[];
     },
@@ -2845,6 +2878,7 @@ export class Realm {
         ? { clientRequestId: opts.clientRequestId }
         : {}),
       ...(authorshipReported ? { clientAuthored } : {}),
+      ...boundedVersions(opts?.versions),
       ...(opts?.generation !== undefined
         ? { generation: opts.generation }
         : {}),
@@ -3998,6 +4032,22 @@ export class Realm {
     if (deleteURLs.length === 0) {
       options?.onDurable?.();
     }
+    // What each file this commit wrote now holds, named the way the event's
+    // `invalidations` names a card. That spelling is not a second opinion about
+    // it: the index reports its own row keys and `RealmIndexUpdater` maps them
+    // onto the event by stripping a trailing `.json`, unconditionally and
+    // whatever the file is, so doing the same to a written path produces the
+    // key the URL beside it in `invalidations` will carry.
+    //
+    // Every leg's readings are in `results` by now, and a file two legs touched
+    // appears once — the append leg replaces the write leg's entry for a path
+    // it reaches, so the hash here always describes the bytes the commit left.
+    let versions: Record<string, string> = Object.fromEntries(
+      results.map(({ path, contentHash }) => [
+        this.paths.fileURL(path).href.replace(/\.json$/, ''),
+        contentHash,
+      ]),
+    );
     let waitForIndex = options?.waitForIndex !== false;
     let changes: IndexChange[] = [
       ...asUpdates(urls),
@@ -4009,6 +4059,7 @@ export class Realm {
         this.broadcastIncrementalInvalidationEvent([...invalidations], {
           clientRequestId,
           ...(clientAuthored ? { clientAuthored } : {}),
+          versions,
           generation: indexGeneration,
           invalidatedTypes: invalidatedTypes.value,
         });
@@ -4062,6 +4113,10 @@ export class Realm {
                 {
                   clientRequestId,
                   ...(clientAuthored ? { clientAuthored } : {}),
+                  // Computed at write time, so deferring the indexing does not
+                  // defer knowing it: these are the bytes this commit stored,
+                  // whatever the pass that follows makes of them.
+                  versions,
                   generation: meta.generation ?? indexGeneration,
                   invalidatedTypes: types.value,
                 },
@@ -4088,9 +4143,16 @@ export class Realm {
       // Nothing changed on disk (e.g., every file's content was already what
       // the caller staged). Preserve the pre-existing always-broadcast
       // behavior.
+      //
+      // The versions are still reported, and they are still the file's own: a
+      // write that found the bytes it staged already there left the file
+      // holding exactly what it would have written. So a client that sent this
+      // write learns the version it is now on, which is the answer it needs
+      // most here — it changed nothing, and nothing will tell it so again.
       this.broadcastIncrementalInvalidationEvent([...invalidations], {
         clientRequestId,
         ...(clientAuthored ? { clientAuthored } : {}),
+        versions,
         generation: indexGeneration,
         invalidatedTypes: invalidatedTypes.value,
       });
@@ -8949,6 +9011,11 @@ export class Realm {
       });
     }
     let created = result.meta.created;
+    // The hash the commit computed over the bytes it stored, which is the card's
+    // version. Read off this result rather than from `realm_file_meta`, because
+    // the row answers for whatever the file holds now while the response has to
+    // answer for what it is reporting.
+    let version = result.meta.version;
     let newURL = result.id;
     let doc: SingleCardDocument;
     if (answerFromEcho) {
@@ -8965,7 +9032,12 @@ export class Realm {
           lid,
         });
       }
-      doc = await this.serializedInstanceEcho(stored, newURL, lastModified);
+      doc = await this.serializedInstanceEcho(
+        stored,
+        newURL,
+        lastModified,
+        version,
+      );
     } else {
       // The readback asks for the written card and nothing around it: no
       // `loadLinks`, so neither the transitive closure of the card's links nor
@@ -9001,7 +9073,7 @@ export class Realm {
       doc = merge({}, entry.doc, {
         data: {
           links: { self: newURL },
-          meta: { lastModified },
+          meta: { lastModified, ...(version != null ? { version } : {}) },
         },
       });
     }
@@ -9396,6 +9468,10 @@ export class Realm {
       });
     }
     let created = result.meta.created;
+    // Read alongside `lastModified` and re-read after the re-commit below for
+    // the same reason it is: both describe the file the response is reporting,
+    // and a second commit leaves a different file behind.
+    let version = result.meta.version;
     // The card and nothing around it: no `loadLinks`, so neither the
     // transitive closure of its links nor the query a query-backed field
     // would run to name its targets. Nothing consumes either off a write
@@ -9424,6 +9500,11 @@ export class Realm {
           // the one the index recorded for it.
           lastModified: unchanged.doc.data.meta.lastModified ?? lastModified,
           created,
+          // The commit's own reading either way: it reports the version the
+          // file holds whether it rewrote the bytes or found them already
+          // there, so an unchanged patch still answers with a usable base for
+          // the caller's next write.
+          version,
           requestContext,
         });
       }
@@ -9442,6 +9523,7 @@ export class Realm {
       }
       lastModified = result?.meta.lastModified ?? lastModified;
       created = result?.meta.created ?? created;
+      version = result?.meta.version ?? version;
     }
     if (answerFromEcho) {
       // See serializedInstanceEcho: the write indexed deferred, so there is
@@ -9466,6 +9548,7 @@ export class Realm {
           stored,
           instanceURL,
           lastModified,
+          version,
         );
         this.#serveInstanceIdsAsRRI(built);
         return { doc: built, body: JSON.stringify(built, null, 2) };
@@ -9490,6 +9573,7 @@ export class Realm {
         localPath,
         lastModified,
         created,
+        version,
         requestContext,
         timings,
       });
@@ -9516,6 +9600,7 @@ export class Realm {
         meta: {
           ...(stored.data.meta ?? {}),
           lastModified,
+          ...(version != null ? { version } : {}),
         },
       },
     }) as SingleCardDocument;
@@ -9552,6 +9637,7 @@ export class Realm {
       localPath,
       lastModified,
       created,
+      version,
       requestContext,
       timings,
     }: {
@@ -9559,6 +9645,11 @@ export class Realm {
       localPath: LocalPath;
       lastModified: number | null;
       created: number | null;
+      // The stored file's fingerprint, from the commit that produced this
+      // response. Not read off `entry`: the document comes from the index and
+      // the hash describes the file, and the two are separate channels that a
+      // deferred index pass leaves at different points.
+      version: string | undefined;
       requestContext: RequestContext;
       timings: RequestTimings;
     },
@@ -9566,7 +9657,7 @@ export class Realm {
     let doc: SingleCardDocument = merge({}, entry.doc, {
       data: {
         links: { self: instanceURL },
-        meta: { lastModified },
+        meta: { lastModified, ...(version != null ? { version } : {}) },
       },
     });
     // The PATCH echo carries the joined `meta.screenshots` like a GET does —
@@ -12601,14 +12692,19 @@ export class Realm {
   // rather than awaited.
   //
   // The echo carries what a saving client merges back: the assigned id, the
-  // self link, `lastModified`, and the realm's `realmInfo`. It does not carry
-  // computed fields, resolved links, or the joined `meta.screenshots` — only
-  // the index knows those. A caller that needs them reads the instance again
-  // once indexing has settled.
+  // self link, `lastModified`, the stored file's `version`, and the realm's
+  // `realmInfo`. It does not carry computed fields, resolved links, or the
+  // joined `meta.screenshots` — only the index knows those. A caller that needs
+  // them reads the instance again once indexing has settled.
   private async serializedInstanceEcho(
     serialization: LooseSingleCardDocument,
     instanceURL: string,
     lastModified: number | null,
+    // The fingerprint the commit computed over the bytes it stored. Reported
+    // here as readily as on the indexed answer, and for the reason the echo
+    // exists at all: it is the commit's own reading, so a write that deferred
+    // its indexing has it just the same.
+    version: string | undefined,
   ): Promise<SingleCardDocument> {
     let realmInfo = await this.getRealmInfo();
     return merge({}, serialization, {
@@ -12619,6 +12715,7 @@ export class Realm {
           realmURL: this.url,
           realmInfo,
           ...(lastModified != null ? { lastModified } : {}),
+          ...(version != null ? { version } : {}),
         },
       },
     }) as SingleCardDocument;

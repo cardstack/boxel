@@ -113,6 +113,28 @@ export type CardResourceMeta = Meta & {
   // data from stale. Additive — absent when the serialization did not come off
   // the index (e.g. a freshly-built resource that has not been persisted).
   generation?: number;
+  // A fingerprint of the bytes the card's source file holds — the
+  // `content_hash` the realm records on the file's `realm_file_meta` row — and
+  // the card's version: a holder of one can tell whether the file has moved on
+  // since, and can name the base its next write was computed against.
+  //
+  // The mirror image of `generation` above: that one is stamped by the
+  // card+json GET and by nothing else, this one by the card+json *writes*
+  // (`POST` 201, `PATCH` 200) and by nothing else. A write knows it, because
+  // the commit computed it over the bytes it stored; a read would have to ask
+  // `realm_file_meta`, which answers for whatever the file holds now rather
+  // than for the document the read is serving.
+  //
+  // Neither the HTTP `ETag` nor `generation`, both of which move for reasons
+  // this does not. The `ETag` is index-time and moves whenever the *served*
+  // document may differ, a linked card's re-index included, so it stays the
+  // cache validator and the `If-Match` comparand; `generation` is the index's
+  // last-touched watermark and moves when a dependent invalidation touches the
+  // row. This moves only when the card's own bytes do.
+  //
+  // Never persisted into the source file and stripped from incoming writes,
+  // like `realmInfo` / `realmURL` / `screenshots`.
+  version?: string;
   // The instance's declared-screenshot captures, joined at serve time from
   // the prerendered manifest (`prerendered_html.screenshots`) — never
   // persisted into the index or the source file, and stripped from incoming

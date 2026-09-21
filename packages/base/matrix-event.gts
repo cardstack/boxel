@@ -502,6 +502,25 @@ export interface IncrementalIndexEventContent {
   // the question at all, which leaves a client with only the request id to go
   // on, as it had before this member existed.
   clientAuthored?: string[];
+  // The version each card this request wrote directly now holds, keyed the way
+  // `invalidations` names a card: URL → the content hash of the bytes the
+  // commit stored. A client holding a card can compare its own version against
+  // the one here and recognize an event it has already applied, or one that
+  // describes state older than what it holds.
+  //
+  // Only the files the request wrote. A dependent re-indexed because something
+  // it depends on changed is in `invalidations` and not here, which is the
+  // distinction the member exists to draw: the realm computed that card's new
+  // state, so nobody holds it and everybody wants it.
+  //
+  // Absent means no information, and unlike `clientAuthored` an empty map
+  // would say the same thing — so the member is present only when it has
+  // something to report, and nothing reads emptiness as a statement. It is
+  // also dropped whole rather than truncated past a size budget, for the
+  // reason `invalidatedTypes` is: a client cannot tell a partial map from a
+  // complete one, so a missing key would read as "this card is not one the
+  // request wrote" — the opposite of true.
+  versions?: Record<string, string>;
   // The realm generation the indexing pass committed. Lets a consumer correlate
   // this search-doc update with the prerendered HTML that belongs to it.
   generation?: number;

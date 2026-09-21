@@ -934,6 +934,7 @@ module(basename(import.meta.filename), function () {
               getMessagesSince,
               realm: testRealmHref,
               clientRequestId: ABSENT_OR_NULL_CLIENT_REQUEST_ID,
+              versions: 'absent',
             },
           );
         });
@@ -1066,6 +1067,7 @@ module(basename(import.meta.filename), function () {
               getMessagesSince,
               realm: testRealmHref,
               clientRequestId: null,
+              versions: 'written',
             },
           );
         });
@@ -1220,6 +1222,7 @@ module(basename(import.meta.filename), function () {
               getMessagesSince,
               realm: testRealmHref,
               clientRequestId: null,
+              versions: 'written',
             },
           );
 
@@ -1312,6 +1315,7 @@ module(basename(import.meta.filename), function () {
               getMessagesSince,
               realm: testRealmHref,
               clientRequestId: null,
+              versions: 'written',
             },
           );
         });
@@ -2132,6 +2136,7 @@ module(basename(import.meta.filename), function () {
               getMessagesSince,
               realm: testRealmHref,
               clientRequestId: null,
+              versions: 'written',
             },
           );
         });

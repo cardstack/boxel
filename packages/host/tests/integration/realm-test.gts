@@ -29,6 +29,7 @@ import {
   setupIntegrationTestRealm,
   testModuleRealm,
   cardInfo,
+  getFileContentHash,
   getFileCreatedAt,
   realmConfigCardJSON,
 } from '../helpers';
@@ -758,6 +759,7 @@ module('Integration | realm', function (hooks) {
     let id = json.data.id.split('/').pop()!;
     let petCreatedAt = await getFileCreatedAt(realm, `Pet/${id}.json`);
     assert.ok(uuidValidate(id), 'card ID is a UUID');
+    let storedVersion = await getFileContentHash(adapter, `Pet/${id}.json`);
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -785,6 +787,7 @@ module('Integration | realm', function (hooks) {
             `${testRealmURL}Pet/${id}.json`,
           ),
           resourceCreatedAt: petCreatedAt!,
+          version: storedVersion,
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -1089,6 +1092,7 @@ module('Integration | realm', function (hooks) {
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
+    let storedVersion = await getFileContentHash(adapter, 'ski-trip.json');
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -1127,6 +1131,7 @@ module('Integration | realm', function (hooks) {
             `${testRealmURL}ski-trip.json`,
           ),
           resourceCreatedAt: resourceCreatedAt!,
+          version: storedVersion,
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -1264,6 +1269,7 @@ module('Integration | realm', function (hooks) {
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
+    let storedVersion = await getFileContentHash(adapter, 'jackie.json');
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -1295,6 +1301,7 @@ module('Integration | realm', function (hooks) {
             `${testRealmURL}jackie.json`,
           ),
           resourceCreatedAt: resourceCreatedAt!,
+          version: storedVersion,
         },
       },
     });
@@ -1419,6 +1426,7 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
 
+    let storedVersion = await getFileContentHash(adapter, 'jackie.json');
     assert.deepEqual(json.data, {
       type: 'card',
       id: `${testRealmURL}jackie`,
@@ -1448,6 +1456,7 @@ module('Integration | realm', function (hooks) {
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
         resourceCreatedAt: resourceCreatedAt!,
+        version: storedVersion,
         realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
@@ -1531,6 +1540,7 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
 
+    let storedVersion = await getFileContentHash(adapter, 'jackie.json');
     assert.deepEqual(json.data, {
       type: 'card',
       id: `${testRealmURL}jackie`,
@@ -1557,6 +1567,7 @@ module('Integration | realm', function (hooks) {
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
         resourceCreatedAt: resourceCreatedAt!,
+        version: storedVersion,
         realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
@@ -1750,6 +1761,7 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
 
+    let storedVersion = await getFileContentHash(adapter, 'jackie.json');
     assert.deepEqual(json.data, {
       type: 'card',
       id: `${testRealmURL}jackie`,
@@ -1775,6 +1787,7 @@ module('Integration | realm', function (hooks) {
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
         resourceCreatedAt: resourceCreatedAt!,
+        version: storedVersion,
         realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
@@ -1875,6 +1888,7 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
 
+    let storedVersion = await getFileContentHash(adapter, 'jackie.json');
     assert.deepEqual(json.data, {
       type: 'card',
       id: `${testRealmURL}jackie`,
@@ -1901,6 +1915,7 @@ module('Integration | realm', function (hooks) {
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
         resourceCreatedAt: resourceCreatedAt!,
+        version: storedVersion,
         realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
@@ -2013,6 +2028,7 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
 
+    let storedVersion = await getFileContentHash(adapter, 'jackie.json');
     assert.deepEqual(json.data, {
       type: 'card',
       id: `${testRealmURL}jackie`,
@@ -2039,6 +2055,7 @@ module('Integration | realm', function (hooks) {
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
         resourceCreatedAt: resourceCreatedAt!,
+        version: storedVersion,
         realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
@@ -2139,6 +2156,7 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
     let mangoCreatedAt = await getFileCreatedAt(realm, 'dir/mango.json');
+    let storedVersion = await getFileContentHash(adapter, 'dir/mango.json');
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -2166,6 +2184,7 @@ module('Integration | realm', function (hooks) {
             `${testRealmURL}dir/mango.json`,
           ),
           resourceCreatedAt: mangoCreatedAt!,
+          version: storedVersion,
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -2293,6 +2312,7 @@ module('Integration | realm', function (hooks) {
 
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
+    let storedVersion = await getFileContentHash(adapter, 'dir/driver.json');
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -2325,6 +2345,7 @@ module('Integration | realm', function (hooks) {
             `${testRealmURL}dir/driver.json`,
           ),
           resourceCreatedAt: resourceCreatedAt!,
+          version: storedVersion,
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },

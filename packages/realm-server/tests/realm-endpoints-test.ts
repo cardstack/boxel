@@ -1038,6 +1038,7 @@ module(basename(import.meta.filename), function () {
           getMessagesSince,
           realm: testRealmHref,
           clientRequestId: null,
+          versions: 'written',
         },
       );
 
