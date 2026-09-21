@@ -275,6 +275,28 @@ export function isDefinitionFreeBaseOperation(name: string): boolean {
   return (DEFINITION_FREE_BASE_OPERATIONS as readonly string[]).includes(name);
 }
 
+// The behaviors that change stored state, which is what decides the permission
+// the request needed and therefore which method may carry the batch.
+//
+// Exhaustive over the base operations on purpose: a further behavior has to
+// say here whether it writes, rather than defaulting to "read" and reaching a
+// commit from a request that was only authorized to read.
+const WRITES: Readonly<Record<BaseOperation, boolean>> = {
+  read: false,
+  readSource: false,
+  query: false,
+  create: true,
+  update: true,
+  delete: true,
+  transform: true,
+  appendContainsMany: true,
+  appendLine: true,
+};
+
+export function isWrite(base: BaseOperation): boolean {
+  return WRITES[base];
+}
+
 // What an operation runs against. An `instance` target is an existing card or
 // file, addressed by URL — the identity of a thing that already has stored
 // state. A `type` target names a class instead, for the operations that have
@@ -311,16 +333,30 @@ export interface OperationRequest {
 }
 
 // A read's answer: the assembled JSON:API document, exactly as the card+json
-// GET serves it.
+// GET serves it — or, where the operation declares an `output`, that document
+// as the projection left it.
 export interface OperationDocumentResult {
+  // What the caller is served. A projection replaces the assembled document
+  // rather than travelling beside it, so a consumer that forgot the stage
+  // exists serves the projection rather than the document it was meant to
+  // replace. A projection is still a JSON:API document — the read executor
+  // requires an object with an object `data`, since this is what a card+json
+  // response carries — but nothing below `data` is the platform's to promise,
+  // so read `projected` before reading into the document's own shape.
   document: SingleCardDocument | SingleFileMetaDocument;
+  // Whether `document` is an `output` projection. A projected body is not the
+  // realm's canonical representation of the card: it is per-operation, it may
+  // be per-actor, and the validator the index row yields describes the
+  // unprojected document, so a caller emitting HTTP headers has to keep it out
+  // of every shared cache and out of the conditional fast path.
+  projected: boolean;
   // What the index row this document was assembled from says about itself, in
   // the shape a headers-only read answers with. A caller computing HTTP
   // response headers needs both halves out of one read: a validator has to
   // describe the bytes it is sent with, and peeking again to obtain one lets a
   // write land in between and pairs a body with a validator for a different
   // one.
-  headers: OperationHeadResult;
+  headers: OperationRowHeaders;
   // Whether assembling this document applied a query-backed field. Such a
   // document is not a function of its own index row — a write to some other
   // card that enters or leaves the query changes it without moving this card's
@@ -329,11 +365,12 @@ export interface OperationDocumentResult {
   queryBacked: boolean;
 }
 
-// A headers-only read's answer. These are the values the card+json response
-// headers are computed from — the validator, the modification time, and the
-// index-data generation and screenshot manifest that go into it. No body is
-// assembled to produce them.
-export interface OperationHeadResult {
+// What the index row behind a read says about itself: the values the card+json
+// response headers are computed from — the validator, the modification time,
+// and the index-data generation and screenshot manifest that go into it.
+// Carried by both read modes, since the document mode reports the row its body
+// came from alongside the body.
+export interface OperationRowHeaders {
   // Which representation these headers describe, the same discrimination
   // `data.type` makes on the document a full read answers with. A caller
   // sending them has to know: a file's metadata document is derived from the
@@ -351,6 +388,16 @@ export interface OperationHeadResult {
   // anyway would serve a 304 against stale foreign content. Whoever computes
   // the headers makes that call, so they need what it rests on.
   deps: string[] | null;
+}
+
+// A headers-only read's answer: the row, and nothing assembled from it. No
+// body is produced, which is the whole difference between the two modes.
+export interface OperationHeadResult extends OperationRowHeaders {
+  // Whether the full read of this target would answer with an `output`
+  // projection. Reported by the headers mode although it projects nothing,
+  // because a `HEAD` states the headers the `GET` would send and those differ
+  // for a projected body — see `projected` on the document result.
+  projected: boolean;
 }
 
 // The stored bytes of a resource, and what the byte-serve headers are computed
