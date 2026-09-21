@@ -10,7 +10,7 @@
       "medications": [
         {
           "name": "Warfarin",
-          "doseMg": 5,
+          "doseMg": 7.5,
           "frequency": "Once daily",
           "status": "administered"
         },
