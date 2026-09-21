@@ -299,6 +299,130 @@ more plan te`;
     );
   });
 
+  test('a patch that closed its fence without a REPLACE marker keeps its fence', function (assert) {
+    // The model wrote the block, left the closing marker out, closed the
+    // fence, and went on with prose. Widening the opener would count that
+    // fence as inner content and leave the block open to the end of the
+    // message, with the fence and the prose rendered inside it.
+    let unterminated = `Now an instance of the card:
+
+\`\`\`json
+https://example.com/realm/HelloWorld/hello.json (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+{
+  "data": { "type": "card" }
+}
+\`\`\`
+
+Apply these two changes and I'll open the card for you.
+`;
+    assert.strictEqual(
+      widenFencesAroundCodePatches(unterminated),
+      unterminated,
+      'nothing is widened',
+    );
+    let blocks = renderBodyToCodeData(unterminated);
+    assert.strictEqual(blocks.length, 1, 'one code block');
+    assert.strictEqual(
+      blocks[0].fileUrl,
+      'https://example.com/realm/HelloWorld/hello.json',
+    );
+    assert.false(
+      (blocks[0].searchReplaceBlock ?? blocks[0].code ?? '').includes(
+        'Apply these two changes',
+      ),
+      'the prose after the fence is not part of the block',
+    );
+  });
+
+  test('a patch that closed its fence without a REPLACE marker does not swallow the patch after it', function (assert) {
+    // The next block's REPLACE marker is the first one after this opener;
+    // taking it as this block's would merge the two into one patch and write
+    // the second file's content into the first.
+    let twoBlocks = `\`\`\`gts
+https://example.com/realm/hello-world.gts (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+import { CardDef } from '@cardstack/base/card-api';
+export class HelloWorld extends CardDef {}
+\`\`\`
+
+And an instance of it:
+
+\`\`\`json
+https://example.com/realm/HelloWorld/hello.json (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+{
+  "data": { "type": "card" }
+}
+${REPLACE_MARKER}
+\`\`\`
+`;
+    assert.strictEqual(
+      widenFencesAroundCodePatches(twoBlocks),
+      twoBlocks,
+      'nothing is widened',
+    );
+    let blocks = renderBodyToCodeData(twoBlocks);
+    assert.deepEqual(
+      blocks.map((b) => b.fileUrl),
+      [
+        'https://example.com/realm/hello-world.gts',
+        'https://example.com/realm/HelloWorld/hello.json',
+      ],
+      'two blocks, each with its own url',
+    );
+    assert.true(
+      blocks[1].searchReplaceBlock!.includes('"data": { "type": "card" }'),
+      'the second patch survives intact',
+    );
+    assert.false(
+      (blocks[0].searchReplaceBlock ?? blocks[0].code ?? '').includes(
+        'hello.json',
+      ),
+      'the first block ends at its own fence',
+    );
+  });
+
+  test('a patch whose inner fence has no info string is still widened', function (assert) {
+    // A bare ``` inside the content opens an inner block just as ```text
+    // does; it must not be read as the patch closing early.
+    let bareInner = `\`\`\`md
+https://example.com/realm/plan.md (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+# Plan
+
+\`\`\`
+box
+\`\`\`
+
+more plan text
+${REPLACE_MARKER}
+\`\`\`
+`;
+    let widened = widenFencesAroundCodePatches(bareInner);
+    assert.true(widened.startsWith('````md\n'), 'the opener is widened');
+    assert.true(
+      widened.endsWith('````\n'),
+      'the closer after the REPLACE marker is widened to match',
+    );
+    let blocks = renderBodyToCodeData(bareInner);
+    assert.strictEqual(blocks.length, 1, 'one code block');
+    assert.true(
+      blocks[0].searchReplaceBlock!.includes('```\nbox\n```'),
+      'the inner fences stay inside the patch as file content',
+    );
+
+    let streaming = bareInner.slice(0, bareInner.indexOf('more plan te') + 12);
+    assert.true(
+      widenFencesAroundCodePatches(streaming).startsWith('````md\n'),
+      'and while the REPLACE marker has not arrived the opener is still widened',
+    );
+  });
+
   test('markedSync converts markdown to HTML', function (assert) {
     const markdown = '# Hello\n**Bold text**';
     const result = markedSync(markdown);
