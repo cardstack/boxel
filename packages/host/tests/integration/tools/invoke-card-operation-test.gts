@@ -298,8 +298,11 @@ module('Integration | tools | invoke-card-operation', function (hooks) {
     let stored = await storedCard(
       `${result.cardId.slice(testRealmURL.length)}.json`,
     );
+    // A stored link is written relative to the card holding it, so it is
+    // resolved before being compared rather than matched as text.
+    let link = stored.data.relationships?.activity?.links?.self;
     assert.strictEqual(
-      stored.data.relationships?.activity?.links?.self,
+      link === undefined ? undefined : new URL(link, result.cardId).href,
       `${testRealmURL}activity-lab-safety`,
       'the new card holds the link the caller named, which it could not if links travelled as attributes',
     );
@@ -440,7 +443,9 @@ module('Integration | tools | invoke-card-operation', function (hooks) {
       message.includes(missing),
       `the refusal names the card that did not load: ${message}`,
     );
-    assert.true(
+    // `assert.ok` rather than `assert.true`: the predicate answers with the
+    // last truthy member it looked at rather than with a boolean.
+    assert.ok(
       isCardErrorJSONAPI(await getService('store').get(missing)),
       'and the store is what reported it missing',
     );
