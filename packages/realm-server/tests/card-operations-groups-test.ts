@@ -87,7 +87,7 @@ function stub(opts: StubOptions = {}): Stub {
     realmURL: REALM,
     async withWriteLocks(localPaths, fn) {
       lockedPaths = [...localPaths].sort();
-      return await fn();
+      return await fn(() => {});
     },
     async fileExists(localPath) {
       return stored[localPath] !== undefined;

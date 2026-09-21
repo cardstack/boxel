@@ -1938,6 +1938,100 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('an instance-only pass leaves the prerender tab its evaluated module graph', async function (assert) {
+        // The tab a pass lands on caches every module it has evaluated, and
+        // the card the pass renders reaches most of them. Dropping that graph
+        // costs a re-fetch and re-evaluation of the whole reachable set, which
+        // a pass over one card has nothing to amortize it against — so a pass
+        // that changed no module must not ask for the drop.
+        //
+        // `loaderResetReason` is the direct reading and `moduleEvaluationCount`
+        // is its consequence; both are asserted because a count above zero with
+        // no reason recorded means the tab was cold to begin with, which is a
+        // different fact from the pass having thrown its graph away.
+        let diagnosticsFor = async (localPath: string) => {
+          let [row] = (await testDbAdapter.execute(
+            `SELECT diagnostics FROM boxel_index WHERE realm_url = $1 AND url = $2 AND type = 'instance'`,
+            { bind: [realm.url, `${testRealm}${localPath}`] },
+          )) as {
+            diagnostics: {
+              loaderResetReason?: string;
+              moduleEvaluationCount?: number;
+            } | null;
+          }[];
+          return row?.diagnostics ?? undefined;
+        };
+
+        let write = (firstName: string) =>
+          realm.write(
+            'ringo.json',
+            JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: { firstName },
+                meta: { adoptsFrom: { module: rri('./pet'), name: 'Pet' } },
+              },
+            }),
+          );
+
+        await write('Ringo Starr');
+        let first = await diagnosticsFor('ringo.json');
+        assert.strictEqual(
+          first?.loaderResetReason,
+          undefined,
+          `a pass whose invalidation set holds no executable records no loader reset, got: ${JSON.stringify(first?.loaderResetReason)}`,
+        );
+        assert.strictEqual(
+          first?.moduleEvaluationCount,
+          0,
+          `and evaluates no module, got: ${JSON.stringify(first?.moduleEvaluationCount)} (a count above zero with no reason above means the tab arrived cold)`,
+        );
+
+        // A second isolated pass over the same card: each write is its own
+        // pass, so a per-pass drop would be paid again here rather than once.
+        await write('Richard Starkey');
+        let second = await diagnosticsFor('ringo.json');
+        assert.strictEqual(
+          second?.loaderResetReason,
+          undefined,
+          `the next pass over the same card records no reset either, got: ${JSON.stringify(second?.loaderResetReason)}`,
+        );
+        assert.strictEqual(
+          second?.moduleEvaluationCount,
+          0,
+          `and still evaluates no module, got: ${JSON.stringify(second?.moduleEvaluationCount)}`,
+        );
+
+        // The mirror: a pass that rewrites the module the card adopts from
+        // must still drop the graph. Without this, the assertions above would
+        // hold just as well for a version that never asks for the drop at all.
+        //
+        // Read as the re-evaluation rather than as a recorded reason: modules
+        // are visited before the instances that adopt from them, so `pet.gts`
+        // consumes the pass's one-shot and drops the graph, and by the time
+        // `ringo.json` renders there is no reset left for its own row to name.
+        // What its row can say is that the graph it rendered against had to be
+        // rebuilt, which is the thing a pass that never armed the drop could
+        // not produce.
+        await realm.write(
+          'pet.gts',
+          `
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
+
+          export class Pet extends CardDef {
+            @field firstName = contains(StringField);
+            @field nickName = contains(StringField);
+          }
+        `,
+        );
+        let afterModule = await diagnosticsFor('ringo.json');
+        assert.ok(
+          (afterModule?.moduleEvaluationCount ?? 0) > 0,
+          `a pass carrying an executable drops the graph, so the card that adopts from it re-evaluates, got: ${JSON.stringify(afterModule?.moduleEvaluationCount)}`,
+        );
+      });
+
       test('a write that changes what a card adopts from stamps the type it left', async function (assert) {
         // The type a row departs is the one a cached search anchored on it
         // still holds the row as a member of, and nothing else in the pass

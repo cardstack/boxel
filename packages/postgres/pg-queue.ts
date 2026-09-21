@@ -93,7 +93,13 @@ const LEASE_GRACE_SEC = 30;
 
 interface CoalesceCandidateRow extends Pick<
   JobsTable,
-  'id' | 'job_type' | 'concurrency_group' | 'timeout' | 'priority' | 'args'
+  | 'id'
+  | 'job_type'
+  | 'concurrency_group'
+  | 'timeout'
+  | 'priority'
+  | 'args'
+  | 'initiated_by'
 > {}
 
 export class PgQueuePublisher implements QueuePublisher {
@@ -187,6 +193,7 @@ export class PgQueuePublisher implements QueuePublisher {
     // another publisher from racing us on this concurrency group.
     let rows = (await queryFn([
       `SELECT j.id, j.job_type, j.concurrency_group, j.timeout, j.priority, j.args,
+              j.initiated_by,
               EXISTS (
                 SELECT 1 FROM job_reservations r
                 WHERE r.job_id = j.id
@@ -211,6 +218,9 @@ export class PgQueuePublisher implements QueuePublisher {
         timeout: row.timeout,
         priority: row.priority,
         args: row.args,
+        ...(Array.isArray(row.initiated_by)
+          ? { initiatedBy: row.initiated_by as string[] }
+          : {}),
       };
       if (row.in_flight) {
         inFlight.push(candidate);
@@ -241,9 +251,18 @@ export class PgQueuePublisher implements QueuePublisher {
       concurrency_group: job.concurrencyGroup,
       priority: job.priority,
       timeout: job.timeout,
+      // Left null when the publish named nobody, which is a different answer
+      // from an empty set: a row recording no user reads as the realm owner,
+      // while one recording an empty set would gate nobody at all.
+      initiated_by: job.initiatedBy?.length ? job.initiatedBy : null,
     } as Pick<
       JobsTable,
-      'args' | 'job_type' | 'concurrency_group' | 'timeout' | 'priority'
+      | 'args'
+      | 'job_type'
+      | 'concurrency_group'
+      | 'timeout'
+      | 'priority'
+      | 'initiated_by'
     >);
     let [{ id: jobId }] = (await queryFn([
       'INSERT INTO JOBS',
@@ -293,6 +312,12 @@ export class PgQueuePublisher implements QueuePublisher {
     }
     if (update.timeout !== undefined) {
       setClauses.push(['timeout=', param(update.timeout)]);
+    }
+    if (update.initiatedBy !== undefined) {
+      setClauses.push([
+        'initiated_by=',
+        param(update.initiatedBy.length ? update.initiatedBy : null),
+      ]);
     }
     if (setClauses.length === 0) {
       return true;

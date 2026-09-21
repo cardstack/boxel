@@ -99,9 +99,15 @@ export interface BatchCore {
   // merge needs, and holding the realm would charge every other writer in it —
   // including the writers of cards this batch never reads — for a guarantee
   // only these files require.
+  //
+  // And scoped in time to the read-merge-write, which is what `releaseLocks`
+  // is for: the commit announces the moment its bytes are durable, and the
+  // batch lets the locks go there rather than across the index wait that
+  // follows. Ordering is what the locks are for, and by then this batch's
+  // place in the order is settled.
   withWriteLocks<T>(
     localPaths: readonly LocalPath[],
-    fn: () => Promise<T>,
+    fn: (releaseLocks: () => void) => Promise<T>,
   ): Promise<T>;
   // A stored file's bytes and modification time. Called only inside the lock.
   readSourceFile(
@@ -119,12 +125,17 @@ export interface BatchCore {
   // coordinator carries through to the caller. Described content is held to
   // the same ceiling by its byte length, which it reports without being read.
   assertWriteSize(localPath: LocalPath, content: StagedContent): void;
-  // Waits for indexing already in flight. A card's serialization resolves the
-  // definitions its type is built from, and a module written moments earlier
-  // may still be indexing, so a batch drains before it stages rather than
-  // failing to resolve a type the realm already holds. A batch that opts out
-  // of waiting for its own indexing skips this too — see
-  // `CommitBatchOptions.waitForIndex`, which owns that trade.
+  // Waits for the indexing already in flight that can move what this batch
+  // resolves. A card's serialization resolves the definitions its type is
+  // built from, and a module written moments earlier may still be indexing,
+  // so a batch drains before it stages rather than failing to resolve a type
+  // the realm already holds, and the realm's settings are resolved partly out
+  // of its config document's index row, so a pass touching that is waited for
+  // too. A pass that touched neither is not: it rewrites index rows a staging
+  // batch resolves nothing from, so waiting for one would be paying another
+  // card's fan-out for nothing. A batch that opts out of waiting for its own
+  // indexing skips this too — see `CommitBatchOptions.waitForIndex`, which
+  // owns that trade.
   drainIndexing(): Promise<void>;
   // Whether the realm's ignore rules exclude this URL. An ignored file is
   // never visited by indexing, so it never gets an index row.
@@ -136,11 +147,15 @@ export interface BatchCore {
   // same answer to the question asked here: the index cannot speak for this
   // card.
   //
-  // This is the one read a batch makes of the index, and it is not a network
-  // capability: the engine is the realm's own, handed down narrowed to the
-  // single row a program's reads are layered from. Called only inside the
-  // lock, after the drain, so what it reports is the realm as the batch is
-  // about to change it.
+  // This is one of the two reads a batch makes of the index — `realmConfig`
+  // is the other — and it is not a network capability: the engine is the
+  // realm's own, handed down narrowed to the single row a program's reads are
+  // layered from. Called inside the lock, so
+  // no other writer of these files can move the row underneath the batch —
+  // but the row is the index as it stands, not as some other card's pending
+  // fan-out will leave it. A program reads indexed values eventually
+  // consistently, and a row that is absent or not yet caught up is reported
+  // as such rather than waited for.
   indexedCardValues(url: URL): Promise<IndexedCardValues | undefined>;
 
   // The realm's unlocked commit: writes, additions to the end of a file, and
@@ -162,6 +177,10 @@ export interface BatchCore {
       // a slow write — so the commit marks them on the caller's timeline
       // rather than leaving the caller one bucket it cannot read.
       stageCursor?: StageCursor;
+      // Called once the commit's bytes are durable and before it indexes
+      // them, so a caller holding write locks over those files can end its
+      // critical section at the boundary the locks are actually for.
+      onDurable?: () => void;
     },
   ): Promise<{
     writes: {
@@ -221,9 +240,11 @@ export interface CommitBatchOptions {
   // It is not a choice about definition freshness, which is the tempting
   // reading: a definition resolves off disk rather than out of the index, so
   // an entry still serializes against a module written moments earlier
-  // whichever way this is set. See the drain in `commitBatch` for what the
-  // wait actually buys, and the realm's own card-write gate for the case
-  // stated at length.
+  // whichever way this is set. Nor is the drain it governs realm-wide: it
+  // waits only for passes that touched a module or the realm's config
+  // document. See the drain in
+  // `commitBatch` for what the wait actually buys, and the realm's own
+  // card-write gate for the case stated at length.
   //
   // A write made from inside a render must skip both, and there it is a
   // requirement rather than a preference: the job it would wait on needs the
@@ -370,7 +391,7 @@ export async function commitBatch(
   let realmConfig = () => (settings ??= core.realmConfig());
   return await core.withWriteLocks(
     lockPaths(entries, paths, lids),
-    async () => {
+    async (releaseLocks) => {
       timings?.add('lock', Date.now() - lockRequestedAt);
       // Drained inside the lock, before anything is staged. Staging serializes
       // each card against its type's definition, and a module written moments
@@ -394,6 +415,13 @@ export async function commitBatch(
       // realm states the case at its own card-write gate, which is the place to
       // read before widening or removing either copy.
       //
+      // The set it waits on is narrower too: only passes that touched an
+      // executable module or the realm's config document — the two things a
+      // batch resolves out of the index rather than off disk. An instance-only
+      // fan-out moves neither, so no batch has a reason to wait for one, which
+      // is what keeps a hub card's fan-out from gating every other writer in
+      // the realm.
+      //
       // So this is not reserved for entries that serialize nothing. A caller
       // whose response does not read indexed state can take it, and a
       // prerender-originated write *must*: the job it would wait on needs the
@@ -405,10 +433,10 @@ export async function commitBatch(
       // removals would wait for indexing it has no use for. That matters
       // because this wait happens with the batch's file locks held — a removal
       // issued while a bulk import drains would park here holding them, with
-      // every other writer of those files queued behind. The scope is narrower
-      // than it was, but the wait is not: the drain is for the realm's
-      // indexing, so a batch that parks here parks for work that has nothing
-      // to do with the files it holds.
+      // every other writer of those files queued behind. What is left to park
+      // for is another writer's module or config landing, and those are
+      // realm-wide by nature: neither a definition nor a realm setting is any
+      // one file's to hold.
       if (opts.waitForIndex !== false && entries.some(stagesContent)) {
         await timed('drain', () => core.drainIndexing());
       }
@@ -497,6 +525,7 @@ export async function commitBatch(
           positions,
           opts,
           cursor,
+          releaseLocks,
         );
       } finally {
         cursor?.mark('commit');
@@ -1678,6 +1707,12 @@ async function commitStaged(
   positions: readonly EntryPosition[],
   opts: CommitBatchOptions,
   stageCursor: StageCursor | undefined,
+  // Handed straight to the commit, which calls it the moment the batch's bytes
+  // are durable. Everything from there on — the index pass, the results built
+  // from what it reported — runs with the files open to other writers again,
+  // and reads nothing off them: the results are assembled from what this batch
+  // staged and what the commit returned.
+  releaseLocks: () => void,
 ): Promise<BatchEntryResult[]> {
   // One entry per file, in batch order. Two entries may name one card, and
   // the second built on the first rather than racing it — it merged over the
@@ -1825,6 +1860,7 @@ async function commitStaged(
       // writes waits for this job rather than returning ahead of it.
       initiatingUser: opts.actor ?? null,
       ...(stageCursor ? { stageCursor } : {}),
+      onDurable: releaseLocks,
     },
   );
   // Emitted here rather than where the record was built: a staged entry is not

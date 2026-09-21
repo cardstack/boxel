@@ -214,7 +214,6 @@ import {
   carriesOperationsExt,
   errorsDocument,
   invocationsIn,
-  isWrite,
   needsActor,
   paramsFor,
   parseOperationsEnvelope,
@@ -233,6 +232,7 @@ import {
   isHeadResult,
   isOperationFailure,
   isSourceResult,
+  isWrite,
   type EntryPosition,
   type OperationRequest,
   type OperationResult,
@@ -567,11 +567,11 @@ function maskLoggedURL(urlString: string): string {
 // ordinary interactive save can take it safely.
 //
 // Motivation: the default synchronous-indexing contract makes a single-card
-// save await `incrementalIndexing()`, which resolves only once EVERY in-flight
-// incremental/copy job for the realm settles — so an unrelated reindex
-// draining in the worker pool can stall (and time out) the save. A caller that
-// consumes the returned instance directly (e.g. SaveCardCommand) doesn't need
-// the freshly-indexed read-back and can opt out.
+// save wait twice on the realm's indexing — once before it stages and once for
+// its own pass — and the second of those is the whole fan-out of the card
+// being written. A caller that consumes the returned instance directly (e.g.
+// SaveCardCommand) doesn't need the freshly-indexed read-back and can opt out
+// of both.
 //
 // The tradeoff is narrower than full read-your-write loss. The writer's own
 // next card read still waits: the deferred job is tagged with the writer
@@ -1477,6 +1477,20 @@ export interface WriteOptions {
   // any of them can be the whole of a slow write. Absent, and so a no-op, for
   // every caller that is not reporting.
   stageCursor?: StageCursor;
+  // Announced once everything this write was asked for is durable — the bytes
+  // and the rows describing them — and before the index pass that follows. A
+  // caller holding write locks over those files releases them here rather than
+  // across an index wait no other writer of those files has any stake in.
+  //
+  // Not announced by a write that REMOVED something, which keeps its locks to
+  // the end: an index pass resolves a removal and a write of one url as the
+  // removal whichever reached it first, so a writer that recreated the path
+  // while the removal's pass was pending would be folded into it. The commit
+  // states the case in full at the boundary it fires this from.
+  //
+  // Called at most once, and not at all by a write that failed before reaching
+  // durability.
+  onDurable?: () => void;
 }
 
 export interface RealmAdapter {
@@ -2415,6 +2429,16 @@ export class Realm {
     return this.#realmIndexUpdater.incrementalIndexing();
   }
 
+  // The write path's gate: the in-flight passes that can move what a staging
+  // write resolves — the ones that touched an executable module or the realm's
+  // config document. Same contract as `incrementalIndexing()`, undefined when
+  // nothing qualifying is pending so a caller can check synchronously, over a
+  // narrower set. See `RealmIndexUpdater.incrementalIndexingAffectingStaging`
+  // for why an instance-only pass is not in it.
+  incrementalIndexingAffectingStaging(): Promise<void> | undefined {
+    return this.#realmIndexUpdater.incrementalIndexingAffectingStaging();
+  }
+
   private startReindex(opts?: {
     clearLastModified?: boolean;
     priority?: number;
@@ -2581,6 +2605,13 @@ export class Realm {
       // work, against a worker pool that is slow to reach it — and the second
       // is the one a card write spends its seconds in.
       stageCursor?: StageCursor;
+      // Whether this caller reads the index for these urls once the pass
+      // lands. Absent for the callers that await a pass without reading one —
+      // the file watcher announcing a change made elsewhere, a removal
+      // answering 204 — which is what lets those attach to a pass already
+      // running instead of adding one to the realm's serial lane. See
+      // `IncrementalArgs.readsOwnWrite`.
+      readsOwnWrite?: boolean;
     },
   ): Promise<
     IndexPassResult & { deferredPrerenderHtml?: DeferredPrerenderHtml }
@@ -2603,6 +2634,7 @@ export class Realm {
       ...(opts?.carriedPrerenderHtmlChanges?.length
         ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
         : {}),
+      ...(opts?.readsOwnWrite ? { readsOwnWrite: true } : {}),
       onEnqueued: () => stageCursor?.mark('enqueue'),
       onDeferredPrerenderHtml: (deferred) => {
         deferredPrerenderHtml = deferred;
@@ -3217,7 +3249,11 @@ export class Realm {
     let results = await this.#dbAdapter.withFileWriteLocks(
       this.url,
       [path],
-      () => this._batchWriteUnlocked(new Map([[path, contents]]), options),
+      (releaseLocks) =>
+        this._batchWriteUnlocked(new Map([[path, contents]]), {
+          ...options,
+          onDurable: releaseLocks,
+        }),
     );
     return results[0];
   }
@@ -3226,8 +3262,14 @@ export class Realm {
     files: Map<LocalPath, string | Uint8Array>,
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
-    return this.#dbAdapter.withFileWriteLocks(this.url, [...files.keys()], () =>
-      this._batchWriteUnlocked(files, options),
+    return this.#dbAdapter.withFileWriteLocks(
+      this.url,
+      [...files.keys()],
+      (releaseLocks) =>
+        this._batchWriteUnlocked(files, {
+          ...options,
+          onDurable: releaseLocks,
+        }),
     );
   }
 
@@ -3408,14 +3450,20 @@ export class Realm {
     // Callers that DO read indexed state after the write (the JSON-API
     // postCardInstance / patchCardInstance handlers) keep the original
     // deadlock-prevention semantics by omitting waitForIndex.
+    //
+    // What they wait for is narrower than all of it. Only a pass that touched
+    // an executable module or the realm's config document can move what the
+    // write below resolves, so an instance-only fan-out — however many cards
+    // it invalidates — is not waited for here. That is what keeps one card's
+    // fan-out from gating every other card's write in the realm.
     let stageCursor = options?.stageCursor;
     if (options?.waitForIndex !== false) {
-      await this.incrementalIndexing();
+      await this.incrementalIndexingAffectingStaging();
       // A batch coordinator drains before it stages, and this gate drains
-      // again. Both wait on the same realm-wide indexing, so they are one
-      // stage reached twice rather than two stages, and they accumulate
-      // together — a write that queued behind indexing it did not ask for
-      // spent that time here however many gates it passed through.
+      // again. Both wait on the same set of passes, so they are one stage
+      // reached twice rather than two stages, and they accumulate together —
+      // a write that queued behind indexing it did not ask for spent that
+      // time here however many gates it passed through.
       stageCursor?.mark('drain');
     }
     let urls: URL[] = [];
@@ -3467,6 +3515,9 @@ export class Realm {
       } = await this.updateIndexAndCollectInvalidations(changes, {
         clientRequestId,
         initiatedBy: initiatingUser,
+        // The write answers from the index once this lands, so it cannot be
+        // settled by a pass that read the file before these bytes did.
+        readsOwnWrite: true,
         ...(stageCursor ? { stageCursor } : {}),
         ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
         // Handed over either way: a pass that renders folds this into the job
@@ -3842,6 +3893,27 @@ export class Realm {
     // the caller may or may not be waiting for — so this is the boundary that
     // says how much of a slow write was the write.
     stageCursor?.mark('persist');
+    // And the boundary the write locks end at, for a commit that only wrote.
+    // Indexing reads the files back off disk rather than from anything this
+    // commit is holding, so the pass below indexes whatever the last write
+    // left — which is what the realm should hold however the writers
+    // interleaved.
+    //
+    // A commit that REMOVED something keeps its locks to the end instead,
+    // because a removal's place in the order is not settled when its bytes are
+    // gone. An index pass resolves a removal and a write of one url as the
+    // removal, whichever reached it first — `mergeIncrementalChanges` at the
+    // queue and the visit loop's own `operations` map both give `delete`
+    // precedence, and the visit is then skipped without asking whether the
+    // file came back. So a writer that recreated the path while this pass was
+    // still pending would have its write folded into this removal and the row
+    // dropped for a file that is on disk. Holding until the pass has run is
+    // what keeps the two ordered; the durable write alone does not, and
+    // neither would holding until the job is merely enqueued, since the
+    // absorption happens for as long as that job sits unclaimed.
+    if (deleteURLs.length === 0) {
+      options?.onDurable?.();
+    }
     let waitForIndex = options?.waitForIndex !== false;
     let changes: IndexChange[] = [
       ...asUpdates(urls),
@@ -5009,7 +5081,7 @@ export class Realm {
             localPath,
           ),
         drainIndexing: async () => {
-          await this.incrementalIndexing();
+          await this.incrementalIndexingAffectingStaging();
         },
         isIgnored: (url) => this.isIgnored(url),
         // Narrowed to the two documents a program reads values from, each
@@ -8892,6 +8964,14 @@ export class Realm {
       // refuse. The refusal is a 5xx rather than a 412 because nothing about
       // the caller's request is wrong and repeating it is the remedy.
       if (this.#dbAdapter) {
+        // Scoped by job type and deliberately not by writer. The gate also
+        // narrows to passes a given user initiated, which is right for asking
+        // "have my own writes landed" and wrong here: what can move this
+        // card's row out from under the comparison is *any* writer's pending
+        // pass, and a concurrent writer is the whole case `If-Match` exists
+        // to catch. Narrowing to the requesting user would report settled
+        // while someone else's incremental index was about to change the
+        // answer — the silent accept this refusal is here to prevent.
         let settled = await awaitRealmIndexSettled(this.#dbAdapter, this.url, {
           jobTypes: CONTENT_MOVING_INDEX_JOB_TYPES,
           timeoutMs: CONDITIONAL_WRITE_INDEX_SETTLE_BUDGET_MS,
@@ -12339,6 +12419,30 @@ export class Realm {
       this.invalidateCache(localPath);
 
       if (hasExecutableExtension(localPath)) {
+        // Mint before the delete, for the same reason and in the same order
+        // as the write path: deleting the cached definition only guarantees
+        // the next lookup re-derives one, not what it derives it FROM. The
+        // repopulate prerenders the module, and a prerender tab that already
+        // evaluated it keeps serving the evaluated copy — so the definition
+        // cached under the new bytes' URL would describe the old ones.
+        //
+        // The write path mints because it knows it changed a module. Nothing
+        // wrote this one through the realm, so nothing else on this path
+        // says so: the index pass that covers the module mints its own epoch,
+        // but a pass carrying only instances does not, and on an external
+        // edit the two can be separate passes. Minting here is what makes the
+        // order between them stop mattering.
+        //
+        // Best-effort, like the invalidate below it: a failure leaves the
+        // staleness this call removes, and the covering index pass's own mint
+        // is still the backstop.
+        try {
+          await mintRealmLoaderEpoch(this.#dbAdapter, this.url);
+        } catch (err: unknown) {
+          this.#log.error(
+            `failed to mint a loader epoch for ${this.url} after an external edit to ${tracked.url.href}; a prerender tab holding the pre-edit module may keep rendering its previous schema: ${stringifyErrorForLog(err)}`,
+          );
+        }
         await this.#definitionLookup.invalidate(tracked.url.href);
       }
 

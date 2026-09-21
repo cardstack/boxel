@@ -89,7 +89,7 @@ module.exports = {
       },
     },
     {
-      files: ['**/*.{js,ts}'],
+      files: ['**/*.{js,ts,mts}'],
       parser: '@typescript-eslint/parser',
       parserOptions: {
         ecmaVersion: 'latest',
@@ -154,6 +154,15 @@ module.exports = {
       rules: {
         'n/no-process-exit': 'off',
         'n/hashbang': 'off',
+      },
+    },
+    // node ESM files — `.mts` so Node and the type-checker agree they are
+    // modules, which a `.ts` under this package's CommonJS default does not.
+    {
+      files: ['support/**/*.mts'],
+      env: {
+        browser: false,
+        node: true,
       },
     },
     {

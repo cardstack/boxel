@@ -49,8 +49,8 @@ function makeFakeAdapter() {
     withFileWriteLocks: async (
       _realmUrl: string,
       _localPaths: readonly string[],
-      fn: () => unknown,
-    ) => fn(),
+      fn: (releaseLocks: () => void) => unknown,
+    ) => fn(() => {}),
     withUserCostLock: async (_userId: string, fn: () => unknown) => fn(),
   };
   return { adapter: adapter as unknown as DBAdapter, inserts };

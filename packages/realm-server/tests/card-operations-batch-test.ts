@@ -77,6 +77,15 @@ interface Stub {
   // covers is not visible in any response, so a test that cares which writers
   // a batch excludes has to read it here.
   lockedPaths: () => string[];
+  // Whether the files are shut to other writers right now, as opposed to
+  // `lockDepth`, which is the high-water mark over the whole batch.
+  heldNow: () => number;
+  // Where the critical section ended relative to the commit, in order. What
+  // the lock covers in TIME is as invisible from a response as which files it
+  // covers, and it is the more expensive of the two to get wrong: a section
+  // that outlives the durable write charges every other writer of these files
+  // for this one's indexing.
+  lockSpan: () => string[];
 }
 
 interface StubOptions {
@@ -144,6 +153,7 @@ function stub(opts: StubOptions = {}): Stub {
   let calls: string[] = [];
   let sourceReads = 0;
   let lockedPaths: string[] = [];
+  let lockSpan: string[] = [];
 
   let core: BatchCore = {
     realmURL: REALM,
@@ -151,10 +161,23 @@ function stub(opts: StubOptions = {}): Stub {
       held++;
       maxHeld = Math.max(maxHeld, held);
       lockedPaths = [...localPaths].sort();
-      try {
-        return await fn();
-      } finally {
+      // The real lock ends at whichever comes first: the section saying it is
+      // done with the files, or the section returning. Modelled the same way
+      // here, so `held` means what it means in postgres — the files are shut
+      // to other writers right now — rather than "a batch is still running".
+      let released = false;
+      let release = () => {
+        if (released) {
+          return;
+        }
+        released = true;
         held--;
+        lockSpan.push('release');
+      };
+      try {
+        return await fn(release);
+      } finally {
+        release();
       }
     },
     async fileExists(localPath) {
@@ -224,6 +247,11 @@ function stub(opts: StubOptions = {}): Stub {
         clientRequestId: options?.clientRequestId,
         waitForIndex: options?.waitForIndex,
       });
+      lockSpan.push('commit');
+      // Where the realm's commit announces the same thing: the bytes are
+      // durable and what follows is indexing. A stub that swallowed it would
+      // hold the locks for the whole of every batch and no test could tell.
+      options?.onDurable?.();
       return {
         // A real commit fingerprints the bytes it wrote; the stub stands in
         // with the byte length, which is enough for a test to tell one
@@ -283,6 +311,8 @@ function stub(opts: StubOptions = {}): Stub {
     calls: () => [...calls],
     sourceReads: () => sourceReads,
     lockedPaths: () => lockedPaths,
+    heldNow: () => held,
+    lockSpan: () => [...lockSpan],
   };
 }
 
@@ -1632,6 +1662,110 @@ module(basename(import.meta.filename), function () {
         lockedPaths(),
         [],
         'nothing is locked for a card whose path no other writer can know',
+      );
+    });
+    test('a batch that removes a card keeps its locks past the durable write', async function (assert) {
+      // A removal's place in the order is not settled when its bytes are gone.
+      // An index pass resolves a removal and a write of one url as the
+      // removal, whichever reached it first, and then skips the visit without
+      // asking whether the file came back — so a writer that recreated the
+      // path while the removal's pass was still pending would be folded into
+      // it and the row dropped for a file that is on disk. The realm's commit
+      // is what withholds the boundary; this pins the coordinator carrying
+      // whatever it decides rather than announcing one of its own.
+      let s = stub({
+        stored: {
+          'person-1.json': cardFile({ firstName: 'Original' }, PERSON),
+        },
+      });
+      let observed: string[] = [];
+      let core: BatchCore = {
+        ...s.core,
+        async commitUnlocked(batch, options) {
+          let committed = await s.core.commitUnlocked(batch, {
+            ...options,
+            // What the realm does for a change set carrying a removal: the
+            // boundary is not announced, so the section runs to its end still
+            // holding the files.
+            onDurable: undefined,
+          });
+          observed.push(`indexWait:held=${s.heldNow()}`);
+          return committed;
+        },
+      };
+
+      await commitBatch(core, [{ op: 'delete', href: `${REALM}person-1` }], {});
+
+      assert.deepEqual(
+        observed,
+        ['indexWait:held=1'],
+        'the files stay shut while the removal is indexed',
+      );
+      assert.strictEqual(
+        s.heldNow(),
+        0,
+        'and are open again once the batch returns',
+      );
+    });
+    test('the lock ends where the write becomes durable, not where the batch does', async function (assert) {
+      // The locks order writers of one file against each other, and by the
+      // time the bytes are durable this batch's place in that order is
+      // settled. What a commit does next is queue an index job and wait for a
+      // worker to run it — seconds of it under load, and none of it needing
+      // the files held. A section that spans it makes the Nth concurrent
+      // writer of one card wait N index passes instead of one.
+      let s = stub({
+        stored: {
+          'person-1.json': cardFile({ firstName: 'Original' }, PERSON),
+        },
+      });
+      let observed: string[] = [];
+      let core: BatchCore = {
+        ...s.core,
+        async commitUnlocked(batch, options) {
+          observed.push(`staged:held=${s.heldNow()}`);
+          let committed = await s.core.commitUnlocked(batch, options);
+          // Stands in for the index wait, which is where a real commit is
+          // when it has written the bytes and is waiting on a worker.
+          observed.push(`indexWait:held=${s.heldNow()}`);
+          return committed;
+        },
+      };
+
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'update',
+            href: `${REALM}person-1`,
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Changed' },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        {},
+      );
+
+      assert.deepEqual(
+        observed,
+        ['staged:held=1', 'indexWait:held=0'],
+        'the files are held across the read-merge-write and open again ' +
+          'while the write is indexed',
+      );
+      assert.deepEqual(
+        s.lockSpan(),
+        ['commit', 'release'],
+        'and the section ends at the commit rather than being let go of ' +
+          'early on its way in',
+      );
+      assert.strictEqual(
+        s.readsOutsideLock(),
+        0,
+        'nothing the batch acts on is read with the files open to others',
       );
     });
     test('a named create stages the type and attributes its declaration names', async function (assert) {
