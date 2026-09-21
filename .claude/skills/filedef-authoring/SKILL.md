@@ -40,7 +40,7 @@ Which families have a content-only renderer is what the barrel exports — read 
 
 - **`@model`** takes the `FileDef` instance itself (the component projects it through `fileViewModel`) _or_ a prebuilt `FileViewModel` (what the shells pass).
 - **`@format`** defaults to `'embedded'` (complete content); `'isolated'` is also complete content; `'fitted'` selects the budgeted snippet a collection cell draws. See `ContentPreviewSignature`.
-- **`@displayContainer={{false}}`** opts out of the component's own container styles (padding, surface color, scroll) so the embedder owns geometry. This arg belongs to the content-only component's public signature — it is _not_ the workaround below.
+- **`@displayContainer={{false}}`** is a `MarkdownPreview` option that opts out of its container styles (padding, surface color, scroll) so the embedder owns geometry; `ImagePreview` and `AudioPreview` do not expose this argument.
 - **Loading / failure / staleness is the embedder's job** here — those panes are `FilePreviewStage`'s only inside the shells.
 - **Kind-dispatch:** `filePreviewComponentFor(file)` returns the right renderer; pass it `ensureFileViewModel(file, format)` as `@model` (only the content-only components project a bare instance themselves).
 - **Format ↔ `@format` invariant:** a prebuilt `FileViewModel` must have been projected at the same format you pass as `@format`, because the fitted budgets are applied at projection time — a complete-content projection rendered at `'fitted'` would feed the whole file to the snippet branch. If you vary the format, pass the instance and let the component re-project.
