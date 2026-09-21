@@ -339,17 +339,19 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
     );
   }
 
-  // The same consult, when the record is to list it too. Two cards change, so
-  // the two entries are one batch: the create's handle is the local id the link
-  // entry names, and the audit line lands in the same commit. Either all three
-  // land or none of them do.
+  // The same consult, when the record is to list it too. It is the *named*
+  // create either way, so the card this mints carries the same `requestedBy`
+  // and the same link back as the button beside it — a batch changes when the
+  // entries commit, never what they write. Two cards change, so the entries
+  // are one batch: the create's handle is the local id the link entry names,
+  // and the audit line lands in the same commit. Either all three land or
+  // none of them do.
   @action requestAndListConsult() {
     this.run('request-and-list-consult', () =>
       this.ops.atomic((b) => {
-        let consult = b.create(ConsultRequest, {
+        let consult = b.requestConsult({
           specialty: this.consultSpecialty,
           question: this.consultQuestion,
-          status: 'requested',
         });
         b.addConsult({ consult });
         let log = this.record.auditLog;

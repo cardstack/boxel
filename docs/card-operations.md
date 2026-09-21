@@ -13,7 +13,7 @@ to copy from.
 ## Operations are not access control
 
 **This is the most important thing on this page.** Operations are
-*identity-aware* and *not access-enforced*. The realm checks its own read/write
+_identity-aware_ and _not access-enforced_. The realm checks its own read/write
 permissions and nothing else:
 
 - Anyone who can write a realm can invoke any mutating operation on any card in
@@ -79,7 +79,7 @@ invocation surface cannot read it.
 
 A subclass overrides an inherited operation by redeclaring its name. TypeScript
 requires the override to stay assignable to what it shadows, so an operation
-you *intend* a subclass to reshape is annotated `: OperationDeclaration` where
+you _intend_ a subclass to reshape is annotated `: OperationDeclaration` where
 it is first declared; the override then keeps its own literal types. That
 annotation costs the annotated name its payload type, so write it only where a
 subclass really will reshape the operation.
@@ -90,12 +90,11 @@ The base operations are `read`, `readSource`, `create`, `update`, `delete`,
 `query`, `transform`, `appendContainsMany` and `appendLine`. Which of them a
 def carries follows from what kind of def it is:
 
-| Def | Carries |
-| --- | --- |
-| `CardDef` | `read`, `readSource`, `create`, `update`, `delete`, `query`, `transform`, `appendContainsMany` |
-| `FileDef` | `read`, `readSource`, `update`, `appendLine` |
-| any other `BaseDef` | `read`, `readSource` |
-| `FieldDef` | nothing — a field has no URL, so its data is reached through the operations of the card that contains it |
+| Def                                | Carries                                                                                                                                                                     |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CardDef`                          | `read`, `readSource`, `create`, `update`, `delete`, `query`, `transform`, `appendContainsMany`                                                                              |
+| `FileDef`                          | `read`, `readSource`, `update`, `appendLine`                                                                                                                                |
+| anything else, `FieldDef` included | nothing — a def that is neither a card nor a file classifies as a field, and a field has no URL, so its data is reached through the operations of the card that contains it |
 
 Naming a base the def does not carry is the authoring error `base-not-carried`:
 `appendLine` belongs to files and `appendContainsMany` to cards, and neither is
@@ -106,7 +105,7 @@ reserved: the realm answers a stored-bytes read without reading a definition,
 so a declaration under that name would never be reached. And `atomic`, `on`,
 `find`, `parallel` and `serial` belong to the invocation surface, so a
 declaration under one of those names could never be called either. `create` is
-deliberately *not* reserved — specializing it is normal.
+deliberately _not_ reserved — specializing it is normal.
 
 The name a caller invokes and the base that carries it out are read separately.
 A `delete` declared on `transform` is a soft delete: asking such a card to
@@ -146,8 +145,14 @@ The references are `params('key')`, `actor()`, `instance('key')`,
   `params` member typed `linkTo(…)` and link that instead.
 - `instance('key')` — the invocation target's **stored source document**, never
   a live card instance. `instance('id')` is the target's identity, which is how
-  a created card links back to what created it. Unavailable to an operation
-  invoked with no target in scope.
+  a created card links back to what created it. It is available only where the
+  operation assembles that document: a `create` reads the card it was invoked
+  from, and a `transform` reads the card it changes. An `appendContainsMany`
+  reads neither — it edits the card's stored bytes without ever assembling it,
+  which is what makes it affordable on a card too large to load — so an
+  `instance(…)` inside an appended item is the authoring error
+  `instance-out-of-scope`. An item that needs the card's own values belongs on
+  a `transform`.
 - `realmConfig('key')` — a named value from the `config` map of the realm the
   operation runs in, so one card type can read a per-realm setting without
   hard-coding it. `realmConfig()` answers the whole map. A realm that
@@ -160,13 +165,13 @@ The references are `params('key')`, `actor()`, `instance('key')`,
 
 Each base accepts its own clauses:
 
-| `base` | Clauses |
-| --- | --- |
-| `transform` | `append`, `assert`, `set` |
-| `create` | `of` (required), `fill` |
-| `query` | `query` (required) |
-| `appendContainsMany` | `field` + `item`, or `fields` |
-| `update`, `delete`, `read`, `appendLine` | none |
+| `base`                                   | Clauses                       |
+| ---------------------------------------- | ----------------------------- |
+| `transform`                              | `append`, `assert`, `set`     |
+| `create`                                 | `of` (required), `fill`       |
+| `query`                                  | `query` (required)            |
+| `appendContainsMany`                     | `field` + `item`, or `fields` |
+| `update`, `delete`, `read`, `appendLine` | none                          |
 
 Every declaration may also carry `params`, `optimistic`, `input`,
 `transformations` and `output`.
@@ -355,7 +360,10 @@ the class:
 // untyped: every name is callable, no payload is checked
 operations(record).escalateRhythmEvent({ eventId, findings });
 // typed from the declarations: unknown names and wrong payloads are errors
-operations<typeof PatientRecord>(record).escalateRhythmEvent({ eventId, findings });
+operations<typeof PatientRecord>(record).escalateRhythmEvent({
+  eventId,
+  findings,
+});
 ```
 
 In a card template `@model` is typed with every field optional — a template
@@ -364,12 +372,12 @@ form casts once, where it is saying that it is rendering a loaded card.
 
 ### What a call answers with
 
-| The operation is built on | It resolves to |
-| --- | --- |
+| The operation is built on                                           | It resolves to                                                                  |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | `create`, `update`, `transform`, `appendContainsMany`, `appendLine` | `{ id, version, generation, lastModified }`, plus `lid` for a create in a batch |
-| `delete` | `null` |
-| `read` | the projected document |
-| `query` | **not a promise** — see below |
+| `delete`                                                            | `null`                                                                          |
+| `read`                                                              | the projected document                                                          |
+| `query`                                                             | **not a promise** — see below                                                   |
 
 A write answers with an identity and a version, not a document. `version` is
 the fingerprint of the card's stored source; to see the written document, read
@@ -455,7 +463,7 @@ The builder:
   result.
 - `b.find(filter, { field, expect })` answers a target found by search rather
   than named by reference, usable wherever `b.on(…)` takes a card. `expect:
-  'many'` fans the entry out over every match and answers an array.
+'many'` fans the entry out over every match and answers an array.
 
 A builder that returns nothing is answered positionally, with a group's results
 nested where the group sat. A builder that returns handles is answered with
@@ -477,7 +485,8 @@ The codes are `unknown-field`, `not-a-collection`, `undeclared-param`,
 `path-crosses-collection`, `link-requires-identity`, `write-through-link`,
 `unsearchable-read`, `unsnapshotted-assert`, `unresolved-type`,
 `actor-not-a-card`, `invalid-program`, `invalid-query`, `reserved-name`,
-`base-not-carried`, `unrunnable-program` and `incomplete-append`.
+`base-not-carried`, `unrunnable-program`, `incomplete-append` and
+`instance-out-of-scope`.
 
 ## Failure at invocation
 

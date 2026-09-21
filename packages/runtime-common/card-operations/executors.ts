@@ -2296,10 +2296,8 @@ async function resourceFromTemplate(
 
 // The card a named create is anchored on, as `instance(…)` reads it: the
 // target's stored document, never a live card instance.
-// The stored source an `instance(...)` marker reads: the card a named create
-// was invoked from. Typed by the member it uses rather than by the entry kind.
 function anchorResource(
-  entry: { href?: string },
+  entry: CreateEntry,
   ctx: StagingContext,
 ): { id: string; resource: CardResource } {
   let url = targetURL(entry.href!);
@@ -2501,7 +2499,7 @@ function resolveMarker(
           title: 'No instance in scope',
           detail:
             `\`${path}\` reads the target's stored document, and this ` +
-            `invocation has none in scope`,
+            `invocation names no target`,
         });
       }
       if (marker.key === undefined || marker.key === 'id') {

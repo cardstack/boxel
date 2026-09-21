@@ -217,7 +217,12 @@ export type OperationLoweringIssueCode =
   // which wins. The decorator refuses each, so one only reaches a stored
   // entry — where appending nothing, or a literal `null`, is worse than
   // refusing.
-  | 'incomplete-append';
+  | 'incomplete-append'
+  // An `instance(…)` inside an `appendContainsMany` item. An append edits the
+  // card's stored bytes without ever assembling its document, which is the
+  // whole reason the behavior exists, so the card's own values are not there
+  // to read — an item that needs one belongs on a `transform`.
+  | 'instance-out-of-scope';
 
 // A problem found while lowering one operation. Recorded, never thrown:
 // definition build is decoupled in time from the edit that introduced the

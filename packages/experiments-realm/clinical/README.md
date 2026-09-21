@@ -48,19 +48,19 @@ operation's result as reachable by any caller permitted to use the realm.
 
 ## What each operation demonstrates
 
-| Where | Name | Built on | Worth reading for |
-| --- | --- | --- | --- |
-| `PatientRecord` | `escalateRhythmEvent` | `transform` | a raw `bxl` program whose `assert` is a precondition on stored state |
-| `PatientRecord` | `titrateDose` | `transform` | exact-one `select` plus an arithmetic update (`\|= . + …`) |
-| `PatientRecord` | `addConsultant` | `transform` | a declarative `assert { unique, by }` over a collection of links, with `append` |
-| `PatientRecord` | `transferToIcu` | `transform` | a declarative `set`, including writing a link from a `linkTo` param |
-| `PatientRecord` | `recordVitals` | `appendContainsMany` | adding to a collection that grows without bound, without loading the card |
-| `PatientRecord` | `requestConsult` | `create` | a named create whose `fill` links the new card back with `instance('id')` |
-| `PatientRecord` | `addConsult` | `transform` | the other half of a link, so a batch can create and link in one commit |
-| `PatientRecord` | `myPatients` | `query` | a saved search compared against `actor()` |
-| `PatientRecord` | `admittedOnUnit` | `query` | a saved search whose filter a payload fills |
-| `Clinician` | `acceptCase` | `transform` | a declarative uniqueness guard over contained values |
-| `Clinician` | `releaseCase` | `transform` | `del` through a `select`, guarded by an `assert` |
+| Where           | Name                  | Built on             | Worth reading for                                                               |
+| --------------- | --------------------- | -------------------- | ------------------------------------------------------------------------------- |
+| `PatientRecord` | `escalateRhythmEvent` | `transform`          | a raw `bxl` program whose `assert` is a precondition on stored state            |
+| `PatientRecord` | `titrateDose`         | `transform`          | exact-one `select` plus an arithmetic update (`\|= . + …`)                      |
+| `PatientRecord` | `addConsultant`       | `transform`          | a declarative `assert { unique, by }` over a collection of links, with `append` |
+| `PatientRecord` | `transferToIcu`       | `transform`          | a declarative `set`, including writing a link from a `linkTo` param             |
+| `PatientRecord` | `recordVitals`        | `appendContainsMany` | adding to a collection that grows without bound, without loading the card       |
+| `PatientRecord` | `requestConsult`      | `create`             | a named create whose `fill` links the new card back with `instance('id')`       |
+| `PatientRecord` | `addConsult`          | `transform`          | the other half of a link, so a batch can create and link in one commit          |
+| `PatientRecord` | `myPatients`          | `query`              | a saved search compared against `actor()`                                       |
+| `PatientRecord` | `admittedOnUnit`      | `query`              | a saved search whose filter a payload fills                                     |
+| `Clinician`     | `acceptCase`          | `transform`          | a declarative uniqueness guard over contained values                            |
+| `Clinician`     | `releaseCase`         | `transform`          | `del` through a `select`, guarded by an `assert`                                |
 
 ## The two batches
 
@@ -74,7 +74,7 @@ back, and a failure anywhere leaves all three unwritten.
 
 Note the contrast with `requestConsult` one button to its left: that one is a
 single named `create`, because the consult owns the link to the patient and
-filling it is the whole of the work. You only need the batch when the *other*
+filling it is the whole of the work. You only need the batch when the _other_
 card has to change too.
 
 **A transfer as a parallel group.** `transferToIcu` changes the record, the
@@ -98,14 +98,24 @@ Two things about them are worth knowing before copying the pattern:
   line as its payload. A value the realm knows and the caller does not — the
   authenticated actor — therefore belongs on the card, which is where
   `recordVitals` and `requestConsult` stamp it.
-- **The file has to exist.** `appendLine` appends to a file; it does not create
-  one. These logs are checked in for that reason.
+- **`appendLine` creates the file it appends to**, so nothing here has to
+  exist first. These logs are checked in for a different reason: a
+  `linksTo(FileDef)` needs a stored file to hydrate an instance from, and
+  `b.on(log)` takes that instance. Where nothing is stored yet, name the path
+  instead — `b.on('audit/pt-1004.txt')` — and the first append brings the file
+  into being.
 
 ## Running it
 
 These cards are part of the `experiments` realm, so bring the stack up with
-`mise run dev-all` — the `test-services:realm-server` flavor sets
-`SKIP_EXPERIMENTS=true` and does not mount this realm at all.
+`dev-all` — the `test-services:realm-server` flavor sets `SKIP_EXPERIMENTS=true`
+and does not mount this realm at all. Skipping the realms this example does not
+touch keeps the shared index worker off them:
+
+```
+SKIP_CATALOG=true SKIP_BOXEL_HOMEPAGE=true SKIP_SUBMISSION=true SKIP_SOFTWARE_FACTORY=true \
+  mise run dev-all
+```
 
 ```
 https://localhost:4201/experiments/clinical/PatientRecord/pt-1001
@@ -124,8 +134,14 @@ broken:
 
 Invoking an operation writes to the realm, which here is this folder in the
 working tree. `git checkout -- packages/experiments-realm/clinical` puts the
-fixtures back; a named `create` also leaves a new card behind, under
-`clinical/ConsultRequest/`.
+fixtures back.
+
+A named `create` also leaves a new card behind, and not in this folder — a
+created card's path is composed from its **type's** name, not from where the
+operation was invoked, so `requestConsult` writes to `ConsultRequest/` at the
+realm root. Remove it with `rm -rf packages/experiments-realm/ConsultRequest`.
+Close the card in the browser before restoring either one, or the open tab
+writes its copy back over you.
 
 The authoring guide for everything used here is `docs/card-operations.md` at
 the root of this repository.

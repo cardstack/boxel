@@ -1,3 +1,5 @@
+import { cached } from '@glimmer/tracking';
+
 import { CardDef, Component, contains, field } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
 import { operations } from '@cardstack/base/operations';
@@ -8,18 +10,32 @@ import { PatientRecord } from './patient-record';
 class ClinicalDashboardIsolated extends Component<typeof ClinicalDashboard> {
   // A declared `query` is the one operation that is not awaited: the search
   // engine carries it out, so calling it starts a live search and `.query()`
-  // answers the wire query behind it. Both are resolved once, here, because
-  // each call builds a new one — a getter would hand the search component a
-  // different query on every render and restart the search each time.
+  // answers the wire query behind it.
   //
-  // It answers nothing when the session cannot say who the caller is: nobody
-  // is signed in, or this is a render, which authenticates as itself rather
-  // than as a viewer. A search compared against `actor()` has nothing to ask
-  // in that case, which is what the empty branch below is for.
-  myPatients = operations(PatientRecord).myPatients.query();
-  onThisUnit = operations(PatientRecord).admittedOnUnit.query({
-    careUnit: this.args.model.unitName ?? '',
-  });
+  // Each call builds a new query, and handing the search component a
+  // different one every render would restart the search each time — so these
+  // are `@cached`, which answers the same query until something it was built
+  // from changes. A plain class field would go further than that and freeze
+  // the payload at construction: `@model` is typed with every field optional
+  // because a template renders a card that may still be loading, so a unit
+  // name arriving after construction would never reach the search and the
+  // page would quietly list the whole realm under an empty `careUnit`.
+  //
+  // A query answers nothing when the session cannot say who the caller is:
+  // nobody is signed in, or this is a render, which authenticates as itself
+  // rather than as a viewer. A search compared against `actor()` has nothing
+  // to ask in that case, which is what the empty branch below is for.
+  @cached
+  get myPatients() {
+    return operations(PatientRecord).myPatients.query();
+  }
+
+  @cached
+  get onThisUnit() {
+    return operations(PatientRecord).admittedOnUnit.query({
+      careUnit: this.args.model.unitName ?? '',
+    });
+  }
 
   <template>
     <section class='dashboard'>
@@ -151,9 +167,9 @@ class ClinicalDashboardIsolated extends Component<typeof ClinicalDashboard> {
   </template>
 }
 
-// A ward list built from a saved search. Everything it renders comes from
-// `PatientRecord.myPatients` — declared on the card type, next to the
-// operations that write it.
+// A ward list built from saved searches. Everything it renders comes from
+// `PatientRecord.myPatients` and `PatientRecord.admittedOnUnit` — declared on
+// the card type, next to the operations that write it.
 export class ClinicalDashboard extends CardDef {
   static displayName = 'Clinical Dashboard';
   static icon = LayoutDashboardIcon;

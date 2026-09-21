@@ -95,6 +95,23 @@ module('Acceptance | card operations | clinical example', function (hooks) {
     return (await response.json()).data;
   }
 
+  // The stored bytes, as opposed to the index's view of them. `storedRecord`
+  // reads `application/vnd.card+json`, which the realm answers out of the
+  // index — `attributes` and `meta.lastModified` alike come off the row. A
+  // refusal that wrote anyway starts no index job, so the row would agree
+  // with itself either way; only the file says whether it was rewritten.
+  async function storedSource(): Promise<string> {
+    let response = await realm.handle(
+      new Request(`${testRealmURL}clinical/PatientRecord/pt-1001`, {
+        headers: { Accept: 'application/vnd.card+source' },
+      }),
+    );
+    if (!response) {
+      throw new Error('the realm did not answer for the patient record');
+    }
+    return await response.text();
+  }
+
   function eventStatus(record: any, eventId: string): string | undefined {
     return (record.attributes.rhythmEvents as any[]).find(
       (event) => event.eventId === eventId,
@@ -153,6 +170,7 @@ module('Acceptance | card operations | clinical example', function (hooks) {
     // The second event is already resolved, so the precondition the
     // declaration asserts — that the event is still open — does not hold.
     let before = await storedRecord();
+    let sourceBefore = await storedSource();
 
     await click(`[data-test-escalate="${RESOLVED_EVENT}"]`);
     await waitUntil(
@@ -162,9 +180,11 @@ module('Acceptance | card operations | clinical example', function (hooks) {
 
     assert
       .dom('[data-test-refusal]')
-      .containsText(
+      .hasText(
         'That rhythm event is not open, so there is nothing to escalate',
-        "the sentence the declaration's own assert carries is what the page shows",
+        "the sentence the declaration's own assert carries is what the page " +
+          'shows — exactly, since `message` prefixes the same detail with the ' +
+          'title and a banner rendering that would pass a containment check',
       );
     assert
       .dom(
@@ -180,17 +200,16 @@ module('Acceptance | card operations | clinical example', function (hooks) {
       'and the realm wrote nothing',
     );
     // The whole document rather than a single member: a refusal that wrote
-    // nothing has to leave every field where it was, and `lastModified` is
-    // what says the file itself was never rewritten.
+    // nothing has to leave every field where it was.
     assert.deepEqual(
       after.attributes,
       before.attributes,
       'no field of the card moved',
     );
     assert.strictEqual(
-      after.meta.lastModified,
-      before.meta.lastModified,
-      'and the stored file was never written',
+      await storedSource(),
+      sourceBefore,
+      'and the file on disk is byte-for-byte what it was',
     );
   });
 });
