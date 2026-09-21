@@ -21,16 +21,20 @@ preflight is step 2 for a reason: starting it first burns time on a run that
 may not be the one the user wanted, and a stack that is down is worth
 reporting after the choice, not instead of it.
 
-Look at `$ARGUMENTS`. Ask with one `AskUserQuestion` call carrying every
-question it leaves unanswered:
+Look at `$ARGUMENTS` and ask for whatever it leaves out:
 
-- no EvaluationCard URL and no evaluation name → ask which evaluation
-- no model list → ask which models
-- nothing about the browser → ask whether to watch it
+- no EvaluationCard URL and no evaluation name → which evaluation
+- nothing about the browser → whether to watch it
+- no model list → which models
 
-If it answers all three, skip straight to the preflight. Otherwise every
-unanswered one goes in the same call, so the user answers once and the run
-proceeds without further interruption.
+The first two go in one `AskUserQuestion` call. Models do not: an
+`AskUserQuestion` takes at most four options and the assistant offers fifteen
+models, so a widget can only ever show a few of them behind an "Other" box.
+Print them as a numbered list instead and let the user answer with numbers.
+
+So: raise the `AskUserQuestion` for evaluation and browser, and once it is
+answered, print the model list and wait for a reply. If `$ARGUMENTS` already
+settles everything, skip straight to the preflight.
 
 **Which evaluation.** Read every `eval-realm/Evaluation/*.json` under
 `packages/ai-assistant-evals` and take `data.attributes.cardInfo.name` and
@@ -43,24 +47,24 @@ the question that "Other" takes any name from the list. An evaluation's URL is
 
 **Which models.** Read every model the SystemCard offers
 (`packages/catalog/contents/SystemCard/default.json` →
-`relationships.modelConfigurations.*` → each card's `cardInfo.name`) and list
-all of them in the reply, grouped by lab. A model the SystemCard does not list
-is not in the picker and the run fails at model selection, so that list is the
-whole of what can be asked for.
+`relationships.modelConfigurations.*` → each card's `cardInfo.name`). That
+list is the whole of what can be asked for: a model the SystemCard does not
+list is not in the picker, and naming it fails the run at model selection.
 
-Then ask as a multi-select, four options:
+Print every one of them as a numbered list, in the SystemCard's own order,
+each line the model's name as the picker shows it and its lab. Then, after the
+numbered models, two more entries:
 
-- `Claude Sonnet 4.6` first, the recommended single model — minutes and cents.
-- **every model the SystemCard offers**, the full sweep. Give the real count
-  and say it costs dollars and the better part of an hour for one evaluation,
-  twice that for a two-prompt one.
-- the current `DEFAULT_MODELS` set from
-  `packages/ai-assistant-evals/run-eval.ts`, described as the sample it is —
-  name the labs it covers and the count, never "all" or "full".
-- one other frontier model.
+- **all** — every model on the list. Say how many that is, and that it costs
+  dollars and the better part of an hour for a one-prompt evaluation, more for
+  a two-prompt one.
+- **default** — the current `DEFAULT_MODELS` from
+  `packages/ai-assistant-evals/run-eval.ts`. Name its models and its count and
+  call it a sample, never "all" or "full".
 
-Say in the question that "Other" takes any names from the list above,
-comma-separated.
+Ask the user to answer with numbers, names, `all` or `default`, and say that
+several numbers may be given at once. Take the answer as given; a bare number
+means the model on that line.
 
 Take an answer the user typed into "Other" as given — it is a picker name or
 an evaluation file name, not a new question.
