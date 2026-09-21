@@ -125,6 +125,16 @@ export interface QueuePublishRequest {
   concurrencyGroup: string | null;
   timeout: number;
   args: PgPrimitive;
+  // The users whose work this job carries, recorded on the row so a gate in
+  // any replica can ask whether anything of its own caller's is outstanding
+  // rather than whether the lane is occupied. A set because jobs coalesce: a
+  // publish that merges into a pending one joins the callers already on it.
+  //
+  // Generic here rather than derived from `args`, which only the job type's
+  // own handler can read. A job type that nobody gates on leaves it out, and
+  // the row records nothing — which reads as the realm owner, see
+  // `awaitRealmIndexSettled`.
+  initiatedBy?: string[];
 }
 
 export interface QueueJobSpec extends Omit<QueuePublishRequest, 'priority'> {
@@ -149,7 +159,10 @@ export interface QueueCoalesceContext {
 }
 
 export type QueueCoalesceJoinUpdate = Partial<
-  Pick<QueueJobSpec, 'jobType' | 'args' | 'priority' | 'timeout'>
+  Pick<
+    QueueJobSpec,
+    'jobType' | 'args' | 'priority' | 'timeout' | 'initiatedBy'
+  >
 >;
 
 export type QueueCoalesceDecision =
