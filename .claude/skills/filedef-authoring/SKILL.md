@@ -66,5 +66,5 @@ To tune a wrapped embed you cannot pass args to at all — a framework-driven `<
 
 ## Test gotchas
 
-- **Module manifest:** `packages/host/tests/integration/realm-indexing-test.gts` hard-codes the `@cardstack/base/file-formats/*` module-dependency list. Adding or removing a module in the barrel's dependency graph breaks those fixtures — update the manifest in the same change.
+- **Module manifest:** `packages/host/tests/integration/realm-indexing-test.gts` snapshots the dependency graph reachable from `card-api`'s static FileDef-template imports. Update it when that graph changes; adding or removing an export in `file-formats/index.ts` alone does not change this manifest.
 - **Format-chooser count:** `fileDefFormats` lives in `packages/runtime-common/formats.ts`; acceptance assertions in `code-submode-test.ts` and `code-submode/inspector-test.ts` count it. Adding a content-only component does **not** change `fileDefFormats` — if you find yourself editing those counts, reconsider.
