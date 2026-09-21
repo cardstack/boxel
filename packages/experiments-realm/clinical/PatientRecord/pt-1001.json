@@ -5,12 +5,12 @@
       "mrn": "PT-1001",
       "patientName": "Margaret Okonkwo",
       "status": "admitted",
-      "severity": "Critical",
+      "severity": "Moderate",
       "careUnit": "Cardiology",
       "medications": [
         {
           "name": "Warfarin",
-          "doseMg": 7.5,
+          "doseMg": 5,
           "frequency": "Once daily",
           "status": "administered"
         },
@@ -32,8 +32,8 @@
           "eventId": "RE-4471",
           "detectedAt": "2026-09-18T02:14:00Z",
           "rhythm": "Atrial fibrillation with RVR",
-          "status": "escalated",
-          "findings": "Rate control started, cardiology paged"
+          "status": "open",
+          "findings": null
         },
         {
           "eventId": "RE-4469",
@@ -58,14 +58,7 @@
           "diastolic": 74,
           "recordedBy": "@jordan.blake:boxel.ai"
         }
-      ],
-      "transferReason": null,
-      "cardInfo": {
-        "name": null,
-        "summary": null,
-        "cardThumbnailURL": null,
-        "notes": null
-      }
+      ]
     },
     "relationships": {
       "facility": {
@@ -81,6 +74,10 @@
       "auditLog": {
         "links": {
           "self": "../audit/pt-1001.txt"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../audit/pt-1001.txt"
         }
       },
       "unitRoster.0": {
@@ -101,16 +98,6 @@
       "consultTeam.0": {
         "links": {
           "self": "../Clinician/jordan-blake"
-        }
-      },
-      "consultTeam.1": {
-        "links": {
-          "self": "../Clinician/theo-martin"
-        }
-      },
-      "consults.0": {
-        "links": {
-          "self": "../../ConsultRequest/163c5796-8616-41e7-a13f-1afcbb50f133_1"
         }
       }
     },
