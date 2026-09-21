@@ -3146,6 +3146,21 @@ module('Unit | index-writer', function (hooks) {
     await batch.done();
 
     let realmMeta = await fetchRealmMeta(adapter);
+    // The file arm first: it is the one the legacy shape cannot supply, so it
+    // is where carrying the synthesized value shows up as lost data rather
+    // than as a stale number.
+    assert.deepEqual(
+      realmMeta.files,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}markdown-file-def/MarkdownDef`,
+          'Markdown',
+          iconHTML,
+          1,
+        ),
+      ],
+      'the file arm the legacy shape never had is rebuilt rather than published empty',
+    );
     assert.deepEqual(
       realmMeta.value,
       [
@@ -3158,18 +3173,6 @@ module('Unit | index-writer', function (hooks) {
         makeCardTypeSummary(`${testRealmURL}pet/Pet`, 'Pet', iconHTML, 1),
       ],
       'the planted count is recomputed rather than carried, so the pass rebuilt',
-    );
-    assert.deepEqual(
-      realmMeta.files,
-      [
-        makeCardTypeSummary(
-          `${testRealmURL}markdown-file-def/MarkdownDef`,
-          'Markdown',
-          iconHTML,
-          1,
-        ),
-      ],
-      'the file arm the legacy shape never had is rebuilt rather than published empty',
     );
   });
 
