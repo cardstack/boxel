@@ -12,7 +12,7 @@ FileDef families (markdown, image, audio, video, code, data, archive, font, 3D, 
 - **Four shared shells** — `FileAtomShell`, `FileEmbeddedShell`, `FileFittedShell`, `FileIsolatedShell` (in `file-formats/`). Every family inherits these from `FileDef` and supplies only the renderer they mount, rather than shipping its own `isolated`/`embedded`/`fitted`/`atom` templates. The shells draw the chrome: the isolated shell's file bar (Download / Copy link) and the GENERAL / PARSER OUTPUT / DERIVED metadata inspector.
 - **`FilePreviewStage`** is the slot the shells project into. It owns the concerns every family shares — the current-render cache, loading / failure / staleness panes, provenance, and the generic fallback pane for a family with no renderer.
 - **`static previewComponent`** is the family hook. A `FileDef` subclass sets `static previewComponent = XPreview`; `FilePreviewStage` mounts it. `filePreviewComponentFor(instance)` resolves the renderer a file's class declares (read off the instance's constructor, since a `linksTo(FileDef)` is routinely a subclass instance).
-- **Pin statics that pre- and post-hydration must agree on.** A prerender omits linked-card CSS, so a value the render depends on (a heading font, a first-child rule) belongs where both passes see it — see the pinning comments in `default-templates/markdown.gts` and the legal-doc masthead.
+- **Pin render-critical values that pre- and post-hydration must share.** A prerender omits linked-card CSS, so values the render depends on (such as heading typography or first-child rules) belong where both passes see them.
 
 So a new family = add `@field`s + a `previewComponent`. It should not touch the shells.
 
