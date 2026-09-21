@@ -46,6 +46,9 @@ export interface RunResult {
     | 'irregularity'
     | 'error';
   irregularities: string[];
+  // File name, next to this result, of what the workspace held when the run
+  // ended: every source file and every indexed card document.
+  workspaceSnapshot?: string;
   analysis: RoomAnalysis | undefined;
   screenshot: string | undefined;
   consoleErrors: string[];

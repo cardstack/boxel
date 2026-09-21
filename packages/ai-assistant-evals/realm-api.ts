@@ -17,6 +17,7 @@ export const MIME = {
   cardSource: 'application/vnd.card+source',
   binary: 'application/octet-stream',
   json: 'application/json',
+  jsonApi: 'application/vnd.api+json',
 } as const;
 
 export interface CardDocument {
@@ -219,6 +220,45 @@ export class RealmClient {
       headers: { accept: MIME.cardJson },
     });
     return response.ok;
+  }
+
+  // Every file in the realm, as paths relative to its root. The realm answers a
+  // directory URL with a JSON:API document whose relationships are its entries,
+  // each marked `file` or `directory` in its meta.
+  async listFiles(realmUrl: string): Promise<string[]> {
+    realmUrl = ensureTrailingSlash(realmUrl);
+    let walk = async (url: string): Promise<string[]> => {
+      let response = await this.#fetch(realmUrl, url, {
+        headers: { accept: MIME.jsonApi },
+      });
+      if (!response.ok) {
+        throw new Error(
+          `listing ${url} failed: ${response.status} ${await response.text()}`,
+        );
+      }
+      let doc = (await response.json()) as {
+        data?: {
+          relationships?: Record<
+            string,
+            { links?: { related?: string }; meta?: { kind?: string } }
+          >;
+        };
+      };
+      let paths: string[] = [];
+      for (let entry of Object.values(doc.data?.relationships ?? {})) {
+        let related = entry.links?.related;
+        if (!related) {
+          continue;
+        }
+        if (entry.meta?.kind === 'directory') {
+          paths.push(...(await walk(related)));
+        } else {
+          paths.push(related.slice(realmUrl.length));
+        }
+      }
+      return paths;
+    };
+    return (await walk(realmUrl)).sort();
   }
 
   // A file's bytes. Modules can be asked for without their extension; the

@@ -83,6 +83,23 @@ Skip this question when the invocation already settled it — `headless` or
   run fails at login, register them once from `packages/matrix`:
   `MATRIX_USERNAME=ai-assistant-eval-user-1 MATRIX_PASSWORD=password node ./scripts/register-test-user.ts`,
   per user.
+- Every eval user holds at least 3000 credits. A user that runs out mid-session
+  gets "There was an error processing your request" from the assistant and the
+  run is wasted, so top up before starting rather than after a failure. The
+  balance is the sum of that user's `credits_ledger` rows, and a top-up is one
+  `extra_credit` row — the only credit type that needs no subscription cycle:
+
+  ```sh
+  docker exec boxel-pg psql -U postgres -d boxel -c "
+  insert into credits_ledger (user_id, credit_amount, credit_type)
+  select u.id, 3000 - coalesce(sum(l.credit_amount), 0), 'extra_credit'
+  from users u left join credits_ledger l on l.user_id = u.id
+  where u.matrix_user_id like '%ai-assistant-eval-user%'
+  group by u.id
+  having coalesce(sum(l.credit_amount), 0) < 3000;"
+  ```
+
+  It tops up only the users below 3000 and is safe to run every time.
 
 ## 3. Run
 
@@ -116,14 +133,33 @@ stops such a run itself; do not stop a run for being slow or expensive.
 ## 4. Judge every result
 
 The runner cannot tell whether the work was right. That is your job, per
-model, from three sources:
+model, from four sources:
 
-1. The result JSON in `eval-results/<session-id>/<model>.json`: verdict,
+1. The workspace snapshot, `eval-results/<session-id>/<model>.workspace.json`
+   — what the assistant left behind. **Read it before the screenshot.** It
+   holds every source file under `files`, and every indexed card document
+   under `cards`. This is the only source that settles a criterion about the
+   code or the data, so a criterion phrased about either is checked here and
+   nowhere else:
+   - a value that must be computed is a `computeVia` field in the `.gts`, not
+     a number sitting in an instance. A screenshot cannot tell those apart.
+   - one definition edited in place, not a second one written beside it —
+     count the definitions in `files`, do not take the room's word for it.
+   - a link field holds the cards it should, once each. Four entries where two
+     were asked for is a duplicated link, and it shows here as four.
+   - a computed value is arithmetically right: check it against the fields it
+     derives from, in the same card document.
+2. The screenshot next to it (open it with the Read tool): what the user would
+   have seen, and whether it rendered at all.
+3. The result JSON in `eval-results/<session-id>/<model>.json`: verdict,
    reasons, tool calls, blocks, files written, patch outcomes.
-2. The screenshot next to it (open it with the Read tool).
-3. The room, when anything is unclear or the run did not pass:
+4. The room, when anything is unclear or the run did not pass:
    `node .claude/skills/inspect-ai-room/scripts/inspect-room.mjs timeline '<roomId>'`
    from the repo root, and `usage` for the cache and cost per turn.
+
+A criterion the snapshot could settle but which was judged from the screenshot
+or the room is not judged. If `workspaceSnapshot` is missing from the result,
+say so in the analysis rather than scoring those criteria on appearances.
 
 Take the evaluation's success criteria from `session.json`
 (`evaluation.successCriteria`; they are numbered) and decide, one by one, with

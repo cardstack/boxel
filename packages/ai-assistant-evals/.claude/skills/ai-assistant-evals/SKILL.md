@@ -38,6 +38,11 @@ and time targets are multiplied by the number of prompts.
 - The dev stack is up: `mise run dev-all` with `OPENROUTER_API_KEY` set for the
   ai-bot. Check: `curl -sk -o /dev/null -w '%{http_code}' https://localhost:4200/`
   prints `200`.
+- Every eval user holds at least 3000 credits. Running out mid-session turns the
+  assistant's reply into "There was an error processing your request" and
+  wastes the run, so top up first — the balance is the sum of that user's
+  `credits_ledger` rows and a top-up is one `extra_credit` row. The
+  `/run-ai-assistant-eval` command's preflight carries the query.
 - The local matrix users `ai-assistant-eval-user-1` to `ai-assistant-eval-user-5` / `password` exist (see
   `EVAL_USERS` below). For evaluations, `pnpm eval:setup` has created the
   AI Assistant Evaluations workspace of the writer user (`user` locally), at

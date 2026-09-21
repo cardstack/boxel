@@ -11,6 +11,7 @@ import { analyzeRoom } from './room-analysis.ts';
 import { grade, type RunResult, type Verdict } from './run-result.ts';
 import { RealmClient } from './realm-api.ts';
 import { prepopulate, type EvaluationBundle } from './eval-card.ts';
+import { captureWorkspace } from './workspace-snapshot.ts';
 
 // One Playwright test per model. Each test: fresh workspace, new room, pick the
 // model, send the prompt, wait for the bot to go idle, check a card rendered,
@@ -786,15 +787,15 @@ async function runModel(
     consoleErrors: [],
   };
   let credentials: Awaited<ReturnType<typeof loginWithPassword>> | undefined;
+  // Declared out here so the snapshot in `finally` can still reach it when the
+  // run ends early.
+  let realmClient: RealmClient | undefined;
   let step = 'start';
   try {
     step = 'login';
     console.log(`[eval] ${requestedModel} runs as @${username}`);
     credentials = await loginViaLocalStorage(page, username);
-    let realmClient = new RealmClient(
-      credentials.accessToken,
-      credentials.userId,
-    );
+    realmClient = new RealmClient(credentials.accessToken, credentials.userId);
     step = 'read the evaluation';
     let { evaluation, prompts } = await loadPrompts();
     result.prompts = prompts;
@@ -904,6 +905,26 @@ async function runModel(
     result.endedAt = new Date().toISOString();
     result.durationSeconds = Math.round((Date.now() - startedAt) / 1000);
     result.consoleErrors = consoleErrors.slice(0, 50);
+    // Read the workspace back before writing the result, so a judge scores
+    // what the assistant left behind rather than what it said it did. A run
+    // that never got as far as a workspace has nothing to read.
+    if (realmClient && result.realmUrl) {
+      try {
+        let snapshot = await captureWorkspace(realmClient, result.realmUrl);
+        let file = `${slug}.workspace.json`;
+        await writeFile(
+          join(RESULTS_DIR, file),
+          JSON.stringify(snapshot, null, 2),
+        );
+        result.workspaceSnapshot = file;
+      } catch (error) {
+        console.log(
+          `[eval] ${requestedModel}: could not read the workspace back — ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
     await writeFile(
       join(RESULTS_DIR, `${slug}.json`),
       JSON.stringify(result, null, 2),
