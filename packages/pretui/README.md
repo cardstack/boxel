@@ -4,8 +4,8 @@ Pret UI is a Boxel UI kit: typed Glimmer components with Pret UI's own visual la
 
 This directory is both a pnpm workspace package and a realm.
 
-- **Host** depends on `@cardstack/pretui` as a workspace package. `package.json#exports` maps every subpath to its `.gts` source, so `import { Button } from '@cardstack/pretui/components/button'` compiles into the host bundle per file and only imported components ship.
-- **Cards** import the same spelling. The realm-server serves this directory as the realm `@cardstack/pretui/`, the loader fetches and compiles the source, and the index tracks the dependency so importers reindex when a component changes.
+- **Host**: a workspace dependency on `@cardstack/pretui`. `package.json#exports` maps every subpath to its `.gts` source, so `import { Button } from '@cardstack/pretui/components/button'` compiles into the host bundle per file and only imported components ship.
+- **Cards**: the same spelling through the realm-server, which serves this directory as the realm `@cardstack/pretui/`. The loader fetches and compiles the source, and the index tracks the dependency so importers reindex when a component changes.
 
 ## Layout
 
@@ -27,7 +27,5 @@ Spec cards for these components live in the catalog realm, not here.
 ```sh
 pnpm lint          # ember-template-lint + ember-tsc
 ```
-
-The realm is opt-in locally: start the dev stack with `START_PRETUI=1` to have the realm-server serve it. Host consumption does not need the realm running.
 
 The kit's remaining components live in the `cardstack/pretui` repo and move here in batches.

@@ -39,7 +39,7 @@ export class IconButton extends Component<IconButtonSignature> {
     <style scoped>
       :deep(.pretui-iconbtn) {
         padding: 0;
-        width: var(--control-h, 28px);
+        width: var(--pretui-button-h, 2.24em);
       }
     </style>
   </template>
