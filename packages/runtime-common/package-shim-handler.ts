@@ -453,11 +453,28 @@ export class PackageShimHandler {
     return null;
   };
 
+  // Both spellings a shim can later be asked for: the URL its identifier
+  // resolves to under the mapping in force now, and the identifier as written.
+  // A realm prefix can be re-pointed after a shim is installed and a lookup
+  // resolves through whatever mapping is current, so the resolved key goes
+  // stale on a remap while the identifier does not. Registering under both is
+  // what lets `lookupModule` find the shim either way.
+  //
+  // One key when the identifier is not realm-mapped, which is every shim on
+  // main: `resolveImport` returns a fake-packages URL that `trimModuleIdentifier`
+  // folds back to the identifier, so the Set collapses to a single entry.
+  private registrationKeys(identifier: string): Set<string> {
+    return new Set([
+      trimModuleIdentifier(this.resolveImport(identifier)),
+      trimModuleIdentifier(identifier),
+    ]);
+  }
+
   shimModule(moduleIdentifier: string, module: ModuleLike) {
-    moduleIdentifier = this.resolveImport(moduleIdentifier);
-    let key = trimModuleIdentifier(moduleIdentifier);
-    this.moduleIds.set(key, async () => module);
-    this.rememberExports(key, module);
+    for (let key of this.registrationKeys(moduleIdentifier)) {
+      this.moduleIds.set(key, async () => module);
+      this.rememberExports(key, module);
+    }
   }
 
   // Records a resolved module's exports for `findExportSources`.
@@ -505,12 +522,22 @@ export class PackageShimHandler {
     // `isRetryableShimResolveError`.
     if ('prefix' in descriptor) {
       let label = `prefix:${descriptor.prefix}`;
-      this.modulePrefixes.set(
-        this.resolveImport(descriptor.prefix),
-        withResolveRetry(label, this.log, descriptor.resolve, retryDeps),
+      let resolver = withResolveRetry(
+        label,
+        this.log,
+        descriptor.resolve,
+        retryDeps,
       );
+      // A prefix is a URL prefix rather than a module identifier, so it keeps
+      // its trailing slash: `trimModuleIdentifier` would only strip an
+      // executable extension, which a prefix does not carry.
+      for (let prefix of new Set([
+        this.resolveImport(descriptor.prefix),
+        descriptor.prefix,
+      ])) {
+        this.modulePrefixes.set(prefix, resolver);
+      }
     } else {
-      let moduleIdentifier = this.resolveImport(descriptor.id);
       let label = `id:${descriptor.id}`;
       let resolver = withResolveRetry(
         label,
@@ -518,15 +545,7 @@ export class PackageShimHandler {
         descriptor.resolve,
         retryDeps,
       );
-      // Registered under both the URL the identifier resolves to now and the
-      // identifier itself. A realm prefix can be re-pointed after a shim is
-      // installed, and a lookup resolves through whatever mapping is current —
-      // so the resolved key goes stale on a remap while the identifier does
-      // not, and `lookupModule` tries the unresolved spelling too.
-      for (let key of new Set([
-        trimModuleIdentifier(moduleIdentifier),
-        trimModuleIdentifier(descriptor.id),
-      ])) {
+      for (let key of this.registrationKeys(descriptor.id)) {
         this.moduleIds.set(key, resolver);
       }
     }
@@ -550,7 +569,8 @@ export class PackageShimHandler {
     let module =
       (await this.getModule(url)) ??
       (identifier ? await this.getModule(identifier) : undefined) ??
-      (await this.getModuleByPrefix(url));
+      (await this.getModuleByPrefix(url)) ??
+      (identifier ? await this.getModuleByPrefix(identifier) : undefined);
     return module
       ? wrapWithStrictNamespace(url, module, this.findExportSources)
       : undefined;

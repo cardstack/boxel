@@ -437,46 +437,78 @@ module('Unit | loader', function (hooks) {
     }
   });
 
-  test('a shim outlives a change to the realm mapping it was registered under', async function (assert) {
-    // The handler keys a shim by the URL its identifier resolved to when it
-    // was registered, and a lookup resolves through whatever mapping is
-    // current. Re-pointing the prefix would otherwise strand the shim under
-    // the old URL and send the import to the network.
-    let virtualNetwork = new VirtualNetwork();
-    let firstURL = 'https://shim-remap-first.example/';
-    let secondURL = 'https://shim-remap-second.example/';
-    virtualNetwork.addRealmMapping('@test-loader-remap/', firstURL);
-    class Shimmed {}
-    virtualNetwork.shimAsyncModule({
-      id: '@test-loader-remap/shimmed-module',
-      resolve: async () => ({ default: Shimmed }),
-    });
-    virtualNetwork.addRealmMapping('@test-loader-remap/', secondURL);
+  // Every shape a shim can be registered in, so the remap guarantee below is a
+  // property of the handler rather than of one registration path. `prefix` is
+  // the shape a whole realm's worth of modules is most naturally shimmed in,
+  // and the one a future `@cardstack/base/` shim would use.
+  const REMAP_PREFIX = '@test-loader-remap/';
+  const REMAP_ID = `${REMAP_PREFIX}shimmed-module`;
+  const SHIM_SHAPES: {
+    name: string;
+    register: (
+      virtualNetwork: VirtualNetwork,
+      module: Record<string, unknown>,
+    ) => void;
+  }[] = [
+    {
+      name: 'shimModule',
+      register: (virtualNetwork, module) =>
+        virtualNetwork.shimModule(REMAP_ID, module),
+    },
+    {
+      name: 'shimAsyncModule by id',
+      register: (virtualNetwork, module) =>
+        virtualNetwork.shimAsyncModule({
+          id: REMAP_ID,
+          resolve: async () => module,
+        }),
+    },
+    {
+      name: 'shimAsyncModule by prefix',
+      register: (virtualNetwork, module) =>
+        virtualNetwork.shimAsyncModule({
+          prefix: REMAP_PREFIX,
+          resolve: async () => module,
+        }),
+    },
+  ];
 
-    let throwIfFetch = new Loader(
-      async () => {
-        throw new Error(
-          'fetch should not be invoked for a module the virtual network shims',
+  for (let shape of SHIM_SHAPES) {
+    test(`a shim registered with ${shape.name} outlives a change to the realm mapping`, async function (assert) {
+      // The handler keys a shim by the URL its identifier resolved to when it
+      // was registered, and a lookup resolves through whatever mapping is
+      // current. Re-pointing the prefix would otherwise strand the shim under
+      // the old URL and send the import to the network.
+      let virtualNetwork = new VirtualNetwork();
+      let firstURL = 'https://shim-remap-first.example/';
+      let secondURL = 'https://shim-remap-second.example/';
+      virtualNetwork.addRealmMapping(REMAP_PREFIX, firstURL);
+      class Shimmed {}
+      shape.register(virtualNetwork, { default: Shimmed });
+      virtualNetwork.addRealmMapping(REMAP_PREFIX, secondURL);
+
+      let throwIfFetch = new Loader(
+        async () => {
+          throw new Error(
+            'fetch should not be invoked for a module the virtual network shims',
+          );
+        },
+        virtualNetwork.resolveImport,
+        { virtualNetwork },
+      );
+
+      for (let spelling of [REMAP_ID, `${secondURL}shimmed-module`]) {
+        let module = await throwIfFetch.import<{ default: typeof Shimmed }>(
+          spelling,
         );
-      },
-      virtualNetwork.resolveImport,
-      { virtualNetwork },
-    );
-
-    for (let spelling of [
-      '@test-loader-remap/shimmed-module',
-      `${secondURL}shimmed-module`,
-    ]) {
-      let module = await throwIfFetch.import<{ default: typeof Shimmed }>(
-        spelling,
-      );
-      assert.strictEqual(
-        module.default,
-        Shimmed,
-        `${spelling} is served from the shim after remapping`,
-      );
-    }
-  });
+        assert.strictEqual(
+          module.default,
+          Shimmed,
+          `${spelling} is served from the shim after remapping`,
+        );
+      }
+    });
+  }
 
   test('identify preserves original module for reexports', function (assert) {
     let throwIfFetch = new Loader(async () => {
