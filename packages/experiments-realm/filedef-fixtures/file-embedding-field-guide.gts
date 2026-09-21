@@ -7,6 +7,11 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import { MarkdownDef } from 'https://cardstack.com/base/markdown-file-def';
+// Content-only markdown renderer (no FileDef shell chrome) from the file-formats
+// barrel — the supported way to embed a file's content, in place of rendering
+// the FileDef field with @displayContainer={{false}} and reaching into the
+// shell's markup with :deep().
+import { MarkdownPreview } from 'https://cardstack.com/base/file-formats/index';
 import { FittedCard } from '@cardstack/boxel-ui/components';
 import BookOpenIcon from '@cardstack/boxel-icons/book-open';
 
@@ -44,7 +49,13 @@ export class FileEmbeddingFieldGuide extends CardDef {
         </header>
 
         <section class='document-body' aria-label='Embedded FileDef field guide'>
-          <@fields.file @format='embedded' @displayContainer={{false}} />
+          {{#if @model.file}}
+            <MarkdownPreview
+              @model={{@model.file}}
+              @format='isolated'
+              @displayContainer={{false}}
+            />
+          {{/if}}
         </section>
 
         <footer class='document-foot'>
@@ -123,26 +134,19 @@ export class FileEmbeddingFieldGuide extends CardDef {
           justify-content: center;
           min-width: 0;
         }
-        .document-body :deep(.markdown-content),
-        .document-body :deep(.markdown-embedded) {
+        /* MarkdownPreview renders the body through the shared
+           MarkdownContentShell (.markdown-content); there is no FileDef shell
+           chrome to override, only the reading column to set. */
+        .document-body :deep(.markdown-content) {
           width: 100%;
           min-width: 0;
           max-width: 54rem;
           margin-inline: auto;
         }
-        .document-body :deep(.markdown-embedded) {
-          display: block;
-          padding: 0;
-        }
-        .document-body :deep(.markdown-embedded__title),
+        /* The masthead above already prints the document title, so drop the
+           body's own leading H1. */
         .document-body :deep(.markdown-content > h1:first-child) {
           display: none;
-        }
-        .document-body :deep(.markdown-embedded__content) {
-          max-height: none;
-          overflow: visible;
-          mask-image: none;
-          -webkit-mask-image: none;
         }
         .document-body :deep(.markdown-bfm-card-slot--block) {
           width: 100%;
