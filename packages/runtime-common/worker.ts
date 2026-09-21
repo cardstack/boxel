@@ -154,9 +154,11 @@ export const INDEX_JOB_TYPES = [
 // the prerender fleet to be running the shell the realm server is serving
 // before they start.
 //
-// `copy-index` and `full-reindex` are absent because neither renders: the
-// first copies rows, the second enqueues the jobs above, and gating it would
-// only delay the gate. `screenshot-card` renders, but a person is usually
+// `copy-index`, `full-reindex` and `prerender-html-reconcile` are absent
+// because none of them renders: the first copies rows, and the other two only
+// scan and enqueue the jobs above — which do wait, so gating the planner as
+// well would hold a worker for the convergence twice over before any repair
+// work is even decided on. `screenshot-card` renders, but a person is usually
 // waiting on it, and seconds of latency on a screenshot is a worse trade than
 // the rare bad capture — the row it writes is replaceable, which an index row
 // served from cache is not.
@@ -164,7 +166,6 @@ const HOST_SHELL_GATED_JOB_TYPES = new Set([
   'from-scratch-index',
   'incremental-index',
   'prerender_html',
-  'prerender-html-reconcile',
 ]);
 
 // How long a render job waits for the fleet before starting anyway.
@@ -413,10 +414,7 @@ export class Worker {
       'prerender-html-reconcile': () =>
         this.#queue.register(
           `prerender-html-reconcile`,
-          gated(
-            'prerender-html-reconcile',
-            Tasks['prerenderHtmlReconcile'](taskArgs),
-          ),
+          Tasks['prerenderHtmlReconcile'](taskArgs),
         ),
       'media-cache-gc': () =>
         this.#queue.register(`media-cache-gc`, Tasks['mediaCacheGc'](taskArgs)),

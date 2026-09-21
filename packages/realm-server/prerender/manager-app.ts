@@ -85,23 +85,33 @@ type ServerInfo = {
 // second implementation of it — one on each side of the HTTP boundary — is two
 // places for "current" to be defined differently.
 //
-// Deliberately strict in three ways, each because the cost of being wrong is
-// asymmetric: a gate that waits when it need not delays an index by seconds,
-// while one that proceeds when it should not renders against the bundle this
-// exists to avoid.
+// Three answers, not two, and the third is what keeps the gate from being an
+// outage of its own. `unknown` means this manager cannot answer the question at
+// all: it holds no reported token, which happens whenever it has restarted
+// since the last realm-server report. `registry.hostShellHash` is in-memory and
+// the realm server reports on a timer, so the manager is blind between its own
+// restart and the next report. A caller must not read that as "the fleet is
+// behind" and wait out its bound — every gated job would pay that wait, for
+// nothing.
 //
-//   - No reported token means there is nothing to converge on, not that
-//     everything has.
-//   - No server that can take work is not convergence either. An empty
-//     registry renders nothing.
-//   - A server that reports no warmed token at all has not said it is
-//     current, and is counted as behind. During a rolling deploy of the
-//     prerender fleet itself this can hold for the whole roll, which is what
-//     the caller's bound is for.
+//   - `unknown` — no token reported, so there is nothing to compare against.
+//   - `behind`  — a token, but at least one server that can take work is not
+//                 on it. This is the deploy the gate exists for.
+//   - `converged` — every server that can take work is on it.
+//
+// Strict about what counts as being on it: a server that reports no warmed
+// token at all has not said it is current, and is `behind`. During a rolling
+// deploy of the prerender fleet itself that can hold for the whole roll, which
+// is what the caller's bound is for.
+//
+// An empty registry is `behind` rather than `unknown`: the manager can answer,
+// and the answer is that nothing here can take a render.
 //
 // Draining servers are excluded: they take no new work, so a render cannot
 // land on one and their shell cannot affect a row.
-export function isHostShellConverged({
+export type HostShellConvergenceState = 'converged' | 'behind' | 'unknown';
+
+export function hostShellConvergenceState({
   hostShellHash,
   servers,
 }: {
@@ -110,15 +120,17 @@ export function isHostShellConverged({
     status: 'active' | 'draining';
     warmedHostShellHash?: string | null;
   }[];
-}): boolean {
+}): HostShellConvergenceState {
   if (!hostShellHash) {
-    return false;
+    return 'unknown';
   }
   let eligible = servers.filter((s) => s.status !== 'draining');
   if (eligible.length === 0) {
-    return false;
+    return 'behind';
   }
-  return eligible.every((s) => s.warmedHostShellHash === hostShellHash);
+  return eligible.every((s) => s.warmedHostShellHash === hostShellHash)
+    ? 'converged'
+    : 'behind';
 }
 
 type Registry = {
@@ -393,15 +405,20 @@ export function buildPrerenderManagerApp(options?: {
           }
         }
       }
-      // Assigned only when the heartbeat carried the field. An omitted field
-      // is a server that cannot answer, and overwriting a previous answer
-      // with `undefined` would turn a converged fleet back into an unknown
-      // one on a single malformed heartbeat.
-      if (warmedHostShellHash !== undefined) {
-        if (warmedHostShellHash !== existing.warmedHostShellHash) {
-          existing.warmedHostShellHash = warmedHostShellHash;
-          changed = true;
-        }
+      // Assigned unconditionally, absence included. Each heartbeat replaces
+      // the server's claim rather than amending it, because the claim is about
+      // the browser the server is running *now*: a process that restarted at
+      // this same URL on a build that reports nothing has made no claim, and
+      // keeping its predecessor's would let a freshly-warmed pool of unknown
+      // shell read as current.
+      //
+      // Absence is unambiguous here, which is what makes replacing safe. The
+      // parse above maps every malformed value — wrong type, empty, oversized
+      // — to `null`, a sampled "warmed against nothing I have heard". Only a
+      // field that is genuinely not there arrives as `undefined`.
+      if (warmedHostShellHash !== existing.warmedHostShellHash) {
+        existing.warmedHostShellHash = warmedHostShellHash;
+        changed = true;
       }
       if (changed) {
         logRegistryIfChanged('heartbeat update');
@@ -504,7 +521,10 @@ export function buildPrerenderManagerApp(options?: {
           // produced by a bundle that is already being replaced.
           hostShellHash: registry.hostShellHash ?? null,
           hostShellGeneration: registry.hostShellGeneration ?? null,
-          hostShellConverged: isHostShellConverged({
+          // Three-state on purpose — see `hostShellConvergenceState`. A caller
+          // that collapsed `unknown` into "not converged" would wait out its
+          // whole bound on every job for as long as this manager has no token.
+          hostShellConvergence: hostShellConvergenceState({
             hostShellHash: registry.hostShellHash,
             servers: [...registry.servers.values()],
           }),

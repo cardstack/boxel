@@ -68,6 +68,11 @@ const HOST_SHELL_POLL_INTERVAL_MS = 1_000;
 // success resets the count, so this can only end a wait that is failing now.
 const MAX_HOST_SHELL_POLL_FAILURES = 3;
 
+// Ceiling on one poll's own deadline. The effective deadline is this or the
+// time left in the caller's bound, whichever is smaller, so the wait can never
+// run past what the caller asked for.
+const HOST_SHELL_POLL_TIMEOUT_MS = 5_000;
+
 export function createRemotePrerenderer(
   prerenderServerURL: string,
 ): Prerenderer {
@@ -447,11 +452,17 @@ export function createRemotePrerenderer(
       // opposite case: that is the deploy this exists for, and it is worth
       // waiting out.
       let consecutiveFailures = 0;
-      // Bounded well below the caller's budget so the last poll cannot itself
-      // overrun it, and short enough that a fleet converging in seconds is
-      // noticed in seconds.
-      let pollTimeoutMs = Math.min(5_000, Math.max(1_000, timeoutMs));
-      while (Date.now() - started < timeoutMs) {
+      for (;;) {
+        // Recomputed every iteration and used as the poll's own deadline, so a
+        // slow manager cannot carry the wait past the caller's bound. Taking a
+        // fixed poll timeout instead lets the last request run its full length
+        // after the budget is spent — and for a bound shorter than one poll,
+        // the very first request does.
+        let remaining = timeoutMs - (Date.now() - started);
+        if (remaining <= 0) {
+          break;
+        }
+        let pollTimeoutMs = Math.min(HOST_SHELL_POLL_TIMEOUT_MS, remaining);
         let ac = new AbortController();
         let timer = setTimeout(() => ac.abort(), pollTimeoutMs);
         (timer as any).unref?.();
@@ -463,21 +474,30 @@ export function createRemotePrerenderer(
           });
           if (response.ok) {
             let body = (await response.json()) as {
-              data?: { attributes?: { hostShellConverged?: unknown } };
+              data?: { attributes?: { hostShellConvergence?: unknown } };
             };
-            // Strictly `true`. A manager too old to report the field answers
-            // `undefined`, and treating that as converged would make the gate
-            // silently absent during exactly the deploy it exists for — so it
-            // counts as not converged and the caller's bound ends the wait.
-            if (body?.data?.attributes?.hostShellConverged === true) {
+            let state = body?.data?.attributes?.hostShellConvergence;
+            if (state === 'converged') {
               return {
                 converged: true,
                 waitedMs: Date.now() - started,
                 outcome: 'converged',
               };
             }
-            lastOutcome = 'timeout';
-            consecutiveFailures = 0;
+            // `behind` is the only answer worth waiting out — it is the deploy
+            // this exists for. Everything else is the manager failing to
+            // answer: `unknown` is a manager that holds no reported token
+            // (it has restarted since the last realm-server report), and an
+            // absent field is a manager too old to have the concept. Waiting
+            // on either would spend the whole bound on every job for as long
+            // as that lasts, so both count toward giving up.
+            if (state === 'behind') {
+              lastOutcome = 'timeout';
+              consecutiveFailures = 0;
+            } else {
+              lastOutcome = 'unavailable';
+              consecutiveFailures++;
+            }
           } else {
             lastOutcome = 'unavailable';
             consecutiveFailures++;
@@ -493,11 +513,11 @@ export function createRemotePrerenderer(
         if (consecutiveFailures >= MAX_HOST_SHELL_POLL_FAILURES) {
           break;
         }
-        let remaining = timeoutMs - (Date.now() - started);
-        if (remaining <= 0) {
+        let left = timeoutMs - (Date.now() - started);
+        if (left <= 0) {
           break;
         }
-        await delay(Math.min(HOST_SHELL_POLL_INTERVAL_MS, remaining));
+        await delay(Math.min(HOST_SHELL_POLL_INTERVAL_MS, left));
       }
       return {
         converged: false,

@@ -13,7 +13,7 @@ import {
   stampStaleShellFailure,
 } from '../prerender/prerender-app.ts';
 import { parseHostShellGeneration } from '../prerender/prerender-constants.ts';
-import { isHostShellConverged } from '../prerender/manager-app.ts';
+import { hostShellConvergenceState } from '../prerender/manager-app.ts';
 import {
   awaitHostShellBeforeRender,
   hostShellGateTimeoutMs,
@@ -486,26 +486,29 @@ module(basename(import.meta.filename), function () {
 
   // Whether every server that could take a render is running the shell the
   // realm server says it is serving. This is what the indexing gate waits on,
-  // so each case below is a reason a render job either starts or holds.
-  module('isHostShellConverged', function () {
+  // so each case below is a reason a render job either starts, holds, or stops
+  // asking.
+  module('hostShellConvergenceState', function () {
     let active = (warmedHostShellHash?: string | null) =>
       ({ status: 'active', warmedHostShellHash }) as const;
 
     test('every eligible server on the reported shell is convergence', function (assert) {
-      assert.true(
-        isHostShellConverged({
+      assert.strictEqual(
+        hostShellConvergenceState({
           hostShellHash: 'aaa',
           servers: [active('aaa'), active('aaa')],
         }),
+        'converged',
       );
     });
 
     test('one server still behind holds the whole fleet', function (assert) {
-      assert.false(
-        isHostShellConverged({
+      assert.strictEqual(
+        hostShellConvergenceState({
           hostShellHash: 'aaa',
           servers: [active('aaa'), active('bbb')],
         }),
+        'behind',
         'a render can land on either, so either being behind is the answer',
       );
     });
@@ -515,18 +518,20 @@ module(basename(import.meta.filename), function () {
     // that cannot say. Neither is a claim to be current, and reading either as
     // one would open the gate during the deploy it exists for.
     test('a server that has not said it is current is not current', function (assert) {
-      assert.false(
-        isHostShellConverged({
+      assert.strictEqual(
+        hostShellConvergenceState({
           hostShellHash: 'aaa',
           servers: [active('aaa'), active(null)],
         }),
+        'behind',
         'null is a sampled answer, and the answer is "behind"',
       );
-      assert.false(
-        isHostShellConverged({
+      assert.strictEqual(
+        hostShellConvergenceState({
           hostShellHash: 'aaa',
           servers: [active('aaa'), active(undefined)],
         }),
+        'behind',
         'an older server that omits the field has made no claim',
       );
     });
@@ -535,34 +540,46 @@ module(basename(import.meta.filename), function () {
     // its shell cannot reach a row. Counting it would hold every gate for the
     // length of every prerender roll.
     test('a draining server is not counted', function (assert) {
-      assert.true(
-        isHostShellConverged({
+      assert.strictEqual(
+        hostShellConvergenceState({
           hostShellHash: 'aaa',
           servers: [
             active('aaa'),
             { status: 'draining', warmedHostShellHash: 'bbb' },
           ],
         }),
+        'converged',
       );
     });
 
-    test('nothing to converge on, and nothing to converge, are both false', function (assert) {
-      assert.false(
-        isHostShellConverged({
+    // The state that keeps the gate from becoming an outage of its own. A
+    // manager holding no token has restarted since the last realm-server
+    // report and cannot answer at all; a caller that read this as "behind"
+    // would spend its whole bound on every job until the next report.
+    test('no reported token is unknown, not behind', function (assert) {
+      assert.strictEqual(
+        hostShellConvergenceState({
           hostShellHash: undefined,
           servers: [active('aaa')],
         }),
-        'no reported token means there is no current shell to be on',
+        'unknown',
       );
-      assert.false(
-        isHostShellConverged({ hostShellHash: 'aaa', servers: [] }),
+    });
+
+    // Distinct from `unknown`: the manager can answer, and the answer is that
+    // nothing here can take a render.
+    test('a fleet with nothing able to render is behind, not unknown', function (assert) {
+      assert.strictEqual(
+        hostShellConvergenceState({ hostShellHash: 'aaa', servers: [] }),
+        'behind',
         'an empty registry renders nothing, which is not the same as being ready',
       );
-      assert.false(
-        isHostShellConverged({
+      assert.strictEqual(
+        hostShellConvergenceState({
           hostShellHash: 'aaa',
           servers: [{ status: 'draining', warmedHostShellHash: 'aaa' }],
         }),
+        'behind',
         'a fleet that is entirely draining has no server that can take a render',
       );
     });

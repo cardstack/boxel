@@ -890,12 +890,12 @@ module(basename(import.meta.filename), function (hooks) {
         },
       };
     }
-    let health = (hostShellConverged: unknown) => ({
-      data: { attributes: { hostShellConverged } },
+    let health = (hostShellConvergence: unknown) => ({
+      data: { attributes: { hostShellConvergence } },
     });
 
     test('returns as soon as the fleet is current', async function (assert) {
-      let stub = stubFetch([health(true)]);
+      let stub = stubFetch([health('converged')]);
       try {
         let prerenderer = createRemotePrerenderer('http://127.0.0.1:1');
         let result = await prerenderer.awaitHostShellConvergence!({
@@ -910,7 +910,7 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('gives up when the bound expires, without throwing', async function (assert) {
-      let stub = stubFetch([health(false)]);
+      let stub = stubFetch([health('behind')]);
       try {
         let prerenderer = createRemotePrerenderer('http://127.0.0.1:1');
         let result = await prerenderer.awaitHostShellConvergence!({
@@ -929,7 +929,7 @@ module(basename(import.meta.filename), function (hooks) {
 
     // A manager too old to report the field answers `undefined`. Reading that
     // as converged would make the gate silently absent during exactly the
-    // deploy it exists for, so only a literal `true` opens it.
+    // deploy it exists for, so only `'converged'` opens it.
     test('a manager that cannot answer the question does not open the gate', async function (assert) {
       let stub = stubFetch([health(undefined)]);
       try {
@@ -940,6 +940,59 @@ module(basename(import.meta.filename), function (hooks) {
         assert.false(result.converged);
       } finally {
         stub.restore();
+      }
+    });
+
+    // A manager that restarted since the last realm-server report holds no
+    // token and cannot answer. Waiting that out would cost every render job
+    // its whole bound for as long as the manager stays blind, so `unknown`
+    // gives up on the same counter a network failure uses.
+    test('a blind manager ends the wait rather than being waited out', async function (assert) {
+      let stub = stubFetch([health('unknown')]);
+      try {
+        let prerenderer = createRemotePrerenderer('http://127.0.0.1:1');
+        let started = Date.now();
+        let result = await prerenderer.awaitHostShellConvergence!({
+          timeoutMs: 120_000,
+        });
+        let elapsed = Date.now() - started;
+        assert.false(result.converged);
+        assert.strictEqual(result.outcome, 'unavailable');
+        assert.true(
+          elapsed < 30_000,
+          `gave up after ${elapsed}ms rather than running out a 120s bound`,
+        );
+      } finally {
+        stub.restore();
+      }
+    });
+
+    // The bound is the caller's, and one poll's own deadline has to fit inside
+    // whatever is left of it. A fixed poll timeout lets a bound shorter than
+    // one poll be overrun by the very first request.
+    test('a bound shorter than one poll is still honoured', async function (assert) {
+      let originalFetch = globalThis.fetch;
+      // Never resolves on its own; only the abort signal can end it.
+      (globalThis as any).fetch = (_url: unknown, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () =>
+            reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+          );
+        });
+      try {
+        let prerenderer = createRemotePrerenderer('http://127.0.0.1:1');
+        let started = Date.now();
+        let result = await prerenderer.awaitHostShellConvergence!({
+          timeoutMs: 50,
+        });
+        let elapsed = Date.now() - started;
+        assert.false(result.converged);
+        assert.true(
+          elapsed < 1_000,
+          `a 50ms bound must not block for a whole poll; took ${elapsed}ms`,
+        );
+      } finally {
+        (globalThis as any).fetch = originalFetch;
       }
     });
 

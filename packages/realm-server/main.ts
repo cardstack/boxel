@@ -426,6 +426,15 @@ const smokeTestHostApp = async () => {
 // reachable): a deploy restarts this process, so a new bundle is reported
 // here and picked up by the prerender fleet. Best-effort — a missing or
 // unreachable manager must never block realm-server boot.
+// How often the realm server re-reports its host-shell token. Bounds how long
+// a manager that restarted outside a deploy stays without one — and therefore
+// how long an indexing gate asking it gets no answer. Cheap enough to be
+// frequent: one small POST and one idempotent single-row UPDATE per task.
+const hostShellReportIntervalMs = Math.max(
+  5_000,
+  Number(process.env.HOST_SHELL_REPORT_INTERVAL_MS ?? 60_000) || 60_000,
+);
+
 const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   try {
     let html = await getIndexHTML();
@@ -907,6 +916,24 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   // The post-deployment hook reports again once the service is fully stable.
   // Fire-and-forget — a missing/unreachable manager must never affect serving.
   void reportHostShellToManager(dbAdapter);
+
+  // …and again on a timer, because the manager holds the token in memory and
+  // restarts on its own schedule. Between such a restart and the next report
+  // it can say nothing about which shell is current, and the only other report
+  // sites are this boot and the post-deployment hook — so without this a
+  // manager that restarted outside a deploy stays blind until the next one.
+  //
+  // Idempotent by construction: the manager ignores a token it already holds,
+  // and re-claiming a generation for the shell already recorded returns that
+  // shell's number without advancing anything. It also makes a host-only
+  // deploy self-healing — the hash is re-read each time, so a new bundle
+  // published under a still-running realm server is noticed here rather than
+  // waiting for a restart.
+  let hostShellReportTimer = setInterval(
+    () => void reportHostShellToManager(dbAdapter),
+    hostShellReportIntervalMs,
+  );
+  hostShellReportTimer.unref();
 
   // Begin the reconciler's background poll loop (LISTEN realm_registry +
   // 30s safety poll). It picks up changes from peer instances (publish,

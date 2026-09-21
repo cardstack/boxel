@@ -245,36 +245,70 @@ module(basename(import.meta.filename), function () {
             },
           },
         });
-      let converged = async () => {
+      let convergence = async () => {
         let health = await request.get('/');
-        return health.body.data.attributes.hostShellConverged;
+        return health.body.data.attributes.hostShellConvergence;
       };
+
+      // Before any realm server has reported, this manager cannot answer the
+      // question at all. A caller must be able to tell that apart from a fleet
+      // that is behind, or it waits out its whole bound for nothing.
+      await heartbeat(serverUrlA!, 'aaa111');
+      assert.strictEqual(
+        await convergence(),
+        'unknown',
+        'no reported token is unknown, not behind',
+      );
 
       await request
         .post('/host-shell')
         .send({ data: { attributes: { hash: 'aaa111' } } });
 
       await heartbeat(serverUrlA!, 'bbb222');
-      assert.false(
-        await converged(),
+      assert.strictEqual(
+        await convergence(),
+        'behind',
         'a server still on the outgoing shell holds the fleet',
       );
 
       await heartbeat(serverUrlA!, 'aaa111');
-      assert.true(await converged(), 'the only server has caught up');
+      assert.strictEqual(
+        await convergence(),
+        'converged',
+        'the only server has caught up',
+      );
 
       // A second server that says nothing is not a second server that is
       // current. During a roll of the prerender build itself this is the
       // normal state, and the gate's bound is what keeps it from being a
       // stall.
       await heartbeat(serverUrlB!);
-      assert.false(
-        await converged(),
+      assert.strictEqual(
+        await convergence(),
+        'behind',
         'a server that has made no claim is not counted as current',
       );
 
       await heartbeat(serverUrlB!, 'aaa111');
-      assert.true(await converged(), 'both servers are on the current shell');
+      assert.strictEqual(
+        await convergence(),
+        'converged',
+        'both servers are on the current shell',
+      );
+
+      // Each heartbeat replaces the server's claim rather than amending it. A
+      // process that restarted at this same URL on a build that reports
+      // nothing has made no claim, and keeping its predecessor's would let a
+      // freshly-warmed pool of unknown shell read as current.
+      await heartbeat(serverUrlB!);
+      assert.strictEqual(
+        await convergence(),
+        'behind',
+        'an omitted field clears the cached answer rather than preserving it',
+      );
+
+      await heartbeat(serverUrlB!, 'aaa111');
+      assert.strictEqual(await convergence(), 'converged');
 
       // Per-server, so an operator reading a gate that will not open can see
       // which server is holding it.
