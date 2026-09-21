@@ -92,12 +92,16 @@ GITHUB_TOKEN=$(gh auth token) node collectors/actions-queue.ts   # loops, defaul
 
 It emits four event types, all on channel `boxel:actions-queue`:
 
-| `event_type`                             | one line per              | carries                                                                                     |
-| ---------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------- |
-| `job`                                    | queued or running job     | branch, actor, workflow, runner labels, `queued_seconds`, `running_seconds`, `current_step` |
-| `group`                                  | dimension × key           | `dimension` (branch / actor / workflow), `key`, `queued`, `running`                         |
-| `snapshot`                               | sample                    | `queued_jobs`, `running_jobs`, `active_runs`, `rate_limit_remaining`                        |
-| `collector-error`, `collector-throttled` | failure or skipped sample | why the series has a gap                                                                    |
+| `event_type`                             | one line per                   | carries                                                                                     |
+| ---------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------- |
+| `job`                                    | queued, pending or running job | branch, actor, workflow, runner labels, `queued_seconds`, `running_seconds`, `current_step` |
+| `group`                                  | dimension × key                | `dimension` (branch / actor / workflow), `key`, `queued`, `running`, `pending`              |
+| `snapshot`                               | sample                         | `queued_jobs`, `running_jobs`, `pending_jobs`, `active_runs`, `rate_limit_remaining`        |
+| `collector-error`, `collector-throttled` | failure or skipped sample      | why the series has a gap                                                                    |
+
+GitHub reports a job as `pending` while a concurrency group holds it, and as
+`queued` while it waits for a runner. The two are counted apart, so a
+self-imposed hold never reads as runner-pool saturation.
 
 Grouped depth is emitted as its own lines rather than nested on the snapshot
 because LogQL flattens nested JSON into one label per key, which for dynamic
@@ -109,7 +113,7 @@ Two constraints are load-bearing:
 - **It must not run as a scheduled GitHub Actions workflow.** It would queue
   behind the backlog it measures and go blind during the incident it exists
   for. Hosted, it belongs on a schedule outside Actions.
-- **A sample costs one request per active run, plus two.** The hourly spend
+- **A sample costs one request per active run, plus three.** The hourly spend
   therefore scales with how busy the repository is, against a token's 5,000
   requests an hour. At the observed peak of ~50 concurrent runs a 60-second
   interval spends around 3,200 an hour, which is comfortable; 30 seconds
