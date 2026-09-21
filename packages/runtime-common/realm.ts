@@ -3,7 +3,7 @@ import { resolveRangeHeader } from './http-range.ts';
 import {
   awaitRealmIndexSettled,
   INDEX_WRITING_JOB_TYPES,
-  outstandingIndexJobs,
+  readLaneHoldersBestEffort,
   indexingConcurrencyGroup,
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
   CONTENT_MOVING_INDEX_JOB_TYPES,
@@ -666,6 +666,11 @@ const ARCHIVED_SEAL_EXEMPT_PATHS = new Set(['_readiness-check', '_session']);
 // carries its own, longer one — a published realm's HTML can take minutes and
 // its callers are pollers with deadlines to match.
 const READINESS_REQUEST_BUDGET_MS = 10_000;
+// How long the readiness lane gate will spend naming the jobs that held it.
+// Separate from the budget above and much smaller, because it is spent after
+// that budget is already gone: it buys a log line, not an answer, so it is
+// sized to be lost in the noise of a request that has already held for 10s.
+const LANE_DIAGNOSTIC_BUDGET_MS = 1_000;
 // How long a card read holds its connection on the read-your-writes indexing
 // drain (see `drainRequestersOwnIndexing`) before serving the current index
 // generation anyway. Bounded for the same reason the readiness gates are: an
@@ -2359,21 +2364,28 @@ export class Realm {
       // Name the jobs. This is the one gate here that can hold a realm for
       // hours on state no part of this process owns, and without the ids an
       // operator cannot tell it from the two in-process gates above — they
-      // differ only in which log line is absent. The read is after the fact, so
-      // a lane that drained between the gate expiring and this query is a real
-      // outcome rather than a missing answer.
-      let holders = await outstandingIndexJobs(
+      // differ only in which log line is absent.
+      //
+      // Strictly best-effort, and bounded: the read happens after the budget is
+      // spent, so it must not be able to turn this 503 into a 500 or extend the
+      // request. It reports three distinct outcomes, because a lane that
+      // drained just after the gate expired and a lane nobody could read want
+      // different next steps from whoever reads this.
+      let holders = await readLaneHoldersBestEffort(
         this.#dbAdapter,
         this.url,
         INDEX_WRITING_JOB_TYPES,
+        LANE_DIAGNOSTIC_BUDGET_MS,
       );
       this.#log.warn(
         `readiness check for ${this.url} is still waiting on queued index work after ${Date.now() - laneWaitStartedAt}ms: ` +
-          (holders.length
-            ? holders
-                .map(({ id, jobType }) => `job ${id} (${jobType})`)
-                .join(', ')
-            : 'the lane drained after the gate expired'),
+          (holders === undefined
+            ? `could not read the lane within ${LANE_DIAGNOSTIC_BUDGET_MS}ms`
+            : holders.length
+              ? holders
+                  .map(({ id, jobType }) => `job ${id} (${jobType})`)
+                  .join(', ')
+              : 'the lane drained after the gate expired'),
       );
       return notReady('index');
     }

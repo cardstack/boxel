@@ -297,6 +297,43 @@ export async function outstandingIndexJobs(
   return rows.map((row) => ({ id: Number(row.id), jobType: row.job_type }));
 }
 
+// `outstandingIndexJobs` for a log line on a path that must still answer.
+//
+// Never throws, and never outlives `timeoutMs`. Both matter because the only
+// caller reads the lane AFTER a gate has already spent its budget: a rejection
+// there would replace that gate's deliberate answer with an unexpected-exception
+// 500, losing the headers the answer is carried in, and a slow read would push
+// the request past the deadline the budget exists to bound. A lane that has not
+// drained is also the case where the database is least likely to answer
+// quickly, so neither is a remote possibility — it is the expected weather.
+//
+// Undefined means the read failed or did not finish, which a caller reports
+// differently from an empty array. "Could not read the lane" and "the lane
+// drained after the gate expired" send an operator to different places, and
+// collapsing them into one empty result would assert the second on evidence of
+// neither.
+export async function readLaneHoldersBestEffort(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+  jobTypes: string[] | undefined,
+  timeoutMs: number,
+): Promise<{ id: number; jobType: string }[] | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let expired = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => resolve(undefined), timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      outstandingIndexJobs(dbAdapter, realmURL, jobTypes).catch(
+        () => undefined,
+      ),
+      expired,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function awaitRealmIndexSettled(
   dbAdapter: DBAdapter,
   realmURL: string,

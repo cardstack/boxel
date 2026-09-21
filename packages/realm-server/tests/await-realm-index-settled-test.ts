@@ -6,6 +6,7 @@ import {
   awaitRealmIndexSettled,
   indexingConcurrencyGroup,
   outstandingIndexJobs,
+  readLaneHoldersBestEffort,
   INDEX_WRITING_JOB_TYPES,
 } from '@cardstack/runtime-common/jobs/indexing';
 import {
@@ -370,6 +371,100 @@ module(basename(import.meta.filename), function (hooks) {
         await outstandingIndexJobs(queueless, realmURL),
         [],
         'no query, so nothing to report',
+      );
+    });
+  });
+
+  // The readiness gate reads the lane only after its budget is already spent,
+  // to name what held it. That read sits between a decided 503 and returning
+  // it, so anything it does to the response is a defect: a throw would reach
+  // the router, which answers an unexpected-exception 500 carrying neither
+  // `X-Boxel-Not-Ready` nor `Retry-After`, and a slow read would extend a
+  // request past the deadline the budget exists to bound.
+  module('readLaneHoldersBestEffort', function () {
+    // `kind` has to stay 'pg' — `outstandingIndexJobs` short-circuits on any
+    // other adapter and would never reach the stubbed `execute`, so the test
+    // would pass without exercising the failure at all.
+    function adapterWhoseQueries(behaviour: () => Promise<never>): PgAdapter {
+      return Object.create(dbAdapter, {
+        execute: { value: behaviour },
+      }) as PgAdapter;
+    }
+
+    test('reports the holders when the read succeeds', async function (assert) {
+      let jobId = await enqueueIndexJob(dbAdapter, realmURL);
+      assert.deepEqual(
+        await readLaneHoldersBestEffort(
+          dbAdapter,
+          realmURL,
+          INDEX_WRITING_JOB_TYPES,
+          5_000,
+        ),
+        [{ id: jobId, jobType: 'from-scratch-index' }],
+        'the happy path is unchanged',
+      );
+    });
+
+    test('reports undefined rather than throwing when the read fails', async function (assert) {
+      let failing = adapterWhoseQueries(() =>
+        Promise.reject(new Error('connection terminated unexpectedly')),
+      );
+      assert.strictEqual(
+        await readLaneHoldersBestEffort(
+          failing,
+          realmURL,
+          INDEX_WRITING_JOB_TYPES,
+          5_000,
+        ),
+        undefined,
+        'a database error is absorbed, not propagated to the caller',
+      );
+    });
+
+    test('reports undefined rather than hanging when the read stalls', async function (assert) {
+      let stalled = adapterWhoseQueries(() => new Promise<never>(() => {}));
+      let startedAt = Date.now();
+      assert.strictEqual(
+        await readLaneHoldersBestEffort(
+          stalled,
+          realmURL,
+          INDEX_WRITING_JOB_TYPES,
+          200,
+        ),
+        undefined,
+        'the budget decides, not the query',
+      );
+      // The query never settles, so without the bound this await never
+      // returns and the assertion above could not run at all.
+      assert.true(
+        Date.now() - startedAt < 3_000,
+        'it returned on its own budget rather than waiting on the query',
+      );
+    });
+
+    // An empty lane and an unreadable one are different answers, and the gate
+    // logs them differently. Collapsing the failure into `[]` would state that
+    // the lane had drained on evidence that nothing was read.
+    test('distinguishes an empty lane from an unreadable one', async function (assert) {
+      assert.deepEqual(
+        await readLaneHoldersBestEffort(
+          dbAdapter,
+          realmURL,
+          INDEX_WRITING_JOB_TYPES,
+          5_000,
+        ),
+        [],
+        'an empty lane reads as empty',
+      );
+      assert.strictEqual(
+        await readLaneHoldersBestEffort(
+          adapterWhoseQueries(() => Promise.reject(new Error('boom'))),
+          realmURL,
+          INDEX_WRITING_JOB_TYPES,
+          5_000,
+        ),
+        undefined,
+        'a failed read is not an empty lane',
       );
     });
   });
