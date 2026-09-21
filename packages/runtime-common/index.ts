@@ -9,6 +9,7 @@ import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RenderRouteOptions } from './render-route-options.ts';
 import type { Definition } from './definitions.ts';
+import type { OperationsTransport } from './card-operations/client.ts';
 import type { OperationLoweringIssue } from './card-operations/types.ts';
 import type {
   CaptureContentType,
@@ -1633,6 +1634,13 @@ export * from './definition-lookup.ts';
 export * from './loader-epoch.ts';
 export * from './definitions.ts';
 export type { JsonValue } from './json-validation.ts';
+// The client side of the envelope — the bucket a caller invokes through, the
+// batch builder, and the transport interface the host implements. Exported
+// from the barrel rather than from the `card-operations` entry because a card
+// module is one of its callers and the barrel is what a card module can
+// import; it reaches neither bxl nor a realm, so nothing here costs a consumer
+// the typecheck program the note below is about.
+export * from './card-operations/client.ts';
 // Only the lowered *shapes*, not the pass that produces them: lowering reaches
 // `@cardstack/bxl` for the program canonicalizer, and a barrel re-export would
 // pull bxl's sources into the typecheck program of every package that imports
@@ -2109,6 +2117,30 @@ export interface CardCreator {
       doc?: LooseSingleCardDocument;
     },
   ): Promise<string>;
+}
+
+// The transport an operation is carried out over, as a card module reaches it.
+//
+// A card declares and invokes its operations from `@cardstack/base/operations`,
+// which loads inside a card module — where there is no service to inject and no
+// fetch that carries the caller's session. So the host registers the one
+// implementation here on the way up, the same way it registers the realm
+// subscription and the choosers above it, and a call reads it back through this
+// function.
+//
+// In node there is nothing to register: an operation invoked from a card is a
+// request from a session, and the realm carries out a batch it is sent rather
+// than one it sends itself. So this refuses outright rather than no-opping —
+// there is no partial behavior to fall back to, and a silent no-op would turn a
+// write nobody performed into a call that appeared to succeed.
+export function getOperationsTransport(): OperationsTransport {
+  let here = globalThis as any;
+  if (!here._CARDSTACK_OPERATIONS_TRANSPORT) {
+    throw new Error(
+      `no operations transport is available in this environment: an operation is carried out over its realm's HTTP endpoint, which the host supplies`,
+    );
+  }
+  return here._CARDSTACK_OPERATIONS_TRANSPORT as OperationsTransport;
 }
 
 export interface RealmSubscribe {
