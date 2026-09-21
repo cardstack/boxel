@@ -495,16 +495,20 @@ export class PackageShimHandler {
   // so the message (and the copy-paste import, which uses the first
   // entry) is stable regardless of shim registration/resolve order.
   private findExportSources = (symbol: string): string[] => {
-    let matches: string[] = [];
+    // By module rather than by key: a shim is registered under every spelling
+    // it can be asked for, so one module owns several entries here and would
+    // otherwise be named once per spelling in a message about which module to
+    // import from.
+    let matches = new Set<string>();
     for (let [moduleId, exports] of this.resolvedExports) {
       if (
         canOwnExports(exports) &&
         Object.prototype.hasOwnProperty.call(exports, symbol)
       ) {
-        matches.push(toImportSpecifier(moduleId));
+        matches.add(toImportSpecifier(moduleId));
       }
     }
-    return matches.sort();
+    return [...matches].sort();
   };
 
   shimAsyncModule(descriptor: ModuleDescriptor, retryDeps?: ShimRetryDeps) {
