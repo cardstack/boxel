@@ -19,7 +19,8 @@ backends — so the absolute numbers are inflated. Both arms of every A/B below
 were measured in the same session minutes apart, so the ratios hold even though
 the milliseconds do not transfer to an idle server.
 
-`lukemelia/tessar-admin`, 2,150 live `instance` rows, 57 distinct leaf types:
+One user realm — 4,455 rows in all, of which 2,150 are live `instance` rows
+across 57 distinct leaf types (see CS-13061 for which realm):
 
 | Variant                                         | Plan                                         | Execution    |
 | ----------------------------------------------- | -------------------------------------------- | ------------ |
@@ -76,7 +77,7 @@ Three changes, smallest and most load-bearing first.
    away, the realm-wide sequential _read_ stays.
 
    It did not earn the write cost. Reproduced locally on a 2,150-row realm with
-   the same shape as `tessar-admin` (Postgres 16, `en_US.UTF-8`, idle machine):
+   the same shape as the realm above (Postgres 16, `en_US.UTF-8`, idle machine):
 
    | Variant                             | Plan                                   | Execution |
    | ----------------------------------- | -------------------------------------- | --------- |

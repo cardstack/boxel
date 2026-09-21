@@ -2232,8 +2232,8 @@ export class Batch {
   // account of the groups whose counts could have moved. A row written without
   // that read can be leaving a type nothing else in the pass names, and this
   // path would carry that type's now-stale count forward as if it were still
-  // current. Same polarity as the `bumpAllTypes` decision below: absence reads
-  // as "unknown", never as "unaffected".
+  // current. Same polarity as the `bumpAllTypes` decision `done()` makes from
+  // the same predicate: absence reads as "unknown", never as "unaffected".
   //
   // The other two are cost, not correctness. A realm that has never completed a
   // pass has no prior entries to carry, and a pass that moved more types than
