@@ -381,6 +381,9 @@ catalogs:
     ember-page-title:
       specifier: ^9.0.3
       version: 9.0.3
+    ember-provide-consume-context:
+      specifier: ^0.8.0
+      version: 0.8.0
     ember-qunit:
       specifier: ^9.0.4
       version: 9.1.0
@@ -913,8 +916,8 @@ importers:
   packages/base:
     dependencies:
       ember-provide-consume-context:
-        specifier: ^0.7.0
-        version: 0.7.1(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
+        specifier: 'catalog:'
+        version: 0.8.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(@glimmer/component@2.1.1)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
       ember-source:
         specifier: 'catalog:'
         version: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)
@@ -1171,7 +1174,7 @@ importers:
         specifier: 'catalog:'
         version: 1.1.2(@babel/core@7.29.7)(@glimmer/component@2.1.1)(@glint/template@1.7.7)(ember-resources@7.0.8(@glimmer/component@2.1.1)(@glint/template@1.7.7))
       ember-provide-consume-context:
-        specifier: ^0.8.0
+        specifier: 'catalog:'
         version: 0.8.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(@glimmer/component@2.1.1)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
       ember-resources:
         specifier: 'catalog:'
@@ -1964,7 +1967,7 @@ importers:
         specifier: 'catalog:'
         version: 1.1.2(@babel/core@7.29.7)(@glimmer/component@2.1.1)(@glint/template@1.7.7)(ember-resources@7.0.8(@glimmer/component@2.1.1)(@glint/template@1.7.7))
       ember-provide-consume-context:
-        specifier: ^0.8.0
+        specifier: 'catalog:'
         version: 0.8.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(@glimmer/component@2.1.1)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
     devDependencies:
       '@babel/plugin-proposal-decorators':
@@ -2524,7 +2527,7 @@ importers:
         specifier: 'catalog:'
         version: 9.0.3
       ember-provide-consume-context:
-        specifier: ^0.8.0
+        specifier: 'catalog:'
         version: 0.8.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(@glimmer/component@2.1.1)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
       ember-qunit:
         specifier: 'catalog:'
@@ -2719,8 +2722,8 @@ importers:
         specifier: 'catalog:'
         version: 4.2.0
       ember-provide-consume-context:
-        specifier: ^0.7.0
-        version: 0.7.1(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
+        specifier: 'catalog:'
+        version: 0.8.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(@glimmer/component@2.1.1)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
       ember-source:
         specifier: 'catalog:'
         version: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)
@@ -10062,12 +10065,6 @@ packages:
       '@glimmer/component': ^2.0.0
       ember-basic-dropdown: ^9.0.0
       ember-concurrency: ^5.1.0
-
-  ember-provide-consume-context@0.7.1:
-    resolution: {integrity: sha512-53eg83K8C5qRbg/YBRXsst9QsF9gtGsyeNbp1pyNpEg8r5ukRdf79GJkbHNyde1xsfBKlu99dzErAmXoSJqUZQ==}
-    peerDependencies:
-      '@ember/test-helpers': ^2.9.1 || ^3.0.0 || ^4.0.0 || >= 5.0.0
-      ember-source: ^4.8.0 || ^5.0.0 || >= 6.0.0
 
   ember-provide-consume-context@0.8.0:
     resolution: {integrity: sha512-/H9y7A6Q7Dlp+Gyu/khVe8DEyM9STrvZijHCbff3zLX4lKZn3bzoNO/GYlgIkbrhPlh6PCZvxb7NhGIYNbqTBQ==}
@@ -24160,15 +24157,6 @@ snapshots:
       ember-truth-helpers: 5.0.0
     transitivePeerDependencies:
       - '@babel/core'
-      - supports-color
-
-  ember-provide-consume-context@0.7.1(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)):
-    dependencies:
-      '@ember/test-helpers': 5.4.3(@babel/core@7.29.7)
-      '@embroider/addon-shim': 1.10.3
-      '@glimmer/component': 2.1.1
-      ember-source: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)
-    transitivePeerDependencies:
       - supports-color
 
   ember-provide-consume-context@0.8.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(@glimmer/component@2.1.1)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)):
