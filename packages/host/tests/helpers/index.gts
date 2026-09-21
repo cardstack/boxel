@@ -19,7 +19,6 @@ import type { LinkShapePolicy } from '@cardstack/runtime-common';
 import {
   CachingDefinitionLookup,
   cardDefComputedFields,
-  computeContentHash,
   ensureTrailingSlash,
   getCreatedTime,
   IndexWriter,
@@ -1794,22 +1793,6 @@ export async function getFileCreatedAt(
 ): Promise<number | undefined> {
   let db = await getDbAdapter();
   return getCreatedTime(db, realm.url, localPath);
-}
-
-// The `meta.version` a write of this file answers with: a hash of the bytes the
-// realm is holding for it. Read off the adapter rather than out of
-// `realm_file_meta`, so a test comparing a response against it is comparing two
-// independently derived readings of the same bytes instead of one recorded
-// value against itself.
-export async function getFileContentHash(
-  adapter: TestRealmAdapter,
-  localPath: string,
-): Promise<string> {
-  let file = await adapter.openFile(localPath);
-  if (!file) {
-    throw new Error(`no file at ${localPath} in the test realm`);
-  }
-  return computeContentHash(file.content as string);
 }
 
 function changedEntry(

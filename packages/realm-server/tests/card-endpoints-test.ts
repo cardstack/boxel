@@ -206,6 +206,15 @@ module(basename(import.meta.filename), function () {
             200,
             `HTTP 200 status: ${response.text}`,
           );
+          // The positive control comes first. An absence assertion on its own
+          // would also hold for a response carrying no `meta` at all, so it
+          // would pass for a broken read as readily as for a correct one —
+          // establishing that this IS a populated card meta is what makes the
+          // absence below a statement about `version`.
+          assert.ok(
+            response.body.data.meta.adoptsFrom,
+            'the response carries a populated card meta',
+          );
           assert.strictEqual(
             response.body.data.meta.version,
             undefined,

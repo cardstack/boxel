@@ -2052,6 +2052,16 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         let [result] = response.body['atomic:results'];
+        // The positive control, for the reason absence assertions need one: a
+        // result carrying no meta at all would satisfy the check below just as
+        // well as one deliberately withholding the key. A write always reports
+        // a version, so finding one establishes that this meta is populated and
+        // the absence is about `baseMatched`.
+        assert.strictEqual(
+          typeof result.data.meta.version,
+          'string',
+          'the result carries a populated write meta',
+        );
         assert.false(
           'baseMatched' in result.data.meta,
           `the result reports nothing about a base: ${JSON.stringify(
