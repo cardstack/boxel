@@ -1983,7 +1983,14 @@ module(basename(import.meta.filename), function () {
                 type: 'card',
                 attributes: { firstName: 'Mango' },
                 meta: {
-                  adoptsFrom: { module: rri('./friend.gts'), name: 'Friend' },
+                  // Spelled absolutely, not as `./friend.gts`. A create's card
+                  // lands under its type's directory, so a realm-relative
+                  // module reference in the payload resolves against that
+                  // directory rather than the realm root.
+                  adoptsFrom: {
+                    module: rri(`${testRealmHref}friend.gts`),
+                    name: 'Friend',
+                  },
                 },
               },
             })
@@ -5200,17 +5207,21 @@ module(basename(import.meta.filename), function () {
         // Comparing the two reported values against the file rather than
         // against each other is what makes this catch a reporting path that
         // answers confidently with the wrong card's hash.
+        // Run against `person-1`, which nothing links to, so the pass
+        // invalidates exactly the card the request wrote. A card with a
+        // dependent is the subject of the next test instead, because this
+        // helper compares the whole invalidation list.
         test('a patch reports the stored bytes’ version on its response and on the index event', async function (assert) {
           let realmEventTimestampStart = Date.now();
 
           let response = await request
-            .patch('/hassan')
+            .patch('/person-1')
             .send({
               data: {
                 type: 'card',
-                attributes: { firstName: 'Hassan the Second' },
+                attributes: { firstName: 'Mango the Second' },
                 meta: {
-                  adoptsFrom: { module: rri('./friend.gts'), name: 'Friend' },
+                  adoptsFrom: { module: rri('./person.gts'), name: 'Person' },
                 },
               },
             })
@@ -5224,7 +5235,7 @@ module(basename(import.meta.filename), function () {
 
           let storedHash = computeContentHash(
             readFileSync(
-              join(dir.name, 'realm_server_1', 'test', 'hassan.json'),
+              join(dir.name, 'realm_server_1', 'test', 'person-1.json'),
               'utf8',
             ),
           );
@@ -5235,14 +5246,14 @@ module(basename(import.meta.filename), function () {
           );
 
           await expectIncrementalIndexEvent(
-            `${testRealmHref}hassan.json`,
+            `${testRealmHref}person-1.json`,
             realmEventTimestampStart,
             {
               assert,
               getMessagesSince,
               realm: testRealmHref,
               clientRequestId: null,
-              versions: { [`${testRealmHref}hassan`]: storedHash },
+              versions: { [`${testRealmHref}person-1`]: storedHash },
             },
           );
         });
