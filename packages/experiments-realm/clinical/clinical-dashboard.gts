@@ -161,9 +161,11 @@ export class ClinicalDashboard extends CardDef {
 
   @field unitName = contains(StringField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: ClinicalDashboard) {
-      return this.unitName;
+      return this.unitName?.length
+        ? this.unitName
+        : `Untitled ${this.constructor.displayName}`;
     },
   });
 
