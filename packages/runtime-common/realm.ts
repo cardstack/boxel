@@ -1446,6 +1446,13 @@ export interface CommitBatchResult {
 
 export interface WriteOptions {
   clientRequestId?: string | null;
+  // The cards among this write's own files whose content the caller supplied
+  // verbatim, named the way the invalidation event names them. Reported on
+  // that event so a client holding these cards can tell them from the ones
+  // this write left the realm to compute. A writer that names none says
+  // nothing about the pass, which is what every writer but the operations
+  // coordinator does.
+  clientAuthored?: string[];
   serializeFile?: boolean | null;
   // When false, the write returns as soon as the source bytes are durable;
   // the *final* index flush kicks off in the background. Callers that need
@@ -2755,10 +2762,38 @@ export class Realm {
     invalidations: string[],
     opts?: {
       clientRequestId?: string | null;
+      clientAuthored?: string[];
       generation?: number;
       invalidatedTypes?: string[];
     },
   ): void {
+    // Narrowed to what the pass actually invalidated. A writer names the cards
+    // it wrote; whether a given one reached this event depends on what the
+    // index did with it, and a name the event does not carry would describe a
+    // card nobody can match it against.
+    //
+    // A dropped name is not a harmless narrowing, though: it turns a card its
+    // writer said to leave alone into one every client re-reads, which is the
+    // edit loss this member exists to prevent. Nothing is known to produce one
+    // — both sides spell a card as its realm href without the `.json` — so a
+    // drop means the two spellings have diverged, and it is said out loud
+    // rather than absorbed.
+    let clientAuthored = opts?.clientAuthored?.filter((url) =>
+      invalidations.includes(url),
+    );
+    let authorshipReported = clientAuthored !== undefined;
+    if (
+      opts?.clientAuthored &&
+      clientAuthored &&
+      clientAuthored.length !== opts.clientAuthored.length
+    ) {
+      let dropped = opts.clientAuthored.filter(
+        (url) => !invalidations.includes(url),
+      );
+      this.#log.warn(
+        `index event for ${this.url} dropped ${dropped.length} client-authored name(s) that the pass did not invalidate, so their holders will re-read them: ${dropped.join(', ')}`,
+      );
+    }
     this.broadcastRealmEvent({
       eventName: 'index',
       indexType: 'incremental',
@@ -2766,6 +2801,7 @@ export class Realm {
       ...(opts && Object.prototype.hasOwnProperty.call(opts, 'clientRequestId')
         ? { clientRequestId: opts.clientRequestId }
         : {}),
+      ...(authorshipReported ? { clientAuthored } : {}),
       ...(opts?.generation !== undefined
         ? { generation: opts.generation }
         : {}),
@@ -3491,6 +3527,10 @@ export class Realm {
     let invalidatedTypes = makeInvalidatedTypeAccumulator();
     let indexGeneration: number | undefined;
     let clientRequestId: string | null = options?.clientRequestId ?? null;
+    // Passed through as supplied. An empty list is a writer saying it authored
+    // none of what it wrote, which is not the same as a writer that said
+    // nothing — so the two stay distinguishable all the way to the event.
+    let clientAuthored: string[] | undefined = options?.clientAuthored;
     let initiatingUser: string | null = options?.initiatingUser ?? null;
     // The module→instance flush below runs an index pass whose invalidation
     // set is every dependent of the modules written so far — including the
@@ -3924,6 +3964,7 @@ export class Realm {
         await performIndex(changes);
         this.broadcastIncrementalInvalidationEvent([...invalidations], {
           clientRequestId,
+          ...(clientAuthored ? { clientAuthored } : {}),
           generation: indexGeneration,
           invalidatedTypes: invalidatedTypes.value,
         });
@@ -3976,6 +4017,7 @@ export class Realm {
                 [...new Set([...priorInvalidations, ...deferredInvalidations])],
                 {
                   clientRequestId,
+                  ...(clientAuthored ? { clientAuthored } : {}),
                   generation: meta.generation ?? indexGeneration,
                   invalidatedTypes: types.value,
                 },
@@ -4004,6 +4046,7 @@ export class Realm {
       // behavior.
       this.broadcastIncrementalInvalidationEvent([...invalidations], {
         clientRequestId,
+        ...(clientAuthored ? { clientAuthored } : {}),
         generation: indexGeneration,
         invalidatedTypes: invalidatedTypes.value,
       });
@@ -4673,6 +4716,10 @@ export class Realm {
         {
           clientRequestId: caller.clientRequestId || null,
           actor: caller.actor || undefined,
+          // One request, several cards, and not all of them from the same
+          // place — which is the case the event's authorship naming exists
+          // for, and the only front door that produces it.
+          reportAuthorship: true,
         },
       );
       // The coordinator answers in the flat order of the entries it staged,
