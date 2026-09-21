@@ -280,21 +280,44 @@ export function jobTypeFilter(
 // that deep is diagnosed from the queue, not from one realm's readiness log.
 const OUTSTANDING_INDEX_JOBS_LOG_CAP = 10;
 
+// `claimed` separates the two states a reader of this has to tell apart: a job
+// waiting behind a backlog, and a job whose worker died holding it and has yet
+// to be reaped. The ids and types read identically for both, so without it the
+// log line names the lane's occupants but not which kind of stuck they are.
+//
+// A live reservation is an uncompleted one that has not expired, the same
+// predicate `currentJobProgress` reads for `has_worker`. An expired reservation
+// is a dead attempt: the job is claimable again, which reads as waiting.
+// `job_reservations(job_id)` is indexed, so the subquery stays well inside the
+// budget the only caller bounds this with.
+export interface LaneHolder {
+  id: number;
+  jobType: string;
+  claimed: boolean;
+}
+
 export async function outstandingIndexJobs(
   dbAdapter: DBAdapter,
   realmURL: string,
   jobTypes?: string[],
-): Promise<{ id: number; jobType: string }[]> {
+): Promise<LaneHolder[]> {
   if (dbAdapter.kind !== 'pg') {
     return [];
   }
   let rows = (await query(dbAdapter, [
-    `SELECT id, job_type FROM jobs WHERE status = 'unfulfilled' AND concurrency_group =`,
+    `SELECT id, job_type,`,
+    `EXISTS (SELECT 1 FROM job_reservations jr WHERE jr.job_id = jobs.id`,
+    `AND jr.completed_at IS NULL AND jr.locked_until > NOW()) AS claimed`,
+    `FROM jobs WHERE status = 'unfulfilled' AND concurrency_group =`,
     param(indexingConcurrencyGroup(realmURL)),
     ...jobTypeFilter(jobTypes),
     `ORDER BY id LIMIT ${OUTSTANDING_INDEX_JOBS_LOG_CAP}`,
-  ])) as { id: number | string; job_type: string }[];
-  return rows.map((row) => ({ id: Number(row.id), jobType: row.job_type }));
+  ])) as { id: number | string; job_type: string; claimed: boolean }[];
+  return rows.map((row) => ({
+    id: Number(row.id),
+    jobType: row.job_type,
+    claimed: Boolean(row.claimed),
+  }));
 }
 
 // `outstandingIndexJobs` for a log line on a path that must still answer.
@@ -307,25 +330,35 @@ export async function outstandingIndexJobs(
 // drained is also the case where the database is least likely to answer
 // quickly, so neither is a remote possibility — it is the expected weather.
 //
-// Undefined means the read failed or did not finish, which a caller reports
-// differently from an empty array. "Could not read the lane" and "the lane
-// drained after the gate expired" send an operator to different places, and
-// collapsing them into one empty result would assert the second on evidence of
-// neither.
+// Three outcomes rather than a value-or-nothing, because each sends whoever
+// reads the log somewhere different. An empty lane says the lane drained just
+// after the gate expired. A rejection says the database answered and refused,
+// and carries why. A timeout says it did not answer at all. Collapsing the last
+// two would print a budget the query may never have spent — a connection error
+// returning in 2ms would read as a slow database.
+export type LaneHoldersRead =
+  | { outcome: 'read'; holders: LaneHolder[] }
+  | { outcome: 'failed'; reason: string }
+  | { outcome: 'timed-out' };
+
 export async function readLaneHoldersBestEffort(
   dbAdapter: DBAdapter,
   realmURL: string,
   jobTypes: string[] | undefined,
   timeoutMs: number,
-): Promise<{ id: number; jobType: string }[] | undefined> {
+): Promise<LaneHoldersRead> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let expired = new Promise<undefined>((resolve) => {
-    timer = setTimeout(() => resolve(undefined), timeoutMs);
+  let expired = new Promise<LaneHoldersRead>((resolve) => {
+    timer = setTimeout(() => resolve({ outcome: 'timed-out' }), timeoutMs);
   });
   try {
     return await Promise.race([
-      outstandingIndexJobs(dbAdapter, realmURL, jobTypes).catch(
-        () => undefined,
+      outstandingIndexJobs(dbAdapter, realmURL, jobTypes).then(
+        (holders): LaneHoldersRead => ({ outcome: 'read', holders }),
+        (error): LaneHoldersRead => ({
+          outcome: 'failed',
+          reason: error instanceof Error ? error.message : String(error),
+        }),
       ),
       expired,
     ]);

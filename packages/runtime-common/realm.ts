@@ -2368,24 +2368,38 @@ export class Realm {
       //
       // Strictly best-effort, and bounded: the read happens after the budget is
       // spent, so it must not be able to turn this 503 into a 500 or extend the
-      // request. It reports three distinct outcomes, because a lane that
-      // drained just after the gate expired and a lane nobody could read want
-      // different next steps from whoever reads this.
-      let holders = await readLaneHoldersBestEffort(
+      // request. Every outcome is reported distinctly, including the two ways
+      // the read itself can fail, because a lane that drained just after the
+      // gate expired, a database that refused, and one that never answered each
+      // send whoever reads this somewhere different.
+      let read = await readLaneHoldersBestEffort(
         this.#dbAdapter,
         this.url,
         INDEX_WRITING_JOB_TYPES,
         LANE_DIAGNOSTIC_BUDGET_MS,
       );
+      let heldBy: string;
+      switch (read.outcome) {
+        case 'read':
+          heldBy = read.holders.length
+            ? read.holders
+                .map(
+                  ({ id, jobType, claimed }) =>
+                    `job ${id} (${jobType}, ${claimed ? 'claimed' : 'waiting'})`,
+                )
+                .join(', ')
+            : 'the lane drained after the gate expired';
+          break;
+        case 'failed':
+          heldBy = `could not read the lane: ${read.reason}`;
+          break;
+        case 'timed-out':
+          heldBy = `could not read the lane within ${LANE_DIAGNOSTIC_BUDGET_MS}ms`;
+          break;
+      }
       this.#log.warn(
         `readiness check for ${this.url} is still waiting on queued index work after ${Date.now() - laneWaitStartedAt}ms: ` +
-          (holders === undefined
-            ? `could not read the lane within ${LANE_DIAGNOSTIC_BUDGET_MS}ms`
-            : holders.length
-              ? holders
-                  .map(({ id, jobType }) => `job ${id} (${jobType})`)
-                  .join(', ')
-              : 'the lane drained after the gate expired'),
+          heldBy,
       );
       return notReady('index');
     }

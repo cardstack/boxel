@@ -44,6 +44,21 @@ async function enqueueIndexJob(
   return id;
 }
 
+// A live reservation on a job — what pg-queue writes when a worker claims one,
+// and what separates a job being worked from one waiting behind a backlog. An
+// expired reservation is a dead attempt, which reads as waiting again.
+async function claimJob(
+  dbAdapter: PgAdapter,
+  jobId: number,
+  opts: { expired?: boolean } = {},
+): Promise<void> {
+  await dbAdapter.execute(
+    `INSERT INTO job_reservations (job_id, locked_until, worker_id)
+       VALUES ($1, NOW() + ($2 || ' minutes')::interval, 'test-worker')`,
+    { bind: [jobId, opts.expired ? '-5' : '5'] },
+  );
+}
+
 // A live `boxel_index` row at `generation`, or a tombstone / index-errored one.
 // Sets only the columns the HTML gate reads.
 async function insertIndexRow(
@@ -302,8 +317,8 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(
         await outstandingIndexJobs(dbAdapter, realmURL),
         [
-          { id: first, jobType: 'from-scratch-index' },
-          { id: second, jobType: 'incremental-index' },
+          { id: first, jobType: 'from-scratch-index', claimed: false },
+          { id: second, jobType: 'incremental-index', claimed: false },
         ],
         'both jobs, in the order a worker will claim them',
       );
@@ -328,7 +343,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.deepEqual(
         await outstandingIndexJobs(dbAdapter, realmURL),
-        [{ id: held, jobType: 'from-scratch-index' }],
+        [{ id: held, jobType: 'from-scratch-index', claimed: false }],
         'only this realm’s unfulfilled index-lane job',
       );
     });
@@ -354,8 +369,44 @@ module(basename(import.meta.filename), function (hooks) {
           realmURL,
           INDEX_WRITING_JOB_TYPES,
         ),
-        [{ id: writing, jobType: 'from-scratch-index' }],
+        [{ id: writing, jobType: 'from-scratch-index', claimed: false }],
         'narrowed, only what a readiness gate waits on',
+      );
+    });
+
+    // The two states a reader of the log line has to tell apart. Both are
+    // unfulfilled jobs in the lane with identical ids and types, so `claimed`
+    // is the only thing separating "waiting behind a backlog" from "a worker
+    // died holding this".
+    test('separates a claimed job from one waiting behind it', async function (assert) {
+      let running = await enqueueIndexJob(dbAdapter, realmURL);
+      await claimJob(dbAdapter, running);
+      let waiting = await enqueueIndexJob(
+        dbAdapter,
+        realmURL,
+        'unfulfilled',
+        'incremental-index',
+      );
+      assert.deepEqual(
+        await outstandingIndexJobs(dbAdapter, realmURL),
+        [
+          { id: running, jobType: 'from-scratch-index', claimed: true },
+          { id: waiting, jobType: 'incremental-index', claimed: false },
+        ],
+        'only the job with a live reservation reads as claimed',
+      );
+    });
+
+    // A worker that died holding the job leaves a reservation behind. The job
+    // is claimable again, so it is waiting — reporting it as claimed would
+    // point an operator at a worker that no longer exists.
+    test('an expired reservation reads as waiting', async function (assert) {
+      let abandoned = await enqueueIndexJob(dbAdapter, realmURL);
+      await claimJob(dbAdapter, abandoned, { expired: true });
+      assert.deepEqual(
+        await outstandingIndexJobs(dbAdapter, realmURL),
+        [{ id: abandoned, jobType: 'from-scratch-index', claimed: false }],
+        'a dead attempt does not read as a live worker',
       );
     });
 
@@ -400,38 +451,46 @@ module(basename(import.meta.filename), function (hooks) {
           INDEX_WRITING_JOB_TYPES,
           5_000,
         ),
-        [{ id: jobId, jobType: 'from-scratch-index' }],
-        'the happy path is unchanged',
+        {
+          outcome: 'read',
+          holders: [
+            { id: jobId, jobType: 'from-scratch-index', claimed: false },
+          ],
+        },
+        'the happy path carries the lane',
       );
     });
 
-    test('reports undefined rather than throwing when the read fails', async function (assert) {
+    test('reports a failed read rather than throwing', async function (assert) {
       let failing = adapterWhoseQueries(() =>
         Promise.reject(new Error('connection terminated unexpectedly')),
       );
-      assert.strictEqual(
+      assert.deepEqual(
         await readLaneHoldersBestEffort(
           failing,
           realmURL,
           INDEX_WRITING_JOB_TYPES,
           5_000,
         ),
-        undefined,
-        'a database error is absorbed, not propagated to the caller',
+        {
+          outcome: 'failed',
+          reason: 'connection terminated unexpectedly',
+        },
+        'a database error is absorbed, and carries why',
       );
     });
 
-    test('reports undefined rather than hanging when the read stalls', async function (assert) {
+    test('reports a timeout rather than hanging when the read stalls', async function (assert) {
       let stalled = adapterWhoseQueries(() => new Promise<never>(() => {}));
       let startedAt = Date.now();
-      assert.strictEqual(
+      assert.deepEqual(
         await readLaneHoldersBestEffort(
           stalled,
           realmURL,
           INDEX_WRITING_JOB_TYPES,
           200,
         ),
-        undefined,
+        { outcome: 'timed-out' },
         'the budget decides, not the query',
       );
       // The query never settles, so without the bound this await never
@@ -442,10 +501,11 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    // An empty lane and an unreadable one are different answers, and the gate
-    // logs them differently. Collapsing the failure into `[]` would state that
-    // the lane had drained on evidence that nothing was read.
-    test('distinguishes an empty lane from an unreadable one', async function (assert) {
+    // The three outcomes the gate logs differently. A read that failed in 2ms
+    // and one that spent the whole budget are different problems, and neither
+    // is an empty lane — collapsing any pair of them would state one on
+    // evidence of another.
+    test('keeps an empty lane, a failed read and a timeout apart', async function (assert) {
       assert.deepEqual(
         await readLaneHoldersBestEffort(
           dbAdapter,
@@ -453,18 +513,30 @@ module(basename(import.meta.filename), function (hooks) {
           INDEX_WRITING_JOB_TYPES,
           5_000,
         ),
-        [],
-        'an empty lane reads as empty',
+        { outcome: 'read', holders: [] },
+        'an empty lane reads as read-and-empty',
+      );
+      let failed = await readLaneHoldersBestEffort(
+        adapterWhoseQueries(() => Promise.reject(new Error('boom'))),
+        realmURL,
+        INDEX_WRITING_JOB_TYPES,
+        5_000,
       );
       assert.strictEqual(
-        await readLaneHoldersBestEffort(
-          adapterWhoseQueries(() => Promise.reject(new Error('boom'))),
-          realmURL,
-          INDEX_WRITING_JOB_TYPES,
-          5_000,
-        ),
-        undefined,
+        failed.outcome,
+        'failed',
         'a failed read is not an empty lane',
+      );
+      let timedOut = await readLaneHoldersBestEffort(
+        adapterWhoseQueries(() => new Promise<never>(() => {})),
+        realmURL,
+        INDEX_WRITING_JOB_TYPES,
+        200,
+      );
+      assert.strictEqual(
+        timedOut.outcome,
+        'timed-out',
+        'a query that never answered is not one that refused',
       );
     });
   });
