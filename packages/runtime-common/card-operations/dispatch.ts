@@ -4,8 +4,16 @@ import { urlNamesFile } from '../file-def-code-ref.ts';
 import { readOperation } from './read.ts';
 import { readSourceOperation } from './read-source.ts';
 import {
+  hasTransforms,
+  runInputTransform,
+  runOutputTransform,
+  type TransformContext,
+} from './transforms.ts';
+import {
   DEFINITION_FREE_BASE_OPERATIONS,
   OperationFailure,
+  isDocumentResult,
+  isHeadResult,
   type BaseOperation,
   type OperationDefinition,
   type OperationResult,
@@ -15,8 +23,10 @@ import {
 } from './types.ts';
 import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import type { Definition } from '../definitions.ts';
+import type { JsonValue } from '../json-validation.ts';
 import type {
   EntryCollectionDocument,
+  SingleCardDocument,
   SingleFileMetaDocument,
 } from '../document-types.ts';
 import type { LooseCardResource, FileMetaResource } from '../resource-types.ts';
@@ -91,6 +101,11 @@ export interface OperationCore {
     file: OperationStoredFile,
     opts?: { skipContentFingerprint?: boolean },
   ): Promise<OperationStoredFileMeta>;
+  // The realm's own settings, as `realmConfig()` answers with them. Reached
+  // only by an operation's transform stages, and only when a stage's program
+  // names a setting — the coordinator has its own reader for the write path,
+  // for the same value read at a different moment.
+  realmConfig(): Promise<Record<string, JsonValue>>;
   // Whether the realm's ignore rules exclude this URL. An ignored path is
   // never visited, so no amount of waiting produces an index row for it.
   isIgnored(url: URL): Promise<boolean>;
@@ -539,6 +554,84 @@ export async function resolveOperation(
   return { base: name, deterministic: true };
 }
 
+// Whether a `read` of this target may be answered without running it, asked
+// before anything is read.
+//
+// The card+json `GET` has to know this before it answers, because a projected
+// body is not the representation its validator describes: the ETag is built
+// from the index row, and a row says nothing about which projection a type
+// declares — so a card whose type gains an `output` keeps the validator it had
+// and a conditional request would be answered 304 with the unprojected body
+// still in the client's cache. The handler therefore asks here, ahead of its
+// own conditional fast path, rather than learning it from the assembly.
+//
+// It costs the definition lookup the assembly would have made anyway; the row
+// peek is shared with the caller's through `scope`.
+//
+// Only `plain` may be answered from the validator, and the other two answers
+// are the two ways a read stops being answerable that way.
+//
+// `staged` covers a read carrying either stage, not only a projecting one. An
+// `input` changes no byte of the document — a read serves the target's indexed
+// view and ignores its payload — but it can *refuse*: the program can fail,
+// the `params` check runs against what it produced, and a stage that reads
+// `actor()` turns an anonymous request away. A 304 answers as though none of
+// that happened.
+//
+// `unresolved` is a target whose read cannot be resolved at all — a
+// declaration lowering flagged invalid. It has a refusal coming, and reporting
+// it as plain would hand a caller holding a validator a 304 for a card the
+// full request refuses.
+//
+// Both send the request down the assembling path, which has the whole request
+// in hand and answers what is actually true of it. Neither says anything about
+// the *body*: whether it was projected is reported by the assembly, since only
+// the `output` stage decides that.
+export type ReadShape = 'plain' | 'staged' | 'unresolved';
+
+export async function readShape(
+  core: OperationCore,
+  url: URL,
+  scope: OperationScope = newOperationScope(core),
+  // Answers already reached, held by the caller across requests. The
+  // definition lookup behind this is a database read, and it lands on the two
+  // paths that exist to answer without one — so a caller that can say when the
+  // answer may have changed should hand one in. See `#readShapeByURL`.
+  memo?: Map<string, ReadShape>,
+): Promise<ReadShape> {
+  let remembered = memo?.get(url.href);
+  if (remembered) {
+    return remembered;
+  }
+  let shape = await resolveReadShape(core, url, scope);
+  // An unresolved read is not remembered: it is a declaration with findings
+  // against it, which the author is presumably mid-way through fixing, and
+  // the answer costs the same to reach again.
+  if (shape !== 'unresolved') {
+    memo?.set(url.href, shape);
+  }
+  return shape;
+}
+
+async function resolveReadShape(
+  core: OperationCore,
+  url: URL,
+  scope: OperationScope,
+): Promise<ReadShape> {
+  let definition: OperationDefinition;
+  try {
+    definition = await resolveOperation(
+      core,
+      { kind: 'instance', url: url.href },
+      'read',
+      scope,
+    );
+  } catch {
+    return 'unresolved';
+  }
+  return hasTransforms(definition) ? 'staged' : 'plain';
+}
+
 export async function runOperation(
   core: OperationCore,
   request: OperationRequest,
@@ -557,7 +650,151 @@ export async function runOperation(
     target === request.target ? request : { ...request, target };
   let scope = newOperationScope(core);
   let definition = await resolveOperation(core, target, canonical.name, scope);
+  // The four stages of an invocation, in the one order they run: the `input`
+  // transform over the payload, the `params` check against what it produced,
+  // the behavior, and the `output` transform over its result. The check runs
+  // against the input's result rather than the caller's payload because that
+  // is what lets an `input` supply a declared param the caller left out.
+  //
+  // Both stages are here rather than inside an executor so that adding a
+  // behavior cannot quietly add one that ignores them — an operation whose
+  // `output` was skipped answers with more than its author said it would,
+  // which is the one failure a projection must not have.
+  refuseAnonymousActor(canonical, definition);
+  if (definition.input) {
+    canonical = {
+      ...canonical,
+      params: await runInputTransform(
+        definition,
+        canonical.params ?? {},
+        transformContext(core, canonical),
+      ),
+    };
+  }
   validateParams(canonical, definition);
+  let result = await runBaseOperation(core, canonical, definition, opts, scope);
+  return await projectResult(core, canonical, definition, result);
+}
+
+// A stage that reads `actor()` cannot run for a request that authenticated
+// nobody, which a realm anyone may read allows. Refused before the behavior
+// runs, and answered 401 rather than letting the program fail on the missing
+// slot: credentials would change the outcome, and that is what a 401 says and
+// a 500 does not. Read off the definition, where lowering recorded it, so the
+// answer does not depend on reaching the program text.
+function refuseAnonymousActor(
+  request: OperationRequest,
+  definition: OperationDefinition,
+): void {
+  if (!hasTransforms(definition) || !definition.readsActor || request.actor) {
+    return;
+  }
+  throw new OperationFailure({
+    id: targetId(request.target),
+    status: 401,
+    code: 'actor-required',
+    title: 'Operation needs an identity',
+    detail:
+      `operation "${request.name}" reads the invoking actor, and this ` +
+      `request authenticated nobody`,
+  });
+}
+
+function transformContext(
+  core: OperationCore,
+  request: OperationRequest,
+): TransformContext {
+  return {
+    name: request.name,
+    realmConfig: () => core.realmConfig(),
+    ...(request.actor ? { actor: request.actor } : {}),
+    ...(request.params ? { params: request.params } : {}),
+    ...(request.target.kind === 'instance' ? { id: request.target.url } : {}),
+  };
+}
+
+// The `output` stage over what the behavior answered.
+//
+// A read is the only behavior that reaches this carrying a declaration today —
+// `readSource` is resolved without one, a `query` is refused before it runs,
+// and the writes are the coordinator's — so the two read shapes are the two
+// arms. A headers-only read projects nothing and says that the full read
+// would, because a `HEAD` states the headers a `GET` would send and a
+// projected body is not cacheable the way an unprojected one is.
+async function projectResult(
+  core: OperationCore,
+  request: OperationRequest,
+  definition: OperationDefinition,
+  result: OperationResult,
+): Promise<OperationResult> {
+  if (!definition.output) {
+    return result;
+  }
+  if (isHeadResult(result)) {
+    return { ...result, projected: true };
+  }
+  if (isDocumentResult(result)) {
+    let projection = await runOutputTransform(
+      definition,
+      result.document,
+      transformContext(core, request),
+    );
+    return {
+      ...result,
+      projected: true,
+      document: asDocument(request, projection),
+    };
+  }
+  throw new OperationFailure({
+    id: targetId(request.target),
+    status: 500,
+    code: 'internal-error',
+    title: 'Unprojectable result',
+    detail:
+      `operation "${request.name}" declares an \`output\`, and the ` +
+      `"${definition.base}" behavior answered with something a projection ` +
+      `has no defined meaning over`,
+  });
+}
+
+// A read answers with a JSON:API document, and a projection of one has to
+// remain one: the card+json response it is served in carries a `data` member
+// and every client reads it. Held to the shape, not to the contents — what an
+// author leaves out below `data` is the whole point of projecting.
+function asDocument(
+  request: OperationRequest,
+  projection: unknown,
+): SingleCardDocument | SingleFileMetaDocument {
+  if (
+    typeof projection !== 'object' ||
+    projection === null ||
+    Array.isArray(projection) ||
+    typeof (projection as { data?: unknown }).data !== 'object' ||
+    (projection as { data?: unknown }).data === null ||
+    Array.isArray((projection as { data?: unknown }).data)
+  ) {
+    throw new OperationFailure({
+      id: targetId(request.target),
+      status: 400,
+      code: 'invalid-params',
+      title: 'Cannot run transform',
+      detail:
+        `the \`output\` stage of operation "${request.name}" projects a read, ` +
+        `which answers a JSON:API document, and this program produced ` +
+        `something with no \`data\` member`,
+      meta: { operation: request.name, stage: 'output' },
+    });
+  }
+  return projection as SingleCardDocument | SingleFileMetaDocument;
+}
+
+async function runBaseOperation(
+  core: OperationCore,
+  canonical: OperationRequest,
+  definition: OperationDefinition,
+  opts: RunOperationOptions,
+  scope: OperationScope,
+): Promise<OperationResult> {
   switch (definition.base) {
     case 'read':
       return await readOperation(core, canonical, definition, opts, scope);
@@ -579,7 +816,7 @@ export async function runOperation(
         code: 'wrong-entry-point',
         title: 'Operation not executable here',
         detail:
-          `operation "${request.name}" is a query; resolve it with ` +
+          `operation "${canonical.name}" is a query; resolve it with ` +
           `lowerQueryOperation and run it on the search engine`,
       });
     case 'create':
@@ -606,7 +843,7 @@ export async function runOperation(
         status: 500,
         code: 'internal-error',
         title: 'Unknown base operation',
-        detail: `operation "${request.name}" names a base operation the core does not implement`,
+        detail: `operation "${canonical.name}" names a base operation the core does not implement`,
       });
   }
 }
@@ -614,21 +851,43 @@ export async function runOperation(
 // The payload has to satisfy the schema the definition declares before any
 // behavior runs on it. A declared param with no value is the caller's mistake,
 // and finding out inside an executor means finding out after work has started.
+//
+// Exported because the behaviors that write never reach `runOperation` — a
+// batch stages them through the coordinator instead — and the check has to run
+// on that path too. It cannot be left to the executors: they read the payload
+// differently enough that some would never notice, and a `delete` reads none
+// at all, so a declaration requiring one would be carried out over a card the
+// caller had not said enough to remove.
+export function assertParamsSupplied(
+  definition: OperationDefinition,
+  params: Record<string, unknown> | undefined,
+  // What the refusal names: the operation as it was invoked, and the target
+  // where there is one. Taken as data rather than as a request, since the two
+  // callers hold the same facts in different shapes.
+  invocation: { name: string; id?: string },
+): void {
+  for (let key of Object.keys(definition.params ?? {})) {
+    if (own(params, key) === undefined) {
+      throw new OperationFailure({
+        ...(invocation.id ? { id: invocation.id } : {}),
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid params',
+        detail: `operation "${invocation.name}" requires a value for params("${key}")`,
+      });
+    }
+  }
+}
+
 function validateParams(
   request: OperationRequest,
   definition: OperationDefinition,
 ): void {
-  for (let key of Object.keys(definition.params ?? {})) {
-    if (own(request.params, key) === undefined) {
-      throw new OperationFailure({
-        id: targetId(request.target),
-        status: 400,
-        code: 'invalid-params',
-        title: 'Invalid params',
-        detail: `operation "${request.name}" requires a value for params("${key}")`,
-      });
-    }
-  }
+  let id = targetId(request.target);
+  assertParamsSupplied(definition, request.params, {
+    name: request.name,
+    ...(id ? { id } : {}),
+  });
 }
 
 // One `RealmPaths` per core. It is derived entirely from the realm URL, which

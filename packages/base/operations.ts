@@ -423,7 +423,20 @@ export type SetClause = { readonly [fieldName: string]: OperationValue };
 export type FillClause = { readonly [fieldName: string]: OperationValue };
 
 // Projects or reshapes the result. May reference the actor, which makes the
-// operation's response per-actor.
+// operation's response per-actor — and on a `read`, makes the card's plain
+// `GET` uncacheable, since a per-caller body cannot be held in a shared cache
+// or answered with a 304.
+//
+// **It is not an access boundary.** An `output` decides the shape of this
+// operation's answer and nothing more: the realm checks its own read/write
+// permission and nothing else, so a field left out here is still reachable by
+// any caller permitted to read the realm — through the card's plain `read`,
+// through its stored source, through a search. Leave a value out because a
+// consumer does not need it, never because a caller may not have it.
+//
+// A projection of a `read` stays a JSON:API document: the response it is
+// served in carries a `data` member and every client reads it. What the
+// projection puts below `data` is the author's.
 export type OperationOutput =
   | BxlProgram
   | { readonly [key: string]: OperationValue };
@@ -467,6 +480,11 @@ interface OperationCommon {
   readonly optimistic?: boolean;
   // The raw escape hatch: author-supplied BXL in place of the declarative
   // clauses, for anything they don't express.
+  //
+  // `input` runs first, over the payload the caller sent, and produces the
+  // payload the operation uses — so a value it supplies satisfies a declared
+  // param the caller left out. It reads `.` (that payload), `params()` and
+  // `actor()`, and it produces an object.
   readonly input?: BxlProgram;
   readonly transformations?: BxlProgram;
   readonly output?: OperationOutput;
