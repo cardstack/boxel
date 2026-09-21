@@ -377,7 +377,11 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
             receiving: receiving.id!,
           });
           p.on(receiving).acceptCase({ mrn });
-          if (releasing) {
+          // Only when the case actually moves between two people. Two members
+          // of one parallel group that write the same card are a
+          // `conflicting-targets` refusal, so handing a patient to their own
+          // attending has to be one entry rather than two.
+          if (releasing && releasing.id !== receiving.id) {
             p.on(releasing).releaseCase({ mrn });
           }
         });
