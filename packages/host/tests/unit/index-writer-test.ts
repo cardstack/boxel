@@ -1747,6 +1747,7 @@ module('Unit | index-writer', function (hooks) {
         url: `${testRealmURL2}1.json`,
         file_alias: `${testRealmURL2}1`,
         generation: 2,
+        host_shell_generation: null,
         realm_url: testRealmURL2,
         type: 'instance',
         has_error: false,
@@ -1896,6 +1897,7 @@ module('Unit | index-writer', function (hooks) {
         url: `${testRealmURL}1.json`,
         file_alias: `${testRealmURL}1`,
         generation: 2,
+        host_shell_generation: null,
         realm_url: testRealmURL,
         type: 'instance',
         has_error: true,
@@ -2049,6 +2051,68 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
+  // The render says which host bundle its page was running; the write copies
+  // that number out of the diagnostics blob into a column of its own, because
+  // the query it serves is a range scan and jsonb has no index to offer it.
+  test("copies the render's host-shell generation onto the row", async function (assert) {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [],
+    );
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.updateEntry(new URL(`${testRealmURL}rendered.json`), {
+      type: 'file',
+      lastModified: 1,
+      resourceCreatedAt: 1,
+      deps: new Set<string>(),
+      searchData: { name: 'rendered' },
+      diagnostics: { warmedHostShellGeneration: 9 },
+    });
+    // An error row is the one a repair most needs to find, so it has to carry
+    // the number too — not only the rows that succeeded.
+    await batch.updateEntry(new URL(`${testRealmURL}failed.json`), {
+      type: 'instance-error',
+      error: { message: 'boom', status: 500, additionalErrors: [] },
+      diagnostics: { warmedHostShellGeneration: 9 },
+    });
+    // A render that reported no number leaves the column null. Unknown, not
+    // old — `< current` must not reach it.
+    await batch.updateEntry(new URL(`${testRealmURL}unstamped.json`), {
+      type: 'file',
+      lastModified: 1,
+      resourceCreatedAt: 1,
+      deps: new Set<string>(),
+      searchData: { name: 'unstamped' },
+      diagnostics: { hostShellHash: 'b778fe76' },
+    });
+    await batch.done();
+
+    let rows = (await adapter.execute(
+      `SELECT url, host_shell_generation FROM boxel_index
+       WHERE realm_url = $1 ORDER BY url`,
+      { bind: [testRealmURL] },
+    )) as unknown as {
+      url: string;
+      host_shell_generation: number | null;
+    }[];
+    assert.deepEqual(
+      rows.map((r) => [
+        r.url.replace(testRealmURL, ''),
+        r.host_shell_generation,
+      ]),
+      [
+        ['failed.json', 9],
+        ['rendered.json', 9],
+        ['unstamped.json', null],
+      ],
+      'the number reaches the success row and the error row, and absence stays null',
+    );
+  });
+
   test('error entry does not include last known good state when not available', async function (assert) {
     await setupIndex(
       adapter,
@@ -2089,6 +2153,7 @@ module('Unit | index-writer', function (hooks) {
         url: `${testRealmURL}1.json`,
         file_alias: `${testRealmURL}1`,
         generation: 2,
+        host_shell_generation: null,
         realm_url: testRealmURL,
         type: 'instance',
         has_error: true,

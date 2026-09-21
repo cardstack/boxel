@@ -6,6 +6,19 @@ export interface BoxelIndexTable {
   url: string;
   file_alias: string;
   generation: number;
+  // Which host bundle rendered this row, as the ordering position the realm
+  // server assigned that shell on first observing it. Distinct from
+  // `generation` above, which counts this realm's own writes: that one says
+  // when the row was written, this one says what rendered it, and a repair of
+  // deploy-skewed rows needs the second question.
+  //
+  // `null` means no number reached the render — a realm server that could not
+  // reach its database reports the shell token alone, and a prerender server
+  // deployed ahead of one that reports the number sends none. Unknown rather
+  // than old: the repair predicate is `< current`, which excludes null.
+  //
+  // A write stamp. Nothing that decides row liveness may read it.
+  host_shell_generation: number | null;
   realm_url: string;
   type: 'instance' | 'file';
   has_error: boolean | null;

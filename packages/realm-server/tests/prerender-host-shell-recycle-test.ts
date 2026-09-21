@@ -12,6 +12,7 @@ import {
   stampHostShellTokens,
   stampStaleShellFailure,
 } from '../prerender/prerender-app.ts';
+import { parseHostShellGeneration } from '../prerender/prerender-constants.ts';
 
 // Unit tests for the host-shell recycle decision a prerender server makes on
 // every heartbeat: the manager echoes the current host-shell token, and the
@@ -389,6 +390,88 @@ module(basename(import.meta.filename), function () {
         { requestId: 'abc' } as unknown as typeof response.meta,
         'no empty keys, and no diagnostics object invented',
       );
+    });
+  });
+
+  module('the warmed generation a row is stamped with', function () {
+    // The one value here a write site reads rather than an operator: it
+    // becomes the row's `host_shell_generation`, so a repair pass selects on
+    // it. Stamped from the start sample, which names the bundle the page was
+    // running when the render began.
+    test('rides beside the warmed token it orders', function (assert) {
+      let response = {
+        meta: { diagnostics: { renderMs: 12 } },
+      } as unknown as RenderVisitResponse;
+      stampHostShellTokens(response, {
+        atStart: 'b778fe76',
+        atCompletion: 'b778fe76',
+        warmedAtStart: 'b778fe76',
+        warmedAtCompletion: 'b778fe76',
+        warmedGenerationAtStart: 7,
+      });
+      let d = (response.meta as any).diagnostics;
+      assert.strictEqual(d.warmedHostShellGeneration, 7);
+      assert.strictEqual(
+        d.warmedHostShellHash,
+        'b778fe76',
+        'the token it orders is still on the row',
+      );
+    });
+
+    // A realm server whose database could not answer reports the token alone,
+    // and the two services deploy separately, so a render sees this state
+    // throughout a rolling deploy. The row has to read as unknown, not as
+    // generation zero — the repair predicate is `< current`, and a zero would
+    // put every such row in the first repair that runs.
+    test('is absent, not zero, when no number reached the render', function (assert) {
+      let response = { meta: {} } as unknown as RenderVisitResponse;
+      stampHostShellTokens(response, {
+        atStart: 'b778fe76',
+        atCompletion: 'b778fe76',
+        warmedAtStart: 'b778fe76',
+        warmedAtCompletion: 'b778fe76',
+      });
+      let d = (response.meta as any).diagnostics;
+      assert.false('warmedHostShellGeneration' in d);
+    });
+
+    // Generation 0 is the seeded "no shell observed yet" value, and it is a
+    // real answer rather than a missing one, so it has to survive the same
+    // presence check the tokens get.
+    test('survives being zero', function (assert) {
+      let response = { meta: {} } as unknown as RenderVisitResponse;
+      stampHostShellTokens(response, {
+        atStart: undefined,
+        atCompletion: undefined,
+        warmedGenerationAtStart: 0,
+      });
+      assert.strictEqual(
+        (response.meta as any).diagnostics.warmedHostShellGeneration,
+        0,
+        'a generation alone is enough to stamp — the early return must not swallow it',
+      );
+    });
+  });
+
+  module('parseHostShellGeneration', function () {
+    test('accepts a non-negative integer, as text or as a number', function (assert) {
+      assert.strictEqual(parseHostShellGeneration('7'), 7);
+      assert.strictEqual(parseHostShellGeneration(7), 7);
+      assert.strictEqual(parseHostShellGeneration('0'), 0);
+    });
+
+    // Every rejection below would otherwise be stamped onto a row and compared
+    // against the current generation, where it orders nothing. Discarding
+    // leaves the column null, which reads as unknown.
+    test('rejects anything that would not order', function (assert) {
+      assert.strictEqual(parseHostShellGeneration(undefined), undefined);
+      assert.strictEqual(parseHostShellGeneration(null), undefined);
+      assert.strictEqual(parseHostShellGeneration(''), undefined);
+      assert.strictEqual(parseHostShellGeneration('nope'), undefined);
+      assert.strictEqual(parseHostShellGeneration('1.5'), undefined);
+      assert.strictEqual(parseHostShellGeneration(-1), undefined);
+      assert.strictEqual(parseHostShellGeneration(Number.NaN), undefined);
+      assert.strictEqual(parseHostShellGeneration(Infinity), undefined);
     });
   });
 

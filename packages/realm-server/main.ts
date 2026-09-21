@@ -10,6 +10,7 @@ import {
   logger,
   Deferred,
   CachingDefinitionLookup,
+  claimHostShellGeneration,
   DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
@@ -424,11 +425,31 @@ const smokeTestHostApp = async () => {
 // reachable): a deploy restarts this process, so a new bundle is reported
 // here and picked up by the prerender fleet. Best-effort — a missing or
 // unreachable manager must never block realm-server boot.
-const reportHostShellToManager = async () => {
+const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   try {
     let html = await getIndexHTML();
     let { createHash } = await import('crypto');
     let hash = createHash('md5').update(html).digest('hex').slice(0, 8);
+    // The generation this shell occupies in the ordering, claimed here because
+    // this is the only place that knows the token — the host is static files
+    // in S3, so there is no artifact to carry a number of its own. Every task
+    // claiming the same token reads back the same generation, so a rolling
+    // deploy reports one number rather than one per task.
+    //
+    // Guarded separately from the report: a database that cannot answer must
+    // not cost the fleet its recycle, which is what the token alone drives.
+    // Reporting the token with no generation is the degraded state this is
+    // designed for — rows then carry no generation and stay out of a repair,
+    // rather than carrying a wrong one.
+    let generation: number | undefined;
+    try {
+      generation = (await claimHostShellGeneration(dbAdapter, hash, Date.now()))
+        .generation;
+    } catch (e: any) {
+      console.warn(
+        `Failed to claim a generation for host shell token ${hash}: ${e?.message ?? e}`,
+      );
+    }
     // Report to the manager URL the realm server already uses (prerendererUrl);
     // PRERENDER_MANAGER_URL is only set on the prerender-server tasks.
     let managerURL = prerendererUrl.replace(/\/$/, '');
@@ -438,11 +459,20 @@ const reportHostShellToManager = async () => {
         'Content-Type': 'application/vnd.api+json',
         Accept: 'application/vnd.api+json',
       },
-      body: JSON.stringify({ data: { attributes: { hash } } }),
+      body: JSON.stringify({
+        data: {
+          attributes: {
+            hash,
+            ...(generation === undefined ? {} : { generation }),
+          },
+        },
+      }),
     });
     if (response.ok) {
       console.log(
-        `Reported host shell token ${hash} to prerender manager at ${managerURL}`,
+        `Reported host shell token ${hash}${
+          generation === undefined ? '' : ` (generation ${generation})`
+        } to prerender manager at ${managerURL}`,
       );
     } else {
       console.warn(
@@ -717,7 +747,7 @@ const reportHostShellToManager = async () => {
       ? getRegistrationSecret
       : undefined,
     prerenderer,
-    reportHostShell: reportHostShellToManager,
+    reportHostShell: () => reportHostShellToManager(dbAdapter),
     linkShapePolicy,
   });
 
@@ -873,7 +903,7 @@ const reportHostShellToManager = async () => {
   // recycle against the old shell, record the new token, and stop retrying.
   // The post-deployment hook reports again once the service is fully stable.
   // Fire-and-forget — a missing/unreachable manager must never affect serving.
-  void reportHostShellToManager();
+  void reportHostShellToManager(dbAdapter);
 
   // Begin the reconciler's background poll loop (LISTEN realm_registry +
   // 30s safety poll). It picks up changes from peer instances (publish,

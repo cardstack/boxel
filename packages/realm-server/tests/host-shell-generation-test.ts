@@ -277,4 +277,107 @@ module(basename(import.meta.filename), function (hooks) {
       'the table holds the current shell, so a second row is a bug not a record',
     );
   });
+
+  // What the ordering exists for: selecting the index rows a bundle that is no
+  // longer served produced. The tokens on those rows cannot answer this — they
+  // are hashes — so the column the render stamps is the only thing that can.
+  module('selecting the rows a deploy left behind', function (hooks) {
+    const REALM = 'https://example.com/r/';
+    // Seeded shells, so `current` below is a real claim rather than a literal.
+    hooks.beforeEach(async function () {
+      await claimHostShellGeneration(dbAdapter, 'aaaaaaaa', 1000);
+      await claimHostShellGeneration(dbAdapter, 'bbbbbbbb', 2000);
+      let seed = async (name: string, hostShellGeneration: number | null) => {
+        await dbAdapter.execute(
+          `INSERT INTO boxel_index
+             (url, file_alias, type, generation, realm_url, host_shell_generation)
+           VALUES ($1, $2, 'instance', 1, $3, $4)`,
+          {
+            bind: [
+              `${REALM}${name}.json`,
+              `${REALM}${name}`,
+              REALM,
+              hostShellGeneration,
+            ],
+          },
+        );
+      };
+      await seed('old-1', 1);
+      await seed('old-2', 1);
+      await seed('current', 2);
+      await seed('unknown', null);
+    });
+
+    test('returns every row below the current shell, and only those', async function (assert) {
+      let { generation: current } = await currentHostShellGeneration(dbAdapter);
+      assert.strictEqual(current, 2, 'two shells have been observed');
+
+      let stale = await dbAdapter.execute(
+        `SELECT url FROM boxel_index
+         WHERE realm_url = $1 AND host_shell_generation < $2
+         ORDER BY url`,
+        { bind: [REALM, current] },
+      );
+      assert.deepEqual(
+        stale.map((r) => r.url),
+        [`${REALM}old-1.json`, `${REALM}old-2.json`],
+        'both rows from the outgoing bundle, and neither the current one nor the unstamped one',
+      );
+    });
+
+    // The distinction the column's nullability carries. A render that reported
+    // no generation is unknown, not old, and a repair that swept those in
+    // would re-render the whole index the first time it ran. `<` excludes NULL
+    // by SQL's own semantics, so this holds without a guard — and would stop
+    // holding the moment someone backfilled a zero.
+    test('leaves an unstamped row out rather than treating it as ancient', async function (assert) {
+      let unknown = await dbAdapter.execute(
+        `SELECT url FROM boxel_index
+         WHERE realm_url = $1 AND host_shell_generation IS NULL`,
+        { bind: [REALM] },
+      );
+      assert.deepEqual(
+        unknown.map((r) => r.url),
+        [`${REALM}unknown.json`],
+        'the row exists',
+      );
+      let sweptIn = await dbAdapter.execute(
+        `SELECT count(*)::int AS n FROM boxel_index
+         WHERE realm_url = $1 AND host_shell_generation < 2147483647`,
+        { bind: [REALM] },
+      );
+      assert.strictEqual(
+        sweptIn[0].n,
+        3,
+        'even an absurdly high current generation reaches only the stamped rows',
+      );
+    });
+
+    // The predicate is a range scan over the largest table in the schema, so
+    // the column exists to be indexed rather than merely stored.
+    //
+    // Asserted with sequential scans disabled, because on four seeded rows the
+    // planner would choose one whatever indexes exist — so a plan taken at
+    // face value here would pass with no index at all. Disabling it asks the
+    // question that is actually about this change: is there an index this
+    // predicate can walk? `SET LOCAL` reverts with the transaction, and
+    // `withConnection` rolls back on a throw, so the pooled connection is
+    // returned clean either way.
+    test('has an index to walk', async function (assert) {
+      let plan = await dbAdapter.withConnection(async (query) => {
+        await query(['BEGIN']);
+        await query(['SET LOCAL enable_seqscan = off']);
+        let rows = await query([
+          `EXPLAIN (FORMAT JSON) SELECT url FROM boxel_index WHERE host_shell_generation < `,
+          param(2),
+        ]);
+        await query(['COMMIT']);
+        return JSON.stringify(rows);
+      });
+      assert.ok(
+        plan.includes('boxel_index_host_shell_generation_index'),
+        `the predicate should resolve through the partial index; got: ${plan}`,
+      );
+    });
+  });
 });

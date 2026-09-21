@@ -1549,6 +1549,16 @@ export class Batch {
       url: href,
       file_alias: trimExecutableExtension(rri(url.href)).replace(/\.json$/, ''),
       generation: this.generation,
+      // The host bundle that rendered this row, as an ordering rather than the
+      // hash beside it in `diagnostics`. Promoted out of the jsonb into its own
+      // indexed column because the query it exists for — every row below the
+      // shell now being served — is a range scan over the largest table here,
+      // and a jsonb extract has no index to walk.
+      //
+      // `null` when the render reported no number, which is unknown rather than
+      // old. `< current` excludes null, so such a row stays out of a repair
+      // instead of being swept into the first one that runs.
+      host_shell_generation: diagnostics.warmedHostShellGeneration ?? null,
       realm_url: this.realmURL.href,
       is_deleted: false,
       indexed_at: Date.now(),

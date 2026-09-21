@@ -17,6 +17,42 @@ export const PRERENDER_SERVER_DRAINING_STATUS_CODE = 410;
 export const PRERENDER_HOST_SHELL_HASH_HEADER =
   'X-Boxel-Prerender-Host-Shell-Hash';
 
+// The ordering position of the shell the header above names. The realm server
+// claims it from `host_shell_generation` when it reports the token, and the
+// manager echoes the pair on every heartbeat so a prerender server records a
+// number alongside each token it adopts.
+//
+// The token alone cannot order two renders: it is a hash, so it answers "same
+// shell?" and never "older shell?". A render carries the generation of the
+// shell its page was warmed against onto the row it produces, which is what
+// lets a repair pass select the rows a deploy left behind.
+//
+// Optional throughout. A manager that has been told no generation sends no
+// header, and a prerender server that receives none records none — the token
+// keeps working on its own, which is what keeps a rolling deploy of these two
+// services from changing recycle behaviour.
+export const PRERENDER_HOST_SHELL_GENERATION_HEADER =
+  'X-Boxel-Prerender-Host-Shell-Generation';
+
+// Read a host-shell generation off a header or a JSON body field. The value
+// crosses a process boundary as text and is stamped onto a row, so anything
+// that is not a non-negative integer is discarded rather than coerced: `NaN`
+// or a negative would compare unpredictably against the current generation,
+// and a silently-zero value would read as "older than everything" and enlist
+// its row in every repair.
+export function parseHostShellGeneration(
+  raw: string | number | null | undefined,
+): number | undefined {
+  if (raw === null || raw === undefined || raw === '') {
+    return undefined;
+  }
+  let parsed = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return undefined;
+  }
+  return parsed;
+}
+
 // CS-10872: correlates one client-initiated prerender call across
 // remote-prerenderer → manager → prerender-server. The client assigns
 // the ID on the first request; the manager and prerender-server echo
