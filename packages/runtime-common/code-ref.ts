@@ -439,6 +439,38 @@ export function getAncestor(
   return undefined;
 }
 
+// A def class, or a thunk deferring one past its own class body, as the code
+// ref that names it. A thunk is how an author names a class declared later in
+// the module — including the class a declaration is written on.
+//
+// The identifier arrives as an argument rather than being read from here, so a
+// caller that must stay independent of any loader can pass its own; both sides
+// that read an authored declaration share this one reading of what a written
+// class means, which is what keeps a declaration from meaning two things.
+export function codeRefForDef(
+  value: unknown,
+  identify: (def: typeof BaseDef) => CodeRef | undefined,
+): CodeRef | undefined {
+  if (typeof value !== 'function') {
+    return undefined;
+  }
+  let direct = identify(value as typeof BaseDef);
+  if (direct) {
+    return direct;
+  }
+  let resolved: unknown;
+  try {
+    resolved = (value as () => unknown)();
+  } catch {
+    // A thunk that throws names nothing yet; the caller reports the
+    // unresolved type.
+    return undefined;
+  }
+  return typeof resolved === 'function'
+    ? identify(resolved as typeof BaseDef)
+    : undefined;
+}
+
 export function moduleFrom(ref: CodeRef): string {
   if (!('type' in ref)) {
     return ref.module;
