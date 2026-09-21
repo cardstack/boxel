@@ -1847,6 +1847,18 @@ export function createPrerenderHttpServer(options?: {
             // manager's warm-vacancy-first routing (CS-10758). Additive to
             // warmedAffinities for rolling-deploy back-compat.
             affinityVacancy: prerenderer.getVacancySnapshot(),
+            // The shell this server's pages are actually running, so the
+            // manager can answer whether the whole fleet has caught up to a
+            // host deploy. Every other host-shell value travels the other way
+            // — the manager tells servers what is current — and this is the
+            // only one that has to come back, because the manager cannot
+            // observe a recycle completing.
+            //
+            // `null` rather than omitted when this server has warmed against
+            // no token it has heard: that is a sampled answer, and a fleet
+            // holding such a server has demonstrably not converged. An older
+            // server omits the field entirely, which is no answer at all.
+            warmedHostShellHash: warmedHostShellHash ?? null,
           },
         },
       };

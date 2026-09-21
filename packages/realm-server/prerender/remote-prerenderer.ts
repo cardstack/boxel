@@ -1,6 +1,7 @@
 import {
   type Prerenderer,
   type AffinityType,
+  type HostShellConvergence,
   type ModuleRenderResponse,
   type PrerenderVisitArgs,
   type RenderVisitResponse,
@@ -52,6 +53,20 @@ class RetryablePrerenderError extends Error {
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+// How often to re-ask the manager whether the fleet has caught up. The
+// measured convergence is tens of seconds and every live prerender server
+// recycles on the same heartbeat, so a one-second poll resolves the common
+// case within a second of it becoming true without making the manager's
+// health endpoint hot.
+const HOST_SHELL_POLL_INTERVAL_MS = 1_000;
+
+// How many polls in a row may fail before the wait gives up rather than
+// running out its bound. Three rather than one so a single dropped request
+// during a manager restart does not skip the gate; small enough that an
+// unreachable manager costs a job seconds, not the whole budget. A single
+// success resets the count, so this can only end a wait that is failing now.
+const MAX_HOST_SHELL_POLL_FAILURES = 3;
 
 export function createRemotePrerenderer(
   prerenderServerURL: string,
@@ -405,6 +420,90 @@ export function createRemotePrerenderer(
       } finally {
         clearTimeout(timer);
       }
+    },
+
+    // Poll the manager's health until it reports the fleet running the shell
+    // the realm server is serving, or until the caller's bound expires.
+    //
+    // A poll rather than a subscription because the answer is only read at the
+    // start of a render job and the interval is seconds: a push channel would
+    // be a second piece of manager state to keep correct for no gain at this
+    // cadence.
+    //
+    // Never throws. The caller is deciding whether to wait before doing work
+    // it is going to do regardless, so a manager that cannot be reached has to
+    // read as "stop waiting", not as a failed job.
+    async awaitHostShellConvergence({
+      timeoutMs,
+    }): Promise<HostShellConvergence> {
+      let started = Date.now();
+      let endpoint = new URL('/', prerenderURL);
+      let lastOutcome: 'timeout' | 'unavailable' = 'timeout';
+      // A manager that cannot be reached will not become reachable within one
+      // job's budget, and every render job pays this wait independently — so
+      // burning the whole bound on each would turn one broken manager into a
+      // fleet-wide throughput collapse, which is worse than anything the gate
+      // prevents. A manager that answers but reports the fleet behind is the
+      // opposite case: that is the deploy this exists for, and it is worth
+      // waiting out.
+      let consecutiveFailures = 0;
+      // Bounded well below the caller's budget so the last poll cannot itself
+      // overrun it, and short enough that a fleet converging in seconds is
+      // noticed in seconds.
+      let pollTimeoutMs = Math.min(5_000, Math.max(1_000, timeoutMs));
+      while (Date.now() - started < timeoutMs) {
+        let ac = new AbortController();
+        let timer = setTimeout(() => ac.abort(), pollTimeoutMs);
+        (timer as any).unref?.();
+        try {
+          let response = await fetch(endpoint, {
+            method: 'GET',
+            headers: { Accept: 'application/vnd.api+json' },
+            signal: ac.signal,
+          });
+          if (response.ok) {
+            let body = (await response.json()) as {
+              data?: { attributes?: { hostShellConverged?: unknown } };
+            };
+            // Strictly `true`. A manager too old to report the field answers
+            // `undefined`, and treating that as converged would make the gate
+            // silently absent during exactly the deploy it exists for — so it
+            // counts as not converged and the caller's bound ends the wait.
+            if (body?.data?.attributes?.hostShellConverged === true) {
+              return {
+                converged: true,
+                waitedMs: Date.now() - started,
+                outcome: 'converged',
+              };
+            }
+            lastOutcome = 'timeout';
+            consecutiveFailures = 0;
+          } else {
+            lastOutcome = 'unavailable';
+            consecutiveFailures++;
+          }
+        } catch (e) {
+          // Includes the abort above. Either way the fleet could not be asked.
+          log.debug('host-shell convergence poll failed:', e as any);
+          lastOutcome = 'unavailable';
+          consecutiveFailures++;
+        } finally {
+          clearTimeout(timer);
+        }
+        if (consecutiveFailures >= MAX_HOST_SHELL_POLL_FAILURES) {
+          break;
+        }
+        let remaining = timeoutMs - (Date.now() - started);
+        if (remaining <= 0) {
+          break;
+        }
+        await delay(Math.min(HOST_SHELL_POLL_INTERVAL_MS, remaining));
+      }
+      return {
+        converged: false,
+        waitedMs: Date.now() - started,
+        outcome: lastOutcome,
+      };
     },
   };
 }

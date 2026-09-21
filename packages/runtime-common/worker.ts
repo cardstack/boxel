@@ -150,6 +150,113 @@ export const INDEX_JOB_TYPES = [
   'copy-index',
 ] as const;
 
+// The job types that render a card in the host shell, and therefore wait for
+// the prerender fleet to be running the shell the realm server is serving
+// before they start.
+//
+// `copy-index` and `full-reindex` are absent because neither renders: the
+// first copies rows, the second enqueues the jobs above, and gating it would
+// only delay the gate. `screenshot-card` renders, but a person is usually
+// waiting on it, and seconds of latency on a screenshot is a worse trade than
+// the rare bad capture — the row it writes is replaceable, which an index row
+// served from cache is not.
+const HOST_SHELL_GATED_JOB_TYPES = new Set([
+  'from-scratch-index',
+  'incremental-index',
+  'prerender_html',
+  'prerender-html-reconcile',
+]);
+
+// How long a render job waits for the fleet before starting anyway.
+//
+// Measured convergence is tens of seconds — every live prerender server
+// recycles on the same heartbeat, in parallel — so this is several times the
+// expected wait rather than a guess at one. `0` disables the gate.
+//
+// The expiry behaviour is to proceed, and that is the whole design rather than
+// a fallback. A stalled indexer is its own outage class, and proceeding is
+// what happens today: a render against a shell being replaced produces a row
+// the write site already declines to publish when it fails. So the worst case
+// of giving up is the behaviour this gate improves on, while the worst case of
+// waiting longer is an indexer that never runs.
+const DEFAULT_HOST_SHELL_GATE_TIMEOUT_MS = 120_000;
+
+// Below this, a wait is the gate working and is not worth a line per job. At or
+// above it, the job's latency has a cause an operator would otherwise have to
+// guess at.
+const HOST_SHELL_GATE_LOG_FLOOR_MS = 1_000;
+
+export function hostShellGateTimeoutMs(): number {
+  let raw = process.env.INDEX_HOST_SHELL_GATE_TIMEOUT_MS;
+  if (raw == null || raw === '') {
+    return DEFAULT_HOST_SHELL_GATE_TIMEOUT_MS;
+  }
+  let parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return DEFAULT_HOST_SHELL_GATE_TIMEOUT_MS;
+  }
+  return parsed;
+}
+
+// Wait for the prerender fleet to be running the host shell the realm server
+// is serving, so the rows a job produces are not rendered by a bundle that is
+// already being replaced.
+//
+// Never throws and never waits without a bound. A job that cannot ask the
+// fleet, or whose bound expires, proceeds — which is what it would have done
+// with no gate at all, and is strictly better than an indexer that stops.
+//
+// A free function rather than a method so its behaviour can be driven directly
+// against a stub prerenderer. The cases that matter here are the ones where it
+// declines to wait, and those are exactly the ones a test would otherwise have
+// to stand up a whole Worker to reach.
+export async function awaitHostShellBeforeRender({
+  prerenderer,
+  jobType,
+  timeoutMs,
+  log,
+}: {
+  prerenderer: Prerenderer;
+  jobType: string;
+  timeoutMs: number;
+  log: { info: (...args: any[]) => void; warn: (...args: any[]) => void };
+}): Promise<void> {
+  if (timeoutMs === 0) {
+    return;
+  }
+  let awaitConvergence = prerenderer.awaitHostShellConvergence;
+  if (!awaitConvergence) {
+    // An in-process or stubbed prerenderer has no fleet to be behind.
+    return;
+  }
+  let result;
+  try {
+    result = await awaitConvergence.call(prerenderer, { timeoutMs });
+  } catch (e) {
+    // The contract says it does not throw; a caller that trusted that and was
+    // wrong would fail a job over a diagnostic.
+    log.warn(
+      `host-shell gate for ${jobType} failed unexpectedly; proceeding`,
+      e as any,
+    );
+    return;
+  }
+  if (result.converged) {
+    // Silent in the steady state, where the fleet is already current and the
+    // first poll returns at once. A wait worth naming is one an operator would
+    // otherwise see only as unexplained job latency.
+    if (result.waitedMs >= HOST_SHELL_GATE_LOG_FLOOR_MS) {
+      log.info(
+        `host-shell gate held ${jobType} for ${result.waitedMs}ms until the prerender fleet was current`,
+      );
+    }
+    return;
+  }
+  log.warn(
+    `host-shell gate gave up after ${result.waitedMs}ms (${result.outcome}); starting ${jobType} against a fleet that has not reported the current shell`,
+  );
+}
+
 export class Worker {
   #log = logger('worker');
   #indexWriter: IndexWriter;
@@ -260,26 +367,56 @@ export class Worker {
       skipPrerenderHtmlRealms: this.#skipPrerenderHtmlRealms,
     };
 
+    // Applied at registration rather than inside each task, so the set of
+    // gated job types is readable in one place and a new render task cannot
+    // quietly miss the gate by forgetting a call.
+    //
+    // The wait happens after the job is claimed, which is deliberate. Gating
+    // the claim itself would leave the work in the queue with nothing
+    // guaranteed to come back for it; gating enqueue would lose it outright.
+    // A claimed job holding its worker for seconds is the cost, and the bound
+    // is what keeps that from becoming a stall.
+    let gated = <A, T>(
+      jobType: string,
+      handler: (arg: A) => Promise<T>,
+    ): ((arg: A) => Promise<T>) => {
+      if (!HOST_SHELL_GATED_JOB_TYPES.has(jobType)) {
+        return handler;
+      }
+      return async (arg: A) => {
+        await awaitHostShellBeforeRender({
+          prerenderer: this.#prerenderer,
+          jobType,
+          timeoutMs: hostShellGateTimeoutMs(),
+          log: this.#log,
+        });
+        return handler(arg);
+      };
+    };
+
     let registrations: Record<string, () => Promise<unknown> | unknown> = {
       'from-scratch-index': () =>
         this.#queue.register(
           `from-scratch-index`,
-          Tasks['fromScratchIndex'](taskArgs),
+          gated('from-scratch-index', Tasks['fromScratchIndex'](taskArgs)),
         ),
       'incremental-index': () =>
         this.#queue.register(
           `incremental-index`,
-          Tasks['incrementalIndex'](taskArgs),
+          gated('incremental-index', Tasks['incrementalIndex'](taskArgs)),
         ),
       prerender_html: () =>
         this.#queue.register(
           `prerender_html`,
-          Tasks['prerenderHtml'](taskArgs),
+          gated('prerender_html', Tasks['prerenderHtml'](taskArgs)),
         ),
       'prerender-html-reconcile': () =>
         this.#queue.register(
           `prerender-html-reconcile`,
-          Tasks['prerenderHtmlReconcile'](taskArgs),
+          gated(
+            'prerender-html-reconcile',
+            Tasks['prerenderHtmlReconcile'](taskArgs),
+          ),
         ),
       'media-cache-gc': () =>
         this.#queue.register(`media-cache-gc`, Tasks['mediaCacheGc'](taskArgs)),

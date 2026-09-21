@@ -225,6 +225,66 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(malformed.headers[genKey], undefined);
     });
 
+    // The one host-shell value that travels from the servers back to the
+    // manager. The manager cannot watch a recycle finish, so without this it
+    // can say what the current shell is but never whether the fleet is
+    // running it — which is the question an indexing job waits on.
+    test('reports whether the fleet has caught up to the current shell', async function (assert) {
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let heartbeat = (url: string, warmedHostShellHash?: string | null) =>
+        request.post('/prerender-servers').send({
+          data: {
+            type: 'prerender-server',
+            attributes: {
+              capacity: 2,
+              url,
+              ...(warmedHostShellHash === undefined
+                ? {}
+                : { warmedHostShellHash }),
+            },
+          },
+        });
+      let converged = async () => {
+        let health = await request.get('/');
+        return health.body.data.attributes.hostShellConverged;
+      };
+
+      await request
+        .post('/host-shell')
+        .send({ data: { attributes: { hash: 'aaa111' } } });
+
+      await heartbeat(serverUrlA!, 'bbb222');
+      assert.false(
+        await converged(),
+        'a server still on the outgoing shell holds the fleet',
+      );
+
+      await heartbeat(serverUrlA!, 'aaa111');
+      assert.true(await converged(), 'the only server has caught up');
+
+      // A second server that says nothing is not a second server that is
+      // current. During a roll of the prerender build itself this is the
+      // normal state, and the gate's bound is what keeps it from being a
+      // stall.
+      await heartbeat(serverUrlB!);
+      assert.false(
+        await converged(),
+        'a server that has made no claim is not counted as current',
+      );
+
+      await heartbeat(serverUrlB!, 'aaa111');
+      assert.true(await converged(), 'both servers are on the current shell');
+
+      // Per-server, so an operator reading a gate that will not open can see
+      // which server is holding it.
+      let health = await request.get('/');
+      let warmed = health.body.included.map(
+        (s: any) => s.attributes.warmedHostShellHash,
+      );
+      assert.deepEqual(warmed.sort(), ['aaa111', 'aaa111']);
+    });
+
     test('health includes active servers with affinities and last used times', async function (assert) {
       process.env.PRERENDER_MULTIPLEX = '2';
       let { app } = buildPrerenderManagerApp();

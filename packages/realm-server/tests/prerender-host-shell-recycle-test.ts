@@ -13,6 +13,15 @@ import {
   stampStaleShellFailure,
 } from '../prerender/prerender-app.ts';
 import { parseHostShellGeneration } from '../prerender/prerender-constants.ts';
+import { isHostShellConverged } from '../prerender/manager-app.ts';
+import {
+  awaitHostShellBeforeRender,
+  hostShellGateTimeoutMs,
+} from '@cardstack/runtime-common/worker';
+import type {
+  HostShellConvergence,
+  Prerenderer,
+} from '@cardstack/runtime-common';
 
 // Unit tests for the host-shell recycle decision a prerender server makes on
 // every heartbeat: the manager echoes the current host-shell token, and the
@@ -472,6 +481,271 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(parseHostShellGeneration(-1), undefined);
       assert.strictEqual(parseHostShellGeneration(Number.NaN), undefined);
       assert.strictEqual(parseHostShellGeneration(Infinity), undefined);
+    });
+  });
+
+  // Whether every server that could take a render is running the shell the
+  // realm server says it is serving. This is what the indexing gate waits on,
+  // so each case below is a reason a render job either starts or holds.
+  module('isHostShellConverged', function () {
+    let active = (warmedHostShellHash?: string | null) =>
+      ({ status: 'active', warmedHostShellHash }) as const;
+
+    test('every eligible server on the reported shell is convergence', function (assert) {
+      assert.true(
+        isHostShellConverged({
+          hostShellHash: 'aaa',
+          servers: [active('aaa'), active('aaa')],
+        }),
+      );
+    });
+
+    test('one server still behind holds the whole fleet', function (assert) {
+      assert.false(
+        isHostShellConverged({
+          hostShellHash: 'aaa',
+          servers: [active('aaa'), active('bbb')],
+        }),
+        'a render can land on either, so either being behind is the answer',
+      );
+    });
+
+    // The distinction the heartbeat's three states carry. `null` is a server
+    // saying it has warmed against nothing it has heard; absence is a server
+    // that cannot say. Neither is a claim to be current, and reading either as
+    // one would open the gate during the deploy it exists for.
+    test('a server that has not said it is current is not current', function (assert) {
+      assert.false(
+        isHostShellConverged({
+          hostShellHash: 'aaa',
+          servers: [active('aaa'), active(null)],
+        }),
+        'null is a sampled answer, and the answer is "behind"',
+      );
+      assert.false(
+        isHostShellConverged({
+          hostShellHash: 'aaa',
+          servers: [active('aaa'), active(undefined)],
+        }),
+        'an older server that omits the field has made no claim',
+      );
+    });
+
+    // A draining server takes no new work, so a render cannot land on it and
+    // its shell cannot reach a row. Counting it would hold every gate for the
+    // length of every prerender roll.
+    test('a draining server is not counted', function (assert) {
+      assert.true(
+        isHostShellConverged({
+          hostShellHash: 'aaa',
+          servers: [
+            active('aaa'),
+            { status: 'draining', warmedHostShellHash: 'bbb' },
+          ],
+        }),
+      );
+    });
+
+    test('nothing to converge on, and nothing to converge, are both false', function (assert) {
+      assert.false(
+        isHostShellConverged({
+          hostShellHash: undefined,
+          servers: [active('aaa')],
+        }),
+        'no reported token means there is no current shell to be on',
+      );
+      assert.false(
+        isHostShellConverged({ hostShellHash: 'aaa', servers: [] }),
+        'an empty registry renders nothing, which is not the same as being ready',
+      );
+      assert.false(
+        isHostShellConverged({
+          hostShellHash: 'aaa',
+          servers: [{ status: 'draining', warmedHostShellHash: 'aaa' }],
+        }),
+        'a fleet that is entirely draining has no server that can take a render',
+      );
+    });
+  });
+
+  // The gate a render job passes through before it starts. Every case here is
+  // about when it declines to wait: waiting forever is the outage class this
+  // is most at risk of introducing.
+  module('awaitHostShellBeforeRender', function () {
+    let stub = (
+      convergence: HostShellConvergence | Error | undefined,
+    ): { prerenderer: Prerenderer; calls: number } => {
+      let state = { calls: 0 };
+      let prerenderer = {
+        prerenderModule: async () => {
+          throw new Error('not used');
+        },
+        prerenderVisit: async () => {
+          throw new Error('not used');
+        },
+        runCommand: async () => {
+          throw new Error('not used');
+        },
+        ...(convergence === undefined
+          ? {}
+          : {
+              awaitHostShellConvergence: async () => {
+                state.calls++;
+                if (convergence instanceof Error) {
+                  throw convergence;
+                }
+                return convergence;
+              },
+            }),
+      } as unknown as Prerenderer;
+      return {
+        prerenderer,
+        get calls() {
+          return state.calls;
+        },
+      };
+    };
+    let silent = { info: () => {}, warn: () => {} };
+
+    test('a converged fleet lets the job start', async function (assert) {
+      let s = stub({ converged: true, waitedMs: 0, outcome: 'converged' });
+      await awaitHostShellBeforeRender({
+        prerenderer: s.prerenderer,
+        jobType: 'incremental-index',
+        timeoutMs: 1000,
+        log: silent,
+      });
+      assert.strictEqual(s.calls, 1, 'the fleet was asked');
+    });
+
+    // The expiry behaviour, which is the design rather than a fallback: a
+    // stalled indexer is its own outage class, and proceeding is what would
+    // happen with no gate at all.
+    test('an expired bound returns rather than holding the job', async function (assert) {
+      let warnings: string[] = [];
+      let s = stub({ converged: false, waitedMs: 1234, outcome: 'timeout' });
+      await awaitHostShellBeforeRender({
+        prerenderer: s.prerenderer,
+        jobType: 'incremental-index',
+        timeoutMs: 1000,
+        log: { info: () => {}, warn: (m: string) => warnings.push(m) },
+      });
+      assert.strictEqual(warnings.length, 1, 'giving up is never silent');
+      assert.true(
+        warnings[0].includes('1234ms'),
+        `the duration is in the line; got: ${warnings[0]}`,
+      );
+      assert.true(
+        warnings[0].includes('timeout'),
+        `and so is the cause; got: ${warnings[0]}`,
+      );
+    });
+
+    test('a zero bound disables the gate without asking anything', async function (assert) {
+      let s = stub({ converged: false, waitedMs: 0, outcome: 'timeout' });
+      await awaitHostShellBeforeRender({
+        prerenderer: s.prerenderer,
+        jobType: 'incremental-index',
+        timeoutMs: 0,
+        log: silent,
+      });
+      assert.strictEqual(s.calls, 0);
+    });
+
+    test('a prerenderer with no fleet to ask does not wait', async function (assert) {
+      let s = stub(undefined);
+      await awaitHostShellBeforeRender({
+        prerenderer: s.prerenderer,
+        jobType: 'incremental-index',
+        timeoutMs: 1000,
+        log: silent,
+      });
+      assert.strictEqual(
+        s.calls,
+        0,
+        'the optional method is absent, so no gate',
+      );
+    });
+
+    // The contract says it does not throw. A caller that trusted that and was
+    // wrong would fail a render job over a diagnostic.
+    test('a throwing fleet check does not fail the job', async function (assert) {
+      let warnings: string[] = [];
+      let s = stub(new Error('manager exploded'));
+      await awaitHostShellBeforeRender({
+        prerenderer: s.prerenderer,
+        jobType: 'prerender_html',
+        timeoutMs: 1000,
+        log: { info: () => {}, warn: (m: string) => warnings.push(m) },
+      });
+      assert.strictEqual(warnings.length, 1);
+      assert.true(warnings[0].includes('proceeding'));
+    });
+
+    test('a wait below the log floor is not narrated', async function (assert) {
+      let infos: string[] = [];
+      let s = stub({ converged: true, waitedMs: 12, outcome: 'converged' });
+      await awaitHostShellBeforeRender({
+        prerenderer: s.prerenderer,
+        jobType: 'incremental-index',
+        timeoutMs: 1000,
+        log: { info: (m: string) => infos.push(m), warn: () => {} },
+      });
+      assert.strictEqual(
+        infos.length,
+        0,
+        'the steady state is every job, and it stays quiet',
+      );
+    });
+
+    test('a wait worth naming is narrated', async function (assert) {
+      let infos: string[] = [];
+      let s = stub({ converged: true, waitedMs: 30_000, outcome: 'converged' });
+      await awaitHostShellBeforeRender({
+        prerenderer: s.prerenderer,
+        jobType: 'incremental-index',
+        timeoutMs: 120_000,
+        log: { info: (m: string) => infos.push(m), warn: () => {} },
+      });
+      assert.strictEqual(infos.length, 1);
+      assert.true(infos[0].includes('30000ms'));
+    });
+  });
+
+  module('hostShellGateTimeoutMs', function (hooks) {
+    let saved: string | undefined;
+    hooks.beforeEach(function () {
+      saved = process.env.INDEX_HOST_SHELL_GATE_TIMEOUT_MS;
+    });
+    hooks.afterEach(function () {
+      if (saved === undefined) {
+        delete process.env.INDEX_HOST_SHELL_GATE_TIMEOUT_MS;
+      } else {
+        process.env.INDEX_HOST_SHELL_GATE_TIMEOUT_MS = saved;
+      }
+    });
+
+    test('defaults to a bound several times the measured convergence', function (assert) {
+      delete process.env.INDEX_HOST_SHELL_GATE_TIMEOUT_MS;
+      assert.strictEqual(hostShellGateTimeoutMs(), 120_000);
+    });
+
+    test('zero is an off switch, not a malformed value', function (assert) {
+      process.env.INDEX_HOST_SHELL_GATE_TIMEOUT_MS = '0';
+      assert.strictEqual(hostShellGateTimeoutMs(), 0);
+    });
+
+    // A malformed value must not read as zero, which would silently remove the
+    // gate — the one outcome an operator setting this would not expect.
+    test('a malformed value falls back to the default rather than to off', function (assert) {
+      for (let bad of ['banana', '-5', '']) {
+        process.env.INDEX_HOST_SHELL_GATE_TIMEOUT_MS = bad;
+        assert.strictEqual(
+          hostShellGateTimeoutMs(),
+          120_000,
+          `${JSON.stringify(bad)} falls back`,
+        );
+      }
     });
   });
 

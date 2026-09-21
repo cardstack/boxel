@@ -1512,6 +1512,23 @@ export type ScreenshotPrerenderResponse = {
   meta?: PrerenderResponseMeta;
 };
 
+// How a wait for the prerender fleet to catch up to the current host shell
+// ended. `waitedMs` is reported whatever the outcome, because a gate that is
+// costing more than it saves is only visible as a duration.
+export interface HostShellConvergence {
+  converged: boolean;
+  waitedMs: number;
+  // `converged` — every server that can take a render reported the shell the
+  // realm server is serving.
+  // `timeout` — the bound expired first. The caller proceeds; see the gate's
+  // own comment for why waiting longer is the worse failure.
+  // `unavailable` — the fleet could not be asked at all. Indistinguishable
+  // from "not converged" as a fact, but not as a cause, and an operator
+  // needs them apart: one is a deploy in progress, the other is a broken
+  // manager.
+  outcome: 'converged' | 'timeout' | 'unavailable';
+}
+
 export interface Prerenderer {
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
   prerenderVisit(args: PrerenderVisitArgs): Promise<RenderVisitResponse>;
@@ -1530,6 +1547,14 @@ export interface Prerenderer {
   prerenderScreenshot?(
     args: ScreenshotPrerenderArgs,
   ): Promise<ScreenshotPrerenderResponse>;
+  // Optional: wait until the prerender fleet is running the host shell the
+  // realm server is serving, or until `timeoutMs` elapses. Optional for the
+  // same reason as the methods above — test stubs and in-process
+  // prerenderers have no fleet to ask — and a caller that finds it absent
+  // simply does not wait.
+  awaitHostShellConvergence?(args: {
+    timeoutMs: number;
+  }): Promise<HostShellConvergence>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';

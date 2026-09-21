@@ -859,4 +859,116 @@ module(basename(import.meta.filename), function (hooks) {
       }
     });
   });
+
+  // The wait an indexing job performs before rendering: poll the manager until
+  // it reports the fleet running the shell the realm server is serving. Every
+  // case below is about when the wait ends, because a wait that does not end
+  // is a worse outage than the skew it prevents.
+  module('awaitHostShellConvergence', function () {
+    // Each entry is one poll's answer: a body to return, or an Error to throw.
+    function stubFetch(answers: (unknown | Error)[]) {
+      let originalFetch = globalThis.fetch;
+      let calls = 0;
+      (globalThis as any).fetch = async () => {
+        let answer = answers[Math.min(calls, answers.length - 1)];
+        calls++;
+        if (answer instanceof Error) {
+          throw answer;
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => answer,
+        } as unknown as Response;
+      };
+      return {
+        restore: () => {
+          (globalThis as any).fetch = originalFetch;
+        },
+        get calls() {
+          return calls;
+        },
+      };
+    }
+    let health = (hostShellConverged: unknown) => ({
+      data: { attributes: { hostShellConverged } },
+    });
+
+    test('returns as soon as the fleet is current', async function (assert) {
+      let stub = stubFetch([health(true)]);
+      try {
+        let prerenderer = createRemotePrerenderer('http://127.0.0.1:1');
+        let result = await prerenderer.awaitHostShellConvergence!({
+          timeoutMs: 60_000,
+        });
+        assert.true(result.converged);
+        assert.strictEqual(result.outcome, 'converged');
+        assert.strictEqual(stub.calls, 1, 'one poll, no sleep');
+      } finally {
+        stub.restore();
+      }
+    });
+
+    test('gives up when the bound expires, without throwing', async function (assert) {
+      let stub = stubFetch([health(false)]);
+      try {
+        let prerenderer = createRemotePrerenderer('http://127.0.0.1:1');
+        let result = await prerenderer.awaitHostShellConvergence!({
+          timeoutMs: 10,
+        });
+        assert.false(result.converged);
+        assert.strictEqual(
+          result.outcome,
+          'timeout',
+          'the manager answered, it just had nothing good to say',
+        );
+      } finally {
+        stub.restore();
+      }
+    });
+
+    // A manager too old to report the field answers `undefined`. Reading that
+    // as converged would make the gate silently absent during exactly the
+    // deploy it exists for, so only a literal `true` opens it.
+    test('a manager that cannot answer the question does not open the gate', async function (assert) {
+      let stub = stubFetch([health(undefined)]);
+      try {
+        let prerenderer = createRemotePrerenderer('http://127.0.0.1:1');
+        let result = await prerenderer.awaitHostShellConvergence!({
+          timeoutMs: 10,
+        });
+        assert.false(result.converged);
+      } finally {
+        stub.restore();
+      }
+    });
+
+    // The failure mode that would matter most in production: every render job
+    // pays this wait independently, so a manager that is simply down must not
+    // cost each of them the whole budget.
+    test('an unreachable manager ends the wait in seconds, not the whole bound', async function (assert) {
+      let stub = stubFetch([new Error('ECONNREFUSED')]);
+      try {
+        let prerenderer = createRemotePrerenderer('http://127.0.0.1:1');
+        let started = Date.now();
+        let result = await prerenderer.awaitHostShellConvergence!({
+          timeoutMs: 120_000,
+        });
+        let elapsed = Date.now() - started;
+        assert.false(result.converged);
+        assert.strictEqual(result.outcome, 'unavailable');
+        assert.true(
+          elapsed < 30_000,
+          `gave up after ${elapsed}ms rather than running out a 120s bound`,
+        );
+        assert.strictEqual(
+          stub.calls,
+          3,
+          'three consecutive failures, so one dropped request still does not skip the gate',
+        );
+      } finally {
+        stub.restore();
+      }
+    });
+  });
 });

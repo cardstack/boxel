@@ -64,10 +64,62 @@ type ServerInfo = {
   // warmth from `warmedAffinities` without vacancy information.
   affinityVacancy: Map<string, AffinityVacancy>;
   status: 'active' | 'draining';
+  // The shell this server's pages are actually running, as it last reported.
+  // The manager cannot observe a recycle completing, so this is the only way
+  // it can answer whether the fleet has caught up to a host deploy.
+  //
+  // Three states, all distinct. A token is an answer. `null` is also an
+  // answer — the server has warmed against no token it has heard, so it is
+  // certainly behind. `undefined` is no answer: the server predates the field
+  // and cannot say, which is not the same as being current.
+  warmedHostShellHash?: string | null;
   registeredAt: number;
   lastSeenAt: number;
   lastAssignedAt: number;
 };
+
+// Whether every server that could take a render is running the shell the realm
+// server says it is serving.
+//
+// Exported because this is the predicate the indexing gate waits on, and a
+// second implementation of it — one on each side of the HTTP boundary — is two
+// places for "current" to be defined differently.
+//
+// Deliberately strict in three ways, each because the cost of being wrong is
+// asymmetric: a gate that waits when it need not delays an index by seconds,
+// while one that proceeds when it should not renders against the bundle this
+// exists to avoid.
+//
+//   - No reported token means there is nothing to converge on, not that
+//     everything has.
+//   - No server that can take work is not convergence either. An empty
+//     registry renders nothing.
+//   - A server that reports no warmed token at all has not said it is
+//     current, and is counted as behind. During a rolling deploy of the
+//     prerender fleet itself this can hold for the whole roll, which is what
+//     the caller's bound is for.
+//
+// Draining servers are excluded: they take no new work, so a render cannot
+// land on one and their shell cannot affect a row.
+export function isHostShellConverged({
+  hostShellHash,
+  servers,
+}: {
+  hostShellHash: string | undefined;
+  servers: {
+    status: 'active' | 'draining';
+    warmedHostShellHash?: string | null;
+  }[];
+}): boolean {
+  if (!hostShellHash) {
+    return false;
+  }
+  let eligible = servers.filter((s) => s.status !== 'draining');
+  if (eligible.length === 0) {
+    return false;
+  }
+  return eligible.every((s) => s.warmedHostShellHash === hostShellHash);
+}
 
 type Registry = {
   servers: Map<string, ServerInfo>; // key: serverUrl
@@ -265,12 +317,14 @@ export function buildPrerenderManagerApp(options?: {
     status,
     warmedAffinities,
     affinityVacancy,
+    warmedHostShellHash,
   }: {
     url: string;
     capacity?: number;
     status?: 'active' | 'draining';
     warmedAffinities?: string[];
     affinityVacancy?: Record<string, AffinityVacancy>;
+    warmedHostShellHash?: string | null;
   }) {
     log.debug(
       `received heartbeat from ${url} status=${status} capacity=${capacity} warmedAffinities=${warmedAffinities ? warmedAffinities.join() : 'none'}`,
@@ -339,6 +393,16 @@ export function buildPrerenderManagerApp(options?: {
           }
         }
       }
+      // Assigned only when the heartbeat carried the field. An omitted field
+      // is a server that cannot answer, and overwriting a previous answer
+      // with `undefined` would turn a converged fleet back into an unknown
+      // one on a single malformed heartbeat.
+      if (warmedHostShellHash !== undefined) {
+        if (warmedHostShellHash !== existing.warmedHostShellHash) {
+          existing.warmedHostShellHash = warmedHostShellHash;
+          changed = true;
+        }
+      }
       if (changed) {
         logRegistryIfChanged('heartbeat update');
       }
@@ -352,6 +416,7 @@ export function buildPrerenderManagerApp(options?: {
       warmedAffinities: new Set(warmedAffinities ?? []),
       affinityVacancy: vacancyMap ?? new Map(),
       status: status ?? 'active',
+      warmedHostShellHash,
       registeredAt: now(),
       lastSeenAt: now(),
       lastAssignedAt: 0,
@@ -419,6 +484,9 @@ export function buildPrerenderManagerApp(options?: {
           status: serverInfo.status,
           warmedAffinities: Array.from(serverInfo.warmedAffinities.values()),
           affinityVacancy: Object.fromEntries(serverInfo.affinityVacancy),
+          // Per-server, so an operator reading a gate that will not open can
+          // see which server is holding it rather than only that one is.
+          warmedHostShellHash: serverInfo.warmedHostShellHash ?? null,
           affinities,
         },
       });
@@ -430,6 +498,16 @@ export function buildPrerenderManagerApp(options?: {
         id: 'health',
         attributes: {
           ready: registry.servers.size > 0,
+          // The shell the realm server says it is serving, and whether every
+          // server that can take a render is running it. An indexing worker
+          // waits on the second before rendering, so that a row is not
+          // produced by a bundle that is already being replaced.
+          hostShellHash: registry.hostShellHash ?? null,
+          hostShellGeneration: registry.hostShellGeneration ?? null,
+          hostShellConverged: isHostShellConverged({
+            hostShellHash: registry.hostShellHash,
+            servers: [...registry.servers.values()],
+          }),
         },
       },
       included: servers,
@@ -523,12 +601,28 @@ export function buildPrerenderManagerApp(options?: {
       }
       url = normalizeURL(url);
 
+      // Three-state, so the parse has to keep `null` and absence apart: a
+      // server reporting `null` has warmed against nothing it has heard, and
+      // one reporting nothing predates the field. Anything else — a number, an
+      // object, an oversized string — is malformed and reads as absence, since
+      // inventing a token would make a stale fleet look converged.
+      let warmedHostShellHash: string | null | undefined;
+      let rawWarmed = attrs.warmedHostShellHash;
+      if (rawWarmed === null) {
+        warmedHostShellHash = null;
+      } else if (typeof rawWarmed === 'string') {
+        let trimmed = rawWarmed.trim();
+        warmedHostShellHash =
+          trimmed.length > 0 && trimmed.length <= 64 ? trimmed : null;
+      }
+
       recordHeartbeat({
         url,
         capacity,
         status,
         warmedAffinities,
         affinityVacancy,
+        warmedHostShellHash,
       });
       // Echo the current host-shell token so the server can recycle its
       // browser when the host is redeployed (see PRERENDER_HOST_SHELL_HASH_HEADER).
