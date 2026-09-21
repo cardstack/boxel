@@ -646,6 +646,18 @@ export async function runGlintCheck(
             '@cardstack/boxel-ui/*': [
               `${join(PACKAGES_PATH, 'boxel-ui', 'src')}/*`,
             ],
+            // Map icons to their committed .gts sources. Without this the
+            // import resolves through the package's exports map, whose types
+            // live in the gitignored `declarations/` build output — in an
+            // environment with `dist/` built but no `declarations/` (CI's
+            // restored web-assets artifact), the import falls through to the
+            // untyped rollup JS, every icon types as `object`, and each
+            // unannotated `static icon = X` in the base package breaks its
+            // class's `typeof BaseDef` constraint.
+            '@cardstack/boxel-icons/*': [
+              `${join(PACKAGES_PATH, 'boxel-icons', 'src', 'icons')}/*`,
+              `${join(PACKAGES_PATH, 'boxel-icons', 'src')}/*`,
+            ],
             '*': [`${HOST_PKG_PATH}/types/*`],
           },
         },
