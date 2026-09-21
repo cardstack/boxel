@@ -89,13 +89,29 @@ class ClinicalDashboardIsolated extends Component<typeof ClinicalDashboard> {
 
     <style scoped>
       .dashboard {
-        padding: var(--boxel-sp);
+        container-type: inline-size;
+        container-name: dashboard;
+        padding: var(--boxel-sp-lg);
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp);
       }
       h1 {
         margin: 0;
+        font-size: clamp(1.75rem, 4cqi, 2.75rem);
+        line-height: 1.05;
+        font-weight: 400;
+        letter-spacing: -0.03em;
+      }
+      h2 {
+        margin: 0;
+        padding-bottom: var(--boxel-sp-xxs);
+        border-bottom: 0.0625rem solid var(--border, var(--muted));
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted-foreground);
       }
       .posture {
         margin: var(--boxel-sp-xs) 0 0;
