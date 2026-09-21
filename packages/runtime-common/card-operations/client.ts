@@ -1297,6 +1297,9 @@ function onTarget(
   env: OperationsEnvironment,
   target: unknown,
 ): Record<string, unknown> {
+  if (typeof target === 'string') {
+    return entryMembers(scope, fileAtPath(scope, env, target));
+  }
   if (isQueryTargetHandle(target)) {
     return queriedMembers(scope, target[TARGET]);
   }
@@ -1319,6 +1322,58 @@ function onTarget(
     );
   }
   return entryMembers(scope, other);
+}
+
+// A file named by its path rather than by an instance, which is the only way
+// to reach one the realm does not hold yet: a `FileDef` is hydrated from a
+// stored file, so a log that has never been written has no instance to pass —
+// and an `appendLine` creates the file it appends to.
+//
+// The path is read the way the endpoint reads an entry's `href`, so what the
+// caller writes here means the same thing it would mean on the wire and a
+// refusal happens where the caller can see which path it was: an absolute URL
+// is taken as written, and anything else names a path under the realm this
+// batch commits to, a leading slash meaning that realm's root rather than its
+// origin.
+//
+// What the path cannot say is what the file is. A stored file's type comes
+// from its extension and is resolved by the realm, so nothing here knows which
+// operations it declares — which is why the bucket this feeds promises only
+// the behaviors every file carries and passes anything else through unchecked.
+function fileAtPath(
+  scope: BatchScope,
+  env: OperationsEnvironment,
+  path: string,
+): InstanceSubject {
+  let realm = scope.batch.realmURL;
+  if (path.length === 0) {
+    throw new Error(
+      `on("") names no file; it takes the path of one in ${realm}`,
+    );
+  }
+  let absolute: URL;
+  try {
+    absolute = new URL(path);
+  } catch {
+    try {
+      absolute = new URL(path.replace(/^\/+/, ''), realm);
+    } catch {
+      throw new Error(`on("${path}") does not name a path in ${realm}`);
+    }
+  }
+  if (!absolute.href.startsWith(realm)) {
+    throw new Error(
+      `on("${path}") names ${absolute.href}, which is not in ${realm}; a batch commits to one realm`,
+    );
+  }
+  let subject = env.subject(path);
+  if (subject.scope !== 'instance') {
+    throw new Error(`on("${path}") does not name a file in ${realm}`);
+  }
+  // The realm is this batch's, and the id is the path resolved against it —
+  // neither is knowable where the subject is built, which reads a target
+  // without knowing the batch it is being registered in.
+  return { ...subject, id: absolute.href, realmURL: realm };
 }
 
 // The operations of the cards a search resolves to.

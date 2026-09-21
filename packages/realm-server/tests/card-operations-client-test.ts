@@ -184,6 +184,38 @@ function fileInstance(): OperationsSubject {
   };
 }
 
+// A stand-in for something the caller holds — an instance, a class — named so
+// the stubbed environment can resolve it back to a subject.
+//
+// An object rather than a bare string, and that is the production split rather
+// than a harness convenience: a string handed to the card-facing module names
+// a *file's path*, so a test that named an instance with one would be handing
+// the core something it now reads as a path.
+function handle(name: string): { stub: string } {
+  return { stub: name };
+}
+
+function stubName(target: unknown): string {
+  return typeof target === 'object' && target !== null && 'stub' in target
+    ? String((target as { stub: unknown }).stub)
+    : String(target);
+}
+
+// What the card-facing module answers for a path, standing in for it here.
+// Which operations a file carries is the file family's to say and is answered
+// where `FileDef` is in scope; where the path points is the batch's to say,
+// since a path names no realm — so the path travels as the id and the batch
+// resolves it.
+function fileAtPath(path: string): OperationsSubject {
+  return {
+    scope: 'instance',
+    family: 'file',
+    displayName: `file ${path}`,
+    operations: FILE_OPERATIONS,
+    id: path,
+  };
+}
+
 interface Sent {
   realmURL: string;
   method: OperationsMethod;
@@ -285,7 +317,10 @@ function harness(opts?: {
     env: {
       transport,
       subject(target: unknown) {
-        let named = opts?.subjects?.[target as string];
+        if (typeof target === 'string') {
+          return fileAtPath(target);
+        }
+        let named = opts?.subjects?.[stubName(target)];
         if (!named) {
           throw new Error(`the test did not describe ${String(target)}`);
         }
@@ -297,7 +332,7 @@ function harness(opts?: {
           : undefined;
       },
       resourceFor(instance: unknown) {
-        let named = opts?.resources?.[instance as string];
+        let named = opts?.resources?.[stubName(instance)];
         if (!named) {
           throw new Error(
             `the test did not describe a resource for ${String(instance)}`,
@@ -668,9 +703,9 @@ module(basename(import.meta.filename), function () {
         bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>
       )((b: any) => {
         if (attributes === undefined) {
-          b.create(target);
+          b.create(handle(target));
         } else {
-          b.create(target, attributes);
+          b.create(handle(target), attributes);
         }
       });
     }
@@ -709,8 +744,8 @@ module(basename(import.meta.filename), function () {
       let bucket = buildOperations(reportInstance(), env);
       await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
         (b: any) => {
-          b.create('ACTIVITY', { headline: 'One' });
-          b.create('ACTIVITY', { headline: 'Two' });
+          b.create(handle('ACTIVITY'), { headline: 'One' });
+          b.create(handle('ACTIVITY'), { headline: 'Two' });
         },
       );
 
@@ -775,8 +810,8 @@ module(basename(import.meta.filename), function () {
       let bucket = buildOperations(reportInstance(), env);
       await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
         (b: any) => {
-          b.create('UNSAVED');
-          b.create('UNSAVED');
+          b.create(handle('UNSAVED'));
+          b.create(handle('UNSAVED'));
         },
       );
 
@@ -891,7 +926,7 @@ module(basename(import.meta.filename), function () {
       let [created] = (await (
         bucket.atomic as (build: (b: any) => unknown) => Promise<any[]>
       )((b: any) => {
-        let activity = b.create('ACTIVITY', { headline: 'Lab safety' });
+        let activity = b.create(handle('ACTIVITY'), { headline: 'Lab safety' });
         b.addActivity({ activity });
         return [activity];
       })) as any[];
@@ -936,7 +971,9 @@ module(basename(import.meta.filename), function () {
       let bucket = buildOperations(reportInstance(), env);
       await (bucket.atomic as (build: (b: any) => unknown) => Promise<any>)(
         (b: any) => {
-          let activity = b.create('ACTIVITY', { headline: 'Lab safety' });
+          let activity = b.create(handle('ACTIVITY'), {
+            headline: 'Lab safety',
+          });
           b.appendContainsMany({
             field: 'comments',
             items: [{ body: 'see activity', activity }],
@@ -1089,7 +1126,7 @@ module(basename(import.meta.filename), function () {
       await assert.rejects(
         (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
           (b: any) => {
-            b.on('ELSEWHERE').escalate();
+            b.on(handle('ELSEWHERE')).escalate();
           },
         ),
         /a batch commits to one realm/,
@@ -1103,10 +1140,81 @@ module(basename(import.meta.filename), function () {
       let bucket = buildOperations(reportInstance(), env);
       await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
         (b: any) => {
-          b.on('NEARBY').delete();
+          b.on(handle('NEARBY')).delete();
         },
       );
       assert.strictEqual(entries(sent[0])[0].href, `${REALM}report-2`);
+    });
+
+    test('a file is targeted by its path, resolved against the batch realm', async function (assert) {
+      // The only way to reach a file the realm does not hold yet: a `FileDef`
+      // is hydrated from a stored file, so a log that has never been written
+      // has no instance to pass — and appending a line creates it.
+      let { sent, env } = batchHarness({
+        'atomic:results': [{ data: null }, { data: null }],
+      });
+      let bucket = buildOperations(reportInstance(), env);
+      await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
+        (b: any) => {
+          b.on('logs/lot-114.txt').appendLine({ line: 'opened' });
+          b.on('/logs/lot-114.txt').appendLine({ line: 'bid 1250' });
+        },
+      );
+      assert.deepEqual(
+        entries(sent[0]).map((entry: any) => entry.href),
+        [`${REALM}logs/lot-114.txt`, `${REALM}logs/lot-114.txt`],
+        'a bare path names one under the realm, and a leading slash names the ' +
+          "realm's root rather than the origin's — the two spellings the " +
+          'endpoint reads',
+      );
+      assert.deepEqual(
+        entries(sent[0]).map((entry: any) => entry['boxel:name']),
+        ['appendLine', 'appendLine'],
+        'and the entries run the behavior every file carries',
+      );
+    });
+
+    test('a path names a file no instance stands for', async function (assert) {
+      // The realm comes from the batch rather than from the path, so a path
+      // needs nothing resolved for it — which is the whole point, since the
+      // file it names may not be stored yet and so has no instance to resolve.
+      let { sent, env } = batchHarness({ 'atomic:results': [{ data: null }] });
+      let bucket = buildOperations(reportInstance(), env);
+      await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
+        (b: any) => {
+          b.on('never-described.txt').appendLine({ line: 'x' });
+        },
+      );
+      assert.strictEqual(
+        entries(sent[0])[0].href,
+        `${REALM}never-described.txt`,
+      );
+      assert.strictEqual(sent[0].realmURL, REALM, 'committed to one realm');
+    });
+
+    test('a path outside the batch realm is refused before anything is sent', async function (assert) {
+      let { sent, env } = batchHarness({ 'atomic:results': [] });
+      let bucket = buildOperations(reportInstance(), env);
+      let atomic = bucket.atomic as (
+        build: (b: any) => unknown,
+      ) => Promise<unknown>;
+
+      await assert.rejects(
+        atomic((b: any) => {
+          b.on('http://example.com/other/notes.txt').appendLine({ line: 'x' });
+        }),
+        /a batch commits to one realm/,
+        'an absolute url in another realm is no more committable than an ' +
+          'instance in one',
+      );
+      await assert.rejects(
+        atomic((b: any) => {
+          b.on('').appendLine({ line: 'x' });
+        }),
+        /names no file/,
+        'and an empty path names nothing to run against',
+      );
+      assert.strictEqual(sent.length, 0);
     });
 
     test('the batch refuses what it cannot carry out', async function (assert) {
@@ -1139,7 +1247,7 @@ module(basename(import.meta.filename), function () {
       );
       await assert.rejects(
         atomic((b: any) => {
-          let created = b.create('ACTIVITY');
+          let created = b.create(handle('ACTIVITY'));
           b.on(created).delete();
         }),
         /no URL to target/,
@@ -1170,7 +1278,9 @@ module(basename(import.meta.filename), function () {
       let escaped: unknown;
       await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
         (b: any) => {
-          escaped = b.create('ACTIVITY', { headline: 'From batch one' });
+          escaped = b.create(handle('ACTIVITY'), {
+            headline: 'From batch one',
+          });
         },
       );
 
@@ -1179,7 +1289,7 @@ module(basename(import.meta.filename), function () {
       await assert.rejects(
         (later.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
           (b: any) => {
-            b.create('ACTIVITY', { headline: 'From batch two' });
+            b.create(handle('ACTIVITY'), { headline: 'From batch two' });
             b.addActivity({ activity: escaped });
           },
         ),
