@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "facilityName": "Northstar Medical Center",
+      "city": "Portland, Oregon",
+      "careUnits": [
+        "Cardiology",
+        "Intensive Care",
+        "Step-down"
+      ]
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../facility",
+        "name": "HospitalFacility"
+      }
+    }
+  }
+}

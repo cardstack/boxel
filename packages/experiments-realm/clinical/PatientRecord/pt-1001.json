@@ -1,0 +1,111 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "mrn": "PT-1001",
+      "patientName": "Margaret Okonkwo",
+      "status": "admitted",
+      "severity": "Moderate",
+      "careUnit": "Cardiology",
+      "medications": [
+        {
+          "name": "Warfarin",
+          "doseMg": 5,
+          "frequency": "Once daily",
+          "status": "administered"
+        },
+        {
+          "name": "Metoprolol",
+          "doseMg": 25,
+          "frequency": "Twice daily",
+          "status": "administered"
+        },
+        {
+          "name": "Furosemide",
+          "doseMg": 20,
+          "frequency": "Once daily",
+          "status": "held"
+        }
+      ],
+      "rhythmEvents": [
+        {
+          "eventId": "RE-4471",
+          "detectedAt": "2026-09-18T02:14:00Z",
+          "rhythm": "Atrial fibrillation with RVR",
+          "status": "open",
+          "findings": null
+        },
+        {
+          "eventId": "RE-4469",
+          "detectedAt": "2026-09-17T21:02:00Z",
+          "rhythm": "Sinus tachycardia",
+          "status": "resolved",
+          "findings": "Rate settled after fluids"
+        }
+      ],
+      "vitals": [
+        {
+          "recordedAt": "2026-09-18T06:00:00Z",
+          "heartRate": 104,
+          "systolic": 132,
+          "diastolic": 78,
+          "recordedBy": "@jordan.blake:boxel.ai"
+        },
+        {
+          "recordedAt": "2026-09-18T10:00:00Z",
+          "heartRate": 96,
+          "systolic": 128,
+          "diastolic": 74,
+          "recordedBy": "@jordan.blake:boxel.ai"
+        }
+      ]
+    },
+    "relationships": {
+      "facility": {
+        "links": {
+          "self": "../HospitalFacility/northstar"
+        }
+      },
+      "attending": {
+        "links": {
+          "self": "../Clinician/aisha-tahir"
+        }
+      },
+      "auditLog": {
+        "links": {
+          "self": "../audit/pt-1001.txt"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../audit/pt-1001.txt"
+        }
+      },
+      "unitRoster.0": {
+        "links": {
+          "self": "../Clinician/jordan-blake"
+        }
+      },
+      "unitRoster.1": {
+        "links": {
+          "self": "../Clinician/theo-martin"
+        }
+      },
+      "unitRoster.2": {
+        "links": {
+          "self": "../Clinician/elena-ruiz"
+        }
+      },
+      "consultTeam.0": {
+        "links": {
+          "self": "../Clinician/jordan-blake"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../patient-record",
+        "name": "PatientRecord"
+      }
+    }
+  }
+}

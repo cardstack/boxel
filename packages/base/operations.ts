@@ -2145,6 +2145,14 @@ export interface CardBatchBaseOperations {
   ): BatchHandle<OperationWriteResult>;
 }
 
+// A file's, in the batch. Its writes work on the file's bytes, which is what
+// puts a log line and the card change that produced it in one commit.
+export interface FileBatchBaseOperations {
+  read(): BatchHandle<OperationDocument>;
+  update(payload: { content: string }): BatchHandle<OperationWriteResult>;
+  appendLine(payload: { line: string }): BatchHandle<OperationWriteResult>;
+}
+
 // Operations a batch registers, for a card whose class the call named — and,
 // when it did not, the same unchecked callables a single call falls back to.
 export interface UncheckedBatchOperations {
@@ -2156,6 +2164,12 @@ export type BatchOperations<Type> =
     ? WithDeclared<CardBatchBaseOperations, BatchMembers<Type>> &
         UncheckedBatchOperations
     : WithDeclared<CardBatchBaseOperations, BatchMembers<Type>>;
+
+export type FileBatchOperations<Type> =
+  NamesNoClass<Type, FileDefConstructor> extends true
+    ? WithDeclared<FileBatchBaseOperations, BatchMembers<Type>> &
+        UncheckedBatchOperations
+    : WithDeclared<FileBatchBaseOperations, BatchMembers<Type>>;
 
 // The operations of whatever a search reached. Which ones those cards carry is
 // their own types' to say and the realm resolves each name against the card it
@@ -2180,6 +2194,12 @@ export type BatchBuilder<Type> = BatchOperations<Type> & {
   on<Other extends CardDefConstructor>(
     instance: InstanceType<Other>,
   ): BatchOperations<Other>;
+  // A file in this batch's realm. It is reached the same way a card is, and
+  // for the same reason: an entry that appends to a log has to commit with the
+  // card change it records, or the two can disagree.
+  on<Other extends FileDefConstructor>(
+    instance: InstanceType<Other>,
+  ): FileBatchOperations<Other>;
   on<Expect extends 'one' | 'many'>(
     target: QueryTarget<Expect>,
   ): QueriedOperations<Expect>;
