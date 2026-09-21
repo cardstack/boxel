@@ -4,6 +4,21 @@ import { module, test } from 'qunit';
 
 import type { Realm } from '@cardstack/runtime-common';
 
+// The realm under test is the shipped clinical example, read from the files
+// the realm actually serves rather than from a copy — so the example and this
+// test cannot drift apart. A change that breaks an operation breaks this.
+
+import aishaTahir from '../../../experiments-realm/clinical/Clinician/aisha-tahir.json?raw';
+import elenaRuiz from '../../../experiments-realm/clinical/Clinician/elena-ruiz.json?raw';
+import jordanBlake from '../../../experiments-realm/clinical/Clinician/jordan-blake.json?raw';
+import theoMartin from '../../../experiments-realm/clinical/Clinician/theo-martin.json?raw';
+import northstar from '../../../experiments-realm/clinical/HospitalFacility/northstar.json?raw';
+import pt1001 from '../../../experiments-realm/clinical/PatientRecord/pt-1001.json?raw';
+import chartFields from '../../../experiments-realm/clinical/chart-fields.gts?raw';
+import clinicalDashboard from '../../../experiments-realm/clinical/clinical-dashboard.gts?raw';
+import clinician from '../../../experiments-realm/clinical/clinician.gts?raw';
+import facility from '../../../experiments-realm/clinical/facility.gts?raw';
+import patientRecord from '../../../experiments-realm/clinical/patient-record.gts?raw';
 import {
   setupAcceptanceTestRealm,
   setupLocalIndexing,
@@ -14,22 +29,6 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
-
-// The realm under test is the shipped clinical example, read from the files
-// the realm actually serves rather than from a copy — so the example and this
-// test cannot drift apart. A change that breaks an operation breaks this.
-import chartFields from '../../../experiments-realm/clinical/chart-fields.gts?raw';
-import clinicalDashboard from '../../../experiments-realm/clinical/clinical-dashboard.gts?raw';
-import clinician from '../../../experiments-realm/clinical/clinician.gts?raw';
-import facility from '../../../experiments-realm/clinical/facility.gts?raw';
-import patientRecord from '../../../experiments-realm/clinical/patient-record.gts?raw';
-
-import aishaTahir from '../../../experiments-realm/clinical/Clinician/aisha-tahir.json?raw';
-import elenaRuiz from '../../../experiments-realm/clinical/Clinician/elena-ruiz.json?raw';
-import jordanBlake from '../../../experiments-realm/clinical/Clinician/jordan-blake.json?raw';
-import theoMartin from '../../../experiments-realm/clinical/Clinician/theo-martin.json?raw';
-import northstar from '../../../experiments-realm/clinical/HospitalFacility/northstar.json?raw';
-import pt1001 from '../../../experiments-realm/clinical/PatientRecord/pt-1001.json?raw';
 
 const OPEN_EVENT = 'RE-4471';
 const RESOLVED_EVENT = 'RE-4469';
@@ -90,6 +89,9 @@ module('Acceptance | card operations | clinical example', function (hooks) {
         headers: { Accept: 'application/vnd.card+json' },
       }),
     );
+    if (!response) {
+      throw new Error('the realm did not answer for the patient record');
+    }
     return (await response.json()).data;
   }
 

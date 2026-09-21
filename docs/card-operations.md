@@ -190,8 +190,9 @@ set: { status: 'escalated', attending: card(params('receiving')) }
 `by` says what decides whether an item is already in it.
 
 ```ts
-// On a collection of links, `by` is compared against each linked card's id
-assert: { unique: 'consultTeam', by: params('clinician'), message: '…' }
+// On a collection of links, `by` is compared against each linked card's id —
+// and a link collection always needs `snapshot: true`, see below
+assert: { unique: 'consultTeam', by: params('clinician'), snapshot: true, message: '…' }
 // On a collection of contained values, the item is compared whole — so key the
 // check on the value the collection actually holds, not on part of it
 assert: { unique: 'activeCaseload', by: params('mrn'), message: '…' }
@@ -201,10 +202,16 @@ A precondition on anything else — "this event is still open", "this patient is
 still admitted" — is a program; see the escape hatch below.
 
 `assert` reads the target's stored document, which holds neither computed
-values nor a linked card's fields. A `unique` path that names one is only
+values nor a linked card's fields. A `unique` path that names either is only
 checkable against an index snapshot, and asking for one is explicit:
 `snapshot: true` says you accept that the check guards the interface rather
-than the commit. Without it, such a path is `unsnapshotted-assert`.
+than the commit. Without it, such a path is `unsnapshotted-assert` and the
+operation refuses every invocation with `invalid-operation`.
+
+**A `unique` over a `linksTo`/`linksToMany` collection always needs it.** A
+link is stored as a reference, so the ids the check compares are not in the
+stored document at all — there is no non-snapshot form of that check. Only a
+collection of contained values can be checked against the commit.
 
 `fill` is `create`'s version of `set`: the new card's field values.
 

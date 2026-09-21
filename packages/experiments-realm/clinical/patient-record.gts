@@ -425,8 +425,8 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
       </p>
 
       {{#if this.refusal}}
-        <Alert @type='error' data-test-refusal as |alert|>
-          <alert.Messages @messages={{array this.refusal}} @type='error' />
+        <Alert @type='error' role='alert' data-test-refusal as |alert|>
+          <alert.Messages @messages={{array this.refusal}} />
         </Alert>
       {{/if}}
 
@@ -905,12 +905,20 @@ export class PatientRecord extends CardDef {
   // The same kind of guard said declaratively. `unique` names the collection
   // and `by` the identity that decides whether an item is already in it —
   // compared against each linked card's id, because the collection holds links.
+  //
+  // `snapshot: true` is required here and is not a detail: a program reads the
+  // card's stored document, which holds a link's target as a reference rather
+  // than as the linked card, so the ids this check compares have to be
+  // gathered from the index first. That makes it a check against an index
+  // snapshot — it guards the interface against an obvious double-add, not the
+  // commit. Declaring it is how an author says they know that.
   @operation static addConsultant = {
     base: 'transform',
     params: { clinician: linkTo(Clinician) },
     assert: {
       unique: 'consultTeam',
       by: params('clinician'),
+      snapshot: true,
       message: 'That clinician is already on this patient’s consult team',
     },
     append: { to: 'consultTeam', value: card(params('clinician')) },
