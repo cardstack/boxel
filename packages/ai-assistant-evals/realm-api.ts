@@ -4,10 +4,27 @@
 // certificate is accepted for localhost.
 
 import { matrixUrl } from './matrix-api.ts';
+import { REALM_SERVER_URL } from './eval-config.ts';
+
+// The dev stack serves the realm over a self-signed certificate, so node has
+// to be told to accept it. The switch is process-wide, which is why it is
+// gated on the two hosts this process actually talks to — the realm server and
+// matrix — both being local. A run pointed at anything remote keeps
+// verification on, and setting NODE_TLS_REJECT_UNAUTHORIZED yourself wins
+// either way.
+function isLocal(url: string) {
+  try {
+    let { hostname } = new URL(url);
+    return hostname === 'localhost' || hostname === '127.0.0.1';
+  } catch {
+    return false;
+  }
+}
 
 if (
   process.env.NODE_TLS_REJECT_UNAUTHORIZED === undefined &&
-  /localhost/.test(process.env.EVAL_HOST_URL ?? 'https://localhost:4200')
+  isLocal(REALM_SERVER_URL) &&
+  isLocal(matrixUrl)
 ) {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 }

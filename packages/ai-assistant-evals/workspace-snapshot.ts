@@ -26,9 +26,14 @@ export interface WorkspaceSnapshot {
   // instance on disk holds what was written, the indexed document holds what
   // the card actually evaluates to.
   cards: Record<string, CardDocument>;
-  // Anything that could not be read, so a gap in the evidence is visible
-  // rather than silent.
+  // Reads that failed, so a gap in the evidence is visible rather than silent.
+  // A judge told to say when evidence is missing reads this, so only real
+  // gaps belong here.
   errors: string[];
+  // Paths under `files` the realm does not serve as a card. Ordinary — an
+  // evaluation's own data file is one — and kept apart from `errors` so
+  // "not a card" is never read as "could not be read".
+  notCards: string[];
 }
 
 export async function captureWorkspace(
@@ -41,6 +46,7 @@ export async function captureWorkspace(
     files: {},
     cards: {},
     errors: [],
+    notCards: [],
   };
 
   try {
@@ -70,12 +76,9 @@ export async function captureWorkspace(
     let cardUrl = `${realmUrl}${path.replace(/\.json$/, '')}`;
     try {
       snapshot.cards[cardUrl] = await client.getCard(realmUrl, cardUrl);
-    } catch (error) {
-      // A .json file that is not a card is ordinary, not a gap in the
-      // evidence: its bytes are already in `files`.
-      snapshot.errors.push(
-        `${path} is not readable as a card: ${message(error)}`,
-      );
+    } catch {
+      // Not a gap in the evidence: the file's bytes are already in `files`.
+      snapshot.notCards.push(path);
     }
   }
 

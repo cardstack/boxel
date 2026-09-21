@@ -148,7 +148,8 @@ apart, and a run fails itself if a second prompt shows up in its room.
 `eval:models:headed` runs one worker so there is one window to watch; `eval:models:tabs`
 opens one incognito window per model in a single browser.
 
-The `ai-assistant-evals` skill in `.claude/skills/ai-assistant-evals/SKILL.md` explains the
+The `ai-assistant-evals` skill, in the repo root's
+`.claude/skills/ai-assistant-evals/SKILL.md`, explains the
 benchmarks and how to read a run. `assistant-eval.spec.ts` is the flow,
 `run-result.ts` the result shape and the grade, `room-analysis.ts` the numbers
 from the room, `matrix-api.ts` and `realm-api.ts` the two APIs, `eval-card.ts`

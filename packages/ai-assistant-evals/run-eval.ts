@@ -405,7 +405,8 @@ async function main() {
       f !== 'playwright.json' &&
       f !== 'evaluation.json' &&
       f !== 'session.json' &&
-      !f.endsWith('.card.json'),
+      !f.endsWith('.card.json') &&
+      !f.endsWith('.workspace.json'),
   );
   let results: RunResult[] = [];
   for (let file of files) {

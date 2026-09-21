@@ -42,10 +42,11 @@ async function loadPrompts() {
   let evaluation = await evaluationPromise;
   return { evaluation, prompts: evaluation!.prompts };
 }
-// One matrix user per model. The ai-bot runs every generation of one user
-// inside a per-user cost lock that spans all of that user's rooms, so two
-// models prompted as the same user take turns: the second waits, showing
-// "Thinking...", until the first model's turn ends. The users come from
+// One matrix user per model, because which room the assistant panel opens on
+// is per-user state: `openRoom` lands on that account's current room and
+// starts a new session from it. Two browsers signed in as one account race
+// over that, and a prompt can land in the other model's room. The users come
+// from
 // `node ./scripts/register-test-user.ts` in packages/matrix
 // (MATRIX_USERNAME=ai-assistant-eval-user-1 MATRIX_PASSWORD=password ...); the `pnpm
 // register-test-user` script hardcodes its own username and ignores the env.
@@ -672,8 +673,20 @@ function classify(
   promptsTotal: number,
 ): { verdict: Verdict; reasons: string[] } {
   let reasons: string[] = [];
+  // A run the runner cut short is a failure whatever is on screen when it
+  // stops: the model was looping, or still going past the safety clock. Both
+  // return here rather than falling through, because everything below judges
+  // a run that finished on its own and would otherwise read a half-finished
+  // one as a pass.
   if (stoppedBy === 'irregularity') {
     reasons.push(`stopped early: ${irregularities.join('; ')}`);
+    return { verdict: 'model-failure', reasons };
+  }
+  if (stoppedBy === 'wall-clock') {
+    reasons.push(
+      `still running after ${MAX_MINUTES} minutes, stopped as a safety measure`,
+    );
+    return { verdict: 'model-failure', reasons };
   }
   if (stoppedBy === 'stuck') {
     reasons.push('a tool pill stayed in "applying" past the host tool timeout');
@@ -707,11 +720,6 @@ function classify(
   }
   if (analysis.patchResults.failed > 0) {
     reasons.push(`${analysis.patchResults.failed} patch(es) failed to apply`);
-  }
-  if (stoppedBy === 'wall-clock') {
-    reasons.push(
-      `still running after ${MAX_MINUTES} minutes, stopped as a safety measure`,
-    );
   }
   if (!cardId) {
     reasons.push(...cardReasons);
@@ -951,7 +959,7 @@ const RUN_LABEL = EVAL_BUNDLE
 
 if (MODELS.length > USERS.length) {
   console.warn(
-    `[eval] ${MODELS.length} models but only ${USERS.length} users (EVAL_USERS): models sharing a user run one after the other, not side by side`,
+    `[eval] ${MODELS.length} models but only ${USERS.length} users (EVAL_USERS): models sharing an account race over which room the panel opens on, and a prompt can land in the wrong room — register more users with \`pnpm eval:users\` after naming them in EVAL_USERS`,
   );
 }
 
@@ -999,7 +1007,8 @@ test.afterAll(async () => {
     (f) =>
       f.endsWith('.json') &&
       !['playwright.json', 'evaluation.json', 'session.json'].includes(f) &&
-      !f.endsWith('.card.json'),
+      !f.endsWith('.card.json') &&
+      !f.endsWith('.workspace.json'),
   );
   let rows: RunResult[] = [];
   for (let file of files) {

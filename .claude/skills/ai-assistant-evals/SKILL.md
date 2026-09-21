@@ -94,13 +94,14 @@ loads do not pile up. A sweep takes about as long as its slowest model.
 `eval:models:headed` runs one worker; `eval:models:tabs` opens one incognito window per
 model in one browser.
 
-Every model must run as a different matrix user until the ai-bot change that
-moves the generation out of the per-user cost lock is deployed. Before it, the
-bot holds that lock around the whole generation across all rooms of one user,
-so a second prompt from the same user waits at "Thinking..." until the first
-model's turn ends, and a sweep on one user is not a sweep. After it, one user
-can drive several rooms at once (verified: two rooms of one user generated
-together). The runner still warns when there are more models than users.
+Every model runs as a different matrix user, because which room the assistant
+panel opens on is that account's own state: a worker lands on its user's
+current room and starts a new session from it. Two browsers on one account
+race over that, and a prompt can land in the other model's room. The ai-bot
+itself does not serialize them — its per-user cost lock covers the credit gate
+and the debit, not the generation — so the rooms would run at once and
+interleave rather than take turns. The runner warns when there are more models
+than users.
 
 ## Watch the run
 
@@ -310,8 +311,12 @@ Check these before blaming the model. Status as of 2026-09-08.
 - Whether the card looks right. Look at the screenshot.
 - Why the host froze, when it did. That needs the tab's console; the runner
   keeps the room and the trace.
-- Anything about a second turn in the same room (edits, follow-ups). One prompt
-  per run, on purpose. Add a second `EVAL_PROMPT` mode if that is ever needed.
+- Whether the card still works after the run. The snapshot holds the code and
+  the card documents; nobody interacts with the card.
+- Anything beyond the prompts the evaluation carries. An evaluation sends its
+  `followUpPrompts` one at a time once the bot is idle, and the turn and time
+  budgets multiply by the prompt count; a bare `pnpm eval:models` run sends the
+  one prompt in `EVAL_PROMPT`.
 
 ## Changing the runner
 
