@@ -52,7 +52,7 @@ import type { DeclaredScreenshotError, Diagnostics } from './index.ts';
 import {
   ALL_TYPES_KEY,
   coerceTypes,
-  normalizeRealmMetaValue,
+  isPartitionedRealmMetaValue,
   type BoxelIndexTable,
   type CardTypeSummary,
   type PrerenderedHtmlTable,
@@ -2235,9 +2235,16 @@ export class Batch {
   // current. Same polarity as the `bumpAllTypes` decision `done()` makes from
   // the same predicate: absence reads as "unknown", never as "unaffected".
   //
-  // The other two are cost, not correctness. A realm that has never completed a
-  // pass has no prior entries to carry, and a pass that moved more types than
-  // the scoped form is worth binding parameters for rebuilds instead.
+  // The prior value also has to be one a pass actually wrote, both arms and
+  // all. A realm still holding the legacy shape has no `files` arm at all, and
+  // reading it through `normalizeRealmMetaValue` would synthesize an empty one
+  // that is indistinguishable from a realm with no file rows — carried forward,
+  // that publishes the realm as having no file types. Rebuilding is what gives
+  // such a realm its `files` arm, so it keeps rebuilding until it has one.
+  //
+  // The rest is cost, not correctness. A realm that has never completed a pass
+  // has no prior entries to carry, and a pass that moved more types than the
+  // scoped form is worth binding parameters for rebuilds instead.
   private async scopedRealmMetaValue(): Promise<RealmMetaValue | undefined> {
     if (!this.typeSetIsComplete) {
       return undefined;
@@ -2246,11 +2253,10 @@ export class Batch {
     if (touchedTypes.length > SCOPED_TYPE_SUMMARY_MAX_TYPES) {
       return undefined;
     }
-    let priorValue = await this.currentRealmMetaValue();
-    if (priorValue === undefined) {
+    let prior = await this.currentRealmMetaValue();
+    if (!isPartitionedRealmMetaValue(prior)) {
       return undefined;
     }
-    let prior = normalizeRealmMetaValue(priorValue);
     return {
       instances: await this.#fetchMergedTypeSummary(
         'instance',

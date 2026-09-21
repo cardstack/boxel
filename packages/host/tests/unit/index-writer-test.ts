@@ -111,7 +111,11 @@ const writeInstance = async (
 const plantRealmMeta = async (
   adapter: SQLiteAdapter,
   generation: number,
-  value: { instances: RealmMetaValue[]; files: RealmMetaValue[] },
+  // A bare array is the legacy shape realms written before `realm_meta` was
+  // partitioned still carry.
+  value:
+    | { instances: RealmMetaValue[]; files: RealmMetaValue[] }
+    | RealmMetaValue[],
 ) =>
   adapter.execute(
     `INSERT INTO realm_meta (realm_url, generation, value, indexed_at)
@@ -3065,6 +3069,107 @@ module('Unit | index-writer', function (hooks) {
         ),
       ],
       'the file arm carries forward too, on a pass that touched no file rows',
+    );
+  });
+
+  test('update realm meta rebuilds when the previous generation predates the partitioned shape', async function (assert) {
+    // The legacy shape is a bare array of instance summaries and carries no
+    // file arm at all. Read as a partitioned value it gains an empty one, which
+    // is indistinguishable from a realm that genuinely has no file rows — so
+    // carrying it forward would publish this realm as having no file types and
+    // empty CardsGrid's "All Files" group. A pass reading one has to rebuild.
+    let iconHTML = '<svg>test icon</svg>';
+    let personRef = { module: rri('./person'), name: 'Person' };
+    let petRef = { module: rri('./pet'), name: 'Pet' };
+    let personTypes = internalKeysFor(virtualNetwork, personRef, baseCardRef);
+    let petTypes = internalKeysFor(virtualNetwork, petRef, baseCardRef);
+    let markdownTypes = internalKeysFor(
+      virtualNetwork,
+      { module: rri('./markdown-file-def'), name: 'MarkdownDef' },
+      { module: rri('./card-api'), name: 'FileDef' },
+    );
+
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource(
+            '1',
+            'Mango',
+            personRef,
+          ) as LooseCardResource,
+          search_doc: { name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          types: personTypes,
+          icon_html: iconHTML,
+        },
+        {
+          url: `${testRealmURL}notes/a.md`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'file',
+          search_doc: { name: 'a.md', url: `${testRealmURL}notes/a.md` },
+          display_names: ['Markdown', 'File'],
+          types: markdownTypes,
+          icon_html: iconHTML,
+        },
+      ],
+    );
+    await plantRealmMeta(adapter, 1, [
+      makeCardTypeSummary(
+        `${testRealmURL}person/Person`,
+        'Person',
+        iconHTML,
+        42,
+      ),
+    ]);
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.invalidate([new URL(`${testRealmURL}2.json`)]);
+    await writeInstance(batch, {
+      id: '2',
+      name: 'Ringo',
+      adoptsFrom: petRef,
+      displayNames: ['Pet', 'Card'],
+      types: petTypes,
+      iconHTML,
+    });
+    await batch.done();
+
+    let realmMeta = await fetchRealmMeta(adapter);
+    assert.deepEqual(
+      realmMeta.value,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          1,
+        ),
+        makeCardTypeSummary(`${testRealmURL}pet/Pet`, 'Pet', iconHTML, 1),
+      ],
+      'the planted count is recomputed rather than carried, so the pass rebuilt',
+    );
+    assert.deepEqual(
+      realmMeta.files,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}markdown-file-def/MarkdownDef`,
+          'Markdown',
+          iconHTML,
+          1,
+        ),
+      ],
+      'the file arm the legacy shape never had is rebuilt rather than published empty',
     );
   });
 
