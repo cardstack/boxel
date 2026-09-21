@@ -482,9 +482,10 @@ The codes are `unknown-field`, `not-a-collection`, `undeclared-param`,
 ## Failure at invocation
 
 A refused operation arrives as an `OperationsError` carrying `status`, `code`,
-`title` and `detail`. **`detail` is the sentence your declaration wrote** —
-`message` prefixes it with the code, which belongs in a log rather than in front
-of a person.
+`title` and `detail`. **`detail` is the sentence your declaration wrote,
+verbatim** — a failed `assert` puts its own message there and nothing else.
+`message` is `title: detail`, so a refused assertion reads "Assertion failed:
+…"; show `detail` to a person and keep `message` for a log.
 
 ```ts
 try {

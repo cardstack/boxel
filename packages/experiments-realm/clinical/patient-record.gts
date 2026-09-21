@@ -165,9 +165,9 @@ export class ConsultRequest extends CardDef {
 // What a refusal says to the person who caused it.
 //
 // The realm answers a refused operation as an `OperationsError` whose `detail`
-// is the sentence the declaration's own `assert` carries. That is the message
-// worth showing: `message` prefixes it with the error code, which belongs in a
-// log rather than on a ward round.
+// is the sentence the declaration's own `assert` carries, verbatim. That is the
+// message worth showing: `message` is `title: detail`, so it reads "Assertion
+// failed: …", which belongs in a log rather than on a ward round.
 function refusalMessage(err: unknown): string {
   if (err instanceof OperationsError) {
     return err.detail ?? err.message;
