@@ -2210,6 +2210,9 @@ importers:
 
   packages/host:
     dependencies:
+      '@cardstack/pretui':
+        specifier: workspace:*
+        version: link:../pretui
       ember-modify-based-class-resource:
         specifier: 'catalog:'
         version: 1.1.2(@babel/core@7.29.7)(@glimmer/component@2.1.1)(@glint/template@1.7.7)(ember-resources@7.0.8(@glimmer/component@2.1.1)(@glint/template@1.7.7))
