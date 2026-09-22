@@ -362,7 +362,15 @@ async function parseRealmFilesUncached(
     });
   let runGlintCheckFn =
     options.runGlintCheckFn ??
-    ((files) => runGlintCheck(files, { targetRealm: options.targetRealm }));
+    ((files) =>
+      runGlintCheck(files, {
+        targetRealm: options.targetRealm,
+        // Realm I/O goes through BoxelCLIClient — the boundary AGENTS.md
+        // states — which also lets the staging walk read non-public prefix
+        // realms instead of degrading them to the shim.
+        fetchFn: (input, init) => options.client.authedFetch(input, init),
+        cacheScope: options.client.getActiveProfile()?.matrixId,
+      }));
 
   let startedAt = Date.now();
   let fileResults: ParseFileResultData[] = [];
@@ -637,6 +645,8 @@ export interface RunGlintCheckOptions {
    */
   targetRealm?: string;
   fetchFn?: typeof globalThis.fetch;
+  /** Identity behind `fetchFn`, partitioning the realm-source memo. */
+  cacheScope?: string;
 }
 
 export interface GlintCheckResult {
@@ -671,6 +681,7 @@ export async function runGlintCheck(
       prefixes: RESOLVABLE_PREFIXES,
       origin: options.targetRealm,
       fetchFn: options.fetchFn,
+      cacheScope: options.cacheScope,
       onWarn: (message) => log.warn(message),
     });
 
@@ -708,9 +719,7 @@ export async function runGlintCheck(
           '@cardstack/host/tests/*': [`${HOST_PKG_PATH}/tests/*`],
           '@cardstack/host/*': [`${HOST_PKG_PATH}/app/*`],
           '@cardstack/boxel-host/tools/*': [`${HOST_PKG_PATH}/app/tools/*`],
-          '@cardstack/boxel-host/commands/*': [
-            `${HOST_PKG_PATH}/app/tools/*`,
-          ],
+          '@cardstack/boxel-host/commands/*': [`${HOST_PKG_PATH}/app/tools/*`],
           '@cardstack/boxel-ui/*': [
             `${join(PACKAGES_PATH, 'boxel-ui', 'src')}/*`,
           ],

@@ -68,6 +68,8 @@ export interface StageRealmSourcesOptions {
    */
   origin: string | undefined;
   fetchFn?: typeof globalThis.fetch;
+  /** See `FetchRealmSourcesOptions.cacheScope` — the identity behind `fetchFn`. */
+  cacheScope?: string;
   /**
    * Reports a degradation worth surfacing (no origin, the fetch threw, an
    * unsafe module path). Left to the caller so each keeps its own channel
@@ -112,7 +114,8 @@ export async function stageRealmSources(
 async function resolveRealmSources(
   options: StageRealmSourcesOptions,
 ): Promise<StageRealmSourcesResult> {
-  let { tempDir, files, prefixes, origin, fetchFn, onWarn } = options;
+  let { tempDir, files, prefixes, origin, fetchFn, cacheScope, onWarn } =
+    options;
   let warn = (message: string) => onWarn?.(message);
 
   let referenced = prefixes.filter((prefix) =>
@@ -147,6 +150,7 @@ async function resolveRealmSources(
       entries: files,
       prefixRealmURLs,
       fetch: fetchFn,
+      cacheScope,
     });
   } catch (error: unknown) {
     warn(

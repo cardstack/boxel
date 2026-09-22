@@ -421,6 +421,11 @@ export async function parseRealm(
       try {
         let glintResult = await runGlintCheck(gtsContents, {
           realmOrigin: realmOriginForPrefixes(normalizedRealmUrl, pm),
+          // The staging walk authenticates the same way fetchSource above
+          // does, so a non-public prefix realm resolves to real sources
+          // instead of degrading to the shim.
+          fetchFn: (input, init) => pm.authedRealmFetch(input, init),
+          cacheScope: pm.getActiveProfile()?.id,
         });
         warnings.push(...glintResult.warnings);
         for (let e of glintResult.errors) {
@@ -674,6 +679,8 @@ interface RunGlintCheckOptions {
    */
   realmOrigin?: string;
   fetchFn?: typeof globalThis.fetch;
+  /** Identity behind `fetchFn`, partitioning the realm-source memo. */
+  cacheScope?: string;
 }
 
 async function runGlintCheck(
@@ -705,6 +712,7 @@ async function runGlintCheck(
       prefixes: RESOLVABLE_PREFIXES,
       origin: glintOptions.realmOrigin,
       fetchFn: glintOptions.fetchFn,
+      cacheScope: glintOptions.cacheScope,
       onWarn: (message) => cliLog.warn(message),
     });
 

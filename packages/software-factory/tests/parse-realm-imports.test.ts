@@ -2,8 +2,9 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 
 import { clearRealmSourceCache } from '@cardstack/runtime-common/realm-source-cache';
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
-import { runGlintCheck } from '../src/parse-execution.ts';
+import { parseRealmFiles, runGlintCheck } from '../src/parse-execution.ts';
 
 const TARGET_REALM = 'https://realms.example.test/user/target/';
 const CATALOG_URL = 'https://realms.example.test/catalog/';
@@ -197,7 +198,7 @@ export class ContributorE extends Profile {
     assert.deepEqual(
       errors.map((e) => `${e.file}:${e.line} ${e.message}`),
       [],
-      'staged-source problems are not the author\'s errors',
+      "staged-source problems are not the author's errors",
     );
     assert.true(
       warnings.some((w) => w.includes('@cardstack/catalog/blog/bio')),
@@ -206,6 +207,50 @@ export class ContributorE extends Profile {
     assert.true(
       warnings.some((w) => w.includes('fetched realm sources')),
       'the dropped staged diagnostics are accounted for',
+    );
+  });
+
+  // The factory reaches realms only through BoxelCLIClient — auth, token
+  // refresh and retries live there. This drives the *default* glint path (no
+  // injected runGlintCheckFn), which is the wiring nothing else exercises:
+  // every other test hands runGlintCheck its fetch directly.
+  test('the default glint path fetches realm sources through the client', async function (assert) {
+    assert.timeout(180_000);
+    let authedUrls: string[] = [];
+    let stub = stubRealmFetch();
+    let client = {
+      authedFetch: async (input: string | URL, init?: RequestInit) => {
+        authedUrls.push(String(input));
+        return stub(input, init);
+      },
+      getActiveProfile: () => ({
+        matrixId: '@tester:example.test',
+        realmServerUrl: 'https://realms.example.test/',
+      }),
+    } as unknown as BoxelCLIClient;
+
+    let output = await parseRealmFiles(
+      {
+        targetRealm: TARGET_REALM,
+        client,
+        workspaceDir: '/unused',
+        readFileFn: async (_realm, path) => ({
+          ok: true,
+          content: SHAPES[path as keyof typeof SHAPES],
+        }),
+      },
+      ['a-extends-no-template.gts'],
+      [],
+    );
+
+    assert.true(
+      authedUrls.some((url) => url.startsWith(CATALOG_URL)),
+      'realm sources were fetched through client.authedFetch',
+    );
+    assert.deepEqual(
+      output.errorViolations,
+      [],
+      'the authed path resolves the catalog import',
     );
   });
 

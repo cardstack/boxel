@@ -285,6 +285,42 @@ module('realm-source-cache > fetchRealmSources', function (hooks) {
     );
   });
 
+  // The memo must not answer one user's read with bytes fetched as another:
+  // the fetch authenticates per user, and the realm decides per request what
+  // each may see. A different cacheScope therefore starts cold — no
+  // revalidation headers, a full fetch — while the same scope revalidates.
+  test('a different cacheScope does not share memo entries', async function (assert) {
+    let realm = makeRealm({ 'author.gts': `export class Author {}` });
+    realm.etags = { 'author.gts': 'v1' };
+    let entries = [
+      {
+        path: 'a.gts',
+        content: `import { Author } from '@cardstack/catalog/author';`,
+      },
+    ];
+    let fetchFn = stubFetch(realm);
+
+    await fetchRealmSources({
+      entries,
+      prefixRealmURLs: { [CATALOG]: CATALOG_URL },
+      fetch: fetchFn,
+      cacheScope: '@alice:example.test',
+    });
+    await fetchRealmSources({
+      entries,
+      prefixRealmURLs: { [CATALOG]: CATALOG_URL },
+      fetch: fetchFn,
+      cacheScope: '@bob:example.test',
+    });
+
+    let last = realm.requests[realm.requests.length - 1];
+    assert.strictEqual(
+      last.headers['If-None-Match'],
+      undefined,
+      "bob's first read carries no validator from alice's entry",
+    );
+  });
+
   // A realm-prefixed specifier can carry `..`, a protocol-relative `//host`, or
   // an absolute `https://host` that `new URL` honors — walking the fetch to a
   // sibling realm or an arbitrary host. This runs server-side over agent-
