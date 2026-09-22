@@ -491,8 +491,35 @@ function computeFields(
         // searchability (searchable annotations drive the search doc, not this
         // serialization). Callers wanting every declared link pass
         // `includeUnrenderedFields`; contained fields are always kept.
+        //
+        // A computed link is exempt from this check: `isFieldUsed` reads the
+        // data bucket, which a `computeVia` getter never writes to, so a
+        // computed `linksTo`/`linksToMany` would always look "never authored"
+        // and be dropped — leaving its relationship out of the indexed
+        // document even though the field derives real targets. Whether a
+        // computed link serializes is governed solely by `includeComputeds`
+        // below, the same as a computed contained field.
+        //
+        // Caveat, same as a computed contained field: a computed link whose
+        // `computeVia` reads a query-backed field derives from a live search
+        // the index cannot invalidate (its `queryDefinition` is undefined, so
+        // `omitQueryFields` does not filter it, and the deps reached through a
+        // query context are not the row's own). Such a value serializes here
+        // with no invalidation edge to keep it true, so it can go stale — a
+        // known limitation, not addressed by exempting the field.
+        //
+        // Once in the document, a resolved computed link is a first-class
+        // relationship, not just a stored-row entry: `loadLinks` walks every
+        // relationship carrying a `links.self` and side-loads its target into
+        // `included[]` on every served card document and search-result item,
+        // spending the same expansion budget authored links spend. That is
+        // intended — a resolved computed link names a real target and should
+        // serve like an authored one — but it does widen the served closure,
+        // so a card sitting near the budget can now trade an authored target
+        // out of `included[]` for a computed one.
         if (
           opts?.usedLinksToFieldsOnly &&
+          !maybeField.computeVia &&
           !isFieldUsed(instance, maybeFieldName) &&
           !['contains', 'containsMany'].includes(maybeField.fieldType)
         ) {
