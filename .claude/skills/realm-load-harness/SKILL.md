@@ -482,16 +482,15 @@ could not have engaged. Two different questions, two different answers:
 
 - **Is the threshold where real traffic can reach it?** That needs load, and
   the credential pool is the ceiling: one session per CSV row, so a 20-row file
-  caps a run at 19 readers. At `--derive-page-size 0` that held a peak
-  120-second mean of **6.3** searches in flight. Read it against the rungs and
-  the cap in `packages/runtime-common/search-bounds.ts`: that run cost about
-  three readers per unit of mean, so the lower rung at 4 wants roughly 13
-  readers and the upper one at 12 roughly 36, **per replica**. So a pool of
-  this size already clears the lower rung, while the upper rung and the
-  admission cap still need one several times larger. Those are a floor, not an
-  estimate — the scaling is linear only while service time holds, and service
-  time is what rises first as a realm saturates. Growing the pool is the only
-  fix, and it is what puts the admission queue under enough pressure to shed.
+  caps a run at 19 readers. At `--derive-page-size 0` against a two-replica
+  deployment, that held the policy's reading — the 120-second mean of search
+  requests in flight, per replica, joiners included — at a p50 of about 14-17
+  and a peak of about 21-22. Read it against the rungs in
+  `packages/runtime-common/search-bounds.ts`: a pool of this size clears the
+  lower rung at 14 and does not reach the upper one at 28. The scaling is
+  linear only while service time holds, and service time is what rises first
+  as a realm saturates. Growing the pool is the only fix, and it is what puts
+  the admission queue under enough pressure to shed.
 
   The reading is also a count and not a cost: `inFlight` moves once per
   admitted search whatever that search is doing. An unbounded derived workload

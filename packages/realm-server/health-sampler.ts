@@ -1,6 +1,10 @@
 import { monitorEventLoopDelay, type IntervalHistogram } from 'node:perf_hooks';
 import { logger } from '@cardstack/runtime-common';
-import { getSearchInFlight } from './search-inflight.ts';
+import {
+  getSearchInFlight,
+  getSearchRequestLoad,
+  getSearchRequestsInFlight,
+} from './search-inflight.ts';
 import {
   heapTelemetry,
   formatHeapTelemetry,
@@ -49,6 +53,16 @@ export function startHealthSampler(
     let p99LagMs = toMs(histogram.percentile(99));
     histogram.reset();
     let inFlightSearch = getSearchInFlight();
+    // The link-shape policy's own inputs, beside the lag they are placed
+    // against. `inFlightSearch` counts admission slots, which a request the
+    // live-search cache answers from another's computation gives back early;
+    // `searchRequests` counts every admitted request until its response ends,
+    // and `searchLoad` is that count's sustained mean, the number the ladder's
+    // thresholds are compared against. A threshold derived from one of these
+    // and applied to another is off by the cache's miss rate, or by whatever
+    // the smoothing takes off a burst.
+    let searchRequests = getSearchRequestsInFlight();
+    let searchLoad = getSearchRequestLoad();
     // Reuse the prerender heap-telemetry helpers so the realm-server health
     // line carries the same `heapUsedMB=… heapLimitMB=…` fields (one spelling
     // of the quantity, and the effective V8 limit read from the running
@@ -57,7 +71,8 @@ export function startHealthSampler(
     let heap = heapTelemetry();
     log.info(
       `eventLoopLagMs(mean/p99/max)=${meanLagMs.toFixed(0)}/${p99LagMs.toFixed(0)}/${maxLagMs.toFixed(0)} ` +
-        `inFlightSearch=${inFlightSearch} ${formatHeapTelemetry(heap)}`,
+        `inFlightSearch=${inFlightSearch} searchRequests=${searchRequests} ` +
+        `searchLoad=${searchLoad.toFixed(2)} ${formatHeapTelemetry(heap)}`,
     );
   }, intervalMs);
   // Don't keep the process alive solely for sampling.

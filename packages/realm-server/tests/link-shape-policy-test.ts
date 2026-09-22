@@ -11,8 +11,10 @@ import {
 } from '@cardstack/runtime-common';
 import {
   admitSearchUnconditionally,
-  SearchAdmissionGate,
-  getSearchSustainedInFlight,
+  beginSearchRequest,
+  SearchRequestLoad,
+  getSearchInFlight,
+  getSearchRequestLoad,
   resetSearchAdmissionForTests,
   setSearchAdmissionForTests,
 } from '../search-inflight.ts';
@@ -473,23 +475,35 @@ module(basename(import.meta.filename), function () {
   });
 
   module('threshold normalization', function () {
-    test('an engage at or above the admission cap is pulled below it', function (assert) {
+    // The reading counts requests and the cap counts the computations among
+    // them, so a reading past the cap is ordinary whenever the live-search
+    // cache coalesces, and a rung placed there is a real rung.
+    test('an engage above the admission cap is honoured, not pulled under it', function (assert) {
+      let load = 40;
       let policy = new LinkShapePolicy({
-        readLoad: () => 40,
+        readLoad: () => load,
         limit: 10,
         multiRowEngage: 50,
         allEngage: 60,
         minDwellMs: 0,
       });
-      // Both thresholds were configured above the cap, which would have put
-      // every rung past the point where the process is already shedding. The
-      // reading of 40 is above the cap, so a clamped ladder still engages.
-      let decision = policy.decide({
-        realm: REALM,
-        rowClass: 'multi-row',
-        requested: 'full',
-      });
-      assert.strictEqual(decision.level, 'multi-row');
+      let read = () =>
+        policy.decide({
+          realm: REALM,
+          rowClass: 'multi-row',
+          requested: 'full',
+        });
+      assert.strictEqual(
+        read().level,
+        'full',
+        'a reading of 40 is past the cap of 10 but short of the engage of 50',
+      );
+      load = 55;
+      assert.strictEqual(
+        read().level,
+        'multi-row',
+        'and the ladder engages once the reading reaches the configured rung',
+      );
     });
 
     test('a release at or above its engage is pushed below it', function (assert) {
@@ -558,36 +572,31 @@ module(basename(import.meta.filename), function () {
     });
   });
 
-  module('the sustained in-flight reading', function (hooks) {
+  module('the sustained request reading', function (hooks) {
     hooks.afterEach(function () {
       resetSearchAdmissionForTests();
     });
 
-    test('is the time-weighted mean of the count, not the count', async function (assert) {
+    test('is the time-weighted mean of the count, not the count', function (assert) {
       let clock = 0;
-      let gate = new SearchAdmissionGate(30, {
+      let load = new SearchRequestLoad({
         halfLifeMs: 10_000,
         now: () => clock,
       });
-      assert.strictEqual(
-        gate.sustainedInFlight,
-        0,
-        'an idle process reads zero',
-      );
+      assert.strictEqual(load.sustained, 0, 'an idle process reads zero');
 
-      let release = await gate.admit(0);
-      assert.ok(release, 'admitted');
-      assert.strictEqual(gate.inFlight, 1);
+      load.begin();
+      assert.strictEqual(load.inFlight, 1);
       assert.strictEqual(
-        gate.sustainedInFlight,
+        load.sustained,
         0,
-        'a search that has only just started has contributed no time',
+        'a request that has only just started has contributed no time',
       );
 
       clock += 10_000; // one half-life held at 1
       assert.ok(
-        Math.abs(gate.sustainedInFlight - 0.5) < 0.01,
-        `after one half-life at 1 the reading is ~0.5, got ${gate.sustainedInFlight}`,
+        Math.abs(load.sustained - 0.5) < 0.01,
+        `after one half-life at 1 the reading is ~0.5, got ${load.sustained}`,
       );
     });
 
@@ -595,20 +604,20 @@ module(basename(import.meta.filename), function () {
       let clock = 0;
       function readingAfter(spikeMs: number, totalMs: number): number {
         clock = 0;
-        let gate = new SearchAdmissionGate(30, {
+        let load = new SearchRequestLoad({
           halfLifeMs: 120_000,
           now: () => clock,
         });
-        let releases = [];
+        let ends = [];
         for (let i = 0; i < 30; i++) {
-          releases.push(gate.admitUnconditionally());
+          ends.push(load.begin());
         }
         clock += spikeMs;
-        for (let release of releases) {
-          release();
+        for (let end of ends) {
+          end();
         }
         clock += totalMs - spikeMs;
-        return gate.sustainedInFlight;
+        return load.sustained;
       }
       // The same peak count, held for 5s against 10 minutes, over the same
       // wall clock. This is the separation the whole policy rests on: the
@@ -628,50 +637,83 @@ module(basename(import.meta.filename), function () {
 
     test('a quiet stretch decays the reading with nothing sampling it', function (assert) {
       let clock = 0;
-      let gate = new SearchAdmissionGate(30, {
+      let load = new SearchRequestLoad({
         halfLifeMs: 10_000,
         now: () => clock,
       });
-      let release = gate.admitUnconditionally();
+      let end = load.begin();
       clock += 100_000;
       // Reading here is what advances the accumulator — there is no timer.
-      let loaded = gate.sustainedInFlight;
+      let loaded = load.sustained;
       assert.ok(loaded > 0.9, `held at 1 for ten half-lives, got ${loaded}`);
 
-      release();
+      end();
       clock += 100_000;
       assert.ok(
-        gate.sustainedInFlight < 0.01,
-        `and decays back toward zero unattended, got ${gate.sustainedInFlight}`,
+        load.sustained < 0.01,
+        `and decays back toward zero unattended, got ${load.sustained}`,
+      );
+    });
+
+    test('a request that ends twice is counted out once', function (assert) {
+      let load = new SearchRequestLoad();
+      let end = load.begin();
+      load.begin();
+      end();
+      end();
+      assert.strictEqual(
+        load.inFlight,
+        1,
+        'a response that both finished and closed does not take another request with it',
       );
     });
 
     // Asserting only that a fresh gate reads 0 would pass against a reading
     // wired to nothing, since 0 is also the seed. The reading has to be made
     // non-zero through the module surface the policy actually calls.
-    test('the module-level reading tracks the process gate', function (assert) {
+    test('the module-level reading tracks the process request count', function (assert) {
       let clock = 0;
       setSearchAdmissionForTests({
         limit: 30,
         halfLifeMs: 10_000,
         now: () => clock,
       });
-      assert.strictEqual(getSearchSustainedInFlight(), 0, 'idle to begin with');
+      assert.strictEqual(getSearchRequestLoad(), 0, 'idle to begin with');
 
-      let release = admitSearchUnconditionally();
+      let end = beginSearchRequest();
       clock += 10_000; // one half-life held at 1
-      let loaded = getSearchSustainedInFlight();
+      let loaded = getSearchRequestLoad();
       assert.ok(
         Math.abs(loaded - 0.5) < 0.01,
-        `the module reading followed the gate, got ${loaded}`,
+        `the module reading followed the request count, got ${loaded}`,
       );
 
-      release();
+      end();
       clock += 100_000;
-      assert.ok(
-        getSearchSustainedInFlight() < 0.01,
-        'and follows it back down',
+      assert.ok(getSearchRequestLoad() < 0.01, 'and follows it back down');
+    });
+
+    // The reading and the admission ceiling count different things, and the
+    // difference is the whole point: a joiner hands its slot back as soon as
+    // the live-search cache decides it is one, but it is still a request in
+    // flight. A reading fed by slots would read the request count multiplied by
+    // the cache's miss rate.
+    test('is not moved by admission slots, which count computations', function (assert) {
+      let clock = 0;
+      setSearchAdmissionForTests({
+        limit: 30,
+        halfLifeMs: 10_000,
+        now: () => clock,
+      });
+      let slot = admitSearchUnconditionally();
+      clock += 100_000;
+      assert.strictEqual(getSearchInFlight(), 1, 'a slot is held');
+      assert.strictEqual(
+        getSearchRequestLoad(),
+        0,
+        'but a slot alone is not a request the reading counts',
       );
+      slot();
     });
   });
 });

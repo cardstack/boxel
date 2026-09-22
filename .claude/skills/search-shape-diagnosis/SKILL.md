@@ -233,7 +233,7 @@ A `dwellMs` of `null` is a realm's first move, not a zero-length dwell — it ha
 ### The thresholds: what they mean and how to set them
 
 Four values decide when a realm changes rung. All four are **thresholds on the
-load reading** — the time-weighted mean of in-flight searches, per replica —
+load reading** — the time-weighted mean of search requests in flight, joiners included, per replica —
 and none of them selects a link shape. Which shape a rung serves is fixed by
 the ladder; these only decide when a realm arrives at that rung. The
 `_THRESHOLD` suffix is there because a bare `…_ENGAGE` reads as a switch that
@@ -241,10 +241,10 @@ turns a shape on, which is the one thing it does not do.
 
 | Parameter                                | Ships as | Crossing it                                                               |
 | ---------------------------------------- | -------: | ------------------------------------------------------------------------- |
-| `LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD`  |        4 | reads that may return more than one row start shedding their link closure |
-| `LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD` |        2 | those reads carry it again                                                |
-| `LINK_SHAPE_ALL_ENGAGE_THRESHOLD`        |       12 | every live read sheds it, including a single-card read                    |
-| `LINK_SHAPE_ALL_RELEASE_THRESHOLD`       |        6 | single-row reads carry it again                                           |
+| `LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD`  |       14 | reads that may return more than one row start shedding their link closure |
+| `LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD` |        7 | those reads carry it again                                                |
+| `LINK_SHAPE_ALL_ENGAGE_THRESHOLD`        |       28 | every live read sheds it, including a single-card read                    |
+| `LINK_SHAPE_ALL_RELEASE_THRESHOLD`       |       14 | single-row reads carry it again                                           |
 
 Three more shape the same mechanism without being rungs:
 `LINK_SHAPE_LOAD_HALF_LIFE_MS` (120000, how far back the mean reaches),
@@ -255,7 +255,7 @@ All seven are settable the same way.
 Four properties decide whether a change to any of these does what you expect:
 
 1. **Per replica, no shared store.** Each process reads only its own
-   admissions, so a fleet-wide in-flight of 12 spread over N tasks is ~12/N
+   requests, so a fleet-wide in-flight of 28 spread over N tasks is ~28/N
    per replica. A threshold is only meaningful stated together with the fleet
    size it was chosen against, and adding tasks raises the fleet-wide load
    needed to engage roughly linearly. Read the current count rather than
@@ -349,7 +349,7 @@ Three of these cost real time on the investigation that produced the policy, and
 - **`busyMs(parallel-sum)` is not CPU.** It sums concurrently-awaited work, so it double-counts waiting — it has read 46× wall clock on a single-threaded loop. It cannot be used to argue the process was or was not saturated.
 - **The `realm:search-timing` stage lines carry no job marker.** A `loadLinks` share computed from them mixes worker traffic into live: in one 55-minute window 533 of 1,355 searches were `prerender`/job traffic. Separate them with this channel's `jobId` (via `correlationId`), not with the stage lines alone.
 
-One more, specific to the policy: the load it reads is the **sustained** in-flight count — a time-weighted mean with a multi-minute half-life — not the instantaneous `inFlightSearch` the health line prints. They differ by design and by a lot: on a production window whose raw samples repeatedly touched the admission cap of 30, the sustained reading peaked at 17. Comparing a `linkShapeLoad` against a health line's `inFlightSearch=` at the same timestamp will look like a contradiction and is not one.
+One more, specific to the policy: the load it reads is the **sustained count of search requests in flight** — every admitted request from admission until its response ends, joiners included, as a time-weighted mean with a multi-minute half-life. It is not the health line's `inFlightSearch`, which differs from it twice over: `inFlightSearch` is an instantaneous sample, and it counts admission slots — computations — which a request the live-search cache answers from another's computation hands back early, so it runs below the request count by the cache's miss rate. The health line carries the policy's own quantity as `searchLoad=` (and its instantaneous form as `searchRequests=`); compare `linkShapeLoad` against that, never against `inFlightSearch=`.
 
 ## Authoring a replay
 

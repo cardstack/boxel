@@ -665,24 +665,26 @@ that distinction available from the run itself — see below.
 
 **The credential pool is the ceiling.** Each session authenticates as its own
 user, one per CSV row, so a 20-row file caps a run at 19 readers. Against a
-deployed realm at `--derive-page-size 0`, 19 readers held a peak 120-second
-mean of **6.3** searches in flight. Read that against the rungs and the cap in
-`packages/runtime-common/search-bounds.ts`: this run cost about three readers
-per unit of mean, so the lower rung at 4 wants roughly 13 readers and the upper
-one at 12 roughly 36, **per replica**. A pool of this size therefore already
-clears the lower rung, while driving a fleet to the upper rung or to the
-admission cap still needs one several times larger. Treat those as a floor
-rather than an estimate — the scaling is only linear while service time holds,
-and service time is what rises first as a realm saturates. Growing the pool is
-what makes a load number realistic, and it is what puts the admission queue
-under enough pressure to shed.
+deployed two-replica realm server at `--derive-page-size 0`, 19 readers held
+the policy's reading — the 120-second mean of search requests in flight, per
+replica — at a p50 of about 14-17 and a peak of about 21-22. Read that against
+the rungs in `packages/runtime-common/search-bounds.ts`: a pool of this size
+clears the lower rung at 14 within a few minutes, and does not reach the upper
+one at 28. Driving a fleet to the upper rung needs a pool well beyond this one,
+and the scaling is only linear while service time holds — service time is
+what rises first as a realm saturates. Growing the pool is what makes a load
+number realistic.
 
-**Which means a default-sized unbounded run now degrades itself partway
-through, and its numbers have to be read accordingly.** Both figures this file
-reports for unbounded runs — the 5.3 concurrency in the derived-run table above
-and the 6.3 peak here — sit above the lower rung of 4. At a 120-second
-half-life the reading crosses it after a couple of half-lives of sustained
-load, so any run longer than a few minutes against a deployment at shipped
+The reading is in requests, not in the admission gate's slots: a request the
+live-search cache answers from another's computation hands its slot back
+early and goes on counting here. So the reading is several times the slot
+count on a workload whose readers share their queries, and the admission cap
+of 30 bounds slots, not this.
+
+**Which means a default-sized unbounded run degrades itself partway through,
+and its numbers have to be read accordingly.** At a 120-second half-life the
+reading crosses the lower rung after a couple of half-lives of sustained load,
+so any run longer than a few minutes against a deployment at shipped
 thresholds engages `multi-row` mid-run, and every search it answers after that
 point comes back links-only.
 
