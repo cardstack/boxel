@@ -508,6 +508,10 @@ export class PagePool {
   // gate file calls on an affinity-level semaphore. Production call sites
   // never set this; Prerenderer constructs PagePool without the flag.
   #disableFileAdmission: boolean;
+  // Whether this pool's server is registered with the prerender manager.
+  // Affinity-eviction notices are part of that registration, so a pool whose
+  // server is not registered sends none.
+  #registerWithManager: boolean;
 
   constructor(options: {
     maxPages: number;
@@ -529,6 +533,9 @@ export class PagePool {
     // it to drive the gate on millisecond timescales; production callers
     // leave it undefined and take the env / default value.
     tabHealthProbeMs?: number;
+    // Default true. False when the owning server is reached only directly by
+    // its URL and never registers with the prerender manager.
+    registerWithManager?: boolean;
   }) {
     // Resolve the dynamic-pool envelope. `PRERENDER_PAGE_POOL_MIN` and
     // `_MAX` are the dynamic knobs; when either is unset the pool
@@ -665,6 +672,7 @@ export class PagePool {
     this.#disableStandbyRefill = options.disableStandbyRefill ?? false;
     this.#onAffinityDisposed = options.onAffinityDisposed;
     this.#disableFileAdmission = options.disableFileAdmission ?? false;
+    this.#registerWithManager = options.registerWithManager ?? true;
     this.#tabHealthProbeMs =
       options.tabHealthProbeMs ?? parseTabHealthProbeMs();
     // Resolve the per-affinity file-admission cap.
@@ -3024,6 +3032,7 @@ export class PagePool {
   }
 
   async #notifyManagerAffinityEvicted(affinityKey: string): Promise<void> {
+    if (!this.#registerWithManager) return;
     try {
       const managerURL = resolvePrerenderManagerURL();
       let target = new URL(
