@@ -4003,9 +4003,11 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   // Keep the version a card+json write reported — the fingerprint of the bytes
-  // the realm stored. The write responses are the only channel a client gets
-  // one on; the card+json GET deliberately reports none, so a version reaches
-  // an instance here or not at all. `#indexStateAlreadyHeld` is what reads it.
+  // the realm stored. A card+json read reports one too, and
+  // `_updateFromSerialized` assigns a served `meta` onto the instance wholesale,
+  // so a read lands one without passing through here; this records the write's,
+  // which no read is guaranteed to follow. `#indexStateAlreadyHeld` reads
+  // whichever is held.
   //
   // Recorded rather than left to the server-state merge above, which runs only
   // when the identity or the realm info moved and so skips the ordinary save.
