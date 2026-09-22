@@ -60,6 +60,11 @@ type EvaluatedModule = {
   state: 'evaluated';
   moduleInstance: object;
   consumedModules: Set<string>;
+  // A shim's consumed modules are declared by its registrar rather than
+  // observed while evaluating it, which makes them leaves: the loader never
+  // holds them, so it can neither learn their own edges nor be missing
+  // anything by not descending into them.
+  shimmed?: true;
 };
 
 type BrokenModule = {
@@ -447,11 +452,22 @@ export class Loader {
         ? this.virtualNetwork.toURLHref(id)
         : new URL(id).href;
     let visited = new Set<string>();
-    let walk = async (id: string, href: string): Promise<void> => {
+    // `terminal` marks an identifier reached from a shim's declared
+    // dependencies. The loader does not hold it and importing it would fetch
+    // what the shim's own bundle already carries, so it is recorded and not
+    // descended into.
+    let walk = async (
+      id: string,
+      href: string,
+      terminal = false,
+    ): Promise<void> => {
       if (visited.has(href)) {
         return;
       }
       visited.add(href);
+      if (terminal) {
+        return;
+      }
 
       let module = this.getModule(href);
       if (!module || module.state === 'fetching') {
@@ -479,8 +495,9 @@ export class Loader {
       // per-state shapes `collectKnownModuleDependencies` does, so the two
       // walks describe one loader the same way at any instant.
       if (module) {
+        let shimmed = module.state === 'evaluated' && module.shimmed === true;
         for (let consumedModule of this.directModuleDependencies(module)) {
-          await walk(consumedModule, resolveHref(consumedModule));
+          await walk(consumedModule, resolveHref(consumedModule), shimmed);
         }
       }
     };
@@ -772,7 +789,17 @@ export class Loader {
       if (module.state === 'fetching') {
         complete = false;
       }
-      for (let dependency of this.directModuleDependencies(module)) {
+      let dependencies = this.directModuleDependencies(module);
+      if (module.state === 'evaluated' && module.shimmed) {
+        // Declared, not observed: this loader will never hold any of them, so
+        // descending would find a gap that is not one and give up memoizing a
+        // set that is already whole.
+        for (let dependency of dependencies) {
+          visited.add(dependency);
+        }
+        continue;
+      }
+      for (let dependency of dependencies) {
         pending.push(dependency);
       }
     }
@@ -1428,6 +1455,7 @@ export class Loader {
             }
           }),
         ),
+        shimmed: true,
       });
       module.deferred.fulfill();
       return;
