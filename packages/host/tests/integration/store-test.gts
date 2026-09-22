@@ -3801,6 +3801,59 @@ module('Integration | Store', function (hooks) {
     }
   });
 
+  test('a duplicate arriving while the first reload is still in flight is coalesced into it', async function (assert) {
+    // The rules read the instance, and an instance does not reflect a reload
+    // until that reload returns — so a second delivery inside that window is
+    // the one case a comparison against the card alone cannot answer. It is
+    // also the one that costs something: the first reload lands, the user
+    // types, and the second lands on top of what they typed.
+    let url = `${testRealmURL}Person/coalesced`;
+    let events = interceptRealmEvents();
+    let reads: ReturnType<typeof countCardReads> | undefined;
+    try {
+      await writePerson('Person/coalesced.json', 'Coalesced');
+      await events.nextEventFor(url);
+      storeService.addReference(url);
+      await storeService.flush();
+
+      await writePerson('Person/coalesced.json', 'Coalesced Again');
+      let event = await events.nextEventFor(url);
+
+      // Both deliveries before anything settles, so the second is decided
+      // while the first reload's fetch is still out.
+      reads = countCardReads('Person/coalesced');
+      events.deliver(event);
+      events.deliver(event);
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        1,
+        'the duplicate is answered by the reload already in flight',
+      );
+      assert.strictEqual(
+        (storeService.peek(url) as any).name,
+        'Coalesced Again',
+        'and that reload still brought the state the pass wrote',
+      );
+
+      // The control: the same back-to-back pair with both members removed, so
+      // neither rule has anything to answer with. Two reloads — which is what
+      // the count above is measuring the absence of.
+      let { generation: _generation, versions: _versions, ...bare } = event;
+      events.deliver(bare as RealmEventContent);
+      events.deliver(bare as RealmEventContent);
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        3,
+        'while a pair carrying neither member reloads twice',
+      );
+    } finally {
+      reads?.stop();
+      events.restore();
+    }
+  });
+
   test('an incremental event overtaken by a newer one does not reload', async function (assert) {
     let url = `${testRealmURL}Person/overtaken`;
     let events = interceptRealmEvents();
