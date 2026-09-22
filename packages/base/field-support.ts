@@ -491,8 +491,17 @@ function computeFields(
         // searchability (searchable annotations drive the search doc, not this
         // serialization). Callers wanting every declared link pass
         // `includeUnrenderedFields`; contained fields are always kept.
+        //
+        // A computed link is exempt from this check: `isFieldUsed` reads the
+        // data bucket, which a `computeVia` getter never writes to, so a
+        // computed `linksTo`/`linksToMany` would always look "never authored"
+        // and be dropped — leaving its relationship out of the indexed
+        // document even though the field derives real targets. Whether a
+        // computed link serializes is governed solely by `includeComputeds`
+        // below, the same as a computed contained field.
         if (
           opts?.usedLinksToFieldsOnly &&
+          !maybeField.computeVia &&
           !isFieldUsed(instance, maybeFieldName) &&
           !['contains', 'containsMany'].includes(maybeField.fieldType)
         ) {

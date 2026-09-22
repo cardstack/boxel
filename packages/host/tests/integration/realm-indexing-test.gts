@@ -3498,6 +3498,102 @@ module(`Integration | realm indexing`, function (hooks) {
     }
   });
 
+  test('a computed linksToMany serializes into the indexed document', async function (assert) {
+    // `serializeCardResource` keeps only the "used" link fields in the mode the
+    // indexer runs, and a computed link never writes to the data bucket that
+    // check reads. A computed relationship reaches the indexed document on the
+    // strength of `includeComputeds`, the same as a computed contained field.
+    class Issue extends CardDef {
+      static displayName = 'Issue';
+      @field title = contains(StringField);
+    }
+    class IssueTracker extends CardDef {
+      static displayName = 'IssueTracker';
+      @field directIssues = linksToMany(() => Issue);
+      @field localCards = linksToMany(() => Issue, {
+        computeVia: function (this: IssueTracker) {
+          return this.directIssues;
+        },
+      });
+    }
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Issue, IssueTracker },
+        'Issue/issue-1.json': {
+          data: {
+            attributes: { title: 'First' },
+            meta: { adoptsFrom: { module: '../test-cards', name: 'Issue' } },
+          },
+        },
+        'Issue/issue-2.json': {
+          data: {
+            attributes: { title: 'Second' },
+            meta: { adoptsFrom: { module: '../test-cards', name: 'Issue' } },
+          },
+        },
+        'Issue/issue-3.json': {
+          data: {
+            attributes: { title: 'Third' },
+            meta: { adoptsFrom: { module: '../test-cards', name: 'Issue' } },
+          },
+        },
+      },
+    });
+
+    let issueIds = [
+      `${testRealmURL}Issue/issue-1`,
+      `${testRealmURL}Issue/issue-2`,
+      `${testRealmURL}Issue/issue-3`,
+    ];
+
+    await realm.write(
+      'board-1.json',
+      JSON.stringify({
+        data: {
+          relationships: {
+            'directIssues.0': { links: { self: './Issue/issue-1' } },
+            'directIssues.1': { links: { self: './Issue/issue-2' } },
+            'directIssues.2': { links: { self: './Issue/issue-3' } },
+          },
+          meta: {
+            adoptsFrom: { module: './test-cards', name: 'IssueTracker' },
+          },
+        },
+      }),
+    );
+
+    let board = await realm.realmIndexQueryEngine.cardDocument(
+      new URL(`${testRealmURL}board-1`),
+      { loadLinks: true },
+    );
+    if (board?.type === 'doc') {
+      let relationships = board.doc.data.relationships ?? {};
+      let linksFor = (prefix: string) =>
+        Object.keys(relationships)
+          .filter((key) => new RegExp(`^${prefix}\\.\\d+$`).test(key))
+          .map((key) => (relationships[key] as Relationship).links?.self)
+          .filter(Boolean)
+          .map((self) => new URL(self as string, `${testRealmURL}board-1`).href)
+          .sort();
+      assert.deepEqual(
+        linksFor('directIssues'),
+        issueIds,
+        'the authored directIssues relationship serializes',
+      );
+      assert.deepEqual(
+        linksFor('localCards'),
+        issueIds,
+        'the computed localCards relationship serializes',
+      );
+    } else {
+      assert.ok(
+        false,
+        `board search entry was an error: ${board?.error.errorDetail.message}`,
+      );
+    }
+  });
+
   test('a query-backed field resolves references that live in another realm', async function (assert) {
     // A query field with no realm searches only the realm holding the card, so
     // a reference into another realm could never match. Interpolating the
