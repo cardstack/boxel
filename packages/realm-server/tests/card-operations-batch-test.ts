@@ -2303,6 +2303,118 @@ module(basename(import.meta.filename), function () {
       });
       assert.strictEqual(commits.length, 0, 'nothing is committed');
     });
+    test('a side-load already stored as its type is linked to, not rewritten', async function (assert) {
+      let incumbent = cardFile({ firstName: 'Incumbent' }, PET);
+      let { core, commits } = stub({
+        stored: { 'Pet/side.json': incumbent },
+      });
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'create',
+            lid: 'owner',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan' },
+                relationships: {
+                  friend: { data: { type: 'card', lid: 'side' } },
+                },
+                meta: { adoptsFrom: PERSON },
+              },
+              included: [
+                {
+                  type: 'card',
+                  lid: 'side',
+                  attributes: { firstName: 'Resent' },
+                  meta: { adoptsFrom: PET },
+                },
+              ],
+            },
+          },
+        ],
+        {},
+      );
+      assert.deepEqual(
+        Object.keys(commits[0].writes),
+        ['Person/owner.json'],
+        'only the card being created is written',
+      );
+      let staged = JSON.parse(commits[0].writes['Person/owner.json']);
+      assert.strictEqual(
+        staged.data.relationships.friend.links.self,
+        `${REALM}Pet/side`,
+        'and it links to the card already stored there',
+      );
+    });
+    test('a side-load stored as another type refuses the batch and is named', async function (assert) {
+      let { core, commits } = stub({
+        stored: {
+          'Pet/side.json': cardFile(
+            { firstName: 'Incumbent' },
+            { module: `${REALM}other-pet`, name: 'Pet' },
+          ),
+        },
+      });
+      let failure: unknown;
+      try {
+        await commitBatch(
+          core,
+          [
+            {
+              op: 'create',
+              lid: 'owner',
+              document: {
+                data: {
+                  type: 'card',
+                  attributes: { firstName: 'Hassan' },
+                  relationships: {
+                    friend: { data: { type: 'card', lid: 'side' } },
+                  },
+                  meta: { adoptsFrom: PERSON },
+                },
+                included: [
+                  {
+                    type: 'card',
+                    lid: 'side',
+                    attributes: { firstName: 'Resent' },
+                    meta: { adoptsFrom: PET },
+                  },
+                ],
+              },
+            },
+          ],
+          {},
+        );
+      } catch (err: unknown) {
+        failure = err;
+      }
+      assert.true(isOperationFailure(failure), 'the batch is refused');
+      let { error } = failure as OperationFailure;
+      assert.strictEqual(error.status, 409);
+      assert.deepEqual(
+        error.meta,
+        {
+          entry: 0,
+          included: {
+            lid: 'side',
+            id: `${REALM}Pet/side`,
+            adoptsFrom: PET,
+          },
+        },
+        'the refusal names the side-load as the card that collided',
+      );
+      assert.true(
+        error.detail.includes('"side"'),
+        `the message names the side-load: ${error.detail}`,
+      );
+      assert.false(
+        error.detail.includes('owner'),
+        `and not the card being created: ${error.detail}`,
+      );
+      assert.strictEqual(commits.length, 0, 'nothing is committed');
+    });
     test('a create names its card by the local id on the resource', async function (assert) {
       let { core, commits } = stub();
       await commitBatch(

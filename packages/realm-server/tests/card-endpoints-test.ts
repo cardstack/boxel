@@ -3256,6 +3256,173 @@ module(basename(import.meta.filename), function () {
           }
         });
 
+        test('a create whose side-load is already stored links to the stored card', async function (assert) {
+          let friendType = {
+            module: rri('https://localhost:4202/node-test/friend'),
+            name: 'Friend',
+          };
+          let first = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                lid: 'already-stored-friend',
+                attributes: { firstName: 'Jade' },
+                meta: { adoptsFrom: friendType },
+              },
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(first.status, 201, 'the linked card is created');
+          let storedFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'Friend',
+            'already-stored-friend.json',
+          );
+          let storedBytes = readFileSync(storedFile, 'utf8');
+
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan' },
+                relationships: {
+                  friend: {
+                    data: { lid: 'already-stored-friend', type: 'card' },
+                  },
+                },
+                meta: { adoptsFrom: friendType },
+              },
+              included: [
+                {
+                  lid: 'already-stored-friend',
+                  type: 'card',
+                  attributes: { firstName: 'Resent' },
+                  meta: { adoptsFrom: friendType },
+                },
+              ],
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            201,
+            `the save succeeds: ${JSON.stringify(response.body)}`,
+          );
+          assert.strictEqual(
+            readFileSync(storedFile, 'utf8'),
+            storedBytes,
+            'the stored card is left exactly as it was',
+          );
+          let id = (response.body as SingleCardDocument).data.id!;
+          let card = readJSONSync(
+            join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'Friend',
+              `${id.split('/').pop()}.json`,
+            ),
+          );
+          assert.deepEqual(
+            card.data.relationships,
+            { friend: { links: { self: './already-stored-friend' } } },
+            'the new card links to the stored one',
+          );
+        });
+
+        test('a create whose side-load collides with a card of another type names the side-load', async function (assert) {
+          let friendType = {
+            module: rri('https://localhost:4202/node-test/friend'),
+            name: 'Friend',
+          };
+          let storedFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'Friend',
+            'other-type-friend.json',
+          );
+          let storedBytes = JSON.stringify(
+            {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Incumbent' },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('https://localhost:4202/node-test/person'),
+                    name: 'Friend',
+                  },
+                },
+              },
+            },
+            null,
+            2,
+          );
+          fsExtra.outputFileSync(storedFile, storedBytes);
+
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                lid: 'primary-card',
+                attributes: { firstName: 'Hassan' },
+                relationships: {
+                  friend: {
+                    data: { lid: 'other-type-friend', type: 'card' },
+                  },
+                },
+                meta: { adoptsFrom: friendType },
+              },
+              included: [
+                {
+                  lid: 'other-type-friend',
+                  type: 'card',
+                  attributes: { firstName: 'Resent' },
+                  meta: { adoptsFrom: friendType },
+                },
+              ],
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 409, 'the save is refused');
+          let [error] = response.body.errors;
+          assert.strictEqual(
+            error.id,
+            `${testRealmHref}Friend/other-type-friend`,
+            'the error is about the side-loaded card',
+          );
+          assert.strictEqual(error.meta?.included?.lid, 'other-type-friend');
+          assert.true(
+            error.message.includes('"other-type-friend"'),
+            `the message names the side-load: ${error.message}`,
+          );
+          assert.false(
+            error.message.includes('primary-card'),
+            `and not the card being created: ${error.message}`,
+          );
+          assert.strictEqual(
+            readFileSync(storedFile, 'utf8'),
+            storedBytes,
+            'the stored card is left exactly as it was',
+          );
+          assert.false(
+            existsSync(
+              join(
+                dir.name,
+                'realm_server_1',
+                'test',
+                'Friend',
+                'primary-card.json',
+              ),
+            ),
+            'nothing is written for the card being created',
+          );
+        });
+
         test('creates card instance when it encounters "lid" in the primary resource', async function (assert) {
           let response = await request
             .post('/')
