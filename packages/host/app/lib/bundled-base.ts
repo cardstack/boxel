@@ -215,8 +215,6 @@ export const BUNDLED_BASE_MODULES: Record<
   email: () => import('@cardstack/base/email'),
   'ethereum-address': () => import('@cardstack/base/ethereum-address'),
   'phone-number': () => import('@cardstack/base/phone-number'),
-  'text-area': () => import('@cardstack/base/text-area'),
-  markdown: () => import('@cardstack/base/markdown'),
   'rich-markdown': () => import('@cardstack/base/rich-markdown'),
   color: () => import('@cardstack/base/color'),
   'code-ref': () => import('@cardstack/base/code-ref'),
