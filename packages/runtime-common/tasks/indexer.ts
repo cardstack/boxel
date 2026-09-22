@@ -48,8 +48,7 @@ export interface IncrementalChange extends JSONTypes.Object {
 
 // One publish a job carries. A pending job absorbs every same-realm publish
 // that arrives before a worker claims it, so one pass can index several
-// writers' changes — and every one of them is waiting on it and would
-// otherwise announce it separately.
+// writers' changes, with every one of them waiting on it.
 export interface CoalescedCaller extends JSONTypes.Object {
   waiterId: string;
   clientRequestId: string | null;

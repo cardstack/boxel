@@ -4088,10 +4088,9 @@ module('Integration | Store', function (hooks) {
         'and the store holds what that writer wrote',
       );
 
-      // The control: the same event as it reads without the list, which is
-      // all a client had when each writer announced the pass separately and
-      // this copy arrived first. Nothing in it names this client's write, so
-      // the card is read back.
+      // The control: the same event without the list, which is what a client
+      // is handed when the realm cannot report who shared the pass. Nothing
+      // in it names this client's write, so the card is read back.
       let { coalescedWrites: _coalescedWrites, ...announcedAlone } = event;
       events.deliver(announcedAlone as RealmEventContent);
       await settled();

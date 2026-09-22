@@ -610,8 +610,8 @@ function parseCoalescedCallers(value: unknown[]): CoalescedCaller[] {
 // else it indexed (a result from an older worker), or when this caller is not
 // among those named — a publish that attached to a job already running is not
 // in the args that job was claimed with. Each of those leaves the caller
-// announcing the pass itself, which is what every caller did before passes
-// were announced once.
+// announcing the pass itself — a duplicate a subscriber can absorb, where a
+// caller wrongly standing down would leave the pass unannounced.
 function sharedPassFor(
   waiterId: string | undefined,
   callers: CoalescedCaller[] | undefined,
