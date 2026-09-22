@@ -646,6 +646,18 @@ export async function runGlintCheck(
             '@cardstack/boxel-ui/*': [
               `${join(PACKAGES_PATH, 'boxel-ui', 'src')}/*`,
             ],
+            // Map icons to their committed .gts sources. Without this the
+            // import resolves through the package's exports map, whose types
+            // live in the gitignored `declarations/` build output — in an
+            // environment with `dist/` built but no `declarations/` (CI's
+            // restored web-assets artifact), the import falls through to the
+            // untyped rollup JS, every icon types as `object`, and each
+            // unannotated `static icon = X` in the base package breaks its
+            // class's `typeof BaseDef` constraint.
+            '@cardstack/boxel-icons/*': [
+              `${join(PACKAGES_PATH, 'boxel-icons', 'src', 'icons')}/*`,
+              `${join(PACKAGES_PATH, 'boxel-icons', 'src')}/*`,
+            ],
             '*': [`${HOST_PKG_PATH}/types/*`],
           },
         },
@@ -669,13 +681,22 @@ export async function runGlintCheck(
       '.bin',
       'ember-tsc',
     );
+    // SF_PARSE_DEBUG dumps the raw compiler output plus the program-membership
+    // ("--explainFiles") entries for the packages whose duplication produces
+    // nominal type mismatches. For diagnosing environment-specific gate
+    // failures; off in normal operation.
+    let debug = !!process.env.SF_PARSE_DEBUG;
+    let tscArgs = ['--noEmit', '--project', join(tempDir, 'tsconfig.json')];
+    if (debug) {
+      tscArgs.push('--explainFiles');
+    }
     let { output, exitedWithError } = await new Promise<{
       output: string;
       exitedWithError: boolean;
     }>((resolvePromise, reject) => {
       let child = execFile(
         emberTscBin,
-        ['--noEmit', '--project', join(tempDir, 'tsconfig.json')],
+        tscArgs,
         {
           cwd: tempDir,
           timeout: 120_000,
@@ -698,19 +719,53 @@ export async function runGlintCheck(
       );
     });
 
+    if (debug) {
+      // Non-indented lines are either diagnostics or (--explainFiles) program
+      // file paths; indented lines belong to the preceding one (elaboration or
+      // inclusion reason). Print every diagnostic and the entries for the
+      // packages prone to duplicate-copy mismatches.
+      let interesting = /@glint|@glimmer|card-api|ember-provide-consume/;
+      let keep = false;
+      for (let line of output.split('\n')) {
+        if (/^\S/.test(line)) {
+          keep = /error TS/.test(line) || interesting.test(line);
+        }
+        if (keep && line.trim()) {
+          console.error(`[SF_PARSE_DEBUG] ${line}`);
+        }
+      }
+    }
+
     let errors: ParseErrorData[] = [];
     let totalDiagnosticLines = 0;
     let lines = output.split('\n');
+
+    // tsc elaborates many diagnostics ("Types of property 'x' are
+    // incompatible.", "Type 'A' is not assignable to type 'B'.") as indented
+    // continuation lines under the error line. Those name the actual
+    // incompatibility, so fold them into the error's message instead of
+    // dropping them.
+    let current: ParseErrorData | null = null;
 
     for (let line of lines) {
       let match = line.match(
         /^(.+?)\((\d+),(\d+)\):\s*error\s+(TS\d+):\s*(.+)/,
       );
       if (!match) {
+        if (current && /^\s+\S/.test(line)) {
+          current.message += `\n${line.trimEnd()}`;
+        } else if (/^\S/.test(line)) {
+          // A non-indented line that isn't a diagnostic — e.g. an
+          // --explainFiles program-file path under SF_PARSE_DEBUG — ends the
+          // previous diagnostic. Clear `current` so the indented inclusion
+          // reasons that follow it don't fold into an unrelated error.
+          current = null;
+        }
         continue;
       }
 
       totalDiagnosticLines++;
+      current = null;
 
       let [, filePath, lineStr, colStr, tsCode, message] = match;
 
@@ -729,12 +784,13 @@ export async function runGlintCheck(
         continue;
       }
 
-      errors.push({
+      current = {
         file: originalFile.path,
         line: parseInt(lineStr, 10),
         column: parseInt(colStr, 10),
         message,
-      });
+      };
+      errors.push(current);
     }
 
     if (exitedWithError && errors.length === 0 && totalDiagnosticLines === 0) {

@@ -117,11 +117,7 @@ function processIfBlocks(
     result = replaceOutermostBlock(result, 'if', (key, body) => {
       let value = resolvePath(key, variables);
 
-      // Split on {{else}} if present
-      let elseParts = body.split('{{else}}');
-      let trueBranch = elseParts[0];
-      let falseBranch =
-        elseParts.length > 1 ? elseParts.slice(1).join('{{else}}') : '';
+      let { trueBranch, falseBranch } = splitOnOwnElse(body);
 
       if (isTruthy(value)) {
         return processBlock(trueBranch, variables);
@@ -178,6 +174,41 @@ function processBlock(
   result = processIfBlocks(result, variables);
   result = processVariables(result, variables);
   return result;
+}
+
+/**
+ * Split an {{#if}} body into its true and false branches at the {{else}} that
+ * belongs to *this* block.
+ *
+ * A nested block carries its own {{else}}, so splitting on the first one found
+ * hands the inner block's false branch to the outer block and drops the rest of
+ * the inner block's markup. Walk the body tracking the depth of every block
+ * type and split only at depth 0; a body with no {{else}} of its own has an
+ * empty false branch.
+ */
+function splitOnOwnElse(body: string): {
+  trueBranch: string;
+  falseBranch: string;
+} {
+  let token = /\{\{(#\w+[^}]*|\/\w+|else)\}\}/g;
+  let depth = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = token.exec(body)) !== null) {
+    let tag = match[1];
+    if (tag.startsWith('#')) {
+      depth++;
+    } else if (tag.startsWith('/')) {
+      depth--;
+    } else if (depth === 0) {
+      return {
+        trueBranch: body.slice(0, match.index),
+        falseBranch: body.slice(match.index + match[0].length),
+      };
+    }
+  }
+
+  return { trueBranch: body, falseBranch: '' };
 }
 
 /**
