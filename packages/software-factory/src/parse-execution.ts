@@ -22,7 +22,7 @@ import {
   symlinkSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve, dirname } from 'node:path';
+import { join, resolve, dirname, sep } from 'node:path';
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { specRef } from '@cardstack/runtime-common/constants';
@@ -152,7 +152,7 @@ export interface ParseRealmFilesOptions {
    */
   runGlintCheckFn?: (
     gtsFiles: { path: string; content: string }[],
-  ) => Promise<ParseErrorData[]>;
+  ) => Promise<GlintCheckResult>;
   /**
    * When set, the engine run is memoized per workspace fingerprint + file
    * set, so the agent's mid-turn `run_parse` and the pipeline's parse step
@@ -163,8 +163,15 @@ export interface ParseRealmFilesOptions {
 
 export interface ParseRealmFilesOutput {
   fileResults: ParseFileResultData[];
-  /** All errors flattened across files. Parse has no warnings. */
+  /** All errors flattened across files. */
   errorViolations: ParseErrorViolation[];
+  /**
+   * Degradations that did not fail the run but changed what it validated:
+   * realm modules the staging walk could not fetch, prefixes that fell back
+   * to the `any` shim, and diagnostics anchored in staged realm sources. A
+   * green result with warnings is a pass over an incomplete module graph.
+   */
+  warnings: string[];
   durationMs: number;
 }
 
@@ -215,6 +222,8 @@ export interface RunParseResult {
   parseableFiles: string[];
   /** All errors across all files. */
   errors: RunParseError[];
+  /** See {@link ParseRealmFilesOutput.warnings}. */
+  warnings: string[];
   /** Set only when `status === 'error'`. */
   errorMessage?: string;
 }
@@ -314,9 +323,10 @@ export async function discoverJsonExampleFiles(
 /**
  * Parse a set of discovered files. `.gts` / `.gjs` / `.ts` are batched into
  * a single glint invocation. JSON files are parsed in parallel and checked
- * for card document structure. Returns per-file results plus a flat list of
- * errors (parse has no warnings). Read failures surface as synthetic
- * `parse-error` entries.
+ * for card document structure. Returns per-file results, a flat list of
+ * errors, and warnings for degradations that changed what the run validated
+ * without failing it. Read failures surface as synthetic `parse-error`
+ * entries.
  */
 export async function parseRealmFiles(
   options: ParseRealmFilesOptions,
@@ -357,6 +367,7 @@ async function parseRealmFilesUncached(
   let startedAt = Date.now();
   let fileResults: ParseFileResultData[] = [];
   let errorViolations: ParseErrorViolation[] = [];
+  let warnings: string[] = [];
 
   if (gtsFiles.length > 0) {
     let gtsContents: { path: string; content: string }[] = [];
@@ -386,7 +397,9 @@ async function parseRealmFilesUncached(
 
     if (gtsContents.length > 0) {
       try {
-        let glintErrors = await runGlintCheckFn(gtsContents);
+        let glintResult = await runGlintCheckFn(gtsContents);
+        let glintErrors = glintResult.errors;
+        warnings.push(...glintResult.warnings);
 
         let errorsByFile = new Map<string, ParseErrorData[]>();
         for (let err of glintErrors) {
@@ -476,6 +489,7 @@ async function parseRealmFilesUncached(
   return {
     fileResults,
     errorViolations,
+    warnings,
     durationMs: Date.now() - startedAt,
   };
 }
@@ -545,11 +559,12 @@ export async function runParseInMemory(
       durationMs: 0,
       parseableFiles: [],
       errors: [],
+      warnings: [],
     };
   }
 
   try {
-    let { fileResults, durationMs } = await parseRealmFiles(
+    let { fileResults, warnings, durationMs } = await parseRealmFiles(
       {
         targetRealm: options.targetRealm,
         client: options.client,
@@ -582,6 +597,7 @@ export async function runParseInMemory(
       durationMs,
       parseableFiles,
       errors,
+      warnings,
     };
   } catch (err) {
     let errorMessage = err instanceof Error ? err.message : String(err);
@@ -594,6 +610,7 @@ export async function runParseInMemory(
       durationMs: 0,
       parseableFiles,
       errors: [],
+      warnings: [],
       errorMessage,
     };
   }
@@ -622,10 +639,16 @@ export interface RunGlintCheckOptions {
   fetchFn?: typeof globalThis.fetch;
 }
 
+export interface GlintCheckResult {
+  errors: ParseErrorData[];
+  /** See {@link ParseRealmFilesOutput.warnings}. */
+  warnings: string[];
+}
+
 export async function runGlintCheck(
   files: { path: string; content: string }[],
   options: RunGlintCheckOptions = {},
-): Promise<ParseErrorData[]> {
+): Promise<GlintCheckResult> {
   let tempDir = mkdtempSync(join(tmpdir(), 'sf-parse-'));
 
   try {
@@ -642,7 +665,7 @@ export async function runGlintCheck(
       writeFileSync(resolved, file.content, 'utf8');
     }
 
-    let { realmPaths } = await stageRealmSources({
+    let { realmPaths, shimmedPrefixes, failures } = await stageRealmSources({
       tempDir,
       files,
       prefixes: RESOLVABLE_PREFIXES,
@@ -651,59 +674,69 @@ export async function runGlintCheck(
       onWarn: (message) => log.warn(message),
     });
 
-    {
-      let tsconfig = {
-        compilerOptions: {
-          target: 'es2022',
-          allowJs: true,
-          moduleResolution: 'bundler',
-          allowSyntheticDefaultImports: true,
-          noEmit: true,
-          baseUrl: '.',
-          module: 'es2022',
-          strict: true,
-          experimentalDecorators: true,
-          skipLibCheck: true,
-          noUnusedLocals: false,
-          noUnusedParameters: false,
-          types: ['qunit-dom', '@cardstack/local-types'],
-          paths: {
-            ...realmPaths,
-            '@cardstack/base/*': [`${BASE_PKG_PATH}/*`],
-            'https://cardstack.com/base/*': [`${BASE_PKG_PATH}/*`],
-            '@cardstack/host/tests/*': [`${HOST_PKG_PATH}/tests/*`],
-            '@cardstack/host/*': [`${HOST_PKG_PATH}/app/*`],
-            '@cardstack/boxel-host/tools/*': [`${HOST_PKG_PATH}/app/tools/*`],
-            '@cardstack/boxel-host/commands/*': [
-              `${HOST_PKG_PATH}/app/tools/*`,
-            ],
-            '@cardstack/boxel-ui/*': [
-              `${join(PACKAGES_PATH, 'boxel-ui', 'src')}/*`,
-            ],
-            // Map icons to their committed .gts sources. Without this the
-            // import resolves through the package's exports map, whose types
-            // live in the gitignored `declarations/` build output — in an
-            // environment with `dist/` built but no `declarations/` (CI's
-            // restored web-assets artifact), the import falls through to the
-            // untyped rollup JS, every icon types as `object`, and each
-            // unannotated `static icon = X` in the base package breaks its
-            // class's `typeof BaseDef` constraint.
-            '@cardstack/boxel-icons/*': [
-              `${join(PACKAGES_PATH, 'boxel-icons', 'src', 'icons')}/*`,
-              `${join(PACKAGES_PATH, 'boxel-icons', 'src')}/*`,
-            ],
-            '*': [`${HOST_PKG_PATH}/types/*`],
-          },
-        },
-        include: ['**/*.ts', '**/*.gts', '**/*.gjs'],
-        exclude: ['node_modules', REALM_CACHE_DIR],
-      };
-      writeFileSync(
-        join(tempDir, 'tsconfig.json'),
-        JSON.stringify(tsconfig, null, 2),
-        'utf8',
+    let warnings: string[] = [];
+    for (let failure of failures) {
+      warnings.push(
+        `Could not fetch realm module ${failure.specifier} (${failure.reason}) — this check ran against an incomplete copy of that realm's code.`,
       );
     }
+    if (shimmedPrefixes.length > 0) {
+      warnings.push(
+        `Realm prefix(es) ${shimmedPrefixes.join(', ')} could not be resolved; their imports were typed as 'any', so card-level adoption from them was not actually type-checked.`,
+      );
+    }
+
+    let tsconfig = {
+      compilerOptions: {
+        target: 'es2022',
+        allowJs: true,
+        moduleResolution: 'bundler',
+        allowSyntheticDefaultImports: true,
+        noEmit: true,
+        baseUrl: '.',
+        module: 'es2022',
+        strict: true,
+        experimentalDecorators: true,
+        skipLibCheck: true,
+        noUnusedLocals: false,
+        noUnusedParameters: false,
+        types: ['qunit-dom', '@cardstack/local-types'],
+        paths: {
+          ...realmPaths,
+          '@cardstack/base/*': [`${BASE_PKG_PATH}/*`],
+          'https://cardstack.com/base/*': [`${BASE_PKG_PATH}/*`],
+          '@cardstack/host/tests/*': [`${HOST_PKG_PATH}/tests/*`],
+          '@cardstack/host/*': [`${HOST_PKG_PATH}/app/*`],
+          '@cardstack/boxel-host/tools/*': [`${HOST_PKG_PATH}/app/tools/*`],
+          '@cardstack/boxel-host/commands/*': [
+            `${HOST_PKG_PATH}/app/tools/*`,
+          ],
+          '@cardstack/boxel-ui/*': [
+            `${join(PACKAGES_PATH, 'boxel-ui', 'src')}/*`,
+          ],
+          // Map icons to their committed .gts sources. Without this the
+          // import resolves through the package's exports map, whose types
+          // live in the gitignored `declarations/` build output — in an
+          // environment with `dist/` built but no `declarations/` (CI's
+          // restored web-assets artifact), the import falls through to the
+          // untyped rollup JS, every icon types as `object`, and each
+          // unannotated `static icon = X` in the base package breaks its
+          // class's `typeof BaseDef` constraint.
+          '@cardstack/boxel-icons/*': [
+            `${join(PACKAGES_PATH, 'boxel-icons', 'src', 'icons')}/*`,
+            `${join(PACKAGES_PATH, 'boxel-icons', 'src')}/*`,
+          ],
+          '*': [`${HOST_PKG_PATH}/types/*`],
+        },
+      },
+      include: ['**/*.ts', '**/*.gts', '**/*.gjs'],
+      exclude: ['node_modules', REALM_CACHE_DIR],
+    };
+    writeFileSync(
+      join(tempDir, 'tsconfig.json'),
+      JSON.stringify(tsconfig, null, 2),
+      'utf8',
+    );
 
     symlinkSync(NODE_MODULES_PATH, join(tempDir, 'node_modules'));
 
@@ -770,7 +803,10 @@ export async function runGlintCheck(
     }
 
     let errors: ParseErrorData[] = [];
-    let totalDiagnosticLines = 0;
+    let inputDiagnosticLines = 0;
+    let stagedDiagnosticLines = 0;
+    let stagedDiagnosticSamples: string[] = [];
+    let stagedCacheRoot = join(tempDir, REALM_CACHE_DIR);
     let lines = output.split('\n');
 
     // tsc elaborates many diagnostics ("Types of property 'x' are
@@ -797,12 +833,31 @@ export async function runGlintCheck(
         continue;
       }
 
-      totalDiagnosticLines++;
       current = null;
 
       let [, filePath, lineStr, colStr, tsCode, message] = match;
 
       let absolutePath = resolve(tempDir, filePath);
+      // `exclude` only keeps staged realm sources from being *root* files — a
+      // file imported by a checked file still enters the program and still
+      // produces diagnostics. Staged sources are third-party code checked
+      // under a tsconfig not written for them, so their diagnostics are not
+      // the author's errors and are dropped — but partitioned into their own
+      // counter, because folding them into `inputDiagnosticLines` would
+      // disarm the setup-failure fallback below and let a non-zero ember-tsc
+      // exit read as a clean pass.
+      if (absolutePath.startsWith(stagedCacheRoot + sep)) {
+        stagedDiagnosticLines++;
+        if (stagedDiagnosticSamples.length < 3) {
+          stagedDiagnosticSamples.push(
+            `${absolutePath.slice(tempDir.length + 1)}(${lineStr},${colStr}): ${tsCode}: ${message}`,
+          );
+        }
+        continue;
+      }
+
+      inputDiagnosticLines++;
+
       if (!absolutePath.startsWith(tempDir)) {
         continue;
       }
@@ -826,7 +881,18 @@ export async function runGlintCheck(
       errors.push(current);
     }
 
-    if (exitedWithError && errors.length === 0 && totalDiagnosticLines === 0) {
+    if (stagedDiagnosticLines > 0) {
+      warnings.push(
+        `ember-tsc reported ${stagedDiagnosticLines} diagnostic(s) in fetched realm sources rather than in the checked files (e.g. ${stagedDiagnosticSamples[0]}). These are dropped — staged realm code is not what this run checks. If they name missing modules, the fetch-failure warnings above carry the cause.`,
+      );
+    }
+
+    if (
+      exitedWithError &&
+      errors.length === 0 &&
+      inputDiagnosticLines === 0 &&
+      stagedDiagnosticLines === 0
+    ) {
       let truncatedOutput = output.slice(0, 500).trim();
       errors.push({
         file: files[0]?.path ?? 'unknown',
@@ -836,7 +902,7 @@ export async function runGlintCheck(
       });
     }
 
-    return errors;
+    return { errors, warnings };
   } finally {
     try {
       rmSync(tempDir, { recursive: true, force: true });
@@ -1060,6 +1126,7 @@ function emptyErrorResult(errorMessage: string): RunParseResult {
     durationMs: 0,
     parseableFiles: [],
     errors: [],
+    warnings: [],
     errorMessage,
   };
 }

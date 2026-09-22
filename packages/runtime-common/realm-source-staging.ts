@@ -22,22 +22,31 @@
  *
  * That degrade-to-shim contract holds only when *every* fetch for a prefix
  * fails. A prefix with at least one module fetched is aliased at its real
- * sources, so a single module that 404s within it is a hard type error. That is
- * the right answer for a genuinely missing module and the accepted answer for a
- * mid-walk transient blip too: within an aliased prefix the two are not
- * distinguished.
+ * sources. Within such a prefix, a missing module the *entry file* imports
+ * directly is a hard type error anchored in the author's own file; a
+ * *transitive* miss — a fetched module whose own import cannot be fetched —
+ * anchors in the staged source, whose diagnostics the callers deliberately do
+ * not report. Transitive misses therefore surface through `failures`, which
+ * each caller folds into its result as a warning.
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 
-import { cacheDirForPrefix, fetchRealmSources } from './realm-source-cache.ts';
+import {
+  cacheDirForPrefix,
+  fetchRealmSources,
+  type RealmSourceFailure,
+} from './realm-source-cache.ts';
 
 /**
  * Where fetched realm module sources land inside a parse run's temp dir. A
- * `paths` alias points each realm prefix at a subdirectory of this, and each
- * caller's tsconfig `exclude`s it so the staged sources are not themselves
- * type-checked as workspace files.
+ * `paths` alias points each realm prefix at a subdirectory of this. Each
+ * caller's tsconfig `exclude`s it, but `exclude` only keeps the staged sources
+ * from becoming *root* files — a file imported by a checked file still enters
+ * the program and is still checked. The callers' diagnostic loops partition on
+ * this directory name to keep staged-source diagnostics out of the author's
+ * errors without disarming their setup-failure detection.
  */
 export const REALM_CACHE_DIR = '.realm-sources';
 
@@ -61,9 +70,10 @@ export interface StageRealmSourcesOptions {
   fetchFn?: typeof globalThis.fetch;
   /**
    * Reports a degradation worth surfacing (no origin, the fetch threw, an
-   * unsafe module path, individual fetch failures). Left to the caller so each
-   * keeps its own channel (`cliLog.warn`, the factory logger); omit to stay
-   * silent.
+   * unsafe module path). Left to the caller so each keeps its own channel
+   * (`cliLog.warn`, the factory logger); omit to stay silent. Individual fetch
+   * failures are not warned here — they come back in `failures` for the caller
+   * to fold into its own result.
    */
   onWarn?: (message: string) => void;
 }
@@ -77,6 +87,13 @@ export interface StageRealmSourcesResult {
    * already written by the time this returns.
    */
   shimmedPrefixes: string[];
+  /**
+   * Modules the walk could not fetch within prefixes that *were* aliased —
+   * exactly the misses whose diagnostics anchor in staged sources and are
+   * dropped by the callers' loops, so this is the only channel they reach the
+   * author through. Callers fold these into their result's warnings.
+   */
+  failures: RealmSourceFailure[];
 }
 
 /**
@@ -102,13 +119,13 @@ async function resolveRealmSources(
     files.some((file) => file.content.includes(prefix)),
   );
   if (referenced.length === 0) {
-    return { realmPaths: {}, shimmedPrefixes: [] };
+    return { realmPaths: {}, shimmedPrefixes: [], failures: [] };
   }
   if (!origin) {
     warn(
       `Realm-prefixed imports (${referenced.join(', ')}) but no realm to resolve them against — falling back to the ambient shim.`,
     );
-    return { realmPaths: {}, shimmedPrefixes: referenced };
+    return { realmPaths: {}, shimmedPrefixes: referenced, failures: [] };
   }
 
   // Hand the full prefix set to the fetch, not just the prefixes the entry
@@ -135,7 +152,7 @@ async function resolveRealmSources(
     warn(
       `Could not fetch realm sources (${error instanceof Error ? error.message : String(error)}) — falling back to the ambient shim.`,
     );
-    return { realmPaths: {}, shimmedPrefixes: referenced };
+    return { realmPaths: {}, shimmedPrefixes: referenced, failures: [] };
   }
 
   let cacheRoot = join(tempDir, REALM_CACHE_DIR);
@@ -152,14 +169,6 @@ async function resolveRealmSources(
     writeFileSync(absolutePath, source, 'utf8');
   }
 
-  if (result.failures.length > 0) {
-    warn(
-      `Could not fetch ${result.failures.length} realm module(s): ${result.failures
-        .map((f) => `${f.specifier} (${f.reason})`)
-        .join(', ')}`,
-    );
-  }
-
   let realmPaths: Record<string, string[]> = {};
   for (let prefix of result.resolvedPrefixes) {
     realmPaths[`${prefix}*`] = [
@@ -172,6 +181,7 @@ async function resolveRealmSources(
     shimmedPrefixes: referenced.filter(
       (prefix) => !result.resolvedPrefixes.includes(prefix),
     ),
+    failures: result.failures,
   };
 }
 

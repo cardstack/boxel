@@ -221,6 +221,13 @@ export interface ParseRealmResult {
   durationMs: number;
   parseableFiles: string[];
   errors: ParseError[];
+  /**
+   * Degradations that did not fail the run but changed what it validated:
+   * realm modules the staging walk could not fetch, prefixes that fell back
+   * to the `any` shim, and diagnostics anchored in staged realm sources. A
+   * green result with warnings is a pass over an incomplete module graph.
+   */
+  warnings: string[];
   errorMessage?: string;
 }
 
@@ -380,6 +387,7 @@ export async function parseRealm(
       durationMs: Date.now() - startedAt,
       parseableFiles: [],
       errors: [],
+      warnings: [],
     };
   }
 
@@ -389,6 +397,7 @@ export async function parseRealm(
       : fetchSource(normalizedRealmUrl, path, pm);
 
   let errors: ParseError[] = [];
+  let warnings: string[] = [];
   let filesWithErrors = new Set<string>();
 
   if (gtsFiles.length > 0) {
@@ -410,10 +419,11 @@ export async function parseRealm(
 
     if (gtsContents.length > 0) {
       try {
-        let glintErrors = await runGlintCheck(gtsContents, {
+        let glintResult = await runGlintCheck(gtsContents, {
           realmOrigin: realmOriginForPrefixes(normalizedRealmUrl, pm),
         });
-        for (let e of glintErrors) {
+        warnings.push(...glintResult.warnings);
+        for (let e of glintResult.errors) {
           errors.push(e);
           filesWithErrors.add(e.file);
         }
@@ -457,6 +467,7 @@ export async function parseRealm(
     durationMs: Date.now() - startedAt,
     parseableFiles,
     errors,
+    warnings,
   };
 }
 
@@ -668,7 +679,7 @@ interface RunGlintCheckOptions {
 async function runGlintCheck(
   files: { path: string; content: string }[],
   glintOptions: RunGlintCheckOptions = {},
-): Promise<ParseError[]> {
+): Promise<{ errors: ParseError[]; warnings: string[] }> {
   let tempDir = mkdtempSync(join(tmpdir(), 'boxel-parse-'));
 
   try {
@@ -688,7 +699,7 @@ async function runGlintCheck(
       writeFileSync(resolved, file.content, 'utf8');
     }
 
-    let { realmPaths } = await stageRealmSources({
+    let { realmPaths, shimmedPrefixes, failures } = await stageRealmSources({
       tempDir,
       files,
       prefixes: RESOLVABLE_PREFIXES,
@@ -697,82 +708,92 @@ async function runGlintCheck(
       onWarn: (message) => cliLog.warn(message),
     });
 
-    {
-      let tsconfig = {
-        compilerOptions: {
-          target: 'es2022',
-          allowJs: true,
-          moduleResolution: 'bundler',
-          allowSyntheticDefaultImports: true,
-          noEmit: true,
-          baseUrl: '.',
-          module: 'es2022',
-          strict: true,
-          experimentalDecorators: true,
-          skipLibCheck: true,
-          noUnusedLocals: false,
-          noUnusedParameters: false,
-          // Bundled `@cardstack/bxl` source imports its siblings by
-          // explicit `.ts` specifier. Without this each of those is a
-          // TS5097 — none reaches the caller (they're outside the temp
-          // dir, so the loop below drops them), but they still count
-          // toward `totalDiagnosticLines`, which is what tells a real
-          // "glint resolved nothing" breakage from a clean run. Safe
-          // under `noEmit`, and it keeps that signal meaningful.
-          allowImportingTsExtensions: true,
-          // `qunit-dom` augments QUnit's `Assert` with `.dom(...)`.
-          // Workspaces routinely include `.test.gts` files that call
-          // `assert.dom(...)` without importing qunit-dom directly (they
-          // rely on the ambient augmentation), and parse type-checks every
-          // discovered `.gts` — so the type lib has to be loaded here or
-          // those tests fail with "Property 'dom' does not exist on type
-          // 'Assert'". It resolves because qunit-dom is a runtime
-          // dependency of boxel-cli, reachable via the node_modules
-          // resolution above. `@cardstack/local-types` is workspace-only
-          // and fed via `include` below instead of here.
-          types: ['qunit-dom'],
-          paths: {
-            ...realmPaths,
-            '@cardstack/base/*': [`${BASE_PKG_PATH}/*`],
-            'https://cardstack.com/base/*': [`${BASE_PKG_PATH}/*`],
-            '@cardstack/runtime-common': [`${RUNTIME_COMMON_PATH}/index`],
-            '@cardstack/runtime-common/*': [`${RUNTIME_COMMON_PATH}/*`],
-            '@cardstack/bxl': [`${BXL_PATH}/index`],
-            '@cardstack/bxl/*': [`${BXL_PATH}/*`],
-            '@cardstack/host/tests/*': [`${HOST_TESTS_PATH}/*`],
-            '@cardstack/host/*': [`${HOST_APP_PATH}/*`],
-            // The host registers each tool module under both its
-            // `tools/` specifier and the pre-rename `commands/` one, so
-            // card content that still carries the old spelling loads.
-            // Both aliases therefore target `tools/`, which is where the
-            // modules live.
-            '@cardstack/boxel-host/commands/*': [`${HOST_APP_PATH}/tools/*`],
-            // Card code imports host tools as
-            // `@cardstack/boxel-host/tools/<name>`.
-            '@cardstack/boxel-host/tools/*': [`${HOST_APP_PATH}/tools/*`],
-            // Host library modules card code may import (e.g.
-            // `lib/pdfjs-loader`); `lib` is among the bundled host-app
-            // subdirs.
-            '@cardstack/boxel-host/lib/*': [`${HOST_APP_PATH}/lib/*`],
-            '@cardstack/boxel-ui/*': [`${BOXEL_UI_PATH}/*`],
-            '*': [`${HOST_TYPES_PATH}/*`],
-          },
-        },
-        include: [
-          '**/*.ts',
-          '**/*.gts',
-          '**/*.gjs',
-          `${LOCAL_TYPES_PATH}/**/*.d.ts`,
-          ...(SHIMS_PATH ? [`${SHIMS_PATH}/**/*.d.ts`] : []),
-        ],
-        exclude: ['node_modules', REALM_CACHE_DIR],
-      };
-      writeFileSync(
-        join(tempDir, 'tsconfig.json'),
-        JSON.stringify(tsconfig, null, 2),
-        'utf8',
+    let warnings: string[] = [];
+    for (let failure of failures) {
+      warnings.push(
+        `Could not fetch realm module ${failure.specifier} (${failure.reason}) — this check ran against an incomplete copy of that realm's code.`,
       );
     }
+    if (shimmedPrefixes.length > 0) {
+      warnings.push(
+        `Realm prefix(es) ${shimmedPrefixes.join(', ')} could not be resolved; their imports were typed as 'any', so card-level adoption from them was not actually type-checked.`,
+      );
+    }
+
+    let tsconfig = {
+      compilerOptions: {
+        target: 'es2022',
+        allowJs: true,
+        moduleResolution: 'bundler',
+        allowSyntheticDefaultImports: true,
+        noEmit: true,
+        baseUrl: '.',
+        module: 'es2022',
+        strict: true,
+        experimentalDecorators: true,
+        skipLibCheck: true,
+        noUnusedLocals: false,
+        noUnusedParameters: false,
+        // Bundled `@cardstack/bxl` source imports its siblings by
+        // explicit `.ts` specifier. Without this each of those is a
+        // TS5097 — none reaches the caller (they're outside the temp
+        // dir, so the loop below drops them), but they still count
+        // toward `inputDiagnosticLines`, which is what tells a real
+        // "glint resolved nothing" breakage from a clean run. Safe
+        // under `noEmit`, and it keeps that signal meaningful.
+        allowImportingTsExtensions: true,
+        // `qunit-dom` augments QUnit's `Assert` with `.dom(...)`.
+        // Workspaces routinely include `.test.gts` files that call
+        // `assert.dom(...)` without importing qunit-dom directly (they
+        // rely on the ambient augmentation), and parse type-checks every
+        // discovered `.gts` — so the type lib has to be loaded here or
+        // those tests fail with "Property 'dom' does not exist on type
+        // 'Assert'". It resolves because qunit-dom is a runtime
+        // dependency of boxel-cli, reachable via the node_modules
+        // resolution above. `@cardstack/local-types` is workspace-only
+        // and fed via `include` below instead of here.
+        types: ['qunit-dom'],
+        paths: {
+          ...realmPaths,
+          '@cardstack/base/*': [`${BASE_PKG_PATH}/*`],
+          'https://cardstack.com/base/*': [`${BASE_PKG_PATH}/*`],
+          '@cardstack/runtime-common': [`${RUNTIME_COMMON_PATH}/index`],
+          '@cardstack/runtime-common/*': [`${RUNTIME_COMMON_PATH}/*`],
+          '@cardstack/bxl': [`${BXL_PATH}/index`],
+          '@cardstack/bxl/*': [`${BXL_PATH}/*`],
+          '@cardstack/host/tests/*': [`${HOST_TESTS_PATH}/*`],
+          '@cardstack/host/*': [`${HOST_APP_PATH}/*`],
+          // The host registers each tool module under both its
+          // `tools/` specifier and the pre-rename `commands/` one, so
+          // card content that still carries the old spelling loads.
+          // Both aliases therefore target `tools/`, which is where the
+          // modules live.
+          '@cardstack/boxel-host/commands/*': [`${HOST_APP_PATH}/tools/*`],
+          // Card code imports host tools as
+          // `@cardstack/boxel-host/tools/<name>`.
+          '@cardstack/boxel-host/tools/*': [`${HOST_APP_PATH}/tools/*`],
+          // Host library modules card code may import (e.g.
+          // `lib/pdfjs-loader`); `lib` is among the bundled host-app
+          // subdirs.
+          '@cardstack/boxel-host/lib/*': [`${HOST_APP_PATH}/lib/*`],
+          '@cardstack/boxel-ui/*': [`${BOXEL_UI_PATH}/*`],
+          '*': [`${HOST_TYPES_PATH}/*`],
+        },
+      },
+      include: [
+        '**/*.ts',
+        '**/*.gts',
+        '**/*.gjs',
+        `${LOCAL_TYPES_PATH}/**/*.d.ts`,
+        ...(SHIMS_PATH ? [`${SHIMS_PATH}/**/*.d.ts`] : []),
+      ],
+      exclude: ['node_modules', REALM_CACHE_DIR],
+    };
+    writeFileSync(
+      join(tempDir, 'tsconfig.json'),
+      JSON.stringify(tsconfig, null, 2),
+      'utf8',
+    );
 
     if (BUNDLED_TYPES_DIR) {
       // Published install: deps may be split across nested + hoisted
@@ -838,17 +859,38 @@ async function runGlintCheck(
     });
 
     let errors: ParseError[] = [];
-    let totalDiagnosticLines = 0;
+    let inputDiagnosticLines = 0;
+    let stagedDiagnosticLines = 0;
+    let stagedDiagnosticSamples: string[] = [];
+    let stagedCacheRoot = join(tempDir, REALM_CACHE_DIR);
     for (let line of output.split('\n')) {
       let match = line.match(
         /^(.+?)\((\d+),(\d+)\):\s*error\s+(TS\d+):\s*(.+)/,
       );
       if (!match) continue;
 
-      totalDiagnosticLines++;
-
       let [, filePath, lineStr, colStr, tsCode, message] = match;
       let absolutePath = resolve(tempDir, filePath);
+      // `exclude` only keeps staged realm sources from being *root* files — a
+      // file imported by a checked file still enters the program and still
+      // produces diagnostics. Staged sources are third-party code checked
+      // under a tsconfig not written for them, so their diagnostics are not
+      // the author's errors and are dropped — but partitioned into their own
+      // counter, because folding them into `inputDiagnosticLines` would
+      // disarm the setup-failure fallback below and let a non-zero ember-tsc
+      // exit read as a clean pass.
+      if (absolutePath.startsWith(stagedCacheRoot + sep)) {
+        stagedDiagnosticLines++;
+        if (stagedDiagnosticSamples.length < 3) {
+          stagedDiagnosticSamples.push(
+            `${absolutePath.slice(tempDir.length + 1)}(${lineStr},${colStr}): ${tsCode}: ${message}`,
+          );
+        }
+        continue;
+      }
+
+      inputDiagnosticLines++;
+
       if (!absolutePath.startsWith(tempDir)) continue;
 
       if (tsCode === 'TS2353' && message.includes("'scoped'")) continue;
@@ -865,7 +907,18 @@ async function runGlintCheck(
       });
     }
 
-    if (exitedWithError && errors.length === 0 && totalDiagnosticLines === 0) {
+    if (stagedDiagnosticLines > 0) {
+      warnings.push(
+        `ember-tsc reported ${stagedDiagnosticLines} diagnostic(s) in fetched realm sources rather than in the checked files (e.g. ${stagedDiagnosticSamples[0]}). These are dropped — staged realm code is not what this run checks. If they name missing modules, the fetch-failure warnings above carry the cause.`,
+      );
+    }
+
+    if (
+      exitedWithError &&
+      errors.length === 0 &&
+      inputDiagnosticLines === 0 &&
+      stagedDiagnosticLines === 0
+    ) {
       let truncatedOutput = output.slice(0, 500).trim();
       errors.push({
         file: files[0]?.path ?? 'unknown',
@@ -875,7 +928,7 @@ async function runGlintCheck(
       });
     }
 
-    return errors;
+    return { errors, warnings };
   } finally {
     try {
       rmSync(tempDir, { recursive: true, force: true });
@@ -1127,6 +1180,7 @@ function emptyErrorResult(message: string): ParseRealmResult {
     durationMs: 0,
     parseableFiles: [],
     errors: [],
+    warnings: [],
     errorMessage: message,
   };
 }
@@ -1187,9 +1241,21 @@ export function registerParseCommand(program: Command): void {
         process.exit(1);
       }
 
+      // Warnings are part of the verdict, not stderr noise: a green run with
+      // warnings passed against an incomplete realm module graph, and the
+      // author deciding whether that matters needs them next to the verdict
+      // line rather than scrolled past above it.
+      for (let warning of result.warnings) {
+        console.log(`${DIM}warning${RESET} ${warning}`);
+      }
+
       if (result.errors.length === 0) {
         console.log(
-          `${DIM}No parse errors (${result.filesChecked} file(s) checked).${RESET}`,
+          `${DIM}No parse errors (${result.filesChecked} file(s) checked${
+            result.warnings.length > 0
+              ? `; ${result.warnings.length} warning(s) above`
+              : ''
+          }).${RESET}`,
         );
         return;
       }
