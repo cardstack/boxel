@@ -1627,6 +1627,44 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a pdf capture paginates its own card, not the one the pooled page was already showing', async function (assert) {
+      // The pooled page keeps the previous capture's render route up while the
+      // next transition is in flight, and Ember holds the old URL through a
+      // loading substate. The route-arrival wait matches on the path suffix,
+      // which every card's render route shares (`/html/isolated/0`), so
+      // without an identity check it returns on the *previous* render and
+      // `page.pdf()` paginates the host's loading screen as valid-looking
+      // bytes: one Letter page, no card.
+      //
+      // So: leave the page on one card's render, then capture a different one.
+      let first = await screenshot(`${realmURL}1`, { type: 'pdf' });
+      assert.strictEqual(first.response.status, 'ready', 'first pdf captured');
+
+      let { response } = await screenshot(`${realmURL}paged-card`, {
+        type: 'pdf',
+        media: 'print',
+      });
+      assert.strictEqual(
+        response.status,
+        'ready',
+        `second pdf captured (got ${response.status}: ${response.error ?? ''})`,
+      );
+      let capture = response.captures?.[0];
+      assert.ok(
+        (capture?.pageCount ?? 0) >= 2,
+        `paginated the paged card's own flow, not a one-page loading screen (got ${capture?.pageCount})`,
+      );
+      let box = firstMediaBox(Buffer.from(response.base64!, 'base64'));
+      let isA4 =
+        box != null &&
+        Math.abs(box.width - 595) <= 3 &&
+        Math.abs(box.height - 842) <= 3;
+      assert.ok(
+        isA4,
+        `paper is the card's own A4 \`@page\`, not the Letter fallback a render without the card would use (got ${box?.width}×${box?.height}pt)`,
+      );
+    });
+
     test('print media does not bleed into the next pooled capture', async function (assert) {
       // Media emulation is sticky per pooled page, so a print capture must
       // restore screen media in its `finally`. Engage print on the page…
