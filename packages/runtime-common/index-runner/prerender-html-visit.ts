@@ -92,6 +92,10 @@ export interface PrerenderHtmlPassArgs {
   // module pre-warm sweep before the format renders begin. False on
   // incremental spawns — the sweep is O(realm module count).
   preWarm: boolean;
+  // The file type bindings the spawning index pass resolved. Absent for a job
+  // enqueued before the payload carried them, or one with no spawning pass —
+  // the pass then reads the realm's config document itself.
+  spawnedFileDefBindings?: FileDefBindings;
   indexWriter: IndexWriter;
   definitionLookup: DefinitionLookup;
   virtualNetwork: VirtualNetwork;
@@ -144,6 +148,7 @@ export async function runPrerenderHtmlPass({
   spawningJobId,
   loaderEpoch,
   preWarm,
+  spawnedFileDefBindings,
   indexWriter,
   definitionLookup,
   virtualNetwork,
@@ -166,16 +171,19 @@ export async function runPrerenderHtmlPass({
   let jobTag = `${jobIdentity(jobInfo)} [realm: ${realmURL.href}] [generation: ${generation}]`;
   let batchId = `${jobInfo.jobId}-${uuidv4().slice(0, 8)}`;
   let realmPaths = new RealmPaths(realmURL, virtualNetwork);
-  // Read once for the pass, from the realm's config document — the same
-  // document the index pass and the realm itself resolve a file's class from,
-  // so the HTML this renders is the author's class's HTML rather than the base
-  // class's.
-  let fileDefBindings = await readFileDefBindings({
-    reader,
-    realmURL,
-    virtualNetwork,
-    logWarn: (message) => log.warn(`${jobIdentity(jobInfo)} ${message}`),
-  });
+  // The bindings the index pass that spawned this job resolved, so the pass
+  // that writes a file's `types` and this one — which writes the HTML keyed on
+  // `types[0]` — agree by construction rather than by each reading a document
+  // an author may edit between them. A job enqueued before the payload carried
+  // them, or one spawned outside that path, reads the config itself.
+  let fileDefBindings =
+    spawnedFileDefBindings ??
+    (await readFileDefBindings({
+      reader,
+      realmURL,
+      virtualNetwork,
+      logWarn: (message) => log.warn(`${jobIdentity(jobInfo)} ${message}`),
+    }));
   let stats: Stats = {
     instancesIndexed: 0,
     filesIndexed: 0,

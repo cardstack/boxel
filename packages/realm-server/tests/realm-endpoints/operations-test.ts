@@ -9,10 +9,10 @@ import type { PgAdapter } from '@cardstack/postgres';
 
 import {
   baseFileRef,
+  baseRealmRRI,
   baseRef,
   BOXEL_OPERATIONS_EXT,
   codeRefFromInternalKey,
-  markdownDefRef,
   rri,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
@@ -2309,6 +2309,13 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         )) as { types: string[] | null }[];
 
         assert.strictEqual(rows.length, 1, 'the file has an index row');
+        // The row's `types` are the extractor's walk of the real prototype
+        // chain, not the synthetic fallback assembled beside
+        // `resolveFileDefCodeRef` — so the platform classes `AuditLog` extends
+        // sit between it and the terminator. Asserted as head, membership and
+        // tail rather than as one literal chain, because inserting a class
+        // between `TextFileDef` and `FileDef` would be a change to the file
+        // family and not to this binding.
         let types = (rows[0].types ?? []).map((key) =>
           codeRefFromInternalKey(key),
         );
@@ -2319,10 +2326,18 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             'decides, since a served document reads its type off the first one',
         );
         assert.deepEqual(
-          types.slice(1),
+          types.slice(-2),
           [baseFileRef, baseRef],
           'with the chain the platform puts behind every file still intact, ' +
             'so a search for files finds this one',
+        );
+        assert.true(
+          types.some(
+            (ref) =>
+              ref?.name === 'TextFileDef' &&
+              ref.module === rri(`${baseRealmRRI}text-file-def`),
+          ),
+          'and the platform class the binding extends is on the chain',
         );
       });
 
@@ -2424,21 +2439,34 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        assert.deepEqual(
-          response.body.data.meta.adoptsFrom,
-          markdownDefRef,
+        // Asserted by class rather than by the module's exact spelling: a
+        // served `adoptsFrom` reads as a registered prefix when it comes off
+        // the index row and as a full URL when it comes off the platform
+        // table, both resolve to the same module, and which one answers is
+        // not what this test is about.
+        let { module, name } = response.body.data.meta.adoptsFrom;
+        assert.strictEqual(
+          name,
+          'MarkdownDef',
           'the binding is per extension, and this one has none',
+        );
+        assert.true(
+          String(module).endsWith('/markdown-file-def'),
+          `and it names the platform's markdown module: ${module}`,
         );
       });
 
       test('an operation the bound class does not declare is still unknown', async function (assert) {
+        // `escalate` is declared on a card in this realm, not on `AuditLog`.
+        // Binding an extension adds the bound class's operations to its
+        // files; it does not put every name in the realm within reach.
         let response = await post(
           envelope(invoke('escalate', { href: '/audit.txt' })),
         );
 
-        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        assert.strictEqual(response.status, 404, 'HTTP 404 status');
         let [error] = response.body.errors;
-        assert.strictEqual(error.code, 'operation-not-found');
+        assert.strictEqual(error.code, 'unknown-operation');
       });
     });
   });

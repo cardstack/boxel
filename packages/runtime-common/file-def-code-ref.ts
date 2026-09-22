@@ -35,6 +35,12 @@ export const FILEDEF_CODE_REF_BY_EXTENSION: Readonly<
   '.gts': { module: baseModule('gts-file-def'), name: 'GtsFileDef' },
   '.txt': { module: baseModule('text-file-def'), name: 'TextFileDef' },
   '.text': { module: baseModule('text-file-def'), name: 'TextFileDef' },
+  // A log is plain text, and mime-db already resolves `.log` to `text/plain`
+  // alongside `.txt`. Without an entry here it falls through to the bare
+  // `FileDef` and gets none of the text family's behavior. `TextFileDef`
+  // guards its own extensions in `extractAttributes`, so `.log` is listed
+  // there too — one without the other turns every log into an error row.
+  '.log': { module: baseModule('text-file-def'), name: 'TextFileDef' },
   '.json': { module: baseModule('json-file-def'), name: 'JsonFileDef' },
   '.csv': { module: baseModule('csv-file-def'), name: 'CsvFileDef' },
   '.pdf': { module: baseModule('pdf-file-def'), name: 'PdfDef' },
@@ -81,6 +87,17 @@ export const FILEDEF_CODE_REF_BY_EXTENSION: Readonly<
 // the file-meta candidate pool from the query alone — without depending on the
 // server having returned a row to sniff — so an empty-but-complete file-meta
 // search still reconciles locally hydrated FileDefs.
+//
+// The platform table is not the whole set of file types any more: a realm may
+// bind an extension to a `FileDef` subclass of its own (see
+// `file-def-bindings.ts`), and this answers false for such a ref. The limit
+// cannot be lifted here — this is synchronous and holds no realm, and so is
+// its caller, `displayedInstances` in the host's search resource. What it
+// costs is confined to the one case that caller cannot sniff its way out of:
+// a search filtered on a realm-bound class whose results are empty *and*
+// complete takes the card pool rather than the file-meta pool, so a locally
+// hydrated FileDef is not reconciled into it. Server-side results are
+// unaffected.
 //
 // The query carries refs in prefix form (e.g. `@cardstack/base/markdown-file-def`)
 // while `FILEDEF_CODE_REF_BY_EXTENSION` is built in full-URL form, so the module
@@ -166,6 +183,23 @@ export function referenceNamesFile(reference: string): boolean {
   return segmentNamesFile(path.slice(path.lastIndexOf('/') + 1));
 }
 
+// The class a realm has bound this file's extension to, if any.
+//
+// Separate from `resolveFileDefCodeRef` because one caller needs to know
+// whether the realm has an answer at all rather than what the answer resolves
+// to: a served file-meta document reads its type off the index row, and a
+// binding has to win over a row that predates it.
+export function boundFileDefCodeRef(
+  fileURL: URL,
+  bindings: FileDefBindings | undefined,
+): ResolvedCodeRef | undefined {
+  if (!bindings) {
+    return undefined;
+  }
+  let extension = extensionOf(fileURL);
+  return extension ? bindings[extension] : undefined;
+}
+
 // The `FileDef` subclass a stored file is, from its extension.
 //
 // `bindings` is the realm's own answer for the extensions it has bound (see
@@ -181,11 +215,11 @@ export function resolveFileDefCodeRef(
   virtualNetwork: VirtualNetwork,
   bindings?: FileDefBindings,
 ): ResolvedCodeRef {
-  let extension = extensionOf(fileURL);
-  let bound = extension ? bindings?.[extension] : undefined;
+  let bound = boundFileDefCodeRef(fileURL, bindings);
   if (bound) {
     return bound;
   }
+  let extension = extensionOf(fileURL);
   let mapping = extension
     ? FILEDEF_CODE_REF_BY_EXTENSION[extension]
     : undefined;

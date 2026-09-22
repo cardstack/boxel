@@ -519,7 +519,12 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       // Fire-and-forget: the index pass must not block on — or fail with —
       // the prerender enqueue. Fires as soon as the invalidation set is
       // known, so HTML rendering can start concurrently with the pass.
-      onInvalidationsReady: ({ changes, generation, loaderEpoch }) => {
+      onInvalidationsReady: ({
+        changes,
+        generation,
+        loaderEpoch,
+        fileDefBindings,
+      }) => {
         if (skipsPrerenderHtml(realmURL, skipPrerenderHtmlRealms)) {
           // Configured off for this realm. Says so out loud: a realm whose
           // HTML never renders reads, from every other vantage point, exactly
@@ -550,6 +555,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
           // From-scratch: the prerender job runs the realm-wide module
           // pre-warm sweep before its format renders.
           preWarm: true,
+          fileDefBindings,
         }).catch((e) => {
           log.warn(
             `${jobIdentity(jobInfo)} failed to enqueue prerender_html job for ${realmURL}: ${(e as Error)?.message}`,
@@ -657,6 +663,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
         changes: htmlChanges,
         generation,
         loaderEpoch,
+        fileDefBindings,
       }) => {
         let changes = htmlChanges.map(({ url, operation }) => ({
           url,
@@ -695,6 +702,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
           // Incremental: no realm-wide sweep — its cost is O(realm module
           // count), deliberately not paid on incrementals.
           preWarm: false,
+          fileDefBindings,
         }).catch((e) => {
           log.warn(
             `${jobIdentity(jobInfo)} failed to enqueue prerender_html job for ${realmURL}: ${(e as Error)?.message}`,
