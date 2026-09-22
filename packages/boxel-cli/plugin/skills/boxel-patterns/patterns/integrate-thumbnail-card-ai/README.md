@@ -29,7 +29,7 @@ You can stop after step 1 (just need the image) or stop after step 2 (write the 
 import GenerateThumbnailCommand from '@cardstack/boxel-host/tools/generate-thumbnail';
 
 // Inside an @action method:
-let result = await new GenerateThumbnailCommand(commandContext).execute({
+let result = await new GenerateThumbnailCommand(toolContext).execute({
   prompt: `Create a square thumbnail for "${targetCard.title}". Top 70%: large centered flat icon. Bottom 30%: title in bold uppercase. Style: flat vector, solid vivid background, 2–3 colors max.`,
   targetRealmIdentifier: targetCard[realmURL].href,
   targetPath: 'Thumbnails',     // optional — subdirectory inside the realm
@@ -95,7 +95,7 @@ private async autoGenerateThumbnail(
   if (!listing.id) return;
   const prompt = `Create a square thumbnail for "${codeRef.name}". Top 70%: large centered flat icon (simple, bold, minimal, slightly angled/layered if needed). Bottom 30%: "${codeRef.name}" in big, bold, uppercase sans-serif text. Style: flat vector, solid vivid background, 2–3 colors max. Icon should be white or light-colored, clean geometric shapes, highly recognizable. No gradients, no shadows, no borders, no clutter. Must be clear at small sizes.`;
 
-  await new GenerateThumbnailCommand(this.commandContext).execute({
+  await new GenerateThumbnailCommand(this.toolContext).execute({
     prompt,
     targetRealmIdentifier: targetRealm,
     targetPath: 'ListingThumbnails',
@@ -133,20 +133,22 @@ Vary by:
 Pair with [`link-command-menu-item`](../link-command-menu-item/README.md) to make "Regenerate thumbnail" a right-click on any card:
 
 ```ts
-import { getCardMenuItems, type GetCardMenuItemParams, type MenuItemOptions } from '@cardstack/runtime-common';
+import { getMenuItems } from '@cardstack/runtime-common';
+import { type GetMenuItemParams } from '@cardstack/base/card-api';
+import { type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 import GenerateThumbnailCommand from '@cardstack/boxel-host/tools/generate-thumbnail';
 import { realmURL } from '@cardstack/base/card-api';
 import WandIcon from '@cardstack/boxel-icons/wand';
 
 class MyCard extends CardDef {
-  [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
+  [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
     return [
       {
         label: 'Generate AI thumbnail',
         icon: WandIcon,
         action: async () => {
           let prompt = /* derive from this.title, theme, or a fixed template */;
-          await new GenerateThumbnailCommand(params.commandContext).execute({
+          await new GenerateThumbnailCommand(params.toolContext).execute({
             prompt,
             targetRealmIdentifier: this[realmURL]!.href,
             targetPath: 'Thumbnails',
@@ -157,7 +159,7 @@ class MyCard extends CardDef {
           // chrome updates next render — no manual saveCard needed here.
         },
       },
-      ...super[getCardMenuItems](params),
+      ...super[getMenuItems](params),
     ];
   }
 }
@@ -172,7 +174,7 @@ class MyCard extends CardDef {
 - **`sourceImageUrl` `fetch` runs in the host, not the realm proxy.** If your source image is on a CORS-locked domain, you may need to route it through `SendRequestViaProxyCommand` first and convert to a data URL, then pass the data URL.
 - **Costs add up.** Each call is an OpenRouter image-gen request. Don't wire it to a `@tracked` getter or anything that recomputes on render — only call from explicit user actions or one-shot install flows.
 - **Fire-and-forget the listing-create way when blocking is wrong.** A modal that waits 8 seconds for an image when the listing is already saved feels broken. `.catch(e => console.warn(...))` and let it land asynchronously — the indexer will surface the thumbnail next refresh.
-- **commandContext only in host interact mode.** Same caveat as every host-command-using pattern. Feature-detect with `this.args.context?.commandContext`.
+- **toolContext only in host interact mode.** Same caveat as every host-command-using pattern. Feature-detect with `this.args.context?.toolContext`.
 
 ## Source
 
