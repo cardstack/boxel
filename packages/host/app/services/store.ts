@@ -300,11 +300,11 @@ export default class StoreService extends Service implements StoreInterface {
     Promise<FileDef | CardErrorJSONAPI>
   > = new Map();
   private inflightCardMutations: Map<string, Promise<void>> = new Map();
-  // The create requests on the wire, keyed by the local id of the card each
-  // one creates. Distinct from `inflightCardMutations`: an entry here exists
-  // only between a create being sent and its response being applied, so
-  // whoever waits on one is waiting on a request, never on a lock. See
-  // `#serializeForSave`.
+  // The cards whose own create is on the wire — a save creating the card, or a
+  // batch minting cards this store holds — keyed by local id. Distinct from
+  // `inflightCardMutations`: an entry here exists only between the write being
+  // sent and its response being applied, so whoever waits on one is waiting on
+  // a request, never on a lock. See `#serializeForSave`.
   private inflightCardCreates: Map<string, Promise<void>> = new Map();
   private inflightCardLoads: Map<string, Deferred<void>> = new Map();
   // The index state a reload now in flight will bring a card to, keyed by the
@@ -3799,10 +3799,8 @@ export default class StoreService extends Service implements StoreInterface {
       return await this.withCardMutationLock(
         instance[localIdSymbol],
         async () => {
-          let createSent: Deferred<void> | undefined;
+          let endCreate: (() => void) | undefined;
           try {
-            let doc = await this.#serializeForSave(instance);
-
             // send doc over the wire with absolute URL's. The realm server will convert
             // to relative URL's as it serializes the cards
             let realmURL = instance[realmURLSymbol];
@@ -3816,13 +3814,8 @@ export default class StoreService extends Service implements StoreInterface {
               }
               realmURL = new URL(defaultRealmHref);
             }
-            if (!doc.data.id) {
-              createSent = new Deferred<void>();
-              this.inflightCardCreates.set(
-                instance[localIdSymbol],
-                createSent.promise,
-              );
-            }
+            let doc: LooseSingleCardDocument;
+            ({ doc, endCreate } = await this.#serializeForSave(instance));
             let json = await this.saveCardDocument(doc, {
               realm: realmURL.href,
               localDir: opts?.localDir,
@@ -3867,15 +3860,7 @@ export default class StoreService extends Service implements StoreInterface {
             }
             return cardError;
           } finally {
-            if (createSent) {
-              if (
-                this.inflightCardCreates.get(instance[localIdSymbol]) ===
-                createSent.promise
-              ) {
-                this.inflightCardCreates.delete(instance[localIdSymbol]);
-              }
-              createSent.fulfill();
-            }
+            endCreate?.();
           }
         },
       );
@@ -3896,7 +3881,19 @@ export default class StoreService extends Service implements StoreInterface {
   // one another. A create that fails still settles its entry, leaving the card
   // without an id — and a card with no id and no create on the wire is one to
   // create alongside this save, as any unsaved link is.
-  async #serializeForSave(instance: CardDef): Promise<LooseSingleCardDocument> {
+  //
+  // The check and, for a create, the registration of this save's own entry
+  // happen in one synchronous step with nothing awaited between them and the
+  // send. A create that registers in between would otherwise be missed by a
+  // save that checked before it, and both would go out.
+  //
+  // Covers a card's own create — this path, and a batch minting cards it was
+  // handed — and not a linked card created as a side-load of another write.
+  // That card takes its id from the realm's index event rather than from the
+  // write's response, so there is no response here that would hand it one.
+  async #serializeForSave(
+    instance: CardDef,
+  ): Promise<{ doc: LooseSingleCardDocument; endCreate?: () => void }> {
     for (;;) {
       let doc = await this.cardService.serializeCard(instance, {
         // for a brand new card that has no id yet, we don't know what we are
@@ -3914,10 +3911,35 @@ export default class StoreService extends Service implements StoreInterface {
         return pending ? [pending] : [];
       });
       if (pendingCreates.length === 0) {
-        return doc;
+        return {
+          doc,
+          ...(doc.data.id
+            ? {}
+            : { endCreate: this.beginCreates([instance[localIdSymbol]]) }),
+        };
       }
       await Promise.all(pendingCreates);
     }
+  }
+
+  // Marks the cards named by these local ids as having a create on the wire,
+  // for a save linking to one of them to wait on; the returned function ends
+  // that, and must be called once the write's response has been applied or
+  // has failed. Called only once the write has done all of its own waiting
+  // and is about to be sent — see `#serializeForSave`.
+  beginCreates(localIds: readonly string[]): () => void {
+    let sent = new Deferred<void>();
+    for (let localId of localIds) {
+      this.inflightCardCreates.set(localId, sent.promise);
+    }
+    return () => {
+      for (let localId of localIds) {
+        if (this.inflightCardCreates.get(localId) === sent.promise) {
+          this.inflightCardCreates.delete(localId);
+        }
+      }
+      sent.fulfill();
+    };
   }
 
   // Serializes mutations of one instance, keyed by its local id, so a save
@@ -4158,6 +4180,12 @@ export default class StoreService extends Service implements StoreInterface {
   //   5. the identity map indexes the instance under both ids, so lookups by
   //      either return this same object;
   //   6. autosave takes over subsequent edits.
+  //
+  // Runs while the create that named the instance still holds its entry in
+  // `inflightCardCreates`, and a save of a card linking to this one may be
+  // waiting on that entry while holding its own mutation lock. So nothing here
+  // may wait on another card's save: `updateForeignConsumersOf` starts the
+  // consumers' saves without awaiting them for exactly that reason.
   private async assignRemoteIdentity(
     instance: CardDef,
     remoteId: RealmResourceIdentifier,
@@ -4212,6 +4240,8 @@ export default class StoreService extends Service implements StoreInterface {
     for (let consumer of consumers) {
       let consumerRealm = consumer[realmURLSymbol]?.href;
       if (consumerRealm !== instanceRealm && consumer.id) {
+        // Not awaited: the consumer's save may be waiting on this card's
+        // create, which is still in flight — see `assignRemoteIdentity`.
         this.save(consumer.id);
       }
     }

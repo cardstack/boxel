@@ -2593,7 +2593,7 @@ module('Integration | Store', function (hooks) {
     let personWrite = hold.writes.find(
       (w) => w.body.data.lid === person[localId],
     );
-    assert.ok(personWrite, 'the linked card was saved');
+    assert.ok(personWrite, 'the card linking to it was saved');
     assert.deepEqual(
       includedLids(personWrite!.body),
       [],
@@ -2608,6 +2608,40 @@ module('Integration | Store', function (hooks) {
       `${person.id!.substring(testRealmURL.length)}.json`,
     );
     assert.ok(file, 'the realm holds the saved card');
+  });
+
+  test("a save started in the same turn as a linked card's create does not send that card again", async function (assert) {
+    let friend = new PersonDef({ name: 'Friend' });
+    await storeService.add(friend, { doNotPersist: true });
+    let person = new PersonDef({ name: 'Person' });
+    (person as any).bestFriend = friend;
+    await storeService.add(person, { doNotPersist: true });
+
+    let hold = holdCreateResponse(friend);
+    let results: unknown[];
+    try {
+      // Neither save has serialized by the time the other starts, so the
+      // linked card's create is not yet on the wire when the second save
+      // begins looking for it.
+      let creatingFriend = (storeService as any).persistAndUpdate(friend);
+      let savingPerson = (storeService as any).persistAndUpdate(person);
+      await hold.stored;
+      hold.release();
+      results = await Promise.all([creatingFriend, savingPerson]);
+    } finally {
+      hold.restore();
+    }
+    await settled();
+
+    assert.true(
+      results.every((r) => isCardInstance(r)),
+      `both saves succeeded (resolved as: ${JSON.stringify(results)})`,
+    );
+    assert.deepEqual(
+      hold.writes.map((w) => includedLids(w.body)),
+      [[], []],
+      'neither request carried a card to create besides its own',
+    );
   });
 
   test('a save still creates a linked card that was never saved alongside it', async function (assert) {
@@ -2661,6 +2695,19 @@ module('Integration | Store', function (hooks) {
       let creatingFriend = (storeService as any).persistAndUpdate(friend);
       await hold.stored;
       let savingPerson = (storeService as any).persistAndUpdate(person);
+      let personSettledWhileFriendHeld = await Promise.race([
+        savingPerson.then(() => true),
+        new Promise((r) => setTimeout(() => r(false), 500)),
+      ]);
+      assert.false(
+        personSettledWhileFriendHeld,
+        "the save waits while the linked card's create is unanswered",
+      );
+      assert.deepEqual(
+        hold.writes.map((w) => w.method),
+        ['POST'],
+        "nothing but the linked card's own create went out while it was unanswered",
+      );
       hold.release();
       [friendResult, personResult] = await Promise.all([
         creatingFriend,
