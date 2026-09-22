@@ -324,7 +324,7 @@ module(
       });
 
       test<TestContextWithSave>('new linked card is created in a different realm than its consuming reference', async function (assert) {
-        assert.expect(5);
+        assert.expect(4);
         await visitOperatorMode({
           stacks: [
             [
@@ -337,44 +337,25 @@ module(
         });
 
         let consumerSaved = new Deferred<void>();
-        let consumerSaveCount = 0;
+        let consumerLinks: (string | null | undefined)[] = [];
+        let consumerIncluded: unknown[] = [];
         let newLinkId: string | undefined;
         this.onSave((url, doc) => {
           doc = doc as SingleCardDocument;
           if (url.href === `${testRealmURL}Person/fadhlan`) {
-            consumerSaveCount++;
-            if (consumerSaveCount === 1) {
-              // the first time we save the consumer we set the relationship to null
-              // as we are still waiting for the other realm to assign an ID to the new linked card
-              let newFriendLink = (
-                doc.data?.relationships?.['friends.1'] as
-                  | { links?: { self?: string | null } }
-                  | undefined
-              )?.links?.self;
-              assert.notOk(
-                newFriendLink,
-                'the "friends.1" relationship names nothing while the new card is unsaved',
-              );
-              assert.notOk(
-                doc.included,
-                'and the save answers with the consumer alone, side-loading none of its links',
-              );
-            }
-            if (consumerSaveCount === 2) {
-              // as soon as the other realm assigns an id to the linked card we then
-              // save the consumer with a relationship to the linked card's id
-              // A write echoes relationships as the card stores them, so the
-              // link is what it names — the resolved target a readback would
-              // have added is not part of this answer.
-              assert.strictEqual(
-                (
-                  doc.data?.relationships?.['friends.1'] as
-                    | { links?: { self?: string | null } }
-                    | undefined
-                )?.links?.self,
-                newLinkId!,
-                'the "friends.1" relationship was populated with the linked card\'s new id',
-              );
+            let link = (
+              doc.data?.relationships?.['friends.1'] as
+                | { links?: { self?: string | null } }
+                | undefined
+            )?.links?.self;
+            consumerLinks.push(link);
+            consumerIncluded.push(doc.included);
+            // A consumer save that lands while the new card's create is still
+            // unanswered waits for it and names its id; one that goes out
+            // before that create was sent names nothing, and the consumer is
+            // saved again once the other realm assigns the id. Either way the
+            // consumer ends up linking to the new card.
+            if (link && link === newLinkId) {
               consumerSaved.fulfill();
             }
           }
@@ -392,6 +373,14 @@ module(
           .containsText('Test Workspace C No results');
         await click(`[data-test-item-button-create-new="${testRealm3URL}"]`);
         await consumerSaved.promise;
+        assert.true(
+          consumerLinks.every((link) => !link || link === newLinkId),
+          `every save of the consumer names either nothing or the linked card's new id (saw ${JSON.stringify(consumerLinks)})`,
+        );
+        assert.true(
+          consumerIncluded.every((included) => !included),
+          'and each save answers with the consumer alone, side-loading none of its links',
+        );
       });
 
       test<TestContextWithSave>('open a stack item of a new card instance when the "New Card of This Type" is clicked', async function (assert) {

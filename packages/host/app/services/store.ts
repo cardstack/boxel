@@ -300,6 +300,12 @@ export default class StoreService extends Service implements StoreInterface {
     Promise<FileDef | CardErrorJSONAPI>
   > = new Map();
   private inflightCardMutations: Map<string, Promise<void>> = new Map();
+  // The create requests on the wire, keyed by the local id of the card each
+  // one creates. Distinct from `inflightCardMutations`: an entry here exists
+  // only between a create being sent and its response being applied, so
+  // whoever waits on one is waiting on a request, never on a lock. See
+  // `#serializeForSave`.
+  private inflightCardCreates: Map<string, Promise<void>> = new Map();
   private inflightCardLoads: Map<string, Deferred<void>> = new Map();
   // The index state a reload now in flight will bring a card to, keyed by the
   // instance's local id — the one id that survives the realm assigning a
@@ -430,6 +436,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightGetCards = new Map();
     this.inflightGetFileMeta = new Map();
     this.inflightCardMutations = new Map();
+    this.inflightCardCreates = new Map();
     this.inflightCardLoads = new Map();
     this.#reloadTargets = new Map();
     this.inflightSearch = new Map();
@@ -486,9 +493,10 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightCardLoads = new Map();
     this.#reloadTargets = new Map();
     this.inflightSearch = new Map();
-    // `inflightCardMutations` is deliberately kept: a render context blocks
-    // persistence, so there is nothing of this job's in it, and dropping a
-    // save that somehow were in flight would lose the only handle on it.
+    // `inflightCardMutations` and `inflightCardCreates` are deliberately kept:
+    // a render context blocks persistence, so there is nothing of this job's
+    // in them, and dropping a save that somehow were in flight would lose the
+    // only handle on it.
   }
 
   // Drop every resolved-doc search-cache entry. Used for hard resets
@@ -515,6 +523,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightGetCards = new Map();
     this.inflightGetFileMeta = new Map();
     this.inflightCardMutations = new Map();
+    this.inflightCardCreates = new Map();
     this.inflightCardLoads = new Map();
     this.#reloadTargets = new Map();
     this.inflightSearch = new Map();
@@ -3790,15 +3799,9 @@ export default class StoreService extends Service implements StoreInterface {
       return await this.withCardMutationLock(
         instance[localIdSymbol],
         async () => {
+          let createSent: Deferred<void> | undefined;
           try {
-            let doc = await this.cardService.serializeCard(instance, {
-              // for a brand new card that has no id yet, we don't know what we are
-              // relativeTo because its up to the realm server to assign us an ID, so
-              // URL's should be absolute
-              useAbsoluteURL: true,
-              withLocalResourcesIncluded: true,
-              omitQueryFields: true,
-            });
+            let doc = await this.#serializeForSave(instance);
 
             // send doc over the wire with absolute URL's. The realm server will convert
             // to relative URL's as it serializes the cards
@@ -3812,6 +3815,13 @@ export default class StoreService extends Service implements StoreInterface {
                 throw new Error('Could not find a writable realm');
               }
               realmURL = new URL(defaultRealmHref);
+            }
+            if (!doc.data.id) {
+              createSent = new Deferred<void>();
+              this.inflightCardCreates.set(
+                instance[localIdSymbol],
+                createSent.promise,
+              );
             }
             let json = await this.saveCardDocument(doc, {
               realm: realmURL.href,
@@ -3856,10 +3866,58 @@ export default class StoreService extends Service implements StoreInterface {
               this.store.addCardInstanceOrError(remoteId, cardError);
             }
             return cardError;
+          } finally {
+            if (createSent) {
+              if (
+                this.inflightCardCreates.get(instance[localIdSymbol]) ===
+                createSent.promise
+              ) {
+                this.inflightCardCreates.delete(instance[localIdSymbol]);
+              }
+              createSent.fulfill();
+            }
           }
         },
       );
     });
+  }
+
+  // A save sends, as cards to create, the linked cards that have no id yet.
+  // Having no id is also what a card looks like while its own create is on the
+  // wire: the realm may already hold its file, and only the response carrying
+  // the id has yet to arrive. Sending such a card again asks the realm to
+  // create a card it already stores, which it refuses, failing the whole save.
+  //
+  // So the save waits for each of those creates to answer and serializes
+  // again, by which time the card holds its id and goes out as a plain link.
+  // What it waits on is a request, not a lock: an entry in
+  // `inflightCardCreates` exists only once its create has done all of its own
+  // waiting, so two new cards linking to each other cannot end up waiting on
+  // one another. A create that fails still settles its entry, leaving the card
+  // without an id — and a card with no id and no create on the wire is one to
+  // create alongside this save, as any unsaved link is.
+  async #serializeForSave(instance: CardDef): Promise<LooseSingleCardDocument> {
+    for (;;) {
+      let doc = await this.cardService.serializeCard(instance, {
+        // for a brand new card that has no id yet, we don't know what we are
+        // relativeTo because its up to the realm server to assign us an ID, so
+        // URL's should be absolute
+        useAbsoluteURL: true,
+        withLocalResourcesIncluded: true,
+        omitQueryFields: true,
+      });
+      let pendingCreates = (doc.included ?? []).flatMap((resource) => {
+        let pending =
+          !resource.id && 'lid' in resource && resource.lid
+            ? this.inflightCardCreates.get(resource.lid)
+            : undefined;
+        return pending ? [pending] : [];
+      });
+      if (pendingCreates.length === 0) {
+        return doc;
+      }
+      await Promise.all(pendingCreates);
+    }
   }
 
   // Serializes mutations of one instance, keyed by its local id, so a save
