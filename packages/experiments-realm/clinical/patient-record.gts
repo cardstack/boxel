@@ -375,12 +375,25 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
             reason: 'Sustained arrhythmia',
             receiving: receiving.id!,
           });
-          p.on(receiving).acceptCase({ mrn });
-          // Only when the case actually moves between two people. Two members
-          // of one parallel group that write the same card are a
-          // `conflicting-targets` refusal, so handing a patient to their own
-          // attending has to be one entry rather than two.
-          if (releasing && releasing.id !== receiving.id) {
+          // Transferring to the clinician who already holds the case is a
+          // real request — the unit moves, the caseload does not — so the
+          // button stays offered for them and the caseload entries are what
+          // gets conditioned.
+          //
+          // Both caseload entries are conditioned on the case actually moving
+          // between two people. Two members of one parallel group that write
+          // the same card are a `conflicting-targets` refusal, so handing a
+          // patient to their own attending cannot be two entries — and an
+          // unconditional `acceptCase` would be worse than that: the record
+          // already sits on the receiving clinician's caseload, so its
+          // uniqueness assert would refuse, and refusing one member rolls the
+          // whole batch back. The unit change and the audit line would be lost
+          // to a transfer that asked for nothing.
+          let moves = !releasing || releasing.id !== receiving.id;
+          if (moves) {
+            p.on(receiving).acceptCase({ mrn });
+          }
+          if (moves && releasing) {
             p.on(releasing).releaseCase({ mrn });
           }
         });

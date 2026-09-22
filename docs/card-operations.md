@@ -460,9 +460,16 @@ read a card you just wrote, read the card.
 ## Batches
 
 `operations(card).atomic(build)` sends one all-or-nothing batch in that card's
-realm. Every entry is evaluated against the state the batch started from —
-there is no reading of your own writes — and either all of them commit or none
-of them do.
+realm: either every entry commits or none of them do.
+
+What an entry is staged against depends on where it sits. The top level is
+**serial**, and a serial entry composes — it stages from what the entries
+before it staged, so a later entry sees an earlier one's write. Members of a
+`parallel` group are staged at the same time and each is evaluated against the
+state at the start of that group, which is why two of them writing the same
+file is the batch error `conflicting-targets` rather than a merge. A `read`
+entry is the one thing that always answers from pre-batch state: a batch never
+reads back its own writes.
 
 ```ts
 let [consult] = await operations(patient).atomic((b) => {
