@@ -10,6 +10,9 @@
 //
 //   * `readRealmPermissions` / `grantRealmPermissions` — what `setup-realm.ts`
 //     calls once, as the owner, to put the other credential rows on the realm.
+//     It reads before it writes so its output can say what changed: a re-run
+//     against an already-granted realm is the common case, and "granted"
+//     printed over a no-op reads as a fix having been applied.
 //   * `realmPermissionsFor` — what `run-load.ts` calls per writer session
 //     before the clock starts, so a missing grant is a refusal naming the fix
 //     rather than a run that reports write errors for ten minutes.
@@ -159,7 +162,13 @@ export function matrixIdFor(username: string, matrixDomain: string): string {
 }
 
 // The Matrix server name, as the deployed environments spell it: the Matrix
-// URL's host with a leading `matrix…` label stripped.
+// URL's hostname with a leading `matrix…` label stripped.
+//
+// `hostname` rather than `host`, because the port is not part of a Matrix
+// server name. A local `http://localhost:8008` derives `@user:localhost`,
+// which is what synapse actually issues; taking `host` produced
+// `@user:localhost:8008`, an id no account has. Both entry points accept a
+// `--matrix-domain` override for deployments this heuristic does not fit.
 export function matrixDomainFor(matrixUrl: string): string {
-  return new URL(matrixUrl).host.replace(/^matrix[^.]*\./, '');
+  return new URL(matrixUrl).hostname.replace(/^matrix[^.]*\./, '');
 }

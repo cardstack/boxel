@@ -22,22 +22,28 @@
 //
 //   * OVERLAPPED — two write windows intersect. Necessary for lane contention
 //     and nothing more: both writes were outstanding at once.
-//   * BEHIND — a write started inside another's window AND finished no
-//     earlier than it. Under one lane per realm that is forced, because the
-//     second pass cannot be claimed until the first releases its reservation.
-//     Under a per-writer lane it is not forced at all. So this is the relation
-//     that moves when the lane splits, which is why it is the one reported.
+//   * BEHIND — a write started strictly inside another's window AND finished
+//     no earlier than it. Under one lane per realm the second pass cannot be
+//     claimed until the first releases its reservation, so a blocked write
+//     tends to land here; under a per-writer lane it does not. So this is the
+//     relation that moves when the lane splits, which is why it is the one
+//     reported.
 //
 // Each split by whether the other write came from the same identity (the
 // self-contention case) or a different one (the case that decides whether the
 // lane should be keyed on the writer).
 //
-// WHAT IT IS NOT. These are HTTP windows, not queue rows. "Behind" is a
-// consequence of a serial lane rather than a direct sighting of one — a write
-// can finish after another for reasons of its own. The rendered section says
-// so, and names the join that settles it: each write carries an
-// `x-boxel-logging-correlation-id`, which the realm server logs on the write
-// path beside the `enqueue` / `awaitIndex` split.
+// WHAT IT IS NOT, IN BOTH DIRECTIONS. These are HTTP windows, not queue rows,
+// and a window ends well after the index pass does: `awaitIndex` closes at the
+// top of the invalidation callback, and the realm then clears its caches,
+// serializes the card and sends the body, which the driver reads before
+// stamping the end. So these are the ends of response TAILS, not of passes,
+// and the count errs both ways — a genuinely blocked write whose blocker had
+// the longer tail ends first and is scored clear, and a slow tail can put a
+// write behind one it never waited on. It is an estimate of lane contention,
+// not a sighting of it. What settles any particular write is the server's own
+// timing: each carries an `x-boxel-logging-correlation-id`, which the realm
+// logs on the write path beside the `enqueue` / `awaitIndex` split.
 
 import { percentile } from './common.ts';
 
@@ -93,19 +99,19 @@ function overlaps(a: WriteRecord, b: WriteRecord): boolean {
 // The second clause is what separates this from a plain overlap: it is the
 // ordering a serial lane forces on the two passes.
 //
-// Two windows that are identical to the millisecond carry no ordering at all,
-// and the bounds below would otherwise read each as behind the other — one
-// pair of writes counted twice, in a figure whose whole job is to be counted
-// honestly. The driver cannot tell which ran first, so it says neither.
+// EQUAL STARTS ARE UNORDERED, and this is load-bearing rather than tidiness.
+// Two writer timers can fire in the same millisecond, and neither write was
+// outstanding when the other began. Ordering them by which finished later
+// would score the more expensive block as behind the cheaper one — and it
+// would do so under per-writer lanes too, since an expensive write still ends
+// last when nothing blocked it. That is a false positive the lane split cannot
+// clear, which would cost this count the one property it is reported for.
 function behind(subject: WriteRecord, other: WriteRecord): boolean {
-  if (
-    subject.startedAt === other.startedAt &&
-    subject.endedAt === other.endedAt
-  ) {
+  if (subject.startedAt === other.startedAt) {
     return false;
   }
   return (
-    other.startedAt <= subject.startedAt &&
+    other.startedAt < subject.startedAt &&
     subject.startedAt < other.endedAt &&
     subject.endedAt >= other.endedAt
   );
@@ -271,9 +277,19 @@ export function describeFairness(reading: FairnessReading): string {
       `finished no earlier than a\n` +
       `    different identity's overlapping write`,
   );
+  // `overlappedOther` is a strict superset of `behindOther` — being behind
+  // implies overlapping — while `behindSelf` is disjoint from both. Printed
+  // flat these three read as a partition that does not add up, so the nesting
+  // is spelled rather than left to be inferred.
   out.push(
     `  same-writer blocked:  ${reading.behindSelf}` +
-      `   ·   overlapped another identity: ${reading.overlappedOther}`,
+      `  (a write behind an earlier write of its own)`,
+  );
+  out.push(
+    `  overlapped another identity: ${reading.overlappedOther}` +
+      `, of which ${reading.behindOther} finished no earlier` +
+      `\n    (the rest overlapped but finished first, which a serial lane does` +
+      ` not forbid)`,
   );
   for (let block of reading.blocks) {
     out.push(
@@ -291,13 +307,17 @@ export function describeFairness(reading: FairnessReading): string {
       `  produced no contention has not shown the lane to be fair.`,
   );
   out.push(
-    `  These are the driver's own write windows, not queue rows. A write that\n` +
-      `  started inside another's window and finished no earlier could not have\n` +
-      `  had its index pass complete first, which one lane per realm forces and\n` +
-      `  a per-writer lane would not. Each write carries an\n` +
-      `  x-boxel-logging-correlation-id, so a specific one joins to the realm\n` +
-      `  server's own write timing by its corr= id, where enqueue and awaitIndex\n` +
-      `  are reported apart.`,
+    `  These are the driver's own write windows, not queue rows, and they bound\n` +
+      `  the answer rather than give it. A window ends when the response body\n` +
+      `  has been read, which is some way past the index pass: the realm still\n` +
+      `  clears its caches, serializes the card and sends the bytes. So the\n` +
+      `  ordering here is the ordering of response tails, and it errs in both\n` +
+      `  directions — a blocked write whose blocker had the longer tail ends\n` +
+      `  first and is scored clear, and a slow tail can put a write behind one\n` +
+      `  it never waited on. Read the count as an estimate. Each write carries\n` +
+      `  an x-boxel-logging-correlation-id, so the realm server's own write\n` +
+      `  timing settles any particular one by its corr= id, where enqueue and\n` +
+      `  awaitIndex are reported apart.`,
   );
   return out.join('\n');
 }

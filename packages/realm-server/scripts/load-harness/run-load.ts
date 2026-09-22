@@ -146,6 +146,12 @@ let args = parseArgsOrExit(process.argv.slice(2), {
   // link-shape policy takes. Only change it when the deployment sets
   // LINK_SHAPE_LOAD_HALF_LIFE_MS; the default is the value the server ships.
   loadHalfLifeMs: DEFAULT_LOAD_HALF_LIFE_MS,
+  // The server part of a Matrix ID, for the identity strings this run prints
+  // and for the grant command its refusals name. Derived from the Matrix URL
+  // by stripping a leading `matrix…` label, which is how the deployed
+  // environments are named; pass it explicitly for anything else. Matches
+  // setup-realm.ts, which an operator copies the refusal's ids straight into.
+  matrixDomain: '',
   // Re-run on the realm's own invalidation events, the way a browser does,
   // rather than on every write this driver happens to make. Without it the
   // harness models the fan-out; with it, it measures it — and a change that
@@ -913,7 +919,11 @@ if (args.readers > 0 && writerCount >= sessions.length) {
 // cross-writer run with the second writer silently dropped reports a fairness
 // table of zeroes that reads exactly like a fair lane. Refuse and name the
 // arithmetic instead.
-if (writerCount > 0 && writerCount < workload.writes.length) {
+// Keyed on what was ASKED for, not on `writerCount`: the clamp above can drive
+// that to zero when logins fall short, and keying on it would let a run asked
+// for with `--writers 2` go silently read-only and then report that a
+// `--writers 0` run cannot answer the question — naming a flag nobody passed.
+if (args.writers > 0 && writerCount < workload.writes.length) {
   console.error(
     `This workload has ${workload.writes.length} write blocks ` +
       `(${workload.writes.map((w) => w.label).join(', ')}) but only ` +
@@ -949,11 +959,32 @@ function assignWriters(): WriterAssignment[] {
 
   // Pinned blocks first, so an unpinned one cannot take the session a pinned
   // one needs and leave it unsatisfiable.
+  let pinnedSlots = new Map<string, number>();
   for (let i = 0; i < writerCount; i++) {
     let write = blockFor(i);
     if (!write.username) {
       continue;
     }
+    // `blockFor` cycles when there are more slots than blocks, and an unpinned
+    // block simply takes another session each time round. A pinned one cannot:
+    // it would put a second loop on the same identity writing the same block,
+    // doubling that block's cadence while the summary still called it one
+    // writer. Two blocks pinned to one username is a different thing and stays
+    // allowed — that is self-contention, which has its own bucket.
+    let alreadyAt = pinnedSlots.get(write.label);
+    if (alreadyAt !== undefined) {
+      console.error(
+        `Write block "${write.label}" is pinned to ${write.username}, so only ` +
+          `one writer can drive it —\n` +
+          `  but --writers ${args.writers} against ${workload.writes.length} ` +
+          `block${workload.writes.length === 1 ? '' : 's'} assigns it to slots ` +
+          `${alreadyAt} and ${i}.\n` +
+          `  Pass --writers ${workload.writes.length}, or drop the "username" ` +
+          `from that block so the\n  extra slots can take sessions of their own.`,
+      );
+      process.exit(1);
+    }
+    pinnedSlots.set(write.label, i);
     let session = byUsername.get(write.username);
     if (!session) {
       console.error(
@@ -1002,7 +1033,7 @@ let readerSessions = sessions.filter((s) => !writerSessionSet.has(s));
 // and costs no round trip. Asking now turns "a realm's write permission
 // belongs to its owner" from three error lines and a run full of failures into
 // a refusal that names the account and the grant.
-let matrixDomain = matrixDomainFor(args.matrixUrl);
+let matrixDomain = args.matrixDomain || matrixDomainFor(args.matrixUrl);
 let cannotWrite = writerAssignments.filter(({ session }) => {
   let permissions = realmPermissionsFor(session, realmUrl);
   // `undefined` is "the token did not say", which must not read as "no". A
@@ -1029,6 +1060,46 @@ if (cannotWrite.length) {
       `Refusing rather than starting: every write from these accounts would be\n` +
       `a 403, and a run whose second writer never lands anything reports the\n` +
       `same fairness table as a lane with nothing to contend over.`,
+  );
+  process.exit(1);
+}
+
+// Does every PATCH block's target exist? A PATCH names a card the realm is
+// expected to already hold, and one it does not answers 404 on every single
+// write — so that block lands nothing all run while the summary's advice sends
+// the operator to the write grant, which was never the problem. The permission
+// check above costs no round trip; this one costs one HEAD per PATCH block,
+// which is worth it for the same reason: both are the difference between a
+// refusal naming the cause and a run that measured nothing.
+let missingTargets: { write: WriteSpec; status: number }[] = [];
+for (let { session, write } of writerAssignments) {
+  if (write.method !== 'PATCH') {
+    continue;
+  }
+  try {
+    let response = await fetch(writeUrl(write), {
+      method: 'HEAD',
+      headers: {
+        Accept: 'application/vnd.card+json',
+        Authorization: realmAuthHeader(session, realmUrl),
+      },
+    });
+    if (response.status === 404) {
+      missingTargets.push({ write, status: response.status });
+    }
+  } catch {
+    // A probe that could not be taken is not evidence the card is missing.
+  }
+}
+if (missingTargets.length) {
+  console.error(
+    `These PATCH blocks name a card ${realmUrl} does not hold:\n` +
+      missingTargets
+        .map(({ write }) => `  • "${write.label}" → ${writeUrl(write)}`)
+        .join('\n') +
+      `\n\nA PATCH updates a card that is already there; the realm answers 404 to\n` +
+      `one that is not, on every write. Push the card as part of the realm's\n` +
+      `source, or point the block's "path" at a card the realm holds.`,
   );
   process.exit(1);
 }
@@ -1198,8 +1269,10 @@ async function finish() {
           )
           .join('\n') +
         `\n   Nothing below counts their work, so a low cross-writer figure is\n` +
-        `   this, not the lane. A refused write on a realm you do not own is\n` +
-        `   usually a missing write grant — see setup-realm.ts --write-grants.`,
+        `   this, not the lane. Both causes this run checks for before starting —\n` +
+        `   a missing write grant, a PATCH target the realm does not hold — would\n` +
+        `   have refused it, so look past them: a realm token that could not be\n` +
+        `   read, or a write the realm refused for the card's own sake.`,
     );
   }
 

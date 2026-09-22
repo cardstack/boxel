@@ -364,14 +364,20 @@ function parseWrite(
     throw new Error(`"${where}.adoptsFrom" needs string "module" and "name"`);
   }
   let attributes = write.attributes;
+  // An array passes `typeof === 'object'` and is truthy, so it has to be ruled
+  // out by name or it reaches the wire as the card document's attributes.
+  // `parseQueries` guards the same hazard the same way.
   if (
     attributes !== undefined &&
-    (typeof attributes !== 'object' || !attributes)
+    (typeof attributes !== 'object' || !attributes || Array.isArray(attributes))
   ) {
     throw new Error(`"${where}.attributes" must be an object`);
   }
   let method = parseMethod(write.method, where);
-  let path = typeof write.path === 'string' ? write.path : undefined;
+  // An empty string is a string, and keeping it would send a POST to the
+  // realm root with a doubled slash rather than falling back to the type name.
+  let path =
+    typeof write.path === 'string' && write.path ? write.path : undefined;
   if (method === 'PATCH' && !path) {
     throw new Error(
       `"${where}.path" is required for a PATCH block: it names the card to ` +
@@ -438,15 +444,20 @@ function assertWriteVaries(write: WriteSpec, where: string): void {
     throw new Error(
       `"${where}" is a PATCH whose attributes are the same on every write. ` +
         `The realm leaves an unchanged card alone, so no index pass would run ` +
-        `and the block would contribute nothing. Use \${n} or \${date} in at ` +
-        `least one attribute`,
+        `and the block would contribute nothing. Use \${n} — the per-write ` +
+        `counter — in at least one attribute. \${date} does not count: it is ` +
+        `the same string for every write in a run`,
     );
   }
 }
 
 function varies(value: unknown): boolean {
   if (typeof value === 'string') {
-    return value.includes('${n}') || value.includes('${date}');
+    // `${n}` only. `${date}` is today, which is the same string for every
+    // write in a run — a block varying by nothing else would resend identical
+    // attributes after its first patch, persist nothing, run no index pass,
+    // and still count as a write in the fairness ledger.
+    return value.includes('${n}');
   }
   if (Array.isArray(value)) {
     return value.some(varies);

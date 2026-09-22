@@ -2213,6 +2213,41 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a PATCH varying only by ${date} is refused', function (assert) {
+      // `${date}` expands to today, the same string for every write in a run,
+      // so such a block resends identical attributes after its first patch.
+      // The realm leaves the file alone, no index pass runs, and the write
+      // still lands in the fairness ledger as a write — a block that looks
+      // like a writer and contributes nothing.
+      assert.throws(
+        () =>
+          parse({
+            writes: [
+              {
+                method: 'PATCH',
+                path: 'A/one',
+                adoptsFrom: { module: '${realm}a', name: 'A' },
+                attributes: { reportedOn: '${date}' },
+              },
+            ],
+          }),
+        /same on every write/,
+      );
+      // And the reason it is refused is real: the two expansions are equal.
+      let spec = {
+        label: 'a',
+        method: 'PATCH' as const,
+        path: 'A/one',
+        adoptsFrom: { module: `${realm}a`, name: 'A' },
+        attributes: { reportedOn: '${date}' },
+      };
+      assert.deepEqual(
+        writeAttributes(spec, 1),
+        writeAttributes(spec, 2),
+        'two successive writes of this block send byte-identical attributes',
+      );
+    });
+
     test('a POST block needs no varying attribute', function (assert) {
       // It creates a new card per write whatever the attributes say.
       assert.strictEqual(
@@ -2228,9 +2263,37 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('two blocks may share a username — that is self-contention', function (assert) {
+      // One identity writing two different blocks is a real thing to measure
+      // (it is what the `behind self` bucket is for), so it parses. What must
+      // not happen is one block being driven twice, which `assignWriters`
+      // refuses.
+      let workload = parse({
+        writes: [
+          {
+            label: 'a',
+            username: 'one',
+            adoptsFrom: { module: '${realm}a', name: 'A' },
+          },
+          {
+            label: 'b',
+            username: 'one',
+            adoptsFrom: { module: '${realm}b', name: 'B' },
+          },
+        ],
+      });
+      assert.deepEqual(
+        workload.writes.map((w) => w.username),
+        ['one', 'one'],
+      );
+    });
+
     test('malformed block members are refused at load', function (assert) {
       for (let [block, pattern] of [
         [{ method: 'PUT' }, /must be "POST" or "PATCH"/],
+        // An array passes `typeof === 'object'` and is truthy, so without an
+        // explicit check it reaches the wire as the card's attributes.
+        [{ attributes: ['a', 'b'] }, /attributes" must be an object/],
         [{ everyMs: 0 }, /positive number of ms/],
         [{ everyMs: 'fast' }, /positive number of ms/],
         [{ label: 7 }, /label" must be a string/],
@@ -2251,6 +2314,17 @@ module(basename(import.meta.filename), function () {
         );
       }
       assert.throws(() => parse({ writes: [] }), /non-empty array/);
+
+      // An empty string is a string, and keeping it would POST to the realm
+      // root with a doubled slash rather than falling back to the type name.
+      assert.strictEqual(
+        parse({
+          writes: [
+            { path: '', adoptsFrom: { module: '${realm}a', name: 'A' } },
+          ],
+        }).writes[0].path,
+        'A',
+      );
     });
   });
 
@@ -2308,22 +2382,38 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test('two identical windows are behind neither', function (assert) {
-        // The bounds would otherwise read each as behind the other, counting
-        // one pair twice in the figure whose whole job is to be counted
-        // honestly. The driver cannot tell which pass ran first, so it says
-        // neither rather than both.
-        let a = record('leaf', '@a:test', 500, 1500);
-        let b = record('hub', '@b:test', 500, 1500);
-        assert.strictEqual(classify(a, [a, b]), 'clear');
-        assert.strictEqual(classify(b, [a, b]), 'clear');
-        let reading = readFairness([a, b]);
+      test('writes that started in the same millisecond are unordered', function (assert) {
+        // Two writer timers can fire in the same tick, and then neither write
+        // was outstanding when the other began. Ordering them by which
+        // finished later would score the more expensive block as behind the
+        // cheaper one — and it would do so under per-writer lanes too, since
+        // an expensive write still ends last when nothing blocked it. That is
+        // a false positive the lane split cannot clear, which would cost this
+        // count the one property it is reported for.
+        let cheap = record('leaf', '@a:test', 500, 600);
+        let costly = record('hub', '@b:test', 500, 4000);
+        assert.strictEqual(classify(costly, [cheap, costly]), 'clear');
+        assert.strictEqual(classify(cheap, [cheap, costly]), 'clear');
+        let reading = readFairness([cheap, costly]);
         assert.strictEqual(reading.behindOther, 0);
         assert.strictEqual(
           reading.overlappedOther,
           2,
           'they did overlap, and that is still reported',
         );
+
+        // Identical windows are the same case, and were the only one the
+        // earlier spelling caught.
+        let a = record('leaf', '@a:test', 500, 1500);
+        let b = record('hub', '@b:test', 500, 1500);
+        assert.strictEqual(classify(a, [a, b]), 'clear');
+        assert.strictEqual(classify(b, [a, b]), 'clear');
+
+        // One millisecond apart is ordered again, so the guard is a tie-break
+        // rather than a hole.
+        let first = record('hub', '@b:test', 500, 4000);
+        let second = record('leaf', '@a:test', 501, 4001);
+        assert.strictEqual(classify(second, [first, second]), 'behind-other');
       });
 
       test('overlapping is not the same as being behind', function (assert) {
@@ -2400,7 +2490,28 @@ module(basename(import.meta.filename), function () {
       test('a read-only run says the question cannot be answered', function (assert) {
         let summary = describeFairness(readFairness([]));
         assert.ok(summary.includes('no writes completed'), summary);
-        assert.notOk(summary.includes('fairness      1.00'), summary);
+        assert.notOk(
+          /fairness\s+\d/.test(summary),
+          'and prints no score at all, rather than one built from nothing',
+        );
+      });
+
+      test('a reading that reaches the renderer still prints no unearned score', function (assert) {
+        // The read-only case above returns before the per-block loop, so the
+        // absence of a score there says nothing about the score function. This
+        // one has blocks to render and still must not produce a number.
+        let summary = describeFairness(
+          readFairness([
+            record('leaf', '@a:test', 0, 100),
+            record('leaf', '@b:test', 5000, 5100),
+          ]),
+        );
+        assert.ok(summary.includes('leaf'), 'the block is rendered');
+        assert.notOk(
+          /fairness\s+\d/.test(summary),
+          `no write ran behind another, so there is no score: ${summary}`,
+        );
+        assert.ok(summary.includes('not measured'), summary);
       });
 
       test('the section names the join that would confirm it', function (assert) {
@@ -2504,6 +2615,10 @@ module(basename(import.meta.filename), function () {
         matrixDomainFor('https://matrix-staging.stack.cards'),
         'stack.cards',
       );
+      // The port is not part of a Matrix server name. Taking `host` here
+      // produced `@user:localhost:8008` in a run's own refusal message — an id
+      // no account has, offered to an operator to paste into a grant command.
+      assert.strictEqual(matrixDomainFor('http://localhost:8008'), 'localhost');
       assert.strictEqual(
         matrixIdFor('loadtest02', 'stack.cards'),
         '@loadtest02:stack.cards',

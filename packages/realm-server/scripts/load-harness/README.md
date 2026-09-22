@@ -361,9 +361,11 @@ still means a one-block workload.
 
 ```
 fairness — did a write wait on somebody else's indexing?
-  cross-writer blocked: 14 of 63 writes finished no earlier than a
+  cross-writer blocked: 14 of 65 writes finished no earlier than a
     different identity's overlapping write
-  same-writer blocked:  2   ·   overlapped another identity: 31
+  same-writer blocked:  2  (a write behind an earlier write of its own)
+  overlapped another identity: 31, of which 14 finished no earlier
+    (the rest overlapped but finished first, which a serial lane does not forbid)
 
   hub  (@loadtest01:stack.cards)
     lane to itself n= 19  p50   6840ms
@@ -378,11 +380,18 @@ fairness — did a write wait on somebody else's indexing?
     fairness      0.12
 ```
 
+The three per-block buckets partition the run's writes: 19 + 0 + 1 for the hub
+and 30 + 2 + 13 for the leaf is 65, and the headline's 14 is the two
+`behind other` rows added up. `overlapped another identity` is a **superset**
+of that 14 rather than a fourth bucket — being behind a write means overlapping
+it — which is why it is printed with its nesting spelled out.
+
 The score is a block's median latency with the lane to itself over its median
 while blocked behind another identity. **1.00 means being blocked cost that
 block nothing.** The table above is the unfair case stated plainly: the hub
-pays nothing for company, and the leaf pays sixty times its own cost to wait
-out a pass it had no part in.
+pays nothing for company, while a blocked leaf write costs 7,450 ms against the
+910 ms an unblocked one costs — roughly eight times, which is what the 0.12
+says.
 
 **An empty bucket reads `not measured`, never `1.00`.** This is the reason the
 section exists in this shape. A run that produced no contention scoring a
@@ -395,14 +404,23 @@ all came from one identity says so in place of its counts, for the same reason.
 windows, not from `jobs` rows — this harness runs from a CloudShell session
 with `fetch` as its whole dependency set and must not grow a database
 connection. It works because a card write blocks on its own index pass, so the
-HTTP window contains the lane wait. "Behind" means a write started inside
-another's window _and_ finished no earlier, which one lane per realm forces and
-a per-writer lane would not; a plain overlap is reported separately because it
-is the weaker relation. Every write carries an
-`x-boxel-logging-correlation-id`, so a specific one joins to the realm server's
-own write timing by its `corr=` id, where `enqueue` and `awaitIndex` are
-reported apart. That is the server's answer to the same question, and it is
-what settles a case the windows only imply.
+HTTP window contains the lane wait. "Behind" means a write started strictly
+inside another's window _and_ finished no earlier — the shape a serial lane
+produces and a per-writer lane does not. A plain overlap is reported separately
+because it is the weaker relation, and two writes that started in the same
+millisecond are treated as unordered, because neither was outstanding when the
+other began.
+
+**The count is an estimate, and it errs in both directions.** A window ends
+when the response body has been read, which is some way past the index pass —
+`awaitIndex` closes and the realm still clears caches, serializes the card and
+sends bytes. So these are the ends of response _tails_ rather than of passes: a
+genuinely blocked write whose blocker had the longer tail ends first and is
+scored clear, and a slow tail can put a write behind one it never waited on.
+Every write carries an `x-boxel-logging-correlation-id`, so a specific one
+joins to the realm server's own write timing by its `corr=` id, where `enqueue`
+and `awaitIndex` are reported apart. That is the server's answer to the same
+question, and it is what settles a case the windows only bound.
 
 ## Running
 

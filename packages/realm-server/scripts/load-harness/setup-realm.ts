@@ -9,14 +9,16 @@
 // and write for the first `--write-grants` (one by default). The write grant
 // is what lets a run drive two identities against one realm, which is the only
 // shape in which the per-realm indexing lane can be measured — see
-// `lib/fairness.ts`. `--skip-push` makes this a grants-only re-run against a
-// realm that already exists.
+// `lib/fairness.ts`.
 //
 // Realm creation and the push go through the `boxel` CLI, which owns the upload
 // protocol and its conflict handling. Everything after that talks HTTP directly.
-//
-// Unlike the driver, this step needs the `boxel` CLI on PATH, so it is run from
-// a workstation rather than from the in-region box the driver runs on.
+// So creating and pushing need the CLI on PATH and run from a workstation
+// rather than from the in-region box the driver runs on — but `--grants-only`
+// does the grants alone and needs no CLI, which is what makes it reachable
+// from that box, where a run refuses to start over a missing grant.
+// (`--skip-push` skips only the push: it still runs `boxel profile`,
+// `realm create` and `wait-for-ready`.)
 
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -32,6 +34,7 @@ import {
 import {
   grantRealmPermissions,
   matrixDomainFor,
+  readRealmPermissions,
   matrixIdFor,
   type RealmPermission,
   type RealmPermissions,
@@ -80,7 +83,13 @@ if (!args.csv) {
   );
   process.exit(1);
 }
-exitIfProduction(args.matrixUrl, args.realmServerUrl);
+// `--realm` is the target of a mutating PATCH, so it is guarded like the other
+// two. run-load.ts already passes its own `--realm` here; without this the two
+// entry points disagree about whether a realm URL is a guarded target, and
+// `--grants-only --realm <production>` would get past the guard and into the
+// fetch. The guard refuses ahead of the attempt on purpose, and has no
+// override, because these targets are typed by hand under time pressure.
+exitIfProduction(args.matrixUrl, args.realmServerUrl, args.realm);
 
 if (args.grantsOnly && args.skipGrants) {
   console.error('--grants-only and --skip-grants leave nothing to do.');
@@ -235,6 +244,21 @@ async function grantAccess(): Promise<void> {
     console.log('\nOnly one credential row, so there is nobody to grant.');
     return;
   }
+  // `parseArgs` coerces with `Number()`, so a typo arrives as NaN — and every
+  // comparison against NaN is false, so it would slip through both the clamp
+  // and the notice below and grant everyone read-only with no error. That is
+  // precisely the single-identity run the rest of this work exists to make
+  // impossible, arriving silently through the one flag whose job is to prevent
+  // it.
+  if (!Number.isFinite(args.writeGrants) || args.writeGrants < 0) {
+    console.error(
+      `--write-grants must be a non-negative number (parsed as ` +
+        `${args.writeGrants}). A non-numeric value reaches here as NaN, and ` +
+        `every\n  comparison against NaN is false — so left unchecked it would ` +
+        `grant everyone\n  read-only and say nothing.`,
+    );
+    process.exit(1);
+  }
   let writeGrants = Math.max(0, Math.min(args.writeGrants, others.length));
   if (args.writeGrants > others.length) {
     console.log(
@@ -257,19 +281,30 @@ async function grantAccess(): Promise<void> {
   if (args.dryRun) {
     return;
   }
-  // As the owner: only they may patch a realm's permissions.
+  // As the owner: only they may read or patch a realm's permissions.
   let session = await authenticate({
     matrixUrl: args.matrixUrl,
     realmServerUrl: args.realmServerUrl,
     username: ownerLocalpart,
     password: owner.password,
   });
-  await grantRealmPermissions({
-    realmUrl,
-    authorization: realmAuthHeader(session, realmUrl),
-    grants,
-  });
-  console.log('Granted.');
+  let authorization = realmAuthHeader(session, realmUrl);
+  // Read before writing, so the output says what CHANGED rather than what was
+  // asked for. A re-run against a realm already granted is the common case —
+  // `--grants-only` exists for retries — and "granted" printed over a no-op
+  // reads as the fix having been applied when nothing moved.
+  let before = await readRealmPermissions({ realmUrl, authorization });
+  let after = await grantRealmPermissions({ realmUrl, authorization, grants });
+  let changed = Object.keys(grants).filter(
+    (user) =>
+      (before[user] ?? []).slice().sort().join(',') !==
+      (after[user] ?? []).slice().sort().join(','),
+  );
+  console.log(
+    changed.length
+      ? `Granted; changed: ${changed.join(', ')}.`
+      : `Granted; no change — these accounts already had these permissions.`,
+  );
 }
 
 if (!args.skipGrants) {
@@ -278,8 +313,9 @@ if (!args.skipGrants) {
   } catch (e) {
     console.error(
       `\nGranting access failed: ${e instanceof Error ? e.message : String(e)}\n` +
-        `The realm itself is ready. Re-run with --skip-push to retry just the\n` +
-        `grants, or pass --skip-grants if access is managed elsewhere.`,
+        `The realm itself is ready. Re-run with --grants-only --realm ${realmUrl}\n` +
+        `to retry just the grants — that path needs no boxel CLI — or pass\n` +
+        `--skip-grants if access is managed elsewhere.`,
     );
     process.exit(1);
   }
