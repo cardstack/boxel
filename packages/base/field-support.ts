@@ -129,6 +129,75 @@ export interface ComputePassSnapshot {
   cacheHits: number;
 }
 
+// A query-backed field resolves against a live search the index cannot
+// invalidate, which is why the serializers omit one outright. A computed that
+// READS such a field derives from the same unwatched result set, so indexing
+// leaves it unpopulated for the same reason — it would otherwise bake in a
+// value nothing will ever recompute.
+//
+// The relation is observed rather than declared: `computeVia` is an ordinary
+// function and nothing about its source says which fields it reads. Every
+// query-field read raises `markQueryFieldRead`, which marks each `computeVia`
+// running at that moment, and the two serializers ask `isQueryTaintedField`
+// after evaluating a field. Taint therefore reaches a computed that reads a
+// query field through another computed, on the same terms.
+interface ComputeFrame {
+  tainted: boolean;
+}
+let computeFrames: ComputeFrame[] = [];
+let queryTaintedFields = new WeakMap<BaseDef, Set<string>>();
+
+// Raised by every read of a query-backed field (`ensureQueryFieldSearchResource`
+// is the single funnel for the getters and the relationship probe alike). Marks
+// the whole open stack rather than its top, so an outer computed that reaches a
+// query field through an inner one is tainted too.
+export function markQueryFieldRead(): void {
+  for (let frame of computeFrames) {
+    frame.tainted = true;
+  }
+}
+
+// Whether `fieldName` on this instance was computed from a query-backed field.
+// Only ever read where computeds are serialized under `omitQueryFields` — the
+// indexing pass — so a taint that outlives the read that raised it costs
+// nothing elsewhere.
+export function isQueryTaintedField(
+  instance: BaseDef,
+  fieldName: string,
+): boolean {
+  return queryTaintedFields.get(instance)?.has(fieldName) ?? false;
+}
+
+// Run a field's `computeVia` under a taint frame. A compute that read a query
+// field is recorded against the instance, and the taint is re-raised after the
+// pop so it reaches the compute that asked for this one.
+function computeWithTaintFrame<CardT extends BaseDefConstructor>(
+  instance: BaseDef,
+  field: Field<CardT>,
+): any {
+  let frame: ComputeFrame = { tainted: false };
+  computeFrames.push(frame);
+  let value: any;
+  try {
+    value = field.computeVia!.bind(instance)();
+  } finally {
+    computeFrames.pop();
+  }
+  if (frame.tainted) {
+    let tainted = queryTaintedFields.get(instance);
+    if (!tainted) {
+      tainted = new Set();
+      queryTaintedFields.set(instance, tainted);
+    }
+    tainted.add(field.name);
+    markQueryFieldRead();
+  }
+  if (value === undefined) {
+    value = field.emptyValue(instance);
+  }
+  return value;
+}
+
 // Open a synchronous compute-memo pass. Callers MUST pair this with
 // `endComputePass()` and must not await between the two — the WeakMap
 // would otherwise be observable across reactive cycles. Intended for
@@ -167,22 +236,21 @@ export function getter<CardT extends BaseDefConstructor>(
     // check. JIT branch-predicts this and the original behaviour is
     // unchanged.
     if (passComputeMemo === null) {
-      let value = field.computeVia.bind(instance)();
-      if (value === undefined) {
-        value = field.emptyValue(instance);
-      }
-      return value as BaseInstanceType<CardT>;
+      return computeWithTaintFrame(instance, field) as BaseInstanceType<CardT>;
     }
     let perInstance = passComputeMemo.get(instance);
     if (perInstance && perInstance.has(field.name)) {
       computedCacheHitCount++;
+      // A memoized value is returned without running `computeVia`, so the
+      // reading compute would miss a taint the first evaluation raised. Replay
+      // it from the record instead.
+      if (isQueryTaintedField(instance, field.name)) {
+        markQueryFieldRead();
+      }
       return perInstance.get(field.name);
     }
     computedCallCount++;
-    let value = field.computeVia.bind(instance)();
-    if (value === undefined) {
-      value = field.emptyValue(instance);
-    }
+    let value = computeWithTaintFrame(instance, field);
     if (!perInstance) {
       perInstance = new Map();
       passComputeMemo.set(instance, perInstance);

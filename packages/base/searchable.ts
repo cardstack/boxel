@@ -16,6 +16,7 @@ import {
   isLinkNotFound,
   isNonPresentLink,
   isNotLoadedValue,
+  isQueryTaintedField,
   peekAtField,
   type LinkErrorValue,
   type LinkNotFoundValue,
@@ -287,6 +288,13 @@ async function searchableQueryableValue(
         isDeclaredLink && !getDataBucket(value).has(fieldName)
           ? null
           : peekAtField(value, fieldName);
+      // A computed that read a query-backed field derives from a live search
+      // nothing reindexes this row for, so it is left out of the doc on the
+      // same terms the query field above is. Running the field is what reveals
+      // the read, so the check follows it rather than joining the skip above.
+      if (field!.computeVia && isQueryTaintedField(value, fieldName)) {
+        return undefined;
+      }
       let entryValue: any;
       switch (field!.fieldType) {
         case 'contains': {
