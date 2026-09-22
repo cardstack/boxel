@@ -1284,8 +1284,8 @@ export type PrerenderVisitArgs = {
 // A card instance's stored source, handed to a visit by a caller that has
 // already read it, so the render need not read it again. The two header-derived
 // values travel with the bytes because the card branch reads both off its own
-// GET response today — the same reason the file-render stash carries the
-// visit's realm (a render has no response header to learn it from).
+// GET response when it makes one — the same reason the file-render stash
+// carries the visit's realm (a render has no response header to learn it from).
 export type CardSourceVisitArgs = {
   // The bytes exactly as stored, i.e. what an `Accept: card+source` GET of the
   // instance returns as its body.
@@ -1299,12 +1299,13 @@ export type CardSourceVisitArgs = {
 };
 
 // Above this length a visit does not carry the card's source, and its render
-// fetches for itself the way it does today. The bytes ride the `prerender-visit`
-// POST the caller already makes and then one CDP message to the page — both
-// internal, and both replacing a balancer round-trip — but neither should grow
-// without bound for a pathological instance. Counted in UTF-16 code units
-// rather than encoded bytes: this is a ceiling on an alternative to work that
-// happens anyway, not an accounting of the wire.
+// fetches for itself. The bytes ride the `prerender-visit` POST the caller
+// already makes and then one CDP message to the page — both internal, and both
+// replacing a balancer round-trip — but neither should grow without bound for a
+// pathological instance. Counted in UTF-16 code units rather than encoded bytes:
+// this is a ceiling on an alternative to work that happens anyway, not an
+// accounting of the wire. Enforced both here and at the request boundary that
+// receives the payload, so a producer that bypasses this helper is still bound.
 export const MAX_STASHED_CARD_SOURCE_LENGTH = 1024 * 1024;
 
 // Build the `cardSource` a visit carries, or `undefined` when this file's bytes

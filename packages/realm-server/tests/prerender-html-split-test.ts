@@ -11,6 +11,7 @@ import {
   systemInitiatedPriority,
   userInitiatedPrerenderHtmlPriority,
   userInitiatedPriority,
+  type CardSourceVisitArgs,
   type DefinitionLookup,
   type Diagnostics,
   type IndexingProgressEvent,
@@ -1976,6 +1977,112 @@ module(basename(import.meta.filename), function () {
           firstScopes,
           secondScopes,
           'a later pass renders under its own scope, so the write it exists to observe cannot be answered from what the earlier pass left resident',
+        );
+      });
+    });
+
+    // This pass reads each file's source to decide whether it is a card, and
+    // hands that same source to the visit so the render builds its model from
+    // it instead of fetching the instance's source again. The hand-off is
+    // destructured by name at every hop, so dropping it anywhere leaves the
+    // render fetching — which still produces correct HTML and fails nothing.
+    // This job never runs `render.meta`, so `cardSourceFrom` never reaches a
+    // row for it either: the visit args are the only place the hop is
+    // observable at all.
+    module('card source', function () {
+      function cardSourceRecordingPrerenderer(
+        recorded: (CardSourceVisitArgs | undefined)[],
+      ) {
+        return {
+          async prerenderVisit(args: { cardSource?: CardSourceVisitArgs }) {
+            recorded.push(args.cardSource);
+            return {
+              fileRender: {
+                isolatedHTML: '<pre>rendered</pre>',
+                headHTML: null,
+                atomHTML: null,
+                embeddedHTML: null,
+                fittedHTML: null,
+                iconHTML: null,
+                markdown: null,
+              },
+            };
+          },
+          async prerenderModule() {
+            throw new Error('not used by the prerender-html pass');
+          },
+          async runCommand() {
+            throw new Error('not used by the prerender-html pass');
+          },
+        } as unknown as Prerenderer;
+      }
+
+      async function cardSourceForPass(
+        url: string,
+        source: string,
+      ): Promise<(CardSourceVisitArgs | undefined)[]> {
+        let recorded: (CardSourceVisitArgs | undefined)[] = [];
+        await runPrerenderHtmlPass({
+          realmURL: new URL(testRealm),
+          changes: [{ url, operation: 'update' }],
+          generation: 2,
+          loaderEpoch: 'epoch-a',
+          spawningJobId: null,
+          ...noPreWarmDeps,
+          indexWriter,
+          virtualNetwork,
+          reader: stubReader(new Map([[url, source]])),
+          prerenderer: cardSourceRecordingPrerenderer(recorded),
+          auth: 'test-auth',
+          jobInfo: jobInfo(),
+        });
+        return recorded;
+      }
+
+      test("a card instance's visit carries the source this pass read", async function (assert) {
+        let url = `${testRealm}carries-source.json`;
+        let source = JSON.stringify({
+          data: {
+            type: 'card',
+            meta: { adoptsFrom: { module: `${testRealm}pine`, name: 'Pine' } },
+          },
+        });
+
+        let recorded = await cardSourceForPass(url, source);
+
+        assert.strictEqual(recorded.length, 1, 'one visit');
+        assert.strictEqual(
+          recorded[0]?.source,
+          source,
+          'the bytes this pass read are the bytes the visit carries',
+        );
+        assert.strictEqual(
+          recorded[0]?.realmURL,
+          testRealm,
+          "the visit's realm travels with them, since a render has no response header to learn it from",
+        );
+        assert.strictEqual(
+          typeof recorded[0]?.lastModified,
+          'number',
+          'and the modified time the card branch would otherwise read off its own response',
+        );
+      });
+
+      test('a .json file that is not a card instance carries no source', async function (assert) {
+        // Nothing renders it through the card branch, so there is nothing for a
+        // stash to feed — and sending one would put bytes on the wire that no
+        // consumer reads.
+        let url = `${testRealm}not-a-card.json`;
+        let recorded = await cardSourceForPass(
+          url,
+          JSON.stringify({ hello: 'world' }),
+        );
+
+        assert.strictEqual(recorded.length, 1, 'one visit');
+        assert.strictEqual(
+          recorded[0],
+          undefined,
+          'the visit carries no card source',
         );
       });
     });

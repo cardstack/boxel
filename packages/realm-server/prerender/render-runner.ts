@@ -582,6 +582,15 @@ export class RenderRunner {
       await abortable(signal, () =>
         page.evaluate((sessionAuth) => {
           localStorage.setItem('boxel-session', sessionAuth);
+          // A capture renders through the same card branch as a visit, on a
+          // tab drawn from the same affinity queue — and it names the card a
+          // visit's stash would name, so the route's URL check cannot tell a
+          // leftover apart from a stash meant for this render. Clear both
+          // stashes here for the same reason a visit clears them at its start:
+          // this render reads current bytes, never what some earlier visit
+          // read.
+          delete (globalThis as any).__boxelFileRenderData;
+          delete (globalThis as any).__boxelCardRenderData;
         }, auth),
       );
 

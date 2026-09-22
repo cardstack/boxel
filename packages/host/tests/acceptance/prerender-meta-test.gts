@@ -874,6 +874,38 @@ module('Acceptance | prerender | meta', function (hooks) {
     );
   });
 
+  test('a stash that parses to something other than a card document is ignored', async function (assert) {
+    // `JSON.parse` succeeds for `null`, a number and an array, and the build
+    // goes on to test `'errors' in doc` — which throws for the first two and
+    // would latch a render error on the card. Falling back to the fetch is the
+    // whole point of validating the stash, so it has to cover what the source
+    // parses TO, not merely that it parsed.
+    let url = `${testRealmURL}Person/hassan.json`;
+    for (let source of ['null', '42', '[]', '{"notData":true}']) {
+      (globalThis as any).__boxelCardRenderData = {
+        url,
+        source,
+        realmURL: testRealmURL,
+        lastModified: Date.parse('2026-01-02T03:04:05Z'),
+      };
+
+      await visit(renderPath(url, '/meta'));
+      let { value } = await capturePrerenderResult('textContent');
+      let meta: PrerenderMeta = JSON.parse(value);
+
+      assert.strictEqual(
+        (meta.serialized as any)?.data?.attributes?.name,
+        'Hassan',
+        `source ${source} fell back to the realm's bytes`,
+      );
+      assert.strictEqual(
+        meta.diagnostics?.cardSourceFrom,
+        'fetch',
+        `source ${source} is reported as a fetch`,
+      );
+    }
+  });
+
   test('a stash missing the values the card branch reads off the response is ignored', async function (assert) {
     let url = `${testRealmURL}Person/hassan.json`;
     // Without a realm URL there is nothing to serialize the instance into, and

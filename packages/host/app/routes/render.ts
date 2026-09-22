@@ -908,8 +908,12 @@ export default class RenderRoute extends Route<Model> {
   // this validates rather than trusts. The one that matters is the URL: a
   // prerender tab serves many cards, and an unkeyed stash outliving its visit
   // would otherwise build this render's model from another card's document.
-  // The runner clears the stash at the start and end of every visit; this is
-  // what makes a survivor inert rather than wrong.
+  //
+  // Nothing upstream can be relied on to have narrowed the input. The runner
+  // clears both stashes before each of the renders it drives, but the request
+  // boundary admits any string as `source` from any caller, so the checks
+  // below — including the shape of what it parses to — are what actually hold
+  // the contract.
   #stashedCardSource(id: string): StashedCardSource | undefined {
     let stashed = (globalThis as any).__boxelCardRenderData as
       | (CardSourceVisitArgs & { url: string })
@@ -930,25 +934,40 @@ export default class RenderRoute extends Route<Model> {
     if (stashed.url.replace(/\.json$/, '') !== id.replace(/\.json$/, '')) {
       return undefined;
     }
-    let doc: LooseSingleCardDocument;
+    let doc: unknown;
     try {
-      doc = JSON.parse(stashed.source) as LooseSingleCardDocument;
+      doc = JSON.parse(stashed.source);
     } catch (err: any) {
-      // Only a caller that already parsed these bytes as a card resource
-      // stashes them, so this is unreachable by construction — but a stash that
-      // cannot be parsed is a statement about the stash, not about the card,
-      // and the card is still readable from the realm. Fetching is both the
-      // honest answer and the one that cannot make this path worse than the
-      // one it replaces.
+      // A stash that cannot be parsed is a statement about the stash, not about
+      // the card, and the card is still readable from the realm. Fetching is
+      // both the honest answer and the one that cannot make this path worse
+      // than the one it replaces.
       console.warn(
         `ignoring unparseable stashed card source for ${id}; fetching instead: ${err?.message}`,
+      );
+      return undefined;
+    }
+    // Parsing is not enough: `null`, `42` and `[]` all parse, and the caller
+    // goes on to test `'errors' in doc`, which throws on the first two — which
+    // would latch a render error on the card, the one outcome this fallback
+    // exists to prevent. Admit only something shaped like the document a
+    // `card+source` GET returns.
+    if (
+      typeof doc !== 'object' ||
+      doc === null ||
+      Array.isArray(doc) ||
+      typeof (doc as LooseSingleCardDocument).data !== 'object' ||
+      (doc as LooseSingleCardDocument).data === null
+    ) {
+      console.warn(
+        `ignoring stashed card source for ${id} that is not a card document; fetching instead`,
       );
       return undefined;
     }
     return {
       realmURL: stashed.realmURL,
       lastModified: new Date(stashed.lastModified),
-      doc,
+      doc: doc as LooseSingleCardDocument,
     };
   }
 

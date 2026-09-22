@@ -10,6 +10,7 @@ import {
   isScreenshotFormat,
   parseScreenshotCaptureSpec,
   SCREENSHOT_FORMATS,
+  MAX_STASHED_CARD_SOURCE_LENGTH,
   type CardSourceVisitArgs,
   type DeclaredScreenshotVisitArgs,
   type PrerenderVisitType,
@@ -1335,12 +1336,19 @@ export function buildPrerenderApp(options: {
       // payload that fails this check is dropped rather than rejected — the
       // render falls back to fetching, which is the behavior this whole path
       // optimizes away and so is always safe.
+      //
+      // The size ceiling is enforced here as well as at the producer, because
+      // this is where the bytes actually arrive and where they are handed to a
+      // CDP message. A producer that assembles visit args without
+      // `cardSourceForVisit` would otherwise carry an unbounded payload past
+      // the only check on it.
       let rawCardSource = attrs.cardSource;
       let cardSource: CardSourceVisitArgs | undefined =
         rawCardSource &&
         typeof rawCardSource === 'object' &&
         !Array.isArray(rawCardSource) &&
         typeof rawCardSource.source === 'string' &&
+        rawCardSource.source.length <= MAX_STASHED_CARD_SOURCE_LENGTH &&
         typeof rawCardSource.realmURL === 'string' &&
         rawCardSource.realmURL.length > 0 &&
         typeof rawCardSource.lastModified === 'number' &&
