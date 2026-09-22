@@ -2568,6 +2568,11 @@ module('Unit | index-writer', function (hooks) {
         indexedAt: null,
         deps: null,
         screenshots: null,
+        // An error row reports one too: it is carried forward from the last
+        // good pass alongside the `pristine_doc` it describes, so the two
+        // always name the same bytes. Null here because this row was seeded
+        // with neither.
+        sourceContentHash: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be a card document`);
