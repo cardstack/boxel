@@ -1297,6 +1297,9 @@ function onTarget(
   env: OperationsEnvironment,
   target: unknown,
 ): Record<string, unknown> {
+  if (typeof target === 'string') {
+    return entryMembers(scope, fileAtPath(scope, env, target));
+  }
   if (isQueryTargetHandle(target)) {
     return queriedMembers(scope, target[TARGET]);
   }
@@ -1319,6 +1322,94 @@ function onTarget(
     );
   }
   return entryMembers(scope, other);
+}
+
+// A file named by its path rather than by an instance, which is the only way
+// to reach one the realm does not hold yet: a `FileDef` is hydrated from a
+// stored file, so a log that has never been written has no instance to pass —
+// and an `appendLine` creates the file it appends to.
+//
+// The path is read the way the endpoint reads an entry's `href`, so what the
+// caller writes here means the same thing it would mean on the wire: an
+// absolute URL is taken as written, and anything else names a path under the
+// realm this batch commits to, a leading slash meaning that realm's root
+// rather than its origin. Reading it here rather than leaving it to the
+// endpoint is what puts a refusal where the caller can see which path they
+// wrote.
+//
+// One spelling the endpoint accepts is refused here instead: a realm addressed
+// by a registered prefix. Resolving one means reading the virtual network, and
+// a card module cannot see it — so rather than resolve a prefix wrongly, this
+// says it cannot. Left to the generic path below it would be worse than an
+// error: `@cardstack/base/notes.txt` is not a URL, so it would resolve as a
+// relative path, land inside the caller's own realm, pass containment, and
+// create a file at a nonsense path instead of refusing a cross-realm target.
+//
+// What the path cannot say is what the file is. A stored file's type comes
+// from its extension and is resolved by the realm, so nothing here knows which
+// operations it declares — which is why the bucket this feeds carries what
+// every file carries and nothing else.
+function fileAtPath(
+  scope: BatchScope,
+  env: OperationsEnvironment,
+  path: string,
+): InstanceSubject {
+  let realm = scope.batch.realmURL;
+  let refuse = (why: string): never => {
+    throw new Error(`on("${path}") ${why}`);
+  };
+  if (path.length === 0) {
+    refuse(`names no file; it takes the path of one in ${realm}`);
+  }
+  let absolute: URL;
+  try {
+    absolute = new URL(path);
+  } catch {
+    if (path.startsWith('@')) {
+      refuse(
+        `names a realm by a registered prefix, which is resolved where the ` +
+          `virtual network is and not here; name the file by its path in ` +
+          `${realm}, or by its full URL`,
+      );
+    }
+    try {
+      // Leading slashes name the realm's root rather than the origin's, and
+      // repeated ones inside the path are collapsed: the realm maps every
+      // spelling of a path onto one file but addresses them as different
+      // local paths, so a batch would take two write locks over one file and
+      // read its two entries as unrelated. This is the first surface on which
+      // a person writes the path by hand, so it is where they are made one.
+      absolute = new URL(
+        path.replace(/^\/+/, '').replace(/\/{2,}/g, '/'),
+        realm,
+      );
+    } catch {
+      refuse(`does not name a path in ${realm}`);
+    }
+  }
+  if (!absolute!.href.startsWith(realm)) {
+    refuse(
+      `names ${absolute!.href}, which is not in ${realm}; a batch commits to one realm`,
+    );
+  }
+  if (absolute!.href.endsWith('/')) {
+    // A directory, or the realm's own root. The realm would answer for it —
+    // as bytes of an unknown type, refused for being binary — which describes
+    // nothing the caller did wrong.
+    refuse(`names a directory rather than a file in ${realm}`);
+  }
+  let subject = env.subject(path);
+  if (subject.scope !== 'instance') {
+    refuse(`does not name a file in ${realm}`);
+  }
+  // The realm is this batch's, and the id is the path resolved against it —
+  // neither is knowable where the subject is built, which reads a target
+  // without knowing the batch it is being registered in.
+  return {
+    ...(subject as InstanceSubject),
+    id: absolute!.href,
+    realmURL: realm,
+  };
 }
 
 // The operations of the cards a search resolves to.
