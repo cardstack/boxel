@@ -428,6 +428,11 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         'report-nested-3',
         'report-shape',
         'report-tree-write',
+        // One per base-version test, for the same reason.
+        'report-base-fresh',
+        'report-base-stale',
+        'report-base-absent',
+        'report-base-refused',
       ].map((name) => [`${name}.json`, reportFile()]),
     ),
     // The one report that is not open, so an operation asserting that it is
@@ -2022,6 +2027,248 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           [{ body: 'Reviewed.', postedBy: TESTER }],
           'the comment records the caller the realm verified, and no other ' +
             'identity is invented for it',
+        );
+      });
+    });
+
+    // A caller that holds a card names the version it computed its write on top
+    // of, and the result says whether the realm executed from the same one.
+    //
+    // The comparison is the coordinator's and is made inside the write lock
+    // against the bytes it read there; what these are about is the wire — the
+    // spelling a caller sends a base version with, and that nothing reaches the
+    // stored file on the way through. A mismatch is reported and not refused:
+    // refusing a write on a stale base is what `If-Match` is for, on the card
+    // verbs, and a batch entry saying so would make the two mean the same
+    // thing.
+    module('base versions', function () {
+      // The version a write reports is the token the next write names as its
+      // base, so this reads one out of a result and sends it straight back.
+      test('an entry naming the version the card holds reports the base matched', async function (assert) {
+        let first = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-base-fresh',
+              data: { body: 'First.' },
+            }),
+          ),
+        );
+        assert.strictEqual(first.status, 200, 'HTTP 200 status');
+        let version = first.body['atomic:results'][0].data.meta.version;
+        assert.strictEqual(
+          typeof version,
+          'string',
+          'the first write reported a version to name as a base',
+        );
+
+        let second = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-base-fresh',
+              data: { body: 'Second.', meta: { baseVersion: version } },
+            }),
+          ),
+        );
+
+        assert.strictEqual(second.status, 200, 'HTTP 200 status');
+        let [result] = second.body['atomic:results'];
+        assert.true(
+          result.data.meta.baseMatched,
+          'the realm executed from the version the caller named',
+        );
+        assert.deepEqual(
+          storedCard('report-base-fresh.json').data.attributes?.comments,
+          [
+            { body: 'First.', postedBy: TESTER },
+            { body: 'Second.', postedBy: TESTER },
+          ],
+          'both writes landed',
+        );
+      });
+
+      test('an entry naming a version the card has moved past applies anyway and reports the mismatch', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-base-stale',
+              data: {
+                body: 'Sent against a base that moved.',
+                meta: { baseVersion: 'a-version-this-card-never-held' },
+              },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let [result] = response.body['atomic:results'];
+        assert.false(
+          result.data.meta.baseMatched,
+          'the realm reports that it executed from a different base',
+        );
+        assert.deepEqual(
+          storedCard('report-base-stale.json').data.attributes?.comments,
+          [{ body: 'Sent against a base that moved.', postedBy: TESTER }],
+          'the write still applied — a moved base is reported, not refused',
+        );
+      });
+
+      // Absent rather than `false`. A caller that named no base asked nothing,
+      // and answering `false` would tell it its base did not match — a claim
+      // about a base it never stated.
+      test('an entry naming no base version has no baseMatched key', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-base-absent',
+              data: { body: 'No base named.' },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let [result] = response.body['atomic:results'];
+        // The positive control, for the reason absence assertions need one: a
+        // result carrying no meta at all would satisfy the check below just as
+        // well as one deliberately withholding the key. A write always reports
+        // a version, so finding one establishes that this meta is populated and
+        // the absence is about `baseMatched`.
+        assert.strictEqual(
+          typeof result.data.meta.version,
+          'string',
+          'the result carries a populated write meta',
+        );
+        assert.false(
+          'baseMatched' in result.data.meta,
+          `the result reports nothing about a base: ${JSON.stringify(
+            result.data.meta,
+          )}`,
+        );
+      });
+
+      // The base version is the envelope's to read, so it must not reach the
+      // patch the entry stages. `meta` legitimately carries `adoptsFrom` and
+      // `fields`, so it cannot be dropped wholesale — the member is lifted out
+      // of it, and this is what says so.
+      test('a base version is not written into the card it names', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('update', {
+              href: '/report-base-refused',
+              data: {
+                type: 'card',
+                attributes: { status: 'escalated' },
+                meta: {
+                  adoptsFrom: EXTERNAL_REPORT,
+                  baseVersion: 'a-version-this-card-never-held',
+                },
+              },
+            }),
+          ),
+        );
+
+        assert.strictEqual(
+          response.status,
+          200,
+          `HTTP 200 status: ${response.text}`,
+        );
+        let stored = storedCard('report-base-refused.json');
+        assert.strictEqual(
+          stored.data.attributes?.status,
+          'escalated',
+          'the patch landed',
+        );
+        assert.false(
+          'baseVersion' in (stored.data.meta as unknown as object),
+          `the stored card carries no base version: ${JSON.stringify(
+            stored.data.meta,
+          )}`,
+        );
+      });
+
+      test('a base version that is not a non-empty string is refused, naming the entry', async function (assert) {
+        for (let [label, baseVersion] of [
+          ['a number', 7],
+          ['an empty string', ''],
+        ] as const) {
+          let response = await post(
+            envelope(
+              invoke('addComment', {
+                href: '/report-base-absent',
+                data: { body: 'Refused.', meta: { baseVersion } },
+              }),
+            ),
+          );
+
+          assert.strictEqual(response.status, 400, `HTTP 400 status: ${label}`);
+          let [error] = response.body.errors;
+          assert.strictEqual(
+            error.meta.entry,
+            0,
+            `the entry is named: ${label}`,
+          );
+          assert.true(
+            error.detail.includes('baseVersion'),
+            `the refusal names the member: ${error.detail}`,
+          );
+        }
+      });
+
+      // A read never reaches the coordinator — it is answered before the batch
+      // is staged — so the refusal for an entry that cannot use a base version
+      // has to be made where every entry's definition is known. Without it a
+      // well-formed base version on a read is silently dropped, which is the
+      // same answer as a realm that does not report on bases at all, while a
+      // malformed one on the same read is a refusal.
+      test('a base version on an entry that writes nothing is refused, naming the entry', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('read', {
+              href: '/report-base-absent',
+              data: { meta: { baseVersion: 'a-version-a-read-cannot-use' } },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.meta.entry, 0, 'the entry is named');
+        assert.true(
+          error.detail.includes('base version'),
+          `the refusal says a read has no base version: ${error.detail}`,
+        );
+        assert.strictEqual(
+          response.body['atomic:results'],
+          undefined,
+          'the batch answered nothing',
+        );
+      });
+
+      // A create has no prior state for a base version to describe and a delete
+      // has none left to report a match on, so naming one is a caller that
+      // believes it is writing conditionally when nothing is comparing
+      // anything. Refused rather than ignored, for that reason.
+      test('a base version on a create is refused, naming the entry', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('create', {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Mango' },
+                meta: {
+                  adoptsFrom: PERSON,
+                  baseVersion: 'a-version-no-new-card-has',
+                },
+              },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.meta.entry, 0, 'the entry is named');
+        assert.true(
+          error.detail.includes('base version'),
+          `the refusal says a create has no base version: ${error.detail}`,
         );
       });
     });

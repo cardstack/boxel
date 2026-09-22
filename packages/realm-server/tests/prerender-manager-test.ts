@@ -12,6 +12,7 @@ import {
   PRERENDER_DISPATCH_DELIVERED,
   PRERENDER_DISPATCH_HEADER,
   PRERENDER_DISPATCH_NONE,
+  PRERENDER_HOST_SHELL_GENERATION_HEADER,
   PRERENDER_HOST_SHELL_HASH_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
@@ -154,6 +155,74 @@ module(basename(import.meta.filename), function () {
         .post('/host-shell')
         .send({ data: { attributes: {} } });
       assert.strictEqual(bad.status, 400, 'host-shell report requires a hash');
+    });
+
+    // The generation orders shells the token can only distinguish. It travels
+    // the same path as the token, and the pairing is what matters: a
+    // generation echoed beside a token it does not describe would be stamped
+    // onto rows as the bundle that rendered them.
+    test('echoes the generation beside the token, and only ever together', async function (assert) {
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let hashKey = PRERENDER_HOST_SHELL_HASH_HEADER.toLowerCase();
+      let genKey = PRERENDER_HOST_SHELL_GENERATION_HEADER.toLowerCase();
+      let heartbeat = () =>
+        request.post('/prerender-servers').send({
+          data: {
+            type: 'prerender-server',
+            attributes: { capacity: 2, url: serverUrlA },
+          },
+        });
+
+      await request
+        .post('/host-shell')
+        .send({ data: { attributes: { hash: 'aaa111', generation: 4 } } });
+      let withGeneration = await heartbeat();
+      assert.strictEqual(withGeneration.headers[hashKey], 'aaa111');
+      assert.strictEqual(
+        withGeneration.headers[genKey],
+        '4',
+        'the generation rides with the token that earned it',
+      );
+
+      // A realm server that could not reach its database reports the token
+      // alone. The token still drives the recycle; the rows it produces carry
+      // no generation, which reads as unknown rather than as old.
+      await request
+        .post('/host-shell')
+        .send({ data: { attributes: { hash: 'bbb222' } } });
+      let tokenOnly = await heartbeat();
+      assert.strictEqual(tokenOnly.headers[hashKey], 'bbb222');
+      assert.strictEqual(
+        tokenOnly.headers[genKey],
+        undefined,
+        "a new token clears the previous token's generation rather than inheriting it",
+      );
+
+      // Both report sites run against the same token, so a second report is
+      // how a generation arrives after the first could not claim one.
+      await request
+        .post('/host-shell')
+        .send({ data: { attributes: { hash: 'bbb222', generation: 5 } } });
+      let filledIn = await heartbeat();
+      assert.strictEqual(filledIn.headers[genKey], '5', 'the gap is filled');
+
+      // …and the reverse does not erase it: a later report with no number
+      // leaves the one already known alone.
+      await request
+        .post('/host-shell')
+        .send({ data: { attributes: { hash: 'bbb222' } } });
+      let stillThere = await heartbeat();
+      assert.strictEqual(stillThere.headers[genKey], '5');
+
+      // A value that could not order anything is discarded, and discarding it
+      // must not cost the token its echo.
+      await request.post('/host-shell').send({
+        data: { attributes: { hash: 'ccc333', generation: 'banana' } },
+      });
+      let malformed = await heartbeat();
+      assert.strictEqual(malformed.headers[hashKey], 'ccc333');
+      assert.strictEqual(malformed.headers[genKey], undefined);
     });
 
     test('health includes active servers with affinities and last used times', async function (assert) {

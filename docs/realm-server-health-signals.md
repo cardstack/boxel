@@ -128,13 +128,22 @@ gate, which likewise treats a failed render as work that is finished. A realm wh
 indexing failed surfaces as missing or errored content, not as a readiness check
 that hangs forever.
 
+Which jobs count is narrower than the lane. A realm's indexing concurrency group
+serializes everything that must not overlap an index pass, and not all of that
+writes the index — the daily scoped-CSS sweep joins the lane for mutual exclusion
+alone. The gate reads only the index-writing types, so a queued or wedged sweep
+holds the lane while readiness passes over it. Gating on the whole lane instead
+would report every realm the sweep touches as mid-index for as long as the
+background queue takes to drain it, which is a claim about the queue rather than
+about any realm's index.
+
 Two consequences follow from reading shared state, both intended. A deploy enqueues
 a system reindex for every realm, so readiness across the fleet reports not-ready
 until those passes drain — the realms really are behind their source. And a wedged
-worker holds its realm's lane until the reservation reaper collects it, so that
-realm reports not-ready on every replica for as long as that takes. Both are the
-answer a caller can act on: the alternative is a 200 from whichever replica happens
-to be ignorant of the work.
+worker on an index job holds its realm's gate until the reservation reaper collects
+it, so that realm reports not-ready on every replica for as long as that takes. Both
+are the answer a caller can act on: the alternative is a 200 from whichever replica
+happens to be ignorant of the work.
 
 ## An event-loop-gated failure is honest
 

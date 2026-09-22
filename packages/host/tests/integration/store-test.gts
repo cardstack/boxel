@@ -74,7 +74,10 @@ import { setupRenderingTest } from '../helpers/setup';
 import type { TestRealmAdapter } from '../helpers/adapter';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardDef as CardDefType } from '@cardstack/base/card-api';
-import type { RealmEventContent } from '@cardstack/base/matrix-event';
+import type {
+  IncrementalIndexEventContent,
+  RealmEventContent,
+} from '@cardstack/base/matrix-event';
 
 module('Integration | Store', function (hooks) {
   setupRenderingTest(hooks);
@@ -124,6 +127,89 @@ module('Integration | Store', function (hooks) {
   }
 
   const noop = () => {};
+
+  async function writePerson(path: string, name: string) {
+    await testRealm.write(
+      path,
+      JSON.stringify({
+        data: {
+          attributes: { name },
+          meta: {
+            adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+  }
+
+  // Take the realm's broadcasts into a list instead of delivering them, so a
+  // test decides which events the store sees and how many times it sees each
+  // one. Replaying the realm's own event rather than a hand-built one is what
+  // keeps these tests honest about the generation and the versions a realm
+  // actually reports.
+  function interceptRealmEvents() {
+    let messageService = getService('message-service');
+    let deliver = messageService.relayRealmEvent.bind(messageService);
+    let captured: RealmEventContent[] = [];
+    messageService.relayRealmEvent = (event: RealmEventContent) => {
+      captured.push(event);
+    };
+    function find(url: string) {
+      return captured.find(
+        (event): event is IncrementalIndexEventContent =>
+          event.eventName === 'index' &&
+          (event as IncrementalIndexEventContent).indexType === 'incremental' &&
+          (event as IncrementalIndexEventContent).invalidations.includes(url),
+      );
+    }
+    return {
+      deliver,
+      // The realm's next incremental event naming `url`, once it arrives.
+      // Matrix hands a broadcast over some time after the write that caused
+      // it, so this waits rather than reading the list once; the list is
+      // emptied afterwards so a later call cannot answer with this event
+      // again.
+      async nextEventFor(url: string): Promise<IncrementalIndexEventContent> {
+        await waitUntil(() => find(url) !== undefined, {
+          timeout: 10_000,
+          timeoutMessage: `the realm broadcast no incremental index event naming ${url}`,
+        });
+        let event = find(url)!;
+        captured.length = 0;
+        return event;
+      },
+      restore() {
+        messageService.relayRealmEvent = deliver;
+      },
+    };
+  }
+
+  // Count the card+json reads of one card. A reload is exactly one of these,
+  // so the count says how many times an event was acted on — which is what
+  // these tests are about, since a reload overwrites the in-memory instance
+  // with server state and so is the window an unwanted one opens.
+  function countCardReads(pathFragment: string) {
+    let cardService = getService('card-service') as any;
+    let originalFetchJSON = cardService.fetchJSON.bind(cardService);
+    let count = 0;
+    cardService.fetchJSON = async (fetchUrl: string | URL, args?: any) => {
+      if (
+        String(fetchUrl).includes(pathFragment) &&
+        (args?.method ?? 'GET') === 'GET'
+      ) {
+        count++;
+      }
+      return originalFetchJSON(fetchUrl, args);
+    };
+    return {
+      get count() {
+        return count;
+      },
+      stop() {
+        delete cardService.fetchJSON;
+      },
+    };
+  }
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     class Person extends CardDef {
@@ -3654,6 +3740,229 @@ module('Integration | Store', function (hooks) {
       'Swept In Flight Person',
       'and it is the indexed state',
     );
+  });
+
+  test('a duplicate incremental event does not reload a card the store already holds at that generation', async function (assert) {
+    let url = `${testRealmURL}Person/echoed`;
+    let events = interceptRealmEvents();
+    let reads: ReturnType<typeof countCardReads> | undefined;
+    try {
+      await writePerson('Person/echoed.json', 'Echoed');
+      await events.nextEventFor(url);
+      storeService.addReference(url);
+      await storeService.flush();
+
+      // A second write, whose event the store does not get to hear until this
+      // test hands it over — so what is replayed below is the realm's own
+      // event, naming a generation a pass really reached and a card it really
+      // wrote.
+      await writePerson('Person/echoed.json', 'Echoed Again');
+      let event = await events.nextEventFor(url);
+      assert.strictEqual(
+        typeof event.generation,
+        'number',
+        'the realm reported the generation its pass committed',
+      );
+
+      reads = countCardReads('Person/echoed');
+      events.deliver(event);
+      await settled();
+      assert.strictEqual(reads.count, 1, 'the event is acted on once');
+      assert.strictEqual(
+        (storeService.peek(url) as any).name,
+        'Echoed Again',
+        'and the store holds what the pass wrote',
+      );
+
+      events.deliver(event);
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        1,
+        'the same event delivered a second time is a no-op',
+      );
+
+      // The control, and the reason the count above is about the generation
+      // rather than about anything else in the event: the same event with
+      // nothing but its generation removed. With no generation there is no
+      // floor to compare against, which is what a realm too old to report one
+      // gives every client.
+      let { generation: _generation, ...withoutGeneration } = event;
+      events.deliver(withoutGeneration as RealmEventContent);
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        2,
+        'while an otherwise identical event carrying no generation does reload',
+      );
+    } finally {
+      reads?.stop();
+      events.restore();
+    }
+  });
+
+  test('a duplicate arriving while the first reload is still in flight is coalesced into it', async function (assert) {
+    // The rules read the instance, and an instance does not reflect a reload
+    // until that reload returns — so a second delivery inside that window is
+    // the one case a comparison against the card alone cannot answer. It is
+    // also the one that costs something: the first reload lands, the user
+    // types, and the second lands on top of what they typed.
+    let url = `${testRealmURL}Person/coalesced`;
+    let events = interceptRealmEvents();
+    let reads: ReturnType<typeof countCardReads> | undefined;
+    try {
+      await writePerson('Person/coalesced.json', 'Coalesced');
+      await events.nextEventFor(url);
+      storeService.addReference(url);
+      await storeService.flush();
+
+      await writePerson('Person/coalesced.json', 'Coalesced Again');
+      let event = await events.nextEventFor(url);
+
+      // Both deliveries before anything settles, so the second is decided
+      // while the first reload's fetch is still out.
+      reads = countCardReads('Person/coalesced');
+      events.deliver(event);
+      events.deliver(event);
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        1,
+        'the duplicate is answered by the reload already in flight',
+      );
+      assert.strictEqual(
+        (storeService.peek(url) as any).name,
+        'Coalesced Again',
+        'and that reload still brought the state the pass wrote',
+      );
+
+      // The control: the same back-to-back pair with both members removed, so
+      // neither rule has anything to answer with. Two reloads — which is what
+      // the count above is measuring the absence of.
+      let { generation: _generation, versions: _versions, ...bare } = event;
+      events.deliver(bare as RealmEventContent);
+      events.deliver(bare as RealmEventContent);
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        3,
+        'while a pair carrying neither member reloads twice',
+      );
+    } finally {
+      reads?.stop();
+      events.restore();
+    }
+  });
+
+  test('an incremental event overtaken by a newer one does not reload', async function (assert) {
+    let url = `${testRealmURL}Person/overtaken`;
+    let events = interceptRealmEvents();
+    let reads: ReturnType<typeof countCardReads> | undefined;
+    try {
+      await writePerson('Person/overtaken.json', 'Overtaken');
+      await events.nextEventFor(url);
+      storeService.addReference(url);
+      await storeService.flush();
+
+      await writePerson('Person/overtaken.json', 'Second');
+      let earlier = await events.nextEventFor(url);
+      await writePerson('Person/overtaken.json', 'Third');
+      let later = await events.nextEventFor(url);
+      assert.true(
+        later.generation! > earlier.generation!,
+        'the two passes are ordered by generation',
+      );
+
+      reads = countCardReads('Person/overtaken');
+      events.deliver(later);
+      await settled();
+      assert.strictEqual(reads.count, 1, 'the newer event is acted on');
+      assert.strictEqual(
+        (storeService.peek(url) as any).name,
+        'Third',
+        'and the store holds the state that pass wrote',
+      );
+
+      events.deliver(earlier);
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        1,
+        'the older event arriving after it is ignored',
+      );
+    } finally {
+      reads?.stop();
+      events.restore();
+    }
+  });
+
+  test("a write's echo is recognized by its version once the request id has aged out of this client's memory", async function (assert) {
+    let url = `${testRealmURL}Person/aged-out`;
+    let events = interceptRealmEvents();
+    let reads: ReturnType<typeof countCardReads> | undefined;
+    try {
+      await writePerson('Person/aged-out.json', 'Aged Out');
+      await events.nextEventFor(url);
+      storeService.addReference(url);
+      await storeService.flush();
+
+      let instance = storeService.peek(url) as CardDefType;
+      (instance as any).name = 'Aged Out Edit';
+      storeService.save(url);
+      await settled();
+      let event = await events.nextEventFor(url);
+
+      // Which rule can answer for this event, established before asking
+      // whether it was answered: the pass moved past the generation the store
+      // last read this card at, so the ordering rule cannot suppress it, and
+      // the version the write returned is the one the event reports.
+      assert.true(
+        event.generation! > api.getCardMeta(instance, 'generation')!,
+        'the event names a generation past the one the store holds',
+      );
+      assert.strictEqual(
+        api.getCardMeta(instance, 'version'),
+        event.versions?.[url],
+        'and the store recorded the version its own write returned',
+      );
+
+      // The echo, arriving with a request id this client no longer recognizes
+      // — what a tab is handed once 250 writes have pushed the id that caused
+      // this one out of `clientRequestIds`.
+      let agedOut = {
+        ...event,
+        clientRequestId: 'instance:aged-out-of-this-clients-memory',
+      };
+      reads = countCardReads('Person/aged-out');
+      events.deliver(agedOut as RealmEventContent);
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        0,
+        'the echo of our own write is not read back',
+      );
+      assert.strictEqual(
+        (storeService.peek(url) as any).name,
+        'Aged Out Edit',
+        'and the edit stands',
+      );
+
+      // The control: the same unrecognized event with its versions map taken
+      // away — an older realm, or a map dropped whole because the event it rode
+      // in would not otherwise fit. Absence is not a statement about what a
+      // request wrote, so it reloads.
+      let { versions: _versions, ...withoutVersions } = agedOut;
+      events.deliver(withoutVersions as RealmEventContent);
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        1,
+        'while the same event without the map does reload',
+      );
+    } finally {
+      reads?.stop();
+      events.restore();
+    }
   });
 
   test('an instance can be restored after a loader reset', async function (assert) {

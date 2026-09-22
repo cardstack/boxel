@@ -935,6 +935,7 @@ module(basename(import.meta.filename), function () {
           ],
           excludes: [`${baseRealmRRI}markdown-file-def/MarkdownDef`],
         });
+        assertVersions(assert, content, [newCardId]);
         assert.deepEqual(content, {
           eventName: 'index',
           indexType: 'incremental',
@@ -1038,6 +1039,7 @@ module(basename(import.meta.filename), function () {
           getMessagesSince,
           realm: testRealmHref,
           clientRequestId: null,
+          versions: 'written',
         },
       );
 
@@ -1966,6 +1968,33 @@ function assertInvalidatedTypes(
     );
   }
   delete content.invalidatedTypes;
+}
+
+// The versions an index event reports, checked over its key set and removed so
+// the caller's structural comparison can be exact. The hash itself is a
+// function of the bytes the fixture stored, so only a caller that read them can
+// state it — which `card-endpoints-test.ts` does, against the file on disk.
+function assertVersions(
+  assert: Assert,
+  content: Record<string, any>,
+  urls: string[],
+) {
+  let versions = content.versions as Record<string, string> | undefined;
+  assert.deepEqual(
+    Object.keys(versions ?? {}).sort(),
+    [...urls].sort(),
+    'the event names a version for exactly the urls this request wrote',
+  );
+  for (let url of urls) {
+    let reported = versions?.[url];
+    assert.true(
+      typeof reported === 'string' && reported.length > 0,
+      `the version for ${url} is a non-empty string: ${JSON.stringify(
+        reported,
+      )}`,
+    );
+  }
+  delete content.versions;
 }
 
 function realmEventIsIndex(

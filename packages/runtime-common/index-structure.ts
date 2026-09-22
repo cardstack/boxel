@@ -6,6 +6,19 @@ export interface BoxelIndexTable {
   url: string;
   file_alias: string;
   generation: number;
+  // Which host bundle rendered this row, as the ordering position the realm
+  // server assigned that shell on first observing it. Distinct from
+  // `generation` above, which counts this realm's own writes: that one says
+  // when the row was written, this one says what rendered it, and a repair of
+  // deploy-skewed rows needs the second question.
+  //
+  // `null` means no number reached the render — a realm server that could not
+  // reach its database reports the shell token alone, and a prerender server
+  // deployed ahead of one that reports the number sends none. Unknown rather
+  // than old: the repair predicate is `< current`, which excludes null.
+  //
+  // A write stamp. Nothing that decides row liveness may read it.
+  host_shell_generation: number | null;
   realm_url: string;
   type: 'instance' | 'file';
   has_error: boolean | null;
@@ -181,6 +194,27 @@ export function normalizeRealmMetaValue(raw: unknown): RealmMetaValue {
     instances: value.instances ?? [],
     files: value.files ?? [],
   };
+}
+
+// Whether `raw` already carries both arms, so `normalizeRealmMetaValue` would
+// hand it back as-is rather than synthesizing an arm it never had.
+//
+// The legacy shape is a bare `CardTypeSummary[]` of instances, and normalizing
+// it fabricates `files: []`. That empty array is indistinguishable from a realm
+// that genuinely has no file rows, so a caller that carries a prior value
+// forward instead of recomputing it has to ask this first — otherwise it
+// publishes the fabricated arm as though a pass had established it, and the
+// realm's file types vanish from the sidebar. Recomputing is what re-establishes
+// the arm, so a realm still on the legacy shape has to keep recomputing until
+// one pass has written the partitioned one.
+export function isPartitionedRealmMetaValue(
+  raw: unknown,
+): raw is RealmMetaValue {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return false;
+  }
+  let value = raw as Partial<RealmMetaValue>;
+  return Array.isArray(value.instances) && Array.isArray(value.files);
 }
 
 export const coerceTypes = Object.freeze({

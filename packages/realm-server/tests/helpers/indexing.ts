@@ -28,6 +28,18 @@ interface IncrementalIndexEventTestContext {
   // handler that never reads it. Required, so each caller states which of the
   // three the write it makes produces.
   clientRequestId: string | null | typeof ABSENT_OR_NULL_CLIENT_REQUEST_ID;
+  // What the event must carry as `versions`. `'written'` is a write that
+  // stored bytes, so the event names a version for exactly the URL it wrote —
+  // the hash itself varies with the fixture, so the check is that the key set
+  // matches and the value is a non-empty string. `'absent'` is a request that
+  // stored none, which is every delete. A record pins the hashes exactly, for
+  // a caller that computed them from the bytes on disk.
+  //
+  // Required for the same reason `clientRequestId` is: absent, present-but-
+  // empty and populated are three different statements about the write, and a
+  // helper that defaulted would let a regression that stopped reporting
+  // versions altogether pass every caller here.
+  versions: 'written' | 'absent' | Record<string, string>;
   type?: string;
   timeout?: number;
 }
@@ -81,8 +93,15 @@ export async function expectIncrementalIndexEvent(
   since: number,
   opts: IncrementalIndexEventTestContext,
 ) {
-  let { assert, getMessagesSince, realm, clientRequestId, type, timeout } =
-    opts;
+  let {
+    assert,
+    getMessagesSince,
+    realm,
+    clientRequestId,
+    versions,
+    type,
+    timeout,
+  } = opts;
 
   type = type ?? 'CardDef';
 
@@ -202,6 +221,39 @@ export async function expectIncrementalIndexEvent(
     'incremental event carries the types its pass touched',
   );
   delete actualContent.invalidatedTypes;
+
+  // The post-write version of each card the request wrote directly. Compared
+  // here rather than left to the structural comparison below, because the hash
+  // is a function of the fixture's bytes and only a caller that computed it can
+  // state it — so the shared check is over the key set, which the caller's own
+  // `url` already determines.
+  if (versions === 'absent') {
+    assert.strictEqual(
+      actualContent.versions,
+      undefined,
+      'the request stored no bytes, so the event names no versions',
+    );
+  } else if (versions === 'written') {
+    assert.deepEqual(
+      Object.keys(actualContent.versions ?? {}),
+      [invalidation],
+      'the event names a version for exactly the url this write stored',
+    );
+    let reported = actualContent.versions?.[invalidation];
+    assert.true(
+      typeof reported === 'string' && reported.length > 0,
+      `the version for ${invalidation} is a non-empty string: ${JSON.stringify(
+        reported,
+      )}`,
+    );
+  } else {
+    assert.deepEqual(
+      actualContent.versions,
+      versions,
+      'the event names the versions the caller computed from the stored bytes',
+    );
+  }
+  delete actualContent.versions;
 
   assert.deepEqual(actualContent, expectedIncrementalContent);
   return incrementalEventContent;
