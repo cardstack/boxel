@@ -12,10 +12,11 @@ exports.shorthands = undefined;
 // that many calls.
 //
 // A row is inserted when a call is admitted and deleted once its cost is
-// recorded, or once the call ends without a cost. A replica that dies mid-call
-// never deletes its rows, so `expires_at` (epoch milliseconds) bounds how long
-// such a row keeps occupying the user's allowance. Expired rows are ignored by
-// the count and cleared when the user's next call is admitted.
+// recorded, or once the call ends without a cost. The replica running the
+// call keeps pushing `expires_at` (epoch milliseconds) forward while the call
+// is live. A replica that dies mid-call stops doing so, and its row stops
+// counting once `expires_at` passes. Expired rows are ignored by the count and
+// cleared when the user's next call is admitted.
 exports.up = (pgm) => {
   pgm.createTable('billable_call_reservations', {
     id: {

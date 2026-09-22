@@ -688,6 +688,11 @@ module(basename(import.meta.filename), function () {
         response.body.errors?.[0]?.includes('minimum of 10 credits'),
         'Should return insufficient credits error',
       );
+      assert.strictEqual(
+        await inFlightReservations(),
+        0,
+        'a denied call takes no in-flight slot',
+      );
     });
 
     test('should handle missing authentication token', async function (assert) {
@@ -1181,6 +1186,90 @@ module(basename(import.meta.filename), function () {
         // calls hanging the test process.
         for (const call of upstreamCalls) call.release();
         await Promise.allSettled(pending);
+        mockFetch.restore();
+        global.fetch = originalFetch;
+      }
+    });
+
+    test('a client that leaves while waiting for a slot never reaches upstream', async function (assert) {
+      // A call waiting at the in-flight limit has taken no slot yet. Its
+      // client giving up must end the wait, and must not leave a slot taken
+      // or an upstream call started once a slot frees.
+      const originalFetch = global.fetch;
+      const mockFetch = sinon.stub(global, 'fetch');
+
+      const upstreamCalls: Array<{ release: () => void }> = [];
+      mockFetch.callsFake(async (input: string | URL | Request) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (!url.includes('/chat/completions')) {
+          return new Response(JSON.stringify({ error: 'Not found' }), {
+            status: 404,
+          });
+        }
+        let releaseFn!: () => void;
+        const released = new Promise<void>((res) => (releaseFn = res));
+        upstreamCalls.push({ release: releaseFn });
+        await released;
+        return new Response(
+          JSON.stringify({
+            id: `gen-${upstreamCalls.length}`,
+            choices: [{ text: 'ok' }],
+            usage: { total_tokens: 10, cost: 0.002 },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      });
+
+      const jwt = createRealmServerJWT(
+        { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+        realmSecretSeed,
+      );
+      const running: Promise<unknown>[] = [];
+      const waiting = sendChatForward(jwt);
+      let waitingSettled: Promise<unknown> | undefined;
+      try {
+        for (let i = 0; i < MAX_IN_FLIGHT_CALLS_PER_USER; i++) {
+          running.push(sendChatForward(jwt).then((r) => r));
+        }
+        await waitUntil(
+          async () => upstreamCalls.length >= MAX_IN_FLIGHT_CALLS_PER_USER,
+          {
+            timeout: 15000,
+            timeoutMessage: 'the first calls should fill every slot',
+          },
+        );
+
+        // supertest's Test fires on `.then`; both outcomes are swallowed
+        // because this is the request the test walks away from.
+        waitingSettled = waiting.then(
+          () => undefined,
+          () => undefined,
+        );
+        // Long enough for the request to reach admission and start waiting.
+        await new Promise((r) => setTimeout(r, 1000));
+        waiting.abort();
+        await waitingSettled;
+
+        for (const call of upstreamCalls) call.release();
+        await Promise.all(running);
+        // Give a call that wrongly kept waiting the time it would need to be
+        // admitted once the slots freed.
+        await new Promise((r) => setTimeout(r, 3000));
+
+        assert.strictEqual(
+          upstreamCalls.length,
+          MAX_IN_FLIGHT_CALLS_PER_USER,
+          'the abandoned call never reaches upstream',
+        );
+        assert.strictEqual(
+          await inFlightReservations(),
+          0,
+          'the abandoned call leaves no slot taken',
+        );
+      } finally {
+        for (const call of upstreamCalls) call.release();
+        await Promise.allSettled(running);
+        await waitingSettled;
         mockFetch.restore();
         global.fetch = originalFetch;
       }

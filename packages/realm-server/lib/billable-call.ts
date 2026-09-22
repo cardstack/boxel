@@ -2,6 +2,7 @@ import type { DBAdapter } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
 import {
   releaseBillableCall,
+  renewBillableCall,
   reserveBillableCall,
 } from '@cardstack/billing/billing-queries';
 import * as Sentry from '@sentry/node';
@@ -18,11 +19,14 @@ const log = logger('billable-call');
 // once gets them all in parallel.
 export const MAX_IN_FLIGHT_CALLS_PER_USER = 8;
 
-// How long an admitted call counts toward that limit if the replica running it
-// dies before releasing it. Longer than the slowest call that ends normally,
-// which includes polling the provider for a cost the response did not carry
-// (up to ten minutes).
-export const RESERVATION_TTL_MS = 15 * 60 * 1000;
+// A reservation stops counting this long after it was last renewed. The
+// replica running a call renews its reservation every
+// `RESERVATION_RENEW_INTERVAL_MS` until the call is settled, so a live call
+// never expires however long its stream or its cost lookup runs. Only a
+// reservation whose replica died stops being renewed, and it frees its slot
+// within this long.
+export const RESERVATION_TTL_MS = 5 * 60 * 1000;
+export const RESERVATION_RENEW_INTERVAL_MS = 60 * 1000;
 
 // A call arriving while the user is at the limit waits for one of their calls
 // to finish. Those end on replicas this one cannot hear from, so the wait
@@ -41,6 +45,23 @@ export interface BillableCallOptions {
   destination: string;
 }
 
+// How a call ended, as the timing line reports it:
+// - `charged`: the upstream answered and its cost was recorded.
+// - `uncharged`: the call ended with nothing to charge for — the upstream
+//   failed, or reported no cost that could be resolved.
+// - `denied`: the user lacked the credits to start.
+// - `client-gone`: the client left before the call finished, whether it was
+//   still waiting for a slot or already upstream.
+// - `error`: the call threw.
+// - `settle-failed`: the call was served but recording its cost failed.
+type Outcome =
+  | 'charged'
+  | 'uncharged'
+  | 'denied'
+  | 'client-gone'
+  | 'error'
+  | 'settle-failed';
+
 /**
  * Runs one billable upstream call for a user: admit it against their credits,
  * run it, and record what it cost.
@@ -56,13 +77,17 @@ export interface BillableCallOptions {
  * start. `call` performs the upstream request, including answering the
  * client, and returns what the upstream sent back for the credit strategy to
  * price, or undefined when there is nothing to charge for.
+ *
+ * Once `call` returns the client has been answered, so a failure to record the
+ * cost is logged and reported here rather than thrown: there is no response
+ * left to put it in.
  */
 export async function withBillableCall(
   opts: BillableCallOptions,
   onDenied: (errorMessage: string) => Promise<void>,
   call: () => Promise<unknown>,
 ): Promise<void> {
-  let { dbAdapter, matrixUserId, creditStrategy, signal, destination } = opts;
+  let { dbAdapter, matrixUserId, signal } = opts;
   let timing = {
     lockWaitMs: 0,
     capacityWaitMs: 0,
@@ -70,71 +95,140 @@ export async function withBillableCall(
     costMs: 0,
   };
   let startedAt = Date.now();
+  let inFlight: number | undefined;
+  let outcome: Outcome = 'error';
 
-  let admission = await admit(opts, timing);
-  if (!admission.admitted) {
-    await onDenied(admission.errorMessage);
-    return;
-  }
-  let { reservationId, inFlight } = admission;
-
-  let released = false;
-  let outcome = 'ok';
   try {
-    let upstreamStartedAt = Date.now();
-    let usage: unknown;
-    try {
-      usage = await call();
-    } finally {
-      timing.upstreamMs = Date.now() - upstreamStartedAt;
+    let admission = await admit(opts, timing);
+    if (!admission.admitted) {
+      outcome = 'denied';
+      await onDenied(admission.errorMessage);
+      return;
     }
+    let { reservationId } = admission;
+    inFlight = admission.inFlight;
 
-    if (usage !== undefined) {
-      let costStartedAt = Date.now();
-      let costInUsd = await creditStrategy.resolveUsageCost(
-        matrixUserId,
-        usage,
-      );
-      timing.costMs = Date.now() - costStartedAt;
-      if (costInUsd !== undefined) {
-        let lockRequestedAt = Date.now();
-        await dbAdapter.withUserCostLock(matrixUserId, async () => {
-          timing.lockWaitMs += Date.now() - lockRequestedAt;
-          await creditStrategy.spendUsageCost(
-            dbAdapter,
-            matrixUserId,
-            costInUsd,
-          );
-          // Given back in the same critical section as the spend, so the
-          // next admission sees either both or neither.
-          await releaseBillableCall(dbAdapter, reservationId);
-          released = true;
-        });
+    let stopRenewing = keepRenewed(dbAdapter, matrixUserId, reservationId);
+    let released = false;
+    try {
+      let upstreamStartedAt = Date.now();
+      let usage: unknown;
+      try {
+        usage = await call();
+      } finally {
+        timing.upstreamMs = Date.now() - upstreamStartedAt;
+      }
+
+      try {
+        released = await settle(opts, reservationId, usage, timing);
+        outcome = released ? 'charged' : 'uncharged';
+      } catch (error) {
+        outcome = 'settle-failed';
+        log.error(
+          `Failed to record the cost of a billable call for user ${matrixUserId}:`,
+          error,
+        );
+        Sentry.captureException(error);
+      }
+    } finally {
+      stopRenewing();
+      if (!released) {
+        await release(dbAdapter, matrixUserId, reservationId);
       }
     }
   } catch (error) {
     outcome = signal.aborted ? 'client-gone' : 'error';
     throw error;
   } finally {
-    if (!released) {
-      try {
-        await releaseBillableCall(dbAdapter, reservationId);
-      } catch (error) {
-        // The slot is lost only until the reservation expires, so this is
-        // not worth failing a request that has otherwise been served.
-        log.error(
-          `Failed to release billable-call reservation ${reservationId} for user ${matrixUserId}:`,
-          error,
-        );
-        Sentry.captureException(error);
-      }
+    // A call the client left during reports as client-gone whichever way the
+    // call itself surfaced it: a streamed call swallows the cancellation and
+    // returns nothing to charge rather than throwing.
+    if (signal.aborted && outcome === 'uncharged') {
+      outcome = 'client-gone';
     }
     log.info(
-      `billable call user=${matrixUserId} destination=${destination} outcome=${outcome} inFlight=${inFlight} totalMs=${
-        Date.now() - startedAt
-      } lockWaitMs=${timing.lockWaitMs} capacityWaitMs=${timing.capacityWaitMs} upstreamMs=${timing.upstreamMs} costMs=${timing.costMs}`,
+      `billable call user=${matrixUserId} destination=${opts.destination} outcome=${outcome} inFlight=${
+        inFlight ?? '-'
+      } totalMs=${Date.now() - startedAt} lockWaitMs=${timing.lockWaitMs} capacityWaitMs=${
+        timing.capacityWaitMs
+      } upstreamMs=${timing.upstreamMs} costMs=${timing.costMs}`,
     );
   }
+}
+
+// Resolves the call's cost and, if there is one, spends it and gives the slot
+// back in one critical section. Returns whether the slot was given back.
+async function settle(
+  { dbAdapter, matrixUserId, creditStrategy }: BillableCallOptions,
+  reservationId: string,
+  usage: unknown,
+  timing: { lockWaitMs: number; costMs: number },
+): Promise<boolean> {
+  if (usage === undefined) {
+    return false;
+  }
+  let costStartedAt = Date.now();
+  let costInUsd: number | undefined;
+  try {
+    costInUsd = await creditStrategy.resolveUsageCost(matrixUserId, usage);
+  } finally {
+    timing.costMs = Date.now() - costStartedAt;
+  }
+  if (costInUsd === undefined) {
+    return false;
+  }
+  let cost = costInUsd;
+  let lockRequestedAt = Date.now();
+  await dbAdapter.withUserCostLock(matrixUserId, async () => {
+    timing.lockWaitMs += Date.now() - lockRequestedAt;
+    await creditStrategy.spendUsageCost(dbAdapter, matrixUserId, cost);
+    // Given back in the same critical section as the spend, so the next
+    // admission sees either both or neither.
+    await releaseBillableCall(dbAdapter, reservationId);
+  });
+  return true;
+}
+
+async function release(
+  dbAdapter: DBAdapter,
+  matrixUserId: string,
+  reservationId: string,
+) {
+  try {
+    await releaseBillableCall(dbAdapter, reservationId);
+  } catch (error) {
+    // The slot is lost only until the reservation expires, so this is not
+    // worth failing a request that has otherwise been served.
+    log.error(
+      `Failed to release billable-call reservation ${reservationId} for user ${matrixUserId}:`,
+      error,
+    );
+    Sentry.captureException(error);
+  }
+}
+
+// Pushes the reservation's expiry forward on an interval until the returned
+// function is called. A failed renewal is only logged: the reservation stays
+// valid until its current expiry, and the next renewal may succeed.
+function keepRenewed(
+  dbAdapter: DBAdapter,
+  matrixUserId: string,
+  reservationId: string,
+): () => void {
+  let timer = setInterval(() => {
+    renewBillableCall(
+      dbAdapter,
+      reservationId,
+      Date.now() + RESERVATION_TTL_MS,
+    ).catch((error) => {
+      log.warn(
+        `Failed to renew billable-call reservation ${reservationId} for user ${matrixUserId}:`,
+        error,
+      );
+    });
+  }, RESERVATION_RENEW_INTERVAL_MS);
+  timer.unref();
+  return () => clearInterval(timer);
 }
 
 type Admission =
@@ -180,8 +274,11 @@ async function admit(
       return attempt;
     }
     let waitStartedAt = Date.now();
-    await abortableDelay(pollMs, signal);
-    timing.capacityWaitMs += Date.now() - waitStartedAt;
+    try {
+      await abortableDelay(pollMs, signal);
+    } finally {
+      timing.capacityWaitMs += Date.now() - waitStartedAt;
+    }
     pollMs = Math.min(pollMs * 2, CAPACITY_POLL_MAX_MS);
   }
 }

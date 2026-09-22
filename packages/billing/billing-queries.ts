@@ -695,6 +695,19 @@ export async function reserveBillableCall(
   return { reservationId: id as string, inFlight: inFlight + 1 };
 }
 
+export async function renewBillableCall(
+  dbAdapter: DBAdapter,
+  reservationId: string,
+  expiresAt: number,
+) {
+  await query(dbAdapter, [
+    `UPDATE billable_call_reservations SET expires_at = `,
+    param(expiresAt),
+    ` WHERE id = `,
+    param(reservationId),
+  ]);
+}
+
 export async function releaseBillableCall(
   dbAdapter: DBAdapter,
   reservationId: string,
