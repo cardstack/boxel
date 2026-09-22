@@ -49,6 +49,10 @@ import {
   serializableError,
 } from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
+import {
+  readFileDefBindings,
+  type FileDefBindings,
+} from '../file-def-bindings.ts';
 import { canonicalURL } from './dependency-url.ts';
 
 // Ceiling on holding a prerender-html job's visits for its spawning pass's
@@ -162,6 +166,16 @@ export async function runPrerenderHtmlPass({
   let jobTag = `${jobIdentity(jobInfo)} [realm: ${realmURL.href}] [generation: ${generation}]`;
   let batchId = `${jobInfo.jobId}-${uuidv4().slice(0, 8)}`;
   let realmPaths = new RealmPaths(realmURL, virtualNetwork);
+  // Read once for the pass, from the realm's config document — the same
+  // document the index pass and the realm itself resolve a file's class from,
+  // so the HTML this renders is the author's class's HTML rather than the base
+  // class's.
+  let fileDefBindings = await readFileDefBindings({
+    reader,
+    realmURL,
+    virtualNetwork,
+    logWarn: (message) => log.warn(`${jobIdentity(jobInfo)} ${message}`),
+  });
   let stats: Stats = {
     instancesIndexed: 0,
     filesIndexed: 0,
@@ -410,6 +424,7 @@ export async function runPrerenderHtmlPass({
             batch,
             prerenderer,
             virtualNetwork,
+            fileDefBindings,
             auth,
             batchId,
             jobInfo,
@@ -671,6 +686,7 @@ async function visitForPrerenderedHtml({
   batch,
   prerenderer,
   virtualNetwork,
+  fileDefBindings,
   auth,
   batchId,
   jobInfo,
@@ -689,6 +705,7 @@ async function visitForPrerenderedHtml({
   batch: Batch;
   prerenderer: Prerenderer;
   virtualNetwork: VirtualNetwork;
+  fileDefBindings?: FileDefBindings;
   auth: string;
   batchId: string;
   jobInfo: JobInfo;
@@ -739,7 +756,11 @@ async function visitForPrerenderedHtml({
   }
 
   let fileURL = url.href;
-  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL), virtualNetwork);
+  let fileDefCodeRef = resolveFileDefCodeRef(
+    new URL(fileURL),
+    virtualNetwork,
+    fileDefBindings,
+  );
 
   // Hand through the write-time content hash + size so the extract pass can
   // skip buffering the file (same optimization as the index visit; only
@@ -754,6 +775,9 @@ async function visitForPrerenderedHtml({
 
   let renderOptions: RenderRouteOptions = {
     fileDefCodeRef,
+    ...(fileDefBindings && Object.keys(fileDefBindings).length > 0
+      ? { fileDefBindings: { realm: realmURL.href, types: fileDefBindings } }
+      : {}),
     ...(parsedCardResource ? { cardRender: true } : {}),
     fileRender: true,
     // The standalone visit resolves the file's resource + types from source

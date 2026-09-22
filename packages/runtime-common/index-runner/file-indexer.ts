@@ -27,6 +27,7 @@ import {
 import { baseRef } from '../constants.ts';
 import { CARD_INSTANCE_FILE_KEY } from '../search-doc-keys.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
+import type { FileDefBindings } from '../file-def-bindings.ts';
 
 export interface FileIndexerOptions {
   path: LocalPath;
@@ -51,6 +52,12 @@ export interface FileIndexerOptions {
   diagnostics?: Diagnostics;
   dependencyResolver: IndexRunnerDependencyManager;
   virtualNetwork: VirtualNetwork;
+  // The realm's own binding of file extension to FileDef subclass. The row
+  // this writes carries the class it resolves, and the realm resolves the same
+  // one from the same document when it serves the file or dispatches an
+  // operation against it — so the type a file is indexed as and the type its
+  // operations are looked up on cannot disagree.
+  fileDefBindings?: FileDefBindings;
   updateEntry(
     entryURL: URL,
     entry: FileEntry | FileErrorIndexEntry,
@@ -73,6 +80,7 @@ export async function performFileIndexing({
   diagnostics,
   dependencyResolver,
   virtualNetwork,
+  fileDefBindings,
   updateEntry,
   logWarn,
 }: FileIndexerOptions): Promise<'indexed' | 'error'> {
@@ -95,7 +103,11 @@ export async function performFileIndexing({
   let name = path.split('/').pop() ?? path;
   let contentType = inferContentType(name);
 
-  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL), virtualNetwork);
+  let fileDefCodeRef = resolveFileDefCodeRef(
+    new URL(fileURL),
+    virtualNetwork,
+    fileDefBindings,
+  );
   let fileTypeRefs = [fileDefCodeRef];
   if (
     fileDefCodeRef.module !== BASE_FILE_DEF_CODE_REF.module ||
