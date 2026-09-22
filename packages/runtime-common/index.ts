@@ -310,6 +310,11 @@ export interface BuildModelDiagnostics {
   // to record which path ran. `buildModelMs.fetchSource` narrows on the same
   // question but answers it with a duration, which needs a threshold and a
   // warm network to read.
+  //
+  // Carried out on the `render.meta` payload, which only the index visit runs
+  // — so on a row this describes the read behind the row's document. The
+  // prerender-html visit stashes and consumes a source the same way but never
+  // enters that route, so its own choice is reported nowhere.
   cardSourceFrom?: 'stash' | 'fetch';
   // Per-field hydration wall-clock, keyed by dotted field path from the
   // card's root — the deserialization sibling of `searchDocFieldsMs`, and

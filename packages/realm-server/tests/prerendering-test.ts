@@ -8939,6 +8939,79 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a visit carrying the card source renders from it instead of fetching', async function (assert) {
+      // The out-of-process half of the read collapse: the caller's bytes have
+      // to survive the prerender-visit POST, the request boundary's validation
+      // and the CDP hand-off to the page. Stashing source that differs from
+      // what the realm holds is what makes the two distinguishable — 'Sequoia'
+      // can only have reached the template through the stash.
+      const cardFileURL = `${realmURL}maple.json`;
+      let result = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        renderOptions: { cardRender: true },
+        cardSource: {
+          source: JSON.stringify({
+            data: {
+              attributes: { name: 'Sequoia' },
+              meta: {
+                adoptsFrom: { module: rri('./person'), name: 'Person' },
+              },
+            },
+          }),
+          realmURL,
+          lastModified: Date.parse('2026-01-02T03:04:05Z'),
+        },
+      });
+
+      assert.notOk(result.response.pageUnusableError, 'no page-unusable error');
+      assert.ok(
+        result.response.card?.isolatedHTML?.includes('Sequoia'),
+        `the stashed source reached the render, got: ${result.response.card?.isolatedHTML}`,
+      );
+      // And the render says so itself. Without this the assertion above is the
+      // only evidence, and a visit whose stash was dropped somewhere on the
+      // wire would render the realm's copy and fail in a way that reads like a
+      // content bug rather than a plumbing one.
+      //
+      // Read off `meta.diagnostics`, not the card sub-response: the settlement
+      // step lifts the card's host-side diagnostics up here and deletes them
+      // from the sub-response, and this is the blob the indexer persists into
+      // `boxel_index.diagnostics`.
+      assert.strictEqual(
+        result.response.meta?.diagnostics?.cardSourceFrom,
+        'stash',
+        'the model build reports it took the stashed path',
+      );
+    });
+
+    test('a visit with no card source fetches, and says so', async function (assert) {
+      // The control for the test above, and the path an on-demand render of a
+      // live card takes forever: same visit, no stash, the realm's own bytes.
+      const cardFileURL = `${realmURL}maple.json`;
+      let result = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        renderOptions: { cardRender: true },
+      });
+
+      assert.ok(
+        result.response.card?.isolatedHTML?.includes('Maple'),
+        `the realm's own source was rendered, got: ${result.response.card?.isolatedHTML}`,
+      );
+      assert.strictEqual(
+        result.response.meta?.diagnostics?.cardSourceFrom,
+        'fetch',
+        'the model build reports it fetched for itself',
+      );
+    });
+
     test('cardRender-only visit leaves file sub-fields unset', async function (assert) {
       const cardFileURL = `${realmURL}maple.json`;
       let result = await prerenderer.prerenderVisit({
