@@ -1538,6 +1538,18 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       };
     }
     if (value == null) {
+      // In the used-only serialization the indexer runs (`!includeUnrenderedFields`,
+      // the same mode `getFields` filters never-authored links out of), a computed
+      // link that resolved to nothing is the absence of a relationship, not an
+      // authored `{ self: null }`. Omit it — the shape a never-set link takes —
+      // so a card gains a relationship entry only when the computed actually
+      // resolves a target. (`isFieldUsed` can't make this call: a computed never
+      // writes the data bucket it reads.) A full serialization
+      // (`includeUnrenderedFields`) still emits `{ self: null }`, matching how it
+      // renders every declared link.
+      if (this.computeVia && !opts?.includeUnrenderedFields) {
+        return { relationships: {} };
+      }
       return {
         relationships: {
           [this.name]: {
@@ -2069,6 +2081,18 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     }
 
     if (values == null || values.length === 0) {
+      // In the used-only serialization the indexer runs (`!includeUnrenderedFields`,
+      // the same mode `getFields` filters never-authored links out of), a computed
+      // relationship that resolved to no members is the absence of a relationship,
+      // not an authored empty (`{ self: null }`). Omit it — the shape a never-set
+      // link takes — so a card gains `cards`-style entries only when the computed
+      // actually resolves members. (`isFieldUsed` can't make this call: a computed
+      // never writes the data bucket it reads.) A full serialization
+      // (`includeUnrenderedFields`) still emits `{ self: null }`, matching how it
+      // renders every declared link.
+      if (this.computeVia && !opts?.includeUnrenderedFields) {
+        return { relationships: {} };
+      }
       return {
         relationships: {
           [this.name]: {

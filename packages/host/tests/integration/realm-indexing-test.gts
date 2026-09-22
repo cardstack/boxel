@@ -3501,6 +3501,193 @@ module(`Integration | realm indexing`, function (hooks) {
     }
   });
 
+  test('a computed linksToMany serializes, including one that reduces over a query-backed linksToMany on a linked card', async function (assert) {
+    // The two-hop shape: a board's `cards` is a computed relationship
+    // (`computeVia`) that returns `this.project?.issues`, where `Project.issues`
+    // is itself a query-backed relationship. The board indexed zero cards even
+    // though the project resolved every issue.
+    //
+    // The underlying defect is broader than the query hop: a computed
+    // `linksToMany` was dropped from the serialized instance document entirely.
+    // `serializeCardResource` keeps only "used" link fields, and a computed
+    // link never writes to the data bucket the used-check reads — so its
+    // relationship was omitted whether it reduced over a linked card's query
+    // field or over an authored link on the same card. The `localCards` control
+    // (a computed reducing over an authored `directIssues`) pins that half.
+    const issueRef = {
+      module: rri(`${testRealmURL}test-cards`),
+      name: 'Issue',
+    };
+    class Issue extends CardDef {
+      static displayName = 'Issue';
+      @field title = contains(StringField);
+      @field project = linksTo(() => Project);
+    }
+    class Project extends CardDef {
+      static displayName = 'Project';
+      @field name = contains(StringField);
+      @field issues = linksToMany(() => Issue, {
+        query: {
+          filter: {
+            on: issueRef,
+            eq: { 'project.id': '$this.id' },
+          },
+        },
+      });
+    }
+    class IssueTracker extends CardDef {
+      static displayName = 'IssueTracker';
+      @field project = linksTo(() => Project);
+      @field directIssues = linksToMany(() => Issue);
+      // Control: a computed linksToMany reducing over an authored linksToMany on
+      // the same card — the query-free half of the same serialization defect.
+      @field localCards = linksToMany(() => Issue, {
+        computeVia: function (this: IssueTracker) {
+          return this.directIssues;
+        },
+      });
+      // The reported shape: a computed linksToMany reducing over the query-backed
+      // relationship of a linked card.
+      @field cards = linksToMany(() => Issue, {
+        computeVia: function (this: IssueTracker) {
+          return this.project?.issues;
+        },
+      });
+    }
+    // Index the project and its issues first, so the query the board's `cards`
+    // runs during its own indexing matches an index that already holds them. A
+    // single from-scratch pass that indexes the board alongside its issues can't
+    // resolve the query hop — the query field only sees committed rows — which
+    // is a separate ordering concern from the serialization defect under test.
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Issue, Project, IssueTracker },
+        'Project/proj-1.json': {
+          data: {
+            attributes: { name: 'Nexus' },
+            meta: { adoptsFrom: { module: '../test-cards', name: 'Project' } },
+          },
+        },
+        'Issue/issue-1.json': {
+          data: {
+            attributes: { title: 'First' },
+            relationships: {
+              project: { links: { self: '../Project/proj-1' } },
+            },
+            meta: { adoptsFrom: { module: '../test-cards', name: 'Issue' } },
+          },
+        },
+        'Issue/issue-2.json': {
+          data: {
+            attributes: { title: 'Second' },
+            relationships: {
+              project: { links: { self: '../Project/proj-1' } },
+            },
+            meta: { adoptsFrom: { module: '../test-cards', name: 'Issue' } },
+          },
+        },
+        'Issue/issue-3.json': {
+          data: {
+            attributes: { title: 'Third' },
+            relationships: {
+              project: { links: { self: '../Project/proj-1' } },
+            },
+            meta: { adoptsFrom: { module: '../test-cards', name: 'Issue' } },
+          },
+        },
+      },
+    });
+
+    let issueIds = [
+      `${testRealmURL}Issue/issue-1`,
+      `${testRealmURL}Issue/issue-2`,
+      `${testRealmURL}Issue/issue-3`,
+    ];
+
+    // Sanity: the first-hop query field resolves every issue.
+    let project = await realm.realmIndexQueryEngine.cardDocument(
+      new URL(`${testRealmURL}Project/proj-1`),
+      { loadLinks: true },
+    );
+    if (project?.type === 'doc') {
+      let issues = project.doc.data.relationships?.issues as Relationship;
+      assert.ok(
+        issues?.links?.search?.startsWith(`${testRealmURL}_search?`),
+        `Project.issues carries links.search (got ${JSON.stringify(
+          issues?.links,
+        )})`,
+      );
+      assert.deepEqual(
+        (issues?.data as { id: string }[] | undefined)?.map((d) => d.id).sort(),
+        issueIds,
+        'the query-backed Project.issues resolves every issue',
+      );
+    } else {
+      assert.ok(
+        false,
+        `Project search entry was an error: ${project?.error.errorDetail.message}`,
+      );
+    }
+
+    // Now index the board, with the project and its issues already indexed.
+    await realm.write(
+      'board-1.json',
+      JSON.stringify({
+        data: {
+          relationships: {
+            project: { links: { self: './Project/proj-1' } },
+            'directIssues.0': { links: { self: './Issue/issue-1' } },
+            'directIssues.1': { links: { self: './Issue/issue-2' } },
+            'directIssues.2': { links: { self: './Issue/issue-3' } },
+          },
+          meta: {
+            adoptsFrom: { module: './test-cards', name: 'IssueTracker' },
+          },
+        },
+      }),
+    );
+
+    let board = await realm.realmIndexQueryEngine.cardDocument(
+      new URL(`${testRealmURL}board-1`),
+      { loadLinks: true },
+    );
+    if (board?.type === 'doc') {
+      let relationships = board.doc.data.relationships ?? {};
+      let linksFor = (prefix: string) =>
+        Object.keys(relationships)
+          .filter((key) => new RegExp(`^${prefix}\\.\\d+$`).test(key))
+          .map((key) => (relationships[key] as Relationship).links?.self)
+          .filter(Boolean)
+          .map((self) => new URL(self as string, `${testRealmURL}board-1`).href)
+          .sort();
+      // The authored (non-computed) linksToMany serializes — the baseline.
+      assert.deepEqual(
+        linksFor('directIssues'),
+        issueIds,
+        'the authored directIssues relationship serializes',
+      );
+      // A computed linksToMany over an authored link serializes.
+      assert.deepEqual(
+        linksFor('localCards'),
+        issueIds,
+        'the computed localCards relationship (over authored directIssues) serializes',
+      );
+      // The reported shape: a computed linksToMany over a linked card's
+      // query-backed relationship serializes every matching issue.
+      assert.deepEqual(
+        linksFor('cards'),
+        issueIds,
+        'the board computed cards relationship resolves every issue',
+      );
+    } else {
+      assert.ok(
+        false,
+        `board search entry was an error: ${board?.error.errorDetail.message}`,
+      );
+    }
+  });
+
   test('a query-backed field resolves references that live in another realm', async function (assert) {
     // A query field with no realm searches only the realm holding the card, so
     // a reference into another realm could never match. Interpolating the
