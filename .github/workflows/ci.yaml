@@ -70,6 +70,9 @@ jobs:
               - 'packages/observability/scripts/**'
             boxel:
               - *shared
+              # The host compiles this package's source as a workspace dependency,
+              # so a change here is a host change.
+              - 'packages/pretui/**'
               - '.github/workflows/build-host.yml'
               - '.github/workflows/deploy-host.yml'
               - '.github/workflows/deploy-release.yml'
