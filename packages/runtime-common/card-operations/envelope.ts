@@ -838,6 +838,19 @@ export function batchEntryFor(
         href: hrefRequired(entry, 'appendLine'),
       };
     case 'appendContainsMany':
+      if (definition.items) {
+        // A declaration says what it appends, so `field`, `items` and
+        // `fields` are not read off the wire for one — which means they are
+        // ordinary param names here, and subtracting them would make a
+        // declaration naming one of them uninvokable. The endpoint checks the
+        // payload against the same unsubtracted map before staging.
+        return {
+          op: 'appendContainsMany',
+          ...common,
+          params: paramsFor(entry),
+          href: hrefRequired(entry, 'appendContainsMany'),
+        };
+      }
       return {
         op: 'appendContainsMany',
         ...common,

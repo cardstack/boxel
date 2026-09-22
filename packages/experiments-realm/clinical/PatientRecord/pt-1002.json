@@ -1,0 +1,81 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "mrn": "PT-1002",
+      "patientName": "Warner Cohen",
+      "status": "admitted",
+      "severity": "Low",
+      "careUnit": "Step-down",
+      "medications": [
+        {
+          "name": "Aspirin",
+          "doseMg": 81,
+          "frequency": "Once daily",
+          "status": "administered"
+        },
+        {
+          "name": "Atorvastatin",
+          "doseMg": 40,
+          "frequency": "Once daily",
+          "status": "administered"
+        }
+      ],
+      "rhythmEvents": [
+        {
+          "eventId": "RE-4510",
+          "detectedAt": "2026-09-19T08:40:00Z",
+          "rhythm": "Premature ventricular contractions",
+          "status": "open",
+          "findings": null
+        }
+      ],
+      "vitals": [
+        {
+          "recordedAt": "2026-09-19T08:00:00Z",
+          "heartRate": 72,
+          "systolic": 118,
+          "diastolic": 70,
+          "recordedBy": "@elena.ruiz:boxel.ai"
+        }
+      ]
+    },
+    "relationships": {
+      "facility": {
+        "links": {
+          "self": "../HospitalFacility/northstar"
+        }
+      },
+      "attending": {
+        "links": {
+          "self": "../Clinician/devon-okonkwo"
+        }
+      },
+      "auditLog": {
+        "links": {
+          "self": "../audit/pt-1002.log"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../audit/pt-1002.log"
+        }
+      },
+      "unitRoster.0": {
+        "links": {
+          "self": "../Clinician/elena-ruiz"
+        }
+      },
+      "unitRoster.1": {
+        "links": {
+          "self": "../Clinician/theo-martin"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../patient-record",
+        "name": "PatientRecord"
+      }
+    }
+  }
+}

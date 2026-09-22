@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "fullName": "Dr. Aisha Tahir",
+      "role": "Attending cardiologist",
+      "userId": "@aisha.tahir:boxel.ai",
+      "activeCaseload": [
+        "PT-1001",
+        "PT-1003"
+      ]
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../clinician",
+        "name": "Clinician"
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "fullName": "Dr. Devon Okonkwo",
+      "role": "Attending cardiologist",
+      "userId": "@devon.okonkwo:boxel.ai",
+      "activeCaseload": [
+        "PT-1002"
+      ]
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../clinician",
+        "name": "Clinician"
+      }
+    }
+  }
+}

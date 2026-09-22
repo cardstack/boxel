@@ -3,11 +3,13 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 
 import {
+  batchEntryFor,
   commitBatch,
   isOperationFailure,
   OperationFailure,
   type BatchCore,
   type BatchEntry,
+  type EnvelopeEntry,
   type OperationDefinition,
 } from '@cardstack/runtime-common/card-operations';
 import {
@@ -3655,6 +3657,234 @@ module(basename(import.meta.filename), function () {
         'and no base match, since an append names no base',
       );
     });
+    // ==========================================================================
+    // A *declared* `appendContainsMany`
+    //
+    // The cases above name the field and send the item on the wire. A
+    // declaration instead carries the item as a template, the same shape a
+    // `create`'s `fill` does, and an invocation supplies only the values that
+    // template reads. What gets appended is therefore the declaration's to
+    // say, and the wire members an ad-hoc append is read from are not read
+    // for one at all.
+    // ==========================================================================
+    function declaredAppend(
+      items: Record<string, unknown>,
+      params?: Record<string, unknown>,
+    ): OperationDefinition {
+      return {
+        base: 'appendContainsMany',
+        deterministic: true,
+        of: EVENT_LOG,
+        ...(params ? { params } : {}),
+        items,
+      } as OperationDefinition;
+    }
+
+    function logStub(stored: string) {
+      return stub({
+        stored: { 'log-1.json': stored },
+        definitions: {
+          EventLog: eventLogDefinition(),
+          LogEvent: logEventDefinition(),
+        },
+      });
+    }
+
+    test('a declared append writes the item its declaration describes', async function (assert) {
+      let stored = eventLog([{ label: 'first' }]);
+      let { core, commits } = logStub(stored);
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'appendContainsMany',
+            href: `${REALM}log-1`,
+            definition: declaredAppend(
+              { events: { label: { $ref: 'params', key: 'summary' } } },
+              { summary: { kind: 'field', codeRef: STRING } },
+            ),
+            params: { summary: 'second' },
+          },
+        ],
+        {},
+      );
+      assert.strictEqual(
+        commits[0].writes['log-1.json'],
+        loadModifyWrite(stored, (resource) => {
+          resource.attributes.events.push({ label: 'second' });
+        }),
+        'the field and the item come from the declaration, and the param ' +
+          'fills the one member that reads it',
+      );
+    });
+
+    test('a declared append stamps the caller rather than trusting the payload', async function (assert) {
+      // The point of resolving the item here rather than sending it: who
+      // appended a line is the realm's to say, and a caller cannot spell it.
+      let stored = eventLog([]);
+      let { core, commits } = logStub(stored);
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'appendContainsMany',
+            href: `${REALM}log-1`,
+            definition: declaredAppend({
+              events: { label: { $ref: 'actor' } },
+            }),
+          },
+        ],
+        { actor: '@tester:localhost' },
+      );
+      assert.strictEqual(
+        commits[0].writes['log-1.json'],
+        loadModifyWrite(stored, (resource) => {
+          resource.attributes.events.push({ label: '@tester:localhost' });
+        }),
+        'the caller the realm authenticated is what landed in the item',
+      );
+    });
+
+    test('a declared append fills an item from the realm configuration', async function (assert) {
+      let stored = eventLog([]);
+      let { core, commits } = stub({
+        stored: { 'log-1.json': stored },
+        definitions: {
+          EventLog: eventLogDefinition(),
+          LogEvent: logEventDefinition(),
+        },
+        settings: { defaultName: 'Configured' },
+      });
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'appendContainsMany',
+            href: `${REALM}log-1`,
+            definition: declaredAppend({
+              events: { label: { $ref: 'realmConfig', key: 'defaultName' } },
+            }),
+          },
+        ],
+        {},
+      );
+      assert.strictEqual(
+        commits[0].writes['log-1.json'],
+        loadModifyWrite(stored, (resource) => {
+          resource.attributes.events.push({ label: 'Configured' });
+        }),
+        'the marker resolved against the settings the realm supplied',
+      );
+    });
+
+    test('a declared append appends to every field its declaration names', async function (assert) {
+      // One item per field, because a declaration describes one thing to
+      // append — not a list to be spread across them.
+      let stored = eventLog([{ label: 'first' }], undefined, undefined, [
+        'kept',
+      ]);
+      let { core, commits } = logStub(stored);
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'appendContainsMany',
+            href: `${REALM}log-1`,
+            definition: declaredAppend({
+              events: { label: 'second' },
+              notes: 'noted',
+            }),
+          },
+        ],
+        {},
+      );
+      assert.strictEqual(
+        commits[0].writes['log-1.json'],
+        loadModifyWrite(stored, (resource) => {
+          resource.attributes.events.push({ label: 'second' });
+          resource.attributes.notes.push('noted');
+        }),
+        'both arrays grew by exactly the one item declared for each',
+      );
+    });
+
+    test('a declared append requires every param its declaration names', async function (assert) {
+      let { core, commits } = logStub(eventLog([]));
+      let failed = await refusal(core, [
+        {
+          op: 'appendContainsMany',
+          href: `${REALM}log-1`,
+          definition: declaredAppend(
+            { events: { label: { $ref: 'params', key: 'summary' } } },
+            { summary: { kind: 'field', codeRef: STRING } },
+          ),
+        },
+      ]);
+      assert.deepEqual(failed, {
+        status: 400,
+        code: 'invalid-params',
+        entry: 0,
+      });
+      assert.strictEqual(commits.length, 0, 'nothing is committed');
+    });
+
+    test('a declared append that resolves to no item is refused', async function (assert) {
+      // An empty declaration would otherwise commit a rewrite of the file
+      // that changed nothing, which is a write the caller did not ask for.
+      let { core, commits } = logStub(eventLog([]));
+      let failed = await refusal(core, [
+        {
+          op: 'appendContainsMany',
+          href: `${REALM}log-1`,
+          definition: declaredAppend({}),
+        },
+      ]);
+      assert.deepEqual(failed, {
+        status: 400,
+        code: 'invalid-params',
+        entry: 0,
+      });
+      assert.strictEqual(commits.length, 0, 'nothing is committed');
+    });
+
+    test('a declared append keeps a param named for a wire member', async function (assert) {
+      // `field`, `items` and `fields` are the members an *ad-hoc* append is
+      // read from, so they are subtracted from its params. Nothing reserves
+      // those names against an author, and a declared append never reads the
+      // wire members — so subtracting them for one would make a declaration
+      // that happens to name a param `field` refused on every invocation,
+      // having lowered and indexed without a finding.
+      let entry: EnvelopeEntry = {
+        op: 'invoke',
+        position: 0,
+        name: 'note',
+        href: `${REALM}log-1`,
+        data: { field: 'audit', items: 'listed', fields: 'named' },
+      };
+      let declared = batchEntryFor(
+        entry,
+        declaredAppend(
+          { notes: { $ref: 'params', key: 'field' } },
+          { field: { kind: 'field', codeRef: STRING } },
+        ),
+      );
+      assert.deepEqual(
+        declared.params,
+        { field: 'audit', items: 'listed', fields: 'named' },
+        'a declared append is handed the payload the endpoint checked',
+      );
+
+      let adHoc = batchEntryFor(entry, {
+        base: 'appendContainsMany',
+        deterministic: true,
+      } as OperationDefinition);
+      assert.deepEqual(
+        adHoc.params,
+        {},
+        'while an ad-hoc one still reads those members for itself',
+      );
+    });
+
     test('a create with nothing to create is refused', async function (assert) {
       let { core, commits } = stub();
       let failed = await refusal(core, [{ op: 'create', lid: 'empty' }]);
