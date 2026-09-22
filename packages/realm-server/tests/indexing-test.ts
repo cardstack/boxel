@@ -1948,13 +1948,14 @@ module(basename(import.meta.filename), function () {
         // `loaderResetReason` is the direct reading and `moduleEvaluationCount`
         // is its consequence, and the two are asserted over different sets of
         // passes. The reason is the pass's own doing, so every pass is held to
-        // it. The count is only the pass's doing on a tab that had a graph to
-        // keep: a tab the pool has just created evaluates the whole reachable
-        // set whatever the pass asks for, and says so by naming `coldTab`, so
-        // the count is read on the passes that named nothing. Which passes
-        // those are is not fixed — the pool is free to hand any pass a new
-        // page — hence several passes and a floor of one warm one, rather than
-        // a count read off whichever pass happens to be first.
+        // it. The count is only the pass's doing on a tab already synchronized
+        // to this realm's epoch series: a pass routed onto a tab that is not
+        // rebuilds the whole reachable set whatever it asks for, and says so
+        // by naming `firstEpoch`, so the count is read on the passes that
+        // named nothing. Which passes those are is not fixed — the pool
+        // chooses — hence several passes and a floor of one that named
+        // nothing, rather than a count read off whichever pass happens to be
+        // first.
         let diagnosticsFor = async (localPath: string) => {
           let [row] = (await testDbAdapter.execute(
             `SELECT diagnostics FROM boxel_index WHERE realm_url = $1 AND url = $2 AND type = 'instance'`,
@@ -1988,16 +1989,15 @@ module(basename(import.meta.filename), function () {
           passes.push(await diagnosticsFor('ringo.json'));
         }
 
-        // `coldTab` and `firstEpoch` are the two readings that say the tab it
-        // landed on had never synchronized to this realm's epoch series, which
-        // is a fact about where the pool ran the pass. The pass is answerable
-        // for `loaderEpoch` and `clearCache` only, and an invalidation set
-        // holding no executable is the condition under which it may record
-        // neither.
+        // `firstEpoch` says the tab it landed on had never synchronized to
+        // this realm's epoch series, which is a fact about where the pool ran
+        // the pass. The pass is answerable for `loaderEpoch` and `clearCache`
+        // only, and an invalidation set holding no executable is the condition
+        // under which it may record neither.
         for (let [index, pass] of passes.entries()) {
           let reason = pass?.loaderResetReason ?? 'none';
           assert.ok(
-            ['none', 'coldTab', 'firstEpoch'].includes(reason),
+            ['none', 'firstEpoch'].includes(reason),
             `pass ${index + 1} holds no executable in its invalidation set, so nothing the pass did can have cleared the loader, got: ${reason}`,
           );
         }

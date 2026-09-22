@@ -618,12 +618,13 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('the loader-reset reason tells a new page apart from a module change', async function (assert) {
+    test('the loader-reset reason tells an unsynchronized tab apart from a module change', async function (assert) {
       // `moduleEvaluationCount` is the cost a reader wants attributed, and
       // two unrelated things drive it up: a pass that changed a module and
-      // asked every tab to drop its graph, and a page the pool created for
-      // this visit, which has no graph yet. `loaderResetReason` is what
-      // separates them, so each of the three states is pinned here.
+      // asked every tab to drop its graph, and a tab the pool routed this
+      // pass onto that had never synchronized to the realm's epoch series.
+      // `loaderResetReason` is what separates them, so each of the three
+      // states a visit can leave behind is pinned here.
       //
       // The module's `afterEach` disposes the affinity, and the wait below
       // settles the refill that dispose kicked off. Both are needed: a
@@ -644,15 +645,15 @@ module(basename(import.meta.filename), function () {
         });
 
       let cold = await visit('epoch-1');
-      assert.false(cold.pool.reused, 'the first visit gets a new page');
+      assert.false(cold.pool.reused, 'the first visit gets a page of its own');
       assert.strictEqual(
         cold.meta?.diagnostics?.loaderResetReason,
-        'coldTab',
-        `a page holding no epoch names itself rather than the epoch, because it had no graph to drop, got: ${JSON.stringify(cold.meta?.diagnostics?.loaderResetReason)}`,
+        'firstEpoch',
+        `a tab that has recorded no epoch names the pool's routing rather than a module change, got: ${JSON.stringify(cold.meta?.diagnostics?.loaderResetReason)}`,
       );
       assert.ok(
         (cold.meta?.diagnostics?.moduleEvaluationCount ?? 0) > 0,
-        `and evaluates the graph it lacks, got: ${JSON.stringify(cold.meta?.diagnostics?.moduleEvaluationCount)}`,
+        `and rebuilds the graph the reset discarded, got: ${JSON.stringify(cold.meta?.diagnostics?.moduleEvaluationCount)}`,
       );
 
       let warm = await visit('epoch-1');
@@ -687,8 +688,7 @@ module(basename(import.meta.filename), function () {
       // leave a page with a warm loader and no epoch recorded against this
       // route. The first epoch-carrying visit onto such a page discards a real
       // graph without the pass having done anything to deserve it, which is
-      // the one case `coldTab` and `loaderEpoch` each describe wrongly: the
-      // first denies the discard, the second bills the pass for it.
+      // the case `loaderEpoch` describes wrongly by billing the pass for it.
       //
       // Settles the refill for the same reason as the test above: a stolen
       // tab arrives warm, so the warming visit would find nothing left to

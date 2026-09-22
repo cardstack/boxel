@@ -491,37 +491,24 @@ export default class RenderRoute extends Route<Model> {
     if (parsedOptions.loaderEpoch !== undefined) {
       let held = (globalThis as any).__boxelLoaderEpoch as string | undefined;
       if (held !== parsedOptions.loaderEpoch) {
-        // Whether the reset throws a graph away, read off the loader rather
-        // than inferred from the held epoch. The counter is per-Loader and
-        // `resetLoader` installs a new instance, so this reads what the
-        // outgoing loader evaluated.
-        let evaluatedBeforeReset =
-          this.loaderService.loader.moduleEvaluationTotals.count > 0;
         this.loaderService.resetLoader({
           clearFetchCache: true,
           reason: 'render-route loader epoch changed',
         });
         this.store.resetCache();
         (globalThis as any).__boxelLoaderEpoch = parsedOptions.loaderEpoch;
-        // Two questions decide the name, and they are independent: did this
-        // reset discard a graph, and did the pass cause the discard. The held
-        // epoch answers only the second — a tab arrives at its first
-        // epoch-carrying visit over a warm loader often enough to matter,
-        // because the module route warms this same loader under an epoch key
-        // of its own and a visit carrying no epoch warms it under none.
+        // Which of the two the row should name is a question about blame,
+        // not about whether the graph was warm — it always is. A pooled tab
+        // boots the host app before it serves anything, so the loader has
+        // evaluated modules by the time any visit arrives, and a reset always
+        // discards something.
         //
-        //   - nothing evaluated: the reset swept an empty loader.
-        //   - warm, but this tab had recorded no epoch: a real discard, and
-        //     the pass did not cause it. The tab had never synchronized to
-        //     this series, which is a fact about where the pool ran the pass
-        //     rather than about anything the pass did.
-        //   - warm, and the recorded epoch moved: the series advanced, so a
-        //     module changed and the discard follows from that.
-        loaderResetReason = !evaluatedBeforeReset
-          ? 'coldTab'
-          : held === undefined
-            ? 'firstEpoch'
-            : 'loaderEpoch';
+        // An absent held epoch means this tab had never synchronized to this
+        // realm's epoch series: the discard is the price of where the pool ran
+        // the pass, and the pass did nothing to earn it. A held epoch that
+        // moved means the series advanced, so an executable changed and the
+        // discard follows from that change.
+        loaderResetReason = held === undefined ? 'firstEpoch' : 'loaderEpoch';
       }
     }
     if (parsedOptions.clearCache) {
