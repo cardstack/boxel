@@ -60,6 +60,18 @@ export function ensureTrailingSlash(url: string) {
   return url.endsWith('/') ? url : `${url}/`;
 }
 
+// A non-ok realm response, carrying the status so a caller can tell a 404
+// apart from the failures that mean the read did not happen: a 500, a rate
+// limit, an expired session.
+export class RealmResponseError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'RealmResponseError';
+    this.status = status;
+  }
+}
+
 // One matrix user talking to any number of realms. Realm sessions are minted
 // on first use per realm with the realm's own `_session` endpoint, which is
 // the path that honours a realm's `users` permission row (the realm server's
@@ -225,7 +237,8 @@ export class RealmClient {
       headers: { accept: MIME.cardJson },
     });
     if (!response.ok) {
-      throw new Error(
+      throw new RealmResponseError(
+        response.status,
         `GET ${cardUrl} failed: ${response.status} ${await response.text()}`,
       );
     }

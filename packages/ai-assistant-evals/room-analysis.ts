@@ -90,6 +90,11 @@ export function analyzeRoom(
 
   // Tool results are keyed by the request id they answer.
   let firstSkillReadTurn: number | undefined;
+  // Per-turn usage, in turn order. The cache window's first turn depends on
+  // which turn first read a skill, and that is not known until the last turn
+  // has been seen, so the window accounting runs after this pass rather than
+  // inside it.
+  let turnUsage: { promptTokens: number; cachedTokens: number }[] = [];
   let toolResults = new Map<string, { key: string; reason: string }>();
   for (let event of sorted) {
     if (event.type.startsWith('app.boxel.toolResult')) {
@@ -139,18 +144,10 @@ export function analyzeRoom(
     ) {
       firstSkillReadTurn = result.turns;
     }
-    // The window opens two turns after the first skill read (the turn after
-    // the read pays the structural miss). With no skill read, from turn two.
-    let windowStart =
-      firstSkillReadTurn === undefined ? 2 : firstSkillReadTurn + 2;
-    if (result.turns >= windowStart) {
-      result.cacheWindowTurns++;
-      result.cacheWindowInputTokens += usage.promptTokens ?? 0;
-      result.cacheWindowCachedTokens += usage.cachedTokens ?? 0;
-      if ((usage.cachedTokens ?? 0) < 0.5 * (usage.promptTokens ?? 0)) {
-        result.cacheMisses++;
-      }
-    }
+    turnUsage.push({
+      promptTokens: usage.promptTokens ?? 0,
+      cachedTokens: usage.cachedTokens ?? 0,
+    });
     result.outputTokens += usage.completionTokens ?? 0;
     result.inputTokens += usage.promptTokens ?? 0;
     result.cachedTokens += usage.cachedTokens ?? 0;
@@ -184,6 +181,24 @@ export function analyzeRoom(
       }
     }
   }
+
+  // The window opens two turns after the first skill read (the turn after the
+  // read pays the structural miss). With no skill read, from turn two. Turn
+  // numbers are one-based, so turn n is `turnUsage[n - 1]`.
+  let windowStart =
+    firstSkillReadTurn === undefined ? 2 : firstSkillReadTurn + 2;
+  for (let [index, usage] of turnUsage.entries()) {
+    if (index + 1 < windowStart) {
+      continue;
+    }
+    result.cacheWindowTurns++;
+    result.cacheWindowInputTokens += usage.promptTokens;
+    result.cacheWindowCachedTokens += usage.cachedTokens;
+    if (usage.cachedTokens < 0.5 * usage.promptTokens) {
+      result.cacheMisses++;
+    }
+  }
+
   result.filesWritten = [...new Set(result.filesWritten)];
   return result;
 }

@@ -8,7 +8,11 @@
 // Saved next to the result as <model>.workspace.json, so a run stays judgeable
 // after its workspace is gone.
 
-import type { CardDocument, RealmClient } from './realm-api.ts';
+import {
+  RealmResponseError,
+  type CardDocument,
+  type RealmClient,
+} from './realm-api.ts';
 
 // Bytes worth reading. A card definition or an instance is small; a binary
 // upload is not, and nothing in the criteria turns on one.
@@ -30,9 +34,10 @@ export interface WorkspaceSnapshot {
   // A judge told to say when evidence is missing reads this, so only real
   // gaps belong here.
   errors: string[];
-  // Paths under `files` the realm does not serve as a card. Ordinary — an
+  // Paths the realm answers with a 404 for the card URL. Ordinary — an
   // evaluation's own data file is one — and kept apart from `errors` so
-  // "not a card" is never read as "could not be read".
+  // "not a card" is never read as "could not be read". Any other failed
+  // status goes to `errors`, because it says nothing about the file.
   notCards: string[];
 }
 
@@ -76,9 +81,19 @@ export async function captureWorkspace(
     let cardUrl = `${realmUrl}${path.replace(/\.json$/, '')}`;
     try {
       snapshot.cards[cardUrl] = await client.getCard(realmUrl, cardUrl);
-    } catch {
-      // Not a gap in the evidence: the file's bytes are already in `files`.
-      snapshot.notCards.push(path);
+    } catch (error) {
+      if (error instanceof RealmResponseError && error.status === 404) {
+        // Not a gap in the evidence: the realm has no card at this URL, and
+        // the file's bytes are already in `files`.
+        snapshot.notCards.push(path);
+      } else {
+        // The read did not happen — a 500, a rate limit, an expired session.
+        // Filing it as "not a card" would state something about the file that
+        // was never established.
+        snapshot.errors.push(
+          `reading ${path} as a card failed: ${message(error)}`,
+        );
+      }
     }
   }
 

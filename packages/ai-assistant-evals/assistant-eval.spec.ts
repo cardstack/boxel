@@ -577,7 +577,18 @@ async function waitForIdle(
 // code-mode preview panel when the model switched to code mode first. Both
 // render the instance through the card renderer, which stamps
 // `data-test-card="<id>"`, so look for that anywhere on the page.
-async function findRenderedCard(page: Page, realmUrl: string) {
+//
+// `seededCardIds` are the evaluation's `initialCards`, which the run copies in
+// and stacks before the prompt goes out. They render exactly like a card the
+// assistant produced, so they are excluded here — otherwise an evaluation that
+// seeds cards clears the "a card rendered" leg before the assistant does
+// anything.
+async function findRenderedCard(
+  page: Page,
+  realmUrl: string,
+  seededCardIds: string[] = [],
+) {
+  let seeded = new Set(seededCardIds);
   let cardIds: string[] = [];
   try {
     await expect
@@ -592,7 +603,10 @@ async function findRenderedCard(page: Page, realmUrl: string) {
             ...new Set(
               ids.filter(
                 (id): id is string =>
-                  !!id && id.startsWith(realmUrl) && !id.endsWith('index'),
+                  !!id &&
+                  id.startsWith(realmUrl) &&
+                  !id.endsWith('index') &&
+                  !seeded.has(id),
               ),
             ),
           ];
@@ -605,7 +619,7 @@ async function findRenderedCard(page: Page, realmUrl: string) {
     return {
       cardId: undefined,
       reasons: [
-        'no card from the new workspace is rendered, in the stack or the preview panel',
+        'no card the assistant produced is rendered, in the stack or the preview panel',
       ],
       where: undefined,
     };
@@ -743,8 +757,7 @@ function classify(
 }
 
 // Not `serial`: serial mode skips every remaining test after one failure, and
-// a sweep must keep going when one model fails. Runs are still one at a time,
-// the config has a single worker.
+// a sweep must keep going when one model fails.
 
 test.beforeAll(async () => {
   await mkdir(RESULTS_DIR, { recursive: true });
@@ -862,7 +875,11 @@ async function runModel(
     }
     step = 'check render';
 
-    let rendered = await findRenderedCard(page, result.realmUrl);
+    let rendered = await findRenderedCard(
+      page,
+      result.realmUrl,
+      result.initialCards,
+    );
     result.cardRendered = rendered.cardId;
     result.renderedIn = rendered.where;
     result.screenshot = join(RESULTS_DIR, `${slug}.png`);
