@@ -55,10 +55,9 @@ export interface DBAdapter {
     localPaths: readonly string[],
     fn: (releaseLocks: () => void) => Promise<T>,
   ) => Promise<T>;
-  // Per-matrix-user cost-barrier primitive: serializes concurrent billable
-  // upstream proxy calls for the same user across replicas so the next
-  // request can't kick off another upstream call before the previous
-  // request's cost row has landed in the credits ledger. PgAdapter
+  // Per-matrix-user cost-barrier primitive: serializes one user's credit
+  // bookkeeping — the balance check that admits a billable call and the debit
+  // that records its cost — across replicas. PgAdapter
   // implements with `pg_advisory_xact_lock` on a namespaced hash of the
   // matrix user id; SQLite is a passthrough. See PgAdapter.withUserCostLock
   // for design notes (pool pressure, re-entrancy).
