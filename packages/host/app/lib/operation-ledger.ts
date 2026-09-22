@@ -296,13 +296,14 @@ export default class OperationLedger {
             entry.clientRequestId,
           );
         } catch (err: unknown) {
-          await this.#abort(chain, entry);
+          // The realm said nothing about what it now holds, so there is no
+          // version the next operation could name.
+          await this.#abort(chain, entry, undefined);
           throw err;
         }
         let result = this.#env.writeResult(answer);
         if (result?.baseMatched === true) {
-          chain.version = result.version;
-          this.#env.recordVersion(entry.instance, result.version);
+          this.#settleAt(chain, entry, result.version);
           this.#retire(chain, entry);
           return answer;
         }
@@ -311,18 +312,35 @@ export default class OperationLedger {
         // that local state equals the result, so the card is re-read and the
         // entries queued behind it, which were computed on top of state that
         // is now gone, are rejected.
-        await this.#abort(chain, entry);
+        //
+        // The version rides through the re-read. A write that is not confirmed
+        // still wrote, and the realm reported the version of the bytes it
+        // stored — which is exactly what the re-read then brings back, since a
+        // write resolves only once its indexing has settled. Dropping it would
+        // leave the next operation with no base to name either, and a card
+        // whose first unconfirmed write is its last confirmable one: the chain
+        // could never start.
+        await this.#abort(chain, entry, result?.version);
         return answer;
       },
     );
   }
 
   // Put the card back on authoritative state and fail everything still queued.
-  async #abort(chain: Chain, entry: LedgerEntry): Promise<void> {
+  //
+  // `version` is what the card holds once the re-read lands, when this abort
+  // followed a write that did land. Undefined where nothing is known — a send
+  // that never got an answer — which leaves the next operation to name no base
+  // and reconcile as unconfirmed, the honest answer.
+  async #abort(
+    chain: Chain,
+    entry: LedgerEntry,
+    version: string | undefined,
+  ): Promise<void> {
     this.#retire(chain, entry);
     let stranded = chain.pending.splice(0, chain.pending.length);
-    // Cleared before the re-read rather than after: a version this client was
-    // told describes bytes the card is about to stop holding.
+    // Cleared before the re-read rather than after: until it lands, this
+    // client cannot say what the card holds.
     chain.version = undefined;
     for (let queued of stranded) {
       queued.settled.reject(precedingFailed());
@@ -332,12 +350,29 @@ export default class OperationLedger {
     } catch (err: unknown) {
       // The correction could not be fetched. Nothing here can put the card
       // right, and saying so is better than leaving the caller believing the
-      // rollback happened.
+      // rollback happened — or letting the next operation name a base for
+      // state this client never managed to read.
       console.error(
         `could not re-read ${entry.instance.id} after an operation reconciled against a base the realm had moved past`,
         err,
       );
+      return;
     }
+    if (version) {
+      this.#settleAt(chain, entry, version);
+    }
+  }
+
+  // Record where the card now stands: on the chain, which is what the next
+  // operation names as its base, and on the instance, which is what the
+  // store's own rules read to recognize this write's echo.
+  //
+  // Both, and in this order, because a re-read replaces the instance's meta
+  // wholesale with what the card+json GET carried — and that read reports no
+  // version, so anything recorded before one is gone afterwards.
+  #settleAt(chain: Chain, entry: LedgerEntry, version: string) {
+    chain.version = version;
+    this.#env.recordVersion(entry.instance, version);
   }
 
   #retire(chain: Chain, entry: LedgerEntry) {
@@ -380,7 +415,10 @@ export default class OperationLedger {
           // assertion this state does not satisfy, say. It cannot be shown
           // locally and it must not be sent as though it had been, so it is
           // failed here and the queue behind it goes with it.
-          await this.#abort(chain, entry);
+          // A foreign write is the one case where this client genuinely does
+          // not know what the card now holds, so the next operation names no
+          // base and reconciles as unconfirmed.
+          await this.#abort(chain, entry, undefined);
           entry.settled.reject(err as Error);
           return;
         }

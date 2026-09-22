@@ -249,8 +249,44 @@ module('Unit | operation ledger', function () {
     assert.strictEqual(h.reloads, 1, 'the card was re-read');
     assert.deepEqual(
       h.recorded,
-      [],
-      'and no version was recorded, since local state is not what the realm holds',
+      ['v9'],
+      'and the version the write reported is kept, since the re-read brings exactly that state',
+    );
+  });
+
+  test('an unconfirmed write still leaves a base for the next operation', async function (assert) {
+    // Otherwise a card's first unconfirmed write would be its last
+    // confirmable one: the re-read replaces the instance's meta with what the
+    // card+json GET carried, which reports no version, so dropping the one the
+    // write reported would leave the next operation with nothing to name
+    // either — and the chain could never start.
+    let h = setup();
+    let first = h.attempt({ body: 'one' });
+    await drain();
+
+    assert.strictEqual(
+      baseVersionOf(h.sends[0].envelope),
+      undefined,
+      'the first operation has no base to name',
+    );
+    h.sends[0].answer.fulfill(answerWith({ version: 'v2' }));
+    await first;
+    assert.strictEqual(h.reloads, 1, 'so it re-reads rather than trusting');
+    await drain();
+
+    let second = h.attempt({ body: 'two' });
+    await drain();
+    assert.strictEqual(
+      baseVersionOf(h.sends[1].envelope),
+      'v2',
+      'and the next operation names what that write reported',
+    );
+    h.sends[1].answer.fulfill(answerWith({ version: 'v3', baseMatched: true }));
+    await second;
+    assert.strictEqual(
+      h.reloads,
+      1,
+      'which lets it reconcile with no further re-read',
     );
   });
 
