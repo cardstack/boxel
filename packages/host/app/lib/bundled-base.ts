@@ -102,6 +102,16 @@ export const BUNDLED_BASE_MODULES: Record<
   // into its chunk, so a module reachable from a bundled one but missing here
   // is bundled anyway AND fetched separately when card code imports it by
   // identifier — two copies, whose classes and module state do not match.
+  //
+  // A module whose whole content is a re-export is the exception, and is left
+  // out on purpose: a loader credits a class to the first module it serves
+  // that exposes it, and a bundled re-exporter is served without the loader
+  // ever being asked for the module that declares the class. The class is then
+  // named by a module that does not declare it, which an adoption-chain walk
+  // reaches as a filter referring to a nonexistent type. Fetching the
+  // re-exporter instead costs one request and gets the attribution right, and
+  // the two module records that leaves behind expose the same class from the
+  // same chunk, so nothing compares them and disagrees.
   'card-api': () => import('@cardstack/base/card-api'),
   '-private': () => import('@cardstack/base/-private'),
   'card-serialization': () => import('@cardstack/base/card-serialization'),
@@ -199,14 +209,6 @@ export const BUNDLED_BASE_MODULES: Record<
   'time/time-range': () => import('@cardstack/base/time/time-range'),
   'time/duration': () => import('@cardstack/base/time/duration'),
   'time/relative-time': () => import('@cardstack/base/time/relative-time'),
-  // string.ts is `export default StringField` from card-api, so it is
-  // resolved there. Importing string.ts itself would have TypeScript classify
-  // that `.ts` module as CommonJS (this package declares no `type`) and
-  // retype its default export as a namespace for every host importer.
-  string: () =>
-    import('@cardstack/base/card-api').then(({ StringField }) => ({
-      default: StringField,
-    })),
   number: () => import('@cardstack/base/number'),
   boolean: () => import('@cardstack/base/boolean'),
   'big-integer': () => import('@cardstack/base/big-integer'),
