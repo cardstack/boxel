@@ -2348,6 +2348,195 @@ module(basename(import.meta.filename), function () {
         'and it links to the card already stored there',
       );
     });
+    test('a side-load linked to its stored card cannot be removed by the same batch', async function (assert) {
+      let { core, commits } = stub({
+        stored: { 'Pet/side.json': cardFile({ firstName: 'Incumbent' }, PET) },
+      });
+      let failed = await refusal(core, [
+        {
+          op: 'create',
+          lid: 'owner',
+          document: {
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Hassan' },
+              relationships: {
+                friend: { data: { type: 'card', lid: 'side' } },
+              },
+              meta: { adoptsFrom: PERSON },
+            },
+            included: [
+              {
+                type: 'card',
+                lid: 'side',
+                attributes: { firstName: 'Resent' },
+                meta: { adoptsFrom: PET },
+              },
+            ],
+          },
+        },
+        { op: 'delete', href: `${REALM}Pet/side` },
+      ]);
+      assert.deepEqual(
+        failed,
+        { status: 400, code: 'invalid-params', entry: 0 },
+        'the batch is refused rather than committing a link to nothing',
+      );
+      assert.strictEqual(commits.length, 0, 'nothing is committed');
+    });
+    test('what only a linked side-load reached is not written', async function (assert) {
+      let { core, commits } = stub({
+        stored: { 'Pet/side.json': cardFile({ firstName: 'Incumbent' }, PET) },
+      });
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'create',
+            lid: 'owner',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan' },
+                relationships: {
+                  friend: { data: { type: 'card', lid: 'side' } },
+                },
+                meta: { adoptsFrom: PERSON },
+              },
+              included: [
+                {
+                  type: 'card',
+                  lid: 'side',
+                  attributes: { firstName: 'Resent' },
+                  relationships: {
+                    friend: { data: { type: 'card', lid: 'deep' } },
+                  },
+                  meta: { adoptsFrom: PET },
+                },
+                {
+                  type: 'card',
+                  lid: 'deep',
+                  attributes: { firstName: 'Nested' },
+                  meta: { adoptsFrom: PET },
+                },
+                {
+                  type: 'card',
+                  lid: 'loose',
+                  attributes: { firstName: 'Unlinked' },
+                  meta: { adoptsFrom: PET },
+                },
+              ],
+            },
+          },
+        ],
+        {},
+      );
+      assert.deepEqual(
+        Object.keys(commits[0].writes).sort(),
+        ['Person/owner.json', 'Pet/loose.json'],
+        'the card only the linked side-load pointed at is left out, and a side-load nothing linked to is written as before',
+      );
+    });
+    test('a card another entry links to is written even when a linked side-load also reached it', async function (assert) {
+      let { core, commits } = stub({
+        stored: { 'Pet/side.json': cardFile({ firstName: 'Incumbent' }, PET) },
+      });
+      await commitBatch(
+        core,
+        [
+          {
+            op: 'create',
+            lid: 'owner',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan' },
+                relationships: {
+                  friend: { data: { type: 'card', lid: 'side' } },
+                },
+                meta: { adoptsFrom: PERSON },
+              },
+              included: [
+                {
+                  type: 'card',
+                  lid: 'side',
+                  attributes: { firstName: 'Resent' },
+                  relationships: {
+                    friend: { data: { type: 'card', lid: 'deep' } },
+                  },
+                  meta: { adoptsFrom: PET },
+                },
+                {
+                  type: 'card',
+                  lid: 'deep',
+                  attributes: { firstName: 'Nested' },
+                  meta: { adoptsFrom: PET },
+                },
+              ],
+            },
+          },
+          {
+            op: 'create',
+            lid: 'other',
+            document: {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Other' },
+                relationships: {
+                  friend: { data: { type: 'card', lid: 'deep' } },
+                },
+                meta: { adoptsFrom: PERSON },
+              },
+            },
+          },
+        ],
+        {},
+      );
+      assert.deepEqual(Object.keys(commits[0].writes).sort(), [
+        'Person/other.json',
+        'Person/owner.json',
+        'Pet/deep.json',
+      ]);
+    });
+    test('a stored file that is not a card resource is not linked to in a side-load’s place', async function (assert) {
+      let { core, commits } = stub({
+        stored: {
+          'Pet/side.json': JSON.stringify({
+            data: { type: 'not-a-card', meta: { adoptsFrom: PET } },
+          }),
+        },
+      });
+      let failed = await refusal(core, [
+        {
+          op: 'create',
+          lid: 'owner',
+          document: {
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Hassan' },
+              relationships: {
+                friend: { data: { type: 'card', lid: 'side' } },
+              },
+              meta: { adoptsFrom: PERSON },
+            },
+            included: [
+              {
+                type: 'card',
+                lid: 'side',
+                attributes: { firstName: 'Resent' },
+                meta: { adoptsFrom: PET },
+              },
+            ],
+          },
+        },
+      ]);
+      assert.deepEqual(failed, {
+        status: 409,
+        code: 'invalid-params',
+        entry: 0,
+      });
+      assert.strictEqual(commits.length, 0, 'nothing is committed');
+    });
     test('a side-load stored as another type refuses the batch and is named', async function (assert) {
       let { core, commits } = stub({
         stored: {

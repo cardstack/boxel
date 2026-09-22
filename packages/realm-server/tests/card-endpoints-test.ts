@@ -3333,6 +3333,73 @@ module(basename(import.meta.filename), function () {
           );
         });
 
+        test('a stored card whose type is spelled relative to its file is the same type as an absolute side-load', async function (assert) {
+          let storedFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'Person',
+            'relative-person.json',
+          );
+          let storedBytes = JSON.stringify(
+            {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Incumbent' },
+                meta: { adoptsFrom: { module: '../person', name: 'Person' } },
+              },
+            },
+            null,
+            2,
+          );
+          fsExtra.outputFileSync(storedFile, storedBytes);
+
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan' },
+                relationships: {
+                  friend: {
+                    data: { lid: 'relative-person', type: 'card' },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('https://localhost:4202/node-test/friend'),
+                    name: 'Friend',
+                  },
+                },
+              },
+              included: [
+                {
+                  lid: 'relative-person',
+                  type: 'card',
+                  attributes: { firstName: 'Resent' },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri(`${testRealmHref}person`),
+                      name: 'Person',
+                    },
+                  },
+                },
+              ],
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            201,
+            `the save succeeds: ${JSON.stringify(response.body)}`,
+          );
+          assert.strictEqual(
+            readFileSync(storedFile, 'utf8'),
+            storedBytes,
+            'the stored card is left exactly as it was',
+          );
+        });
+
         test('a create whose side-load collides with a card of another type names the side-load', async function (assert) {
           let friendType = {
             module: rri('https://localhost:4202/node-test/friend'),
