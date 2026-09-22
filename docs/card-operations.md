@@ -247,8 +247,36 @@ collection large enough that loading it is the cost:
 ```
 
 `appendLine` takes no clause at all: the line **is** the payload, read under
-`line`, so a declaration on a `FileDef` says which param carries it and nothing
-more.
+`line`, so the simplest declaration on a `FileDef` says which param carries it
+and nothing more.
+
+There is a second spelling, and it is the one to reach for when the line should
+not be the caller's to write. An `input` program _produces_ the payload, so a
+declaration can compose the line from values the caller has no way to supply —
+the authenticated actor, a realm setting, the realm's own clock:
+
+```ts
+export class AuditLog extends TextFileDef {
+  @operation static record = {
+    base: 'appendLine',
+    params: { what: StringField },
+    input: bxl`. + { line: (TEXT(NOW(); "yyyy-mm-dd hh:mm:ss") + " " + actor() + " " + params("what")) }`,
+  } satisfies OperationDeclaration;
+}
+```
+
+The caller chooses what to say and never who said it. Two things to know about
+the form: `. +` merges into the payload rather than replacing it, and replacing
+it would drop the declared `what` — the params check runs against what `input`
+produced, not what the caller sent, so a program answering `{ line: … }` alone
+is refused for a missing param. And `NOW()` answers an Excel serial rather than
+a timestamp, so it is formatted; unformatted it appends a number like
+`46023.518`.
+
+A declaration on a `FileDef` is only reachable if the realm binds its files to
+that class — see the `fileTypes` map in a realm's `realm.json`. Without a
+binding a stored file is the platform's class for its extension, and a named
+operation declared on a subclass lowers, indexes, and never resolves.
 
 ### The raw escape hatch
 
