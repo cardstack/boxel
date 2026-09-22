@@ -676,6 +676,46 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a page warmed without an epoch reports the drop, not a cold page', async function (assert) {
+      // Not every visit carries an epoch. An on-demand render carries none,
+      // and the module route holds its epoch under a key of its own, so both
+      // leave a page with a warm loader and no epoch recorded against this
+      // route. The first epoch-carrying visit onto such a page does discard a
+      // graph, and calling that `coldTab` would file a real drop under the one
+      // name that tells a reader the pass had no part in it.
+      const cardURL = `${realmURL}1`;
+      let base = {
+        affinityType: 'realm' as const,
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardURL,
+      };
+
+      let warming = await prerenderCard(prerenderer, { ...base, auth: auth() });
+      assert.false(warming.pool.reused, 'the warming visit gets a new page');
+      assert.strictEqual(
+        warming.meta?.diagnostics?.loaderResetReason,
+        undefined,
+        `a visit carrying no epoch runs no epoch synchronization, got: ${JSON.stringify(warming.meta?.diagnostics?.loaderResetReason)}`,
+      );
+      assert.ok(
+        (warming.meta?.diagnostics?.moduleEvaluationCount ?? 0) > 0,
+        `and leaves the loader holding the graph it evaluated, got: ${JSON.stringify(warming.meta?.diagnostics?.moduleEvaluationCount)}`,
+      );
+
+      let epochCarrying = await prerenderCard(prerenderer, {
+        ...base,
+        auth: auth(),
+        renderOptions: { loaderEpoch: 'epoch-1' },
+      });
+      assert.true(epochCarrying.pool.reused, 'and the next visit reuses it');
+      assert.strictEqual(
+        epochCarrying.meta?.diagnostics?.loaderResetReason,
+        'loaderEpoch',
+        `the first epoch onto a warm page is a drop, whatever the page has recorded, got: ${JSON.stringify(epochCarrying.meta?.diagnostics?.loaderResetReason)}`,
+      );
+    });
+
     test("a module's lowered operations report whether they read the actor", async function (assert) {
       // Lowering runs in the prerender host, and this is where the realm
       // server sees what it produced: the visit hands back the definitions it

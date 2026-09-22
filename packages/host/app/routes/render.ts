@@ -491,20 +491,29 @@ export default class RenderRoute extends Route<Model> {
     if (parsedOptions.loaderEpoch !== undefined) {
       let held = (globalThis as any).__boxelLoaderEpoch as string | undefined;
       if (held !== parsedOptions.loaderEpoch) {
+        // Whether the reset below throws a graph away, read off the loader
+        // rather than inferred from the held epoch. A tab reaches its first
+        // epoch-carrying visit with a warm loader often enough that the two
+        // are not the same question: the module route warms this same loader
+        // while holding its epoch under its own key, and a render carrying no
+        // epoch at all (an on-demand visit) warms it without recording one.
+        // Both leave `held` undefined over a graph the reset does discard.
+        //
+        // The counter is per-Loader and `resetLoader` installs a new instance,
+        // so this reads what the outgoing loader evaluated, and only a loader
+        // that evaluated nothing reports a page with nothing to lose.
+        let evaluatedBeforeReset =
+          this.loaderService.loader.moduleEvaluationTotals.count > 0;
         this.loaderService.resetLoader({
           clearFetchCache: true,
           reason: 'render-route loader epoch changed',
         });
         this.store.resetCache();
         (globalThis as any).__boxelLoaderEpoch = parsedOptions.loaderEpoch;
-        // A tab holding no epoch is a tab whose first epoch-carrying visit
-        // this is: the reset above swept an empty loader, so naming it
-        // `loaderEpoch` would report a module change this pass did not make
-        // and a warm graph it did not throw away. The two differ in what a
-        // reader can do about a large `moduleEvaluationCount` — a drop is
-        // attributable to the pass, a cold tab is the pool handing it a new
-        // page — so they get different names rather than one.
-        loaderResetReason = held === undefined ? 'coldTab' : 'loaderEpoch';
+        // The two differ in what a reader can do about a large
+        // `moduleEvaluationCount`: a drop is attributable to the pass, a cold
+        // page is the pool handing the pass somewhere new to work.
+        loaderResetReason = evaluatedBeforeReset ? 'loaderEpoch' : 'coldTab';
       }
     }
     if (parsedOptions.clearCache) {
