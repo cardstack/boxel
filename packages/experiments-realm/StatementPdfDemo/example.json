@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "accountName": "Ada Lovelace",
+      "period": "Q3 2026",
+      "cardInfo": {
+        "name": "Statement PDF Demo",
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "name": "StatementPdfDemo",
+        "module": "../statement-pdf-demo"
+      }
+    }
+  }
+}

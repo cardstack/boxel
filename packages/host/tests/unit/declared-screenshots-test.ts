@@ -316,11 +316,13 @@ module('Unit | declared screenshots', function (hooks) {
     assert.throws(() => cardApi.getScreenshots(BadType), /type must be one/);
   });
 
-  test('a pdf screenshot is a format-based, geometry-free declaration', function (assert) {
+  test('a pdf screenshot is a geometry-free declaration from a format or a render slot', function (assert) {
+    class InvoiceDocument extends cardApi.Component<typeof cardApi.CardDef> {}
     class Reports extends cardApi.CardDef {
       static screenshots: Screenshots = {
         statement: { format: 'isolated', type: 'pdf' },
-        invoice: { format: 'embedded', type: 'pdf', keyBy: 'generation' },
+        summary: { format: 'embedded', type: 'pdf', keyBy: 'generation' },
+        invoice: { render: InvoiceDocument, type: 'pdf' },
       };
     }
     let merged = cardApi.getScreenshots(Reports);
@@ -331,10 +333,15 @@ module('Unit | declared screenshots', function (hooks) {
       undefined,
       'a pdf declares no capture box',
     );
-    assert.strictEqual(merged.invoice.format, 'embedded');
+    assert.strictEqual(merged.summary.format, 'embedded');
+    assert.strictEqual(
+      merged.invoice.render,
+      InvoiceDocument,
+      'a pdf can source from a capture-only render component',
+    );
   });
 
-  test('a pdf screenshot refuses raster fields, box formats, the render slot, and thumbnails', function (assert) {
+  test('a pdf screenshot refuses raster fields, box formats, and thumbnails', function (assert) {
     for (let [spec, pattern] of [
       [{ format: 'isolated', type: 'pdf', width: 300 }, /'width' is a raster/],
       [
@@ -357,10 +364,7 @@ module('Unit | declared screenshots', function (hooks) {
         { format: 'atom', type: 'pdf' },
         /format must be 'isolated' or 'embedded'/,
       ],
-      [
-        { render: class {}, type: 'pdf' },
-        /the author-supplied pdf render slot is not yet available/,
-      ],
+      [{ render: class {}, type: 'pdf', width: 300 }, /'width' is a raster/],
       [
         { format: 'isolated', type: 'pdf', useAsThumbnail: true },
         /useAsThumbnail cannot appear on a pdf/,
