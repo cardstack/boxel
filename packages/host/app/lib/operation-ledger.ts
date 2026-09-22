@@ -211,8 +211,8 @@ export default class OperationLedger {
       // for, so a failure in it is not a failure of their operation. Nothing
       // has been applied or sent at this point, so declining costs the call
       // only the pessimistic path it would have taken anyway.
-      console.debug(
-        `could not decide optimistic eligibility for "${args.candidate.name}", so it is sent and awaited`,
+      console.warn(
+        `PROBE could not decide optimistic eligibility for "${args.candidate.name}", so it is sent and awaited`,
         err,
       );
       return undefined;
@@ -245,13 +245,16 @@ export default class OperationLedger {
       // The program could not run here — most often because it reads a value
       // only the realm's index overlay supplies. Nothing was applied, so this
       // is simply not an optimistic call.
-      console.debug(
-        `operation "${args.candidate.name}" is not applied locally, so it is sent and awaited: ${
+      console.warn(
+        `PROBE operation "${args.candidate.name}" is not applied locally, so it is sent and awaited: ${
           (err as Error)?.message ?? String(err)
         }`,
       );
       return undefined;
     }
+    console.warn(
+      `PROBE carried "${args.candidate.name}" params=${JSON.stringify(entry.params)} pending=${chain.pending.length + 1} chainVersion=${chain.version ?? 'none'}`,
+    );
     chain.pending.push(entry);
     let sent = chain.sending.then(() => this.#deliver(chain, entry));
     chain.sending = sent.then(ignore, ignore);
@@ -287,6 +290,9 @@ export default class OperationLedger {
         let envelope = baseVersion
           ? this.#env.stamp(entry.envelope, baseVersion)
           : entry.envelope;
+        console.warn(
+          `PROBE sending "${entry.clientRequestId}" base=${baseVersion ?? 'none'} (chain=${chain.version ?? 'none'} held=${this.#env.heldVersion(entry.instance) ?? 'none'})`,
+        );
         entry.sent = true;
         let answer: OperationsAnswer;
         try {
@@ -302,6 +308,9 @@ export default class OperationLedger {
           throw err;
         }
         let result = this.#env.writeResult(answer);
+        console.warn(
+          `PROBE answered version=${result?.version ?? 'none'} baseMatched=${String(result?.baseMatched)}`,
+        );
         if (result?.baseMatched === true) {
           this.#settleAt(chain, entry, result.version);
           this.#retire(chain, entry);

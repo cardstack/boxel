@@ -61,6 +61,9 @@ interface Harness {
   // Fires the store's reload notification, which is what a foreign write looks
   // like from the ledger's side.
   foreignWrite(): void;
+  // When set, `reload` fires the reload subscribers the way the real store
+  // does, so an abort's re-read re-enters the ledger.
+  notifyOnReload?: boolean;
   attempt(
     params?: Record<string, unknown>,
   ): Promise<OperationsAnswer | undefined>;
@@ -107,6 +110,11 @@ function setup(
     },
     reload: async () => {
       harness.reloads++;
+      if (harness.notifyOnReload) {
+        // What `StoreService.reloadForRollback` does: the reload notifies
+        // every reload subscriber, and the ledger registered as one.
+        harness.foreignWrite();
+      }
     },
     heldVersion: () => heldVersion,
     recordVersion: (_instance, version) => {
@@ -432,6 +440,47 @@ module('Unit | operation ledger', function () {
     h.sends[1].answer.fulfill(answerWith({ version: 'v5', baseMatched: true }));
     let answer = await third;
     assert.ok(answer, 'and it resolves with the realm’s answer');
+  });
+
+  test('a rollback re-read that notifies subscribers still carries the next operation', async function (assert) {
+    // Closer to the real store than the plain stand-in above: a reload there
+    // notifies reload subscribers, and the ledger is one of them. So a
+    // rollback fires the ledger's own rebase re-entrantly, from inside the
+    // abort that is still running. If that re-entry disturbs the chain, the
+    // operation after a rollback is the one that pays — which is exactly the
+    // shape seen against a live realm.
+    let h = setup();
+    h.notifyOnReload = true;
+
+    let first = h.attempt({ body: 'one' });
+    await drain();
+    h.sends[0].answer.fulfill(answerWith({ version: 'v2' }));
+    await first;
+    await drain();
+
+    assert.strictEqual(h.reloads, 1, 'the unconfirmed write re-read the card');
+    assert.strictEqual(
+      h.applied.length,
+      1,
+      'and the re-read did not re-apply anything, since nothing was pending',
+    );
+
+    let second = h.attempt({ body: 'two' });
+    await drain();
+
+    assert.strictEqual(
+      h.applied.length,
+      2,
+      'the next operation is still applied locally',
+    );
+    assert.strictEqual(h.sends.length, 2, 'and still sent');
+    assert.strictEqual(
+      baseVersionOf(h.sends[1].envelope),
+      'v2',
+      'naming the version the first write reported',
+    );
+    h.sends[1].answer.fulfill(answerWith({ version: 'v3', baseMatched: true }));
+    await second;
   });
 
   test('a foreign write re-applies the operations that have not been sent', async function (assert) {

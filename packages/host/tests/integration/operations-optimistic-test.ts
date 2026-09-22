@@ -211,15 +211,22 @@ module('Integration | operations optimistic', function (hooks) {
   test('an eligible transform leaves the card and the realm agreeing', async function (assert) {
     let report = await cardAt('report-applies');
 
-    let result: any = await (operations(report) as any).addComment({
+    let pending = (operations(report) as any).addComment({
       body: 'First comment.',
     });
 
+    // Read before the write resolves. "The card has one comment" is satisfied
+    // by an index event re-reading it just as well as by a local application,
+    // so asserting after the await would pass whether or not anything here
+    // ran. In flight, only a local application can have put it there.
     assert.strictEqual(
       (report as any).comments.length,
       1,
-      'the local card carries the appended comment',
+      'the appended comment is on the card before the realm has answered',
     );
+
+    let result: any = await pending;
+
     assert.strictEqual(
       (report as any).comments[0].body,
       'First comment.',
@@ -239,21 +246,36 @@ module('Integration | operations optimistic', function (hooks) {
     assert.ok(result.version, 'the write reported the version it produced');
   });
 
-  test('a second operation names the first one’s version and needs no re-read', async function (assert) {
-    // The first operation on a card this tab has only read has no base to
-    // name: the card+json GET reports no version, so the realm compares
-    // nothing and the ledger re-reads rather than trusting local state. The
-    // second has the version the first write returned, so it reconciles.
+  test('consecutive operations chain their versions and never re-read', async function (assert) {
+    // The card+json GET reports the version of the bytes its document was
+    // built from, so a card this tab has only read already carries a base.
+    // Every operation therefore names one — the first from the read, each
+    // later one from what its predecessor's write returned — and a confirmed
+    // base means local state already equals the authoritative result, so
+    // nothing is re-read at any point.
     let report = await cardAt('report-chains');
-    await (operations(report) as any).addComment({ body: 'One.' });
-
     let recorder = recordReads();
     try {
-      await (operations(report) as any).addComment({ body: 'Two.' });
+      let first = (operations(report) as any).addComment({ body: 'One.' });
+      assert.strictEqual(
+        (report as any).comments.length,
+        1,
+        'the first comment is on the card before the realm has answered',
+      );
+      await first;
+
+      let second = (operations(report) as any).addComment({ body: 'Two.' });
+      assert.strictEqual(
+        (report as any).comments.length,
+        2,
+        'and the second is there before the realm has answered either',
+      );
+      await second;
+
       assert.deepEqual(
         recorder.reads.filter((url) => url.includes('report-chains')),
         [],
-        'the realm confirmed the base, so the card is not re-read',
+        'neither operation re-read the card, because the realm confirmed both bases',
       );
     } finally {
       recorder.restore();
@@ -264,11 +286,16 @@ module('Integration | operations optimistic', function (hooks) {
       2,
       'the card carries both comments',
     );
+    assert.deepEqual(
+      (report as any).comments.map((c: any) => c.body),
+      ['One.', 'Two.'],
+      'in the order they were asked for',
+    );
     let stored = await storedAttributes('report-chains');
-    assert.strictEqual(
-      stored.comments.length,
-      2,
-      'and so does the realm — neither was applied twice',
+    assert.deepEqual(
+      stored.comments.map((c: any) => c.body),
+      ['One.', 'Two.'],
+      'and the realm holds exactly the same two — neither applied twice nor lost',
     );
   });
 

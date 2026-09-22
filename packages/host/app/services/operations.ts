@@ -373,8 +373,8 @@ export default class OperationsService
       // Lowering is how this path decides it *can* be optimistic. A failure
       // here means it cannot, which the realm is entirely able to cope with —
       // so it is reported and the write goes out pessimistically.
-      console.debug(
-        `could not lower operations for ${JSON.stringify(codeRef)} locally, so writes to it are sent and awaited`,
+      console.warn(
+        `PROBE could not lower operations for ${JSON.stringify(codeRef)} locally, so writes to it are sent and awaited`,
         err,
       );
       return undefined;
