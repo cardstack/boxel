@@ -1792,3 +1792,23 @@ function isEvaluatable(
   }
   return stateOrder[module.state] >= stateOrder['registered-completing-deps'];
 }
+
+// The Loader a module runs under, for code that has to reach one from inside a
+// module rather than being handed one.
+//
+// A Loader that evaluates a module injects `import.meta.loader` into it. A
+// module compiled into a host bundle is evaluated by the platform instead and
+// carries no injection, so it falls back to the loader the host publishes for
+// bundled modules.
+//
+// The caller passes its own `import.meta` because the injection is per-module:
+// were this to read one of its own, a bundled copy of this module would hand
+// every caller the published loader, including callers that were fetched and
+// have a loader of their own.
+export function loaderForModule(meta: { loader?: Loader }): Loader {
+  let loader = meta.loader ?? Loader.forBundledModules();
+  if (!loader) {
+    throw new Error('no Loader is available to this module');
+  }
+  return loader;
+}

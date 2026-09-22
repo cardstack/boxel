@@ -35,7 +35,7 @@ import {
   Pill,
 } from '@cardstack/boxel-ui/components';
 import { restartableTask } from 'ember-concurrency';
-import { Loader } from '@cardstack/runtime-common';
+import { loaderForModule, type Loader } from '@cardstack/runtime-common';
 import type { CardErrorJSONAPI } from '@cardstack/runtime-common';
 import {
   chooseCard,
@@ -871,18 +871,8 @@ export function getLinksToManyComponent({
 }
 
 function myLoader(): Loader {
-  // A Loader that evaluates this module injects `import.meta.loader`. A module
-  // compiled into the host bundle is evaluated by the platform instead, and
-  // uses the loader the host publishes for bundled modules.
-
-  // When type-checking realm-server, tsc sees this file as CommonJS output and
-  // so complains about import.meta. Scope the suppression to that read alone —
-  // widening it over the fallback would hide real errors there too.
+  // tsc checks this file as CommonJS output when it checks realm-server, and
+  // so rejects the `import.meta` read; the read is all that is suppressed.
   // @ts-ignore
-  let injected = (import.meta as any).loader;
-  let loader = injected ?? Loader.forBundledModules();
-  if (!loader) {
-    throw new Error('no Loader is available to this module');
-  }
-  return loader;
+  return loaderForModule(import.meta);
 }

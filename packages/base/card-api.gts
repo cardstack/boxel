@@ -52,6 +52,7 @@ import {
   loadCardDef,
   loadCardDocument,
   Loader,
+  loaderForModule,
   localId,
   meta,
   primitive,
@@ -5950,20 +5951,10 @@ export function resolveRef(
 }
 
 function myLoader(): Loader {
-  // A Loader that evaluates this module injects `import.meta.loader`. A module
-  // compiled into the host bundle is evaluated by the platform instead, and
-  // uses the loader the host publishes for bundled modules.
-
-  // When type-checking realm-server, tsc sees this file as CommonJS output and
-  // so complains about import.meta. Scope the suppression to that read alone —
-  // widening it over the fallback would hide real errors there too.
+  // tsc checks this file as CommonJS output when it checks realm-server, and
+  // so rejects the `import.meta` read; the read is all that is suppressed.
   // @ts-ignore
-  let injected = (import.meta as any).loader;
-  let loader = injected ?? Loader.forBundledModules();
-  if (!loader) {
-    throw new Error('no Loader is available to this module');
-  }
-  return loader;
+  return loaderForModule(import.meta);
 }
 
 class FallbackCardStore implements CardStore {
