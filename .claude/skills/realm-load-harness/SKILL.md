@@ -464,11 +464,14 @@ per-render total:
 
 ## Getting a run to a threshold, and telling whether it did
 
-Two realm-server mechanisms engage at a level of concurrency: the admission gate
-bounds in-flight searches at a cap, and the link-shape policy degrades a live
-read's link closure one rung earlier, at a time-weighted mean of the same count
+Two realm-server mechanisms engage at a level of concurrency, on two different
+counts: the admission gate bounds concurrent search _computations_ at a cap,
+and the link-shape policy degrades a live read's link closure once a
+time-weighted mean of concurrent search _requests_ — joiners included, which
+the gate stops counting at the cache decision — crosses one of its rungs
 (120-second half-life by default, `LINK_SHAPE_LOAD_HALF_LIFE_MS` per
-deployment). Both are **per replica**, so a fleet of N tasks needs N times the
+deployment). The rungs are placed against sustained request load, not below
+the point where the gate starts shedding. Both are **per replica**, so a fleet of N tasks needs N times the
 load one process would.
 
 The gate does not shed at the cap: an arrival above it queues and is answered

@@ -176,7 +176,7 @@ packages/observability/scripts/tail-logs.sh --env staging --service realm-server
 
 ## The link-shape policy
 
-How much of each result's link graph a live read carries is decided per realm from the load the process is under, one rung below admission control: a saturated process degrades a response before it refuses a request. Two channels record it — the per-request fields above, and a low-volume transition channel, `boxel:link-shape-policy`, on the same `| json` convention.
+How much of each result's link graph a live read carries is decided per realm from the load the process is under: under sustained request load, a process degrades a response rather than serving its full link closure. This is independent of admission control, which refuses requests on bursts against its cap and can do so at readings below the lower rung. Two channels record it — the per-request fields above, and a low-volume transition channel, `boxel:link-shape-policy`, on the same `| json` convention.
 
 A policy that reacts to load is only debuggable if it records the conditions it reacted to, because by the time anyone asks "why was this page slow" the concurrency that caused the decision is gone. These are the two questions an operator actually arrives with.
 
@@ -271,9 +271,10 @@ Four properties decide whether a change to any of these does what you expect:
 3. **Every rung change costs a realm its cached validators.** The link mode is
    folded into both response validators and keys the card+json response cache,
    so a lower engage buys earlier protection and pays in cache fragmentation
-   landing exactly when the server is busiest. That trade is the reason the
-   upper rung sits at 12: lowering it to 8 raised a quiet control window's
-   degraded time from 0.3% to 3.8%.
+   landing exactly when the server is busiest. The upper rung, which degrades
+   even single-card reads, is placed above every load it has been observed on,
+   because nothing has measured it helping; `search-bounds.ts` records the
+   evidence for each rung.
 
    The fragmentation _rate_, though, does not track the engage as directly as
    that trade suggests, so "lower engage, more flapping" is not a safe thing to

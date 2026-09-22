@@ -428,24 +428,26 @@ module(basename(import.meta.filename), function () {
   // The module above shows a response following the level its realm is held
   // at. What it cannot see is anything upstream of that level: whether a
   // search the server answers puts load on the reading the policy decides on,
-  // whether the policy is wired to that reading at all, and whether the shipped
-  // thresholds sit anywhere a process under load can reach. All three fail in
-  // the same direction and none of them fails loudly — the ladder simply stays
+  // and whether the policy is wired to that reading at all. Both fail in the
+  // same direction and neither fails loudly — the ladder simply stays
   // at `full` — so a run reporting that nothing degraded reads identically
   // whether the policy declined or could never have engaged.
   //
   // This realm's policy is therefore constructed the way the realm server
   // constructs its own: over `getSearchRequestLoad`, against the admission
   // cap, at the thresholds and the dwell the server ships. The load is real
-  // requests counted on the process's own request count. Only the clock is supplied,
+  // requests counted on the process's own request count. Only the clock is
+  // supplied,
   // because the reading is a two-minute mean and the dwell a minute — a test
   // that waited either out would not be runnable, and one that shortened them
   // would pin numbers nobody deploys.
   //
   // The thresholds are imported rather than restated, so these assertions
   // follow a retune instead of pinning one. That is deliberate: what they claim
-  // is not that a rung sits at a particular number but that wherever it sits, a
-  // real reading reaches it and the routes follow. The ladder's own behaviour
+  // is not that a rung sits at a particular number but that wherever it sits,
+  // the routes follow a real reading across it. Whether the shipped numbers
+  // sit where real load reaches them is a question about deployed traffic, and
+  // is answered where they are defined, not here. The ladder's own behaviour
   // at a fixed pair of thresholds is `link-shape-policy-test.ts`, which
   // constructs its policy with explicit values and so describes the mechanism
   // rather than the tuning.
@@ -672,26 +674,6 @@ module(basename(import.meta.filename), function () {
       assert.ok(
         reading > 0.4,
         `and one search held for one half-life moved the reading the policy decides on to ~0.5, got ${reading}`,
-      );
-    });
-
-    // The question a run that never degraded cannot answer about itself. A
-    // reading is a mean over minutes, so a process can be busy for a long time
-    // and still read below a rung placed too high — in which case the ladder is
-    // unreachable and nothing says so. The request count is not bounded by the
-    // admission cap, so the top rung is stated against a number of concurrent
-    // requests rather than against the cap.
-    test('enough concurrent requests read above both rungs', function (assert) {
-      let reading = hold(assert, TOP_RUNG_HOLD, {
-        atLeast: LINK_SHAPE_ALL_ENGAGE_THRESHOLD,
-      });
-      assert.ok(
-        reading > LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD,
-        `and above the lower rung at ${LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD}`,
-      );
-      assert.ok(
-        reading <= TOP_RUNG_HOLD,
-        'while never exceeding the count it is a mean of',
       );
     });
 

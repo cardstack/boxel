@@ -9,11 +9,14 @@
 // depends on concurrency, which the client cannot observe and a fixed choice
 // cannot track.
 //
-// The realm server's existing answer to pressure is to refuse work — a `429`
-// once in-flight searches reach the admission cap. Degrading a response is
-// gentler than rejecting a request, so this sits one rung earlier on the same
-// ladder: under sustained load a read is served a cheaper representation, and
-// the caller fetches the linked cards it actually displays.
+// The realm server's other answer to pressure is to refuse work — a `429` for
+// a request still queued when the admission cap stays full past the admission
+// wait. That is a response to bursts against the instantaneous cap. This one
+// is a response to sustained load: under it a read is served a cheaper
+// representation, and the caller fetches the linked cards it actually
+// displays. The two act on different counts over different spans, so neither
+// is placed relative to the other; a process can shed on a burst while its
+// sustained reading sits below the lower rung.
 //
 // # Three levels, because the two costs scale differently
 //

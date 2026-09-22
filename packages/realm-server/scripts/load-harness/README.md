@@ -646,11 +646,14 @@ server's own timing rather than inferred.
 
 ## Driving it hard enough to reach a threshold
 
-The realm server has two mechanisms that engage at a level of concurrency: the
-admission gate bounds in-flight searches at a cap, and the link-shape policy
-degrades a live read's link closure one rung earlier, at a time-weighted mean
-of the same count (a 120-second half-life by default, `LINK_SHAPE_LOAD_HALF_LIFE_MS`
-per deployment). Both are **per replica**, so a fleet of N tasks needs N times
+The realm server has two mechanisms that engage at a level of concurrency, on
+two different counts: the admission gate bounds concurrent search
+_computations_ at a cap, and the link-shape policy degrades a live read's link
+closure once a time-weighted mean of concurrent search _requests_ — joiners
+included, which the gate stops counting at the cache decision — crosses one of
+its rungs (a 120-second half-life by default, `LINK_SHAPE_LOAD_HALF_LIFE_MS`
+per deployment). The two are independent: the rungs are placed against
+sustained request load, not below the point where the gate starts shedding. Both are **per replica**, so a fleet of N tasks needs N times
 the load a single process would.
 
 The gate does not answer `429` at the cap. An arrival above it queues and is

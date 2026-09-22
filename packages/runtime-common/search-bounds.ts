@@ -236,11 +236,11 @@ export const SERVER_MAX_ASSEMBLED_LINK_RESOURCES = parsePositiveInt(
 // ---------------------------------------------------------------------------
 // The link-shape policy's tuning (see runtime-common/link-shape-policy.ts).
 //
-// These bound the rung below admission control: how much of a result's link
-// graph a live read carries, chosen from prevailing load. Admission control
-// answers a saturated process by refusing work; this answers it one step
-// earlier by serving a cheaper representation, which costs the caller a
-// follow-up fetch rather than the whole request.
+// These decide how much of a result's link graph a live read carries, chosen
+// from prevailing load. Admission control answers a burst against its cap by
+// refusing work; this answers sustained load by serving a cheaper
+// representation, which costs the caller a follow-up fetch rather than the
+// whole request.
 //
 // The reading the thresholds below are compared against is the time-weighted
 // mean of **search requests in flight** on one process: every admitted
@@ -259,6 +259,17 @@ export const SERVER_MAX_ASSEMBLED_LINK_RESOURCES = parsePositiveInt(
 // The thresholds are absolute request counts, per replica. They are not
 // bounded by the admission cap: the cap counts computations, and the request
 // count exceeds it whenever the cache coalesces.
+//
+// The request readings below were reconstructed from the realm server's own
+// request log — each admitted `_search` / `_federated-search`, per-realm and
+// indexing-lane requests included and shed requests excluded, occupying the
+// span its logged duration covers — because they were measured on processes
+// that did not count requests themselves. That span begins before admission,
+// so it includes any time a request spent queued for a slot, which this count
+// does not; the reconstruction reads high by at most the request rate times
+// the admission wait (about 2.7 per replica on the engaged staging arm, and
+// only while the gate was full), so the same traffic reads somewhat lower on
+// the count the ladder actually uses.
 // ---------------------------------------------------------------------------
 
 // Half-life of the time-weighted mean of search requests in flight the policy
@@ -330,13 +341,16 @@ const DEFAULT_LINK_SHAPE_MIN_DWELL_MS = 60_000;
 //
 // # Where the lower rung sits, and why
 //
-// The engaged arm first engaged on each replica at request readings of 13.7
-// and 15.4, and its other transitions fell between 13.8 and 18.8. The
-// held-out arm — load where engaging would have helped, and did not happen —
-// read p50 14.4 and 17.2 on its two replicas. 14 is the highest engage that
-// takes both promptly: it is crossed 3.5 and 4.5 minutes into the engaged
-// arm, about two minutes before that arm's own rung fired, and 4.5 and 2.2
-// minutes into the held-out one, which it then
+// The engaged arm's own rung first fired on each replica at request readings
+// of 13.7 and 15.4, and its other transitions fell between 13.8 and 18.8. On
+// the first replica the reading had already passed 14 about two minutes
+// earlier, peaked at 15.1 and dipped back to 13.7 by the time that rung
+// fired; the rung is consulted only on a read, so it fires on whatever the
+// reading is when one arrives. The held-out arm — load where engaging would
+// have helped, and did not happen — read p50 14.4 and 17.2 on its two
+// replicas. 14 is the highest engage that takes both promptly: it is crossed
+// 3.5 and 4.5 minutes into the engaged arm and 4.5 and 2.2 minutes into the
+// held-out one, which it then
 // holds for 67% and 89% of the window. At 15 the held-out arm's first replica
 // spends only 31% of its window engaged; at 16, 9%.
 //
@@ -347,15 +361,17 @@ const DEFAULT_LINK_SHAPE_MIN_DWELL_MS = 60_000;
 //
 // Production engages later on this rung than a computation count would have it
 // engage, and that is deliberate. Production's miss rate is higher, so the same
-// request count produces a larger computation count there: a computation rung
-// of 4 corresponds to 6-9 requests in flight on production and 14-16 on the
-// harness. Replayed over a saturation episode on production (1.5 hours, two
+// request count produces a larger computation count there: at the moments a
+// computation rung of 4 actually fired, the request reading was 6.3-9.0 on
+// production and 13.7-18.8 on the harness. Replayed over a saturation episode on production (1.5 hours, two
 // replicas), a request rung of 14 degrades 20.9% of the episode where a
 // computation rung of 4 degrades 53.7%, and a second, smaller wave in the same
-// episode, peaking at a reading of 13.1, does not engage at all. That replay is open-loop — it replays a trajectory
-// recorded while the old ladder was acting on it — so the busy-window figures
-// are estimates; the quiet-window one is unaffected, since nothing engages
-// there.
+// episode, peaking at a reading of 13.1, does not engage at all. That replay
+// is open-loop — it replays a trajectory recorded while a computation ladder
+// was already degrading it — so the busy-window figures are estimates, and
+// they err low: a ladder that degrades less of an episode sees a higher
+// reading than the one replayed. The quiet-window figure is unaffected, since
+// nothing engages there.
 //
 // The release keeps the engage/release ratio of 1/2 the ladder uses at both
 // rungs, which puts it at 7. Coming off load, the reading falls under 7 within
@@ -380,11 +396,19 @@ const DEFAULT_LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD = 7;
 // helping. So it is placed above every load it has been observed on rather
 // than against one: the sustained request reading peaked at 22.4 on the
 // engaged staging arm (reached after engaging), 20.9 on the held-out one, and
-// no higher than 23.6 on any staging load window since, so 28 sits a
-// quarter clear of all of them and load measured as beneficial at the lower
-// rung does not reach this one. Production's busiest recent episode peaked at
-// 27.5 and does not reach it either. A rung of 24 would have put that episode
-// at `all` for 7.5% of its time, from the moment its first requests were shed.
+// no higher than 23.6 on any staging load window, so 28 sits at least 19%
+// clear of all of them and load measured as beneficial at the lower rung does
+// not reach this one.
+//
+// Production's busiest recent episode read 27.5 at its peak, and that is a
+// floor rather than a prediction: it was recorded while a ladder engaging at
+// a lower request count was degrading over half the episode, and degrading
+// shortens service time, which lowers the reading. Under this ladder, which
+// degrades less of it, the same traffic would read higher and may reach
+// `all`. That is accepted: an episode at that level is one the admission gate
+// is already shedding on, which is the regime the last rung exists for. A
+// rung of 24 would have put that episode at `all` from the moment its first
+// requests were shed, even on the degrading trajectory.
 //
 // It is not placed against the onset of shedding, because that onset is not a
 // sustained reading: sheds are driven by bursts against the instantaneous

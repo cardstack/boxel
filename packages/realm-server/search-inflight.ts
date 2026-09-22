@@ -333,8 +333,8 @@ export function resetSearchAdmissionForTests(): void {
 // card's link graph each one carries, chosen per realm from the load the
 // process is under. It reads the sustained count of search requests in flight
 // — sustained, since a shape that flapped per request would fragment every
-// validator it is folded into — and degrades a response one rung before
-// admission control would refuse the request outright.
+// validator it is folded into. It is independent of admission control, which
+// sheds on bursts against the instantaneous cap.
 //
 // This is the process's only control over the shape. There is deliberately no
 // environment variable beside it: an operator-set flag cannot express "depends

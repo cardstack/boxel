@@ -329,7 +329,13 @@ export async function searchAdmission(ctxt: Koa.Context, next: Koa.Next) {
     }
     release = admitted;
   }
-  endRequest = beginSearchRequest();
+  // Only a request whose connection is still open starts counting. The
+  // `close` listener is what ends the count, so a request that began after
+  // its close had already fired would never be ended — and a leaked request,
+  // unlike a leaked slot, holds the replica's load reading up until restart.
+  if (!closed) {
+    endRequest = beginSearchRequest();
+  }
   return next();
 }
 
