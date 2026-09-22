@@ -125,6 +125,12 @@ jobs:
               - 'packages/test-realm-cards/**'
             realm-server:
               - *shared
+              # The card-operations authoring skill's claims are pinned by a
+              # realm-server suite that reads the copied skill file, so an edit
+              # to the skill has to run that suite too. A version-bump PR
+              # regenerates the skill while touching only `packages/boxel-cli`,
+              # which nothing else here matches.
+              - 'packages/boxel-cli/plugin/skills/card-operations-authoring/**'
               - 'packages/billing/**'
               - 'packages/boxel-icons/**'
               - 'packages/boxel-ui/**'
