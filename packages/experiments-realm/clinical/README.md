@@ -102,6 +102,15 @@ export class AuditLog extends TextFileDef {
 }
 ```
 
+and the batches invoke it by name, on the file rather than the card:
+
+```ts
+let log = this.record.auditLog;
+if (log) {
+  b.on(log).record({ what: `consult requested: ${this.consultSpecialty}` });
+}
+```
+
 Three things about it are worth knowing before copying the pattern:
 
 - **The realm composes the line, not the caller.** An `appendLine` usually
