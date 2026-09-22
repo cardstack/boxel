@@ -15,6 +15,8 @@
     "eval:judge": "node judge-result.ts",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
+    "lint:hbs": "ember-template-lint .",
+    "lint:hbs:fix": "ember-template-lint . --fix",
     "lint:js": "eslint . --ext .ts --report-unused-disable-directives --cache",
     "lint:js:fix": "eslint . --ext .ts --report-unused-disable-directives --fix",
     "lint:types": "ember-tsc --noEmit"
@@ -26,6 +28,7 @@
     "@playwright/test": "catalog:",
     "@types/node": "catalog:",
     "concurrently": "catalog:",
+    "ember-template-lint": "catalog:",
     "typescript": "catalog:"
   },
   "volta": {
