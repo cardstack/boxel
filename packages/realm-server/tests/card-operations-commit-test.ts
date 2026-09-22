@@ -10,6 +10,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 
 import {
   CONTENT_HASH_WHOLE_LIMIT_BYTES,
+  Deferred,
   computeContentHash,
   computeContentHashFromRanges,
   rri,
@@ -27,6 +28,8 @@ import type {
   DBAdapter,
   LocalPath,
   LooseSingleCardDocument,
+  QueuePublisher,
+  QueueRunner,
   Realm,
   RealmAdapter,
 } from '@cardstack/runtime-common';
@@ -327,6 +330,8 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         'append-sibling',
         'commit-write',
         'commit-delete',
+        'shared-pass-first',
+        'shared-pass-second',
         'version-target',
         'patch-over-http',
         'patch-over-batch',
@@ -358,6 +363,8 @@ module(basename(import.meta.filename), function (hooks) {
   let serverRequest: SuperTest<Test>;
   let testRealmHttpServer: Server;
   let dir: DirResult;
+  let queuePublisher: QueuePublisher;
+  let queueRunner: QueueRunner;
 
   setupPermissionedRealmCached(hooks, {
     mode: 'before',
@@ -376,6 +383,8 @@ module(basename(import.meta.filename), function (hooks) {
       serverRequest = args.request;
       testRealmHttpServer = args.testRealmHttpServer;
       dir = args.dir;
+      queuePublisher = args.publisher;
+      queueRunner = args.runner;
     },
   });
 
@@ -651,6 +660,148 @@ module(basename(import.meta.filename), function (hooks) {
       [...indexEvents[0].invalidations].sort(),
       [`${testRealmHref}commit-write`, `${testRealmHref}commit-delete`].sort(),
       'the one event covers both the write and the removal',
+    );
+    assert.strictEqual(
+      indexEvents[0].coalescedWrites,
+      undefined,
+      'a pass that indexed one publish announces it in the single-writer form',
+    );
+  });
+
+  // Holds the realm's indexing lane, so publishes that arrive meanwhile fold
+  // into one pending pass the way concurrent writers' saves do under load.
+  async function holdIndexingLane() {
+    let started = new Deferred<void>();
+    let release = new Deferred<void>();
+    queueRunner.register('hold-indexing-lane', async () => {
+      started.fulfill();
+      await release.promise;
+      return null;
+    });
+    let holder = await queuePublisher.publish<void>({
+      jobType: 'hold-indexing-lane',
+      concurrencyGroup: `indexing:${realm.url}`,
+      timeout: 30,
+      args: null,
+    });
+    await started.promise;
+    return { holder, release };
+  }
+
+  async function pendingIndexCallers(): Promise<(string | null)[]> {
+    let rows = (await testDbAdapter.execute(
+      `select args from jobs where job_type = 'incremental-index'
+         and concurrency_group = $1 and status = 'unfulfilled'`,
+      { bind: [`indexing:${realm.url}`] },
+    )) as {
+      args: { coalescedCallers?: { clientRequestId: string | null }[] };
+    }[];
+    return rows.flatMap((row) =>
+      (row.args.coalescedCallers ?? []).map((caller) => caller.clientRequestId),
+    );
+  }
+
+  test('writes from two clients that share one index pass are announced once, naming both', async function (assert) {
+    let first = `${testRealmHref}shared-pass-first`;
+    let second = `${testRealmHref}shared-pass-second`;
+    let patch = (firstName: string) => ({
+      data: {
+        type: 'card',
+        attributes: { firstName },
+        meta: { adoptsFrom: PERSON },
+      },
+    });
+    let jobsBefore = await indexJobIds();
+    let { holder, release } = await holdIndexingLane();
+    let since = Date.now();
+    let writes: Promise<unknown>[] = [];
+    try {
+      writes.push(
+        Promise.resolve(
+          request
+            .patch('/shared-pass-first')
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-Boxel-Client-Request-Id', 'instance:first-tab')
+            .send(patch('First')),
+        ),
+      );
+      // The second write goes out only once the first is queued, so the two
+      // meet in one pending job rather than racing to create it.
+      await waitUntil(async () =>
+        (await pendingIndexCallers()).includes('instance:first-tab'),
+      );
+      writes.push(
+        Promise.resolve(
+          request
+            .patch('/shared-pass-second')
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-Boxel-Client-Request-Id', 'instance:second-tab')
+            .send(patch('Second')),
+        ),
+      );
+      await waitUntil(async () =>
+        (await pendingIndexCallers()).includes('instance:second-tab'),
+      );
+    } finally {
+      release.fulfill();
+    }
+    let responses = (await Promise.all(writes)) as { status: number }[];
+    await holder.done;
+    assert.deepEqual(
+      responses.map((response) => response.status),
+      [200, 200],
+      'both writes are served',
+    );
+    let newJobs = (await indexJobIds()).filter(
+      (id) => !jobsBefore.includes(id),
+    );
+    assert.strictEqual(
+      newJobs.length,
+      1,
+      `the two writes share one index pass (got ${newJobs.length})`,
+    );
+
+    let eventsForPass = async () =>
+      (await incrementalIndexEventsSince(since)).filter(
+        (event) =>
+          event.invalidations.includes(first) ||
+          event.invalidations.includes(second),
+      );
+    await waitUntil(async () => (await eventsForPass()).length > 0);
+    // Room for a second copy to arrive, if one is coming: every caller
+    // announces the moment its own wait on the pass resolves, so a duplicate
+    // lands within the same few ticks the first one did.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    let events = await eventsForPass();
+    assert.strictEqual(
+      events.length,
+      1,
+      `the shared pass is announced once (got ${events.length}, under ${events
+        .map((event) => event.clientRequestId)
+        .join(', ')})`,
+    );
+    let [event] = events;
+    assert.deepEqual(
+      [...event.invalidations].sort(),
+      [first, second].sort(),
+      'the one event carries both writes',
+    );
+    assert.deepEqual(
+      (event.coalescedWrites ?? [])
+        .map(({ clientRequestId, changed }) => ({ clientRequestId, changed }))
+        .sort((a, b) =>
+          String(a.clientRequestId).localeCompare(String(b.clientRequestId)),
+        ),
+      [
+        { clientRequestId: 'instance:first-tab', changed: [first] },
+        { clientRequestId: 'instance:second-tab', changed: [second] },
+      ],
+      'the event names every writer the pass indexed, and the card each one changed',
+    );
+    assert.strictEqual(
+      event.clientRequestId,
+      'instance:first-tab',
+      'the first writer to join the pass announces it',
     );
   });
 

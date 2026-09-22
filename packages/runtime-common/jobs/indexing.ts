@@ -5,6 +5,7 @@ import type {
   IncrementalChange,
   IncrementalDoneResult,
   IncrementalResult,
+  SharedIndexPass,
 } from '../tasks/indexer.ts';
 import {
   param,
@@ -536,6 +537,7 @@ function parseIncrementalResult(
     stats,
     generation,
     deferredPrerenderHtml,
+    coalescedCallers,
   } = result as Record<string, PgPrimitive>;
   if (
     !Array.isArray(invalidations) ||
@@ -563,6 +565,76 @@ function parseIncrementalResult(
     stats: stats as IncrementalResult['stats'],
     ...(typeof generation === 'number' ? { generation } : {}),
     ...(deferred ? { deferredPrerenderHtml: deferred } : {}),
+    ...(Array.isArray(coalescedCallers)
+      ? { coalescedCallers: parseCoalescedCallers(coalescedCallers) }
+      : {}),
+  };
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === 'string')
+  );
+}
+
+// The callers a pass indexed, as the claimed job's args named them. Read
+// loosely: an entry written by a realm server predating a member lacks it, and
+// one missing its identity is dropped rather than guessed at.
+function parseCoalescedCallers(value: unknown[]): CoalescedCaller[] {
+  let callers: CoalescedCaller[] = [];
+  for (let caller of value) {
+    if (!isObjectLike(caller)) {
+      continue;
+    }
+    let { waiterId, clientRequestId, urls, clientAuthored, announcesPass } =
+      caller as Record<string, unknown>;
+    if (
+      typeof waiterId !== 'string' ||
+      (clientRequestId !== null && typeof clientRequestId !== 'string')
+    ) {
+      continue;
+    }
+    callers.push({
+      waiterId,
+      clientRequestId,
+      urls: isStringArray(urls) ? urls : null,
+      clientAuthored: isStringArray(clientAuthored) ? clientAuthored : null,
+      announcesPass: announcesPass === true,
+    });
+  }
+  return callers;
+}
+
+// How one caller of a pass relates to the others it shared the pass with.
+// Undefined when the pass indexed this caller alone, or when it cannot say who
+// else it indexed (a result from an older worker), or when this caller is not
+// among those named — a publish that attached to a job already running is not
+// in the args that job was claimed with. Each of those leaves the caller
+// announcing the pass itself, which is what every caller did before passes
+// were announced once.
+function sharedPassFor(
+  waiterId: string | undefined,
+  callers: CoalescedCaller[] | undefined,
+): SharedIndexPass | undefined {
+  if (
+    waiterId === undefined ||
+    !callers ||
+    callers.length < 2 ||
+    !callers.some((caller) => caller.waiterId === waiterId)
+  ) {
+    return undefined;
+  }
+  // The first caller that announces its passes as they land. Chosen from the
+  // args rather than negotiated, so every caller — in whichever replica it is
+  // waiting — reaches the same answer from the same result without talking to
+  // the others. A caller for which this pass is only a step toward a later
+  // one is passed over: its announcement waits on work that has not happened
+  // yet and may never succeed. When no caller announces as it lands, nobody
+  // stands down.
+  let announcer = callers.find((caller) => caller.announcesPass);
+  return {
+    announcedByPeer: announcer !== undefined && announcer.waiterId !== waiterId,
+    callers,
   };
 }
 
@@ -620,9 +692,22 @@ export interface IncrementalIndexEnqueueArgs {
 export function makeIncrementalArgsWithCallerMetadata(
   args: IncrementalIndexEnqueueArgs,
   clientRequestId: string | null,
+  caller?: {
+    // See CoalescedCaller.
+    clientAuthored?: string[] | null;
+    announcesPass?: boolean;
+  },
 ): IncrementalArgs {
   let waiterId = uuidv4();
-  let coalescedCallers: CoalescedCaller[] = [{ waiterId, clientRequestId }];
+  let coalescedCallers: CoalescedCaller[] = [
+    {
+      waiterId,
+      clientRequestId,
+      urls: args.changes.map(({ url }) => url.replace(/\.json$/, '')),
+      clientAuthored: caller?.clientAuthored ?? null,
+      announcesPass: caller?.announcesPass === true,
+    },
+  ];
   return {
     realmURL: args.realmURL,
     realmUsername: args.realmUsername,
@@ -637,6 +722,9 @@ export function makeIncrementalArgsWithCallerMetadata(
 
 export function mapIncrementalDoneResult(
   clientRequestId: string | null,
+  // The caller's own entry in the job's `coalescedCallers`, so it can find
+  // itself among the callers the pass reports.
+  waiterId?: string,
 ): (result: PgPrimitive) => IncrementalDoneResult {
   return (result: PgPrimitive) => {
     let parsedResult = parseIncrementalResult(result);
@@ -651,9 +739,11 @@ export function mapIncrementalDoneResult(
         )}`,
       );
     }
+    let sharedPass = sharedPassFor(waiterId, parsedResult.coalescedCallers);
     return {
       ...parsedResult,
       clientRequestId,
+      ...(sharedPass ? { sharedPass } : {}),
     };
   };
 }

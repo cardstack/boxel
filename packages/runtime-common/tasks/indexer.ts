@@ -46,9 +46,32 @@ export interface IncrementalChange extends JSONTypes.Object {
   operation: 'update' | 'delete';
 }
 
+// One publish a job carries. A pending job absorbs every same-realm publish
+// that arrives before a worker claims it, so one pass can index several
+// writers' changes — and every one of them is waiting on it and would
+// otherwise announce it separately.
 export interface CoalescedCaller extends JSONTypes.Object {
   waiterId: string;
   clientRequestId: string | null;
+  // The files this publish asked the pass to index, in the spelling the
+  // pass's invalidations use: the realm href without a trailing `.json`. Lets
+  // a subscriber tell which of the pass's cards each writer changed. Null
+  // when unknown — a job enqueued by a realm server predating the member —
+  // which a subscriber has to read as "may have changed any of them".
+  //
+  // Non-optional, like the args' own members, so the entry satisfies the
+  // JSON-shape index signature (which rejects `undefined`).
+  urls: string[] | null;
+  // The request's own report of which cards it wrote from content its client
+  // supplied verbatim (see the event's `clientAuthored`). Null when the
+  // request made no such report.
+  clientAuthored: string[] | null;
+  // Whether this caller announces the pass to subscribers the moment it
+  // lands. False for a pass that is only a step in a larger write (the
+  // module→instance flush), whose caller announces later, once its closing
+  // pass has run, or never, if that pass fails. The first caller for which
+  // this is true announces the pass for everyone; see `SharedIndexPass`.
+  announcesPass: boolean;
 }
 
 export interface IncrementalArgs extends WorkerArgs {
@@ -115,10 +138,28 @@ export interface IncrementalResult {
   // set no prerender_html job was enqueued for. The caller either carries it
   // into a later pass of the same write or enqueues it itself.
   deferredPrerenderHtml?: DeferredPrerenderHtml;
+  // Every publish whose changes this pass indexed, as the claimed job's args
+  // named them. Optional so a result produced by an older worker mid-deploy
+  // still parses; its absence leaves each caller announcing the pass itself.
+  coalescedCallers?: CoalescedCaller[];
+}
+
+// A pass that indexed more than one publish, as one of its callers sees it.
+export interface SharedIndexPass {
+  // True when another caller announces this pass, so this one must not
+  // announce it a second time. Every caller of a pass receives the same
+  // invalidations, and a subscriber handed several copies of one pass would
+  // act on each, so exactly one caller — the first that announces its passes
+  // as they land — speaks for all of them.
+  announcedByPeer: boolean;
+  callers: CoalescedCaller[];
 }
 
 export interface IncrementalDoneResult extends IncrementalResult {
   clientRequestId: string | null;
+  // Present only when the pass indexed this caller's publish alongside at
+  // least one other.
+  sharedPass?: SharedIndexPass;
 }
 
 export interface FromScratchArgs extends WorkerArgs {
@@ -743,6 +784,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       ...(generation !== undefined ? { generation } : {}),
       ...(phaseTimings !== undefined ? { phaseTimings } : {}),
       ...(deferredPrerenderHtml !== undefined ? { deferredPrerenderHtml } : {}),
+      coalescedCallers: getCoalescedCallers(args),
     };
   };
 

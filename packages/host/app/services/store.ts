@@ -137,6 +137,7 @@ import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardDef, BaseDef } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
 import type {
+  CoalescedIndexWrite,
   IncrementalIndexEventContent,
   RealmEventContent,
 } from '@cardstack/base/matrix-event';
@@ -203,6 +204,16 @@ export function resolveOutboundJobPriority({
     return valid ?? 0;
   }
   return valid ?? userInitiatedPriority;
+}
+
+// A request id minted for a write whose content this tab sent — a card saved
+// from an open instance — as opposed to a source edit or a bot's patch, whose
+// resulting state this tab does not already hold.
+function isInstanceWriteRequestId(clientRequestId: string): boolean {
+  return (
+    clientRequestId.startsWith('instance:') ||
+    clientRequestId.startsWith('editor-with-instance')
+  );
 }
 
 function jobPriorityHeader(): Record<string, string> {
@@ -2321,9 +2332,10 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
     let invalidations = event.invalidations as string[];
-    let ownWrite = event.clientRequestId
-      ? this.cardService.clientRequestIds.has(event.clientRequestId)
-      : false;
+    let ownWrite = [
+      event.clientRequestId,
+      ...(event.coalescedWrites ?? []).map((write) => write.clientRequestId),
+    ].some((id) => !!id && this.cardService.clientRequestIds.has(id));
 
     // The invalidation triggers a rebuild when it touches an already-loaded
     // executable module: the loader must be flushed so the updated code is
@@ -2391,6 +2403,50 @@ export default class StoreService extends Service implements StoreInterface {
     }
   };
 
+  // Whether a card named by a pass that indexed several publishes has to be
+  // re-read. The pass is announced once for all of them, so the event's own
+  // `clientRequestId` names just one writer; the rule the single-writer event
+  // gets from it is asked of every writer that changed this card instead.
+  //
+  // Skipped only when every writer that changed the card is one of ours, of
+  // the kind whose content we sent, and says it wrote this card verbatim —
+  // which is when this tab holds what the card says, or something newer typed
+  // while the write was in flight. A second writer changing the same card in
+  // the same pass means the index holds whichever landed last, which this tab
+  // cannot know it holds. A card no writer changed is a dependent, whose state
+  // the realm computed.
+  #sharedPassNeedsReload(
+    writes: CoalescedIndexWrite[],
+    invalidation: string,
+  ): boolean {
+    let changedBy = writes.filter(
+      (write) => write.changed === null || write.changed.includes(invalidation),
+    );
+    if (changedBy.length === 0) {
+      realmEventsLogger.debug(
+        `reloading card ${invalidation} because no write in its shared pass changed it directly`,
+      );
+      return true;
+    }
+    let stranger = changedBy.find(
+      ({ clientRequestId, changed, clientAuthored }) =>
+        !clientRequestId ||
+        !this.cardService.clientRequestIds.has(clientRequestId) ||
+        !isInstanceWriteRequestId(clientRequestId) ||
+        !(clientAuthored ?? changed ?? []).includes(invalidation),
+    );
+    if (stranger) {
+      realmEventsLogger.debug(
+        `reloading card ${invalidation} because request ${stranger.clientRequestId ?? 'with no id'} in its shared pass changed it and did not carry our content for it`,
+      );
+      return true;
+    }
+    realmEventsLogger.debug(
+      `ignoring invalidation for card ${invalidation} because every write in its shared pass that changed it is ours and carried its content`,
+    );
+    return false;
+  }
+
   // Reload the individual cards / file-meta resources named by an incremental
   // invalidation that did not trigger a full rebuild. Returns the number of
   // reloads kicked off (for realm-event telemetry).
@@ -2444,16 +2500,18 @@ export default class StoreService extends Service implements StoreInterface {
           // the auto save request and the arrival realm event.
           let reloadFile = false;
 
-          if (!clientRequestId) {
+          if (event.coalescedWrites) {
+            reloadFile = this.#sharedPassNeedsReload(
+              event.coalescedWrites,
+              invalidation,
+            );
+          } else if (!clientRequestId) {
             reloadFile = true;
             realmEventsLogger.debug(
               `reloading file resource ${invalidation} because event has no clientRequestId`,
             );
           } else if (this.cardService.clientRequestIds.has(clientRequestId)) {
-            if (
-              clientRequestId.startsWith('instance:') ||
-              clientRequestId.startsWith('editor-with-instance')
-            ) {
+            if (isInstanceWriteRequestId(clientRequestId)) {
               // Our own write, of the kind whose content we sent — so this
               // instance already holds what the card says, and may hold
               // something newer that was typed while the write was in flight.

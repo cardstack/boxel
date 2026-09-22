@@ -3972,6 +3972,142 @@ module('Integration | Store', function (hooks) {
     }
   });
 
+  // Holds the in-browser queue on a job of its own, so index publishes that
+  // arrive meanwhile fold into one pending pass — how concurrent writers' saves
+  // meet in a realm under load.
+  async function holdIndexQueue() {
+    let { queue } = getService('queue');
+    let started = new Deferred<void>();
+    let release = new Deferred<void>();
+    queue.register('hold-index-queue', async () => {
+      started.fulfill();
+      await release.promise;
+      return null;
+    });
+    let holder = await queue.publish<null>({
+      jobType: 'hold-index-queue',
+      concurrencyGroup: null,
+      timeout: 30,
+      args: null,
+    });
+    await started.promise;
+    let pendingCallers = () =>
+      ((queue as any).jobs as { jobType: string; args: any }[])
+        .filter((job) => job.jobType === 'incremental-index')
+        .flatMap((job) =>
+          (job.args?.coalescedCallers ?? []).map(
+            (caller: { clientRequestId: string | null }) =>
+              caller.clientRequestId,
+          ),
+        );
+    return { holder, release, pendingCallers };
+  }
+
+  test("this client's own write, announced under another writer's id in a pass they shared, is not read back", async function (assert) {
+    let mine = `${testRealmURL}Person/shared-mine`;
+    let theirs = `${testRealmURL}Person/shared-theirs`;
+    let events = interceptRealmEvents();
+    let reads: ReturnType<typeof countCardReads> | undefined;
+    let theirReads: ReturnType<typeof countCardReads> | undefined;
+    let hold: Awaited<ReturnType<typeof holdIndexQueue>> | undefined;
+    try {
+      await writePerson('Person/shared-mine.json', 'Mine');
+      await events.nextEventFor(mine);
+      await writePerson('Person/shared-theirs.json', 'Theirs');
+      await events.nextEventFor(theirs);
+      storeService.addReference(mine);
+      storeService.addReference(theirs);
+      await storeService.flush();
+
+      hold = await holdIndexQueue();
+      // The other writer's publish opens the pass, so it is the one that
+      // announces it and this client's write reaches the event only as one of
+      // the pass's coalesced writes.
+      let theirWrite = testRealm.write(
+        'Person/shared-theirs.json',
+        JSON.stringify({
+          data: {
+            attributes: { name: 'Theirs Edited' },
+            meta: {
+              adoptsFrom: { module: testRRI('person'), name: 'Person' },
+            },
+          },
+        } as LooseSingleCardDocument),
+        { clientRequestId: 'instance:another-tab' },
+      );
+      await waitUntil(() =>
+        hold!.pendingCallers().includes('instance:another-tab'),
+      );
+      let instance = storeService.peek(mine) as CardDefType;
+      (instance as any).name = 'Mine Edited';
+      let ownSave = storeService.save(mine);
+      await waitUntil(() => hold!.pendingCallers().length === 2);
+      hold.release.fulfill();
+      await Promise.all([theirWrite, ownSave, hold.holder.done]);
+      await settled();
+
+      let event = await events.nextEventFor(mine);
+      assert.strictEqual(
+        event.clientRequestId,
+        'instance:another-tab',
+        "the pass is announced under the other writer's id",
+      );
+      assert.deepEqual(
+        [...event.invalidations].sort(),
+        [mine, theirs].sort(),
+        'and it carries both writes',
+      );
+      assert.strictEqual(
+        event.coalescedWrites?.length,
+        2,
+        'with both writers among its coalesced writes',
+      );
+
+      reads = countCardReads('Person/shared-mine');
+      theirReads = countCardReads('Person/shared-theirs');
+      events.deliver(event as RealmEventContent);
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        0,
+        'the card this client wrote is not read back',
+      );
+      assert.strictEqual(
+        (storeService.peek(mine) as any).name,
+        'Mine Edited',
+        'and its edit stands',
+      );
+      assert.strictEqual(
+        theirReads.count,
+        1,
+        'while the card the other writer changed is',
+      );
+      assert.strictEqual(
+        (storeService.peek(theirs) as any).name,
+        'Theirs Edited',
+        'and the store holds what that writer wrote',
+      );
+
+      // The control: the same event as it reads without the list, which is
+      // all a client had when each writer announced the pass separately and
+      // this copy arrived first. Nothing in it names this client's write, so
+      // the card is read back.
+      let { coalescedWrites: _coalescedWrites, ...announcedAlone } = event;
+      events.deliver(announcedAlone as RealmEventContent);
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        1,
+        'while the same event without its coalesced writes reads it back',
+      );
+    } finally {
+      hold?.release.fulfill();
+      reads?.stop();
+      theirReads?.stop();
+      events.restore();
+    }
+  });
+
   test('an instance can be restored after a loader reset', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
     await renderComponent(
