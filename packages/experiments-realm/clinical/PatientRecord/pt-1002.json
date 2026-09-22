@@ -53,11 +53,11 @@
       },
       "auditLog": {
         "links": {
-          "self": "../audit/pt-1002.txt"
+          "self": "../audit/pt-1002.log"
         },
         "data": {
           "type": "file-meta",
-          "id": "../audit/pt-1002.txt"
+          "id": "../audit/pt-1002.log"
         }
       },
       "unitRoster.0": {

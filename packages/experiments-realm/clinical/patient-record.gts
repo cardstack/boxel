@@ -22,7 +22,7 @@ import {
   linksTo,
   linksToMany,
 } from '@cardstack/base/card-api';
-import { FileDef } from '@cardstack/base/file-api';
+import { AuditLog } from './audit-log';
 import NumberField from '@cardstack/base/number';
 import StringField from '@cardstack/base/string';
 import {
@@ -260,10 +260,6 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
     }
   }
 
-  private auditLine(what: string): string {
-    return `${new Date().toISOString()} ${this.record.mrn} ${what}`;
-  }
-
   @action updateFindings(value: string) {
     this.findings = value;
   }
@@ -356,8 +352,8 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
         b.addConsult({ consult });
         let log = this.record.auditLog;
         if (log) {
-          b.on(log).appendLine({
-            line: this.auditLine(`consult requested: ${this.consultSpecialty}`),
+          b.on(log).record({
+            what: `consult requested: ${this.consultSpecialty}`,
           });
         }
       }),
@@ -390,9 +386,7 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
         });
         let log = this.record.auditLog;
         if (log) {
-          b.on(log).appendLine({
-            line: this.auditLine('transferred to intensive care'),
-          });
+          b.on(log).record({ what: 'transferred to intensive care' });
         }
       }),
     );
@@ -657,7 +651,7 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
           </section>
 
           <section class='panel'>
-            <h2>Audit log <span class='op'>appendLine</span></h2>
+            <h2>Audit log <span class='op'>record</span></h2>
             <p class='row-note'>A text file in this realm. The two batch
               actions — <em>Request and list it here</em> and
               <em>Transfer to ICU</em> — append one line to it in the same
@@ -883,11 +877,11 @@ export class PatientRecord extends CardDef {
   @field rhythmEvents = containsMany(RhythmEvent);
   @field vitals = containsMany(VitalsReading);
 
-  // The append-only ledger the batches write a line to. It is a text file in
-  // this realm; which `FileDef` type a realm file gets is decided by its
-  // extension, so this is base's `TextFileDef` and the only writes it carries
-  // are the base `update` and `appendLine`.
-  @field auditLog = linksTo(FileDef);
+  // The append-only ledger the batches write a line to. Naming the subclass
+  // here is what gives the batch handle its `record` member: a batch's members
+  // come from the type the field declares, and the realm binds the stored
+  // `.txt` to the same type so the name resolves on both sides.
+  @field auditLog = linksTo(AuditLog);
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: PatientRecord) {

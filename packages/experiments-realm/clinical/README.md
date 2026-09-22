@@ -85,30 +85,62 @@ record does not show.
 
 ## The audit log
 
-`audit/pt-100*.txt` are plain text files in this realm, linked from each record
-with `linksTo(FileDef)`. The batches append one line to them with `appendLine`,
-in the same commit as the card change.
+`audit/pt-100*.log` are plain text files in this realm, linked from each record
+with `linksTo(AuditLog)`. The batches append one line to them in the same commit
+as the card change.
 
-Two things about them are worth knowing before copying the pattern:
+The log is the one place here where the operation is declared on a **file**
+rather than a card, and it is worth reading for that:
 
-- **The line is composed by the caller, and that is a limitation rather than
-  the authoring model.** A named `appendLine` on a `FileDef` subclass is a
-  legal declaration — the authoring guide covers it, and such a declaration
-  says which param carries the line. What decides whether one can be _reached_
-  is which class a stored file resolves to, and that comes from the file's
-  extension: a `.txt` here is base's `TextFileDef`, so only the base
-  `appendLine` and `update` are available on it, and the base `appendLine`
-  takes the line as its payload. Until a realm can bind its files to its own
-  `FileDef` subclasses, a value the realm knows and the caller does not — the
-  authenticated actor — has to be stamped on the card instead, which is what
-  `recordVitals` and `requestConsult` do. Treat the audit line here as
-  caller-supplied text, not as something a caller could not have forged.
+```ts
+export class AuditLog extends TextFileDef {
+  @operation static record = {
+    base: 'appendLine',
+    params: { what: StringField },
+    input: bxl`. + { line: (TEXT(NOW(); "yyyy-mm-dd hh:mm:ss") + " " + actor() + " " + params("what")) }`,
+  } satisfies OperationDeclaration;
+}
+```
+
+Three things about it are worth knowing before copying the pattern:
+
+- **The realm composes the line, not the caller.** An `appendLine` usually
+  declares a `line` param, which makes the whole line the caller's to write —
+  including the part naming who wrote it. An `input` program is the other
+  spelling: it _produces_ the line, so the timestamp and the authenticated
+  actor are composed where a caller cannot reach them. The caller chooses what
+  to say and never who said it. `. +` merges into the payload rather than
+  replacing it, and `NOW()` answers an Excel serial rather than a timestamp, so
+  it is formatted — unformatted it would append a number like `46023.518`.
+- **A declaration on a file is only reachable if the realm binds the file to
+  it.** A stored file's class comes from its extension, and `realm.json` is
+  where this realm says which class its own extensions mean:
+
+  ```json
+  {
+    "attributes": {
+      "fileTypes": {
+        ".log": { "module": "./clinical/audit-log", "name": "AuditLog" }
+      }
+    }
+  }
+  ```
+
+  Without that entry a `.log` is base's `TextFileDef`, the declaration lowers
+  and indexes without complaint, and every invocation of it fails to resolve.
+  A realm binds which _class_ an extension means; it does not get to say what
+  counts as a file, so the extension has to be one the platform already reads
+  as one. The binding is realm-wide, which is why these logs use `.log` rather
+  than `.txt` — every `.txt` in this realm would otherwise become an audit log.
+
 - **`appendLine` creates the file it appends to**, so nothing here has to
-  exist first. These logs are checked in for a different reason: a
-  `linksTo(FileDef)` needs a stored file to hydrate an instance from, and
+  exist first, and a binding adds a name rather than taking the base
+  operations away: `b.on(log).appendLine({ line })` still works on a bound
+  file. These logs are checked in for a different reason — a
+  `linksTo(AuditLog)` needs a stored file to hydrate an instance from, and
   `b.on(log)` takes that instance. Where nothing is stored yet, name the path
-  instead — `b.on('audit/pt-1004.txt')` — and the first append brings the file
-  into being.
+  instead — `b.on('clinical/audit/pt-1004.log')` — and the first append brings
+  the file into being.
 
 ## Running it
 
