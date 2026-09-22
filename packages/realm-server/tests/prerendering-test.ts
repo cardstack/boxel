@@ -641,38 +641,38 @@ module(basename(import.meta.filename), function () {
       let cold = await visit('epoch-1');
       assert.false(cold.pool.reused, 'the first visit gets a new page');
       assert.strictEqual(
-        cold.response.diagnostics?.loaderResetReason,
+        cold.meta?.diagnostics?.loaderResetReason,
         'coldTab',
-        `a page holding no epoch names itself rather than the epoch, because it had no graph to drop, got: ${JSON.stringify(cold.response.diagnostics?.loaderResetReason)}`,
+        `a page holding no epoch names itself rather than the epoch, because it had no graph to drop, got: ${JSON.stringify(cold.meta?.diagnostics?.loaderResetReason)}`,
       );
       assert.ok(
-        (cold.response.diagnostics?.moduleEvaluationCount ?? 0) > 0,
-        `and evaluates the graph it lacks, got: ${JSON.stringify(cold.response.diagnostics?.moduleEvaluationCount)}`,
+        (cold.meta?.diagnostics?.moduleEvaluationCount ?? 0) > 0,
+        `and evaluates the graph it lacks, got: ${JSON.stringify(cold.meta?.diagnostics?.moduleEvaluationCount)}`,
       );
 
       let warm = await visit('epoch-1');
       assert.true(warm.pool.reused, 'the second visit reuses that page');
       assert.strictEqual(
-        warm.response.diagnostics?.loaderResetReason,
+        warm.meta?.diagnostics?.loaderResetReason,
         undefined,
-        `an unchanged epoch clears nothing, got: ${JSON.stringify(warm.response.diagnostics?.loaderResetReason)}`,
+        `an unchanged epoch clears nothing, got: ${JSON.stringify(warm.meta?.diagnostics?.loaderResetReason)}`,
       );
       assert.strictEqual(
-        warm.response.diagnostics?.moduleEvaluationCount,
+        warm.meta?.diagnostics?.moduleEvaluationCount,
         0,
-        `so the graph the first visit evaluated is still there, got: ${JSON.stringify(warm.response.diagnostics?.moduleEvaluationCount)}`,
+        `so the graph the first visit evaluated is still there, got: ${JSON.stringify(warm.meta?.diagnostics?.moduleEvaluationCount)}`,
       );
 
       let changed = await visit('epoch-2');
       assert.true(changed.pool.reused, 'the third visit reuses it too');
       assert.strictEqual(
-        changed.response.diagnostics?.loaderResetReason,
+        changed.meta?.diagnostics?.loaderResetReason,
         'loaderEpoch',
-        `a moved epoch is a drop, and the page that paid for it names the epoch, got: ${JSON.stringify(changed.response.diagnostics?.loaderResetReason)}`,
+        `a moved epoch is a drop, and the page that paid for it names the epoch, got: ${JSON.stringify(changed.meta?.diagnostics?.loaderResetReason)}`,
       );
       assert.ok(
-        (changed.response.diagnostics?.moduleEvaluationCount ?? 0) > 0,
-        `and evaluates the graph again, got: ${JSON.stringify(changed.response.diagnostics?.moduleEvaluationCount)}`,
+        (changed.meta?.diagnostics?.moduleEvaluationCount ?? 0) > 0,
+        `and evaluates the graph again, got: ${JSON.stringify(changed.meta?.diagnostics?.moduleEvaluationCount)}`,
       );
     });
 
