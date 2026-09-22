@@ -2486,17 +2486,15 @@ export default class StoreService extends Service implements StoreInterface {
             );
           }
 
+          let alreadyHeld: string | undefined;
           if (reloadFile) {
-            let alreadyHeld = this.#indexStateAlreadyHeld(
+            alreadyHeld = this.#indexStateAlreadyHeld(
               event,
               invalidation,
               instance,
             );
             if (alreadyHeld) {
               reloadFile = false;
-              realmEventsLogger.debug(
-                `ignoring invalidation for card ${invalidation} because ${alreadyHeld}`,
-              );
             }
           }
 
@@ -2518,8 +2516,11 @@ export default class StoreService extends Service implements StoreInterface {
             this.reloadTask.perform(instance, target);
             reloadsTriggered++;
           } else {
+            // One line per skip, naming the rule that decided it.
             realmEventsLogger.debug(
-              `ignoring invalidation ${invalidation} for request id ${clientRequestId}`,
+              alreadyHeld
+                ? `ignoring invalidation ${invalidation} because ${alreadyHeld}`
+                : `ignoring invalidation ${invalidation} for request id ${clientRequestId}`,
             );
           }
         } else {
@@ -2586,12 +2587,26 @@ export default class StoreService extends Service implements StoreInterface {
   // window own-request suppression above exists to close; these two rules
   // close cases it cannot reach.
   //
-  // `generation` orders. It is the generation of the pass that last wrote the
-  // card's index row, stamped onto the card+json GET, and a pass stamps every
-  // row it writes with its own — so an event at or below the generation in
-  // hand describes a pass this card has already been read past. That is what
-  // makes a duplicate delivery, and an event overtaken by a newer one, a
-  // no-op without keeping any memory of the events already seen.
+  // `generation` orders, and the two numbers it compares are not quite the
+  // same number. The one in hand is the card's own row generation, stamped
+  // onto the card+json GET; the one on the event is the generation of the pass
+  // that broadcast it. They coincide for a card that pass rewrote, since a
+  // pass stamps every row it writes with its own — and there an event at or
+  // below the generation in hand describes a pass this card has already been
+  // read past, which is what makes a duplicate delivery, and an event
+  // overtaken by a newer one, a no-op without keeping any memory of the events
+  // already seen.
+  //
+  // They come apart for a card invalidated by the earlier half of a mixed
+  // batch. `performIndex` runs once per module/instance group, each its own
+  // batch at its own generation, while `invalidations` accumulates across both
+  // and the one broadcast carries the union stamped with the closing pass's
+  // number — so a card the module flush invalidated keeps the flush's lower
+  // generation, and every event naming it reads as newer. This rule then never
+  // fires for it and it reloads as it did before. A missed skip and never a
+  // wrong one, which is the direction to fail in, and back-to-back duplicates
+  // are still bounded by the in-flight target below — but the comparison is
+  // not exact, so nothing should be built on it as though it were.
   //
   // `version` says something narrower and in a different currency: the file
   // the realm holds for this card is the file this tab's own last write
