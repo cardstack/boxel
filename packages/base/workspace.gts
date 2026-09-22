@@ -449,19 +449,20 @@ class Isolated extends Component<typeof Workspace> {
             class='tab {{if (eq this.segment "home") "active"}}'
             data-test-workspace-tab='home'
             {{on 'click' (this.setSegment 'home')}}
-          ><HouseIcon class='tab-icon' /> Home</button>
+          ><HouseIcon width='14' height='14' class='tab-icon' /> Home</button>
           <button
             type='button'
             class='tab {{if (eq this.segment "library") "active"}}'
             data-test-workspace-tab='library'
             {{on 'click' (this.setSegment 'library')}}
-          ><LayoutGridIcon class='tab-icon' /> Library</button>
+          ><LayoutGridIcon width='14' height='14' class='tab-icon' />
+            Library</button>
           <button
             type='button'
             class='tab {{if (eq this.segment "activity") "active"}}'
             data-test-workspace-tab='activity'
             {{on 'click' (this.setSegment 'activity')}}
-          ><ActivityIcon class='tab-icon' />
+          ><ActivityIcon width='14' height='14' class='tab-icon' />
             Activity{{#if this.runningJobs.length}}<span
                 class='attention-dot'
                 aria-hidden='true'
@@ -475,7 +476,7 @@ class Isolated extends Component<typeof Workspace> {
         {{/if}}
         <div class='frame-actions'>
           <div class='search-box' {{this.setupSearchHotkey}}>
-            <SearchIcon class='search-icon' />
+            <SearchIcon width='13' height='13' class='search-icon' />
             <input
               class='search-input'
               type='text'
@@ -619,7 +620,11 @@ class Isolated extends Component<typeof Workspace> {
                           {{/if}}
                         </div>
                         <div class='door-face'>
-                          <Door @format='fitted' />
+                          <Door
+                            @format='fitted'
+                            @displayContainer={{false}}
+                            class='door-card'
+                          />
                           <button
                             type='button'
                             class='tile-open'
@@ -855,7 +860,11 @@ class Isolated extends Component<typeof Workspace> {
                   {{on 'click' (this.selectFilter option)}}
                 >
                   {{#let (this.iconComponent option) as |Icon|}}
-                    {{#if Icon}}<Icon class='rail-icon' />{{/if}}
+                    {{#if Icon}}<Icon
+                        width='14'
+                        height='14'
+                        class='rail-icon'
+                      />{{/if}}
                   {{/let}}
                   <span class='rail-name'>{{option.displayName}}</span>
                   <span class='rail-count'>{{this.countFor option}}</span>
@@ -882,7 +891,11 @@ class Isolated extends Component<typeof Workspace> {
                           }}</span>
                       {{else if (this.iconComponent option)}}
                         {{#let (this.iconComponent option) as |Icon|}}
-                          {{#if Icon}}<Icon class='rail-icon' />{{/if}}
+                          {{#if Icon}}<Icon
+                              width='14'
+                              height='14'
+                              class='rail-icon'
+                            />{{/if}}
                         {{/let}}
                       {{else}}
                         <span class='rail-swatch' />
@@ -920,7 +933,11 @@ class Isolated extends Component<typeof Workspace> {
                         }}</span>
                     {{else if (this.iconComponent option)}}
                       {{#let (this.iconComponent option) as |Icon|}}
-                        {{#if Icon}}<Icon class='rail-icon' />{{/if}}
+                        {{#if Icon}}<Icon
+                            width='14'
+                            height='14'
+                            class='rail-icon'
+                          />{{/if}}
                       {{/let}}
                     {{else}}
                       <span class='rail-swatch' />
@@ -1001,7 +1018,11 @@ class Isolated extends Component<typeof Workspace> {
                         <div class='dock-pane build'>
                           <span class='dock-pane-label'>Building</span>
                           <div class='job-cell'>
-                            <job.component @format='embedded' />
+                            <job.component
+                              @format='embedded'
+                              @displayContainer={{false}}
+                              class='job-face'
+                            />
                             <button
                               type='button'
                               class='tile-open'
@@ -1034,7 +1055,11 @@ class Isolated extends Component<typeof Workspace> {
                       </div>
                     {{else}}
                       <div class='job-cell'>
-                        <job.component @format='embedded' />
+                        <job.component
+                          @format='embedded'
+                          @displayContainer={{false}}
+                          class='job-face'
+                        />
                         <button
                           type='button'
                           class='tile-open'
@@ -1068,7 +1093,7 @@ class Isolated extends Component<typeof Workspace> {
                         '—'
                       }}</span>
                     <div class='feed-card'>
-                      <item.component @format='embedded' />
+                      <item.component @format='embedded' class='feed-face' />
                       <button
                         type='button'
                         class='tile-open'
@@ -1087,7 +1112,11 @@ class Isolated extends Component<typeof Workspace> {
                             {{if (eq item.verb "Remixed") "remixed"}}'
                         >{{item.verb}}</span>
                         <span class='feed-type'>
-                          <item.typeIcon class='feed-type-icon' />
+                          <item.typeIcon
+                            width='12'
+                            height='12'
+                            class='feed-type-icon'
+                          />
                           {{item.typeName}}</span>
                       </div>
                       {{#if item.title}}
@@ -1127,55 +1156,56 @@ class Isolated extends Component<typeof Workspace> {
     </section>
     <style scoped>
       .card-grid {
-        /* Derived light-surface tier. System constants — the
-           chrome's switchgear. The realm theme may tint exactly two
-           channels: surface (--background) and accent (--primary). */
-        --grid-ink: #272330;
-        --grid-ink-body: #5a586a;
-        --grid-ink-quiet: #8b8b93;
-        --grid-ink-kicker: #919191;
-        --grid-ink-meta: #a2a2ab;
-        --grid-ink-faint: #b7b7bd;
-        --grid-ink-ghost: #c0c0c7;
-        --grid-stage: var(--background, #f7f8fa);
-        --grid-surface: #ffffff;
-        --grid-shelf: #fafbfc;
-        --grid-control: #f6f7f9;
-        --grid-track: #eef0f4;
-        --grid-nav-ink: #3f3d49;
-        --grid-border: #e2e8f0;
-        --grid-hairline: #eceef1;
-        --grid-hover-border: #cbd0d8;
-        --grid-interactive: var(--primary, #0c9d7c);
-        --grid-live: #00c495;
-        --grid-accent: var(--boxel-teal, #00ffba);
-        --grid-accent-ink: #12241e;
-        --grid-attention: #d97706;
-        --grid-attention-text: #b45309;
-        --grid-attention-surface: #fff9f2;
-        --grid-attention-border: #f4e6d4;
-        --grid-attention-rule: #f0ddc0;
-        --grid-broken: var(--boxel-red, #ff5050);
-        --grid-shadow-rest: 0 2px 8px rgba(28, 28, 50, 0.05);
-        --grid-shadow-hover: 0 10px 26px rgba(28, 28, 50, 0.11);
-        --grid-mono: var(
-          --boxel-monospace-font-family,
-          'IBM Plex Mono',
-          monospace
+        /* Derived values only; everything else reads the theme contract
+           directly. Attention tints are mixes of --attention over --card so
+           the register moves with the theme as one. */
+        --grid-interactive-edge: color-mix(
+          in oklch,
+          var(--primary) 40%,
+          transparent
         );
-        --grid-sans: var(--boxel-font-family, 'IBM Plex Sans', sans-serif);
-        --grid-serif: var(
-          --boxel-serif-font-family,
-          'IBM Plex Serif',
-          Georgia,
-          serif
+        --grid-attention-soft: color-mix(
+          in oklch,
+          var(--attention) 60%,
+          var(--card)
         );
+        --grid-attention-glow: color-mix(
+          in oklch,
+          var(--attention) 7%,
+          transparent
+        );
+        --grid-attention-surface: color-mix(
+          in oklch,
+          var(--attention) 6%,
+          var(--card)
+        );
+        --grid-attention-border: color-mix(
+          in oklch,
+          var(--attention) 18%,
+          var(--card)
+        );
+        --grid-attention-rule: color-mix(
+          in oklch,
+          var(--attention) 30%,
+          var(--card)
+        );
+        --grid-chip-border: color-mix(in oklch, var(--border) 70%, transparent);
+        /* looser leading for the welcome prose; no line-height token runs past 1.4 */
+        --grid-prose-leading: 1.6;
+        /* fixed geometry the layout is built around */
+        --grid-rail-width: 13.375rem;
+        --grid-search-width: 10.625rem;
+        --grid-search-input-width: 6.875rem;
+        --grid-search-results-size: 20rem;
+        --grid-frame-height: 3.375rem;
+        --grid-bar-height: 2.875rem;
+        --grid-readme-width: 45rem;
+        --grid-readme-collapsed-height: 12.5rem;
+        --grid-pill: 100rem;
         /* motion tokens (0.4s meter fill and 2s pulses stay as
-           deliberate exceptions) + the created-verb ink */
+           deliberate exceptions) */
         --grid-quick: 0.12s;
         --grid-soft: 0.18s;
-        --grid-created: #00893a;
-        --grid-remixed: #7c3aed;
 
         display: flex;
         flex-direction: column;
@@ -1183,194 +1213,206 @@ class Isolated extends Component<typeof Workspace> {
         height: 100%;
         max-height: 100vh;
         overflow: hidden;
-        background-color: var(--grid-stage);
-        color: var(--grid-ink);
-        font-family: var(--grid-sans);
       }
 
       /* ── Frame ─────────────────────────────────────────────── */
       .frame {
         display: flex;
         align-items: center;
-        gap: 14px;
-        min-height: 54px;
-        padding: 0 18px;
-        background-color: var(--grid-surface);
-        border-bottom: 1px solid var(--grid-border);
+        gap: var(--boxel-sp);
+        min-height: var(--grid-frame-height);
+        padding: 0 var(--boxel-sp-lg);
+        background-color: var(--card);
+        color: var(--card-foreground);
+        border-bottom: 1px solid var(--border);
         flex-shrink: 0;
       }
       .tabs {
         display: flex;
-        gap: 2px;
-        padding: 2px;
-        background-color: var(--grid-track);
-        border: 1px solid var(--grid-border);
-        border-radius: 9px;
+        gap: var(--boxel-sp-6xs);
+        padding: var(--boxel-sp-6xs);
+        background-color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius);
       }
       .tab {
         position: relative;
         display: inline-flex;
         align-items: center;
-        gap: 6px;
+        gap: var(--boxel-sp-3xs);
         border: none;
         background: none;
-        padding: 5px 12px;
-        border-radius: 7px;
-        font: 500 12.5px var(--grid-sans);
-        color: var(--grid-ink-quiet);
+        padding: var(--boxel-sp-3xs) var(--boxel-sp-sm);
+        border-radius: var(--boxel-border-radius-sm);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
+        color: var(--muted-foreground);
         cursor: pointer;
       }
       .tab.active {
-        background-color: var(--grid-surface);
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
-        color: var(--grid-ink);
+        background-color: var(--card);
+        color: var(--card-foreground);
+        box-shadow: var(--shadow-xs);
         font-weight: 600;
       }
       .tab-icon {
-        width: 14px;
-        height: 14px;
         flex-shrink: 0;
       }
       .attention-dot {
         position: absolute;
-        top: 4px;
-        right: 4px;
-        width: 5px;
-        height: 5px;
+        top: var(--boxel-sp-4xs);
+        right: var(--boxel-sp-4xs);
+        width: 0.3125rem;
+        height: 0.3125rem;
         border-radius: 50%;
-        background-color: var(--grid-attention);
+        background-color: var(--attention);
         animation: softpulse 2s ease-in-out infinite;
       }
       .frame-actions {
         margin-left: auto;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--boxel-sp-2xs);
       }
       /* workspace signage & description */
       .signage {
-        margin-left: 10px;
-        padding: 3px 8px;
-        border: 1px solid var(--grid-border);
-        border-radius: 5px;
-        font: 600 9.5px var(--grid-mono);
-        letter-spacing: 0.11em;
+        margin-left: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-2xs);
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius-sm);
+        font-family: var(--font-mono);
+        font-size: var(--boxel-eyebrow-font-size);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
-        color: var(--grid-ink-meta);
+        color: var(--subtle-foreground);
         white-space: nowrap;
         cursor: default;
       }
       .space-desc {
         margin: 0;
-        font: 400 13px/1.5 var(--grid-sans);
-        color: var(--grid-ink-quiet);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 400;
+        color: var(--muted-foreground);
       }
       .search-box {
         position: relative;
         display: inline-flex;
         align-items: center;
-        gap: 7px;
-        min-width: 170px;
-        border: 1px solid var(--grid-border);
-        border-radius: 8px;
-        padding: 6px 11px;
-        background-color: var(--grid-control);
+        gap: var(--boxel-sp-2xs);
+        min-width: var(--grid-search-width);
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius);
+        padding: var(--boxel-sp-3xs) var(--boxel-sp-sm);
+        background-color: var(--muted);
       }
       .search-box:focus-within {
-        border-color: var(--grid-interactive);
-        background-color: var(--grid-surface);
+        border-color: var(--ring);
+        background-color: var(--card);
       }
       .search-icon {
-        width: 13px;
-        height: 13px;
         flex-shrink: 0;
-        color: var(--grid-ink-quiet);
+        color: var(--muted-foreground);
       }
       .search-input {
         border: none;
         background: none;
         outline: none;
         padding: 0;
-        width: 110px;
-        font: 500 12.5px var(--grid-sans);
-        color: var(--grid-ink);
+        width: var(--grid-search-input-width);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
+        color: var(--foreground);
       }
       .search-input::placeholder {
-        color: #9a9aa2;
+        color: var(--muted-foreground);
       }
       .search-kbd {
         margin-left: auto;
-        font: 500 10px var(--grid-mono);
-        color: var(--grid-ink-ghost);
+        font-family: var(--font-mono);
+        font-size: var(--boxel-eyebrow-font-size);
+        font-weight: 500;
+        line-height: var(--boxel-eyebrow-line-height);
+        color: var(--subtle-foreground);
       }
       .search-results {
         position: absolute;
-        top: calc(100% + 6px);
+        top: calc(100% + 0.375rem);
         right: 0;
         z-index: 20;
-        width: 320px;
-        max-height: 320px;
+        width: var(--grid-search-results-size);
+        max-height: var(--grid-search-results-size);
         overflow-y: auto;
-        padding: 4px;
-        background-color: var(--grid-surface);
-        border: 1px solid var(--grid-border);
-        border-radius: 10px;
-        box-shadow: var(--grid-shadow-hover);
+        padding: var(--boxel-sp-4xs);
+        background-color: var(--card);
+        color: var(--card-foreground);
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius);
+        box-shadow: var(--shadow-lg);
       }
       .search-result {
         display: flex;
         align-items: baseline;
-        gap: 10px;
+        gap: var(--boxel-sp-xs);
         width: 100%;
         border: none;
         background: none;
         text-align: left;
-        padding: 7px 10px;
-        border-radius: 7px;
+        padding: var(--boxel-sp-2xs) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius-sm);
         cursor: pointer;
       }
       .search-result:hover {
-        background-color: var(--grid-track);
+        background-color: var(--hover);
       }
       .search-result-title {
         flex: 1;
         min-width: 0;
-        font: 500 12.5px var(--grid-sans);
-        color: var(--grid-ink);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
+        color: var(--foreground);
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
       }
       .search-result-type {
         flex-shrink: 0;
-        font: 600 9px var(--grid-mono);
-        letter-spacing: 0.06em;
+        font-family: var(--font-mono);
+        font-size: var(--boxel-eyebrow-font-size);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
-        color: var(--grid-ink-meta);
+        color: var(--subtle-foreground);
       }
       .search-see-all {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 10px;
+        gap: var(--boxel-sp-xs);
         width: 100%;
         border: 0;
-        border-top: 1px solid var(--grid-hairline);
-        padding: 8px 12px;
+        border-top: 1px solid var(--border);
+        padding: var(--boxel-sp-2xs) var(--boxel-sp-sm);
         background: transparent;
-        font: 600 12px var(--grid-sans);
-        color: var(--grid-interactive);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        color: var(--primary-ink);
         text-align: left;
         cursor: pointer;
       }
       .search-see-all:hover {
-        background-color: var(--grid-track);
+        background-color: var(--hover);
       }
       .search-scope-note {
-        font: 500 9px var(--grid-mono);
-        letter-spacing: 0.06em;
+        font-family: var(--font-mono);
+        font-size: var(--boxel-eyebrow-font-size);
+        font-weight: 500;
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
-        color: var(--grid-ink-ghost);
+        color: var(--subtle-foreground);
       }
       @keyframes softpulse {
         0%,
@@ -1387,10 +1429,10 @@ class Isolated extends Component<typeof Workspace> {
         flex-grow: 1;
         min-height: 0;
         overflow-y: auto;
-        padding: 24px 26px 30px;
+        padding: var(--boxel-sp-xl);
         display: grid;
         align-content: start;
-        gap: 28px;
+        gap: var(--boxel-sp-xl);
       }
       .library {
         flex-grow: 1;
@@ -1400,15 +1442,15 @@ class Isolated extends Component<typeof Workspace> {
 
       /* ── Facet rail ────────────────────────────────────────── */
       .rail {
-        width: 214px;
+        width: var(--grid-rail-width);
         flex-shrink: 0;
         overflow-y: auto;
-        background-color: var(--grid-shelf);
-        border-right: 1px solid var(--grid-hairline);
-        padding: 16px 10px;
+        background-color: var(--muted);
+        border-right: 1px solid var(--border);
+        padding: var(--boxel-sp) var(--boxel-sp-xs);
         display: flex;
         flex-direction: column;
-        gap: 18px;
+        gap: var(--boxel-sp-lg);
       }
       .rail-group {
         display: grid;
@@ -1416,23 +1458,27 @@ class Isolated extends Component<typeof Workspace> {
       }
       .rail-label {
         margin: 0;
-        padding: 4px 10px 6px;
-        font: 600 9.5px var(--grid-mono);
-        letter-spacing: 0.11em;
+        padding: var(--boxel-sp-4xs) var(--boxel-sp-xs) var(--boxel-sp-3xs);
+        font-family: var(--font-mono);
+        font-size: var(--boxel-eyebrow-font-size);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
-        color: var(--grid-ink-meta);
+        color: var(--subtle-foreground);
       }
       .rail-row {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--boxel-sp-2xs);
         border: none;
         background: none;
         text-align: left;
-        padding: 6px 10px;
-        border-radius: 7px;
-        font: 500 13px var(--grid-sans);
-        color: var(--grid-nav-ink);
+        padding: var(--boxel-sp-3xs) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius-sm);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 500;
+        color: var(--foreground);
         cursor: pointer;
         /* Without this the row keeps its max-content width instead of the
            rail's, so a long type name pushes the count and the + past the
@@ -1441,33 +1487,28 @@ class Isolated extends Component<typeof Workspace> {
            narrower than its content. */
         min-width: 0;
       }
-      .rail-row.type {
-        padding: 5px 10px;
-      }
       .rail-row:hover {
-        background-color: var(--grid-track);
+        background-color: var(--hover);
       }
       .rail-row.selected {
-        color: #12463a;
-        background-color: rgba(0, 255, 186, 0.16);
-        box-shadow: inset 0 0 0 1px rgba(0, 201, 150, 0.4);
+        color: var(--foreground);
+        background-color: var(--selected);
+        box-shadow: inset 0 0 0 1px var(--grid-interactive-edge);
       }
       .rail-icon {
-        width: 14px;
-        height: 14px;
         flex-shrink: 0;
-        color: var(--grid-ink-quiet);
+        color: var(--muted-foreground);
       }
       .rail-row.selected .rail-icon {
-        color: var(--grid-interactive);
+        color: var(--primary-ink);
       }
       .rail-swatch {
-        width: 8px;
-        height: 8px;
-        border-radius: 2px;
-        background-color: var(--grid-ink-faint);
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: var(--boxel-border-radius-xs);
+        background-color: var(--subtle-foreground);
         flex-shrink: 0;
-        margin: 0 3px;
+        margin: 0 var(--boxel-sp-5xs);
       }
       /* hover + on card-type rows (the relocated New button) */
       .rail-row-wrap {
@@ -1475,22 +1516,24 @@ class Isolated extends Component<typeof Workspace> {
         display: grid;
       }
       .rail-row-wrap .rail-row {
-        padding-right: 30px;
+        padding-right: var(--boxel-sp-xl);
       }
       .rail-add {
         position: absolute;
-        right: 5px;
+        right: var(--boxel-sp-3xs);
         top: 50%;
         transform: translateY(-50%);
-        width: 20px;
-        height: 20px;
+        width: 1.25rem;
+        height: 1.25rem;
         display: grid;
         place-items: center;
         border: 0;
-        border-radius: 5px;
-        background-color: var(--grid-control);
-        color: var(--grid-ink-quiet);
-        font: 600 13px/1 var(--grid-sans);
+        border-radius: var(--boxel-border-radius-sm);
+        background-color: var(--muted);
+        color: var(--muted-foreground);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 600;
+        line-height: 1;
         cursor: pointer;
         /* quietly present at rest — hover-only proved undiscoverable */
         opacity: 0.45;
@@ -1502,24 +1545,24 @@ class Isolated extends Component<typeof Workspace> {
       }
       .rail-add:hover {
         opacity: 1;
-        background-color: var(--grid-accent);
-        color: var(--grid-accent-ink);
+        background-color: var(--primary);
+        color: var(--primary-foreground);
       }
       .rail-type-icon {
         display: grid;
         place-items: center;
-        width: 14px;
-        height: 14px;
+        width: 0.875rem;
+        height: 0.875rem;
         flex-shrink: 0;
-        color: var(--grid-ink-quiet);
+        color: var(--muted-foreground);
       }
       .rail-type-icon :deep(svg) {
-        width: 14px;
-        height: 14px;
+        width: 0.875rem;
+        height: 0.875rem;
         display: block;
       }
       .rail-row.selected .rail-type-icon {
-        color: var(--grid-interactive);
+        color: var(--primary-ink);
       }
       .rail-name {
         overflow: hidden;
@@ -1528,18 +1571,20 @@ class Isolated extends Component<typeof Workspace> {
       }
       .rail-count {
         margin-left: auto;
-        font: 500 11px var(--grid-mono);
-        color: var(--grid-ink-meta);
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-2xs);
+        font-weight: 500;
+        color: var(--subtle-foreground);
       }
       .rail-row.selected .rail-count {
-        color: var(--grid-interactive);
+        color: var(--primary-ink);
       }
       .library :deep(.boxel-cards-grid-layout .sidebar) {
         display: none;
       }
       .zone {
         display: grid;
-        gap: 12px;
+        gap: var(--boxel-sp-sm);
       }
       /* ── Activity dock: collapsing panel (). The full panel is the
          first block inside the scrolling stage; once it scrolls off-screen
@@ -1559,9 +1604,9 @@ class Isolated extends Component<typeof Workspace> {
       .dock {
         position: relative;
         display: grid;
-        gap: 10px;
-        margin: 0 -26px; /* counter the stage side padding: flush edges */
-        padding: 14px 26px 16px;
+        gap: var(--boxel-sp-xs);
+        margin: 0 calc(-1 * var(--boxel-sp-xl)); /* counter the stage side padding: flush edges */
+        padding: var(--boxel-sp) var(--boxel-sp-xl) var(--boxel-sp);
         background-color: var(--grid-attention-surface);
         border-bottom: 1px solid var(--grid-attention-border);
         /* no overflow: hidden here — an overflow-hidden grid item's
@@ -1578,8 +1623,8 @@ class Isolated extends Component<typeof Workspace> {
         background: linear-gradient(
           90deg,
           transparent,
-          #f0a94b,
-          #d97706,
+          var(--grid-attention-soft),
+          var(--attention),
           transparent
         );
         background-size: 200% 100%;
@@ -1588,26 +1633,24 @@ class Isolated extends Component<typeof Workspace> {
       .dock-head {
         display: flex;
         align-items: baseline;
-        gap: 10px;
+        gap: var(--boxel-sp-xs);
       }
       .dock-dot {
-        width: 8px;
-        height: 8px;
+        width: 0.5rem;
+        height: 0.5rem;
         border-radius: 50%;
         flex-shrink: 0;
         align-self: center;
-        background-color: var(--grid-attention);
+        background-color: var(--attention);
         animation: softpulse 2s ease-in-out infinite;
       }
       .dock-title {
-        margin: 0;
-        font: 600 15px/1.3 var(--grid-sans);
-        letter-spacing: -0.01em;
-        color: var(--grid-attention-text);
+        color: var(--attention-ink);
       }
       .dock-hint {
-        font: 400 12px var(--grid-sans);
-        color: #c78b4a;
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 400;
+        color: var(--attention-ink);
       }
       .dock-mini {
         position: absolute;
@@ -1617,12 +1660,12 @@ class Isolated extends Component<typeof Workspace> {
         z-index: 4;
         display: flex;
         align-items: center;
-        gap: 10px;
-        padding: 9px 26px 11px;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-xl) var(--boxel-sp-sm);
         border: 0;
         border-bottom: 1px solid var(--grid-attention-border);
         background-color: var(--grid-attention-surface);
-        box-shadow: 0 2px 8px rgba(28, 28, 50, 0.08);
+        box-shadow: var(--shadow-sm);
         text-align: left;
         cursor: pointer;
         opacity: 0;
@@ -1639,9 +1682,9 @@ class Isolated extends Component<typeof Workspace> {
       }
       .dock-mini-title {
         flex-shrink: 0;
-        font: 600 12.5px var(--grid-sans);
-        letter-spacing: -0.01em;
-        color: var(--grid-attention-text);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        color: var(--attention-ink);
       }
       .dock-mini-summary {
         flex: 1;
@@ -1649,9 +1692,10 @@ class Isolated extends Component<typeof Workspace> {
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
-        font: 400 12.5px var(--grid-sans);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 400;
         font-variant-numeric: tabular-nums;
-        color: #c78b4a;
+        color: var(--attention-ink);
       }
       .dock-mini-track {
         position: absolute;
@@ -1665,7 +1709,7 @@ class Isolated extends Component<typeof Workspace> {
       .dock-mini-fill {
         display: block;
         height: 100%;
-        background-color: var(--grid-attention);
+        background-color: var(--attention);
         transition: width 0.4s ease;
       }
       @keyframes scan {
@@ -1681,21 +1725,16 @@ class Isolated extends Component<typeof Workspace> {
          Boxel voice), data speaks mono fragments. */
       .section-head {
         display: grid;
-        gap: 2px;
-      }
-      .section-title {
-        margin: 0;
-        font: 600 17px/1.3 var(--grid-sans);
-        letter-spacing: -0.01em;
-        color: var(--grid-ink);
+        gap: var(--boxel-sp-6xs);
       }
       .section-hint {
         margin: 0;
-        font: 400 12px var(--grid-sans);
-        color: var(--grid-ink-quiet);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 400;
+        color: var(--muted-foreground);
       }
       .notice .section-hint {
-        color: #c78b4a;
+        color: var(--attention-ink);
       }
 
       /* ── Setup status bar (passive; one click target → Activity) ── */
@@ -1704,13 +1743,13 @@ class Isolated extends Component<typeof Workspace> {
         overflow: hidden;
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: var(--boxel-sp-sm);
         width: 100%;
-        min-height: 46px;
+        min-height: var(--grid-bar-height);
         text-align: left;
         border: 1px solid var(--grid-attention-border);
-        border-radius: 12px;
-        padding: 11px 16px;
+        border-radius: var(--boxel-border-radius-lg);
+        padding: var(--boxel-sp-sm) var(--boxel-sp);
         background-color: var(--grid-attention-surface);
         cursor: pointer;
         transition:
@@ -1718,8 +1757,8 @@ class Isolated extends Component<typeof Workspace> {
           box-shadow var(--grid-quick) ease;
       }
       .setup-bar:hover {
-        border-color: #e6c893;
-        box-shadow: var(--grid-shadow-rest);
+        border-color: var(--grid-attention-rule);
+        box-shadow: var(--shadow-sm);
       }
       /* canvas `sweep`: a soft light pass keeps the bar alive */
       .setup-bar::before {
@@ -1729,7 +1768,7 @@ class Isolated extends Component<typeof Workspace> {
         background: linear-gradient(
           90deg,
           transparent,
-          rgba(217, 119, 6, 0.07),
+          var(--grid-attention-glow),
           transparent
         );
         transform: translateX(-100%);
@@ -1750,21 +1789,21 @@ class Isolated extends Component<typeof Workspace> {
          learnings 2026-07-15); the children carry their own radii. */
       .setup-strip {
         border: 1px solid var(--grid-attention-border);
-        border-radius: 12px;
+        border-radius: var(--boxel-border-radius-lg);
       }
       .setup-strip .setup-bar {
         border: 0;
-        border-radius: 11px;
+        border-radius: var(--boxel-border-radius);
       }
       .setup-strip .setup-bar:not(:last-child) {
-        border-radius: 11px 11px 0 0;
+        border-radius: var(--boxel-border-radius) var(--boxel-border-radius) 0 0;
       }
       .setup-tease {
-        border-radius: 0 0 11px 11px;
+        border-radius: 0 0 var(--boxel-border-radius) var(--boxel-border-radius);
       }
       .setup-ring {
-        width: 20px;
-        height: 20px;
+        width: 1.25rem;
+        height: 1.25rem;
         border-radius: 50%;
         flex-shrink: 0;
         display: grid;
@@ -1772,8 +1811,8 @@ class Isolated extends Component<typeof Workspace> {
         animation: softpulse 3s ease-in-out infinite;
       }
       .setup-ring-hole {
-        width: 12px;
-        height: 12px;
+        width: 0.75rem;
+        height: 0.75rem;
         border-radius: 50%;
         background-color: var(--grid-attention-surface);
       }
@@ -1783,8 +1822,9 @@ class Isolated extends Component<typeof Workspace> {
         min-width: 0;
       }
       .setup-name {
-        font: 400 13px var(--grid-sans);
-        color: var(--grid-attention-text);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 400;
+        color: var(--attention-ink);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -1793,8 +1833,10 @@ class Isolated extends Component<typeof Workspace> {
         font-weight: 600;
       }
       .setup-data {
-        font: 500 10.5px var(--grid-mono);
-        color: #a35a00;
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-2xs);
+        font-weight: 500;
+        color: var(--attention-ink);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -1802,65 +1844,76 @@ class Isolated extends Component<typeof Workspace> {
       }
       .setup-track {
         flex: 1;
-        min-width: 60px;
-        height: 6px;
-        border-radius: 100px;
-        background-color: #f2e2c8;
+        min-width: 3.75rem;
+        height: 0.375rem;
+        border-radius: var(--grid-pill);
+        background-color: var(--grid-attention-rule);
         overflow: hidden;
       }
       .setup-fill {
         display: block;
         height: 100%;
-        border-radius: 100px;
-        background: linear-gradient(90deg, #e0b878, #d97706);
+        border-radius: var(--grid-pill);
+        background: linear-gradient(
+          90deg,
+          var(--grid-attention-soft),
+          var(--attention)
+        );
       }
       .setup-pct {
         flex-shrink: 0;
-        font: 600 11px var(--grid-mono);
-        color: var(--grid-attention-text);
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-2xs);
+        font-weight: 600;
+        color: var(--attention-ink);
         font-variant-numeric: tabular-nums;
       }
       .setup-action {
         flex-shrink: 0;
-        font: 600 12.5px var(--grid-sans);
-        color: var(--grid-interactive);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        color: var(--primary-ink);
       }
       .setup-tease {
         display: flex;
         align-items: center;
-        gap: 7px;
+        gap: var(--boxel-sp-2xs);
         width: 100%;
-        padding: 9px 16px;
+        padding: var(--boxel-sp-xs) var(--boxel-sp);
         border: 0;
         border-top: 1px dashed var(--grid-attention-border);
-        background-color: #fffdf8;
+        background-color: var(--card);
         text-align: left;
-        font: 400 12.5px var(--grid-sans);
-        color: var(--grid-ink-body);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 400;
+        color: var(--muted-foreground);
         cursor: pointer;
       }
       .setup-tease-mark {
-        color: var(--grid-attention);
+        color: var(--attention);
       }
       .setup-tease-link {
         font-weight: 600;
-        color: var(--grid-interactive);
+        color: var(--primary-ink);
       }
       .setup-tease:hover .setup-tease-link {
         text-decoration: underline;
       }
       .setup-tease:focus-visible {
-        outline: 2px solid var(--grid-interactive);
+        outline: 2px solid var(--ring);
         outline-offset: -2px;
       }
 
       /* ── Doors ─────────────────────────────────────────────── */
       .doors {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(var(--grid-search-results-size), 1fr)
+        );
         /* tile height set from DOOR_TILE_HEIGHT_* via doorsStyle */
         grid-auto-rows: var(--door-h);
-        gap: 20px;
+        gap: var(--boxel-sp-lg);
       }
       /* Containment: the fitted face IS the shadowed card (so the host's
          selection outline and overlay land exactly on the visible box); the
@@ -1874,20 +1927,22 @@ class Isolated extends Component<typeof Workspace> {
       .door-kicker {
         display: flex;
         align-items: baseline;
-        padding: 0 2px 8px;
+        padding: 0 var(--boxel-sp-6xs) var(--boxel-sp-2xs);
       }
       /* pin management affordances */
       .door-unpin {
         margin-left: auto;
-        width: 18px;
-        height: 18px;
+        width: 1.125rem;
+        height: 1.125rem;
         display: grid;
         place-items: center;
         border: 0;
-        border-radius: 5px;
+        border-radius: var(--boxel-border-radius-sm);
         background: transparent;
-        color: var(--grid-ink-ghost);
-        font: 500 13px/1 var(--grid-sans);
+        color: var(--subtle-foreground);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 500;
+        line-height: 1;
         cursor: pointer;
         opacity: 0;
         transition: opacity var(--grid-quick) ease;
@@ -1897,38 +1952,44 @@ class Isolated extends Component<typeof Workspace> {
         opacity: 1;
       }
       .door-unpin:hover {
-        background-color: var(--grid-track);
-        color: var(--grid-ink);
+        background-color: var(--hover);
+        color: var(--foreground);
       }
       .door-add {
         display: grid;
         place-content: center;
-        gap: 6px;
+        gap: var(--boxel-sp-3xs);
         justify-items: center;
-        border: 1.5px dashed var(--grid-border);
-        border-radius: 13px;
+        border: 1.5px dashed var(--border);
+        border-radius: var(--boxel-border-radius-lg);
         background: transparent;
-        color: var(--grid-ink-quiet);
+        color: var(--muted-foreground);
         cursor: pointer;
         transition:
           border-color var(--grid-quick) ease,
           color var(--grid-quick) ease;
       }
       .door-add:hover {
-        border-color: var(--grid-interactive);
-        color: var(--grid-interactive);
+        border-color: var(--primary-ink);
+        color: var(--primary-ink);
       }
       .door-add-mark {
-        font: 300 30px/1 var(--grid-sans);
+        font-size: var(--boxel-font-size-xl);
+        font-weight: 300;
+        line-height: 1;
       }
       .door-add-label {
-        font: 600 12.5px var(--grid-sans);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
       }
       .door-kind {
-        font: 600 9px var(--grid-mono);
-        letter-spacing: 0.11em;
+        font-family: var(--font-mono);
+        font-size: var(--boxel-eyebrow-font-size);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
-        color: var(--grid-ink-kicker);
+        color: var(--muted-foreground);
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
@@ -1937,37 +1998,36 @@ class Isolated extends Component<typeof Workspace> {
         min-height: 0;
         position: relative; /* Containing block for the shared click-to-open overlay */
       }
-      .door-face :deep(.field-component-card) {
+      /* the class lands on the pinned card's CardContainer; the card draws
+         the edge itself, so the host's boundary ring is off */
+      .door-card {
         height: 100%;
         max-height: 100%;
-        overflow: hidden;
-      }
-      .door-face :deep(.boxel-card-container) {
-        height: 100%;
-        border: 1px solid var(--grid-border);
-        border-radius: 12px;
-        box-shadow: var(--grid-shadow-rest);
-        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius-lg);
+        box-shadow: var(--shadow-sm);
         transition:
           box-shadow var(--grid-quick) ease,
           border-color var(--grid-quick) ease;
       }
-      .door:hover :deep(.boxel-card-container) {
-        border-color: var(--grid-hover-border);
-        box-shadow: var(--grid-shadow-hover);
+      .door:hover .door-card {
+        border-color: var(--border-strong);
+        box-shadow: var(--shadow-lg);
       }
       .door-footer {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: var(--boxel-sp-xs);
         min-width: 0; /* Establish the flex shrink boundary for title + action */
-        padding: 10px 2px 0;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-6xs) 0;
       }
       .door-title {
         flex: 1 1 auto; /* The label owns only the space left by Open */
         min-width: 0;
-        font: 500 10.5px var(--grid-mono);
-        color: var(--grid-ink-kicker);
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-2xs);
+        font-weight: 500;
+        color: var(--muted-foreground);
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
@@ -1981,127 +2041,142 @@ class Isolated extends Component<typeof Workspace> {
       /* ── Inventory (Home): what lives here, grouped by kind ── */
       .inventory {
         display: grid;
-        gap: 10px;
+        gap: var(--boxel-sp-xs);
       }
       .inventory-group {
         display: grid;
-        grid-template-columns: 44px 1fr;
-        gap: 12px;
+        grid-template-columns: 2.75rem 1fr;
+        gap: var(--boxel-sp-sm);
         align-items: start;
       }
       .inventory-label {
-        padding-top: 8px;
-        font: 600 9.5px var(--grid-mono);
-        letter-spacing: 0.11em;
+        padding-top: var(--boxel-sp-2xs);
+        font-family: var(--font-mono);
+        font-size: var(--boxel-eyebrow-font-size);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
-        color: var(--grid-ink-meta);
+        color: var(--muted-foreground);
       }
       .inventory-chips {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: var(--boxel-sp-2xs);
       }
       .type-chip {
         display: inline-flex;
         align-items: center;
-        gap: 7px;
-        border: 1px solid var(--grid-border);
-        border-radius: 100px;
-        padding: 5px 12px 5px 9px;
-        background-color: var(--grid-surface);
-        font: 500 12.5px var(--grid-sans);
-        color: var(--grid-nav-ink);
+        gap: var(--boxel-sp-2xs);
+        border: 1px solid var(--grid-chip-border);
+        border-radius: var(--grid-pill);
+        padding: var(--boxel-sp-3xs) var(--boxel-sp-sm) var(--boxel-sp-3xs)
+          var(--boxel-sp-xs);
+        background-color: var(--card);
+        color: var(--card-foreground);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
         cursor: pointer;
       }
       .type-chip:hover {
-        border-color: var(--grid-hover-border);
-        box-shadow: var(--grid-shadow-rest);
+        border-color: var(--border-strong);
+        box-shadow: var(--shadow-sm);
       }
       .type-chip-icon {
         display: grid;
         place-items: center;
-        width: 14px;
-        height: 14px;
+        width: 0.875rem;
+        height: 0.875rem;
         flex-shrink: 0;
-        color: var(--grid-ink-quiet);
+        color: var(--muted-foreground);
       }
       .type-chip-icon :deep(svg) {
-        width: 14px;
-        height: 14px;
+        width: 0.875rem;
+        height: 0.875rem;
         display: block;
       }
       .type-chip-count {
-        font: 500 10.5px var(--grid-mono);
-        color: var(--grid-ink-meta);
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-2xs);
+        font-weight: 500;
+        color: var(--subtle-foreground);
       }
       /* ── Recent preview (passive, one row → Activity) ──────── */
       .recent-preview {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: var(--boxel-sp-sm);
         width: 100%;
         text-align: left;
-        border: 1px solid var(--grid-hairline);
-        border-radius: 10px;
-        padding: 10px 14px;
-        background-color: var(--grid-shelf);
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius);
+        padding: var(--boxel-sp-xs) var(--boxel-sp);
+        background-color: var(--muted);
         cursor: pointer;
         transition: border-color var(--grid-quick) ease;
       }
       .recent-preview:hover {
-        border-color: var(--grid-hover-border);
+        border-color: var(--border-strong);
       }
       .recent-text {
         flex: 1;
         min-width: 0;
-        font: 500 11px var(--grid-mono);
-        color: var(--grid-ink-body);
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-2xs);
+        font-weight: 500;
+        color: var(--muted-foreground);
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
       }
       .recent-action {
         flex-shrink: 0;
-        font: 600 12.5px var(--grid-sans);
-        color: var(--grid-interactive);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        color: var(--primary-ink);
       }
 
       /* ── Activity log: when | what | why ───────────────────── */
       .feed {
         display: grid;
-        gap: 10px;
+        gap: var(--boxel-sp-xs);
       }
       .feed-day {
         display: flex;
         align-items: center;
-        gap: 10px;
-        margin-top: 8px;
+        gap: var(--boxel-sp-xs);
+        margin-top: var(--boxel-sp-2xs);
       }
       .feed-day:first-child {
         margin-top: 0;
       }
       .feed-day-label {
-        font: 600 9.5px var(--grid-mono);
-        letter-spacing: 0.11em;
+        font-family: var(--font-mono);
+        font-size: var(--boxel-eyebrow-font-size);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
-        color: var(--grid-ink-meta);
+        color: var(--subtle-foreground);
         white-space: nowrap;
       }
       .feed-day-rule {
         flex: 1;
         height: 1px;
-        background-color: var(--grid-hairline);
+        background-color: var(--border);
       }
       .feed-row {
         display: grid;
-        grid-template-columns: 72px minmax(0, 440px) minmax(160px, 1fr);
-        gap: 14px;
+        grid-template-columns: 4.5rem minmax(0, 27.5rem) minmax(10rem, 1fr);
+        gap: var(--boxel-sp);
         align-items: start;
       }
       .feed-when {
-        padding-top: 12px;
-        font: 500 10.5px var(--grid-mono);
-        color: var(--grid-ink-meta);
+        padding-top: var(--boxel-sp-sm);
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-2xs);
+        font-weight: 500;
+        color: var(--subtle-foreground);
         text-align: right;
         white-space: nowrap;
         font-variant-numeric: tabular-nums;
@@ -2109,66 +2184,72 @@ class Isolated extends Component<typeof Workspace> {
       .feed-card {
         min-width: 0;
       }
-      .feed-card :deep(.boxel-card-container) {
-        background-color: var(--grid-surface);
-        border: 1px solid var(--grid-border);
-        border-radius: 10px;
-        overflow: hidden;
+      /* the class lands on the child's CardContainer; its boundary ring
+         draws the edge and its corners follow the theme */
+      .feed-face {
+        background-color: var(--card);
+        color: var(--card-foreground);
       }
       .feed-note {
         min-width: 0;
-        padding-top: 10px;
+        padding-top: var(--boxel-sp-xs);
         display: grid;
-        gap: 3px;
+        gap: var(--boxel-sp-5xs);
       }
       .feed-meta {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--boxel-sp-2xs);
         min-width: 0;
       }
       .feed-verb {
         flex-shrink: 0;
-        font: 600 9.5px var(--grid-mono);
-        letter-spacing: 0.08em;
+        font-family: var(--font-mono);
+        font-size: var(--boxel-eyebrow-font-size);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
-        color: var(--grid-ink-faint);
+        color: var(--subtle-foreground);
       }
       .feed-verb.created {
-        color: var(--grid-created);
+        color: var(--success-ink);
       }
       .feed-verb.remixed {
-        color: var(--grid-remixed);
+        color: var(--info-ink);
       }
       .feed-type {
         display: inline-flex;
         align-items: center;
-        gap: 4px;
+        gap: var(--boxel-sp-4xs);
         min-width: 0;
         overflow: hidden;
         white-space: nowrap;
-        font: 500 9.5px var(--grid-mono);
-        letter-spacing: 0.08em;
+        font-family: var(--font-mono);
+        font-size: var(--boxel-eyebrow-font-size);
+        font-weight: 500;
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
-        color: var(--grid-ink-meta);
+        color: var(--subtle-foreground);
       }
       .feed-type-icon {
-        width: 12px;
-        height: 12px;
         flex-shrink: 0;
       }
       .feed-title {
         margin: 0;
-        font: 600 12.5px/1.35 var(--grid-sans);
-        color: var(--grid-ink);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        color: var(--foreground);
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
       }
       .feed-remix-source {
         margin: 0;
-        font: 500 11px/1.35 var(--grid-sans);
-        color: var(--grid-ink-meta);
+        font-size: var(--boxel-font-size-2xs);
+        font-weight: 500;
+        color: var(--subtle-foreground);
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
@@ -2177,24 +2258,26 @@ class Isolated extends Component<typeof Workspace> {
       .feed-more {
         display: grid;
         place-items: center;
-        padding: 10px 0 4px;
+        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-4xs);
       }
       .feed-more-note,
       .feed-end-note {
         margin: 0;
-        font: 500 10.5px var(--grid-mono);
-        letter-spacing: 0.04em;
-        color: var(--grid-ink-ghost);
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-2xs);
+        font-weight: 500;
+        color: var(--subtle-foreground);
         font-variant-numeric: tabular-nums;
       }
       .feed-end-note {
         text-align: center;
-        padding: 10px 0 4px;
+        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-4xs);
       }
       .feed-note-text {
         margin: 0;
-        font: 400 12.5px/1.5 var(--grid-sans);
-        color: var(--grid-ink-body);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 400;
+        color: var(--muted-foreground);
         overflow: hidden;
         display: -webkit-box;
         -webkit-box-orient: vertical;
@@ -2205,47 +2288,53 @@ class Isolated extends Component<typeof Workspace> {
       .dock-duo {
         display: flex;
         flex-wrap: wrap;
-        gap: 12px;
+        gap: var(--boxel-sp-sm);
         align-items: flex-start;
       }
       .dock-pane {
         display: grid;
-        gap: 6px;
+        gap: var(--boxel-sp-3xs);
         min-width: 0;
       }
       .dock-pane.build {
-        flex: 1.45 1 340px;
+        flex: 1.45 1 21.25rem;
       }
       .dock-pane.invite {
-        flex: 1 1 260px;
+        flex: 1 1 16.25rem;
       }
       .dock-pane-label {
-        font: 600 9.5px var(--grid-mono);
-        letter-spacing: 0.11em;
+        font-family: var(--font-mono);
+        font-size: var(--boxel-eyebrow-font-size);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
-        color: var(--grid-attention-text);
+        color: var(--attention-ink);
       }
       .dock-pane-head {
         display: flex;
         align-items: baseline;
         justify-content: space-between;
-        gap: 10px;
+        gap: var(--boxel-sp-xs);
       }
       .dock-pane-open {
         border: 0;
         background: none;
         padding: 0;
-        font: 600 10px var(--grid-mono);
-        letter-spacing: 0.08em;
+        font-family: var(--font-mono);
+        font-size: var(--boxel-eyebrow-font-size);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
-        color: var(--grid-attention-text);
+        color: var(--attention-ink);
         cursor: pointer;
       }
       .dock-pane-open:hover {
-        color: var(--grid-ink);
+        color: var(--foreground);
       }
       .dock-pane-open:focus-visible {
-        outline: 2px solid var(--grid-interactive);
+        outline: 2px solid var(--ring);
         outline-offset: 2px;
       }
       /* the wizard pane accepts input — never dim or intercept it */
@@ -2267,24 +2356,24 @@ class Isolated extends Component<typeof Workspace> {
         padding: 0;
         background: transparent;
         cursor: pointer;
-        border-radius: 10px;
+        border-radius: var(--boxel-border-radius);
       }
       .tile-open:focus-visible {
-        outline: 2px solid var(--grid-interactive);
+        outline: 2px solid var(--ring);
         outline-offset: -2px;
       }
 
       /* ── Jobs ──────────────────────────────────────────────── */
       /* Same containment rule: the card container is the visible box. */
       .job-cell + .job-cell {
-        margin-top: 12px;
+        margin-top: var(--boxel-sp-sm);
       }
-      .job-cell :deep(.boxel-card-container) {
-        background-color: var(--grid-surface);
-        border: 1px solid var(--grid-border);
-        border-radius: 13px;
-        box-shadow: var(--grid-shadow-rest);
-        overflow: hidden;
+      .job-face {
+        background-color: var(--card);
+        color: var(--card-foreground);
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius-lg);
+        box-shadow: var(--shadow-sm);
       }
 
       /* ── Welcome & empties ─────────────────────────────────── */
@@ -2294,8 +2383,10 @@ class Isolated extends Component<typeof Workspace> {
       }
       .welcome-copy {
         margin: 0;
-        font: 400 14px/1.6 var(--grid-sans);
-        color: var(--grid-ink-body);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 400;
+        line-height: var(--grid-prose-leading);
+        color: var(--muted-foreground);
       }
       /* README rendering: the realm's markdown document, content-only (no file
          shell chrome). The card owns its own frame and its own collapse clamp,
@@ -2303,79 +2394,83 @@ class Isolated extends Component<typeof Workspace> {
       .readme-embed {
         position: relative;
         width: 100%;
-        max-width: 720px;
-        border: 1px solid var(--grid-border);
-        border-radius: 12px;
-        box-shadow: var(--grid-shadow-rest);
-        /* The card's own light tier, like every other panel here: the markdown
-           inherits this stylesheet's fixed --grid-ink, so a surface that moved
-           with the theme would leave the two on different schemes. */
-        background-color: var(--grid-surface);
+        max-width: var(--grid-readme-width);
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius-lg);
+        box-shadow: var(--shadow-sm);
+        /* Same panel surface as the rest of the card; the markdown inherits
+           the paired foreground. */
+        background-color: var(--card);
+        color: var(--card-foreground);
         overflow: hidden;
       }
       .readme-body {
-        padding: 20px 24px;
+        padding: var(--boxel-sp-lg) var(--boxel-sp-xl);
       }
       /* Collapsed (About this space, before Read more): bound the height and
          fade the cut so it reads as "more below". The empty-space hero and the
          expanded state render the whole document. */
       .readme-embed.collapsed .readme-body {
-        max-height: 200px;
+        max-height: var(--grid-readme-collapsed-height);
         overflow: hidden;
-        -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent);
-        mask-image: linear-gradient(to bottom, #000 72%, transparent);
+        -webkit-mask-image: linear-gradient(to bottom, black 72%, transparent);
+        mask-image: linear-gradient(to bottom, black 72%, transparent);
       }
       .readme-toggle {
         justify-self: start;
         border: 0;
         background: none;
-        padding: 2px 0;
-        font: 600 12.5px var(--grid-sans);
-        color: var(--grid-interactive);
+        padding: var(--boxel-sp-6xs) 0;
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        color: var(--primary-ink);
         cursor: pointer;
       }
       /* space details strip */
       .space-details {
         display: flex;
         align-items: center;
-        gap: 7px;
-        padding-top: 6px;
-        font: 500 10.5px var(--grid-mono);
-        letter-spacing: 0.03em;
-        color: var(--grid-ink-ghost);
+        gap: var(--boxel-sp-2xs);
+        padding-top: var(--boxel-sp-3xs);
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-2xs);
+        font-weight: 500;
+        color: var(--subtle-foreground);
         font-variant-numeric: tabular-nums;
       }
       .space-live {
-        width: 6px;
-        height: 6px;
+        width: 0.375rem;
+        height: 0.375rem;
         border-radius: 50%;
-        background-color: var(--grid-live);
+        background-color: var(--success);
         flex-shrink: 0;
       }
       .space-sep {
-        color: var(--grid-ink-ghost);
+        color: var(--subtle-foreground);
       }
       .space-config {
         border: 0;
         background: none;
         padding: 0;
-        font: 500 10.5px var(--grid-mono);
-        letter-spacing: 0.03em;
-        color: var(--grid-ink-quiet);
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-2xs);
+        font-weight: 500;
+        color: var(--muted-foreground);
         cursor: pointer;
       }
       .space-config:hover {
-        color: var(--grid-interactive);
+        color: var(--primary-ink);
       }
       .welcome-actions {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: var(--boxel-sp-xs);
       }
       .empty-note {
         margin: 0;
-        font: 400 13px var(--grid-sans);
-        color: var(--grid-ink-body);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 400;
+        color: var(--muted-foreground);
       }
 
       /* one focus language across the chrome: every
@@ -2396,27 +2491,24 @@ class Isolated extends Component<typeof Workspace> {
       .rail-row:focus-visible,
       .dock-mini:focus-visible,
       .wait-open:focus-visible {
-        outline: 2px solid var(--grid-interactive);
+        outline: 2px solid var(--ring);
         outline-offset: 2px;
       }
       .search-input:focus-visible {
         outline: none;
       }
-      .search-box:focus-within {
-        border-color: var(--grid-interactive);
-      }
 
       /* P1-4: the stock Library content header joins the
          chrome's type ramp (typography only; structure stays stock) */
       .library :deep(.boxel-cards-grid-layout .content-title) {
-        font: 600 17px/1.3 var(--grid-sans);
-        letter-spacing: -0.01em;
-        color: var(--grid-ink);
+        font-size: var(--boxel-section-heading-font-size);
+        font-weight: 600;
+        color: var(--foreground);
       }
       .library :deep(.boxel-cards-grid-layout .content-icon) {
-        width: 16px;
-        height: 16px;
-        color: var(--grid-ink-quiet);
+        width: 1rem;
+        height: 1rem;
+        color: var(--muted-foreground);
       }
 
       /* A buried card sits behind another in the stack, so it must not keep
@@ -2788,7 +2880,7 @@ class Isolated extends Component<typeof Workspace> {
 
   ringStyle = (job: { card: JobCard }): SafeString => {
     return htmlSafe(
-      `background: conic-gradient(var(--grid-attention) ${this.jobPct(job)}%, var(--grid-attention-rule) 0)`,
+      `background: conic-gradient(var(--attention) ${this.jobPct(job)}%, var(--grid-attention-rule) 0)`,
     );
   };
 
@@ -4252,108 +4344,86 @@ export class Workspace extends CardDef {
       <style scoped>
         /* Shopify-pattern settings page in the grid's own voice: narrow
            column, group rail left, control card right, help under every
-           setting. Token subset mirrors the isolated chrome ladder. */
+           setting. */
         .settings {
-          --grid-ink: #272330;
-          --grid-ink-body: #5a586a;
-          --grid-ink-quiet: #8b8b93;
-          --grid-surface: #ffffff;
-          --grid-control: #f6f7f9;
-          --grid-border: #e2e8f0;
-          --grid-hairline: #eceef1;
-          --grid-hover-border: #cbd0d8;
-          --grid-interactive: var(--primary, #0c9d7c);
-          --grid-shadow-rest: 0 2px 8px rgba(28, 28, 50, 0.05);
-          --grid-mono: var(
-            --boxel-monospace-font-family,
-            'IBM Plex Mono',
-            monospace
-          );
-          --grid-sans: var(--boxel-font-family, 'IBM Plex Sans', sans-serif);
-
+          --grid-settings-width: 55rem;
+          --grid-pill: 100rem;
           container-type: inline-size;
-          max-width: 880px;
+          max-width: var(--grid-settings-width);
           margin: 0 auto;
           display: grid;
-          gap: 26px;
-          padding: 26px 22px 40px;
-          font-family: var(--grid-sans);
-          color: var(--grid-ink);
+          gap: var(--boxel-sp-xl);
+          padding: var(--boxel-sp-xl) var(--boxel-sp-lg) var(--boxel-sp-2xl);
         }
         .settings-head {
           display: grid;
-          gap: 4px;
-        }
-        .settings-title {
-          margin: 0;
-          font: 700 20px/1.25 var(--grid-sans);
-          letter-spacing: -0.02em;
+          gap: var(--boxel-sp-4xs);
         }
         .settings-lede {
           margin: 0;
-          font: 400 13px/1.5 var(--grid-sans);
-          color: var(--grid-ink-quiet);
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 400;
+          color: var(--muted-foreground);
         }
         .group {
           display: grid;
-          grid-template-columns: 220px minmax(0, 1fr);
-          gap: 22px;
+          grid-template-columns: 13.75rem minmax(0, 1fr);
+          gap: var(--boxel-sp-lg);
           align-items: start;
         }
-        @container (width < 680px) {
+        @container (width < 42.5rem) {
           .group {
             grid-template-columns: 1fr;
-            gap: 10px;
+            gap: var(--boxel-sp-xs);
           }
         }
         .group-info {
           display: grid;
-          gap: 4px;
-          padding-top: 4px;
-        }
-        .group-name {
-          margin: 0;
-          font: 600 13.5px/1.3 var(--grid-sans);
-          color: var(--grid-ink);
+          gap: var(--boxel-sp-4xs);
+          padding-top: var(--boxel-sp-4xs);
         }
         .group-desc {
           margin: 0;
-          font: 400 12.5px/1.5 var(--grid-sans);
-          color: var(--grid-ink-quiet);
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 400;
+          color: var(--muted-foreground);
         }
         .group-card {
-          background-color: var(--grid-surface);
-          border: 1px solid var(--grid-border);
-          border-radius: 13px;
-          box-shadow: var(--grid-shadow-rest);
+          background-color: var(--card);
+          color: var(--card-foreground);
+          border: 1px solid var(--border);
+          border-radius: var(--boxel-border-radius-lg);
+          box-shadow: var(--shadow-sm);
         }
         .setting {
           display: grid;
           grid-template-columns: minmax(0, 1fr) auto;
           align-items: center;
-          gap: 8px 20px;
-          padding: 14px 16px;
+          gap: var(--boxel-sp-2xs) var(--boxel-sp-lg);
+          padding: var(--boxel-sp);
         }
         .setting.stack {
           grid-template-columns: 1fr;
           align-items: start;
         }
         .setting + .setting {
-          border-top: 1px solid var(--grid-hairline);
+          border-top: 1px solid var(--border);
         }
         .setting-text {
           display: grid;
-          gap: 3px;
+          gap: var(--boxel-sp-5xs);
           min-width: 0;
         }
         .setting-label {
-          font: 600 13px/1.3 var(--grid-sans);
-          color: var(--grid-ink);
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 600;
+          color: var(--foreground);
         }
         .setting-help {
           margin: 0;
-          font: 400 12px/1.5 var(--grid-sans);
-          color: var(--grid-ink-quiet);
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 400;
+          color: var(--muted-foreground);
         }
         .setting-control {
           min-width: 0;
@@ -4361,86 +4431,95 @@ export class Workspace extends CardDef {
         .setting-control.site {
           display: flex;
           align-items: baseline;
-          gap: 10px;
+          gap: var(--boxel-sp-xs);
         }
         .site-host {
-          font: 500 12.5px var(--grid-mono);
-          color: var(--grid-ink);
+          font-family: var(--font-mono);
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 500;
+          color: var(--foreground);
         }
         .site-when {
-          font: 400 11px var(--grid-sans);
-          color: var(--grid-ink-quiet);
+          font-size: var(--boxel-font-size-2xs);
+          font-weight: 400;
+          color: var(--muted-foreground);
         }
         .choice {
           display: inline-flex;
-          padding: 2px;
-          gap: 2px;
-          border: 1px solid var(--grid-border);
-          border-radius: 8px;
-          background-color: var(--grid-control);
+          padding: var(--boxel-sp-6xs);
+          gap: var(--boxel-sp-6xs);
+          border: 1px solid var(--border);
+          border-radius: var(--boxel-border-radius);
+          background-color: var(--muted);
         }
         .choice-opt {
           border: 0;
-          border-radius: 6px;
-          padding: 5px 12px;
+          border-radius: var(--boxel-border-radius-sm);
+          padding: var(--boxel-sp-3xs) var(--boxel-sp-sm);
           background: transparent;
-          font: 500 12.5px var(--grid-sans);
-          color: var(--grid-ink-body);
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 500;
+          color: var(--muted-foreground);
           cursor: pointer;
         }
         .choice-opt.selected {
-          background-color: var(--grid-surface);
-          color: var(--grid-ink);
-          box-shadow: 0 1px 2px rgba(28, 28, 50, 0.1);
+          background-color: var(--card);
+          color: var(--card-foreground);
+          box-shadow: var(--shadow-xs);
         }
         .order-list {
           display: grid;
-          gap: 6px;
+          gap: var(--boxel-sp-3xs);
         }
         .order-row {
           display: grid;
-          grid-template-columns: 22px minmax(0, 1fr) auto auto;
+          grid-template-columns: 1.375rem minmax(0, 1fr) auto auto;
           align-items: center;
-          gap: 8px;
-          padding: 7px 10px;
-          border: 1px solid var(--grid-border);
-          border-radius: 8px;
-          background-color: var(--grid-surface);
+          gap: var(--boxel-sp-2xs);
+          padding: var(--boxel-sp-2xs) var(--boxel-sp-xs);
+          border: 1px solid var(--border);
+          border-radius: var(--boxel-border-radius);
+          background-color: var(--card);
+          color: var(--card-foreground);
         }
         .order-pos {
-          font: 600 10.5px var(--grid-mono);
-          color: var(--grid-ink-quiet);
+          font-family: var(--font-mono);
+          font-size: var(--boxel-font-size-2xs);
+          font-weight: 600;
+          color: var(--muted-foreground);
         }
         .order-name {
-          font: 500 13px var(--grid-sans);
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 500;
         }
         .order-move {
-          width: 24px;
-          height: 24px;
+          width: 1.5rem;
+          height: 1.5rem;
           display: grid;
           place-items: center;
-          border: 1px solid var(--grid-border);
-          border-radius: 6px;
+          border: 1px solid var(--border);
+          border-radius: var(--boxel-border-radius-sm);
           background: none;
-          color: var(--grid-ink-body);
+          color: var(--muted-foreground);
           cursor: pointer;
         }
         .order-move:hover {
-          border-color: var(--grid-hover-border);
-          color: var(--grid-ink);
+          border-color: var(--border-strong);
+          color: var(--foreground);
         }
         .publish-btn {
-          padding: 7px 14px;
-          border: 1px solid var(--grid-border);
-          border-radius: 8px;
-          background-color: var(--grid-surface);
-          font: 600 12.5px var(--grid-sans);
-          color: var(--grid-ink);
+          padding: var(--boxel-sp-2xs) var(--boxel-sp);
+          border: 1px solid var(--border);
+          border-radius: var(--boxel-border-radius);
+          background-color: var(--card);
+          color: var(--card-foreground);
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 600;
           cursor: pointer;
         }
         .publish-btn:hover {
-          border-color: var(--grid-interactive);
-          color: var(--grid-interactive);
+          border-color: var(--primary-ink);
+          color: var(--primary-ink);
         }
         .publish-btn:disabled {
           opacity: 0.6;
@@ -4450,21 +4529,21 @@ export class Workspace extends CardDef {
           counterpart to Republish rather than a second primary action. */
         .unpublish-btn {
           margin-left: auto;
-          padding: 5px 10px;
-          font-size: 11.5px;
-          color: var(--grid-ink-quiet);
+          padding: var(--boxel-sp-3xs) var(--boxel-sp-xs);
+          font-size: var(--boxel-font-size-2xs);
+          color: var(--muted-foreground);
         }
         .unpublish-btn:hover:not(:disabled) {
-          border-color: var(--grid-broken);
-          color: var(--grid-broken);
+          border-color: var(--destructive-ink);
+          color: var(--destructive-ink);
         }
         .hosting-error {
-          color: var(--grid-broken);
+          color: var(--destructive-ink);
         }
         .choice-opt:focus-visible,
         .order-move:focus-visible,
         .publish-btn:focus-visible {
-          outline: 2px solid var(--grid-interactive);
+          outline: 2px solid var(--ring);
           outline-offset: 2px;
         }
       </style>
