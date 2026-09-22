@@ -754,6 +754,12 @@ export async function runGlintCheck(
       if (!match) {
         if (current && /^\s+\S/.test(line)) {
           current.message += `\n${line.trimEnd()}`;
+        } else if (/^\S/.test(line)) {
+          // A non-indented line that isn't a diagnostic — e.g. an
+          // --explainFiles program-file path under SF_PARSE_DEBUG — ends the
+          // previous diagnostic. Clear `current` so the indented inclusion
+          // reasons that follow it don't fold into an unrelated error.
+          current = null;
         }
         continue;
       }
