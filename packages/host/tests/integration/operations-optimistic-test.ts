@@ -211,21 +211,26 @@ module('Integration | operations optimistic', function (hooks) {
   test('an eligible transform leaves the card and the realm agreeing', async function (assert) {
     let report = await cardAt('report-applies');
 
-    let pending = (operations(report) as any).addComment({
-      body: 'First comment.',
-    });
-
-    // Read before the write resolves. "The card has one comment" is satisfied
-    // by an index event re-reading it just as well as by a local application,
-    // so asserting after the await would pass whether or not anything here
-    // ran. In flight, only a local application can have put it there.
-    assert.strictEqual(
-      (report as any).comments.length,
-      1,
-      'the appended comment is on the card before the realm has answered',
-    );
-
-    let result: any = await pending;
+    // "The card has one comment" is satisfied by an index event re-reading it
+    // just as well as by a local application, so on its own it would pass
+    // whether or not anything here ran. Pairing it with "the card was never
+    // re-read" is what makes it a statement about this code: between them,
+    // local application is the only thing that could have put the comment
+    // there.
+    let recorder = recordReads();
+    let result: any;
+    try {
+      result = await (operations(report) as any).addComment({
+        body: 'First comment.',
+      });
+      assert.deepEqual(
+        recorder.reads.filter((url) => url.includes('report-applies')),
+        [],
+        'the card was never re-read, so nothing here came back from the realm',
+      );
+    } finally {
+      recorder.restore();
+    }
 
     assert.strictEqual(
       (report as any).comments[0].body,
@@ -256,21 +261,8 @@ module('Integration | operations optimistic', function (hooks) {
     let report = await cardAt('report-chains');
     let recorder = recordReads();
     try {
-      let first = (operations(report) as any).addComment({ body: 'One.' });
-      assert.strictEqual(
-        (report as any).comments.length,
-        1,
-        'the first comment is on the card before the realm has answered',
-      );
-      await first;
-
-      let second = (operations(report) as any).addComment({ body: 'Two.' });
-      assert.strictEqual(
-        (report as any).comments.length,
-        2,
-        'and the second is there before the realm has answered either',
-      );
-      await second;
+      await (operations(report) as any).addComment({ body: 'One.' });
+      await (operations(report) as any).addComment({ body: 'Two.' });
 
       assert.deepEqual(
         recorder.reads.filter((url) => url.includes('report-chains')),

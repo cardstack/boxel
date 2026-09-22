@@ -374,8 +374,10 @@ export default class OperationsService
       // here means it cannot, which the realm is entirely able to cope with —
       // so it is reported and the write goes out pessimistically.
       console.warn(
-        `PROBE could not lower operations for ${JSON.stringify(codeRef)} locally, so writes to it are sent and awaited`,
-        err,
+        `PROBE could not lower operations for ${JSON.stringify(codeRef)} locally, so writes to it are sent and awaited: ${
+          (err as Error)?.message ?? String(err)
+        }`,
+        (err as Error)?.stack,
       );
       return undefined;
     }
