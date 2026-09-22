@@ -51,14 +51,29 @@ export default defineConfig({
   // the run that does not.
   globalTimeout: 25 * 60 * 1000,
   globalSetup: 'tests/global.setup.ts',
-  // Without `--shard`, every shard's blob report would default to the same
-  // `report.zip`, and the merge job downloads all of them into one directory.
+  // Two reporters in CI, for two different readers.
+  //
+  // `blob` is the machine-readable one: the merge job downloads every shard's
+  // and builds the published HTML report from them, and the shard-timings job
+  // reads the per-spec durations out of the same files. Without `--shard`,
+  // every shard's blob report would default to the same `report.zip`, and the
+  // merge job downloads all of them into one directory — hence the name.
+  //
+  // `github` is what makes a red shard readable without that report. The test
+  // services stream their request logs into this job's log for the whole run,
+  // so by the time the run ends anything a terminal reporter printed is tens of
+  // thousands of lines from the end — and the Actions logs API serves only a
+  // tail, so it is unreachable there. GitHub annotations are attached to the
+  // job rather than written into its log, so they survive that volume: a
+  // failure names its test, file and line on the job's own page, and triage
+  // does not have to start by fetching an artifact.
   reporter: process.env.CI
     ? [
         [
           'blob',
           { fileName: shard ? `report-${shard.index}.zip` : 'report.zip' },
         ],
+        ['github'],
       ]
     : 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
