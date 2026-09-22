@@ -300,6 +300,11 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
       },
     }),
     'audit.txt': 'opened\n',
+    // Unbound, and a `.log` on purpose: the platform types it `TextFileDef`,
+    // whose `extractAttributes` refuses any extension outside its own list.
+    // A `.log` in the code-ref table but not in that list indexes as a
+    // file-error rather than as text, and this is the file that says so.
+    'startup.log': 'ready\n',
     'staged.gts': `
       import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
       import StringField from "@cardstack/base/string";
@@ -2416,6 +2421,30 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           String(module).endsWith('/markdown-file-def'),
           `and it names the platform's markdown module: ${module}`,
         );
+      });
+
+      test('a log the realm does not bind is the platform text class', async function (assert) {
+        let response = await request
+          .get('/startup.log')
+          .set('Accept', SupportedMimeType.CardJson)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(realm, TESTER, ['read', 'write'])}`,
+          );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          response.body.data.meta.adoptsFrom.name,
+          'TextFileDef',
+          'a log is text rather than the bare FileDef an unlisted extension ' +
+            'falls back to',
+        );
+        // That the text family also *accepts* a `.log` — `extractAttributes`
+        // refuses any extension outside its own list, so naming the class is
+        // only half of it — is asserted where the extract actually runs, in
+        // the host's `text-file-def` acceptance suite. The fixture files here
+        // are served without one, so a content assertion would pass or fail
+        // for reasons that have nothing to do with the extension.
       });
 
       test('an operation the bound class does not declare is still unknown', async function (assert) {
