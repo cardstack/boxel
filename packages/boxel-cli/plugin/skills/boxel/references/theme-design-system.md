@@ -1,6 +1,8 @@
 ### Theme-First Principle
 
-- Always decide the Theme or Brand Guide before generating code or styling. (See 3.1 Theme Linking Rules)
+- Decide whether the card needs a specific Theme or Brand Guide before generating code or styling. (See 3.1 Theme Linking Rules)
+- No theme link is needed for default styling: `boxel-ui`'s `theme.css` supplies every token's default, so an instance with no `cardInfo.theme` renders with the Boxel defaults.
+- A linked Theme is layered over those defaults, not substituted for them: `theme.css` re-declares the token contract at every themed card boundary (`[data-boxel-theme-scope]`), so a Theme only overrides the tokens it defines and the rest reset to the light or dark defaults instead of inheriting from the surrounding chrome or an outer theme. Two things do pass through the boundary: the `--theme-*` typography knobs, which are deliberately left unset there, and the `--boxel-*` palette variables the defaults are written in. An ancestor that redefines a palette variable therefore changes what the reset tokens compute to inside the nested card; only a `BrandGuide` custom variable, a bare `Theme`, or host CSS can do that.
 - All CSS in production card templates must use theme variables (no hardcoded colors/spacing/fonts). (See 3.2 Canonical Theme Variables)
 - Theme linkage usually lives at `relationships.cardInfo.theme` on the card instance. CardDefs can also compute `cardTheme` from a parent object, realm default, or business rule.
 - Brand Guides are Theme cards plus identity assets: palette, typography, style rules, and logo/mark material.
@@ -9,23 +11,24 @@
 ### 3.1 Theme Linking Rules
 Pick the source first:
 
-- **Boxel built-in feature work:** use `@cardstack/base/Theme/boxel-brand-guide`. This is the Boxel style guide and brand material source.
-- **Cardstack-branded work:** use `@cardstack/base/Theme/cardstack-brand-guide`.
+- **Default styling:** link nothing; `theme.css` provides the defaults.
+- **Boxel built-in feature work:** use `@cardstack/base/Theme/boxel-brand-guide` as the style reference. This is the Boxel style guide and brand material source.
 - **User/custom realm work:** choose or create a theme that fits the requested domain. Do not force Boxel styling onto an unrelated app unless the user asks for Boxel-branded output.
 - **Logo, mark, brand color, or brand material needed:** use a `BrandGuide`, not a plain `StructuredTheme`.
 
-For an instance that should use the Boxel Brand Guide:
+For an instance that should use a specific Theme, link it under `relationships`:
 
 ```json
 "relationships": {
   "cardInfo.theme": {
     "links": {
-      "self": "@cardstack/base/Theme/boxel-brand-guide"
+      "self": "<theme-card-url>"
     }
   }
 }
 ```
-- You must also set the remaining cardInfo properties in the card data attributes. Example:
+`<theme-card-url>` is the theme card's URL: absolute (`https://<realm>/<path-to-theme>`), relative to the instance file's own location, or `@cardstack/base/Theme/<slug>` for the shipped base-realm themes. The theme can live at any path; a `Theme/` folder is only a convention.
+- Set the remaining cardInfo properties in the card data attributes. Example:
 ```json
 "attributes": {
   "cardInfo": {
@@ -44,13 +47,13 @@ A ThemeCard is an instance of a card definition that inherits from `@cardstack/b
 
 | Type | Module | Description |
 |------|-----|-------------|
-| Base Theme | `@cardstack/base/theme` | Root base class |
-| Structured Theme | `@cardstack/base/structured-theme` | Structured token theme. Adds `typography`, `rootVariables`, `darkModeVariables`, `version`, and computed `cssVariables`. Use for pure token systems with no brand assets. |
+| Base Theme | `@cardstack/base/theme` | DO NOT USE. Root base class. Do not instantiate or subclass it: its free-form `cssVariables` string bypasses the token contract, so themes built on it get no defaults, no validation, and no editor support. |
+| Structured Theme | `@cardstack/base/structured-theme` | Structured token theme. Adds `typography`, `rootVariables`, `darkModeVariables`, `customCssImports`, `version`, and computed `cssVariables` and `cssImports`. Use for pure token systems with no brand assets. |
 | Style Reference | `@cardstack/base/style-reference` | Extends `StructuredTheme`. Adds `styleName`, `inspirations`, `visualDNA`, and `wallpaperImages`. Use when the visual language matters. |
 | Detailed Style Reference | `@cardstack/base/detailed-style-reference` | Extends `StyleReference`. Adds long-form guidance for context, palette, typography, geometry, material, composition, motion, components, voice, technical specs, scenarios, quality standards, and design mindset. Use for a complete design system without logo/mark assets. |
-| Brand Guide | `@cardstack/base/brand-guide` | Extends `DetailedStyleReference`. Adds `brandColorPalette`, `functionalPalette`, `typography`, and `markUsage` for logo/mark material. Use whenever brand assets or brand governance matter. |
+| Brand Guide | `@cardstack/base/brand-guide` | Extends `DetailedStyleReference`. Adds `brandColorPalette`, `functionalPalette`, `typography`, `markUsage` for logo/mark material, and `customCssVariables` for tokens outside the contract. Use whenever brand assets or brand governance matter. |
 
-> **When creating a Theme card:** Prefer `BrandGuide` if the output has a brand, logo, marks, or other brand material. Prefer `DetailedStyleReference` for a rich visual system without logo material. Use `StructuredTheme` only for a minimal token-only theme. At minimum, fill in `rootVariables` and `typography`. Add font URLs to `cssImports` as a string array - no `@import` needed (the system handles imports).
+> **When creating a Theme card:** Start from `StructuredTheme` at minimum, never the bare `Theme`. If the design needs custom variables outside the token contract, use `BrandGuide`; it is the only shipped structured theme shape with dedicated fields for them. Prefer `BrandGuide` if the output has a brand, logo, marks, or other brand material. Prefer `DetailedStyleReference` for a rich visual system without logo material. Use `StructuredTheme` only for a minimal token-only theme. At minimum, fill in `rootVariables` and `typography`. Font stylesheets are derived: `cssImports` is computed from the theme's font stacks (Google Fonts), so do not write it by hand. Only a stylesheet that cannot be derived, such as Adobe Fonts, goes in `customCssImports`. Templates never `@import` a font.
 
 #### Brand Guide Pattern
 
@@ -104,7 +107,7 @@ The Boxel host has theme-oriented commands that understand the hierarchy:
 
 Use these command patterns when making or improving theme cards through the app instead of treating every Theme as a raw CSS string.
 
-Monorepo source files to check when this model changes: `packages/base/structured-theme.gts`, `packages/base/style-reference.gts`, `packages/base/detailed-style-reference.gts`, `packages/base/brand-guide.gts`, `packages/base/brand-logo.gts`, `packages/base/brand-functional-palette.gts`, `packages/base/structured-theme-variables.gts`, `packages/base/Theme/boxel-brand-guide.json`, `packages/boxel-ui/addon/src/helpers/theme-css.ts`, and `packages/host/app/tools/generate-theme-example.ts`.
+Monorepo source files to check when this model changes: `packages/base/structured-theme.gts`, `packages/base/style-reference.gts`, `packages/base/detailed-style-reference.gts`, `packages/base/brand-guide.gts`, `packages/base/brand-logo.gts`, `packages/base/brand-functional-palette.gts`, `packages/base/structured-theme-variables.gts`, `packages/base/Theme/boxel-brand-guide.json`, `packages/boxel-ui/src/styles/theme.css` (the token contract and its default values), `packages/boxel-ui/src/helpers/theme-css.ts`, and `packages/host/app/tools/generate-theme-example.ts`.
 
 ### 3.2 Canonical Theme Variables
 Use the variables directly (do not wrap with `hsl(var(...))`). Pair backgrounds with their foregrounds for contrast: a rule that sets a semantic background also sets the paired `--*-foreground` in the same rule, once at that surface's root — descendants inherit it. See the Color Pairing Rules in `boxel-ui-guidelines/references/use-boxel-design-tokens-for-theming.md` for the full rules and exceptions.
@@ -113,132 +116,7 @@ Our design system is compatible with shadcn css variables.
 
 When assigning values, remember that Boxel UI treats shadcn-style tokens as paired surface/foreground contracts. `--spacing` is also normalized by the runtime: `CardContainer` derives `--boxel-sp` from `calc(var(--spacing) * 4)`, so a desired 16px base unit should usually be stored as `--spacing: 0.25rem`.
 
-- Background Colors:
-```css
---background
---card
---popover
---primary
---secondary
---muted
---accent
---destructive
---input
---sidebar
---sidebar-primary
---sidebar-accent
-```
-
-- Foreground Colors:
-```css
---foreground
---card-foreground
---popover-foreground
---primary-foreground
---secondary-foreground
---muted-foreground
---accent-foreground
---destructive-foreground
---sidebar-foreground
---sidebar-primary-foreground
---sidebar-accent-foreground
-```
-- Border Colors:
-```css
---border
---sidebar-border
-```
-- Css Outline Colors:
-```css
---ring
---sidebar-ring
-```
-- Chart Colors:
-```css
---chart-1
---chart-2
---chart-3
---chart-4
---chart-5
-```
-
-- Fonts: (`font-family`)
-```css
---font-sans
---font-serif
---font-mono
-```
-- Radius: (`border-radius`)
-```css
---radius
---boxel-border-radius-2xs
---boxel-border-radius-xs
---boxel-border-radius-sm
---boxel-border-radius
---boxel-border-radius-lg
---boxel-border-radius-xl
---boxel-border-radius-2xl
-```
-- Spacing:
-```css
---spacing
---boxel-sp-6xs
---boxel-sp-5xs
---boxel-sp-4xs
---boxel-sp-3xs
---boxel-sp-2xs
---boxel-sp-xs
---boxel-sp-sm
---boxel-sp
---boxel-sp-lg
---boxel-sp-xl
---boxel-sp-2xl
---boxel-sp-3xl
---boxel-sp-4xl
---boxel-sp-5xl
---boxel-sp-6xl
-```
-- Letter-spacing:
-```css
---tracking-normal
---boxel-lsp-xxl
---boxel-lsp-xl
---boxel-lsp-lg
---boxel-lsp
---boxel-lsp-sm
---boxel-lsp-xs
---boxel-lsp-xxs
-```
-- Shadows: (`box-shadow`)
-```css
---shadow-2xs
---shadow-xs
---shadow-sm
---shadow
---shadow-md
---shadow-lg
---shadow-xl
---shadow-2xl
---boxel-box-shadow
---boxel-box-shadow-hover
---boxel-deep-box-shadow
-```
-
-- Font Sizes: (`font-size`)
-```css
---boxel-font-size-2xl
---boxel-font-size-xl
---boxel-font-size-lg
---boxel-font-size-md
---boxel-font-size
---boxel-font-size-sm
---boxel-font-size-xs
---boxel-heading-font-size
---boxel-section-heading-font-size
---boxel-subheading-font-size
---boxel-body-font-size
---boxel-caption-font-size
-```
+The complete token inventory — color roles and their paired foregrounds, status fills, neutral surfaces, hue-as-ink tokens, borders, charts, sidebar, fonts, typography roles (`heading`, `sectionHeading`, `subheading`, `body`, `caption`, `label`, `eyebrow`), spacing, radius, and shadows — is maintained in one file: `skills/boxel-ui-guidelines/references/theme-token-contract.md`. It also explains the boundary reset (a theme only sets what it changes; everything else falls back to `theme.css`) and why custom variables outside the contract are a `BrandGuide`-only escape hatch with real costs. Do not duplicate the list here.
 
 #### CSS Usage Examples:
 
@@ -257,6 +135,22 @@ box-shadow: var(--shadow-lg);
 ```css
 background-color: hsl(var(--background));   /* DO NOT wrap in hsl() */
 ```
+
+### 3.3 Dark Mode
+
+**How it applies.** Dark mode is opt-in and explicit; there is no automatic `prefers-color-scheme` switch in `theme.css`. Adding `data-theme="dark"` to `<html>` or to any element flips the semantic tokens (`--background`, `--foreground`, `--primary`, `--muted`, `--border`, ink tokens, sidebar tokens, and the rest) to their dark defaults for that subtree and sets the inherited `--boxel-color-scheme: dark` signal. `data-theme="light"` forces light back on inside a dark subtree. Always use the `data-theme` attribute to switch schemes: it is the only form with a `light` counterpart, and the host's own toggles and the theme editors' observers key off it. Typography and spacing tokens do not change between schemes.
+
+**How a Theme participates.** `StructuredTheme` and its descendants carry `darkModeVariables` next to `rootVariables`. The card runtime emits them under a style container query on `--boxel-color-scheme`, scoped to the card's own theme boundary, so a card's dark values follow the *nearest ancestor's* scheme. A Theme with no dark block keeps its light values in dark mode; any token it omits resets at the card boundary to the `theme.css` default for that scheme (scheme-neutral tokens such as `--success`, `--chart-*`, `--font-*`, `--radius` and `--shadow-*` have a single default). Never write `@media (prefers-color-scheme: dark)` inside a Theme's CSS; the theme parser skips it. Dark values belong in `darkModeVariables`.
+
+**When to use it.**
+- Author `darkModeVariables` on any Theme that may render inside a dark host surface or a site with a dark option. A light-only Theme in a dark subtree keeps its light values and looks out of place.
+- Do not toggle the scheme from an ordinary card template. The host controls its own chrome, and cards render under whatever scheme surrounds them.
+- Offer a visitor-facing light/dark toggle only at the page or site shell level (a `SiteShell`-style component), where it is legitimate app UI.
+
+**How to use it in templates.**
+- Write every color through a token and pair each background with its `-foreground`. That is all a card needs to be dark-mode safe; no scheme-specific selectors in `<style scoped>`.
+- Scrims and veils use `--overlay` / `--hover`, or `color-mix()` with literal `black`/`white`, never `rgba()` on a themed color and never `--foreground` (it inverts in dark mode).
+- A shell that owns a toggle stamps `data-theme={{if this.isDarkMode 'dark' 'light'}}` on a wrapper *above* the themed content, defaults to the visitor's `prefers-color-scheme`, persists the choice (e.g. `localStorage`), and never bakes a machine's preference into prerendered HTML.
 
 ### CSS Safety (All Formats)
 - Always use `<style scoped>`; only `/* */` comments (never `//`).

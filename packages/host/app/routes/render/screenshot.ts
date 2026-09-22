@@ -14,16 +14,21 @@ import type { BoxComponent, CardDef } from '@cardstack/base/card-api';
 export interface Model {
   instance: CardDef;
   name: string;
-  width: number;
-  height: number;
+  // A pdf entry renders the full document flow with no capture box; a raster
+  // entry sizes to a declared width×height. The two are mutually exclusive.
+  isPdf: boolean;
+  width?: number;
+  height?: number;
   background: string;
   Component: BoxComponent;
 }
 
 // Renders one declared screenshot's capture-only component (the `render`
-// slot of a `static screenshots` entry) into a fixed-size box for the
-// capture engine. Format-based entries never come here — they re-render
-// their display format through render.html; this route exists because a
+// slot of a `static screenshots` entry). A raster entry renders into a
+// fixed-size box the capture engine sizes its viewport to; a pdf entry
+// renders the full document flow (no box) that `page.pdf()` paginates under
+// print media. Format-based entries never come here — they re-render their
+// display format through render.html; this route exists because a
 // capture-only component has no format slot for that route to look up.
 export default class RenderScreenshotRoute extends Route<Model> {
   @service declare private cardService: CardService;
@@ -69,16 +74,13 @@ export default class RenderScreenshotRoute extends Route<Model> {
       );
     }
 
-    // A paged (pdf) slot has no capture box — it paginates a print-media
-    // render onto the card's own `@page` paper. Declaration validation refuses
-    // `render` for `type: 'pdf'` today, so such a slot cannot reach this route
-    // — but that refusal names itself temporary, and without this the missing
-    // box would reach the template as `width: undefinedpx` and capture a
-    // collapsed box rather than failing.
-    if (spec.width == null || spec.height == null) {
-      throw new Error(
-        `declared screenshot "${name}" declares no capture box — a paged screenshot does not render through this route`,
-      );
+    // A raster slot renders into a fixed-size capture box; a pdf slot has no
+    // box — it paginates the full print-media render onto the card's own
+    // `@page` paper. A raster slot missing its box would reach the template as
+    // `width: undefinedpx` and capture a collapsed box rather than failing, so
+    // refuse that; a pdf slot is expected to be box-less.
+    if (spec.type !== 'pdf' && (spec.width == null || spec.height == null)) {
+      throw new Error(`declared screenshot "${name}" declares no capture box`);
     }
 
     let Component = instance.constructor.getComponent(instance, undefined, {
@@ -88,6 +90,7 @@ export default class RenderScreenshotRoute extends Route<Model> {
     return {
       instance,
       name,
+      isPdf: spec.type === 'pdf',
       width: spec.width,
       height: spec.height,
       background: spec.background ?? SCREENSHOT_DEFAULT_BACKGROUND,

@@ -22,8 +22,7 @@ export class CommentThread extends FieldDef {
 **Gotchas:**
 - Use the lazy arrow only where the class references itself inside its own definition. A parent CardDef that appears after the FieldDef can use `containsMany(CommentThread)`.
 - Include a depth or collapsed-state guard in the rendering component for very deep trees. Recursion is powerful, but unbounded rendering is not.
-- Render the plural field with `<@fields.replies @format='embedded' />` so Boxel owns persistence and child rendering.
-- If you style the nested plural wrapper, remember the delegated-render wrapper trap: linksToMany and containsMany have different wrapper classes. For pure containsMany, `.containsMany-field` is usually enough.
+- Render the plural field with `<@fields.replies @format='embedded' class='replies' />` so Boxel owns persistence and child rendering. The class is forwarded onto the host's plural wrapper, which is already `display: grid`, so `.replies { gap: …; margin-top: …; }` in your scoped style is enough — no `:deep(.containsMany-field)` reach needed.
 
 **Source:** `realms-staging.stack.cards/awalker34/magma-moors/story.gts:93-122`, `BSL-STUDY.md:633-635`.
 

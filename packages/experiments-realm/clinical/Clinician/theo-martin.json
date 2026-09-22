@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "fullName": "Dr. Theo Martin",
+      "role": "Intensivist",
+      "userId": "@theo.martin:boxel.ai",
+      "activeCaseload": []
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../clinician",
+        "name": "Clinician"
+      }
+    }
+  }
+}

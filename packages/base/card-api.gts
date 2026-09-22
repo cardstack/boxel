@@ -52,6 +52,7 @@ import {
   loadCardDef,
   loadCardDocument,
   Loader,
+  loaderForModule,
   localId,
   meta,
   primitive,
@@ -3032,11 +3033,11 @@ type RasterScreenshotSpec = {
 // own print CSS. It has no capture box — `width`/`height` (and the raster-only
 // `deviceScaleFactor`/`background`) are refused, and paper comes from the
 // card's `@page { size }` rule (Chrome's default paper otherwise). Its source
-// must be a viewport-filling format (`isolated` or `embedded`): the box
-// formats (`fitted`/`atom`) need an envelope a pdf entry cannot give, and the
-// author-supplied `render` slot for pdf is a separate capability. A pdf is
-// never a thumbnail — that fallback chain wants an image — so `useAsThumbnail`
-// is refused too.
+// is either a capture-only `render` component (which renders the full document
+// flow itself, the same slot pattern posters use) or a viewport-filling format
+// (`isolated`/`embedded`) — the box formats (`fitted`/`atom`) need an envelope
+// a pdf entry cannot give. A pdf is never a thumbnail — that fallback chain
+// wants an image — so `useAsThumbnail` is refused too.
 type PdfScreenshotSpec = {
   type: 'pdf';
   width?: undefined;
@@ -3118,12 +3119,15 @@ function assertValidScreenshotSpec(
   // own `@page` paper. Validate its distinct shape here and return before the
   // raster checks below (which require a capture box a pdf entry never has).
   if (entry.type === 'pdf') {
-    if (hasRender) {
-      throw new Error(
-        `${prefix}: type 'pdf' requires a format ('isolated' or 'embedded'); the author-supplied pdf render slot is not yet available`,
-      );
-    }
-    if (entry.format !== 'isolated' && entry.format !== 'embedded') {
+    // Source is either a capture-only `render` component (which renders the
+    // full document flow itself) or a viewport-filling format. The box formats
+    // ('fitted', 'atom') need an envelope a pdf entry cannot describe, so a
+    // format-based pdf is limited to 'isolated'/'embedded'.
+    if (
+      hasFormat &&
+      entry.format !== 'isolated' &&
+      entry.format !== 'embedded'
+    ) {
       throw new Error(
         `${prefix}: a pdf screenshot's format must be 'isolated' or 'embedded' — the box formats ('fitted', 'atom') need an envelope a pdf entry cannot describe`,
       );
@@ -6025,14 +6029,10 @@ export function resolveRef(
 }
 
 function myLoader(): Loader {
-  // we know this code is always loaded by an instance of our Loader, which sets
-  // import.meta.loader.
-
-  // When type-checking realm-server, tsc sees this file and thinks
-  // it will be transpiled to CommonJS and so it complains about this line. But
-  // this file is always loaded through our loader and always has access to import.meta.
+  // tsc checks this file as CommonJS output when it checks realm-server, and
+  // so rejects the `import.meta` read; the read is all that is suppressed.
   // @ts-ignore
-  return (import.meta as any).loader;
+  return loaderForModule(import.meta);
 }
 
 class FallbackCardStore implements CardStore {

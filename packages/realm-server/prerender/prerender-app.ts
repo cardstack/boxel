@@ -10,6 +10,8 @@ import {
   isScreenshotFormat,
   parseScreenshotCaptureSpec,
   SCREENSHOT_FORMATS,
+  MAX_STASHED_CARD_SOURCE_LENGTH,
+  type CardSourceVisitArgs,
   type DeclaredScreenshotVisitArgs,
   type PrerenderVisitType,
   type RenderRouteOptions,
@@ -1326,6 +1328,43 @@ export function buildPrerenderApp(options: {
           ? rawRenderScope
           : undefined;
 
+      // The card instance's stored bytes, sent by a caller that already read
+      // them so the render need not read them again. All three fields are
+      // required together: the card branch reads the realm URL and the modified
+      // time off the response it would otherwise fetch, so a partial payload
+      // would leave the model missing values it has no other source for. A
+      // payload that fails this check is dropped rather than rejected — the
+      // render falls back to fetching, which is the behavior this whole path
+      // optimizes away and so is always safe.
+      //
+      // The size ceiling is enforced here as well as at the producer, because
+      // this is where the bytes actually arrive and where they are handed to a
+      // CDP message. A producer that assembles visit args without
+      // `cardSourceForVisit` would otherwise carry an unbounded payload past
+      // the only check on it.
+      let rawCardSource = attrs.cardSource;
+      let cardSource: CardSourceVisitArgs | undefined =
+        rawCardSource &&
+        typeof rawCardSource === 'object' &&
+        !Array.isArray(rawCardSource) &&
+        typeof rawCardSource.source === 'string' &&
+        rawCardSource.source.length <= MAX_STASHED_CARD_SOURCE_LENGTH &&
+        typeof rawCardSource.realmURL === 'string' &&
+        rawCardSource.realmURL.length > 0 &&
+        typeof rawCardSource.lastModified === 'number' &&
+        Number.isFinite(rawCardSource.lastModified)
+          ? {
+              source: rawCardSource.source,
+              realmURL: rawCardSource.realmURL,
+              lastModified: rawCardSource.lastModified,
+            }
+          : undefined;
+      if (rawCardSource && !cardSource) {
+        log.warn(
+          `visit prerender request for ${rawUrl} carried an unusable cardSource; the render will fetch the card's source for itself`,
+        );
+      }
+
       let start = Date.now();
       // Hoisted so a re-render after a host-shell change replays the same
       // visit rather than an approximation of it.
@@ -1345,6 +1384,7 @@ export function buildPrerenderApp(options: {
         ...(jobId ? { jobId } : {}),
         ...(screenshots ? { screenshots } : {}),
         ...(renderScope ? { renderScope } : {}),
+        ...(cardSource ? { cardSource } : {}),
         signal: ac.signal,
       };
       let shellAtStart = options.getHostShellHash?.();

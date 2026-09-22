@@ -615,6 +615,44 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       return post(body).set('X-HTTP-Method-Override', 'QUERY');
     }
 
+    // A browser reaches this endpoint across an origin boundary, and neither
+    // of this project's suites crosses one: the host's integration tests drive
+    // an in-browser realm with no network, and everything here runs on node
+    // `fetch`, which has no CORS. So the request being *deliverable* is pinned
+    // separately from the request being answered correctly.
+    module('cross-origin delivery', function () {
+      test('the preflight allows every header the envelope carries', async function (assert) {
+        let response = await request
+          .options('/_operations')
+          .set('Origin', 'https://localhost:4200')
+          .set('Access-Control-Request-Method', 'POST')
+          .set(
+            'Access-Control-Request-Headers',
+            'accept, authorization, content-type',
+          );
+
+        let allowed = String(
+          response.headers['access-control-allow-headers'] ?? '',
+        )
+          .split(',')
+          .map((header) => header.trim().toLowerCase());
+
+        // `Accept` is the one worth naming. It is normally CORS-safelisted, so
+        // its absence from the allow list looks impossible — but the safelist
+        // covers only values free of `"`, `:` and the rest of the forbidden
+        // set, and this endpoint's media type is
+        // `application/vnd.api+json;ext="…"`, which carries both. So the
+        // request preflights, and without `Accept` allowed the preflight is
+        // refused and no browser can invoke any operation at all.
+        for (let header of ['accept', 'authorization', 'content-type']) {
+          assert.true(
+            allowed.includes(header),
+            `the preflight allows ${header}: ${allowed.join(', ')}`,
+          );
+        }
+      });
+    });
+
     module('validation', function () {
       test('an href outside this realm is refused, naming the entry', async function (assert) {
         let response = await post(

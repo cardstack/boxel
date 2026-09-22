@@ -24,6 +24,7 @@ So read it as your first action, before you plan the work or tell the user what 
 ```
 ├─ Loop detected (same commands repeating)?  → STOP. Alert: "Detected potential loop."
 ├─ No workspace in context?                  → Ask user to navigate, open a card, reply 'continue'
+├─ Already where the task needs you?          → The last tool result's context.submode / codeMode.currentFile say so. Do the work; no navigation call
 └─ Workspace found                            → Continue to Step 2
 ```
 
@@ -39,8 +40,6 @@ So read it as your first action, before you plan the work or tell the user what 
 ### Step 3 — Code task
 
 ```
-□ LLM approved (claude-4.6+ / gemini-2.5+ / gpt-5+)?
-  └─ NO → set-active-llm_1887 "anthropic/claude-sonnet-4.6"
 □ Boxel Development skill active?
   └─ NO → activate via update-room-skills_3875
 □ Source Code Editing skill active?
@@ -84,13 +83,18 @@ Full create/edit tool tables, file naming, and path rules: `references/card-tool
 ```
 ├─ INTERACT MODE:
 │   ├─ Display card                  → show-card_566f
-│   ├─ Create card / definition      → switch-submode_dd88 (submode: "code", createFile: true, codePath: realmUrl + filename), then SEARCH/REPLACE
+│   ├─ Create card / definition      → a SEARCH/REPLACE block with `(new)` after the file URL — that alone creates the file; no tool call is part of writing
 │   ├─ Switch to code                → switch-submode_dd88 (submode: "code"; pass codePath to target a specific realm — a bare switch stays in the current realm)
-│   └─ Open workspace                → open-workspace_1696 (lands in interact mode)
+│   ├─ Open workspace                → open-workspace_1696 (lands in interact mode)
+│   ├─ Create workspace              → create-workspace_cf0f (opens the new workspace; report its URL from the result context)
+│   └─ Delete workspace              → delete-workspace_a465 (permanent; confirm with the user first)
 ├─ CODE MODE:
+│   ├─ Create or edit a file         → SEARCH/REPLACE block. Never call switch-submode_dd88 again for a file the tab already shows — the last tool result's `context.codeMode.currentFile` tells you where you are
 │   ├─ Preview card + module         → preview-format_cb94
 │   ├─ Open file in editor           → update-code-path-with-selection_f749
 │   ├─ Switch to interact            → switch-submode_dd88 (submode: "interact")
+│   ├─ Create workspace              → create-workspace_cf0f (opens the new workspace; report its URL from the result context)
+│   ├─ Delete workspace              → delete-workspace_a465 (permanent; confirm with the user first)
 │   └─ Open workspace                → open-workspace_1696 (⚠️ exits code mode — to change realm and stay in code mode, switch-submode with a codePath in that realm)
 └─ EITHER MODE:
     └─ Toggle mode                   → switch-submode_dd88
@@ -119,9 +123,9 @@ Always-relevant — read these together, first:
 - [`references/user-environment-awareness.md`](references/user-environment-awareness.md) — Parse workspace, mode, open cards from each message.
 
 By task:
-- [`references/choosing-llm-models.md`](references/choosing-llm-models.md) — Model selection. Check when code tasks detected or debugging stuck.
 - [`references/searching-and-querying.md`](references/searching-and-querying.md) — Query syntax for finding cards.
 - [`references/workflows-and-orchestration.md`](references/workflows-and-orchestration.md) — Multi-step patterns (migrations, bulk operations).
+- [`references/shared-mirror-safety.md`](references/shared-mirror-safety.md) — **Read before `realm pull` / `sync`.** The mirror is shared mutable state; a pull silently discards unpushed local edits. Generating outside the mirror and pushing from there.
 - [`references/markdown-edit.md`](references/markdown-edit.md) — Editing long markdown fields surgically.
 - [`../boxel/references/lint-workflow.md`](../boxel/references/lint-workflow.md) — Required installed npm `boxel` lint gate for `.gts` code tasks.
 
