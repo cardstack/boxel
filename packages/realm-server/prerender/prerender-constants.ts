@@ -36,10 +36,25 @@ export const PRERENDER_HOST_SHELL_GENERATION_HEADER =
 
 // Read a host-shell generation off a header or a JSON body field. The value
 // crosses a process boundary as text and is stamped onto a row, so anything
-// that is not a non-negative integer is discarded rather than coerced: `NaN`
-// or a negative would compare unpredictably against the current generation,
-// and a silently-zero value would read as "older than everything" and enlist
-// its row in every repair.
+// that cannot order a render is discarded here rather than coerced.
+//
+// The accepted range is what a real generation can be, and both ends matter:
+//
+//   - Below 1 is not a generation. Zero is the seeded "no shell observed yet"
+//     sentinel, and a real claim never returns it — the first transition takes
+//     1. Letting it through would stamp rows with a number that reads as older
+//     than everything and enlists them in every repair, and `?? null` at the
+//     write site does not catch a zero.
+//   - Above `INTEGER` cannot be stored. The column is `integer`, so a larger
+//     value parses cleanly here and then fails at the write, turning a
+//     malformed header into a failed index row.
+//
+// Deliberately not resting on the one producer that filters the sentinel
+// upstream. This is the boundary every value crosses, and a guard that holds
+// only because of its current caller is a guard that stops holding when a
+// second one appears.
+const MAX_HOST_SHELL_GENERATION = 2147483647;
+
 export function parseHostShellGeneration(
   raw: string | number | null | undefined,
 ): number | undefined {
@@ -47,7 +62,11 @@ export function parseHostShellGeneration(
     return undefined;
   }
   let parsed = typeof raw === 'number' ? raw : Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 0) {
+  if (
+    !Number.isInteger(parsed) ||
+    parsed < 1 ||
+    parsed > MAX_HOST_SHELL_GENERATION
+  ) {
     return undefined;
   }
   return parsed;

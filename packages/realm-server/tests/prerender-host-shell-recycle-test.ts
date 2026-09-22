@@ -435,29 +435,34 @@ module(basename(import.meta.filename), function () {
       assert.false('warmedHostShellGeneration' in d);
     });
 
-    // Generation 0 is the seeded "no shell observed yet" value, and it is a
-    // real answer rather than a missing one, so it has to survive the same
-    // presence check the tokens get.
-    test('survives being zero', function (assert) {
+    // The early return exists so a render that knows nothing stamps nothing.
+    // A generation is one of the values it has to count as something, or a
+    // response carrying only that would be dropped on the floor.
+    test('a generation alone is enough to stamp', function (assert) {
       let response = { meta: {} } as unknown as RenderVisitResponse;
       stampHostShellTokens(response, {
         atStart: undefined,
         atCompletion: undefined,
-        warmedGenerationAtStart: 0,
+        warmedGenerationAtStart: 4,
       });
       assert.strictEqual(
         (response.meta as any).diagnostics.warmedHostShellGeneration,
-        0,
-        'a generation alone is enough to stamp — the early return must not swallow it',
+        4,
+        'the early return must not swallow a response whose only value is the generation',
       );
     });
   });
 
   module('parseHostShellGeneration', function () {
-    test('accepts a non-negative integer, as text or as a number', function (assert) {
+    test('accepts a real generation, as text or as a number', function (assert) {
       assert.strictEqual(parseHostShellGeneration('7'), 7);
       assert.strictEqual(parseHostShellGeneration(7), 7);
-      assert.strictEqual(parseHostShellGeneration('0'), 0);
+      assert.strictEqual(
+        parseHostShellGeneration('1'),
+        1,
+        'the first transition takes 1, so that is the lowest real answer',
+      );
+      assert.strictEqual(parseHostShellGeneration(2147483647), 2147483647);
     });
 
     // Every rejection below would otherwise be stamped onto a row and compared
@@ -472,6 +477,25 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(parseHostShellGeneration(-1), undefined);
       assert.strictEqual(parseHostShellGeneration(Number.NaN), undefined);
       assert.strictEqual(parseHostShellGeneration(Infinity), undefined);
+    });
+
+    // Zero is the seeded "no shell observed yet" sentinel, not a generation —
+    // a real claim never returns it, because the first transition takes 1. It
+    // is rejected here rather than only at the producer that filters it today:
+    // `?? null` at the write site does not catch a zero, so one reaching this
+    // boundary would ride to the column intact and read as older than
+    // everything there is.
+    test('rejects the no-observation sentinel', function (assert) {
+      assert.strictEqual(parseHostShellGeneration('0'), undefined);
+      assert.strictEqual(parseHostShellGeneration(0), undefined);
+    });
+
+    // The column is `integer`. A larger value parses cleanly as a number and
+    // then fails at the write, turning a malformed header into a failed index
+    // row rather than an unstamped one.
+    test('rejects a value the column could not hold', function (assert) {
+      assert.strictEqual(parseHostShellGeneration('99999999999'), undefined);
+      assert.strictEqual(parseHostShellGeneration(2147483648), undefined);
     });
   });
 

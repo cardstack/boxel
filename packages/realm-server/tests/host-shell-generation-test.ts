@@ -410,6 +410,12 @@ module(basename(import.meta.filename), function (hooks) {
     // The predicate is a range scan over the largest table in the schema, so
     // the column exists to be indexed rather than merely stored.
     //
+    // Issued in the repair's own shape — realm equality plus the generation
+    // range — rather than on the generation alone. That is what makes the plan
+    // discriminate: a generation-only index also satisfies the narrower
+    // predicate, so testing that one would confirm an index the repair never
+    // walks and would stay green if the key order stopped serving it.
+    //
     // Asserted with sequential scans disabled, because on four seeded rows the
     // planner would choose one whatever indexes exist — so a plan taken at
     // face value here would pass with no index at all. Disabling it asks the
@@ -422,7 +428,9 @@ module(basename(import.meta.filename), function (hooks) {
         await query(['BEGIN']);
         await query(['SET LOCAL enable_seqscan = off']);
         let rows = await query([
-          `EXPLAIN (FORMAT JSON) SELECT url FROM boxel_index WHERE host_shell_generation < `,
+          `EXPLAIN (FORMAT JSON) SELECT url FROM boxel_index WHERE realm_url = `,
+          param(REALM),
+          ` AND host_shell_generation < `,
           param(2),
         ]);
         await query(['COMMIT']);
@@ -430,7 +438,7 @@ module(basename(import.meta.filename), function (hooks) {
       });
       assert.ok(
         plan.includes('boxel_index_host_shell_generation_index'),
-        `the predicate should resolve through the partial index; got: ${plan}`,
+        `the repair's predicate should resolve through the partial index; got: ${plan}`,
       );
     });
   });
