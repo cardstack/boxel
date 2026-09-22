@@ -383,9 +383,18 @@ async function waitForRoutePathSuffix(
         // left behind resolves at once, and an absent `data-screenshot-pending`
         // reads as ready. So the route is only reached when the path carries
         // this render's own identity, which is what the id and nonce are for.
-        let identity = window.location.pathname.split('/');
-        // `/render/:id/:nonce/:options/…` and `/module/:id/:nonce/:options`
-        // both put the id and nonce in these two slots.
+        // The render route is `/render/:id/:nonce/:options/…`, so the id and
+        // nonce are the two segments right after the `render` route keyword.
+        // Locate them by that keyword rather than by absolute position, so a
+        // non-root `rootURL` (a path prefix ahead of `render`) can't shift the
+        // slots out from under this check — the multi-status route wait below
+        // finds them the same way. The card id is a single URL-encoded segment,
+        // so only the route keyword itself reads as `render` here.
+        let segments = window.location.pathname.split('/').filter(Boolean);
+        let renderIdx = segments.indexOf('render');
+        let idSegment = renderIdx === -1 ? undefined : segments[renderIdx + 1];
+        let nonceSegment =
+          renderIdx === -1 ? undefined : segments[renderIdx + 2];
         let decodeSegment = (value: string | undefined) => {
           if (value == null) {
             return '';
@@ -404,11 +413,11 @@ async function waitForRoutePathSuffix(
         let withoutJson = (value: string) => value.replace(/\.json$/i, '');
         if (
           expectedId &&
-          withoutJson(decodeSegment(identity[2])) !== withoutJson(expectedId)
+          withoutJson(decodeSegment(idSegment)) !== withoutJson(expectedId)
         ) {
           return false;
         }
-        if (expectedNonce && decodeSegment(identity[3]) !== expectedNonce) {
+        if (expectedNonce && decodeSegment(nonceSegment) !== expectedNonce) {
           return false;
         }
         return true;
