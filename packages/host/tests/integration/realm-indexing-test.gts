@@ -3594,6 +3594,69 @@ module(`Integration | realm indexing`, function (hooks) {
     }
   });
 
+  test('a computed link that resolves to nothing is omitted from the indexed document', async function (assert) {
+    // The mirror of the case above: in the used-only serialization the indexer
+    // runs, a computed link resolving to nothing is the absence of a
+    // relationship, not an authored `{ self: null }`, so it contributes no
+    // entry — the shape a never-set link takes. This holds every card's index
+    // row steady: `CardDef.cardTheme` is a computed `linksTo` that is null on a
+    // themeless card, and without this omission every indexed document would
+    // gain a `cardTheme` entry it never carried before. A card whose only links
+    // are empty computeds serializes with no `relationships` key at all.
+    class Tag extends CardDef {
+      static displayName = 'Tag';
+      @field label = contains(StringField);
+    }
+    class Board extends CardDef {
+      static displayName = 'Board';
+      @field tags = linksToMany(() => Tag);
+      @field activeTags = linksToMany(() => Tag, {
+        computeVia: function (this: Board) {
+          return this.tags;
+        },
+      });
+      @field primaryTag = linksTo(() => Tag, {
+        computeVia: function (this: Board) {
+          return this.tags[0];
+        },
+      });
+    }
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Tag, Board },
+      },
+    });
+
+    await realm.write(
+      'board-empty.json',
+      JSON.stringify({
+        data: {
+          meta: {
+            adoptsFrom: { module: './test-cards', name: 'Board' },
+          },
+        },
+      }),
+    );
+
+    let board = await realm.realmIndexQueryEngine.cardDocument(
+      new URL(`${testRealmURL}board-empty`),
+      { loadLinks: true },
+    );
+    if (board?.type === 'doc') {
+      assert.strictEqual(
+        board.doc.data.relationships,
+        undefined,
+        'a card whose only links are empty computeds carries no relationships key (empty computeds omitted, the leftover `{}` stripped)',
+      );
+    } else {
+      assert.ok(
+        false,
+        `board search entry was an error: ${board?.error.errorDetail.message}`,
+      );
+    }
+  });
+
   test('a query-backed field resolves references that live in another realm', async function (assert) {
     // A query field with no realm searches only the realm holding the card, so
     // a reference into another realm could never match. Interpolating the

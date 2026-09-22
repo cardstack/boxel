@@ -499,6 +499,14 @@ function computeFields(
         // document even though the field derives real targets. Whether a
         // computed link serializes is governed solely by `includeComputeds`
         // below, the same as a computed contained field.
+        //
+        // Caveat, same as a computed contained field: a computed link whose
+        // `computeVia` reads a query-backed field derives from a live search
+        // the index cannot invalidate (its `queryDefinition` is undefined, so
+        // `omitQueryFields` does not filter it, and the deps reached through a
+        // query context are not the row's own). Such a value serializes here
+        // with no invalidation edge to keep it true, so it can go stale — a
+        // known limitation, not addressed by exempting the field.
         if (
           opts?.usedLinksToFieldsOnly &&
           !maybeField.computeVia &&
