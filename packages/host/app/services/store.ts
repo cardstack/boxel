@@ -2463,6 +2463,20 @@ export default class StoreService extends Service implements StoreInterface {
           }
 
           if (reloadFile) {
+            let alreadyHeld = this.#indexStateAlreadyHeld(
+              event,
+              invalidation,
+              instance,
+            );
+            if (alreadyHeld) {
+              reloadFile = false;
+              realmEventsLogger.debug(
+                `ignoring invalidation for card ${invalidation} because ${alreadyHeld}`,
+              );
+            }
+          }
+
+          if (reloadFile) {
             this.reloadTask.perform(instance);
             reloadsTriggered++;
           } else {
@@ -2521,6 +2535,68 @@ export default class StoreService extends Service implements StoreInterface {
     }
 
     return reloadsTriggered;
+  }
+
+  // Does this event describe a state of `invalidation` that the store already
+  // holds? Returns why when it does, so the decision says itself in the log,
+  // and `undefined` when it cannot tell — which reloads, as it did before.
+  //
+  // Not reloading matters for more than the round trip it saves. A reload
+  // overwrites the in-memory instance with server state, so each one is a
+  // window in which an edit typed since the write is discarded. That is the
+  // window own-request suppression above exists to close; these two rules
+  // close cases it cannot reach.
+  //
+  // `generation` orders. It is the generation of the pass that last wrote the
+  // card's index row, stamped onto the card+json GET, and a pass stamps every
+  // row it writes with its own — so an event at or below the instance's
+  // generation describes a pass this instance has already been read past. That
+  // is what makes a duplicate delivery, and an event overtaken by a newer one,
+  // a no-op without keeping any memory of the events already seen.
+  //
+  // `version` identifies content, and it answers after the request-id memory
+  // is gone. `clientRequestIds` is a `LimitedSet(250)`, so a tab that has
+  // written that many times since has evicted the id its own echo carries, and
+  // the echo then arrives indistinguishable from a stranger's — unrecognized
+  // request id, higher generation — and reloads over whatever has been typed
+  // since. A version is a property of the card rather than of a request, so it
+  // outlives that: the instance holds the hash its last write returned, and an
+  // event naming the same hash names bytes this store already has.
+  //
+  // Each rule answers in one direction only. An absent generation on either
+  // side, an absent `versions` map, an absent recorded version — all mean no
+  // information, and no information reloads. Three degradations depend on
+  // that: a realm too old to report a generation; a `versions` map dropped
+  // whole — rather than truncated — because the event it rides in would not
+  // otherwise fit, since a subscriber cannot tell a partial map from a complete
+  // one and a missing key must never read as "this card was not written"; and
+  // the broadcast a failed indexing pass sends, which carries no generation
+  // precisely so clients re-read and pick up the error rows it swapped in.
+  #indexStateAlreadyHeld(
+    event: IncrementalIndexEventContent,
+    invalidation: string,
+    instance: CardDef,
+  ): string | undefined {
+    let held = instance[meta];
+    if (
+      typeof event.generation === 'number' &&
+      typeof held?.generation === 'number' &&
+      event.generation <= held.generation
+    ) {
+      return `the store holds it at index generation ${held.generation}, at or past this event's ${event.generation}`;
+    }
+    // Keyed by the spelling this loop is already holding. `versions` spells a
+    // card the way `invalidations` does — the realm href with a trailing
+    // `.json` removed — so the two join by construction. That is deliberately
+    // not how a write response spells it: response ids are canonicalized to
+    // registered-prefix form, which is also what `instance.id` and the
+    // identity map carry, so a lookup by `instance.id` would miss on every
+    // prefix-mapped realm and pass on the rest.
+    let version = event.versions?.[invalidation];
+    if (version !== undefined && version === held?.version) {
+      return `the store already holds version ${version}`;
+    }
+    return undefined;
   }
 
   private loadInstanceTask = task(
@@ -3640,6 +3716,7 @@ export default class StoreService extends Service implements StoreInterface {
             if (isNew) {
               await this.assignRemoteIdentity(instance, json.data.id!);
             }
+            this.#recordWrittenVersion(instance, json);
             if (this.onSaveSubscriber) {
               this.onSaveSubscriber(
                 this.network.virtualNetwork.toURL(json.data.id!),
@@ -3799,6 +3876,25 @@ export default class StoreService extends Service implements StoreInterface {
   //   5. the identity map indexes the instance under both ids, so lookups by
   //      either return this same object;
   //   6. autosave takes over subsequent edits.
+  // Keep the version a card+json write reported — the fingerprint of the bytes
+  // the realm stored. The write responses are the only channel a client gets
+  // one on; the card+json GET deliberately reports none, so a version reaches
+  // an instance here or not at all. `#indexStateAlreadyHeld` is what reads it.
+  //
+  // Recorded rather than left to the server-state merge above, which runs only
+  // when the identity or the realm info moved and so skips the ordinary save.
+  // A response carrying no version (a realm old enough not to report one)
+  // clears whatever was held instead of leaving it: a version that no longer
+  // describes the bytes the realm holds would suppress a reload that is needed.
+  #recordWrittenVersion(instance: CardDef, json: SingleCardDocument) {
+    let held = instance[meta];
+    let version = json.data.meta?.version;
+    if (version === held?.version) {
+      return;
+    }
+    instance[meta] = { ...held, version } as CardResourceMeta;
+  }
+
   private async assignRemoteIdentity(
     instance: CardDef,
     remoteId: RealmResourceIdentifier,
