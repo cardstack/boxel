@@ -204,6 +204,16 @@ function computeWithTaintFrame<CardT extends BaseDefConstructor>(
       queryTaintedFields.set(instance, tainted);
     }
     tainted.add(field.name);
+  }
+  // Re-raise the mark from the record, not just from this frame. A compute
+  // factory may serve its result from its own memo without re-running the
+  // expression (BXL's `computeVia` caches per instance per compute cycle), so
+  // the query-field read that first raised the taint does not recur on a later
+  // read — this frame stays clean even though the field is query-derived. A
+  // chained computed reads the inner one after it is already memoized (fields
+  // serialize in declaration order), so replaying from the recorded taint is
+  // what carries it outward; relying on the read recurring would drop it.
+  if (isQueryTaintedField(instance, field.name)) {
     markQueryFieldRead();
   }
   if (value === undefined) {
