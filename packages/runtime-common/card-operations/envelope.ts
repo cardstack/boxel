@@ -667,7 +667,8 @@ export function assertTravelsInEnvelope(
 //
 // Refused rather than ignored, and refused here rather than left to the
 // coordinator, because the coordinator only ever sees the entries that write:
-// a read, a query or a head is answered before the batch is staged. An ignored
+// a `read`, a `readSource` or a `query` — the three bases that write nothing —
+// is answered before the batch is staged. An ignored
 // base version answers with no `baseMatched` at all, which is exactly the
 // reading a caller cannot distinguish from "the realm does not report on
 // this" — so a well-formed value on a read would be silently dropped while a

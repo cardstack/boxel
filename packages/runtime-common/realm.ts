@@ -391,6 +391,7 @@ import { MatrixBackendAuthentication } from './matrix-backend-authentication.ts'
 
 import type {
   FileWatcherEventContent,
+  IncrementalIndexEventContent,
   RealmEventContent,
   UpdateRealmEventContent,
 } from '@cardstack/base/matrix-event';
@@ -865,47 +866,59 @@ function boundedInvalidatedTypes(invalidatedTypes: string[] | undefined): {
   return { invalidatedTypes };
 }
 
-// The same budget, for the same reason, over the versions a write reports:
-// bounded by the commit's own file count rather than by the invalidation
-// fan-out, and the additive member, so it is the one that gives way rather than
-// making an event undeliverable.
+// What the whole event may encode to, not what this one member may.
 //
-// The capacity is worth stating rather than leaving to intuition, because this
-// is the member's own drop condition and the number is smaller than "a bulk
-// import" suggests. Each entry costs `len(url) + 38` encoded bytes — two quote
-// pairs, a colon, a comma, and a 32-character hex digest, which is what every
-// card carries since none reaches the whole-file sampling threshold under the
-// card size ceiling. So at the 50-to-70-character URLs a realm's cards
-// actually have, this budget holds roughly 300 to 400 files in one commit.
-// Neither the operations envelope nor `writeMany` caps how many files a commit
-// carries, so a larger import than that loses the member — and by then
-// `invalidations` is carrying the same URLs at comparable cost, so the event is
-// near its own ceiling regardless.
+// A per-member budget is the wrong instrument here, and measuring one in
+// isolation is what makes it wrong: a bulk commit's URLs appear in the event
+// three times over — once in `invalidations`, which has no ceiling at all,
+// again in `clientAuthored` for a caller that asks for authorship, and again in
+// `versions`. A member that fits its own allowance can still be the increment
+// that carries the total past the 65536 bytes the Matrix specification allows
+// an event, and a rejected event is not a degraded one: `sendEvent` throws,
+// `broadcastRealmEvent` logs it and moves to the next room, and subscribers get
+// nothing at all for that commit — no `invalidations` either. That is strictly
+// worse than the outcome dropping this member exists to produce.
 //
-// Dropped whole rather than trimmed to fit. A subscriber cannot tell a partial
-// map from a complete one, so a trimmed one would have it read a missing key as
+// So the question asked is the one that actually decides deliverability: does
+// the assembled event still fit with `versions` in it. Raising a per-member
+// allowance cannot answer that, and a larger one is not safer — it moves the
+// band of commit sizes where the total overruns rather than removing it, and
+// the risk peaks just under whatever the number is.
+//
+// The reserve is for what the room event wraps this content in — type, sender,
+// room and event ids, timestamps, signatures — none of which is visible here.
+// It is generous on purpose: this member is the additive one, so the cost of
+// being wrong in the cautious direction is a client re-reading a card, and the
+// cost of being wrong the other way is an event nobody receives.
+const MAX_EVENT_CONTENT_BYTES = 56 * 1024;
+
+// `versions` on the event when the event still fits with it, and absent when it
+// does not.
+//
+// Dropped whole rather than trimmed. A subscriber cannot tell a partial map
+// from a complete one, so a trimmed one would have it read a missing key as
 // "the realm computed this card's state" — the opposite of what a dropped key
 // means — and act on it by keeping a stale local copy. Absent, it re-reads,
 // which is what it did before the member existed.
-const MAX_BROADCAST_VERSIONS_BYTES = 32 * 1024;
-
-function boundedVersions(versions: Record<string, string> | undefined): {
-  versions?: Record<string, string>;
-} {
+function withVersionsIfItFits(
+  content: IncrementalIndexEventContent,
+  versions: Record<string, string> | undefined,
+): IncrementalIndexEventContent {
   // Emitted only when it reports something. An empty map and an absent one say
   // the same thing to a subscriber — no version for any card it holds — so
   // unlike `clientAuthored`, whose emptiness is itself a statement, there is
   // nothing here for the distinction to carry.
   if (versions === undefined || Object.keys(versions).length === 0) {
-    return {};
+    return content;
   }
-  // Measure what goes on the wire — the JSON encoding, not the character count
-  // of the keys and values inside it.
-  let encodedLength = new TextEncoder().encode(JSON.stringify(versions)).length;
-  if (encodedLength > MAX_BROADCAST_VERSIONS_BYTES) {
-    return {};
+  let withVersions: IncrementalIndexEventContent = { ...content, versions };
+  // Measure what goes on the wire — the JSON encoding of the whole content,
+  // not the character count of the keys and values inside one member.
+  let encoded = new TextEncoder().encode(JSON.stringify(withVersions)).length;
+  if (encoded > MAX_EVENT_CONTENT_BYTES) {
+    return content;
   }
-  return { versions };
+  return withVersions;
 }
 
 // Emit `NOTIFY realm_index_updated, '<realmURL>'`. Called from every
@@ -2882,7 +2895,7 @@ export class Realm {
         `index event for ${this.url} dropped ${dropped.length} client-authored name(s) that the pass did not invalidate, so their holders will re-read them: ${dropped.join(', ')}`,
       );
     }
-    this.broadcastRealmEvent({
+    let content: IncrementalIndexEventContent = {
       eventName: 'index',
       indexType: 'incremental',
       invalidations,
@@ -2890,13 +2903,13 @@ export class Realm {
         ? { clientRequestId: opts.clientRequestId }
         : {}),
       ...(authorshipReported ? { clientAuthored } : {}),
-      ...boundedVersions(opts?.versions),
       ...(opts?.generation !== undefined
         ? { generation: opts.generation }
         : {}),
       ...boundedInvalidatedTypes(opts?.invalidatedTypes),
       realmURL: this.url,
-    });
+    };
+    this.broadcastRealmEvent(withVersionsIfItFits(content, opts?.versions));
   }
 
   private async invalidateURLs(

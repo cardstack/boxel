@@ -2138,10 +2138,6 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         }
       });
 
-      // A create has no prior state for a base version to describe and a delete
-      // has none left to report a match on, so naming one is a caller that
-      // believes it is writing conditionally when nothing is comparing
-      // anything. Refused rather than ignored, for that reason.
       // A read never reaches the coordinator — it is answered before the batch
       // is staged — so the refusal for an entry that cannot use a base version
       // has to be made where every entry's definition is known. Without it a
@@ -2172,6 +2168,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         );
       });
 
+      // A create has no prior state for a base version to describe and a delete
+      // has none left to report a match on, so naming one is a caller that
+      // believes it is writing conditionally when nothing is comparing
+      // anything. Refused rather than ignored, for that reason.
       test('a base version on a create is refused, naming the entry', async function (assert) {
         let response = await post(
           envelope(
