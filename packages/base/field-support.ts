@@ -172,9 +172,14 @@ export function markQueryFieldRead(): void {
 }
 
 // Whether `fieldName` on this instance was computed from a query-backed field.
-// Only ever read where computeds are serialized under `omitQueryFields` — the
-// indexing pass — so a taint that outlives the read that raised it costs
-// nothing elsewhere.
+// Read in two roles: the two serializers consult it under `omitQueryFields` to
+// decide which computeds to drop, and `getter` / `computeWithTaintFrame` replay
+// it on every computed read — re-raising `markQueryFieldRead` so a value served
+// from a compute memo (which skips the query-field read that first raised the
+// taint) still taints the compute reading it. That replay marks whatever frames
+// are open and can record a fresh taint against them, so it is the conservative
+// propagation the omission relies on, not a free read. Off the indexing pass no
+// frame is open, so the re-raise is a no-op beyond the map lookup.
 export function isQueryTaintedField(
   instance: BaseDef,
   fieldName: string,

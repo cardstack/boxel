@@ -356,14 +356,19 @@ export function serializeCardResource(
       // A computed that read a query-backed field derives from a live search
       // this document's invalidation never covers, so it is left out on the
       // same terms the query field itself is. Which computeds those are is only
-      // knowable by running them, so the value is read here and the field
-      // skipped before `serializedGet` — which would otherwise pull a link
-      // target into `included` for a field about to be dropped.
+      // knowable by running them, so the value is peeked here — before
+      // `serializedGet`, which would otherwise pull a link target into
+      // `included` for a field about to be dropped — and a tainted one skipped.
+      // An untainted one serializes from the value already in hand rather than
+      // routing back through `serializedGet`, whose second `peekAtField` would
+      // land as a pass-memo hit and inflate `computedCacheHitCount` on the very
+      // route (`render/meta`) that snapshots it into diagnostics.
       if (opts?.omitQueryFields && field.computeVia) {
-        peekAtField(model, fieldName);
+        let value = peekAtField(model, fieldName);
         if (isQueryTaintedField(model, fieldName)) {
           return {};
         }
+        return field.serialize(value, doc, visited, opts);
       }
       return serializedGet(model, fieldName, doc, visited, opts);
     });
