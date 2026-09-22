@@ -635,6 +635,48 @@ module(basename(import.meta.filename), function () {
         urls('hub', 'linker', 'linker-of-linker'),
         'the pass tombstones only the rows it will visit',
       );
+
+      await batch.done();
+      let rows = (await adapter.execute(
+        `SELECT url, generation, indexed_at, is_deleted FROM boxel_index
+          WHERE realm_url = $1 AND url = ANY($2)`,
+        {
+          bind: [
+            testRealm,
+            urls('renderer', 'renderer-of-renderer', 'unrelated'),
+          ],
+        },
+      )) as {
+        url: string;
+        generation: number;
+        indexed_at: string | number | null;
+        is_deleted: boolean | null;
+      }[];
+      let byURL = new Map(rows.map((row) => [row.url, row]));
+      for (let name of ['renderer', 'renderer-of-renderer']) {
+        let row = byURL.get(url(name));
+        assert.strictEqual(
+          row?.generation,
+          batch.currentGeneration,
+          `${name}'s index row carries the pass's generation, so the HTML reconcile sweep can still repair it`,
+        );
+        assert.notEqual(
+          row?.indexed_at,
+          null,
+          `${name}'s index row carries a fresh indexed_at, so card+json validators move`,
+        );
+        assert.notOk(row?.is_deleted, `${name}'s index row stays live`);
+      }
+      assert.strictEqual(
+        byURL.get(url('unrelated'))?.generation,
+        1,
+        'a card outside the fan-out is untouched',
+      );
+      assert.strictEqual(
+        byURL.get(url('unrelated'))?.indexed_at,
+        null,
+        'a card outside the fan-out keeps its indexed_at',
+      );
     });
 
     test('a dependent with both an index edge and a render edge is visited', async function (assert) {

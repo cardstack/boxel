@@ -5369,6 +5369,67 @@ module(basename(import.meta.filename), function () {
           );
         });
 
+        // `jade` links `hassan` but only renders it, so patching `hassan`
+        // leaves `jade`'s search row alone. Its card+json still carries
+        // `hassan` in `included`, so its validator must move and a cached
+        // body must not be served.
+        test('a card that links an edited card serves the edit under a new validator', async function (assert) {
+          let before = await request
+            .get('/jade')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(before.status, 200, `HTTP 200: ${before.text}`);
+          let etag = before.get('etag') ?? '';
+          assert.ok(etag, 'the first read carries an ETag');
+
+          let patched = await request
+            .patch('/hassan')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan Renamed' },
+                meta: {
+                  adoptsFrom: { module: rri('./friend.gts'), name: 'Friend' },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(patched.status, 200, `HTTP 200: ${patched.text}`);
+
+          let conditional = await request
+            .get('/jade')
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-None-Match', etag);
+          assert.strictEqual(
+            conditional.status,
+            200,
+            'the old validator no longer matches',
+          );
+          let linked = (conditional.body.included ?? []).find(
+            (resource: { id: string }) =>
+              resource.id === `${testRealmHref}hassan`,
+          );
+          assert.strictEqual(
+            linked?.attributes?.firstName,
+            'Hassan Renamed',
+            `the linked card in included is the edited one: ${JSON.stringify(
+              linked?.attributes,
+            )}`,
+          );
+
+          let plain = await request
+            .get('/jade')
+            .set('Accept', 'application/vnd.card+json');
+          let cachedLinked = (plain.body.included ?? []).find(
+            (resource: { id: string }) =>
+              resource.id === `${testRealmHref}hassan`,
+          );
+          assert.strictEqual(
+            cachedLinked?.attributes?.firstName,
+            'Hassan Renamed',
+            'an unconditional read is not served the pre-edit body',
+          );
+        });
+
         // `hassan-tag` reads `hassan`'s name into a computed field, so patching
         // `hassan` re-indexes `hassan-tag` in the same pass. The realm computed
         // `hassan-tag`'s new state, so nobody holds it and every client wants

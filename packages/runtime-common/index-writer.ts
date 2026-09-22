@@ -2576,6 +2576,49 @@ export class Batch {
         this.#publishedPrerenderedHtml = true;
       }
     }
+
+    await this.stampRenderOnlyEntries();
+  }
+
+  // Render-only dependents keep their index row — its search document
+  // cannot have moved — but two things keyed on that row must still see the
+  // change. The card+json validator and response cache key on `indexed_at`,
+  // and a card's `included` resources are assembled from its links at read
+  // time, so a renderer that links the changed card would otherwise keep
+  // serving the old linked resource under an unchanged ETag. And the
+  // prerender-html reconcile sweep finds HTML to repair by
+  // `prerendered_html.generation < boxel_index.generation`, so stamping this
+  // pass's generation keeps a lost `prerender_html` job repairable, exactly
+  // as it is for the rows this pass visits. One UPDATE stands in for the
+  // visit the row no longer gets.
+  private async stampRenderOnlyEntries() {
+    if (this.#renderOnlyInvalidations.size === 0) {
+      return;
+    }
+    let urls = [...this.#renderOnlyInvalidations];
+    let indexedAt = Date.now();
+    for (let offset = 0; offset < urls.length; offset += 5000) {
+      await this.#query([
+        'UPDATE boxel_index SET',
+        ...separatedByCommas([
+          ['indexed_at =', param(indexedAt)],
+          ['generation =', param(this.generation)],
+        ]),
+        'WHERE',
+        ...every([
+          ['realm_url =', param(this.realmURL.href)],
+          [
+            'url IN',
+            ...addExplicitParens(
+              separatedByCommas(
+                urls.slice(offset, offset + 5000).map((url) => [param(url)]),
+              ),
+            ),
+          ],
+          any([['is_deleted = false'], ['is_deleted IS NULL']]) as Expression,
+        ]),
+      ] as Expression);
+    }
   }
 
   // Whether `#touchedTypes` is a complete account of what this pass moved.
