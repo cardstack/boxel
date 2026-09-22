@@ -3,7 +3,7 @@ import { Deferred, OperationsError } from '@cardstack/runtime-common';
 import type {
   OperationsAnswer,
   OperationsEnvelope,
-  OperationWriteResult,
+  ReconciledWriteResult,
   OptimisticCandidate,
 } from '@cardstack/runtime-common';
 
@@ -86,7 +86,7 @@ export interface LedgerEnvironment {
   stamp(envelope: OperationsEnvelope, baseVersion: string): OperationsEnvelope;
   // Reads the write result out of an answer, or nothing when the answer does
   // not carry one.
-  writeResult(answer: OperationsAnswer): OperationWriteResult | undefined;
+  writeResult(answer: OperationsAnswer): ReconciledWriteResult | undefined;
   // Fires when the store re-reads a card, whoever caused it. What a foreign
   // write looks like from here.
   onReload(cb: (instance: CardDef) => void): () => void;

@@ -317,13 +317,24 @@ export interface OperationWriteResult {
   // gave it. Present only for a create that named one, which is every create
   // a batch stages.
   lid?: string;
+}
+
+// A write result as the transport reads it, which is the author's plus the
+// realm's answer to the one question only a caller that named a base can ask.
+//
+// Kept off `OperationWriteResult` rather than added to it: an invocation
+// carries no way to name a base — `InvokeOptions` is a realm and some
+// relationships — so for every call a card author can make this would be a
+// member that is always absent. It is present here because the transport does
+// name one, on the caller's behalf, for a write it is reconciling.
+export type ReconciledWriteResult = OperationWriteResult & {
   // Whether the realm executed from the same source version the caller named.
   // Present only when the entry carried a base version, so absent means the
   // realm was asked nothing rather than that it answered no — a distinction a
-  // reconciling caller has to keep, since only a `true` licenses treating
+  // reconciling caller has to keep, since only `true` licenses treating
   // locally computed state as the authoritative result.
   baseMatched?: boolean;
-}
+};
 
 // A read reports the document it was asked for. An author's `output` program
 // may reshape one, so what a projected read answers is not knowable from the
@@ -1106,7 +1117,7 @@ export function mintedIdentities(
 // thing it does with a realm that reports no `baseMatched`.
 export function writeResultIn(
   answer: OperationsAnswer,
-): OperationWriteResult | undefined {
+): ReconciledWriteResult | undefined {
   let [result, ...rest] = answer['atomic:results'] ?? [];
   if (!result || rest.length > 0 || Array.isArray(result)) {
     return undefined;
@@ -1115,7 +1126,13 @@ export function writeResultIn(
   if (!data || typeof data.id !== 'string') {
     return undefined;
   }
-  return writeResult(data, 'the batch');
+  let meta = (data.meta ?? {}) as Record<string, unknown>;
+  return {
+    ...writeResult(data, 'the batch'),
+    ...(typeof meta.baseMatched === 'boolean'
+      ? { baseMatched: meta.baseMatched }
+      : {}),
+  };
 }
 
 function writeResult(
@@ -1134,9 +1151,6 @@ function writeResult(
     generation: Number(meta.generation ?? 0),
     lastModified: Number(meta.lastModified ?? 0),
     ...(typeof data.lid === 'string' ? { lid: data.lid } : {}),
-    ...(typeof meta.baseMatched === 'boolean'
-      ? { baseMatched: meta.baseMatched }
-      : {}),
   };
 }
 

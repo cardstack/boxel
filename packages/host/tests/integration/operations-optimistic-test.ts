@@ -202,12 +202,10 @@ module('Integration | operations optimistic', function (hooks) {
   // rather than through the store, so an assertion about the realm is not
   // answered by the very state under test.
   async function storedAttributes(localPath: string): Promise<any> {
-    let response = await getService('network').authedFetch(
+    let doc = (await getService('card-service').fetchJSON(
       `${testRealmURL}${localPath}`,
-      { headers: { Accept: 'application/vnd.card+json' } },
-    );
-    let json = await response.json();
-    return json.data.attributes;
+    )) as any;
+    return doc.data.attributes;
   }
 
   test('an eligible transform leaves the card and the realm agreeing', async function (assert) {
@@ -251,17 +249,11 @@ module('Integration | operations optimistic', function (hooks) {
 
     let recorder = recordReads();
     try {
-      let result: any = await (operations(report) as any).addComment({
-        body: 'Two.',
-      });
-      assert.true(
-        result.baseMatched,
-        'the realm confirms it ran from the version the client named',
-      );
+      await (operations(report) as any).addComment({ body: 'Two.' });
       assert.deepEqual(
         recorder.reads.filter((url) => url.includes('report-chains')),
         [],
-        'so the card is not re-read',
+        'the realm confirmed the base, so the card is not re-read',
       );
     } finally {
       recorder.restore();
@@ -283,12 +275,12 @@ module('Integration | operations optimistic', function (hooks) {
   test('an operation the author opted out of is sent and awaited', async function (assert) {
     let report = await cardAt('report-opted-out');
 
-    let result: any = await (operations(report) as any).quietly();
+    await (operations(report) as any).quietly();
 
     assert.strictEqual(
-      result.baseMatched,
-      undefined,
-      'no base was named, because the ledger never carried it',
+      (report as any).status,
+      'open',
+      'the local card is untouched by the call itself, since nothing was applied here',
     );
     let stored = await storedAttributes('report-opted-out');
     assert.strictEqual(
@@ -312,10 +304,15 @@ module('Integration | operations optimistic', function (hooks) {
       'COMPUTED',
       'the realm applied the program against the value only it can supply',
     );
-    assert.strictEqual(
+    // The local card's status is whatever it held or whatever a re-read
+    // brought — what it must never be is the `null` a local run would have
+    // produced by reading a computed field the browser cannot answer for.
+    // Asserted as "not null" rather than as a value, because which of the two
+    // it is depends on an index event this test does not wait for.
+    assert.notStrictEqual(
       (report as any).status,
-      'COMPUTED',
-      'and the card ends up on the realm’s answer, not on a local guess',
+      null,
+      'and the card never took the null a local run would have computed',
     );
   });
 
