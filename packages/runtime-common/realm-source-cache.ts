@@ -52,6 +52,18 @@ export interface FetchRealmSourcesOptions {
    * bytes fetched as another. Omit only for a genuinely anonymous fetch.
    */
   cacheScope?: string;
+  /**
+   * Per-request budget. The degrade-on-unreachable contract has to cover a
+   * hung realm as well as a refused connection: staging runs before the
+   * type-checker is spawned, so no downstream timeout applies to it, and one
+   * accepted-but-never-answered socket would otherwise stall the gate with no
+   * output. A timeout lands on the same failure -> degrade path as a refused
+   * connection. Modules fetch in parallel per depth level but a module's
+   * extension candidates probe sequentially (up to 4), so a fully hung realm
+   * costs at most 4x this per level — and stages nothing, so the walk ends at
+   * the entry level, well under the type-checker's own two-minute cap.
+   */
+  fetchTimeoutMs?: number;
 }
 
 export interface RealmSourceFailure {
@@ -73,6 +85,7 @@ export interface FetchRealmSourcesResult {
 }
 
 const DEFAULT_MAX_DEPTH = 10;
+const DEFAULT_FETCH_TIMEOUT_MS = 10_000;
 
 /**
  * Extensions to try when a specifier carries none. Card code imports
@@ -205,6 +218,7 @@ async function fetchModuleSource(
   realmPath: string,
   fetchFn: typeof globalThis.fetch,
   cacheScope: string | undefined,
+  fetchTimeoutMs: number,
 ): Promise<{ realmPath: string; source: string } | { error: string }> {
   let candidates = hasKnownExtension(realmPath)
     ? [realmPath]
@@ -240,7 +254,10 @@ async function fetchModuleSource(
 
     let response: Response;
     try {
-      response = await fetchFn(url, { headers });
+      response = await fetchFn(url, {
+        headers,
+        signal: AbortSignal.timeout(fetchTimeoutMs),
+      });
     } catch (error: unknown) {
       errors.push(
         `${candidate}: ${error instanceof Error ? error.message : String(error)}`,
@@ -285,6 +302,7 @@ export async function fetchRealmSources(
     fetch: fetchFn = globalThis.fetch,
     maxDepth = DEFAULT_MAX_DEPTH,
     cacheScope,
+    fetchTimeoutMs = DEFAULT_FETCH_TIMEOUT_MS,
   } = options;
 
   let modules: RealmSourceModules = new Map();
@@ -350,6 +368,7 @@ export async function fetchRealmSources(
           pending.realmPath,
           fetchFn,
           cacheScope,
+          fetchTimeoutMs,
         );
         return { pending, fetched };
       }),

@@ -321,6 +321,37 @@ module('realm-source-cache > fetchRealmSources', function (hooks) {
     );
   });
 
+  // A realm that accepts the socket and never answers must land on the same
+  // failure -> degrade path as a refused connection. Staging runs before the
+  // type-checker is spawned, so nothing downstream would ever cut this short.
+  test('a hung realm times out into the failure path instead of stalling the walk', async function (assert) {
+    let hangingFetch = ((_input: string | URL, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () =>
+          reject(init.signal?.reason),
+        );
+      })) as unknown as typeof globalThis.fetch;
+
+    let result = await fetchRealmSources({
+      entries: [
+        {
+          path: 'a.gts',
+          content: `import { Author } from '@cardstack/catalog/author';`,
+        },
+      ],
+      prefixRealmURLs: { [CATALOG]: CATALOG_URL },
+      fetch: hangingFetch,
+      fetchTimeoutMs: 50,
+    });
+
+    assert.strictEqual(result.modules.size, 0, 'nothing staged');
+    assert.strictEqual(result.failures.length, 1, 'the module is a failure');
+    assert.true(
+      /timeout|abort/i.test(result.failures[0].reason),
+      `the reason names the timeout (got: ${result.failures[0].reason})`,
+    );
+  });
+
   // A realm-prefixed specifier can carry `..`, a protocol-relative `//host`, or
   // an absolute `https://host` that `new URL` honors — walking the fetch to a
   // sibling realm or an arbitrary host. This runs server-side over agent-
