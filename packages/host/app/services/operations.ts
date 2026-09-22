@@ -20,6 +20,7 @@ import {
   SupportedMimeType,
   writeResultIn,
   type CodeRef,
+  type Definition,
   type LooseCardResource,
   type OperationsAnswer,
   type OperationsEnvelope,
@@ -441,6 +442,17 @@ export default class OperationsService
     // The same identity the realm will authenticate this request as, so a
     // program reading `actor()` reads one value rather than two.
     let actor = this.sessionActor();
+    // Everything about this card that only the realm's index can answer,
+    // declared as such. Without it a program reading a computed field would
+    // not be refused — it would read straight through to the stored document,
+    // find nothing there, and carry on with a null the realm is about to
+    // replace with a computed value. That result would then be confirmed by
+    // `baseMatched`, because the base really did match; the divergence is in
+    // the program's inputs rather than in the version, so nothing downstream
+    // could catch it.
+    let overlays = {
+      unavailable: await this.unavailableHere(definition, lookupDefinition),
+    };
     let schema = await mutationSchemaForCardSource(
       definition as unknown as Parameters<
         typeof mutationSchemaForCardSource
@@ -463,6 +475,7 @@ export default class OperationsService
             ...((resource.attributes ?? {}) as Record<string, unknown>),
           },
         },
+        overlays,
         // A program naming a card to link to gets the identity back, the same
         // answer the realm's own planner is given. Whether that card exists is
         // the realm's to refuse, and it does so on the write.
@@ -473,6 +486,61 @@ export default class OperationsService
       instance,
       (document as unknown as { data: LooseCardResource }).data,
     );
+  }
+
+  // The paths a program may read that a browser cannot answer for.
+  //
+  // The realm lays two things under the stored document before it runs a
+  // program: the index's rendering of the card, which is where its computed
+  // values are, and the denormalized fields of the cards it links to. A client
+  // holds neither, so from a program's point of view this session is exactly
+  // the realm's own "there is no index row for this card" case — and it is
+  // described the same way, with the same tiers and the same reason, so the
+  // planner refuses the same reads on both sides.
+  //
+  // Declared per path rather than by refusing the whole field: a link is still
+  // perfectly writable — appending a card to a collection reads nothing — and
+  // it is only the linked card's *fields* that are out of reach. The members
+  // are enumerated from the target's own definition, which is the list the
+  // realm builds from too.
+  private async unavailableHere(
+    definition: Definition,
+    lookupDefinition: (codeRef: CodeRef) => Promise<Definition | undefined>,
+  ): Promise<{ path: string; tier: 'computed' | 'linked'; reason: string }[]> {
+    let unavailable: {
+      path: string;
+      tier: 'computed' | 'linked';
+      reason: string;
+    }[] = [];
+    for (let [field, defId] of Object.entries(definition.fields)) {
+      let fieldDef = definition.fieldDefs[defId];
+      if (!fieldDef) {
+        continue;
+      }
+      if (fieldDef.isComputed) {
+        unavailable.push({
+          path: field,
+          tier: 'computed',
+          reason: 'not-indexed',
+        });
+        continue;
+      }
+      if (fieldDef.type !== 'linksTo') {
+        continue;
+      }
+      let linked = await lookupDefinition(fieldDef.fieldOrCard);
+      for (let member of Object.keys(linked?.fields ?? {})) {
+        if (member === 'id') {
+          continue;
+        }
+        unavailable.push({
+          path: `${field}.${member}`,
+          tier: 'linked',
+          reason: 'not-indexed',
+        });
+      }
+    }
+    return unavailable;
   }
 
   private async fetchAnswer(
