@@ -135,6 +135,7 @@ module('Integration | realm', function (hooks) {
     // The card+json GET stamps the index-data generation in per-instance meta;
     // it's server metadata not asserted by this structural comparison.
     delete json.data.meta.generation;
+    delete json.data.meta.version;
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -290,6 +291,7 @@ module('Integration | realm', function (hooks) {
     // The card+json GET stamps the index-data generation in per-instance meta;
     // it's server metadata not asserted by this structural comparison.
     delete json.data.meta.generation;
+    delete json.data.meta.version;
     assert.deepEqual(json, {
       data: {
         type: 'card',

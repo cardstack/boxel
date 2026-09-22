@@ -39,6 +39,27 @@ export interface BoxelIndexTable {
   // The icon renders in the index visit, so it lives here rather than on
   // `prerendered_html` with the other rendered output.
   icon_html: string | null;
+  // The content hash of the source bytes this row's document was built from,
+  // served as `meta.version` on the single-card card+json GET. A client sends
+  // it back as the base its next write is computed against, and the realm
+  // answers `baseMatched` by comparing that base against the bytes it executed
+  // from — so the value has to identify the bytes behind `pristine_doc` and
+  // nothing else. A version naming newer bytes than the document beside it
+  // would turn a client's honest "I cannot confirm this" into a false
+  // confirmation.
+  //
+  // Stamped from the render's own read of the source, which is the read whose
+  // result is serialized into `pristine_doc`. The worker's separate read of the
+  // same file (`reader.readFile` in the visit) is a different read that can see
+  // different bytes, so it is not the one this comes from.
+  //
+  // Instance rows only. A file row's hash already rides inside its
+  // `pristine_doc` as the file-meta resource's `contentHash`.
+  //
+  // Null means no pass has stamped the row, or the pass produced no document.
+  // The GET then reports no version, which is what it did before this column
+  // existed. Nothing that decides row liveness may read it.
+  source_content_hash: string | null;
   indexed_at: string | null; // pg represents big integers as strings in javascript
   last_modified: string | null; // pg represents big integers as strings in javascript
   resource_created_at: string | null; // pg represents big integers as strings in javascript

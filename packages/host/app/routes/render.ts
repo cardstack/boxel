@@ -15,6 +15,7 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import {
   beginRuntimeDependencyTrackingSession,
+  computeContentHash,
   endRuntimeDependencyTrackingSession,
   formattedError,
   loadCardDef,
@@ -98,6 +99,19 @@ export type Model = {
   cardId: string;
   renderOptions: ReturnType<typeof parseRenderRouteOptions>;
   capturedDeps?: string[];
+  // The content hash of the stored source this build read to hydrate
+  // `instance`. The render.meta route reports it onward, the indexer persists it
+  // as `boxel_index.source_content_hash`, and the card+json GET serves it as
+  // `meta.version` — the base a client's next write is computed against.
+  //
+  // Taken here because this is the read the served document comes from. The
+  // worker's own read of the same file, earlier in the visit, is a separate
+  // `card+source` GET that can be answered by a different realm-server replica,
+  // so a hash from there can describe bytes this build never saw.
+  //
+  // Absent on the file-extract and file-render branches, which read no card
+  // source.
+  sourceContentHash?: string;
   // The model build's own timing breakdown, bounded and rounded for
   // persistence. A model is built once per visit and shared by every child
   // route step in it, so this rides the model rather than any one step: the
@@ -128,6 +142,7 @@ interface StashedCardSource {
   realmURL: string;
   lastModified: Date;
   doc: LooseSingleCardDocument;
+  sourceContentHash: string;
 }
 
 export default class RenderRoute extends Route<Model> {
@@ -692,6 +707,11 @@ export default class RenderRoute extends Route<Model> {
     let realmURL: string;
     let lastModified: Date;
     let doc: LooseSingleCardDocument | CardErrorsJSONAPI;
+    // The fingerprint of the stored source this build reads, whichever arm
+    // supplies it. Persisted as `boxel_index.source_content_hash` and served as
+    // `meta.version`, so both arms have to produce the same value for the same
+    // file — the one `computeContentHash` gives for the bytes on disk.
+    let sourceContentHash: string;
     let cardSourceFrom: BuildModelDiagnostics['cardSourceFrom'];
     let stashedSource = this.#stashedCardSource(id);
     if (stashedSource) {
@@ -700,7 +720,7 @@ export default class RenderRoute extends Route<Model> {
       // from reading a card's stored source twice — and the second read is the
       // one that crosses the public balancer, so it is also the one that can
       // answer with something other than the card.
-      ({ realmURL, lastModified, doc } = stashedSource);
+      ({ realmURL, lastModified, doc, sourceContentHash } = stashedSource);
       cardSourceFrom = 'stash';
     } else {
       cardSourceFrom = 'fetch';
@@ -738,7 +758,18 @@ export default class RenderRoute extends Route<Model> {
 
       realmURL = response.headers.get('x-boxel-realm-url')!;
       lastModified = new Date(response.headers.get('last-modified')!);
-      doc = await response.json();
+      // Fingerprinted as bytes, before anything decodes them. A decode is not
+      // the identity: `response.text()` performs a WHATWG UTF-8 decode, which
+      // strips a leading BOM and replaces malformed sequences, while the hash a
+      // `baseVersion` is compared against is taken over what the file holds.
+      // Hashing the decoded string would give such a card a version that can
+      // never match its own base, so every operation on it would report no
+      // match and reload — the optimization silently off, for the cards least
+      // likely to be noticed. The decode still happens, downstream and only for
+      // the parse, where dropping a BOM is what `JSON.parse` requires.
+      let sourceBytes = new Uint8Array(await response.arrayBuffer());
+      sourceContentHash = computeContentHash(sourceBytes);
+      doc = JSON.parse(new TextDecoder().decode(sourceBytes));
     }
     let canonicalId = id.replace(/\.json$/, '');
 
@@ -764,6 +795,7 @@ export default class RenderRoute extends Route<Model> {
       nonce,
       cardId: canonicalId,
       renderOptions: parsedOptions,
+      sourceContentHash,
       get status(): RenderStatus {
         return (state.get('status') as RenderStatus) ?? 'loading';
       },
@@ -968,6 +1000,21 @@ export default class RenderRoute extends Route<Model> {
       realmURL: stashed.realmURL,
       lastModified: new Date(stashed.lastModified),
       doc: doc as LooseSingleCardDocument,
+      // Taken over the stashed source rather than over `doc`, and before the
+      // parse above is trusted for anything else. Re-serializing the parsed
+      // document would not reproduce the file: key order is whatever the parse
+      // produced, and the stored bytes are pretty-printed with a trailing
+      // newline, so the hash would be stable, deterministic and permanently
+      // unequal to the base it is compared against.
+      //
+      // The string is the file's text as the visit's reader decoded it, so for
+      // any source the realm itself wrote this is the hash of the bytes on
+      // disk. A file whose bytes are not the UTF-8 encoding of their own
+      // decoding — a BOM, or malformed sequences — can hash differently here
+      // than the write path computes, and the effect is that the card reports a
+      // version its base never matches: it reloads rather than confirming,
+      // which is the safe direction.
+      sourceContentHash: computeContentHash(stashed.source),
     };
   }
 
