@@ -512,6 +512,9 @@ export async function raceAgainstDrain<T>(
 export function buildPrerenderApp(options: {
   serverURL: string;
   maxPages?: number;
+  // Default true. False keeps the page pool from sending the manager
+  // affinity-eviction notices for a server that never registered.
+  registerWithManager?: boolean;
   isDraining?: () => boolean;
   drainingPromise?: Promise<void>;
   // The host-shell token the manager last *reported*, read at render start and
@@ -547,6 +550,7 @@ export function buildPrerenderApp(options: {
   let prerenderer = new Prerenderer({
     maxPages,
     serverURL: options.serverURL,
+    registerWithManager: options.registerWithManager,
   });
 
   // One reaction on the shutdown promise for the whole process. Requests take
@@ -1758,8 +1762,9 @@ export function createPrerenderHttpServer(options?: {
   // pass false so the qunit runner isn't torn down before teardown hooks can
   // release hardcoded test ports (CS-10813).
   fatalExitOnUncaught?: boolean;
-  // Default true. Gates the heartbeat that registers this server with the
-  // prerender manager, and the unregister on close. A server that is only
+  // Default true. Gates every call this server makes to the prerender
+  // manager: the registration heartbeat, the unregister on close, and the
+  // page pool's affinity-eviction notices. A server that is only
   // reached directly by its own URL passes false, so a machine-wide manager
   // never routes other clients' renders to it.
   registerWithManager?: boolean;
@@ -1807,6 +1812,7 @@ export function createPrerenderHttpServer(options?: {
     awaitHostShellRecycle: () => hostShellRecycle,
     maxPages: options?.maxPages,
     serverURL,
+    registerWithManager,
     isDraining: () => draining,
     drainingPromise: drainingDeferred.promise,
   });

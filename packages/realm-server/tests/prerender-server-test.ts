@@ -37,6 +37,77 @@ function inFlight<T>(send: () => PromiseLike<T>): Promise<T> {
   return (async () => await send())();
 }
 
+// A listener standing in for the prerender manager. It records every request
+// it receives, with the prerender server each one names: the `url` query
+// parameter of a DELETE, or the body's `url` attribute of a registration.
+interface StandInManager {
+  url: string;
+  requests: { method: string; path: string; serverURL: string | null }[];
+  close(): Promise<void>;
+}
+
+async function startStandInManager(): Promise<StandInManager> {
+  let requests: StandInManager['requests'] = [];
+  let server = createServer((req, res) => {
+    let chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', () => {
+      let url = new URL(req.url ?? '/', 'http://manager');
+      let serverURL = url.searchParams.get('url');
+      if (!serverURL && chunks.length > 0) {
+        try {
+          serverURL =
+            JSON.parse(Buffer.concat(chunks).toString('utf8')).data?.attributes
+              ?.url ?? null;
+        } catch {
+          serverURL = null;
+        }
+      }
+      requests.push({
+        method: req.method ?? '',
+        path: url.pathname,
+        serverURL,
+      });
+      res.statusCode = 204;
+      res.end();
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => resolve());
+  });
+  return {
+    url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    requests,
+    close: () => closeServer(server),
+  };
+}
+
+// Points the prerender server's manager calls at `managerURL` (plus any extra
+// env), returning a function that restores the previous values.
+function pointPrerenderAtManager(
+  managerURL: string,
+  extra: Record<string, string> = {},
+): () => void {
+  let overrides: Record<string, string> = {
+    PRERENDER_MANAGER_URL: managerURL,
+    ...extra,
+  };
+  let previous = Object.fromEntries(
+    Object.keys(overrides).map((key) => [key, process.env[key]]),
+  );
+  Object.assign(process.env, overrides);
+  return () => {
+    for (let [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  };
+}
+
 module(basename(import.meta.filename), function () {
   module('Prerender server', function (hooks) {
     let request: SuperTest<Test>;
@@ -736,6 +807,74 @@ module(basename(import.meta.filename), function () {
         'HEAD sets draining header',
       );
       draining = false;
+    });
+
+    test('registerWithManager=false sends no affinity-eviction notice to the manager', async function (assert) {
+      let manager = await startStandInManager();
+      let restoreEnv = pointPrerenderAtManager(manager.url);
+      let permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> = {
+        [realmURL.href]: ['read', 'write', 'realm-owner'],
+      };
+      let auth = testCreatePrerenderAuth(testUserId, permissions);
+      let affinity = {
+        affinityType: 'realm' as const,
+        affinityValue: realmURL.href,
+      };
+      let registered = buildPrerenderApp({
+        serverURL: 'http://127.0.0.1:59001',
+      });
+      let unregistered = buildPrerenderApp({
+        serverURL: 'http://127.0.0.1:59002',
+        registerWithManager: false,
+      });
+      try {
+        for (let built of [registered, unregistered]) {
+          let res = await supertest(built.app.callback())
+            .post('/prerender-visit')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .send({
+              data: {
+                type: 'prerender-visit-request',
+                attributes: {
+                  url: `${realmURL.href}1`,
+                  auth,
+                  realm: realmURL.href,
+                  ...affinity,
+                  renderOptions: { cardRender: true },
+                },
+              },
+            });
+          assert.strictEqual(res.status, 201, 'visit renders');
+          // Resolves after the pool has awaited its eviction notice.
+          await built.prerenderer.disposeAffinity(affinity);
+        }
+
+        let evictions = (serverURL: string) =>
+          manager.requests.filter(
+            (r) =>
+              r.method === 'DELETE' &&
+              r.path.startsWith('/prerender-servers/affinities/') &&
+              r.serverURL === serverURL,
+          );
+        assert.strictEqual(
+          evictions('http://127.0.0.1:59001').length,
+          1,
+          'a registered server reports the evicted affinity',
+        );
+        assert.deepEqual(
+          manager.requests.filter(
+            (r) => r.serverURL === 'http://127.0.0.1:59002',
+          ),
+          [],
+          'the manager never hears from the opted-out server',
+        );
+      } finally {
+        await registered.prerenderer.stop();
+        await unregistered.prerenderer.stop();
+        restoreEnv();
+        await manager.close();
+      }
     });
 
     test('tracks warmed affinities for heartbeat', async function (assert) {
@@ -1797,54 +1936,19 @@ module(basename(import.meta.filename), function () {
   });
 
   module('createPrerenderHttpServer manager registration', function (hooks) {
-    // A listener standing in for the prerender manager. It records which
-    // prerender server each registration heartbeat and unregister names.
-    let manager: Server;
-    let requests: { method: string; serverURL: string }[];
-    let previousManagerURL: string | undefined;
-    let previousInterval: string | undefined;
+    let manager: StandInManager;
+    let restoreEnv: () => void;
 
     hooks.beforeEach(async function () {
-      requests = [];
-      manager = createServer((req, res) => {
-        let chunks: Buffer[] = [];
-        req.on('data', (chunk: Buffer) => chunks.push(chunk));
-        req.on('end', () => {
-          let url = new URL(req.url ?? '/', 'http://manager');
-          if (url.pathname === '/prerender-servers') {
-            let serverURL =
-              req.method === 'DELETE'
-                ? url.searchParams.get('url')
-                : JSON.parse(Buffer.concat(chunks).toString('utf8')).data
-                    .attributes.url;
-            requests.push({ method: req.method ?? '', serverURL });
-          }
-          res.statusCode = 204;
-          res.end();
-        });
+      manager = await startStandInManager();
+      restoreEnv = pointPrerenderAtManager(manager.url, {
+        PRERENDER_HEARTBEAT_INTERVAL_MS: '1000',
       });
-      await new Promise<void>((resolve, reject) => {
-        manager.once('error', reject);
-        manager.listen(0, '127.0.0.1', () => resolve());
-      });
-      previousManagerURL = process.env.PRERENDER_MANAGER_URL;
-      previousInterval = process.env.PRERENDER_HEARTBEAT_INTERVAL_MS;
-      process.env.PRERENDER_MANAGER_URL = `http://127.0.0.1:${(manager.address() as AddressInfo).port}`;
-      process.env.PRERENDER_HEARTBEAT_INTERVAL_MS = '1000';
     });
 
     hooks.afterEach(async function () {
-      await closeServer(manager);
-      if (previousManagerURL === undefined) {
-        delete process.env.PRERENDER_MANAGER_URL;
-      } else {
-        process.env.PRERENDER_MANAGER_URL = previousManagerURL;
-      }
-      if (previousInterval === undefined) {
-        delete process.env.PRERENDER_HEARTBEAT_INTERVAL_MS;
-      } else {
-        process.env.PRERENDER_HEARTBEAT_INTERVAL_MS = previousInterval;
-      }
+      restoreEnv();
+      await manager.close();
     });
 
     async function listen(server: Server): Promise<string> {
@@ -1874,9 +1978,11 @@ module(basename(import.meta.filename), function () {
         // second one gives the opted-out server's loop time to have posted.
         await waitUntil(
           async () =>
-            requests.filter(
+            manager.requests.filter(
               (r) =>
-                r.method === 'POST' && r.serverURL.endsWith(registeredPort!),
+                r.method === 'POST' &&
+                r.path === '/prerender-servers' &&
+                r.serverURL?.endsWith(registeredPort!),
             ).length >= 2,
           {
             timeout: 10000,
@@ -1895,19 +2001,23 @@ module(basename(import.meta.filename), function () {
       }
       await waitUntil(
         async () =>
-          requests.some(
+          manager.requests.some(
             (r) =>
-              r.method === 'DELETE' && r.serverURL.endsWith(registeredPort!),
+              r.method === 'DELETE' &&
+              r.path === '/prerender-servers' &&
+              r.serverURL?.endsWith(registeredPort!),
           ),
         {
           timeout: 60000,
           timeoutMessage: () =>
-            `default server unregisters from the manager; saw ${JSON.stringify(requests)}`,
+            `default server unregisters from the manager; saw ${JSON.stringify(manager.requests)}`,
         },
       );
 
       assert.deepEqual(
-        requests.filter((r) => r.serverURL.endsWith(unregisteredPort!)),
+        manager.requests.filter((r) =>
+          r.serverURL?.endsWith(unregisteredPort!),
+        ),
         [],
         'the manager never hears from the opted-out server',
       );
