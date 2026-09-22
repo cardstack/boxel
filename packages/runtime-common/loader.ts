@@ -534,6 +534,17 @@ export class Loader {
     Loader.#forBundledModules = loader;
   }
 
+  // Withdraw a published loader as it is disposed, so a bundled module is told
+  // no loader is available rather than handed a disposed one — and with it,
+  // the module graph that loader holds. A loader that has already been
+  // superseded withdraws nothing: the publisher that replaced it is the live
+  // one.
+  static clearForBundledModules(loader: Loader) {
+    if (Loader.#forBundledModules === loader) {
+      Loader.#forBundledModules = undefined;
+    }
+  }
+
   static forBundledModules(): Loader | undefined {
     return Loader.#forBundledModules;
   }
