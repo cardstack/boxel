@@ -182,6 +182,41 @@ function makeFileSystem() {
         };
       }
 
+      // Two render-based pdf slots on one card, captured back-to-back on the
+      // same pooled page. The alpha slot renders a one-page flow; the beta
+      // slot, a three-page flow. They sort alpha-before-beta, so beta captures
+      // second, while alpha's shorter document is still the mounted DOM. beta's
+      // own page count (three, not alpha's one) is the proof the capture engine
+      // waited for beta's render before paginating — the per-slot guard against
+      // paginating a prior slot's still-mounted DOM into this slot.
+      class AlphaDocument extends Component<typeof MultiPdf> {
+        <template>
+          <article><h1>Alpha: <@fields.name/></h1></article>
+        </template>
+      }
+      class BetaDocument extends Component<typeof MultiPdf> {
+        <template>
+          <article>
+            <h1>Beta: <@fields.name/></h1>
+            <section style='break-before: page;'>Two</section>
+            <section style='break-before: page;'>Three</section>
+          </article>
+        </template>
+      }
+
+      export class MultiPdf extends CardDef {
+        @field name = contains(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1>MultiPdf (isolated one-pager): <@fields.name/></h1>
+          </template>
+        }
+        static screenshots: Record<string, ScreenshotSpec> = {
+          alpha: { render: AlphaDocument, type: 'pdf' },
+          beta: { render: BetaDocument, type: 'pdf' },
+        };
+      }
+
       // A capture-only pdf component that discovers it can never render and
       // swaps the pending signal for the definitive-failure signal — the same
       // contract the raster DoomedShot follows, exercised on the pdf path.
@@ -824,6 +859,44 @@ module(basename(import.meta.filename), function (hooks) {
       served!.headers.get('content-type'),
       'application/pdf',
       'the ?name= URL serves the component-rendered pdf',
+    );
+  });
+
+  test('back-to-back pdf render slots each paginate their own document, not the prior slot’s DOM', async function (assert) {
+    await writeAndSettle(
+      'multi-pdf.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'MP-1' },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'MultiPdf' },
+          },
+        },
+      }),
+    );
+
+    let row = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}multi-pdf.json`,
+    );
+    assert.ok(row, 'the instance row exists');
+    let manifest = row!.screenshots as ScreenshotManifest | null;
+    assert.ok(manifest?.alpha, 'the first pdf slot captured');
+    assert.ok(manifest?.beta, 'the second pdf slot captured');
+
+    assert.strictEqual(
+      manifest!.alpha.pageCount,
+      1,
+      'the first pdf slot paginates its own one-page flow',
+    );
+    // The regression this pins: without a per-slot flush wait, the second pdf
+    // slot could paginate the first slot's still-mounted one-page DOM into a
+    // valid-looking PDF. A page count of three is only reachable from beta's
+    // own render.
+    assert.strictEqual(
+      manifest!.beta.pageCount,
+      3,
+      "the second pdf slot paginates its own three-page flow, not the first slot's one-page DOM",
     );
   });
 

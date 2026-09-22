@@ -7,8 +7,8 @@ import {
 } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
 
-// Pattern example for declared PDFs (the "Cards to PDF" project). One card,
-// both authoring paths for a `type: 'pdf'` declared screenshot:
+// Pattern example for declared PDFs. One card, both authoring paths for a
+// `type: 'pdf'` declared screenshot:
 //
 //   - `statement` sources the card's own `isolated` format. Reach for this
 //     when the isolated template already reads like the document.

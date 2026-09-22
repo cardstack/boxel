@@ -1535,6 +1535,36 @@ async function waitForEnvelopeBox(
   );
 }
 
+// Prove this slot's own render is on the page before a pdf capture. The raster
+// path gets this ordering from waitForEnvelopeBox (it matches the slot's named
+// envelope at its declared size); a pdf slot declares no box, so its template
+// carries a boxless `display: contents` marker (`data-render-screenshot` named
+// for the slot) that this waits on instead. Without it, a fully settled
+// *previous* render already satisfies every other wait on this path — the route
+// path suffix and prerender settle stay ready across a same-card sub-route
+// transition, and the pending-clear wait reads a prior render's absent
+// `data-screenshot-pending` as ready on its first evaluation — so `page.pdf()`
+// could paginate the wrong document (the prior pdf slot, or a preceding format
+// group's display-format DOM) into this slot's manifest entry.
+async function waitForRenderSlotMarker(
+  page: Page,
+  slotName: string,
+  opts?: CaptureOptions,
+): Promise<void> {
+  await page.waitForFunction(
+    (name: string) => {
+      for (let el of document.querySelectorAll('[data-render-screenshot]')) {
+        if (el.getAttribute('data-render-screenshot') === name) {
+          return true;
+        }
+      }
+      return false;
+    },
+    { timeout: effectiveRouteWaitTimeoutMs(opts) },
+    slotName,
+  );
+}
+
 // Let a viewport change reflow + paint without re-running the full settle hook
 // (two animation frames). Batch captures share one settle; only the viewport
 // resize between entries needs to flush.
@@ -2201,6 +2231,10 @@ async function captureRenderBasedEntry(
     await waitForPrerenderSettle(page);
     if (box) {
       await waitForEnvelopeBox(page, box, opts, name);
+    } else {
+      // pdf: no envelope box to size-match — wait on the slot's boxless marker
+      // so a prior render's still-mounted DOM can't be paginated into this slot.
+      await waitForRenderSlotMarker(page, name, opts);
     }
     let terminal = await detectTerminalPrerenderError(page);
     if (terminal) {

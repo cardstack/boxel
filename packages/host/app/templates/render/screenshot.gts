@@ -31,8 +31,10 @@ interface Signature {
 }
 
 // The capture-only component gets the same author surface a format render
-// gets (context provisioning mirrors the render.html template), rendered
-// into a fixed-size box the capture engine sizes its viewport to.
+// gets (context provisioning mirrors the render.html template). A raster
+// entry renders into a fixed-size box the capture engine sizes its viewport
+// to; a pdf entry renders in the natural document flow (no box) that
+// `page.pdf()` paginates under print media.
 class RenderScreenshotTemplate extends Component<Signature> {
   @service('render-store') declare private store: RenderStoreService;
 
@@ -108,10 +110,16 @@ class RenderScreenshotTemplate extends Component<Signature> {
       {{! A pdf entry renders the full document flow — no capture box, no
           clipping — so print `break-*`/`@page` rules paginate it across pages
           under `page.pdf()`. A fixed-height, `overflow: hidden` box would
-          truncate it to one page. Readiness is still the global
-          `data-screenshot-pending` signal the component owns, so no envelope
-          attributes are needed here. }}
-      <@model.Component @format='isolated' />
+          truncate it to one page. There is no envelope box to size-match, but
+          the slot still needs a per-slot flush signal: `display: contents`
+          adds no box (so `break-*`/`@page` fragmentation is unaffected) while
+          `data-render-screenshot` names this slot, letting the capture engine
+          wait for *this* slot's render before paginating — its guard against
+          paginating a prior slot's still-mounted DOM. Readiness stays the
+          `data-screenshot-pending` signal the component owns. }}
+      <div class='pdf-flow' data-render-screenshot={{@model.name}}>
+        <@model.Component @format='isolated' />
+      </div>
     {{else}}
       {{! The `data-render-envelope` attribute reuses the capture engine's
           applied-size wait (the deterministic signal that this box has laid
@@ -127,6 +135,16 @@ class RenderScreenshotTemplate extends Component<Signature> {
         <@model.Component @format='isolated' />
       </div>
     {{/if}}
+    <style scoped>
+      /* The pdf slot's flush marker must add no box of its own, or it would
+         interpose a formatting context between the page and the component's
+         `break-*`/`@page` flow. `display: contents` makes the wrapper carry
+         its `data-render-screenshot` marker while laying out as if it were
+         not there. */
+      .pdf-flow {
+        display: contents;
+      }
+    </style>
   </template>
 }
 
