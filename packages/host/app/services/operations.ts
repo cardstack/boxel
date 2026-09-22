@@ -11,6 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import {
   identifyCard,
+  isCardInstance,
   localId as localIdSymbol,
   mintedIdentities,
   OperationsError,
@@ -139,7 +140,7 @@ export default class OperationsService
   // wants the search to end with a view hands the query to the search
   // component instead of holding the resource.
   search: OperationsSearch = {
-    actor: () => this.actorForSearch(),
+    actor: () => this.sessionActor(),
     realmFor: (identifier: string) => this.realm.realmOf(rri(identifier)),
     entries: (
       getQuery: () => SearchEntryWireQuery,
@@ -147,7 +148,9 @@ export default class OperationsService
     ): SearchEntries => getSearchEntriesResource(opts?.owner ?? this, getQuery),
   };
 
-  // Who a saved search compares against, when the session can say.
+  // Who this session is, when it can say — what a saved search compares
+  // against, and what an operation's `actor()` resolves to when its program is
+  // run locally.
   //
   // Nobody, inside the dedicated prerender app: that app authenticates as
   // itself so it can render any card, and its identity is not the identity of
@@ -160,7 +163,7 @@ export default class OperationsService
   // Nobody, too, before the matrix client is up or after a sign-out, where
   // reading the id throws rather than answering. A query that does not read
   // the actor is unaffected in all three cases.
-  private actorForSearch(): string | undefined {
+  private sessionActor(): string | undefined {
     if ((globalThis as any).__boxelPrerenderApp) {
       return undefined;
     }
@@ -257,10 +260,10 @@ export default class OperationsService
         held: (id) => {
           let instance = this.store.peek(rri(id));
           // An error placeholder is not a card whose source a program could be
-          // planned against, so it is not one this can apply to.
-          return instance && 'id' in instance
-            ? (instance as CardDef)
-            : undefined;
+          // planned against. Asked by what it is rather than by whether it
+          // carries an id, because a recorded error carries one too — it names
+          // the card it stands in for.
+          return isCardInstance(instance) ? (instance as CardDef) : undefined;
         },
         localId: (instance) => instance[localIdSymbol],
         lower: (instance, name) => this.loweredOperation(instance, name),
@@ -435,6 +438,9 @@ export default class OperationsService
       omitQueryFields: true,
     });
     let resource = doc.data as LooseCardResource;
+    // The same identity the realm will authenticate this request as, so a
+    // program reading `actor()` reads one value rather than two.
+    let actor = this.sessionActor();
     let schema = await mutationSchemaForCardSource(
       definition as unknown as Parameters<
         typeof mutationSchemaForCardSource
@@ -451,7 +457,7 @@ export default class OperationsService
         ...(instance.id ? { targetId: instance.id } : {}),
         context: {
           ...(params ? { params } : {}),
-          ...(this.actorForSearch() ? { actor: this.actorForSearch() } : {}),
+          ...(actor ? { actor } : {}),
           instance: {
             ...(instance.id ? { id: instance.id } : {}),
             ...((resource.attributes ?? {}) as Record<string, unknown>),
