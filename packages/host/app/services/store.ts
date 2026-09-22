@@ -224,6 +224,11 @@ const queryFieldSeedFromSearchSymbol = Symbol.for(
 );
 
 type PersistOptions = CreateOptions & { clientRequestId?: string };
+// What an index event said the state of a card would be, carried alongside the
+// reload it scheduled so a second delivery of that event can recognize it as
+// already answered. Both members are optional because both are optional on the
+// event, and an absent one is no information rather than a claim.
+type ReloadTarget = { generation?: number; version?: string };
 type DependencyTrackingOptions = {
   dependencyTrackingContext?: RuntimeDependencyTrackingContext;
 };
@@ -295,6 +300,22 @@ export default class StoreService extends Service implements StoreInterface {
   > = new Map();
   private inflightCardMutations: Map<string, Promise<void>> = new Map();
   private inflightCardLoads: Map<string, Deferred<void>> = new Map();
+  // The index state a reload now in flight will bring a card to, keyed by the
+  // instance's local id — the one id that survives the realm assigning a
+  // remote one, which the invalidation loop itself can do.
+  //
+  // The rules in `#indexStateAlreadyHeld` read the instance, and an instance
+  // does not reflect a reload until that reload returns. Two deliveries of one
+  // event inside that window would both compare against the pre-reload
+  // instance, so both would reload — and the second lands after the first,
+  // over anything typed in between. That is the loss this filter exists to
+  // prevent, so the question the rules ask is "does the store hold this state,
+  // or has it already gone to fetch it".
+  //
+  // Not a memory of events seen: an entry describes one reload and is released
+  // when that reload settles, whatever it settles into. A reload that fails
+  // leaves nothing behind, so the next event retries.
+  #reloadTargets: Map<string, ReloadTarget> = new Map();
   // Coalesce concurrent same-(realms, query) `_federated-search` HTTP
   // calls during a prerender. Gated on `__boxelRenderContext` so live
   // user searches stay uncoalesced — write-then-read freshness story
@@ -408,6 +429,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightGetFileMeta = new Map();
     this.inflightCardMutations = new Map();
     this.inflightCardLoads = new Map();
+    this.#reloadTargets = new Map();
     this.inflightSearch = new Map();
     this.searchCache = new Map();
     this.searchCacheJobId = undefined;
@@ -460,6 +482,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightGetCards = new Map();
     this.inflightGetFileMeta = new Map();
     this.inflightCardLoads = new Map();
+    this.#reloadTargets = new Map();
     this.inflightSearch = new Map();
     // `inflightCardMutations` is deliberately kept: a render context blocks
     // persistence, so there is nothing of this job's in it, and dropping a
@@ -491,6 +514,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightGetFileMeta = new Map();
     this.inflightCardMutations = new Map();
     this.inflightCardLoads = new Map();
+    this.#reloadTargets = new Map();
     this.inflightSearch = new Map();
     this.searchCache = new Map();
     this.searchCacheJobId = undefined;
@@ -2463,12 +2487,41 @@ export default class StoreService extends Service implements StoreInterface {
             );
           }
 
+          let alreadyHeld: string | undefined;
           if (reloadFile) {
-            this.reloadTask.perform(instance);
+            alreadyHeld = this.#indexStateAlreadyHeld(
+              event,
+              invalidation,
+              instance,
+            );
+            if (alreadyHeld) {
+              reloadFile = false;
+            }
+          }
+
+          if (reloadFile) {
+            // Record what this reload will bring before starting it, so a
+            // duplicate arriving while it is in flight has something to
+            // compare against. See `#reloadTargets`.
+            let target: ReloadTarget | undefined;
+            if (
+              typeof event.generation === 'number' ||
+              event.versions?.[invalidation] !== undefined
+            ) {
+              target = {
+                generation: event.generation,
+                version: event.versions?.[invalidation],
+              };
+              this.#reloadTargets.set(instance[localIdSymbol], target);
+            }
+            this.reloadTask.perform(instance, target);
             reloadsTriggered++;
           } else {
+            // One line per skip, naming the rule that decided it.
             realmEventsLogger.debug(
-              `ignoring invalidation ${invalidation} for request id ${clientRequestId}`,
+              alreadyHeld
+                ? `ignoring invalidation ${invalidation} because ${alreadyHeld}`
+                : `ignoring invalidation ${invalidation} for request id ${clientRequestId}`,
             );
           }
         } else {
@@ -2522,6 +2575,110 @@ export default class StoreService extends Service implements StoreInterface {
     }
 
     return reloadsTriggered;
+  }
+
+  // Does this event describe a state of `invalidation` that the store already
+  // holds, or has already gone to fetch? Returns why when it does, so the
+  // decision says itself in the log, and `undefined` when it cannot tell —
+  // which reloads, as it did before.
+  //
+  // Not reloading matters for more than the round trip it saves. A reload
+  // overwrites the in-memory instance with server state, so each one is a
+  // window in which an edit typed since the write is discarded. That is the
+  // window own-request suppression above exists to close; these two rules
+  // close cases it cannot reach.
+  //
+  // `generation` orders, and the two numbers it compares are not quite the
+  // same number. The one in hand is the card's own row generation, stamped
+  // onto the card+json GET; the one on the event is the generation of the pass
+  // that broadcast it. They coincide for a card that pass rewrote, since a
+  // pass stamps every row it writes with its own — and there an event at or
+  // below the generation in hand describes a pass this card has already been
+  // read past, which is what makes a duplicate delivery, and an event
+  // overtaken by a newer one, a no-op without keeping any memory of the events
+  // already seen.
+  //
+  // They come apart for a card invalidated by the earlier half of a mixed
+  // batch. `performIndex` runs once per module/instance group, each its own
+  // batch at its own generation, while `invalidations` accumulates across both
+  // and the one broadcast carries the union stamped with the closing pass's
+  // number — so a card the module flush invalidated keeps the flush's lower
+  // generation, and every event naming it reads as newer. This rule then never
+  // fires for it and it reloads as it did before. A missed skip and never a
+  // wrong one, which is the direction to fail in, and back-to-back duplicates
+  // are still bounded by the in-flight target below — but the comparison is
+  // not exact, so nothing should be built on it as though it were.
+  //
+  // `version` says something narrower and in a different currency: the file
+  // the realm holds for this card is the file this tab's own last write
+  // produced. It is worth being exact about what that licenses, because a
+  // card's *document* can move while its file stands still. A commit that
+  // rewrites a card with the bytes it already held still reports a version for
+  // it, and if that same commit changed something the card links to, the pass
+  // re-indexes the card as a dependent and it arrives in `invalidations` as
+  // well — so the two can intersect on a card nobody edited. Skipping is still
+  // right there, because what a document adds to the file is computed values,
+  // which this client recomputes from the live graph rather than trusting what
+  // it was served, and a link closure whose members carry their own
+  // invalidations and reload on those. Neither is state only the realm has.
+  //
+  // What the version is really for is answering after the request-id memory is
+  // gone, which is why it sits beside the generation rule rather than
+  // duplicating it. `clientRequestIds` is a `LimitedSet(250)`, so a tab that
+  // has written that many times since has evicted the id its own echo carries,
+  // and the echo then arrives indistinguishable from a stranger's —
+  // unrecognized request id, higher generation — and reloads over whatever has
+  // been typed since. A version is a property of the card rather than of a
+  // request, so it outlives that.
+  //
+  // Each rule answers in one direction only. An absent generation on either
+  // side, an absent `versions` map, an absent recorded version — all mean no
+  // information, and no information reloads. Three degradations rest on that:
+  // a realm too old to report a generation; a `versions` map dropped whole —
+  // rather than truncated — because the event it rides in would not otherwise
+  // fit, since a subscriber cannot tell a partial map from a complete one and
+  // a missing key must never read as "this card was not written"; and the
+  // broadcast a failed indexing pass sends, which names the URLs it was handed
+  // and carries neither member, so nothing here can suppress the re-read that
+  // finds whatever it swapped in.
+  #indexStateAlreadyHeld(
+    event: IncrementalIndexEventContent,
+    invalidation: string,
+    instance: CardDef,
+  ): string | undefined {
+    let held = instance[meta];
+    // What a reload already in flight will bring, which is as good an answer
+    // as holding it: the fetch is out, and a second one would only land on top
+    // of it. See `#reloadTargets`.
+    let incoming = this.#reloadTargets.get(instance[localIdSymbol]);
+    let generation = Math.max(
+      typeof held?.generation === 'number' ? held.generation : -Infinity,
+      typeof incoming?.generation === 'number'
+        ? incoming.generation
+        : -Infinity,
+    );
+    if (
+      typeof event.generation === 'number' &&
+      Number.isFinite(generation) &&
+      event.generation <= generation
+    ) {
+      return `the store is at index generation ${generation}, at or past this event's ${event.generation}`;
+    }
+    // Read by the spelling this loop is already holding. `versions` spells a
+    // card the way `invalidations` does — the realm href with a trailing
+    // `.json` removed — so the two join by construction. That is deliberately
+    // not how a write response spells it: response ids are canonicalized to
+    // registered-prefix form, which is also what `instance.id` and the
+    // identity map carry, so a lookup by `instance.id` would miss on every
+    // prefix-mapped realm and pass on the rest.
+    let version = event.versions?.[invalidation];
+    if (
+      version !== undefined &&
+      (version === held?.version || version === incoming?.version)
+    ) {
+      return `the store is at version ${version}`;
+    }
+    return undefined;
   }
 
   private loadInstanceTask = task(
@@ -2762,73 +2919,82 @@ export default class StoreService extends Service implements StoreInterface {
     }
   });
 
-  private reloadTask = task(async (instance: CardDef) => {
-    let reloadTracker = this.startTrackingCardLoad(instance.id);
-    let maybeReloadedInstance: CardDef | CardErrorJSONAPI | undefined;
-    let isDelete = false;
+  private reloadTask = task(
+    async (instance: CardDef, reloadTarget?: ReloadTarget) => {
+      let reloadTracker = this.startTrackingCardLoad(instance.id);
+      let maybeReloadedInstance: CardDef | CardErrorJSONAPI | undefined;
+      let isDelete = false;
 
-    try {
       try {
-        maybeReloadedInstance = await this.reloadInstance(instance);
-      } catch (err: any) {
-        let cardError = processCardError(instance.id, err).errors[0];
-        if (cardError?.awaitingIndex) {
-          // The realm holds this card's source and has not indexed it yet.
-          // That is a statement about the index, not about the instance this
-          // tab is already running — so keep it exactly as it is, autosave and
-          // all, and let the index event that follows bring the fresh state.
-          // Treating it as a deletion would evict a card that still exists;
-          // recording it as an error would stand a placeholder in front of one
-          // the user is working in.
-          maybeReloadedInstance = instance;
-        } else if (err.status === 404) {
-          // in this case the document was invalidated in the index because the
-          // file was deleted
-          isDelete = true;
-        } else {
-          maybeReloadedInstance = cardError;
+        try {
+          maybeReloadedInstance = await this.reloadInstance(instance);
+        } catch (err: any) {
+          let cardError = processCardError(instance.id, err).errors[0];
+          if (cardError?.awaitingIndex) {
+            // The realm holds this card's source and has not indexed it yet.
+            // That is a statement about the index, not about the instance this
+            // tab is already running — so keep it exactly as it is, autosave and
+            // all, and let the index event that follows bring the fresh state.
+            // Treating it as a deletion would evict a card that still exists;
+            // recording it as an error would stand a placeholder in front of one
+            // the user is working in.
+            maybeReloadedInstance = instance;
+          } else if (err.status === 404) {
+            // in this case the document was invalidated in the index because the
+            // file was deleted
+            isDelete = true;
+          } else {
+            maybeReloadedInstance = cardError;
+          }
         }
-      }
-      // Detach the original instance's autosave subscription when it's been
-      // superseded: either the reload errored, or the card's type changed and
-      // reloadInstance built a fresh instance of the new type and swapped it
-      // into the identity map. When the reload updated the same object in
-      // place (the common case), keep its subscription.
-      if (
-        !isCardInstance(maybeReloadedInstance) ||
-        maybeReloadedInstance !== instance
-      ) {
-        await this.stopAutoSaving(instance);
-      }
-      if (maybeReloadedInstance) {
-        this.setIdentityContext(maybeReloadedInstance);
-        await this.startAutoSaving(maybeReloadedInstance);
-      }
-      if (isDelete) {
-        await this.stopAutoSaving(instance);
-        // Snapshot the consumers BEFORE removing the deleted instance from
-        // the store. `consumersOf` walks the loaded cards and reads their
-        // linksTo refs — every consumer that has the now-deleted card in
-        // its bucket needs its slot rewritten to a link-not-found sentinel
-        // so the placeholder render takes over the slot without a
-        // navigation. Without this, the consumer's render stays stale on
-        // the now-orphaned card object until something else forces a
-        // re-render.
-        let api = await this.cardService.getAPI();
-        let consumers = this.store.consumersOf(api, instance);
-        this.store.delete(instance.id);
-        for (let consumer of consumers) {
-          api.notifyLinksToTargetDeleted(consumer, instance.id);
+        // Detach the original instance's autosave subscription when it's been
+        // superseded: either the reload errored, or the card's type changed and
+        // reloadInstance built a fresh instance of the new type and swapped it
+        // into the identity map. When the reload updated the same object in
+        // place (the common case), keep its subscription.
+        if (
+          !isCardInstance(maybeReloadedInstance) ||
+          maybeReloadedInstance !== instance
+        ) {
+          await this.stopAutoSaving(instance);
         }
-        // Notify direct-reference holders after the local eviction so their
-        // re-evaluation does not return the cached pre-delete instance.
-        // (The server is already gone — we got here from a 404 reload.)
-        this.notifyCardInvalidationSubscribers(instance.id);
+        if (maybeReloadedInstance) {
+          this.setIdentityContext(maybeReloadedInstance);
+          await this.startAutoSaving(maybeReloadedInstance);
+        }
+        if (isDelete) {
+          await this.stopAutoSaving(instance);
+          // Snapshot the consumers BEFORE removing the deleted instance from
+          // the store. `consumersOf` walks the loaded cards and reads their
+          // linksTo refs — every consumer that has the now-deleted card in
+          // its bucket needs its slot rewritten to a link-not-found sentinel
+          // so the placeholder render takes over the slot without a
+          // navigation. Without this, the consumer's render stays stale on
+          // the now-orphaned card object until something else forces a
+          // re-render.
+          let api = await this.cardService.getAPI();
+          let consumers = this.store.consumersOf(api, instance);
+          this.store.delete(instance.id);
+          for (let consumer of consumers) {
+            api.notifyLinksToTargetDeleted(consumer, instance.id);
+          }
+          // Notify direct-reference holders after the local eviction so their
+          // re-evaluation does not return the cached pre-delete instance.
+          // (The server is already gone — we got here from a 404 reload.)
+          this.notifyCardInvalidationSubscribers(instance.id);
+        }
+      } finally {
+        // Released only if it is still this reload's: a newer event may have
+        // scheduled its own while this one was in flight, and that one is what
+        // the rules should go on reading.
+        let localId = instance[localIdSymbol];
+        if (reloadTarget && this.#reloadTargets.get(localId) === reloadTarget) {
+          this.#reloadTargets.delete(localId);
+        }
+        this.finishTrackingCardLoad(instance.id, reloadTracker);
       }
-    } finally {
-      this.finishTrackingCardLoad(instance.id, reloadTracker);
-    }
-  });
+    },
+  );
 
   private reloadFileMetaTask = task(async (url: string) => {
     let waiterLabel = `reloadFileMeta ${url}`;
@@ -3661,6 +3827,7 @@ export default class StoreService extends Service implements StoreInterface {
             if (isNew) {
               await this.assignRemoteIdentity(instance, json.data.id!);
             }
+            this.#recordWrittenVersion(instance, json);
             if (this.onSaveSubscriber) {
               this.onSaveSubscriber(
                 this.network.virtualNetwork.toURL(json.data.id!),
@@ -3833,6 +4000,25 @@ export default class StoreService extends Service implements StoreInterface {
     await this.updateForeignConsumersOf(instance);
     this.setIdentityContext(instance);
     await this.startAutoSaving(instance);
+  }
+
+  // Keep the version a card+json write reported — the fingerprint of the bytes
+  // the realm stored. The write responses are the only channel a client gets
+  // one on; the card+json GET deliberately reports none, so a version reaches
+  // an instance here or not at all. `#indexStateAlreadyHeld` is what reads it.
+  //
+  // Recorded rather than left to the server-state merge above, which runs only
+  // when the identity or the realm info moved and so skips the ordinary save.
+  // A response carrying no version (a realm old enough not to report one)
+  // clears whatever was held instead of leaving it: a version that no longer
+  // describes the bytes the realm holds would suppress a reload that is needed.
+  #recordWrittenVersion(instance: CardDef, json: SingleCardDocument) {
+    let held = instance[meta];
+    let version = json.data.meta?.version;
+    if (version === held?.version) {
+      return;
+    }
+    instance[meta] = { ...held, version } as CardResourceMeta;
   }
 
   // in the case we are making a cross realm relationship with a link that
