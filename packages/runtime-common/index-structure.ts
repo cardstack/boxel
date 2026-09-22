@@ -196,6 +196,27 @@ export function normalizeRealmMetaValue(raw: unknown): RealmMetaValue {
   };
 }
 
+// Whether `raw` already carries both arms, so `normalizeRealmMetaValue` would
+// hand it back as-is rather than synthesizing an arm it never had.
+//
+// The legacy shape is a bare `CardTypeSummary[]` of instances, and normalizing
+// it fabricates `files: []`. That empty array is indistinguishable from a realm
+// that genuinely has no file rows, so a caller that carries a prior value
+// forward instead of recomputing it has to ask this first — otherwise it
+// publishes the fabricated arm as though a pass had established it, and the
+// realm's file types vanish from the sidebar. Recomputing is what re-establishes
+// the arm, so a realm still on the legacy shape has to keep recomputing until
+// one pass has written the partitioned one.
+export function isPartitionedRealmMetaValue(
+  raw: unknown,
+): raw is RealmMetaValue {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return false;
+  }
+  let value = raw as Partial<RealmMetaValue>;
+  return Array.isArray(value.instances) && Array.isArray(value.files);
+}
+
 export const coerceTypes = Object.freeze({
   deps: 'JSON',
   last_known_good_deps: 'JSON',
