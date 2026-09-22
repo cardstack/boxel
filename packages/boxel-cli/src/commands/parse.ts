@@ -125,6 +125,20 @@ const BXL_PATH = BUNDLED_TYPES_DIR
 const SHIMS_PATH = BUNDLED_TYPES_DIR
   ? join(BUNDLED_TYPES_DIR, 'shims')
   : undefined;
+// In a published install the shims above type `@cardstack/boxel-icons/*`
+// as `any` — a deliberate trade against shipping 50MB of declarations.
+// Monorepo dev has no shim: the import resolves through the package's
+// exports map into the gitignored `declarations/` build output, and when
+// that isn't built it falls through to the untyped rollup JS — every icon
+// types as `object`, and each unannotated `static icon = X` in fetched
+// catalog sources breaks its class's `typeof BaseDef` constraint. Alias
+// the committed sources instead, the same mapping the factory twin uses.
+const BOXEL_ICONS_PATHS = BUNDLED_TYPES_DIR
+  ? undefined
+  : [
+      `${join(PACKAGES_PATH, 'boxel-icons', 'src', 'icons')}/*`,
+      `${join(PACKAGES_PATH, 'boxel-icons', 'src')}/*`,
+    ];
 
 // The temp parse workspace needs the CLI's runtime deps resolvable so
 // glint can type-check card code: `@glint/ember-tsc` (and its
@@ -683,7 +697,10 @@ interface RunGlintCheckOptions {
   cacheScope?: string;
 }
 
-async function runGlintCheck(
+// Exported for tests: the realm-prefixed staging behavior can only be pinned
+// with an injected fetch, and the CLI surface (a subprocess) has nowhere to
+// inject one.
+export async function runGlintCheck(
   files: { path: string; content: string }[],
   glintOptions: RunGlintCheckOptions = {},
 ): Promise<{ errors: ParseError[]; warnings: string[] }> {
@@ -785,6 +802,9 @@ async function runGlintCheck(
           // subdirs.
           '@cardstack/boxel-host/lib/*': [`${HOST_APP_PATH}/lib/*`],
           '@cardstack/boxel-ui/*': [`${BOXEL_UI_PATH}/*`],
+          ...(BOXEL_ICONS_PATHS
+            ? { '@cardstack/boxel-icons/*': BOXEL_ICONS_PATHS }
+            : {}),
           '*': [`${HOST_TYPES_PATH}/*`],
         },
       },
