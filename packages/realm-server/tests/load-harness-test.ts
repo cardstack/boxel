@@ -57,6 +57,20 @@ import {
   typeKey,
   writeAttributes,
 } from '../scripts/load-harness/lib/workload.ts';
+import {
+  classify,
+  describeFairness,
+  fairnessScore,
+  readFairness,
+  type WriteRecord,
+} from '../scripts/load-harness/lib/fairness.ts';
+import {
+  decodeJwtClaims,
+  matrixDomainFor,
+  matrixIdFor,
+  realmPermissionsFor,
+} from '../scripts/load-harness/lib/permissions.ts';
+import type { Session } from '../scripts/load-harness/lib/auth.ts';
 
 // The load harness runs against deployed environments with real credentials, so
 // none of it can be exercised from a test. Its decision-making can: the guard
@@ -391,11 +405,11 @@ module(basename(import.meta.filename), function () {
           [`${realm}schema/widget/Widget`],
         );
         assert.strictEqual(
-          workload.write!.path,
+          workload.writes[0]!.path,
           'Report',
           'the write path defaults to the type name',
         );
-        assert.deepEqual(workload.write!.adoptsFrom, {
+        assert.deepEqual(workload.writes[0]!.adoptsFrom, {
           module: `${realm}schema/report`,
           name: 'Report',
         });
@@ -470,7 +484,7 @@ module(basename(import.meta.filename), function () {
         let workload = loadWorkload(path, realm);
         assert.deepEqual(workload.secondaryQueries, []);
         assert.deepEqual(workload.extraQueries, []);
-        assert.deepEqual(workload.write!.attributes, {});
+        assert.deepEqual(workload.writes[0]!.attributes, {});
       });
     });
 
@@ -527,9 +541,9 @@ module(basename(import.meta.filename), function () {
           }),
           realm,
         );
-        assert.strictEqual(
-          workload.write,
-          undefined,
+        assert.deepEqual(
+          workload.writes,
+          [],
           'run-load refuses to start writers against this',
         );
       });
@@ -603,8 +617,8 @@ module(basename(import.meta.filename), function () {
         realm,
       );
       let written = typeKey(
-        workload.write!.adoptsFrom.module,
-        workload.write!.adoptsFrom.name,
+        workload.writes[0]!.adoptsFrom.module,
+        workload.writes[0]!.adoptsFrom.name,
       );
       assert.true(
         [...workload.queries, ...workload.secondaryQueries].some((q) =>
@@ -636,7 +650,7 @@ module(basename(import.meta.filename), function () {
             },
           },
         });
-        let { write } = loadWorkload(path, realm);
+        let [write] = loadWorkload(path, realm).writes;
         assert.ok(write, 'this workload declares a write block');
         let first = writeAttributes(write!, 1);
         let second = writeAttributes(write!, 2);
@@ -934,7 +948,7 @@ module(basename(import.meta.filename), function () {
       });
       let workload = parseWorkload(raw, realm, '_types');
       assert.deepEqual(
-        workload.write!.adoptsFrom,
+        workload.writes[0]!.adoptsFrom,
         { module: `${realm}author`, name: 'Author' },
         'Spec outranks it but is not addressable relative to this realm',
       );
@@ -945,7 +959,7 @@ module(basename(import.meta.filename), function () {
         'so each write invalidates something a reader is querying',
       );
       assert.deepEqual(
-        workload.write!.attributes,
+        workload.writes[0]!.attributes,
         {},
         'the summary reports counts, not field schemas, so nothing is guessed',
       );
@@ -969,7 +983,7 @@ module(basename(import.meta.filename), function () {
       );
       let workload = parseWorkload(raw, realm, '_types');
       assert.strictEqual(workload.queries.length, 2, 'the reads still stand');
-      assert.strictEqual(workload.write, undefined);
+      assert.deepEqual(workload.writes, []);
       assert.true(
         readOnlyReason(raw, 8).includes('Spec'),
         'the reason names the types that ranked, so the operator can judge it',
@@ -2031,6 +2045,473 @@ module(basename(import.meta.filename), function () {
       assert.ok(
         summary.includes('boxel:link-shape-policy'),
         'and the reader is sent to the server figure this one bounds',
+      );
+    });
+  });
+
+  module('write blocks — two identities on one realm', function () {
+    const realm = 'https://example.test/owner/load-test/';
+
+    function parse(raw: Record<string, unknown>) {
+      return parseWorkload(
+        {
+          queries: [
+            {
+              label: 'W',
+              filter: { 'item.on': { module: '${realm}w', name: 'W' } },
+            },
+          ],
+          ...raw,
+        },
+        realm,
+        'workload.json',
+      );
+    }
+
+    test('a single "write" block is one entry in "writes"', function (assert) {
+      // The spelling every existing workload file uses, and the one
+      // derive-workload emits. It has to keep meaning what it meant.
+      let workload = parse({
+        write: {
+          adoptsFrom: { module: '${realm}schema/report', name: 'Report' },
+          attributes: { title: 'x' },
+        },
+      });
+      assert.strictEqual(workload.writes.length, 1);
+      assert.strictEqual(workload.writes[0].method, 'POST', 'the default');
+      assert.strictEqual(
+        workload.writes[0].path,
+        'Report',
+        'and a POST path still defaults to the type name',
+      );
+      assert.strictEqual(
+        workload.writes[0].label,
+        'Report',
+        'the label defaults to the type name, so a one-block run reads the same',
+      );
+    });
+
+    test('"writes" carries a block per kind of write', function (assert) {
+      let workload = parse({
+        writes: [
+          {
+            label: 'hub',
+            method: 'PATCH',
+            path: 'Course/intro',
+            everyMs: 30000,
+            adoptsFrom: { module: '${realm}course', name: 'Course' },
+            attributes: { title: 'rev ${n}' },
+          },
+          {
+            label: 'leaf',
+            username: 'loadtest02',
+            everyMs: 5000,
+            adoptsFrom: { module: '${realm}note', name: 'Note' },
+            attributes: { title: 'note ${n}' },
+          },
+        ],
+      });
+      assert.deepEqual(
+        workload.writes.map((w) => [
+          w.label,
+          w.method,
+          w.path,
+          w.everyMs,
+          w.username,
+        ]),
+        [
+          ['hub', 'PATCH', 'Course/intro', 30000, undefined],
+          ['leaf', 'POST', 'Note', 5000, 'loadtest02'],
+        ],
+      );
+      assert.strictEqual(
+        workload.writes[0].adoptsFrom.module,
+        `${realm}course`,
+        '${realm} expands inside a block like anywhere else',
+      );
+    });
+
+    test('naming both "write" and "writes" is refused', function (assert) {
+      // Two answers to one question. A precedence rule would be a thing to
+      // misremember while reading a run's numbers back.
+      assert.throws(
+        () =>
+          parse({
+            write: {
+              adoptsFrom: { module: '${realm}a', name: 'A' },
+            },
+            writes: [{ adoptsFrom: { module: '${realm}b', name: 'B' } }],
+          }),
+        /"write" and "writes" both name/,
+      );
+    });
+
+    test('two blocks cannot share a label', function (assert) {
+      // The label keys the fairness table, and the table exists precisely so
+      // an expensive block and a cheap one are not averaged together.
+      assert.throws(
+        () =>
+          parse({
+            writes: [
+              { label: 'w', adoptsFrom: { module: '${realm}a', name: 'A' } },
+              { label: 'w', adoptsFrom: { module: '${realm}b', name: 'B' } },
+            ],
+          }),
+        /labelled "w"/,
+      );
+    });
+
+    test('a PATCH block must name the card it patches', function (assert) {
+      // A POST addresses a collection and the realm names the card. There is
+      // no such thing as patching a collection, so there is no default.
+      assert.throws(
+        () =>
+          parse({
+            writes: [
+              {
+                method: 'PATCH',
+                adoptsFrom: { module: '${realm}a', name: 'A' },
+                attributes: { title: '${n}' },
+              },
+            ],
+          }),
+        /path" is required for a PATCH block/,
+      );
+    });
+
+    test('a PATCH block whose attributes never change is refused', function (assert) {
+      // The realm leaves an unchanged card's file exactly as it is, so such a
+      // block persists nothing and runs no index pass — it would sit in the
+      // run contributing no work while the summary counted it as a writer.
+      // That is a null result wearing a measurement's clothes.
+      assert.throws(
+        () =>
+          parse({
+            writes: [
+              {
+                method: 'PATCH',
+                path: 'A/one',
+                adoptsFrom: { module: '${realm}a', name: 'A' },
+                attributes: { title: 'always the same' },
+              },
+            ],
+          }),
+        /same on every write/,
+      );
+      assert.ok(
+        parse({
+          writes: [
+            {
+              method: 'PATCH',
+              path: 'A/one',
+              adoptsFrom: { module: '${realm}a', name: 'A' },
+              attributes: { nested: { tags: ['run-${n}'] } },
+            },
+          ],
+        }),
+        'a varying attribute anywhere in the tree satisfies it',
+      );
+    });
+
+    test('a POST block needs no varying attribute', function (assert) {
+      // It creates a new card per write whatever the attributes say.
+      assert.strictEqual(
+        parse({
+          writes: [
+            {
+              adoptsFrom: { module: '${realm}a', name: 'A' },
+              attributes: { title: 'always the same' },
+            },
+          ],
+        }).writes.length,
+        1,
+      );
+    });
+
+    test('malformed block members are refused at load', function (assert) {
+      for (let [block, pattern] of [
+        [{ method: 'PUT' }, /must be "POST" or "PATCH"/],
+        [{ everyMs: 0 }, /positive number of ms/],
+        [{ everyMs: 'fast' }, /positive number of ms/],
+        [{ label: 7 }, /label" must be a string/],
+        [{ username: 7 }, /username" must be a string/],
+      ] as [Record<string, unknown>, RegExp][]) {
+        assert.throws(
+          () =>
+            parse({
+              writes: [
+                {
+                  adoptsFrom: { module: '${realm}a', name: 'A' },
+                  ...block,
+                },
+              ],
+            }),
+          pattern,
+          `${JSON.stringify(block)} is caught before any login happens`,
+        );
+      }
+      assert.throws(() => parse({ writes: [] }), /non-empty array/);
+    });
+  });
+
+  module(
+    'fairness — did a write wait on somebody else’s indexing?',
+    function () {
+      function record(
+        block: string,
+        userId: string,
+        startedAt: number,
+        endedAt: number,
+      ): WriteRecord {
+        return { block, userId, startedAt, endedAt };
+      }
+
+      test('a write nothing overlapped is clear', function (assert) {
+        let records = [
+          record('leaf', '@a:test', 0, 100),
+          record('leaf', '@a:test', 200, 300),
+        ];
+        assert.strictEqual(classify(records[0], records), 'clear');
+        assert.strictEqual(classify(records[1], records), 'clear');
+      });
+
+      test('starting inside another identity’s window and finishing later is behind-other', function (assert) {
+        // The ordering one lane per realm forces: the second pass cannot be
+        // claimed until the first releases its reservation.
+        let hub = record('hub', '@a:test', 0, 1000);
+        let leaf = record('leaf', '@b:test', 100, 1100);
+        let records = [hub, leaf];
+        assert.strictEqual(classify(leaf, records), 'behind-other');
+        assert.strictEqual(
+          classify(hub, records),
+          'clear',
+          'the blocker itself waited on nobody',
+        );
+      });
+
+      test('the same identity blocking itself is reported apart', function (assert) {
+        // Self-contention is a real effect and a different ticket. Folding it
+        // in would inflate the figure that decides whether the lane should be
+        // keyed on the writer.
+        let first = record('leaf', '@a:test', 0, 1000);
+        let second = record('leaf', '@a:test', 100, 1100);
+        assert.strictEqual(classify(second, [first, second]), 'behind-self');
+      });
+
+      test('a different identity outranks a same-identity blocker', function (assert) {
+        let mine = record('leaf', '@a:test', 0, 1000);
+        let theirs = record('hub', '@b:test', 50, 1000);
+        let subject = record('leaf', '@a:test', 100, 1100);
+        assert.strictEqual(
+          classify(subject, [mine, theirs, subject]),
+          'behind-other',
+        );
+      });
+
+      test('two identical windows are behind neither', function (assert) {
+        // The bounds would otherwise read each as behind the other, counting
+        // one pair twice in the figure whose whole job is to be counted
+        // honestly. The driver cannot tell which pass ran first, so it says
+        // neither rather than both.
+        let a = record('leaf', '@a:test', 500, 1500);
+        let b = record('hub', '@b:test', 500, 1500);
+        assert.strictEqual(classify(a, [a, b]), 'clear');
+        assert.strictEqual(classify(b, [a, b]), 'clear');
+        let reading = readFairness([a, b]);
+        assert.strictEqual(reading.behindOther, 0);
+        assert.strictEqual(
+          reading.overlappedOther,
+          2,
+          'they did overlap, and that is still reported',
+        );
+      });
+
+      test('overlapping is not the same as being behind', function (assert) {
+        // A write can overlap another and still finish first, which is not the
+        // ordering a serial lane forces. Counting it as blocked would report
+        // contention wherever two writes merely coincided.
+        let long = record('hub', '@a:test', 0, 1000);
+        let quick = record('leaf', '@b:test', 100, 200);
+        let reading = readFairness([long, quick]);
+        assert.strictEqual(reading.behindOther, 0, 'neither ran behind');
+        assert.strictEqual(
+          reading.overlappedOther,
+          2,
+          'but both overlapped the other identity, and that is reported too',
+        );
+      });
+
+      test('the score compares a block against itself, not against other blocks', function (assert) {
+        let records = [
+          // Leaf alone: 100ms each.
+          record('leaf', '@b:test', 0, 100),
+          record('leaf', '@b:test', 200, 300),
+          // Hub running long, with a leaf write caught inside it.
+          record('hub', '@a:test', 400, 2400),
+          record('leaf', '@b:test', 500, 2500),
+        ];
+        let reading = readFairness(records);
+        assert.strictEqual(reading.behindOther, 1);
+        let leaf = reading.blocks.find((b) => b.block === 'leaf')!;
+        assert.deepEqual(leaf.clear, [100, 100]);
+        assert.deepEqual(leaf.behindOther, [2000]);
+        assert.strictEqual(
+          fairnessScore(leaf)!.toFixed(2),
+          '0.05',
+          'the blocked leaf write cost twenty times what an unblocked one did',
+        );
+      });
+
+      test('an empty bucket is "not measured", never 1.00', function (assert) {
+        // The failure this whole capability exists to prevent. A run where the
+        // lane was never contended scoring a perfect 1.00 reports a property
+        // of the workload as a property of the fix.
+        let reading = readFairness([
+          record('leaf', '@a:test', 0, 100),
+          record('leaf', '@a:test', 200, 300),
+        ]);
+        let leaf = reading.blocks[0];
+        assert.strictEqual(fairnessScore(leaf), undefined);
+        let summary = describeFairness(reading);
+        assert.ok(
+          summary.includes('not measured'),
+          `the section says so in words: ${summary}`,
+        );
+        assert.notOk(
+          /fairness\s+1\.00/.test(summary),
+          'and never prints a score it did not measure',
+        );
+      });
+
+      test('a one-identity run says so rather than reporting a fair lane', function (assert) {
+        let summary = describeFairness(
+          readFairness([
+            record('leaf', '@a:test', 0, 1000),
+            record('leaf', '@a:test', 100, 1100),
+          ]),
+        );
+        assert.ok(
+          summary.includes('all 2 writes came from one identity'),
+          `the zero cross-writer count is attributed to the run's shape: ${summary}`,
+        );
+        assert.ok(summary.includes('@a:test'), 'and names the identity');
+      });
+
+      test('a read-only run says the question cannot be answered', function (assert) {
+        let summary = describeFairness(readFairness([]));
+        assert.ok(summary.includes('no writes completed'), summary);
+        assert.notOk(summary.includes('fairness      1.00'), summary);
+      });
+
+      test('the section names the join that would confirm it', function (assert) {
+        // These are HTTP windows, not queue rows, and the output has to say
+        // where the server's own answer lives.
+        let summary = describeFairness(
+          readFairness([
+            record('hub', '@a:test', 0, 1000),
+            record('leaf', '@b:test', 100, 1100),
+            record('leaf', '@b:test', 2000, 2100),
+          ]),
+        );
+        assert.ok(summary.includes('x-boxel-logging-correlation-id'), summary);
+        assert.ok(summary.includes('awaitIndex'), summary);
+        assert.ok(summary.includes('cross-writer blocked: 1 of 3'), summary);
+      });
+    },
+  );
+
+  module('realm write permission', function () {
+    const realm = 'https://example.test/owner/load-test/';
+
+    function sessionWith(claims: unknown, key = realm): Session {
+      let payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
+      return {
+        userId: '@a:example.test',
+        username: 'a',
+        accessToken: 'x',
+        serverToken: 'Bearer server.token.here',
+        realmTokens: { [key]: `Bearer header.${payload}.signature` },
+      };
+    }
+
+    test('reads the permissions the realm put in the session token', function (assert) {
+      // `_realm-auth` states each user's permissions in the JWT it mints, so
+      // the answer is in hand before the run starts and costs no round trip —
+      // which matters, because the endpoint that would answer it directly is
+      // owner-only and a writer is not the owner.
+      assert.deepEqual(
+        realmPermissionsFor(sessionWith({ permissions: ['read'] }), realm),
+        ['read'],
+      );
+      assert.deepEqual(
+        realmPermissionsFor(
+          sessionWith({ permissions: ['read', 'write'] }),
+          realm,
+        ),
+        ['read', 'write'],
+      );
+    });
+
+    test('a realm the session has no token for is a definite no', function (assert) {
+      assert.deepEqual(
+        realmPermissionsFor(
+          sessionWith({ permissions: ['read', 'write'] }, 'https://other/'),
+          realm,
+        ),
+        [],
+        'no entry means no grant, which is an answer rather than a silence',
+      );
+    });
+
+    test('an unreadable token is "cannot tell", not "no"', function (assert) {
+      // A token shape the harness does not recognise must not refuse a run
+      // that would have worked. The realm still answers 403 if the grant is
+      // genuinely missing, and the summary reports a writer that landed
+      // nothing.
+      let session: Session = {
+        userId: '@a:example.test',
+        username: 'a',
+        accessToken: 'x',
+        serverToken: 'Bearer s',
+        realmTokens: { [realm]: 'not-a-jwt' },
+      };
+      assert.strictEqual(realmPermissionsFor(session, realm), undefined);
+      assert.strictEqual(
+        realmPermissionsFor(sessionWith({ user: '@a:example.test' }), realm),
+        undefined,
+        'and so is a token that simply does not state permissions',
+      );
+    });
+
+    test('decodes claims without verifying them', function (assert) {
+      assert.deepEqual(
+        decodeJwtClaims(
+          `Bearer h.${Buffer.from('{"user":"@a:t"}').toString('base64url')}.s`,
+        ),
+        { user: '@a:t' },
+      );
+      for (let bad of ['', 'one.two', 'a.b.c', 'h..s']) {
+        assert.strictEqual(
+          decodeJwtClaims(bad),
+          undefined,
+          `${bad} is not a token this can read`,
+        );
+      }
+    });
+
+    test('matrix ids are built the way the deployments spell them', function (assert) {
+      assert.strictEqual(
+        matrixDomainFor('https://matrix-staging.stack.cards'),
+        'stack.cards',
+      );
+      assert.strictEqual(
+        matrixIdFor('loadtest02', 'stack.cards'),
+        '@loadtest02:stack.cards',
+      );
+      assert.strictEqual(
+        matrixIdFor('@loadtest02:stack.cards', 'stack.cards'),
+        '@loadtest02:stack.cards',
+        'a row that already carries a full id is left alone',
       );
     });
   });

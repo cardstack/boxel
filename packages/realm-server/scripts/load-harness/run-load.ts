@@ -88,6 +88,16 @@ import {
   type Workload,
   type WriteSpec,
 } from './lib/workload.ts';
+import {
+  describeFairness,
+  readFairness,
+  type WriteRecord,
+} from './lib/fairness.ts';
+import {
+  matrixDomainFor,
+  matrixIdFor,
+  realmPermissionsFor,
+} from './lib/permissions.ts';
 
 let args = parseArgsOrExit(process.argv.slice(2), {
   csv: '',
@@ -222,6 +232,13 @@ if (!args.deriveWorkload) {
 // admission gate or the link-shape policy counts.
 let inFlight = new InFlightReading({ halfLifeMs: args.loadHalfLifeMs });
 
+// Which writing identities got anywhere. A writer that authenticated, ran its
+// whole loop and landed nothing is the shape a missing write grant takes, and
+// it is silent in every other line of the summary — the run just reports fewer
+// writes than it should have, against a workload nobody re-reads.
+let writersWithWrites = new Set<string>();
+let writersWithErrors = new Set<string>();
+
 let stats = {
   search: [] as number[],
   headers: [] as number[],
@@ -241,6 +258,8 @@ let stats = {
   writeErrors: 0,
   searches: 0,
   writes: 0,
+  // One row per write that landed, for the fairness reading.
+  writeRecords: [] as WriteRecord[],
   byLabel: new Map<
     string,
     { total: number; headersMs: number; bodyMs: number; bytes: number }[]
@@ -394,8 +413,22 @@ async function search(
   }
 }
 
+// Where a write block's writes land. A POST addresses the collection and the
+// realm names the card; a PATCH addresses one card that is already there.
+function writeUrl(write: WriteSpec): string {
+  let path = write.path.replace(/^\//, '');
+  return write.method === 'PATCH'
+    ? `${realmUrl}${path}`
+    : `${realmUrl}${path}/`;
+}
+
 // One card write. The payload is deliberately small: what the run is measuring
 // is the invalidation the write causes, not the cost of the bytes going up.
+//
+// The window is recorded as well as the latency. A write blocks on its own
+// index pass, so its start and end bracket that pass — which is what lets the
+// summary say whether this write's pass waited behind somebody else's without
+// reading a queue row. See `lib/fairness.ts`.
 async function writeCard(
   session: Session,
   write: WriteSpec,
@@ -410,31 +443,51 @@ async function writeCard(
     },
   };
   try {
-    let response = await fetch(`${realmUrl}${write.path.replace(/^\//, '')}/`, {
-      method: 'POST',
+    let response = await fetch(writeUrl(write), {
+      method: write.method,
       headers: {
         Accept: 'application/vnd.card+json',
         'Content-Type': 'application/vnd.card+json',
         Authorization: realmAuthHeader(session, realmUrl),
+        // The realm server reads this on the write path too, and logs it
+        // beside the enqueue / awaitIndex split. It is how a write the
+        // fairness section reports as blocked is confirmed against the
+        // server's own view of where its seconds went.
+        'x-boxel-logging-correlation-id': correlationId(),
       },
       body: JSON.stringify(body),
     });
     let text = await response.text();
-    let ms = Date.now() - started;
+    let endedAt = Date.now();
     if (!response.ok) {
       stats.writeErrors++;
+      writersWithErrors.add(session.userId);
       if (stats.writeErrors <= 3) {
-        console.error(`  write → ${response.status} ${text.slice(0, 200)}`);
+        console.error(
+          `  write ${write.label} (${session.username}) → ${response.status} ` +
+            `${text.slice(0, 200)}`,
+        );
       }
       return false;
     }
-    stats.write.push(ms);
+    stats.write.push(endedAt - started);
     stats.writes++;
+    // Only writes that landed. A refusal's latency is a refusal, not a wait on
+    // an index pass, and folding one into the ledger would report a fast 403
+    // as a write that sailed through an uncontended lane.
+    stats.writeRecords.push({
+      block: write.label,
+      userId: session.userId,
+      startedAt: started,
+      endedAt,
+    });
+    writersWithWrites.add(session.userId);
     return true;
   } catch (e) {
     stats.writeErrors++;
+    writersWithErrors.add(session.userId);
     if (stats.writeErrors <= 3) {
-      console.error(`  write failed: ${errorMessage(e)}`);
+      console.error(`  write ${write.label} failed: ${errorMessage(e)}`);
     }
     return false;
   }
@@ -683,8 +736,13 @@ async function writerLoop(
   index: number,
 ): Promise<void> {
   let n = index * 1000;
+  // A block's own cadence, else the run's. Blocks on differing cadences are
+  // what put a cheap write both inside and outside an expensive one's index
+  // pass within a single run, which is what gives the fairness reading a
+  // baseline to compare its blocked writes against.
+  let everyMs = write.everyMs ?? args.writeEveryMs;
   while (running) {
-    await new Promise((r) => setTimeout(r, args.writeEveryMs));
+    await new Promise((r) => setTimeout(r, everyMs));
     if (!running) {
       break;
     }
@@ -836,11 +894,11 @@ console.log(`Modelling the ${describeFieldset(fieldset)}.`);
 // read-only run against a realm nobody wants dirtied.
 // A workload with no write block is read-only, and starting writers against it
 // would mean inventing a target. Say which workload, so the fix is obvious.
-if (args.writers > 0 && !workload.write) {
+if (args.writers > 0 && workload.writes.length === 0) {
   console.error(
-    `This workload has no "write" block, so it cannot drive writes.\n` +
-      `  Re-run with --writers 0, or use a workload whose "write" names a type\n` +
-      `  you can create in ${realmUrl}.`,
+    `This workload has no write block, so it cannot drive writes.\n` +
+      `  Re-run with --writers 0, or use a workload whose "write" (one block) or\n` +
+      `  "writes" (several) names a type you can create in ${realmUrl}.`,
   );
   process.exit(1);
 }
@@ -849,12 +907,154 @@ let writerCount = Math.min(args.writers, sessions.length);
 if (args.readers > 0 && writerCount >= sessions.length) {
   writerCount = sessions.length - 1;
 }
-let writerSessions = sessions.slice(0, writerCount);
-let readerSessions = sessions.slice(writerCount);
+
+// Fewer writer slots than blocks means some block never runs, and the block
+// left out is as likely as not the one the run was composed to produce — a
+// cross-writer run with the second writer silently dropped reports a fairness
+// table of zeroes that reads exactly like a fair lane. Refuse and name the
+// arithmetic instead.
+if (writerCount > 0 && writerCount < workload.writes.length) {
+  console.error(
+    `This workload has ${workload.writes.length} write blocks ` +
+      `(${workload.writes.map((w) => w.label).join(', ')}) but only ` +
+      `${writerCount} writer\n` +
+      `  slot${writerCount === 1 ? '' : 's'} ${writerCount === 1 ? 'is' : 'are'} available, so ` +
+      `${workload.writes.length - writerCount} of them would never run. A run\n` +
+      `  missing a block reports no contention for it, which is indistinguishable\n` +
+      `  from a lane that stayed fair. Pass --writers ${workload.writes.length} or more` +
+      (args.readers > 0
+        ? `, with a credential\n  file holding at least ${workload.writes.length + 1} rows.`
+        : `.`),
+  );
+  process.exit(1);
+}
+
+// Which session drives which block. A block that pins a `username` takes that
+// credential row wherever it sits in the file; the rest take sessions in file
+// order, which is what the harness did before any of this existed. This is the
+// step that makes "writer A on realm R, writer B on realm R, A ≠ B" a property
+// of the workload rather than of how the CSV happens to be sorted.
+interface WriterAssignment {
+  session: Session;
+  write: WriteSpec;
+}
+
+function assignWriters(): WriterAssignment[] {
+  let byUsername = new Map(sessions.map((s) => [s.username, s]));
+  let taken = new Set<Session>();
+  let slots: (WriterAssignment | undefined)[] = Array.from({
+    length: writerCount,
+  });
+  let blockFor = (i: number) => workload.writes[i % workload.writes.length]!;
+
+  // Pinned blocks first, so an unpinned one cannot take the session a pinned
+  // one needs and leave it unsatisfiable.
+  for (let i = 0; i < writerCount; i++) {
+    let write = blockFor(i);
+    if (!write.username) {
+      continue;
+    }
+    let session = byUsername.get(write.username);
+    if (!session) {
+      console.error(
+        `Write block "${write.label}" is pinned to username ` +
+          `"${write.username}", which has no authenticated session.\n` +
+          `  The credential file's rows in use are: ` +
+          `${sessions.map((s) => s.username).join(', ')}.\n` +
+          `  Either that row is missing from the CSV, its login failed, or it\n` +
+          `  sits past --readers + --writers rows and was never read.`,
+      );
+      process.exit(1);
+    }
+    slots[i] = { session, write };
+    taken.add(session);
+  }
+
+  let free = sessions.filter((s) => !taken.has(s));
+  for (let i = 0; i < writerCount; i++) {
+    if (slots[i]) {
+      continue;
+    }
+    let session = free.shift();
+    if (!session) {
+      console.error(
+        `Not enough sessions to fill ${writerCount} writer slots once the ` +
+          `pinned blocks took theirs.`,
+      );
+      process.exit(1);
+    }
+    slots[i] = { session, write: blockFor(i) };
+    taken.add(session);
+  }
+  return slots as WriterAssignment[];
+}
+
+let writerAssignments = writerCount > 0 ? assignWriters() : [];
+let writerSessions = writerAssignments.map((a) => a.session);
+// Whatever the writers did not take, in file order. Readers were the tail of
+// the list before pinning existed and still are — pinning only changes which
+// sessions end up in the head.
+let writerSessionSet = new Set(writerSessions);
+let readerSessions = sessions.filter((s) => !writerSessionSet.has(s));
+
+// Can these writers actually write? `_realm-auth` states each user's
+// permissions in the realm token it mints, so the answer is already in hand
+// and costs no round trip. Asking now turns "a realm's write permission
+// belongs to its owner" from three error lines and a run full of failures into
+// a refusal that names the account and the grant.
+let matrixDomain = matrixDomainFor(args.matrixUrl);
+let cannotWrite = writerAssignments.filter(({ session }) => {
+  let permissions = realmPermissionsFor(session, realmUrl);
+  // `undefined` is "the token did not say", which must not read as "no". A
+  // token shape this harness does not recognise is not grounds to refuse a
+  // run; the realm still answers 403 if the grant really is missing, and the
+  // summary reports a writer that landed nothing.
+  return permissions !== undefined && !permissions.includes('write');
+});
+if (cannotWrite.length) {
+  console.error(
+    `These accounts cannot write to ${realmUrl}:\n` +
+      cannotWrite
+        .map(
+          ({ session, write }) =>
+            `  • ${matrixIdFor(session.username, matrixDomain)} ` +
+            `(block "${write.label}")`,
+        )
+        .join('\n') +
+      `\n\nA realm's write permission belongs to its owner; everyone else has to\n` +
+      `be granted it. setup-realm.ts does that, and --grants-only needs no\n` +
+      `boxel CLI, so it runs from here:\n\n` +
+      `  node setup-realm.ts --csv <accounts.csv> --grants-only \\\n` +
+      `      --realm ${realmUrl} --write-grants ${workload.writes.length}\n\n` +
+      `Refusing rather than starting: every write from these accounts would be\n` +
+      `a 403, and a run whose second writer never lands anything reports the\n` +
+      `same fairness table as a lane with nothing to contend over.`,
+  );
+  process.exit(1);
+}
+
 console.log(
   `${readerSessions.length} readers, ${writerSessions.length} writers, ${args.minutes} min. ` +
     `Ctrl-C to stop early.\n`,
 );
+if (writerAssignments.length) {
+  // Which identity drives which block, printed before the run rather than
+  // inferred from the summary: whether two writers are two people is the one
+  // thing the fairness numbers cannot state about themselves.
+  for (let { session, write } of writerAssignments) {
+    let cadence = write.everyMs ?? args.writeEveryMs;
+    console.log(
+      `  write ${write.label.padEnd(12)} ${write.method.padEnd(5)} ` +
+        `${writeUrl(write)}  every ${cadence}ms  as ${session.userId}`,
+    );
+  }
+  let identities = new Set(writerAssignments.map((a) => a.session.userId));
+  console.log(
+    identities.size > 1
+      ? `  ${identities.size} distinct writing identities — cross-writer contention is reachable.\n`
+      : `  one writing identity — this run cannot produce cross-writer contention.\n`,
+  );
+}
 
 let reportTimer = setInterval(() => {
   console.log(
@@ -977,6 +1177,33 @@ async function finish() {
         `  lock. These calls do not reproduce that lock's contention.`,
     );
   }
+
+  // A writer that authenticated, ran its loop and landed nothing wrote no rows
+  // into the fairness ledger, so every count below is missing that identity
+  // without saying so. The likeliest cause is the grant, which is why the
+  // message names it.
+  let silentWriters = writerAssignments.filter(
+    ({ session }) => !writersWithWrites.has(session.userId),
+  );
+  if (silentWriters.length) {
+    console.log(
+      `\n⚠  ${silentWriters.length} writer(s) landed no writes at all:\n` +
+        silentWriters
+          .map(
+            ({ session, write }) =>
+              `     ${session.userId} (block "${write.label}")` +
+              (writersWithErrors.has(session.userId)
+                ? ' — its writes were refused'
+                : ' — it never got a write away'),
+          )
+          .join('\n') +
+        `\n   Nothing below counts their work, so a low cross-writer figure is\n` +
+        `   this, not the lane. A refused write on a realm you do not own is\n` +
+        `   usually a missing write grant — see setup-realm.ts --write-grants.`,
+    );
+  }
+
+  console.log(describeFairness(readFairness(stats.writeRecords)));
 
   let headerShare = stats.search.length
     ? stats.headers.reduce((a, b) => a + b, 0) /
@@ -1150,7 +1377,6 @@ process.on('SIGINT', () => {
 setTimeout(() => void finish(), args.minutes * 60000);
 
 readerSessions.forEach((s, i) => void readerLoop(s, i));
-let writeSpec = workload.write;
-if (writeSpec) {
-  writerSessions.forEach((s, i) => void writerLoop(s, writeSpec, i));
-}
+writerAssignments.forEach(
+  ({ session, write }, i) => void writerLoop(session, write, i),
+);
