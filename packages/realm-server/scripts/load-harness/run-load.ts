@@ -539,10 +539,10 @@ async function writeCard(
 // expected shape: `handleRequestForward` verifies the JWT, parses the body, and
 // looks the destination up in `AllowedProxyDestinations` — a `proxy_endpoints`
 // read, cached for five seconds per replica — and rejects there. That lookup
-// precedes `withUserCostLock`, so a refused destination never takes the
-// per-user cost lock and this flag does NOT reproduce the serialization where
-// one user's second generation waits out their first. Reaching the lock takes
-// an allowlisted destination, which means real spend; the harness declines.
+// precedes admission, so a refused destination never takes the per-user cost
+// lock or an in-flight slot, and this flag does NOT reproduce a user's calls
+// contending for either. Reaching them takes an allowlisted destination, which
+// means real spend; the harness declines.
 //
 // What it does add is a second authenticated round trip per write, at the
 // realm server and at the database, in the position a generation occupies.

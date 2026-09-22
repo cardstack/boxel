@@ -58,6 +58,8 @@ interface Harness {
   applied: { params: Record<string, unknown> | undefined }[];
   reloads: number;
   recorded: string[];
+  // The local ids the ledger has reported as drained, in order.
+  drained: string[];
   // Fires the store's reload notification, which is what a foreign write looks
   // like from the ledger's side.
   foreignWrite(): void;
@@ -101,6 +103,7 @@ function setup(
     applied,
     reloads: 0,
     recorded: [] as string[],
+    drained: [] as string[],
   } as Harness;
   let heldVersion = overrides.version;
 
@@ -153,6 +156,9 @@ function setup(
       return () => {
         reloadSubscribers = reloadSubscribers.filter((s) => s !== cb);
       };
+    },
+    drained: (localId) => {
+      harness.drained.push(localId);
     },
     ...overrides,
   };
@@ -238,6 +244,31 @@ module('Unit | operation ledger', function () {
 
     h.sends[0].answer.fulfill(answerWith({ version: 'v2', baseMatched: true }));
     await call;
+  });
+
+  test('the chain reports it has drained only once nothing on it is pending', async function (assert) {
+    let h = setup({ version: 'v1' });
+    let first = h.attempt({ body: 'one' });
+    let second = h.attempt({ body: 'two' });
+    await drain();
+
+    h.sends[0].answer.fulfill(answerWith({ version: 'v2', baseMatched: true }));
+    await first;
+    await drain();
+    assert.deepEqual(
+      h.drained,
+      [],
+      'the second operation is still pending, so its effect is unconfirmed',
+    );
+
+    h.sends[1].answer.fulfill(answerWith({ version: 'v3', baseMatched: true }));
+    await second;
+    await drain();
+    assert.deepEqual(
+      h.drained,
+      ['local-1'],
+      'once both have settled, the card is reported drained exactly once',
+    );
   });
 
   test('a matched base retires the entry without re-reading the card', async function (assert) {
