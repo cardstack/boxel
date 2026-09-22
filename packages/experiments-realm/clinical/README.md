@@ -130,8 +130,12 @@ Three things about it are worth knowing before copying the pattern:
   and indexes without complaint, and every invocation of it fails to resolve.
   A realm binds which _class_ an extension means; it does not get to say what
   counts as a file, so the extension has to be one the platform already reads
-  as one. The binding is realm-wide, which is why these logs use `.log` rather
-  than `.txt` — every `.txt` in this realm would otherwise become an audit log.
+  as one — and not one the platform keeps for itself, which rules out the
+  executable extensions and `.json`, where a binding would re-type every module
+  or every card instance rather than a realm's own content. The binding is also
+  realm-wide, which is why these logs use `.log` rather than `.txt`: every
+  `.txt` in this realm would otherwise become an audit log, including a
+  hello-world file and three format-preview samples.
 
 - **`appendLine` creates the file it appends to**, so nothing here has to
   exist first, and a binding adds a name rather than taking the base
