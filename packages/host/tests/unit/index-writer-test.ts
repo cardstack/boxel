@@ -1747,6 +1747,7 @@ module('Unit | index-writer', function (hooks) {
         url: `${testRealmURL2}1.json`,
         file_alias: `${testRealmURL2}1`,
         generation: 2,
+        host_shell_generation: null,
         realm_url: testRealmURL2,
         type: 'instance',
         has_error: false,
@@ -1896,6 +1897,7 @@ module('Unit | index-writer', function (hooks) {
         url: `${testRealmURL}1.json`,
         file_alias: `${testRealmURL}1`,
         generation: 2,
+        host_shell_generation: null,
         realm_url: testRealmURL,
         type: 'instance',
         has_error: true,
@@ -2049,6 +2051,162 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
+  // The render says which host bundle its page was running; the write copies
+  // that number out of the diagnostics blob into a column of its own, because
+  // the query it serves is a range scan and jsonb has no index to offer it.
+  test("copies the render's host-shell generation onto the row", async function (assert) {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [],
+    );
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.updateEntry(new URL(`${testRealmURL}rendered.json`), {
+      type: 'file',
+      lastModified: 1,
+      resourceCreatedAt: 1,
+      deps: new Set<string>(),
+      searchData: { name: 'rendered' },
+      diagnostics: { warmedHostShellGeneration: 9 },
+    });
+    // An error row is the one a repair most needs to find, so it has to carry
+    // the number too — not only the rows that succeeded.
+    await batch.updateEntry(new URL(`${testRealmURL}failed.json`), {
+      type: 'instance-error',
+      error: { message: 'boom', status: 500, additionalErrors: [] },
+      diagnostics: { warmedHostShellGeneration: 9 },
+    });
+    // A render that reported no number leaves the column null. Unknown, not
+    // old — `< current` must not reach it.
+    await batch.updateEntry(new URL(`${testRealmURL}unstamped.json`), {
+      type: 'file',
+      lastModified: 1,
+      resourceCreatedAt: 1,
+      deps: new Set<string>(),
+      searchData: { name: 'unstamped' },
+      diagnostics: { hostShellHash: 'b778fe76' },
+    });
+    await batch.done();
+
+    let rows = (await adapter.execute(
+      `SELECT url, host_shell_generation FROM boxel_index
+       WHERE realm_url = $1 ORDER BY url`,
+      { bind: [testRealmURL] },
+    )) as unknown as {
+      url: string;
+      host_shell_generation: number | null;
+    }[];
+    assert.deepEqual(
+      rows.map((r) => [
+        r.url.replace(testRealmURL, ''),
+        r.host_shell_generation,
+      ]),
+      [
+        ['failed.json', 9],
+        ['rendered.json', 9],
+        ['unstamped.json', null],
+      ],
+      'the number reaches the success row and the error row, and absence stays null',
+    );
+  });
+
+  // An error row for a URL that already has a published row carries that row's
+  // whole shape forward, its generation included. Which of the two numbers the
+  // row should keep depends on whose content it ends up serving, and the two
+  // error paths differ — so both are driven here.
+  module('an error row over a published row', function (hooks) {
+    const PUBLISHED_GENERATION = 3;
+    const RENDER_GENERATION = 9;
+
+    hooks.beforeEach(async function () {
+      await setupIndex(
+        adapter,
+        [{ realm_url: testRealmURL, current_generation: 1 }],
+        [
+          {
+            url: `${testRealmURL}1.json`,
+            generation: 1,
+            realm_url: testRealmURL,
+            host_shell_generation: PUBLISHED_GENERATION,
+            pristine_doc: {
+              id: `${testRealmURL}1.json`,
+              type: 'card',
+              attributes: { name: 'Mango' },
+              meta: {
+                adoptsFrom: { module: rri(`./person`), name: 'Person' },
+              },
+            } as LooseCardResource,
+            search_doc: { name: 'Mango' },
+          },
+        ],
+      );
+    });
+
+    let generationOnRow = async () => {
+      let [row] = (await adapter.execute(
+        `SELECT host_shell_generation FROM boxel_index WHERE url = $1`,
+        { bind: [`${testRealmURL}1.json`] },
+      )) as unknown as { host_shell_generation: number | null }[];
+      return row.host_shell_generation;
+    };
+
+    // The case a repair most needs to find. The error is this render's own
+    // output, so the row has to name the bundle that produced it — carrying
+    // the published row's number forward would make a failure on the current
+    // shell read as one from a bundle already replaced.
+    test("a published error takes the render's generation", async function (assert) {
+      let batch = await indexWriter.createBatch(
+        new URL(testRealmURL),
+        virtualNetwork,
+      );
+      await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+        type: 'instance-error',
+        error: { message: 'boom', status: 500, additionalErrors: [] },
+        diagnostics: { warmedHostShellGeneration: RENDER_GENERATION },
+      });
+      await batch.done();
+      assert.strictEqual(await generationOnRow(), RENDER_GENERATION);
+    });
+
+    // A withheld failure republishes the last good render untouched, so the
+    // row still shows that bundle's work. Restamping it with this render's
+    // number would claim the withheld attempt produced content it did not.
+    test('a withheld failure keeps the published generation', async function (assert) {
+      let batch = await indexWriter.createBatch(
+        new URL(testRealmURL),
+        virtualNetwork,
+      );
+      await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+        type: 'instance-error',
+        error: { message: 'boom', status: 500, additionalErrors: [] },
+        diagnostics: {
+          warmedHostShellGeneration: RENDER_GENERATION,
+          staleShellFailure: ['instance'],
+        },
+      });
+      await batch.done();
+      let [row] = (await adapter.execute(
+        `SELECT host_shell_generation, has_error FROM boxel_index WHERE url = $1`,
+        {
+          bind: [`${testRealmURL}1.json`],
+          coerceTypes: { has_error: 'BOOLEAN' },
+        },
+      )) as unknown as {
+        host_shell_generation: number | null;
+        has_error: boolean;
+      }[];
+      assert.false(row.has_error, 'the failure was withheld');
+      assert.strictEqual(
+        row.host_shell_generation,
+        PUBLISHED_GENERATION,
+        'the row still serves the published render, so it keeps its generation',
+      );
+    });
+  });
+
   test('error entry does not include last known good state when not available', async function (assert) {
     await setupIndex(
       adapter,
@@ -2089,6 +2247,7 @@ module('Unit | index-writer', function (hooks) {
         url: `${testRealmURL}1.json`,
         file_alias: `${testRealmURL}1`,
         generation: 2,
+        host_shell_generation: null,
         realm_url: testRealmURL,
         type: 'instance',
         has_error: true,

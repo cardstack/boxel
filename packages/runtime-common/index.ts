@@ -1023,6 +1023,19 @@ export interface Diagnostics
   // card that is genuinely broken, so a reader must require presence.
   warmedHostShellHash?: string | null;
   warmedHostShellHashAtCompletion?: string | null;
+  // The ordering position of `warmedHostShellHash` — the position the realm
+  // server claimed for that shell when it observed it. The tokens above are
+  // hashes, so they answer "same shell?" and never "older shell?"; this is
+  // what makes a render's bundle comparable to the one now being served, and
+  // it is the value the write site copies into the row's own indexed column.
+  //
+  // Absent whenever no number reached the render: a realm server whose
+  // database could not answer reports the token alone, and the two services
+  // deploy separately, so a worker sees such responses throughout a rolling
+  // deploy. Absent therefore means unknown, never old — a repair selecting
+  // `< current` excludes it by SQL's own semantics, which is the intended
+  // reading.
+  warmedHostShellGeneration?: number;
   // Set only when the prerender server has concluded that a module-resolution
   // failure cannot be attributed to the card: the render failed on a missing
   // export, a re-render on a recycled pool failed the same way, and the pool
