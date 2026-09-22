@@ -463,6 +463,22 @@ export interface PrerenderMeta {
   displayNames: string[] | null;
   deps: string[] | null;
   types: string[] | null;
+  // The content hash of the stored source this render read to build `serialized`
+  // — persisted as `boxel_index.source_content_hash` and served as
+  // `meta.version` on the card+json GET.
+  //
+  // It is reported from here, rather than computed by the worker over its own
+  // read of the same file, because a client uses it as the base a write is
+  // computed against. The two reads are separate `card+source` GETs seconds
+  // apart that can be answered by different realm-server replicas, so a hash
+  // taken from the worker's read can describe bytes this render never saw —
+  // including, in one interleaving, NEWER bytes than the document beside it,
+  // which reads to a client as a confirmation of state it never held. One read
+  // behind both the document and the hash is what makes that unrepresentable.
+  //
+  // Null when this render built no card document (an error render, or a file
+  // render, which has no stored card source behind it).
+  sourceContentHash?: string | null;
   // Optional host-side timing block. The Prerenderer lifts this onto
   // `response.meta.diagnostics` so it persists to
   // `boxel_index.diagnostics` for SQL-side perf triage.

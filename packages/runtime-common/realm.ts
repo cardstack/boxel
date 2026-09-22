@@ -765,8 +765,13 @@ const CONDITIONAL_WRITE_INDEX_SETTLE_POLL_MS = 250;
 // `indexed_at` nor the realm-info hash moves on a serialization change, so the
 // variant is the only signal that invalidates already-cached bodies. Bumped to
 // `card-rri` when the server began serving instance ids (`id`/`links.self`/
-// relationship ids) in canonical prefix (RRI) form for mapped realms.
-const CARD_JSON_ETAG_VARIANT = 'card-rri';
+// relationship ids) in canonical prefix (RRI) form for mapped realms, and to
+// `card-srcver` when the GET began reporting `meta.version` — the content hash
+// of the source the document was assembled from. Adding a key to the
+// representation moves none of the inputs above, so without the bump a client
+// holding a cached body would be 304'd back to a document that predates the
+// key and would never see a version for a card it had already read.
+const CARD_JSON_ETAG_VARIANT = 'card-srcver';
 
 // The variant the card+json validator carries, with the assembled-resource
 // budget folded in. The budget decides which cards come back with a clipped
