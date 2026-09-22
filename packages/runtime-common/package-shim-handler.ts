@@ -567,8 +567,13 @@ export class PackageShimHandler {
       );
       for (let key of this.registrationKeys(descriptor.id)) {
         this.moduleIds.set(key, resolver);
+        // Re-registering an id replaces the module, so its declared
+        // dependencies go with it: leaving the previous registration's thunk
+        // in place would answer for a module this handler no longer serves.
         if (descriptor.deps) {
           this.moduleDeps.set(key, descriptor.deps);
+        } else {
+          this.moduleDeps.delete(key);
         }
       }
     }
