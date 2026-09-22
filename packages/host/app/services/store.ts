@@ -316,6 +316,18 @@ export default class StoreService extends Service implements StoreInterface {
   // when that reload settles, whatever it settles into. A reload that fails
   // leaves nothing behind, so the next event retries.
   #reloadTargets: Map<string, ReloadTarget> = new Map();
+  // The fields of an instance the user has edited that the realm has not yet
+  // acknowledged, each stamped with the `#localEditSeq` of its latest edit.
+  // A reload merges server state into the instance around these fields, so an
+  // edit in progress survives server state arriving underneath it — whoever
+  // wrote that state, and however the event naming it was attributed. The
+  // local edit is newer than anything the realm holds for that field, and the
+  // pending autosave is what will tell the realm about it.
+  //
+  // An entry clears when a save that began after the edit succeeds; a failed
+  // save leaves it, so the edit keeps winning until one lands.
+  #localEdits: WeakMap<CardDef, Map<string, number>> = new WeakMap();
+  #localEditSeq = 0;
   // Coalesce concurrent same-(realms, query) `_federated-search` HTTP
   // calls during a prerender. Gated on `__boxelRenderContext` so live
   // user searches stay uncoalesced — write-then-read freshness story
@@ -3017,11 +3029,74 @@ export default class StoreService extends Service implements StoreInterface {
     }
     if (isCardInstance(instance)) {
       this._instanceMutationVersion++;
+      this.#recordLocalEdit(instance, fieldName);
       let autoSaveState = this.initOrGetAutoSaveState(instance);
       autoSaveState.hasUnsavedChanges = true;
       this.doAutoSave(instance);
     }
   };
+
+  // A nested path (`address.street`, `items.2`) records its top-level field:
+  // that is the unit a card document carries, and so the unit a merge can
+  // keep or take.
+  #recordLocalEdit(instance: CardDef, fieldName: string) {
+    let edits = this.#localEdits.get(instance);
+    if (!edits) {
+      edits = new Map();
+      this.#localEdits.set(instance, edits);
+    }
+    edits.set(fieldName.split('.')[0], ++this.#localEditSeq);
+  }
+
+  // Clears the edits a successful save carried: those made before it
+  // serialized the instance, i.e. stamped at or below `sentSeq`.
+  #acknowledgeLocalEdits(instance: CardDef, sentSeq: number) {
+    let edits = this.#localEdits.get(instance);
+    if (!edits) {
+      return;
+    }
+    for (let [fieldName, seq] of edits) {
+      if (seq <= sentSeq) {
+        edits.delete(fieldName);
+      }
+    }
+  }
+
+  // Removes from a server document every field the user has edited that the
+  // realm has not acknowledged, so applying the document leaves those fields
+  // as the user has them. `updateFromSerialized` only touches the fields a
+  // document carries. Relationships are keyed by the field name, or by
+  // `<field>.<n>` for a linksToMany member, so both spellings are dropped.
+  #withoutLocalEdits(
+    instance: CardDef,
+    doc: SingleCardDocument,
+  ): SingleCardDocument {
+    let edits = this.#localEdits.get(instance);
+    if (!edits || edits.size === 0) {
+      return doc;
+    }
+    let merged = cloneDeep(doc);
+    let isEdited = (key: string) => edits!.has(key.split('.')[0]);
+    let { attributes, relationships } = merged.data;
+    if (attributes) {
+      for (let key of Object.keys(attributes)) {
+        if (isEdited(key)) {
+          delete attributes[key];
+        }
+      }
+    }
+    if (relationships) {
+      for (let key of Object.keys(relationships)) {
+        if (isEdited(key)) {
+          delete relationships[key];
+        }
+      }
+    }
+    realmEventsLogger.debug(
+      `reload of ${instance.id} keeps local edits to ${[...edits.keys()].join(', ')}`,
+    );
+    return merged;
+  }
 
   private setIdentityContext(
     instanceOrError: CardDef | FileDef | CardErrorJSONAPI,
@@ -3783,6 +3858,8 @@ export default class StoreService extends Service implements StoreInterface {
         instance[localIdSymbol],
         async () => {
           try {
+            // Every edit stamped up to here is in the document serialized below.
+            let sentSeq = this.#localEditSeq;
             let doc = await this.cardService.serializeCard(instance, {
               // for a brand new card that has no id yet, we don't know what we are
               // relativeTo because its up to the realm server to assign us an ID, so
@@ -3828,6 +3905,7 @@ export default class StoreService extends Service implements StoreInterface {
               await this.assignRemoteIdentity(instance, json.data.id!);
             }
             this.#recordWrittenVersion(instance, json);
+            this.#acknowledgeLocalEdits(instance, sentSeq);
             if (this.onSaveSubscriber) {
               this.onSaveSubscriber(
                 this.network.virtualNetwork.toURL(json.data.id!),
@@ -4121,9 +4199,12 @@ export default class StoreService extends Service implements StoreInterface {
         return rebuilt;
       }
 
+      // Taken after the fetch returns rather than before it goes out, so a
+      // field the user started editing while the read was in flight is kept
+      // too.
       await api.updateFromSerialized<typeof CardDef>(
         instance,
-        incomingDoc,
+        this.#withoutLocalEdits(instance, incomingDoc),
         this.store,
       );
       return instance;

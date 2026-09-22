@@ -1,4 +1,11 @@
-import { click, fillIn, find, typeIn, settled } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  find,
+  typeIn,
+  settled,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -339,6 +346,90 @@ module('Acceptance | interact submode | index changes tests', function (hooks) {
         3,
         'select is preserved',
       );
+    });
+
+    test("another client's write to a card being edited keeps the unsaved edit and takes the rest", async function (assert) {
+      let cardURL = `${testRealmURL}Pet/vangogh`;
+      // Hold this tab's autosave on the wire, so the edit is still unsaved
+      // when the other client's write reaches the realm and its index event
+      // reaches this tab.
+      let saveArrived = new Deferred<void>();
+      let releaseSave = new Deferred<void>();
+      let network = getService('network');
+      let holdSave = async (request: Request) => {
+        if (
+          request.method === 'PATCH' &&
+          request.url.endsWith('/Pet/vangogh')
+        ) {
+          saveArrived.fulfill();
+          await releaseSave.promise;
+        }
+        return null;
+      };
+      network.virtualNetwork.mount(holdSave, { prepend: true });
+
+      try {
+        await visitOperatorMode({
+          stacks: [[{ id: cardURL, format: 'edit' }]],
+        });
+        let nameInput = '[data-test-field="name"] input';
+        assert.dom(nameInput).hasValue('Van Gogh');
+        let card = getService('store').peek(cardURL) as any;
+
+        // Not awaited: it settles only once the held save is released.
+        let typed = fillIn(nameInput, 'Van Gogh typed locally');
+        await saveArrived.promise;
+
+        await realm.write(
+          'Pet/vangogh.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { name: 'Van Gogh', favoriteTreat: 'Carrots' },
+              meta: {
+                adoptsFrom: { module: rri('../pet'), name: 'Pet' },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+        // A timeout falls through to the assertions below, which report what
+        // the card holds instead.
+        await waitUntil(() => card.favoriteTreat === 'Carrots', {
+          timeout: 15000,
+        }).catch(() => undefined);
+
+        assert.strictEqual(
+          card.favoriteTreat,
+          'Carrots',
+          "the other client's change reaches the card",
+        );
+        assert.strictEqual(
+          card.name,
+          'Van Gogh typed locally',
+          'the unsaved edit is not replaced by the server state',
+        );
+        assert.dom(nameInput).hasValue('Van Gogh typed locally');
+
+        releaseSave.fulfill();
+        await typed;
+        await settled();
+
+        assert
+          .dom(nameInput)
+          .hasValue('Van Gogh typed locally', 'the edit survives its save');
+        let saved = await network.authedFetch(cardURL, {
+          headers: { Accept: SupportedMimeType.CardJson },
+        });
+        let json = await saved.json();
+        assert.strictEqual(
+          json.data.attributes.name,
+          'Van Gogh typed locally',
+          'the edit is what the realm now holds',
+        );
+      } finally {
+        releaseSave.fulfill();
+        network.virtualNetwork.unmount(holdSave);
+      }
     });
 
     test('containsMany string field preserves focus while typing', async function (assert) {
