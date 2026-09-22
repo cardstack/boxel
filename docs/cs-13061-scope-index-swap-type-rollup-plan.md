@@ -124,7 +124,10 @@ Three changes, smallest and most load-bearing first.
 ## Target files
 
 - `packages/runtime-common/index-writer.ts` — `#fetchTypeSummary`,
-  `updateRealmMeta`, `carryForwardRealmMeta`.
+  `updateRealmMeta`, `carryForwardRealmMeta`, and the shared aggregate and
+  ordering both rollup paths build from.
+- `packages/runtime-common/index-structure.ts` — `isPartitionedRealmMetaValue`,
+  beside `normalizeRealmMetaValue`.
 - `packages/host/tests/unit/index-writer-test.ts` — the suite that already
   exercises `realm_meta` and `fetchCardTypeSummary`.
 
@@ -133,9 +136,20 @@ Three changes, smallest and most load-bearing first.
 The failure mode is a silently wrong type summary, not an error, so the tests
 assert the value rather than the timing:
 
-- A merged pass produces the same `realm_meta.value` as a full recompute of the
-  same state — the acceptance criterion, asserted directly.
+- A merged pass produces the same `realm_meta.value` as a full rebuild of the
+  same state — asserted directly, over a fixture containing two types that share
+  a display name and one carrying none, since ties are the only state in which
+  the two forms can disagree.
 - A pass that deletes the last instance of a type drops that type's entry.
 - A card that changes what it adopts from moves its count off the old type and
   onto the new one.
-- A pass where `typeSetIsComplete` is false still recomputes in full.
+- A realm whose prior value predates the partitioned shape rebuilds, and its
+  `files` arm comes back rather than being published empty.
+- A pass where `typeSetIsComplete` is false still rebuilds in full.
+
+Each test that claims to cover the merge plants a prior entry carrying a count
+the working table cannot produce, so it can only pass if that entry was carried
+rather than recomputed. Checked by stubbing the scoped path out and confirming
+which tests redden, read by test name rather than by failure count — a filter
+that matches nothing reports zero failures and reads exactly like a passing
+control.
