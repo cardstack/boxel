@@ -1734,6 +1734,7 @@ module(basename(import.meta.filename), function () {
       let server = createPrerenderHttpServer({
         maxPages: 1,
         fatalExitOnUncaught: false,
+        registerWithManager: false,
       });
       try {
         await new Promise<void>((resolve, reject) => {
@@ -1758,7 +1759,10 @@ module(basename(import.meta.filename), function () {
     test('fatalExitOnUncaught default registers process-wide fatal handlers', async function (assert) {
       let baselineUncaught = process.listenerCount('uncaughtException');
       let baselineRejection = process.listenerCount('unhandledRejection');
-      let server = createPrerenderHttpServer({ maxPages: 1 });
+      let server = createPrerenderHttpServer({
+        maxPages: 1,
+        registerWithManager: false,
+      });
       try {
         await new Promise<void>((resolve, reject) => {
           server.once('error', reject);
