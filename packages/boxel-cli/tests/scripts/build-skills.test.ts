@@ -148,6 +148,16 @@ describe('parseFrontmatter', () => {
     expect(fm.name).toBe('after');
   });
 
+  // YAML lets a block scalar carry an explicit indentation and/or chomping
+  // indicator (`>2`, `|-`, `>2-`); the reader must treat those as the block
+  // form too, not as a plain value beginning with `>`.
+  it('reads a block scalar with explicit indentation/chomping indicators', () => {
+    const fm = parseFrontmatter(
+      '---\nname: indicators\ndescription: >2-\n  wrapped text\n  onto two lines.\n---\n',
+    );
+    expect(fm.description).toBe('wrapped text onto two lines.');
+  });
+
   it('returns {} for content without frontmatter', () => {
     expect(parseFrontmatter('# Just a heading\n')).toEqual({});
     expect(parseFrontmatter('---\nunterminated')).toEqual({});

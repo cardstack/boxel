@@ -121,9 +121,9 @@ export function parseFrontmatter(content: string): {
     if (out[key] !== undefined) continue;
     const value = m[2].trim();
 
-    // `>`/`|`, each optionally with a `-` or `+` chomping indicator, means the
-    // value is the indented block that follows.
-    if (/^[>|][-+]?$/.test(value)) {
+    // `>`/`|`, optionally followed by a chomping (`-`/`+`) and/or indentation
+    // (`1`-`9`) indicator, means the value is the indented block that follows.
+    if (/^[>|][0-9+-]*$/.test(value)) {
       const folded = value.startsWith('>');
       const body: string[] = [];
       for (let j = i + 1; j < lines.length; j++) {
