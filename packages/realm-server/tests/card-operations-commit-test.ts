@@ -333,6 +333,8 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         'shared-pass-first',
         'shared-pass-second',
         'shared-pass-both',
+        'shared-pass-mixed-card',
+        'shared-pass-mixed-peer',
         'version-target',
         'patch-over-http',
         'patch-over-batch',
@@ -803,6 +805,94 @@ module(basename(import.meta.filename), function (hooks) {
       event.clientRequestId,
       'instance:first-tab',
       'the first writer to join the pass announces it',
+    );
+  });
+
+  test('a write whose module flush was shared names its own instances in the event it announces', async function (assert) {
+    let instance = `${testRealmHref}shared-pass-mixed-card`;
+    let peerCard = `${testRealmHref}shared-pass-mixed-peer`;
+    let { holder, release } = await holdIndexingLane();
+    let since = Date.now();
+    let mixedWrite: Promise<unknown> | undefined;
+    let peerWrite: Promise<unknown> | undefined;
+    try {
+      // A module ahead of an instance, so the write flushes the module in a
+      // pass of its own before the pass that indexes the instance.
+      mixedWrite = realm.writeMany(
+        new Map([
+          [
+            'shared-pass-mixed.gts',
+            `import { CardDef } from "@cardstack/base/card-api";\nexport class SharedPassMixed extends CardDef {}\n`,
+          ],
+          [
+            'shared-pass-mixed-card.json',
+            JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Mixed' },
+                meta: { adoptsFrom: PERSON },
+              },
+            }),
+          ],
+        ]),
+        {
+          clientRequestId: 'instance:mixed-tab',
+          clientAuthored: [instance],
+        },
+      );
+      await waitUntil(async () =>
+        (await pendingIndexCallers()).includes('instance:mixed-tab'),
+      );
+      // Another client's write joins that pending module flush, and so
+      // announces it; the instance pass that follows is the mixed write's
+      // alone.
+      peerWrite = Promise.resolve(
+        request
+          .patch('/shared-pass-mixed-peer')
+          .set('Accept', 'application/vnd.card+json')
+          .set('X-Boxel-Client-Request-Id', 'instance:peer-tab')
+          .send({
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Peer' },
+              meta: { adoptsFrom: PERSON },
+            },
+          }),
+      );
+      await waitUntil(async () =>
+        (await pendingIndexCallers()).includes('instance:peer-tab'),
+      );
+    } finally {
+      release.fulfill();
+    }
+    await Promise.all([mixedWrite, peerWrite, holder.done]);
+
+    let mixedEvent = async () =>
+      (await incrementalIndexEventsSince(since)).find(
+        (event) =>
+          event.clientRequestId === 'instance:mixed-tab' &&
+          event.invalidations.includes(instance),
+      );
+    await waitUntil(async () => (await mixedEvent()) !== undefined);
+    let event = (await mixedEvent())!;
+    assert.true(
+      event.invalidations.includes(peerCard),
+      "the event carries the shared flush's invalidations, the other writer's card among them",
+    );
+    let own = (event.coalescedWrites ?? []).filter(
+      ({ clientRequestId }) => clientRequestId === 'instance:mixed-tab',
+    );
+    assert.true(
+      own.some(({ changed }) => changed?.includes(instance)),
+      'the writer is listed as having changed its own instance',
+    );
+    assert.true(
+      (event.coalescedWrites ?? []).some(
+        ({ clientRequestId, changed }) =>
+          clientRequestId === 'instance:peer-tab' &&
+          !!changed?.includes(peerCard),
+      ),
+      'beside the other writer and the card it changed',
     );
   });
 

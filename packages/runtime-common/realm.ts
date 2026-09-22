@@ -3055,6 +3055,11 @@ export class Realm {
       // publishes it indexed, one entry per pass. Absent for a broadcast no
       // pass stands behind.
       passes?: (SharedIndexPass | undefined)[];
+      // What this broadcaster's own request wrote or removed, spelled as
+      // `invalidations` spells a card. Lets its write stand in the event's
+      // `coalescedWrites` beside the others' when only some of its passes were
+      // shared — the rest name it nowhere else.
+      ownChanges?: string[];
     },
   ): void {
     // A pass indexed alongside other publishes is announced once, by the
@@ -3114,6 +3119,20 @@ export class Realm {
       realmURL: this.url,
     };
     let coalescedWrites = coalescedWritesFor(passes, invalidations);
+    if (coalescedWrites && passes.some((pass) => pass === undefined)) {
+      // A write whose module flush was shared but whose closing pass was not:
+      // the list holds the flush's writers, which name this request only for
+      // the modules. Its own entry covers the rest, or a tab looking for its
+      // own write would find its instances changed by nobody and re-read them.
+      let invalidated = new Set(invalidations);
+      coalescedWrites.push({
+        clientRequestId: opts?.clientRequestId ?? null,
+        changed: opts?.ownChanges
+          ? opts.ownChanges.filter((url) => invalidated.has(url))
+          : null,
+        ...(clientAuthored ? { clientAuthored } : {}),
+      });
+    }
     let versions = opts?.versions;
     if (coalescedWrites) {
       versions = versionsOnlyThisWriterChanged(passes, versions);
@@ -4343,6 +4362,12 @@ export class Realm {
       ...asUpdates(urls),
       ...deleteURLs.map((url) => ({ url, operation: 'delete' as const })),
     ];
+    let ownChanges = [
+      ...new Set([
+        ...Object.keys(versions),
+        ...changes.map(({ url }) => url.href.replace(/\.json$/, '')),
+      ]),
+    ];
     if (changes.length > 0) {
       if (waitForIndex) {
         await performIndex(changes);
@@ -4353,6 +4378,7 @@ export class Realm {
           generation: indexGeneration,
           invalidatedTypes: invalidatedTypes.value,
           passes,
+          ownChanges,
         });
         // Announcing what the pass invalidated is the last of the
         // invalidation, so it accumulates into the same stage as the hooks
@@ -4413,6 +4439,7 @@ export class Realm {
                   generation: meta.generation ?? indexGeneration,
                   invalidatedTypes: types.value,
                   passes: [...priorPasses, meta.sharedPass],
+                  ownChanges,
                 },
               );
             },
@@ -4447,12 +4474,19 @@ export class Realm {
       // whatever a mid-loop flush put there, and usually nothing at all. That
       // is why the member is documented as describing what the request wrote
       // rather than as a companion to the list beside it.
+      //
+      // A module flush that ran ahead of these byte-identical instances is the
+      // only pass behind this broadcast, and when it was shared with a writer
+      // that announces it, that writer's event already carries this one's
+      // invalidations — so `passes` goes along, and this broadcast stands down.
       this.broadcastIncrementalInvalidationEvent([...invalidations], {
         clientRequestId,
         ...(clientAuthored ? { clientAuthored } : {}),
         versions,
         generation: indexGeneration,
         invalidatedTypes: invalidatedTypes.value,
+        passes,
+        ownChanges,
       });
     }
     // A mixed batch whose instances all turned out to be byte-identical
