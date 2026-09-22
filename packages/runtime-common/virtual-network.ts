@@ -581,7 +581,19 @@ export class VirtualNetwork {
       return new URL(resolved);
     }
     // Not a registered prefix; parse as a plain URL.
-    return new URL(rri);
+    try {
+      return new URL(rri);
+    } catch (cause) {
+      // `Invalid URL` alone says neither which identifier failed nor that a
+      // prefix was looked for, and this throws from paths whose stack does not
+      // survive to the reader.
+      throw new Error(
+        `cannot resolve ${JSON.stringify(rri)} to a URL: it is not a URL, and ` +
+          `no registered realm prefix matches it (registered: ` +
+          `${[...this.realmMappings.keys()].join(', ')})`,
+        { cause },
+      );
+    }
   }
 
   /**

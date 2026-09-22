@@ -1969,7 +1969,7 @@ export default class StoreService extends Service implements StoreInterface {
     if (!cardId) {
       return;
     }
-    let normalizedId = asURL(cardId, this.network.virtualNetwork);
+    let normalizedId = keyFor(cardId, this.network.virtualNetwork);
     if (!normalizedId) {
       return;
     }
@@ -1985,7 +1985,7 @@ export default class StoreService extends Service implements StoreInterface {
     if (!cardId || !deferred) {
       return;
     }
-    let normalizedId = asURL(cardId, this.network.virtualNetwork);
+    let normalizedId = keyFor(cardId, this.network.virtualNetwork);
     if (!normalizedId) {
       return;
     }
@@ -4148,6 +4148,20 @@ export function asURL(
   // RRI and orphan an inflight-load deferred. gc-card-store and render-service
   // key the same way. Locals stay as-is.
   return isLocalId(id) ? id : vn.toRealURLHref(id);
+}
+
+// `asURL` reaches `VirtualNetwork.toURL`, which throws for an identifier that
+// is neither a URL nor covered by a registered realm prefix — an id minted from
+// a prefix mapping that this network never had, or no longer has. The
+// inflight-load bookkeeping has no key to record such an id under, and it is
+// only bookkeeping: skipping it loses a deduplicated reload, while throwing
+// from the tasks that call it — which nothing awaits — ends the run.
+function keyFor(id: string, vn: VirtualNetwork): string | undefined {
+  try {
+    return asURL(id, vn);
+  } catch {
+    return undefined;
+  }
 }
 
 function isSystemCardDefaultId(
