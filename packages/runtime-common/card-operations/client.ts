@@ -128,10 +128,83 @@ export interface OperationsTransport {
       // know; this module knows only which names came from a caller rather
       // than from the batch.
       adopted?: string[];
+      // Present when this call is shaped such that the transport *may* be able
+      // to apply it locally before the realm answers. Not a decision — half of
+      // one. See `OptimisticCandidate`.
+      optimistic?: OptimisticCandidate;
     },
   ): Promise<OperationsAnswer>;
   defaultWritableRealm(): string | undefined;
   search?: OperationsSearch;
+}
+
+// A call this module has found no structural reason to refuse optimism for.
+//
+// Eligibility is split because neither module can answer it alone, and the
+// halves are different in kind. What is decided here is a property of the
+// *call*: that it is one entry rather than a batch, that it names a stored
+// card, that its behavior is one the realm will compare a base version for,
+// and that the author did not opt out. None of that needs a card loaded, a
+// definition graph or a store, which is why it is answered where the envelope
+// is built.
+//
+// What is left is a property of the *session*: whether a store is holding the
+// target, whether the declaration lowers, and whether the program it lowers to
+// is deterministic. A transport that cannot answer those — or has no ledger at
+// all — ignores this and sends the batch exactly as it would have. So a
+// candidate is a fact offered, never an instruction: nothing here is applied
+// locally, and a transport that drops the member on the floor is correct.
+export interface OptimisticCandidate {
+  // The card the entry targets, spelled the way the entry spells it rather
+  // than the way a result would — a result's ids are canonicalized to
+  // registered-prefix form, and the two differ on every prefix-mapped realm.
+  id: string;
+  // The name the operation was invoked under, which is what a definition is
+  // resolved by.
+  name: string;
+  // The payload as the entry carries it, so a local run reads `params()` the
+  // way the realm's own run will.
+  params?: Record<string, unknown>;
+}
+
+// The same envelope with a base version named on its single entry.
+//
+// Exported rather than left to the transport because this module is the wire
+// producer: where a base version sits — `data.meta.baseVersion`, lifted back
+// out by the envelope's parse rather than reaching the operation's params — is
+// a fact about the wire, and a second writer of it would be a second place for
+// that spelling to drift.
+//
+// Refuses anything but a lone invocation. A base version is per entry and the
+// realm compares it against the file that entry merged over, so stamping one
+// onto a batch would either name the wrong entry or claim a base for all of
+// them; a caller that reached here with a batch has a bug rather than a
+// pessimistic send.
+export function stampBaseVersion(
+  envelope: OperationsEnvelope,
+  baseVersion: string,
+): OperationsEnvelope {
+  let [entry, ...rest] = envelope['boxel:operations'];
+  if (!entry || rest.length > 0 || entry.op !== 'invoke') {
+    throw new Error(
+      `a base version names the state one entry was computed on top of, so it is stamped on a batch of exactly one invocation`,
+    );
+  }
+  let { meta, ...data } = (entry.data ?? {}) as Record<string, unknown>;
+  return {
+    'boxel:operations': [
+      {
+        ...entry,
+        data: {
+          ...data,
+          meta: {
+            ...((meta ?? {}) as Record<string, unknown>),
+            baseVersion,
+          },
+        },
+      },
+    ],
+  };
 }
 
 // What a saved search needs from the session it runs in.
@@ -244,6 +317,12 @@ export interface OperationWriteResult {
   // gave it. Present only for a create that named one, which is every create
   // a batch stages.
   lid?: string;
+  // Whether the realm executed from the same source version the caller named.
+  // Present only when the entry carried a base version, so absent means the
+  // realm was asked nothing rather than that it answered no — a distinction a
+  // reconciling caller has to keep, since only a `true` licenses treating
+  // locally computed state as the authoritative result.
+  baseMatched?: boolean;
 }
 
 // A read reports the document it was asked for. An author's `output` program
@@ -277,6 +356,12 @@ export interface CarriedOperationInfo {
   // there, while the base create it builds on targets a type and has no
   // instance to read.
   declared: boolean;
+  // The author's override of the client's optimistic eligibility, as the
+  // declaration spells it. Carried here rather than read off the lowered
+  // operation because it is the one eligibility term that needs no lowering:
+  // refusing optimism is a decision the author already made in plain data, and
+  // a call that respects it never has to build a definition graph to find out.
+  optimistic?: boolean;
   // A declared query's own declaration, as its author wrote it. It travels
   // whole rather than as a result computed from it because a saved search is
   // resolved when it is invoked: the caller's identity and payload are what
@@ -496,16 +581,59 @@ async function invokeOne(
     // what the caller did.
     assertNoHandles(entry.data, name);
   }
+  let optimistic = optimisticCandidate(subject, info, name, entry);
   let answer = await env.transport.send(
     realmURL,
     isWrite(info.base) ? 'POST' : 'QUERY',
     { 'boxel:operations': [entry] },
+    optimistic ? { optimistic } : undefined,
   );
   return valueResult(
     answer['atomic:results']?.[0],
     resultKindOf(info.base),
     name,
   );
+}
+
+// Whether this call is one a transport could apply locally, as far as the call
+// itself can say. See `OptimisticCandidate` for why this is only half the
+// question.
+//
+// `transform` alone. It is the behavior whose work is a program, so a local run
+// and the realm's run are the same function over the same document rather than
+// two implementations that have to be argued into agreement — and it is one of
+// only two the realm will compare a base version for at all. The other,
+// `update`, is a merge whose one implementation lives in the realm's executor;
+// reaching it from here would mean a second copy of that merge, so an update
+// sends pessimistically and behaves exactly as it did before.
+//
+// A batch offers nothing, which is why this is reached only from `invokeOne`:
+// a batch commits several cards under one lock, and a group or a query-defined
+// target names cards the caller may not hold at all.
+function optimisticCandidate(
+  subject: OperationsSubject,
+  info: CarriedOperationInfo,
+  name: string,
+  entry: WireInvocation,
+): OptimisticCandidate | undefined {
+  if (
+    subject.scope !== 'instance' ||
+    subject.family !== 'card' ||
+    info.base !== 'transform' ||
+    // A bare `transform` carries no program, so there would be nothing to run
+    // locally — and a bucket does not offer one, which makes this total rather
+    // than reachable.
+    !info.declared ||
+    info.optimistic === false ||
+    entry.href === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    id: entry.href,
+    name,
+    ...(entry.data ? { params: entry.data } : {}),
+  };
 }
 
 // The payload, as the behavior in hand reads it.
@@ -962,6 +1090,34 @@ export function mintedIdentities(
   return pairs;
 }
 
+// The write result of a batch of exactly one entry, for a reader that holds
+// the answer and not the call that produced it.
+//
+// Exported for the same reason `mintedIdentities` is: a transport reconciling
+// its own optimistic entry has an answer and no handles, and what it needs —
+// the version the card now carries, and whether the realm ran from the base it
+// named — is the write result the caller is about to be handed anyway. Reading
+// it a second time here costs nothing and keeps the reading of the wire in the
+// module that produced it.
+//
+// Answers nothing for anything that is not a lone write result, which includes
+// a `delete`'s `null` and a projection an author's `output` reshaped. A caller
+// that cannot find a result treats the write as unconfirmed, which is the same
+// thing it does with a realm that reports no `baseMatched`.
+export function writeResultIn(
+  answer: OperationsAnswer,
+): OperationWriteResult | undefined {
+  let [result, ...rest] = answer['atomic:results'] ?? [];
+  if (!result || rest.length > 0 || Array.isArray(result)) {
+    return undefined;
+  }
+  let data = (result as { data?: Record<string, unknown> | null }).data;
+  if (!data || typeof data.id !== 'string') {
+    return undefined;
+  }
+  return writeResult(data, 'the batch');
+}
+
 function writeResult(
   data: Record<string, unknown>,
   name: string,
@@ -978,6 +1134,9 @@ function writeResult(
     generation: Number(meta.generation ?? 0),
     lastModified: Number(meta.lastModified ?? 0),
     ...(typeof data.lid === 'string' ? { lid: data.lid } : {}),
+    ...(typeof meta.baseMatched === 'boolean'
+      ? { baseMatched: meta.baseMatched }
+      : {}),
   };
 }
 

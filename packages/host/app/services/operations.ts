@@ -2,29 +2,53 @@ import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
+import {
+  mutateBxlCardSource,
+  mutationSchemaForCardSource,
+} from '@cardstack/bxl/mutation';
+
 import { v4 as uuidv4 } from 'uuid';
 
 import {
+  identifyCard,
+  localId as localIdSymbol,
   mintedIdentities,
   OperationsError,
   rri,
+  stampBaseVersion,
   SupportedMimeType,
+  writeResultIn,
+  type CodeRef,
+  type LooseCardResource,
   type OperationsAnswer,
   type OperationsEnvelope,
   type OperationsMethod,
   type OperationsSearch,
   type OperationsTransport,
+  type OptimisticCandidate,
   type SearchEntries,
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
+import { lowerOperationDeclarations } from '@cardstack/runtime-common/card-operations';
+import type { OperationDefinition } from '@cardstack/runtime-common/card-operations';
+import type { Loader } from '@cardstack/runtime-common/loader';
+
+import { makeDefinitionLookup } from '../lib/definition-lookup';
+import OperationLedger from '../lib/operation-ledger';
 
 import { getSearchEntriesResource } from '../resources/search-entries';
 
 import type CardService from './card-service';
+import type LoaderService from './loader-service';
 import type MatrixService from './matrix-service';
 import type NetworkService from './network';
 import type RealmService from './realm';
 import type StoreService from './store';
+import type { LoweredOperation } from '../lib/operation-ledger';
+
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type * as OperationsAPI from '@cardstack/base/operations';
 
 // ============================================================================
 // The transport a card's operations are carried out over.
@@ -54,10 +78,23 @@ export default class OperationsService
   implements OperationsTransport
 {
   @service declare private cardService: CardService;
+  @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
   @service declare private network: NetworkService;
   @service declare private realm: RealmService;
   @service declare private store: StoreService;
+
+  // Built on first use rather than on construction: a session that never
+  // invokes an optimistic operation never subscribes to the store's reloads.
+  #ledger: OperationLedger | undefined;
+  // One lowering per type per loader. A declaration is fixed for the life of a
+  // loaded module, and the loader is replaced whenever a module changes — so
+  // keying the cache by loader is what retires an entry for a type whose
+  // module was edited, with no invalidation rule of its own.
+  #lowered: WeakMap<
+    Loader,
+    Map<string, Promise<Record<string, OperationDefinition> | undefined>>
+  > = new WeakMap();
 
   constructor(owner: Owner) {
     super(owner);
@@ -138,7 +175,11 @@ export default class OperationsService
     realmURL: string,
     method: OperationsMethod,
     envelope: OperationsEnvelope,
-    opts?: { clientRequestId?: string; adopted?: string[] },
+    opts?: {
+      clientRequestId?: string;
+      adopted?: string[];
+      optimistic?: OptimisticCandidate;
+    },
   ): Promise<OperationsAnswer> {
     this.assertMayWrite(method);
     let headers: Record<string, string> = {
@@ -170,6 +211,24 @@ export default class OperationsService
     this.cardService.clientRequestIds.add(clientRequestId);
     headers['X-Boxel-Client-Request-Id'] = clientRequestId;
 
+    // A call the client core found no structural reason to refuse optimism for
+    // is offered to the ledger, which answers the rest of the question — is
+    // this session holding the card, does the declaration lower, is what it
+    // lowers to deterministic — and carries the send itself when it can. An
+    // answer of nothing means it declined without applying or sending
+    // anything, and the batch goes out below exactly as it would have.
+    if (opts?.optimistic) {
+      let optimistic = await this.ledger().attempt({
+        realmURL,
+        envelope,
+        candidate: opts.optimistic,
+        clientRequestId,
+      });
+      if (optimistic) {
+        return optimistic;
+      }
+    }
+
     // The cards this batch mints that the store is already holding instances
     // of. Their saves and this write are the same card being written, so they
     // queue behind one another: an autosave that starts while the batch is in
@@ -186,6 +245,228 @@ export default class OperationsService
       await this.store.adoptMintedIdentities(mintedIdentities(answer));
       return answer;
     });
+  }
+
+  // ==========================================================================
+  // The optimistic path
+  // ==========================================================================
+
+  private ledger(): OperationLedger {
+    if (!this.#ledger) {
+      let ledger = new OperationLedger({
+        held: (id) => {
+          let instance = this.store.peek(rri(id));
+          // An error placeholder is not a card whose source a program could be
+          // planned against, so it is not one this can apply to.
+          return instance && 'id' in instance
+            ? (instance as CardDef)
+            : undefined;
+        },
+        localId: (instance) => instance[localIdSymbol],
+        lower: (instance, name) => this.loweredOperation(instance, name),
+        applyLocally: (instance, operation, params) =>
+          this.applyOperationLocally(instance, operation, params),
+        reload: (instance) => this.store.reloadForRollback(instance),
+        heldVersion: (instance) => this.store.operationVersionOf(instance),
+        recordVersion: (instance, version) =>
+          this.store.recordOperationVersion(instance, version),
+        withLock: (localId, fn) => this.store.withMutationLocks([localId], fn),
+        send: (realmURL, envelope, clientRequestId) =>
+          this.fetchAnswer(
+            realmURL,
+            {
+              Accept: SupportedMimeType.BoxelOperations,
+              'Content-Type': SupportedMimeType.BoxelOperations,
+              'X-Boxel-Client-Request-Id': clientRequestId,
+            },
+            envelope,
+          ),
+        stamp: stampBaseVersion,
+        writeResult: writeResultIn,
+        onReload: (cb) => this.store.onCardReloaded(cb),
+      });
+      registerDestructor(this, () => ledger.teardown());
+      this.#ledger = ledger;
+    }
+    return this.#ledger;
+  }
+
+  // The operation as the realm stored it, lowered here from the same
+  // declaration by the same function the indexer runs.
+  //
+  // Lowered locally rather than fetched: the class is loaded in this browser,
+  // so the declaration is in hand, and reading the realm's copy would put a
+  // network round trip in front of the path whose whole purpose is to avoid
+  // one. Byte-identical by construction, because it is one function over one
+  // declaration against one definition graph — which is also why the
+  // definition lookup is shared with the indexer rather than written twice.
+  private async loweredOperation(
+    instance: CardDef,
+    name: string,
+  ): Promise<OperationDefinition | undefined> {
+    let operations = await this.loweredOperationsFor(instance);
+    return operations?.[name];
+  }
+
+  private async loweredOperationsFor(
+    instance: CardDef,
+  ): Promise<Record<string, OperationDefinition> | undefined> {
+    let loader = this.loaderService.loader;
+    let codeRef = identifyCard(
+      instance.constructor as typeof CardAPI.BaseDef,
+    ) as CodeRef | undefined;
+    if (!codeRef || !('module' in codeRef) || !('name' in codeRef)) {
+      // A class no module exports cannot be named to the realm either, so
+      // there is no operation here to be optimistic about.
+      return undefined;
+    }
+    let key = `${codeRef.module}/${codeRef.name}`;
+    let byType = this.#lowered.get(loader);
+    if (!byType) {
+      byType = new Map();
+      this.#lowered.set(loader, byType);
+    }
+    let lowered = byType.get(key);
+    if (!lowered) {
+      lowered = this.lowerDeclarations(instance, codeRef, loader);
+      byType.set(key, lowered);
+    }
+    return await lowered;
+  }
+
+  private async lowerDeclarations(
+    instance: CardDef,
+    codeRef: CodeRef,
+    loader: Loader,
+  ): Promise<Record<string, OperationDefinition> | undefined> {
+    try {
+      let api = await this.cardService.getAPI();
+      let operationsApi = await loader.import<typeof OperationsAPI>(
+        '@cardstack/base/operations',
+      );
+      let declared = operationsApi.getDeclaredOperations(
+        instance.constructor as typeof CardAPI.BaseDef,
+      );
+      if (Object.keys(declared).length === 0) {
+        return undefined;
+      }
+      let lookupDefinition = makeDefinitionLookup(
+        api,
+        loader,
+        'optimistic operation lowering',
+      );
+      let definition = await lookupDefinition(codeRef);
+      if (!definition) {
+        return undefined;
+      }
+      let { operations } = await lowerOperationDeclarations(declared, {
+        definition,
+        lookupDefinition,
+        identifyCard: (def) => identifyCard(def) as CodeRef,
+      });
+      return operations;
+    } catch (err: unknown) {
+      // Lowering is how this path decides it *can* be optimistic. A failure
+      // here means it cannot, which the realm is entirely able to cope with —
+      // so it is reported and the write goes out pessimistically.
+      console.debug(
+        `could not lower operations for ${JSON.stringify(codeRef)} locally, so writes to it are sent and awaited`,
+        err,
+      );
+      return undefined;
+    }
+  }
+
+  // Run the operation's program over the card's own stored source and put the
+  // result back on the instance.
+  //
+  // The same function the realm's `transform` executor runs, over the same
+  // document, with the same context — which is what makes "the local result
+  // equals the authoritative result" a property of the arrangement rather than
+  // a claim to be checked. The realm reads the card's stored `.json`; the
+  // serialization here is that document, since it is what a save of this
+  // instance would store.
+  //
+  // What the realm has and this does not is the index overlay it lays *under*
+  // the stored document, which is what lets a program read a computed field or
+  // a linked card's field. No overlay is supplied here, so such a read is
+  // refused by the program rather than answered with a value this client
+  // guessed — and the refusal reaches the ledger as a throw, which sends the
+  // operation pessimistically. Fails closed on purpose: a wrong local value
+  // would be confirmed by `baseMatched` and never corrected.
+  private async applyOperationLocally(
+    instance: CardDef,
+    operation: LoweredOperation,
+    params: Record<string, unknown> | undefined,
+  ): Promise<void> {
+    let program = operation.program;
+    if (!program) {
+      throw new Error('the operation carries no program to run');
+    }
+    if (programNamesRealmConfig(program.source)) {
+      // The realm reads its own config document to answer `realmConfig()`.
+      // Nothing here holds one, and running the program without it would
+      // silently substitute nothing for a value the realm will supply.
+      throw new Error(
+        'the program reads the realm config, which only the realm can supply',
+      );
+    }
+    let codeRef = identifyCard(
+      instance.constructor as typeof CardAPI.BaseDef,
+    ) as CodeRef | undefined;
+    if (!codeRef) {
+      throw new Error('the card names no type to plan the program against');
+    }
+    let api = await this.cardService.getAPI();
+    let lookupDefinition = makeDefinitionLookup(
+      api,
+      this.loaderService.loader,
+      'optimistic operation lowering',
+    );
+    let definition = await lookupDefinition(codeRef);
+    if (!definition) {
+      throw new Error("the card's type has no definition to plan against");
+    }
+    // The card as the realm stores it: its own field values, links as links,
+    // no computed values and no side-loaded graph. The same shape the stored
+    // `.json` holds, which is the document the realm plans against.
+    let doc = await this.cardService.serializeCard(instance, {
+      useAbsoluteURL: true,
+      omitQueryFields: true,
+    });
+    let resource = doc.data as LooseCardResource;
+    let schema = await mutationSchemaForCardSource(
+      definition as unknown as Parameters<
+        typeof mutationSchemaForCardSource
+      >[0],
+      { lookupDefinition: lookupDefinition as never },
+    );
+    let { document } = mutateBxlCardSource(
+      { data: resource } as never,
+      program.source,
+      {
+        schema,
+        syntax: program.syntax,
+        programId: `optimistic:${uuidv4()}`,
+        ...(instance.id ? { targetId: instance.id } : {}),
+        context: {
+          ...(params ? { params } : {}),
+          ...(this.actorForSearch() ? { actor: this.actorForSearch() } : {}),
+          instance: {
+            ...(instance.id ? { id: instance.id } : {}),
+            ...((resource.attributes ?? {}) as Record<string, unknown>),
+          },
+        },
+        // A program naming a card to link to gets the identity back, the same
+        // answer the realm's own planner is given. Whether that card exists is
+        // the realm's to refuse, and it does so on the write.
+        resolveCard: (id: string) => ({ id }),
+      } as never,
+    );
+    await this.store.applyOperationSource(
+      instance,
+      (document as unknown as { data: LooseCardResource }).data,
+    );
   }
 
   private async fetchAnswer(
@@ -262,6 +543,13 @@ async function refusal(response: Response): Promise<Error> {
     ...(typeof error.id === 'string' ? { id: error.id } : {}),
     ...(meta.entry === undefined ? {} : { entry: meta.entry }),
   });
+}
+
+// Whether a program reads the realm's config document. Spelled the same way
+// the realm's own executor asks it, and for the same reason: the name is a
+// builtin, and a program that never mentions it never needs one supplied.
+function programNamesRealmConfig(source: string): boolean {
+  return source.includes('realmConfig');
 }
 
 declare module '@ember/service' {
