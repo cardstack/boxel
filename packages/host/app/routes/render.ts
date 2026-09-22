@@ -727,17 +727,30 @@ export default class RenderRoute extends Route<Model> {
 
     let realmURL = response.headers.get('x-boxel-realm-url')!;
     let lastModified = new Date(response.headers.get('last-modified')!);
-    // Read as text and parsed here rather than through `response.json()`, so the
-    // bytes can be fingerprinted before they become an object. This is the read
-    // the card document is built from, so a hash taken over exactly these bytes
-    // is the one thing that can describe the document the index row will hold.
-    // The card+source route serves a `.json` card's stored bytes verbatim and
-    // the text round-trips UTF-8, so this is the same value
-    // `computeContentHash` gives for the file on disk.
-    let sourceText = await response.text();
-    let sourceContentHash = computeContentHash(sourceText);
-    let doc: LooseSingleCardDocument | CardErrorsJSONAPI =
-      JSON.parse(sourceText);
+    // Taken as bytes and fingerprinted before anything decodes them. This is
+    // the read the card document is built from, so a hash over exactly these
+    // bytes is the one thing that can describe the document the index row will
+    // hold — and the card+source route serves a `.json` card's stored bytes
+    // verbatim, so it is also the value `computeContentHash` gives for the file
+    // on disk.
+    //
+    // Bytes rather than `response.text()`, because the version is compared
+    // against a hash the write path computes from the file's own bytes. A
+    // decode is not the identity: `text()` performs a WHATWG UTF-8 decode,
+    // which strips a leading BOM and replaces malformed sequences, while the
+    // write path's fingerprint is taken over what the file holds. Hashing the
+    // decoded string would give such a card a version that can never match its
+    // own base, so every operation on it would report `baseMatched: false` and
+    // reload — the optimization silently off, for the cards least likely to be
+    // noticed.
+    //
+    // The decode still happens, just downstream and only for the parse, where
+    // dropping a BOM is what `JSON.parse` requires.
+    let sourceBytes = new Uint8Array(await response.arrayBuffer());
+    let sourceContentHash = computeContentHash(sourceBytes);
+    let doc: LooseSingleCardDocument | CardErrorsJSONAPI = JSON.parse(
+      new TextDecoder().decode(sourceBytes),
+    );
     let canonicalId = id.replace(/\.json$/, '');
 
     let state = new TrackedMap<string, unknown>();
