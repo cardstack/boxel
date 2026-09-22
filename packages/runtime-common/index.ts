@@ -299,10 +299,12 @@ export interface BuildModelDiagnostics {
   //   - `clearCache` and `loaderEpoch` are drops. The graph was warm and
   //     this visit threw it away, so the re-fetch and re-evaluation it pays
   //     for is the drop's price and not a property of the card.
-  //   - `coldTab` is not a drop. The tab held no epoch, so this is its
-  //     first epoch-carrying visit and there was no graph to discard; the
-  //     count is the price of the page being new, which the pool decided
-  //     and the pass had no part in.
+  //   - `coldTab` is not a drop. The loader this visit replaced had
+  //     evaluated nothing, so the reset swept an empty graph; the count is
+  //     the price of building a first one, which the pool decided by where
+  //     it ran the pass and the pass had no part in. It does not say the
+  //     page was new — a page can reach this state more than once — only
+  //     that nothing was thrown away to reach it.
   //
   // Absence alongside a large count is neither, and is worth a look: a warm
   // tab that nothing cleared has no accounted reason to evaluate a graph.

@@ -511,8 +511,8 @@ export default class RenderRoute extends Route<Model> {
         this.store.resetCache();
         (globalThis as any).__boxelLoaderEpoch = parsedOptions.loaderEpoch;
         // The two differ in what a reader can do about a large
-        // `moduleEvaluationCount`: a drop is attributable to the pass, a cold
-        // page is the pool handing the pass somewhere new to work.
+        // `moduleEvaluationCount`: a drop is attributable to the pass, while
+        // a page carrying no graph is the pool's choice of where to run it.
         loaderResetReason = evaluatedBeforeReset ? 'loaderEpoch' : 'coldTab';
       }
     }

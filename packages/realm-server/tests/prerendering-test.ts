@@ -625,8 +625,13 @@ module(basename(import.meta.filename), function () {
       // this visit, which has no graph yet. `loaderResetReason` is what
       // separates them, so each of the three states is pinned here.
       //
-      // The module's `afterEach` disposes the affinity, so the first visit
-      // below is guaranteed to land on a page the pool has just created.
+      // The module's `afterEach` disposes the affinity, and the wait below
+      // settles the refill that dispose kicked off. Both are needed: a
+      // `getPage` that finds no standby falls through to the cross-affinity
+      // steal, which hands back another affinity's warm tab and still reports
+      // `reused: false`, so `pool.reused` alone cannot say the page is new and
+      // the first assertion would read a real drop as a cold page.
+      await prerenderer.warmStandbys();
       const cardURL = `${realmURL}1`;
       let visit = (loaderEpoch: string) =>
         prerenderCard(prerenderer, {
@@ -683,6 +688,11 @@ module(basename(import.meta.filename), function () {
       // route. The first epoch-carrying visit onto such a page does discard a
       // graph, and calling that `coldTab` would file a real drop under the one
       // name that tells a reader the pass had no part in it.
+      //
+      // Settles the refill for the same reason as the test above: a stolen
+      // tab arrives warm, so the warming visit would find nothing left to
+      // evaluate and the count assertion below would read zero.
+      await prerenderer.warmStandbys();
       const cardURL = `${realmURL}1`;
       let base = {
         affinityType: 'realm' as const,
