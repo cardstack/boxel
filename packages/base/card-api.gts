@@ -5179,11 +5179,17 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   ) as BaseInstanceType<T>;
 }
 
+// `keepField` names top-level fields whose current value this update leaves
+// in place, whatever the document carries for them. It is read at the moment
+// the values are written, after every field has been deserialized, so a field
+// that becomes one to keep while deserialization is still running is kept too.
+// It applies to this instance only, never to the fields of nested values.
 export async function updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   doc: LooseSingleCardDocument,
   store = getStore(instance),
   opts?: DeserializeOpts,
+  keepField?: (fieldName: string) => boolean,
 ): Promise<BaseInstanceType<T>> {
   stores.set(instance, store);
   if (!instance[relativeTo] && doc.data.id) {
@@ -5208,6 +5214,7 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
     doc,
     store,
     opts,
+    keepField,
   });
 }
 
@@ -5285,12 +5292,14 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   doc,
   store,
   opts,
+  keepField,
 }: {
   instance: BaseInstanceType<T>;
   resource: LooseCardResource;
   doc: LooseSingleCardDocument | CardDocument;
   store: CardStore;
   opts?: DeserializeOpts;
+  keepField?: (fieldName: string) => boolean;
 }): Promise<BaseInstanceType<T>> {
   // because our store uses a tracked map for its identity map all the assembly
   // work that we are doing to deserialize the instance below is "live". so we
@@ -5597,6 +5606,9 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
 
     for (let [field, value] of values) {
       if (!field) {
+        continue;
+      }
+      if (field.name !== 'id' && keepField?.(field.name as string)) {
         continue;
       }
       if (field.name === 'id' && wasSaved && originalId !== value) {

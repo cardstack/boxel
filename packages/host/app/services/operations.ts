@@ -288,6 +288,7 @@ export default class OperationsService
         stamp: stampBaseVersion,
         writeResult: writeResultIn,
         onReload: (cb) => this.store.onCardReloaded(cb),
+        drained: (localId) => this.store.releaseOptimisticFields(localId),
       });
       registerDestructor(this, () => ledger.teardown());
       this.#ledger = ledger;
@@ -516,6 +517,7 @@ export default class OperationsService
     await this.store.applyOperationSource(
       instance,
       (document as unknown as { data: LooseCardResource }).data,
+      resource,
     );
   }
 
