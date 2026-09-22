@@ -4090,7 +4090,11 @@ export default class StoreService extends Service implements StoreInterface {
     } as CardResourceMeta;
   }
 
-  // Re-read a card from its realm, discarding whatever this tab holds for it.
+  // Re-read a card from its realm, discarding whatever this tab holds for it
+  // apart from fields the user has edited that the realm has not yet
+  // acknowledged. An optimistic application is not a user edit, so it is
+  // always discarded; a field the user typed into is newer than what the realm
+  // holds, and its pending autosave carries it (see `#localEdits`).
   //
   // The rollback an optimistic operation takes when the realm reports it ran
   // from a different base. Routed through the same task an index event's
