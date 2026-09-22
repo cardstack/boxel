@@ -26,8 +26,8 @@ export class TextParser extends CardDef {
     parseTask = restartableTask(async () => {
       this.status = 'loading';
       try {
-        let { commandContext } = this.args.context!;
-        let llm = new OneShotLlmRequestCommand(commandContext);
+        let { toolContext } = this.args.context!;
+        let llm = new OneShotLlmRequestCommand(toolContext);
 
         let result = await llm.execute({
           systemPrompt: 'Extract structured fields from the input. Output JSON only.',

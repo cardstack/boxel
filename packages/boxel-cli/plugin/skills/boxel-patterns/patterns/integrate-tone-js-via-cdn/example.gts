@@ -1,12 +1,8 @@
-import {
-  CardDef,
-  Component,
-  field,
-  contains,
-} from '@cardstack/base/card-api';
+import { CardDef, Component, field, contains } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
+import { Button } from '@cardstack/boxel-ui/components';
 
 // 🧩 PATTERN: Tone.js inside a card, loaded once via <script> tag.
 //
@@ -48,8 +44,6 @@ function tone(): any {
 
 export class ChordPlayer extends CardDef {
   static displayName = 'Chord Player';
-
-  @field cardTitle = contains(StringField);
 
   static isolated = class Isolated extends Component<typeof ChordPlayer> {
     @tracked ready = false;
@@ -99,15 +93,27 @@ export class ChordPlayer extends CardDef {
 
     <template>
       <div class='chord-player'>
-        <h1>{{if @model.cardTitle @model.cardTitle 'Chord Player'}}</h1>
+        <h1><@fields.cardTitle /></h1>
 
         {{#if this.error}}
           <p class='error'>{{this.error}}</p>
         {{else if this.ready}}
           <div class='keys'>
-            <button type='button' {{on 'click' this.playC}}>C major</button>
-            <button type='button' {{on 'click' this.playF}}>F major</button>
-            <button type='button' {{on 'click' this.playG}}>G major</button>
+            <Button
+              @size='touch'
+              @rectangular={{true}}
+              {{on 'click' this.playC}}
+            >C major</Button>
+            <Button
+              @size='touch'
+              @rectangular={{true}}
+              {{on 'click' this.playF}}
+            >F major</Button>
+            <Button
+              @size='touch'
+              @rectangular={{true}}
+              {{on 'click' this.playG}}
+            >G major</Button>
           </div>
         {{else}}
           <p>Loading Tone.js…</p>
@@ -126,16 +132,8 @@ export class ChordPlayer extends CardDef {
           display: flex;
           gap: 0.75rem;
         }
-        button {
-          padding: 0.75rem 1.25rem;
-          border-radius: 8px;
-          border: 1px solid var(--border, #ccc);
-          background: var(--card, white);
-          cursor: pointer;
-          font-size: 1rem;
-        }
         .error {
-          color: crimson;
+          color: var(--destructive-ink);
         }
       </style>
     </template>

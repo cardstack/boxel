@@ -313,8 +313,6 @@ class PdfAnnotationIsolated extends Component<typeof PdfAnnotationCard> {
         display: grid;
         gap: 1rem;
         padding: 1rem;
-        background: var(--background, #f8fafc);
-        color: var(--foreground, #111827);
       }
 
       header {
@@ -338,7 +336,6 @@ class PdfAnnotationIsolated extends Component<typeof PdfAnnotationCard> {
         position: relative;
         max-width: 100%;
         overflow: auto;
-        background: white;
         box-shadow: 0 1px 8px rgb(15 23 42 / 0.16);
       }
 
@@ -349,11 +346,11 @@ class PdfAnnotationIsolated extends Component<typeof PdfAnnotationCard> {
       .empty,
       .error {
         margin: 0;
-        color: var(--muted-foreground, #6b7280);
+        color: var(--muted-foreground);
       }
 
       .error {
-        color: var(--destructive, #b91c1c);
+        color: var(--destructive-ink);
       }
     </style>
   </template>

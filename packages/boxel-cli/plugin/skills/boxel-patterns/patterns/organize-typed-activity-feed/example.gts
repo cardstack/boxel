@@ -113,16 +113,16 @@ export class FeedEntry extends CardDef {
         .feed-isolated { padding: 1.25rem; }
         .feed-header { display: flex; justify-content: space-between; align-items: start; gap: 1rem; margin-bottom: 1rem; }
         .header-meta { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; }
-        .time-ago { color: var(--muted-foreground, var(--boxel-600)); }
+        .time-ago { color: var(--muted-foreground); }
         .ai-badge {
           font-size: 0.6875rem; font-weight: 600;
-          padding: 0.125rem 0.375rem; border-radius: 999px;
-          background: var(--primary, var(--boxel-purple-100));
-          color: var(--primary-foreground, var(--boxel-purple-900));
+          padding: 0.125rem 0.375rem; border-radius: var(--boxel-border-radius-pill);
+          background-color: var(--primary);
+          color: var(--primary-foreground);
         }
         .header-people { display: flex; gap: 0.5rem; }
         .person-card { display: flex; flex-direction: column; gap: 0.25rem; }
-        .person-label { font-size: 0.75rem; color: var(--muted-foreground, var(--boxel-600)); }
+        .person-label { font-size: 0.75rem; color: var(--muted-foreground); }
         .ai-detail { margin-top: 0.5rem; }
       </style>
     </template>
@@ -156,12 +156,12 @@ export class AcademicEntry extends FeedEntry {
       </article>
 
       <style scoped>
-        .feed-embedded { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border, var(--boxel-200)); }
+        .feed-embedded { padding: 0.75rem 1rem; }
         .row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
         .kind { font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; }
-        .time-ago { font-size: 0.75rem; color: var(--muted-foreground, var(--boxel-600)); margin-left: auto; }
-        .chip { padding: 0.125rem 0.5rem; border-radius: 999px; font-size: 0.75rem; background: var(--boxel-100); }
-        .chip.understanding { background: var(--primary, var(--boxel-purple-100)); color: var(--primary-foreground, var(--boxel-purple-900)); }
+        .time-ago { font-size: 0.75rem; color: var(--muted-foreground); margin-left: auto; }
+        .chip { padding: 0.125rem 0.5rem; border-radius: var(--boxel-border-radius-pill); font-size: 0.75rem; background-color: var(--muted); }
+        .chip.understanding { background-color: var(--primary); color: var(--primary-foreground); }
         .chip.score { font-variant-numeric: tabular-nums; }
       </style>
     </template>
@@ -194,14 +194,14 @@ export class BehavioralEntry extends FeedEntry {
       </article>
 
       <style scoped>
-        .feed-embedded { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border, var(--boxel-200)); }
+        .feed-embedded { padding: 0.75rem 1rem; }
         .row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
         .kind { font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; }
-        .time-ago { font-size: 0.75rem; color: var(--muted-foreground, var(--boxel-600)); margin-left: auto; }
-        .chip { padding: 0.125rem 0.5rem; border-radius: 999px; font-size: 0.75rem; background: var(--boxel-100); }
-        .chip.behavior { background: var(--surface-2, var(--boxel-200)); }
+        .time-ago { font-size: 0.75rem; color: var(--muted-foreground); margin-left: auto; }
+        .chip { padding: 0.125rem 0.5rem; border-radius: var(--boxel-border-radius-pill); font-size: 0.75rem; background-color: var(--muted); }
+        .chip.behavior { background-color: var(--accent); color: var(--accent-foreground); }
         .chip.score { font-variant-numeric: tabular-nums; }
-        .intervention { margin-top: 0.5rem; font-size: 0.875rem; color: var(--muted-foreground, var(--boxel-600)); }
+        .intervention { margin-top: 0.5rem; font-size: 0.875rem; color: var(--muted-foreground); }
       </style>
     </template>
   };

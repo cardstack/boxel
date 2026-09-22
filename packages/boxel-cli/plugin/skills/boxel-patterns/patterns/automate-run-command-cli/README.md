@@ -12,7 +12,7 @@ validated: source-proven
 - CI gates — a deploy script checks an exit code or parses the JSON output.
 - One-off realm migrations after a schema change (see `boxel-migrate-schema`).
 
-**The insight:** A Command class is already a typed function (`Input → Output`) with `commandContext` access to host primitives. The CLI loads the module, instantiates the Command with a synthetic `commandContext`, builds the input card from `--input`, runs it, and prints the output as JSON. No re-implementation needed; the same Command works from a card menu, a Glimmer component, and the shell.
+**The insight:** A Command class is already a typed function (`Input → Output`) with `toolContext` access to host primitives. The CLI loads the module, instantiates the Command with a synthetic `toolContext`, builds the input card from `--input`, runs it, and prints the output as JSON. No re-implementation needed; the same Command works from a card menu, a Glimmer component, and the shell.
 
 ## Invocation shape
 
@@ -52,7 +52,7 @@ export class ReindexCommand extends Command<
 
   protected async run(input: ReindexInput): Promise<ReindexOutput> {
     const output = new ReindexOutput();
-    // ... do the work via this.commandContext ...
+    // ... do the work via this.toolContext ...
     return output;
   }
 }
@@ -65,14 +65,14 @@ For history-on-write, link the Command output to a Run CardDef that captures sta
 ## Conventions
 
 - **`getInputType()` is required.** The CLI uses it to instantiate the input class from the `--input` JSON. Fields not on the class are dropped silently — keep the input shape narrow.
-- **Use `this.commandContext` for IO.** `SendRequestViaProxyCommand`, `SaveCardCommand`, `SearchCardsByQueryCommand`, etc. — same primitives as in-app, no host UI assumed.
+- **Use `this.toolContext` for IO.** `SendRequestViaProxyCommand`, `SaveCardCommand`, `SearchCardsByQueryCommand`, etc. — same primitives as in-app, no host UI assumed.
 - **Decide the error convention up front.** Most commands prefer to set `output.success = 'false'` and exit 0 so the JSON parses cleanly — useful when the caller is another script. Throw for genuinely exceptional cases when you want a non-zero exit (cron alerting).
 - **Static `description` is exposed to `--help`.** Write it for the operator who is reading the shell help text, not the developer.
 
 ## Gotchas
 
 - **Module URLs must be reachable from the CLI host.** Local realms behind auth need credentials configured in `~/.config/boxel-cli` or via `BOXEL_TOKEN`.
-- **`commandContext` from the CLI lacks browser features.** Anything that calls `document` or `window` will fail. Keep `run()` server-friendly.
+- **`toolContext` from the CLI lacks browser features.** Anything that calls `document` or `window` will fail. Keep `run()` server-friendly.
 - **Output cards are NOT auto-saved.** Returning a new `ReindexOutput()` prints its serialized JSON; if you want the run history in the realm, call `SaveCardCommand` explicitly.
 
 ## Source

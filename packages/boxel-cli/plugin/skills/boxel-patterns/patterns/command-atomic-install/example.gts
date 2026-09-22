@@ -60,7 +60,7 @@ export default class InstallListingCommand extends Command<typeof InstallInput, 
 
     // (3) Execute atomically.
     log.info(`Plan has ${plan.size} operations`);
-    const result = await new ExecuteAtomicOperationsCommand(this.commandContext)
+    const result = await new ExecuteAtomicOperationsCommand(this.toolContext)
       .execute(plan.build());
 
     log.info(`Install complete: ${result.applied?.length ?? 0} ops applied`);
