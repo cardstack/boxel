@@ -1,6 +1,7 @@
 import type { Ignore } from 'ignore';
 
 import {
+  cardSourceForVisit,
   flattenPrerenderMeta,
   hasExecutableExtension,
   isCardResource,
@@ -247,6 +248,17 @@ export async function renderFileForIndexing({
     }
   }
 
+  // The bytes read above, carried into the visit so the render's card branch
+  // builds its model from them instead of fetching the instance's source for
+  // itself. Both visits below get it: each one enters the render route on its
+  // own transition and would otherwise read the file again.
+  let cardSource = cardSourceForVisit({
+    source: content,
+    realmURL: realmURL.href,
+    lastModified,
+    isCardInstance: Boolean(parsedCardResource),
+  });
+
   let visitArgs = {
     affinityType: 'realm' as const,
     affinityValue: realmURL.href,
@@ -254,6 +266,7 @@ export async function renderFileForIndexing({
     url: fileURL,
     auth,
     batchId,
+    ...(cardSource ? { cardSource } : {}),
     ...(jobInfo
       ? { renderScope: renderScopeFor(realmURL.href, jobInfo.jobId) }
       : {}),

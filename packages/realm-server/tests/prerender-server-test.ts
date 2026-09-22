@@ -15,7 +15,11 @@ import {
   createPrerenderHttpServer,
 } from '../prerender/prerender-app.ts';
 import type { Prerenderer } from '../prerender/index.ts';
-import { baseCardRef, rri } from '@cardstack/runtime-common';
+import {
+  baseCardRef,
+  MAX_STASHED_CARD_SOURCE_LENGTH,
+  rri,
+} from '@cardstack/runtime-common';
 import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
@@ -243,6 +247,77 @@ module(basename(import.meta.filename), function () {
               captured.attrs[0]?.renderScope,
               undefined,
               `${JSON.stringify(scope)} is not forwarded as a scope`,
+            );
+          } finally {
+            prerenderer.prerenderVisit = original;
+          }
+        }
+      });
+
+      test('a cardSource on the request reaches the prerenderer', async function (assert) {
+        let captured: { attrs: any[] } = { attrs: [] };
+        let original = prerenderer.prerenderVisit;
+        prerenderer.prerenderVisit = stubVisit(captured) as any;
+        try {
+          let cardSource = {
+            source: '{"data":{"attributes":{"name":"Sequoia"}}}',
+            realmURL: realmURL.href,
+            lastModified: 1767322445000,
+          };
+          let res = await postVisit({ cardSource });
+          assert.strictEqual(res.status, 201, 'HTTP 201');
+          assert.deepEqual(
+            captured.attrs[0]?.cardSource,
+            cardSource,
+            'the source off the request body is forwarded to the visit',
+          );
+        } finally {
+          prerenderer.prerenderVisit = original;
+        }
+      });
+
+      test('an unusable cardSource is dropped rather than rejecting the visit', async function (assert) {
+        // Dropping leaves the render to fetch the card's source for itself,
+        // which is the path this whole mechanism optimizes away and so is
+        // always safe. Rejecting would fail a render over an optimization.
+        //
+        // The three fields are required together — the card branch has no other
+        // source for the realm URL or the modified time — and the payload is
+        // size-bounded here as well as at the producer, because this is where
+        // the bytes arrive and where they are handed to a CDP message.
+        let original = prerenderer.prerenderVisit;
+        let valid = {
+          source: '{"data":{"attributes":{"name":"Sequoia"}}}',
+          realmURL: realmURL.href,
+          lastModified: 1767322445000,
+        };
+        let cases: [string, unknown][] = [
+          ['not an object', 'a string'],
+          ['an array', []],
+          ['missing source', { ...valid, source: undefined }],
+          ['missing realmURL', { ...valid, realmURL: undefined }],
+          ['empty realmURL', { ...valid, realmURL: '' }],
+          ['missing lastModified', { ...valid, lastModified: undefined }],
+          ['non-numeric lastModified', { ...valid, lastModified: 'nope' }],
+          ['non-finite lastModified', { ...valid, lastModified: null }],
+          [
+            'over the size cap',
+            {
+              ...valid,
+              source: 'x'.repeat(MAX_STASHED_CARD_SOURCE_LENGTH + 1),
+            },
+          ],
+        ];
+        for (let [label, cardSource] of cases) {
+          let captured: { attrs: any[] } = { attrs: [] };
+          prerenderer.prerenderVisit = stubVisit(captured) as any;
+          try {
+            let res = await postVisit({ cardSource });
+            assert.strictEqual(res.status, 201, `HTTP 201 for ${label}`);
+            assert.strictEqual(
+              captured.attrs[0]?.cardSource,
+              undefined,
+              `${label} is not forwarded`,
             );
           } finally {
             prerenderer.prerenderVisit = original;

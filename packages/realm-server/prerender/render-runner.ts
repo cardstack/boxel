@@ -582,6 +582,15 @@ export class RenderRunner {
       await abortable(signal, () =>
         page.evaluate((sessionAuth) => {
           localStorage.setItem('boxel-session', sessionAuth);
+          // A capture renders through the same card branch as a visit, on a
+          // tab drawn from the same affinity queue — and it names the card a
+          // visit's stash would name, so the route's URL check cannot tell a
+          // leftover apart from a stash meant for this render. Clear both
+          // stashes here for the same reason a visit clears them at its start:
+          // this render reads current bytes, never what some earlier visit
+          // read.
+          delete (globalThis as any).__boxelFileRenderData;
+          delete (globalThis as any).__boxelCardRenderData;
         }, auth),
       );
 
@@ -887,6 +896,7 @@ export class RenderRunner {
     jobId,
     screenshots,
     renderScope,
+    cardSource,
     signal,
     onTabAcquired,
   }: PrerenderVisitArgs & {
@@ -958,6 +968,7 @@ export class RenderRunner {
     let response: RenderVisitResponse = {};
     let baseOptions: RenderRouteOptions = { ...(renderOptions ?? {}) };
     let didStashFileRenderData = false;
+    let didStashCardRenderData = false;
     // Per-format wall-clock of the html-route steps, recorded directly onto
     // `response.meta.diagnostics.renderFormatsMs` as each step completes so
     // every return path — including the early short-circuits — carries
@@ -1077,12 +1088,16 @@ export class RenderRunner {
           `visit prerender url=${url} affinity=${affinityKey} fusing fileExtract into render.meta`,
         );
       }
-      // defense-in-depth: clear any stale file render data left on globalThis
-      // from a prior visit before we start running passes.
+      // defense-in-depth: clear any stale render data left on globalThis from a
+      // prior visit before we start running passes. The card stash is also
+      // keyed on its URL and checked by the route, so a survivor is inert
+      // rather than wrong; this keeps one visit's bytes from outliving it on a
+      // shared tab regardless.
       await abortable(signal, () =>
         page
           .evaluate(() => {
             delete (globalThis as any).__boxelFileRenderData;
+            delete (globalThis as any).__boxelCardRenderData;
           })
           .catch(() => {
             /* best-effort */
@@ -1299,6 +1314,27 @@ export class RenderRunner {
       // ── cardRender pass ────────────────────────────────────────────────
       throwIfAborted(signal, 'rendering');
       if (requested.cardRender) {
+        // Stash the card's stored source for the render route's model hook,
+        // the way the fileRender pass below stashes its file data. A caller
+        // that already read these bytes sends them along, and the card branch
+        // builds its model from them instead of fetching the instance's source
+        // back out of the realm — a round-trip that crosses the public balancer
+        // from here. The visit's URL rides along so the route can confirm the
+        // stash names the card it is rendering: a tab serves many cards, and a
+        // mismatch has to fall back to the fetch rather than render another
+        // card's document. No stash means the route fetches, which is how an
+        // on-demand render of a live card still works.
+        if (cardSource) {
+          await abortable(signal, () =>
+            page.evaluate(
+              (data) => {
+                (globalThis as any).__boxelCardRenderData = data;
+              },
+              { ...cardSource, url },
+            ),
+          );
+          didStashCardRenderData = true;
+        }
         let cardOptions = optionsForPass(
           fusedIndexPass ? 'fusedIndex' : 'cardRender',
         );
@@ -2168,7 +2204,7 @@ export class RenderRunner {
         poolInfo,
       );
     } finally {
-      if (didStashFileRenderData) {
+      if (didStashFileRenderData || didStashCardRenderData) {
         // The stash only matters to a page that will render again, and
         // against a wedged page this evaluate can hang until the
         // protocol timeout — so race it against the signal and swallow
@@ -2180,6 +2216,7 @@ export class RenderRunner {
           page
             .evaluate(() => {
               delete (globalThis as any).__boxelFileRenderData;
+              delete (globalThis as any).__boxelCardRenderData;
             })
             .catch(() => {
               /* best-effort cleanup */
