@@ -758,6 +758,20 @@ module('Integration | realm', function (hooks) {
     let id = json.data.id.split('/').pop()!;
     let petCreatedAt = await getFileCreatedAt(realm, `Pet/${id}.json`);
     assert.ok(uuidValidate(id), 'card ID is a UUID');
+    // A write response reports the stored file's `version`, a hash of the bytes
+    // the commit wrote. Asserted well-formed and then dropped before the
+    // structural comparison, the way `generation` is: this adapter keeps its
+    // files in memory and does not hand the stored bytes back verbatim, so
+    // recomputing the hash here would compare against a re-serialization rather
+    // than against what was stored. That the reported version agrees with the
+    // bytes on disk is pinned where real files exist, in the realm-server card
+    // endpoint tests, for both a create and a patch.
+    assert.strictEqual(
+      typeof json.data.meta.version,
+      'string',
+      'the write response carries the stored file version',
+    );
+    delete json.data.meta.version;
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -1089,6 +1103,12 @@ module('Integration | realm', function (hooks) {
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
+    assert.strictEqual(
+      typeof json.data.meta.version,
+      'string',
+      'the write response carries the stored file version',
+    );
+    delete json.data.meta.version;
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -1264,6 +1284,12 @@ module('Integration | realm', function (hooks) {
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
+    assert.strictEqual(
+      typeof json.data.meta.version,
+      'string',
+      'the write response carries the stored file version',
+    );
+    delete json.data.meta.version;
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -1419,6 +1445,12 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
 
+    assert.strictEqual(
+      typeof json.data.meta.version,
+      'string',
+      'the write response carries the stored file version',
+    );
+    delete json.data.meta.version;
     assert.deepEqual(json.data, {
       type: 'card',
       id: `${testRealmURL}jackie`,
@@ -1531,6 +1563,12 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
 
+    assert.strictEqual(
+      typeof json.data.meta.version,
+      'string',
+      'the write response carries the stored file version',
+    );
+    delete json.data.meta.version;
     assert.deepEqual(json.data, {
       type: 'card',
       id: `${testRealmURL}jackie`,
@@ -1750,6 +1788,12 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
 
+    assert.strictEqual(
+      typeof json.data.meta.version,
+      'string',
+      'the write response carries the stored file version',
+    );
+    delete json.data.meta.version;
     assert.deepEqual(json.data, {
       type: 'card',
       id: `${testRealmURL}jackie`,
@@ -1875,6 +1919,12 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
 
+    assert.strictEqual(
+      typeof json.data.meta.version,
+      'string',
+      'the write response carries the stored file version',
+    );
+    delete json.data.meta.version;
     assert.deepEqual(json.data, {
       type: 'card',
       id: `${testRealmURL}jackie`,
@@ -2013,6 +2063,12 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
 
+    assert.strictEqual(
+      typeof json.data.meta.version,
+      'string',
+      'the write response carries the stored file version',
+    );
+    delete json.data.meta.version;
     assert.deepEqual(json.data, {
       type: 'card',
       id: `${testRealmURL}jackie`,
@@ -2139,6 +2195,12 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
     let mangoCreatedAt = await getFileCreatedAt(realm, 'dir/mango.json');
+    assert.strictEqual(
+      typeof json.data.meta.version,
+      'string',
+      'the write response carries the stored file version',
+    );
+    delete json.data.meta.version;
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -2293,6 +2355,12 @@ module('Integration | realm', function (hooks) {
 
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
+    assert.strictEqual(
+      typeof json.data.meta.version,
+      'string',
+      'the write response carries the stored file version',
+    );
+    delete json.data.meta.version;
     assert.deepEqual(json, {
       data: {
         type: 'card',

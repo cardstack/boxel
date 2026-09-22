@@ -727,13 +727,32 @@ export async function stageUpdate(
   //
   // Realm-managed keys never come from a patch: `realmInfo` and `realmURL` are
   // stamped by the realm serving the card, `screenshots` is joined from the
-  // prerendered manifest at serve time, and `type` is fixed by the document
-  // shape. A client echoing back what it was served must not persist any of
-  // them into the source file.
+  // prerendered manifest at serve time, `version` / `lastModified` /
+  // `resourceCreatedAt` describe the stored file and are reported on a write
+  // response, and `type` is fixed by the document shape. A client echoing back
+  // what it was served must not persist any of them into the source file.
+  //
+  // Dropped here and not only where the bytes are serialized, because these run
+  // ahead of the unchanged-patch comparison below, and a key that survives the
+  // merge sends an otherwise no-op patch down the re-serializing arm.
+  //
+  // What that costs depends on the card. Where the stored bytes already are
+  // what re-serialization produces, nothing observable follows: the serializer
+  // drops these keys before it stringifies, so the arm produces the bytes the
+  // file already holds and the commit's own content comparison leaves the file,
+  // its modification time and `changed` alone. Where the stored bytes are *not*
+  // canonical — a hand-authored fixture, or bytes an older serializer wrote —
+  // the arm canonicalizes them, which rewrites the file and moves its
+  // modification time for a request that changed nothing. It also spends a
+  // serialization that resolves the card's definition, and that can fail
+  // outright on a card the realm cannot currently type.
   delete (patch as { type?: unknown }).type;
   delete patch.meta.realmInfo;
   delete patch.meta.realmURL;
   delete patch.meta.screenshots;
+  delete patch.meta.version;
+  delete patch.meta.lastModified;
+  delete patch.meta.resourceCreatedAt;
 
   promoteStagedLinks(patch, ctx);
 
