@@ -1091,9 +1091,13 @@ export class RenderRunner {
 
       // Serialized options carry the pass flags into the route — the host
       // render/module routes consume these to decide which mode to run. The
-      // first pass in the visit keeps any clearCache flag; subsequent passes
-      // must not attempt another loader reset, so we strip it after first use.
+      // first pass in the visit keeps any clearCache / resetStore flag;
+      // subsequent passes must not reset anything, so both are stripped after
+      // first use. A later pass in the same visit renders against what the
+      // earlier ones loaded, so a second reset would discard the visit's own
+      // work rather than a previous pass's.
       let clearCacheConsumed = false;
+      let resetStoreConsumed = false;
       let optionsForPass = (
         pass: 'fileExtract' | 'cardRender' | 'fileRender' | 'fusedIndex',
       ) => {
@@ -1115,6 +1119,12 @@ export class RenderRunner {
           clearCacheConsumed = true;
         } else {
           delete optionsForThisPass.clearCache;
+        }
+        if (!resetStoreConsumed && baseOptions.resetStore) {
+          optionsForThisPass.resetStore = true;
+          resetStoreConsumed = true;
+        } else {
+          delete optionsForThisPass.resetStore;
         }
         // Clean undefined keys so serializeRenderRouteOptions stays stable.
         for (let k of Object.keys(

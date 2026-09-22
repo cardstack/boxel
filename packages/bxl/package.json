@@ -1,6 +1,6 @@
 {
   "name": "@cardstack/bxl",
-  "version": "0.7.0-unstable.8",
+  "version": "0.7.0-unstable.9",
   "description": "Boxel Expression Language: readable syntax, linter, formatter, and sandboxed evaluator that compiles to canonical jq.",
   "keywords": [
     "bxl",
@@ -36,6 +36,7 @@
     "./runtime": "./src/runtime.ts",
     "./runtime-bare": "./src/runtime-bare.ts",
     "./syntax/textmate": "./src/bxl/syntax/bxl.tmLanguage.json",
+    "./transform": "./src/transform.ts",
     "./*": "./src/*.ts"
   },
   "files": [
@@ -61,6 +62,7 @@
       "./runtime": "./dist/runtime.js",
       "./runtime-bare": "./dist/runtime-bare.js",
       "./syntax/textmate": "./dist/bxl/syntax/bxl.tmLanguage.json",
+      "./transform": "./dist/transform.js",
       "./*": "./dist/*.js"
     },
     "provenance": true

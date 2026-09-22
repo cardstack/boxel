@@ -6,6 +6,7 @@ import {
   jobIdentity,
   trimExecutableExtension,
   hasExecutableExtension,
+  passInvalidatesExecutables,
   RealmPaths,
   unixTime,
   logger,
@@ -520,8 +521,8 @@ export class Batch {
       !this.#hasExecutableInvalidation &&
       this.#invalidations.size !== this.#scannedInvalidationCount
     ) {
-      this.#hasExecutableInvalidation = [...this.#invalidations].some((url) =>
-        hasExecutableExtension(url),
+      this.#hasExecutableInvalidation = passInvalidatesExecutables(
+        this.#invalidations,
       );
       this.#scannedInvalidationCount = this.#invalidations.size;
     }
@@ -539,9 +540,7 @@ export class Batch {
   // and disagree with the epoch the pass ultimately commits.
   noteInvalidatedURLs(urls: string[]): void {
     if (!this.#hasExecutableInvalidation) {
-      this.#hasExecutableInvalidation = urls.some((url) =>
-        hasExecutableExtension(url),
-      );
+      this.#hasExecutableInvalidation = passInvalidatesExecutables(urls);
     }
   }
 

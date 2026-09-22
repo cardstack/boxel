@@ -9,6 +9,7 @@ import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RenderRouteOptions } from './render-route-options.ts';
 import type { Definition } from './definitions.ts';
+import type { OperationsTransport } from './card-operations/client.ts';
 import type { OperationLoweringIssue } from './card-operations/types.ts';
 import type {
   CaptureContentType,
@@ -290,6 +291,14 @@ export interface BuildModelDiagnostics {
   // earlier card in the same job rather than not happening.
   moduleEvaluationCount?: number;
   moduleEvaluationTotalMs?: number;
+  // Present only when this visit dropped the tab's loader before building
+  // the model, naming which of the two synchronizations did it. A drop
+  // makes a nonzero `moduleEvaluationCount` expected rather than
+  // surprising: the graph was warm and this visit threw it away, so the
+  // re-fetch and re-evaluation it pays for is the drop's price and not a
+  // property of the card. Its absence alongside a large count is the
+  // reading that says the tab had never evaluated the graph at all.
+  loaderResetReason?: 'clearCache' | 'loaderEpoch';
   // Per-field hydration wall-clock, keyed by dotted field path from the
   // card's root — the deserialization sibling of `searchDocFieldsMs`, and
   // the breakdown of `buildModelMs.hydrate`. Same bounding, so a cheap card
@@ -1638,6 +1647,13 @@ export * from './definition-lookup.ts';
 export * from './loader-epoch.ts';
 export * from './definitions.ts';
 export type { JsonValue } from './json-validation.ts';
+// The client side of the envelope — the bucket a caller invokes through, the
+// batch builder, and the transport interface the host implements. Exported
+// from the barrel rather than from the `card-operations` entry because a card
+// module is one of its callers and the barrel is what a card module can
+// import; it reaches neither bxl nor a realm, so nothing here costs a consumer
+// the typecheck program the note below is about.
+export * from './card-operations/client.ts';
 // Only the lowered *shapes*, not the pass that produces them: lowering reaches
 // `@cardstack/bxl` for the program canonicalizer, and a barrel re-export would
 // pull bxl's sources into the typecheck program of every package that imports
@@ -2116,6 +2132,30 @@ export interface CardCreator {
   ): Promise<string>;
 }
 
+// The transport an operation is carried out over, as a card module reaches it.
+//
+// A card declares and invokes its operations from `@cardstack/base/operations`,
+// which loads inside a card module — where there is no service to inject and no
+// fetch that carries the caller's session. So the host registers the one
+// implementation here on the way up, the same way it registers the realm
+// subscription and the choosers above it, and a call reads it back through this
+// function.
+//
+// In node there is nothing to register: an operation invoked from a card is a
+// request from a session, and the realm carries out a batch it is sent rather
+// than one it sends itself. So this refuses outright rather than no-opping —
+// there is no partial behavior to fall back to, and a silent no-op would turn a
+// write nobody performed into a call that appeared to succeed.
+export function getOperationsTransport(): OperationsTransport {
+  let here = globalThis as any;
+  if (!here._CARDSTACK_OPERATIONS_TRANSPORT) {
+    throw new Error(
+      `no operations transport is available in this environment: an operation is carried out over its realm's HTTP endpoint, which the host supplies`,
+    );
+  }
+  return here._CARDSTACK_OPERATIONS_TRANSPORT as OperationsTransport;
+}
+
 export interface RealmSubscribe {
   subscribe(realmURL: string, cb: (ev: RealmEventContent) => void): () => void;
 }
@@ -2150,6 +2190,37 @@ export interface SearchQuery {
 export interface CopyCardsWithCodeRef {
   sourceCard: CardDef;
   codeRef?: ResolvedCodeRef; // if provided the card will point to a new code ref
+}
+
+// Whether a pass over `urls` has to ask the prerender tab it lands on to drop
+// its loader. Only a change to an executable can make an evaluated module
+// graph describe something other than what is on disk, so only an executable
+// in the set answers yes.
+//
+// The tab-local drop is not the whole of the mechanism, and is not what makes
+// a module change safe: the realm's loader epoch is re-minted by the same
+// condition and threaded on every render, which resets every tab holding a
+// superseded graph rather than only the one this pass's first visit reaches.
+// This stays as the reset for that one tab. Both readers call this same
+// predicate — `IndexWriter` to decide whether to mint, `IndexRunner` to decide
+// whether to arm — so the two cannot disagree about whether the pass changed a
+// module, and a change to what counts as executable moves both at once.
+//
+// The epoch is per realm and a tab's evaluated graph is not: a tab affine to
+// one realm holds the base realm's modules too, and a base-realm write moves
+// only the base realm's epoch. What covers that is the deploy, not indexing.
+// A deployed realm's base modules only change by releasing, the prerender
+// fleet recycles its browsers whenever the host-shell token changes, and that
+// token is the digest of the host's `index.html`, which carries the build's
+// own version — so no release leaves a tab holding modules from the one
+// before it.
+export function passInvalidatesExecutables(urls: Iterable<string>): boolean {
+  for (let url of urls) {
+    if (hasExecutableExtension(url)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function hasExecutableExtension(path: string): boolean {

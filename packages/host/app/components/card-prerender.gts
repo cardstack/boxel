@@ -77,6 +77,7 @@ export default class CardPrerender extends Component {
   @service declare private loaderService: LoaderService;
   #nonce = 0;
   #shouldClearCacheForNextRender = true;
+  #shouldResetStoreForNextRender = true;
   #prerendererDelegate!: Prerenderer;
   #cardTypeTracker = new RenderCardTypeTracker();
   #currentContext: CardRenderContext | undefined;
@@ -231,6 +232,9 @@ export default class CardPrerender extends Component {
       let shouldClearCache = this.#consumeClearCacheForRender(
         Boolean(renderOptions?.clearCache),
       );
+      let shouldResetStore = this.#consumeResetStoreForRender(
+        Boolean(renderOptions?.resetStore),
+      );
       let baseOptions: RenderRouteOptions = { ...(renderOptions ?? {}) };
       let runIndexSteps = visitType !== 'prerender-html';
       let runHtmlSteps = visitType !== 'index';
@@ -256,8 +260,30 @@ export default class CardPrerender extends Component {
           reason: 'card-prerender visit clearCache',
         });
         this.store.resetCache();
+      } else if (shouldResetStore) {
+        // Only when the clear above did not already do it. This is the drop
+        // that keeps one index pass from being handed the instances, cached
+        // documents and local-id pairings of the last one: nothing tags an
+        // in-browser visit with a render scope, so the store cannot observe
+        // the job boundary on its own here.
+        //
+        // The loader goes with it, which is what the out-of-process driver
+        // does NOT do. There an index pass owns its tab, so its loader holds
+        // nothing but what indexing put there, and a pass that changed no
+        // module has no reason to drop it. Here one `loader-service` is shared
+        // with the application being rendered, so the same loader backs both
+        // the pass and the app's own store — and the app drops its references
+        // in response to the loader being replaced. Separating the two would
+        // leave the app holding instances resolved against a graph the pass
+        // has moved on from.
+        this.loaderService.resetLoader({
+          clearFetchCache: true,
+          reason: 'card-prerender visit resetStore',
+        });
+        this.store.resetCache();
       }
       let clearCacheConsumed = !shouldClearCache;
+      let resetStoreConsumed = !shouldResetStore;
       let optionsForPass = (
         pass: 'fileExtract' | 'cardRender' | 'fileRender' | 'fusedIndex',
       ): RenderRouteOptions => {
@@ -277,6 +303,12 @@ export default class CardPrerender extends Component {
           clearCacheConsumed = true;
         } else {
           delete out.clearCache;
+        }
+        if (!resetStoreConsumed) {
+          out.resetStore = true;
+          resetStoreConsumed = true;
+        } else {
+          delete out.resetStore;
         }
         for (let key of Object.keys(out) as (keyof RenderRouteOptions)[]) {
           if (out[key] === undefined) {
@@ -888,6 +920,20 @@ export default class CardPrerender extends Component {
       return false;
     }
     this.#shouldClearCacheForNextRender = false;
+    return true;
+  }
+
+  // The store half, consumed the same way. An index pass asks for it on every
+  // pass rather than only when it changed a module, so what the caller
+  // requests is what decides it after this component's own first visit.
+  #consumeResetStoreForRender(requestedReset = false): boolean {
+    if (requestedReset) {
+      this.#shouldResetStoreForNextRender = true;
+    }
+    if (!this.#shouldResetStoreForNextRender) {
+      return false;
+    }
+    this.#shouldResetStoreForNextRender = false;
     return true;
   }
 

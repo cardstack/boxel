@@ -25,6 +25,7 @@ import type {
 import type { RealmHttpServer as Server } from '../../server.ts';
 import {
   createJWT,
+  realmConfigCardJSON,
   setupMatrixRoom,
   setupPermissionedRealmCached,
   waitUntil,
@@ -66,9 +67,29 @@ function envelope(...operations: unknown[]) {
 
 function invoke(
   name: string,
-  rest: { href?: string; data?: unknown } = {},
+  rest: {
+    href?: string;
+    data?: unknown;
+    'boxel:target'?: Record<string, unknown>;
+  } = {},
 ): Record<string, unknown> {
   return { op: 'invoke', 'boxel:name': name, ...rest };
+}
+
+// A query target naming the reports whose headline is `headline`. Every report
+// this file finds by query carries a headline of its own, so a filter selects
+// the fixtures one test wrote and none of the ones another did.
+function findReports(
+  headline: string,
+  rest: { field?: string; expect?: 'one' | 'many' } = {},
+): Record<string, unknown> {
+  return {
+    query: {
+      'item.on': { module: `${testRealmHref}report`, name: 'ExternalReport' },
+      eq: { 'item.headline': headline },
+    },
+    ...rest,
+  };
 }
 
 function parallel(...operations: unknown[]): Record<string, unknown> {
@@ -163,7 +184,7 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         @operation static restate = {
           base: 'transform',
           params: { headline: StringField },
-          input: bxl\`{headline: params("headline")}\`,
+          input: bxl\`. + {headline: (.headline // "Restated by default")}\`,
           set: { headline: params('headline') },
         };
 
@@ -180,6 +201,29 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
           query: { filter: { on: Person, eq: { firstName: 'Reviewer' } } },
         };
 
+        @operation static headlineOnly = {
+          base: 'read',
+          output: bxl\`{data: {type: "card", id: .data.id, attributes: {headline: .data.attributes.headline, readBy: actor()}}}\`,
+        };
+
+        @operation static retire = {
+          base: 'delete',
+          params: { confirm: StringField },
+          input: bxl\`.\`,
+        };
+
+        @operation static settled = {
+          base: 'transform',
+          set: { status: 'escalated' },
+          output: bxl\`{data: {escalatedIn: realmConfig("timezone")}}\`,
+        };
+
+        @operation static broken = {
+          base: 'transform',
+          set: { status: 'escalated' },
+          output: bxl\`{data: {status: instance("status")}}\`,
+        };
+
         static isolated = class Isolated extends Component<typeof this> {
           <template><h1><@fields.headline /></h1></template>
         }
@@ -191,6 +235,87 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         }
       }
     `,
+    // A type whose *default* `read` is specialized, which is what makes the
+    // plain card+json `GET` of its cards a projected one.
+    'projected.gts': `
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+      import { operation, bxl } from "@cardstack/base/operations";
+
+      export class ProjectedReport extends CardDef {
+        @field headline = contains(StringField);
+        @field salary = contains(StringField);
+
+        @operation static read = {
+          base: 'read',
+          output: bxl\`{data: {type: "card", id: .data.id, attributes: {headline: .data.attributes.headline}, meta: .data.meta}}\`,
+        };
+
+        static isolated = class Isolated extends Component<typeof this> {
+          <template><h1><@fields.headline /></h1></template>
+        }
+        static embedded = class Embedded extends Component<typeof this> {
+          <template><h1><@fields.headline /></h1></template>
+        }
+        static fitted = class Fitted extends Component<typeof this> {
+          <template><h1><@fields.headline /></h1></template>
+        }
+      }
+    `,
+    // The realm's own config document, carrying the settings a transform reads
+    // with `realmConfig(…)`.
+    'realm.json': realmConfigCardJSON({
+      name: 'Card Operations Envelope Test Realm',
+      config: { timezone: 'UTC' },
+    }),
+    'staged.gts': `
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+      import { operation, bxl } from "@cardstack/base/operations";
+
+      export class StagedReadReport extends CardDef {
+        @field headline = contains(StringField);
+
+        @operation static read = {
+          base: 'read',
+          input: bxl\`.\`,
+        };
+
+        static isolated = class Isolated extends Component<typeof this> {
+          <template><h1><@fields.headline /></h1></template>
+        }
+        static embedded = class Embedded extends Component<typeof this> {
+          <template><h1><@fields.headline /></h1></template>
+        }
+        static fitted = class Fitted extends Component<typeof this> {
+          <template><h1><@fields.headline /></h1></template>
+        }
+      }
+    `,
+    'staged-report.json': {
+      data: {
+        type: 'card',
+        attributes: { headline: 'Quarterly Review' },
+        meta: {
+          adoptsFrom: {
+            module: rri(`${testRealmHref}staged`),
+            name: 'StagedReadReport',
+          },
+        },
+      },
+    },
+    'projected-report.json': {
+      data: {
+        type: 'card',
+        attributes: { headline: 'Quarterly Review', salary: '120000' },
+        meta: {
+          adoptsFrom: {
+            module: rri(`${testRealmHref}projected`),
+            name: 'ProjectedReport',
+          },
+        },
+      },
+    },
     'event-log.gts': `
       import { contains, containsMany, field, CardDef, FieldDef, Component } from "@cardstack/base/card-api";
       import StringField from "@cardstack/base/string";
@@ -247,7 +372,12 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         'report-uncached',
         'report-canonical',
         'report-query',
-        'report-unserved',
+        'report-restated',
+        'report-restated-explicit',
+        'report-projected',
+        'report-broken-output',
+        'report-retired',
+        'report-settled',
         'report-position',
         // One per group test, for the same reason.
         'report-parallel-1',
@@ -275,6 +405,66 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         },
         relationships: { owner: { links: { self: './reviewer' } } },
         meta: { adoptsFrom: EXTERNAL_REPORT },
+      },
+    },
+    // The cards a query target finds. Each carries a headline of its own, so a
+    // filter picks out exactly the fixtures one test is about — the shared
+    // `Quarterly Review` reports above would otherwise all answer to it.
+    ...Object.fromEntries(
+      [
+        ['find-one', 'Find One'],
+        ['find-two-a', 'Find Two'],
+        ['find-two-b', 'Find Two'],
+        ['find-many-a', 'Find Many'],
+        ['find-many-b', 'Find Many'],
+        ['find-conflict', 'Find Conflict'],
+        ['find-expanded-a', 'Find Expanded'],
+        ['find-closed', 'Find Closed'],
+      ].map(([name, headline]) => [
+        `${name}.json`,
+        {
+          data: {
+            type: 'card',
+            attributes: {
+              headline,
+              status: name === 'find-closed' ? 'closed' : 'open',
+              comments: [],
+            },
+            relationships: { owner: { links: { self: './reviewer' } } },
+            meta: { adoptsFrom: EXTERNAL_REPORT },
+          },
+        },
+      ]),
+    ),
+    // The second member of the `Find Expanded` pair, whose own operation
+    // refuses — so a refusal from inside an expansion has a position to name.
+    'find-expanded-b.json': {
+      data: {
+        type: 'card',
+        attributes: {
+          headline: 'Find Expanded',
+          status: 'closed',
+          comments: [],
+        },
+        relationships: { owner: { links: { self: './reviewer' } } },
+        meta: { adoptsFrom: EXTERNAL_REPORT },
+      },
+    },
+    // A report whose owner is its own, so following the link and writing what
+    // it points at is observable without disturbing the shared reviewer.
+    'find-hop.json': {
+      data: {
+        type: 'card',
+        attributes: { headline: 'Find Hop', status: 'open', comments: [] },
+        relationships: { owner: { links: { self: './find-hop-owner' } } },
+        meta: { adoptsFrom: EXTERNAL_REPORT },
+      },
+    },
+    'find-hop-owner.json': {
+      data: {
+        type: 'card',
+        attributes: { firstName: 'Owner' },
+        meta: { adoptsFrom: PERSON },
       },
     },
     'notes.md': '# Notes\n',
@@ -673,28 +863,6 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           "a malformed reference is the caller's to fix, not a fault to report",
         );
         assert.strictEqual(response.body.errors[0].meta.entry, 0);
-      });
-
-      test('an operation whose declaration carries a stage a batch does not run is refused', async function (assert) {
-        let response = await post(
-          envelope(
-            invoke('restate', {
-              href: '/report-unserved',
-              data: { headline: 'Revised' },
-            }),
-          ),
-        );
-
-        assert.strictEqual(response.status, 501, 'HTTP 501 status');
-        assert.true(
-          response.body.errors[0].detail.includes('input'),
-          `the refusal names the stage: ${response.body.errors[0].detail}`,
-        );
-        assert.strictEqual(
-          storedCard('report-unserved.json').data.attributes?.headline,
-          'Quarterly Review',
-          'and nothing was written under a declaration half carried out',
-        );
       });
 
       test('two entries claiming one local id are refused', async function (assert) {
@@ -1418,6 +1586,316 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       });
     });
 
+    module('query-defined targets', function () {
+      test('the one card a query matches is the card the entry runs against', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('escalate', { 'boxel:target': findReports('Find One') }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          storedCard('find-one.json').data.attributes?.status,
+          'escalated',
+          'the found card was written',
+        );
+        // The result is the one a named target produces, and its id is the
+        // card the query found — which is how a caller that did not know the
+        // URL learns it.
+        let [result] = response.body['atomic:results'];
+        assert.strictEqual(result.data.id, `${testRealmHref}find-one`);
+        assert.strictEqual(result.data.type, 'card');
+      });
+
+      test('a query matching nothing is refused, naming the entry', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('escalate', { href: '/report-kept' }),
+            invoke('escalate', { 'boxel:target': findReports('Find Nobody') }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.code, 'invalid-params');
+        assert.strictEqual(error.meta.entry, 1);
+        assert.true(
+          error.detail.includes('matched no card'),
+          `detail names the count: ${error.detail}`,
+        );
+        assert.strictEqual(
+          storedCard('report-kept.json').data.attributes?.status,
+          'open',
+          'and the entry that would have succeeded wrote nothing',
+        );
+      });
+
+      test('a query matching several is refused, naming how many', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('escalate', { 'boxel:target': findReports('Find Two') }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.true(
+          error.detail.includes('2 cards answer to it'),
+          `detail names the count: ${error.detail}`,
+        );
+        for (let card of ['find-two-a', 'find-two-b']) {
+          assert.strictEqual(
+            storedCard(`${card}.json`).data.attributes?.status,
+            'open',
+            `${card} was not written`,
+          );
+        }
+      });
+
+      test('an entry expecting many runs against every match and answers with an array', async function (assert) {
+        let jobsBefore = await indexJobIds();
+
+        let response = await post(
+          envelope(
+            invoke('escalate', {
+              'boxel:target': findReports('Find Many', { expect: 'many' }),
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        for (let card of ['find-many-a', 'find-many-b']) {
+          assert.strictEqual(
+            storedCard(`${card}.json`).data.attributes?.status,
+            'escalated',
+            `${card} was written`,
+          );
+        }
+        // The entry's slot holds an array of the results its targets produced,
+        // in the order the index returned them — the shape a group's position
+        // already has, because the expansion is one.
+        let [results] = response.body['atomic:results'];
+        assert.deepEqual(
+          results.map((result: { data: { id: string } }) => result.data.id),
+          [`${testRealmHref}find-many-a`, `${testRealmHref}find-many-b`],
+        );
+        // Lean results: an identity and its version, never the document that
+        // was written.
+        assert.deepEqual(Object.keys(results[0].data).sort(), [
+          'id',
+          'meta',
+          'type',
+        ]);
+        // And the expansion is still one batch — the found targets commit
+        // together, under one job, the way the caller's own entries do.
+        assert.strictEqual(
+          (await indexJobIds()).length - jobsBefore.length,
+          1,
+          'the whole expansion indexed under one job',
+        );
+      });
+
+      test('an entry expecting many and matching nothing answers with an empty array', async function (assert) {
+        let jobsBefore = await indexJobIds();
+
+        let response = await post(
+          envelope(
+            invoke('escalate', {
+              'boxel:target': findReports('Find Nobody', { expect: 'many' }),
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(response.body['atomic:results'], [[]]);
+        // Nothing matched, so nothing staged: the batch takes no lock and has
+        // nothing to announce.
+        assert.strictEqual(
+          (await indexJobIds()).length,
+          jobsBefore.length,
+          'no index job was enqueued',
+        );
+      });
+
+      test('a refusal from inside an expansion names which of the found targets produced it', async function (assert) {
+        // The second `Find Expanded` report is closed, and the operation
+        // asserts that a report is open — so the expansion's second target is
+        // the one that refuses, and the position it is named by is the path to
+        // it through the entry that found it.
+        let response = await post(
+          envelope(
+            invoke('escalate', { href: '/report-kept' }),
+            invoke('openOnly', {
+              'boxel:target': findReports('Find Expanded', { expect: 'many' }),
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.code, 'assertion-failed');
+        assert.strictEqual(error.meta.entry, '[1].boxel:target[1]');
+        assert.strictEqual(
+          storedCard('find-expanded-a.json').data.attributes?.status,
+          'open',
+          'and the target before it in the same expansion wrote nothing',
+        );
+      });
+
+      test('a field on the matched card makes the card it links to the target', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('update', {
+              'boxel:target': findReports('Find Hop', { field: 'owner' }),
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Reassigned' },
+                meta: { adoptsFrom: PERSON },
+              },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          storedCard('find-hop-owner.json').data.attributes?.firstName,
+          'Reassigned',
+          'the linked card was written',
+        );
+        assert.strictEqual(
+          storedCard('find-hop.json').data.attributes?.headline,
+          'Find Hop',
+          'and the card the query matched was not',
+        );
+        let [result] = response.body['atomic:results'];
+        assert.strictEqual(result.data.id, `${testRealmHref}find-hop-owner`);
+      });
+
+      test('a field that is not a link is refused, naming what it is', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('escalate', {
+              'boxel:target': findReports('Find One', { field: 'status' }),
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.code, 'invalid-params');
+        assert.true(
+          error.detail.includes('is a contains field'),
+          `detail names the field's type: ${error.detail}`,
+        );
+      });
+
+      test('a card this batch creates is not one its own query can match', async function (assert) {
+        let jobsBefore = await indexJobIds();
+
+        let response = await post(
+          envelope(
+            invoke('create', {
+              data: {
+                type: 'card',
+                attributes: {
+                  headline: 'Find Created',
+                  status: 'open',
+                  comments: [],
+                },
+                meta: { adoptsFrom: EXTERNAL_REPORT },
+              },
+            }),
+            invoke('escalate', { 'boxel:target': findReports('Find Created') }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.meta.entry, 1);
+        assert.true(
+          error.detail.includes(
+            'a card another entry of this batch creates is not one it can match',
+          ),
+          `detail says why: ${error.detail}`,
+        );
+        assert.strictEqual(
+          (await indexJobIds()).length,
+          jobsBefore.length,
+          'and the create the batch was refused over was not carried out',
+        );
+      });
+
+      test('a create cannot take its target from a query', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('create', { 'boxel:target': findReports('Find One') }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.code, 'invalid-params');
+        assert.true(
+          error.detail.includes('takes its target from a query'),
+          `detail says why: ${error.detail}`,
+        );
+      });
+
+      test('a found target collides with a parallel sibling that named the same card', async function (assert) {
+        // The conflict rule reads the files each member staged a change to, so
+        // it does not matter that one member named its target and the other
+        // described it — which is the property the whole resolution rests on.
+        let response = await post(
+          envelope(
+            parallel(
+              invoke('escalate', { href: '/find-conflict' }),
+              invoke('addComment', {
+                'boxel:target': findReports('Find Conflict'),
+                data: { body: 'at the same time' },
+              }),
+            ),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.code, 'conflicting-targets');
+        assert.strictEqual(error.meta.entry, '[0].boxel:operations[1]');
+        assert.strictEqual(error.meta.conflictsWith, '[0].boxel:operations[0]');
+        assert.strictEqual(
+          storedCard('find-conflict.json').data.attributes?.status,
+          'open',
+          'and neither of them was written',
+        );
+      });
+
+      test('a read may describe its target too, and a read-only batch carries one', async function (assert) {
+        let response = await query(
+          envelope(invoke('read', { 'boxel:target': findReports('Find Two') })),
+        );
+
+        // Two cards answer to it, and a read is held to the same count rule as
+        // a write: what the entry answers with is one document, so which of
+        // the two it would be is not a question the realm picks for the caller.
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        assert.true(
+          response.body.errors[0].detail.includes('2 cards answer to it'),
+          response.body.errors[0].detail,
+        );
+
+        let found = await query(
+          envelope(
+            invoke('read', { 'boxel:target': findReports('Find Closed') }),
+          ),
+        );
+        assert.strictEqual(found.status, 200, 'HTTP 200 status');
+        let [result] = found.body['atomic:results'];
+        assert.strictEqual(result.data.id, `${testRealmHref}find-closed`);
+        assert.strictEqual(result.data.attributes.status, 'closed');
+      });
+    });
+
     module('identity', function () {
       test('an operation that reads the actor refuses a request that authenticated nobody', async function (assert) {
         let response = await anonymousPost(
@@ -1469,6 +1947,266 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           [{ body: 'Reviewed.', postedBy: TESTER }],
           'the comment records the caller the realm verified, and no other ' +
             'identity is invented for it',
+        );
+      });
+    });
+
+    // The two stages around an operation, end to end: what a declaration's
+    // `input` and `output` do to a real batch, and what a projected default
+    // `read` does to the card+json `GET` of the cards that carry it. The
+    // stages' own semantics are `card-operations-transforms-test.ts`; these
+    // are about a declaration reaching them through a lowered definition and a
+    // served response.
+    module('transforms', function () {
+      test('an input fills a value the params check would have refused', async function (assert) {
+        // No headline is sent, so the value the write stores is one only the
+        // program could have produced — and without the stage the entry does
+        // not reach the write at all, since `headline` is a declared param.
+        let response = await post(
+          envelope(invoke('restate', { href: '/report-restated' })),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          storedCard('report-restated.json').data.attributes?.headline,
+          'Restated by default',
+          'the write ran on the payload the input produced',
+        );
+      });
+
+      test("a caller's own value still wins over the input's default", async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('restate', {
+              href: '/report-restated-explicit',
+              data: { headline: 'Revised' },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          storedCard('report-restated-explicit.json').data.attributes?.headline,
+          'Revised',
+        );
+      });
+
+      test("a write's output projects the result, and reads the realm's settings", async function (assert) {
+        // The same stage on the other transport: a read's `output` reaches the
+        // realm's settings through the operation core, and a write's reaches
+        // them through the batch handler, so one declaration cannot answer on
+        // one transport and refuse on the other.
+        let response = await post(
+          envelope(invoke('settled', { href: '/report-settled' })),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          response.body['atomic:results'][0],
+          { data: { escalatedIn: 'UTC' } },
+          'the projection is the whole of what the write answers with',
+        );
+        assert.strictEqual(
+          storedCard('report-settled.json').data.attributes?.status,
+          'escalated',
+          'and the write it projected landed',
+        );
+      });
+
+      test('an output projects a read, and the redacted field is gone', async function (assert) {
+        let response = await query(
+          envelope(invoke('headlineOnly', { href: '/report-projected' })),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let [projected] = response.body['atomic:results'];
+        assert.deepEqual(
+          projected,
+          {
+            data: {
+              type: 'card',
+              id: `${testRealmHref}report-projected`,
+              attributes: { headline: 'Quarterly Review', readBy: TESTER },
+            },
+          },
+          'the projection is the whole answer: no status, no comments, no ' +
+            'owner relationship, and the caller it was projected for',
+        );
+      });
+
+      test('a failing output is a 400 over a write that has already landed', async function (assert) {
+        let response = await post(
+          envelope(invoke('broken', { href: '/report-broken-output' })),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.code, 'invalid-params');
+        assert.strictEqual(error.meta.stage, 'output');
+        assert.strictEqual(error.meta.entry, 0);
+        assert.strictEqual(
+          storedCard('report-broken-output.json').data.attributes?.status,
+          'escalated',
+          'the stage projects the result of a commit, so the commit is ' +
+            'behind it: a refusal here says the caller cannot be told what ' +
+            'happened, not that nothing did',
+        );
+      });
+
+      test('the card+json GET of a projected type is served the projection, uncacheable', async function (assert) {
+        let response = await request
+          .get('/projected-report')
+          .set('Accept', SupportedMimeType.CardJson)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(realm, TESTER, ['read', 'write'])}`,
+          );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          response.body.data.attributes.headline,
+          'Quarterly Review',
+        );
+        assert.strictEqual(
+          response.body.data.attributes.salary,
+          undefined,
+          'the field the projection leaves out is not served',
+        );
+        assert.strictEqual(
+          response.get('Cache-Control'),
+          'private, no-store',
+          'a projected body is held by no cache, shared or otherwise',
+        );
+        assert.ok(
+          response.get('ETag'),
+          'and the validator is still emitted, for a conditional write',
+        );
+      });
+
+      test('a matching If-None-Match does not 304 a projected read', async function (assert) {
+        let path = '/projected-report';
+        let authorization = `Bearer ${createJWT(realm, TESTER, ['read', 'write'])}`;
+        let first = await request
+          .get(path)
+          .set('Accept', SupportedMimeType.CardJson)
+          .set('Authorization', authorization);
+        let etag = first.get('ETag');
+        assert.ok(etag, 'the first read emitted a validator');
+
+        let conditional = await request
+          .get(path)
+          .set('Accept', SupportedMimeType.CardJson)
+          .set('Authorization', authorization)
+          .set('If-None-Match', etag!);
+
+        assert.strictEqual(
+          conditional.status,
+          200,
+          'the validator describes the unprojected document, so it cannot ' +
+            'answer for this body',
+        );
+        assert.strictEqual(
+          conditional.body.data.attributes.headline,
+          'Quarterly Review',
+        );
+
+        let head = await request
+          .head(path)
+          .set('Accept', SupportedMimeType.CardJson)
+          .set('Authorization', authorization)
+          .set('If-None-Match', etag!);
+        assert.strictEqual(
+          head.status,
+          200,
+          'a HEAD states the headers the GET would send, 304 included',
+        );
+        assert.strictEqual(head.get('Cache-Control'), 'private, no-store');
+      });
+
+      test('a declared write is held to its params before anything is staged', async function (assert) {
+        // The behaviors read a payload differently enough that some would
+        // never notice one was missing — a `delete` reads none at all — so the
+        // check cannot be left to the executor that would carry the write out.
+        let response = await post(
+          envelope(invoke('retire', { href: '/report-retired' })),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.code, 'invalid-params');
+        assert.true(
+          error.detail.includes('params("confirm")'),
+          `the refusal names the value it wanted: ${error.detail}`,
+        );
+        assert.true(
+          existsSync(realmFile('report-retired.json')),
+          'and the card the caller said too little to remove is still there',
+        );
+      });
+
+      test('a read carrying only an input still runs, so it is never answered 304', async function (assert) {
+        // An `input` changes no byte of the document a read serves, but it can
+        // refuse — so the conditional fast path, which answers without running
+        // the read at all, is off for one.
+        let path = '/staged-report';
+        let authorization = `Bearer ${createJWT(realm, TESTER, ['read', 'write'])}`;
+        let first = await request
+          .get(path)
+          .set('Accept', SupportedMimeType.CardJson)
+          .set('Authorization', authorization);
+
+        assert.strictEqual(first.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          first.get('Cache-Control'),
+          'public, max-age=0, must-revalidate',
+          'nothing projected the body, so it is cacheable as any other is',
+        );
+
+        let conditional = await request
+          .get(path)
+          .set('Accept', SupportedMimeType.CardJson)
+          .set('Authorization', authorization)
+          .set('If-None-Match', first.get('ETag')!);
+        assert.strictEqual(
+          conditional.status,
+          200,
+          'the stage has to run, and a 304 would skip it',
+        );
+        assert.strictEqual(
+          conditional.body.data.attributes.headline,
+          'Quarterly Review',
+        );
+      });
+
+      test('a card whose type declares no read is served exactly as before', async function (assert) {
+        let path = '/report-projected';
+        let authorization = `Bearer ${createJWT(realm, TESTER, ['read', 'write'])}`;
+        let first = await request
+          .get(path)
+          .set('Accept', SupportedMimeType.CardJson)
+          .set('Authorization', authorization);
+
+        assert.strictEqual(first.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          first.get('Cache-Control'),
+          'public, max-age=0, must-revalidate',
+          'the ordinary directive, on a realm anyone may read',
+        );
+        assert.strictEqual(
+          first.body.data.attributes.status,
+          'open',
+          'every field is served: the named projection above is not this read',
+        );
+
+        let conditional = await request
+          .get(path)
+          .set('Accept', SupportedMimeType.CardJson)
+          .set('Authorization', authorization)
+          .set('If-None-Match', first.get('ETag')!);
+        assert.strictEqual(
+          conditional.status,
+          304,
+          'and its conditional fast path is untouched',
         );
       });
     });

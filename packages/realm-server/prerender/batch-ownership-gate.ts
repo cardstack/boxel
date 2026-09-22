@@ -19,19 +19,32 @@ import { toAffinityKey } from './affinity.ts';
 //   │                             │             │ (legit successor)    │
 //   │ no batchId + clearCache:true│ any owner   │ STRIP clearCache     │
 //   │ no batchId + clearCache:true│ none        │ honor (no protect)   │
-//   │ any + clearCache:false/off  │ any         │ run; touch owner if  │
-//   │                             │             │ batchId matches      │
+//   │ batchId=A + clearCache:off  │ none or any │ run; owner := A      │
+//   │ no batchId + clearCache:off │ any         │ run; owner unchanged │
 //   └─────────────────────────────┴─────────────┴──────────────────────┘
 //
-// Rationale: indexing jobs are serialized per-realm through the queue, so
-// two legitimate same-realm batches never run concurrently. The only
-// source of a different-batchId + clearCache is a **successor** batch
-// (crash recovery, or the next .gts-triggered run). That successor should
-// win — it's the one with fresh module sources to pick up. Stripping its
-// clearCache would silently regress the .gts invalidation semantic. The
-// `no batchId` row covers the threat the ticket names: user-initiated
-// prerenders and cross-realm traffic that happen to land on the
-// indexer's warm tab.
+// Rationale: ownership answers one question — is a batch rendering on this
+// affinity right now — and every batch visit answers it the same way, so any
+// of them may claim or refresh the entry. A different batchId is either a
+// successor (crash recovery, or the next run) or a legitimate concurrent
+// peer: an index pass and the `prerender_html` job it spawns sit in
+// different concurrency groups (`indexing:<realm>` vs
+// `prerender-html:<realm>`) over one realm's affinity, and the pass spawns
+// that job the moment its invalidation set is known, precisely so the two
+// overlap. Letting them trade the entry costs nothing, because no reader
+// asks which batch owns it — only whether one does.
+//
+// Ownership therefore cannot be made to depend on clearing. Only a pass whose
+// invalidation set contains an executable clears, so a clearing-only claim
+// would leave every other pass unprotected for the whole of its run, and
+// would leave a batch that died without releasing owning the affinity until
+// something else displaced it.
+//
+// The `no batchId` row covers the threat the ticket names: user-initiated
+// prerenders and cross-realm traffic that happen to land on the indexer's
+// warm tab. A clearing successor is still honored rather than stripped —
+// it's the one with fresh module sources to pick up, and stripping it would
+// silently regress the .gts invalidation semantic.
 export type BatchOwner = { batchId: string; since: number };
 
 export interface BatchClearCacheDecision<
@@ -62,12 +75,16 @@ export function computeBatchClearCacheGate<
   });
 
   if (!wantsClearCache) {
-    // Non-clearing visit is always OK. Touch the owner timestamp if
-    // this visit belongs to the current owner (keeps-alive semantics).
-    if (args.batchId && owner?.batchId === args.batchId) {
+    // Non-clearing visit is always OK, and claims the affinity for its own
+    // batch — refreshing the entry when it already owns it, taking it over
+    // when another batch holds one. Taking over is what keeps a batch that
+    // died without releasing from owning the affinity forever: `since` has no
+    // expiry and nothing else clears the entry but a matching release or the
+    // affinity being disposed.
+    if (args.batchId) {
       return {
         gatedArgs: args,
-        newOwner: { batchId: owner.batchId, since: nowMs },
+        newOwner: { batchId: args.batchId, since: nowMs },
       };
     }
     return { gatedArgs: args };

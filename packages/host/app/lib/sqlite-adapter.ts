@@ -74,13 +74,14 @@ export default class SQLiteAdapter implements DBAdapter {
 
   // SQLite has no cross-connection concurrency to coordinate, so the per-file
   // write lock is a passthrough too. The PG implementation provides the real
-  // serialization across replicas.
+  // serialization across replicas. Ending the section early is therefore a
+  // no-op here: there is nothing held to let go of.
   async withFileWriteLocks<T>(
     _realmUrl: string,
     _localPaths: readonly string[],
-    fn: () => Promise<T>,
+    fn: (releaseLocks: () => void) => Promise<T>,
   ): Promise<T> {
-    return await fn();
+    return await fn(() => {});
   }
 
   // SQLite has no cross-connection concurrency to coordinate, so the
