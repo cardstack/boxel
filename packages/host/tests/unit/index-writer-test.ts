@@ -3185,8 +3185,23 @@ module('Unit | index-writer', function (hooks) {
     let iconHTML = '<svg>test icon</svg>';
     let personRef = { module: rri('./person'), name: 'Person' };
     let petRef = { module: rri('./pet'), name: 'Pet' };
+    // A second type deliberately shares Person's display name, and a third
+    // carries none at all. Display name is not a unique key, and `MAX(...)` is
+    // NULL for a type whose rows are unlabelled, so both are ties — and ties
+    // are the only state in which a merged summary and a rebuilt one can
+    // disagree, since the merged form would otherwise settle them by which arm
+    // of its union a row came out of. A fixture of distinct labels cannot see
+    // that.
+    let personaRef = { module: rri('./persona'), name: 'Persona' };
+    let namelessRef = { module: rri('./nameless'), name: 'Nameless' };
     let personTypes = internalKeysFor(virtualNetwork, personRef, baseCardRef);
     let petTypes = internalKeysFor(virtualNetwork, petRef, baseCardRef);
+    let personaTypes = internalKeysFor(virtualNetwork, personaRef, baseCardRef);
+    let namelessTypes = internalKeysFor(
+      virtualNetwork,
+      namelessRef,
+      baseCardRef,
+    );
     let markdownTypes = internalKeysFor(
       virtualNetwork,
       { module: rri('./markdown-file-def'), name: 'MarkdownDef' },
@@ -3211,6 +3226,38 @@ module('Unit | index-writer', function (hooks) {
           display_names: ['Person'],
           deps: [`${testRealmURL}person`],
           types: personTypes,
+          icon_html: iconHTML,
+        },
+        {
+          url: `${testRealmURL}3.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource(
+            '3',
+            'Vincent',
+            personaRef,
+          ) as LooseCardResource,
+          search_doc: { name: 'Vincent' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}persona`],
+          types: personaTypes,
+          icon_html: iconHTML,
+        },
+        {
+          url: `${testRealmURL}4.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource(
+            '4',
+            'Anon',
+            namelessRef,
+          ) as LooseCardResource,
+          search_doc: { name: 'Anon' },
+          display_names: [],
+          deps: [`${testRealmURL}nameless`],
+          types: namelessTypes,
           icon_html: iconHTML,
         },
         {
@@ -3277,18 +3324,23 @@ module('Unit | index-writer', function (hooks) {
       rebuilt.files,
       'the file summaries are identical',
     );
+    // Content, keyed rather than positional: the order the two agree on is the
+    // database's, and pinning it literally here would only restate the ordering
+    // clause back to itself.
     assert.deepEqual(
-      scoped.value,
-      [
-        makeCardTypeSummary(
-          `${testRealmURL}person/Person`,
-          'Person',
-          iconHTML,
-          1,
-        ),
-        makeCardTypeSummary(`${testRealmURL}pet/Pet`, 'Pet', iconHTML, 1),
-      ],
+      Object.fromEntries(scoped.value.map((s) => [s.code_ref, s.total])),
+      {
+        [`${testRealmURL}person/Person`]: 1,
+        [`${testRealmURL}persona/Persona`]: 1,
+        [`${testRealmURL}nameless/Nameless`]: 1,
+        [`${testRealmURL}pet/Pet`]: 1,
+      },
       'and both describe the realm as it now stands',
+    );
+    assert.strictEqual(
+      scoped.value[scoped.value.length - 1].code_ref,
+      `${testRealmURL}nameless/Nameless`,
+      'the unlabelled type sorts last under NULLS LAST',
     );
   });
 
@@ -3341,20 +3393,25 @@ module('Unit | index-writer', function (hooks) {
       ],
     );
 
-    let batch = await indexWriter.createBatch(
-      new URL(testRealmURL),
-      virtualNetwork,
-    );
-    await batch.done();
-    assert.deepEqual(
-      (await fetchRealmMeta(adapter)).value.map((s) => s.display_name),
-      ['Person', 'Pet'],
-      'both types are summarized before the deletion',
-    );
+    // Person's planted count is one the working table cannot produce, so it
+    // survives only by being carried — which is what makes this a test of the
+    // merge rather than of a rebuild that happens to agree with it.
+    await plantRealmMeta(adapter, 1, {
+      instances: [
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          42,
+        ),
+        makeCardTypeSummary(`${testRealmURL}pet/Pet`, 'Pet', iconHTML, 1),
+      ],
+      files: [],
+    });
 
     // Invalidating without writing the URL back is a deletion: the pass
     // tombstones the row and the swap promotes the tombstone.
-    batch = await indexWriter.createBatch(
+    let batch = await indexWriter.createBatch(
       new URL(testRealmURL),
       virtualNetwork,
     );
@@ -3368,10 +3425,10 @@ module('Unit | index-writer', function (hooks) {
           `${testRealmURL}person/Person`,
           'Person',
           iconHTML,
-          1,
+          42,
         ),
       ],
-      'the emptied type is gone and the untouched one is unchanged',
+      'the emptied type is dropped from the carried arm while the untouched one keeps the entry it had',
     );
   });
 
@@ -3382,8 +3439,10 @@ module('Unit | index-writer', function (hooks) {
     let iconHTML = '<svg>test icon</svg>';
     let personRef = { module: rri('./person'), name: 'Person' };
     let petRef = { module: rri('./pet'), name: 'Pet' };
+    let dogRef = { module: rri('./dog'), name: 'Dog' };
     let personTypes = internalKeysFor(virtualNetwork, personRef, baseCardRef);
     let petTypes = internalKeysFor(virtualNetwork, petRef, baseCardRef);
+    let dogTypes = internalKeysFor(virtualNetwork, dogRef, baseCardRef);
 
     await setupIndex(
       adapter,
@@ -3405,16 +3464,42 @@ module('Unit | index-writer', function (hooks) {
           types: personTypes,
           icon_html: iconHTML,
         },
+        // A type the pass never names, so it can only reach the published
+        // summary by being carried.
+        {
+          url: `${testRealmURL}3.json`,
+          generation: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource(
+            '3',
+            'Rex',
+            dogRef,
+          ) as LooseCardResource,
+          search_doc: { name: 'Rex' },
+          display_names: ['Dog'],
+          deps: [`${testRealmURL}dog`],
+          types: dogTypes,
+          icon_html: iconHTML,
+        },
       ],
     );
+    // Dog's planted count is one the working table cannot produce — it holds a
+    // single Dog row — so a rebuild would publish 1 and only the merge keeps 42.
+    await plantRealmMeta(adapter, 1, {
+      instances: [
+        makeCardTypeSummary(`${testRealmURL}dog/Dog`, 'Dog', iconHTML, 42),
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          1,
+        ),
+      ],
+      files: [],
+    });
 
     let batch = await indexWriter.createBatch(
-      new URL(testRealmURL),
-      virtualNetwork,
-    );
-    await batch.done();
-
-    batch = await indexWriter.createBatch(
       new URL(testRealmURL),
       virtualNetwork,
     );
@@ -3431,8 +3516,11 @@ module('Unit | index-writer', function (hooks) {
 
     assert.deepEqual(
       (await fetchRealmMeta(adapter)).value,
-      [makeCardTypeSummary(`${testRealmURL}pet/Pet`, 'Pet', iconHTML, 1)],
-      'the count moved onto the new type and the type it left is gone',
+      [
+        makeCardTypeSummary(`${testRealmURL}dog/Dog`, 'Dog', iconHTML, 42),
+        makeCardTypeSummary(`${testRealmURL}pet/Pet`, 'Pet', iconHTML, 1),
+      ],
+      'the count moved onto the new type, the type it left is gone, and the type the pass never named was carried',
     );
   });
 

@@ -61,13 +61,22 @@ Three changes, smallest and most load-bearing first.
    fall back to today's full recompute — the same polarity `bumpAllTypes`
    already uses three lines later, so absence keeps reading as "unknown".
 
-   The merge happens in SQL rather than in JS. `realm_meta.value`'s order comes
-   from `ORDER BY MAX(display_names->>0) ASC NULLS LAST`, which is the
-   database's collation; reproducing it in a JS comparator would change the
-   order the sidebar renders on Postgres and would make "byte-identical to a
-   full recompute" depend on matching glibc. Unioning the scoped aggregate with
-   the carried-forward entries and letting the database order the result keeps
-   that property exactly, per adapter.
+   The merge happens in SQL rather than in JS. `realm_meta.value`'s order is the
+   database's collation, and reproducing it in a JS comparator would change the
+   order the sidebar renders on Postgres and make agreement with a full rebuild
+   depend on matching glibc. Unioning the scoped aggregate with the
+   carried-forward entries and letting the database order the result keeps the
+   two in step, per adapter.
+
+   Ordering on display name alone would not be enough for that. Display names
+   are not unique, and a type whose rows carry no label aggregates to NULL, so
+   entries tie; a tie leaves the order unspecified, and the merged form settles
+   it by which arm of the union a row came from. The two would then disagree
+   about tied entries, and the sidebar would reshuffle them on an unrelated
+   edit. The ordering both paths share ends `, code_ref ASC` — the group key,
+   unique within each arm — which makes it total. It sorts the aggregated
+   output rather than the scan input, so it does not bring back the cost that
+   dropping the `DISTINCT` removed.
 
 3. **An index on the leaf type** — `boxel_index_working (realm_url, type,
 (types->>0))` — was measured and left out. It is the only thing that would
@@ -105,8 +114,12 @@ Three changes, smallest and most load-bearing first.
 - `typeSetIsComplete` is the right gate: it is exactly the question "did this
   pass read the prior chain of every URL it promotes", which is what makes
   `#touchedTypes` a complete account of what moved.
-- The prior value may still be in the legacy bare-array shape, so the merge
-  normalizes it through `normalizeRealmMetaValue` before partitioning.
+- The merge requires a prior value that already carries both arms, and rebuilds
+  otherwise. A realm still on the legacy bare-array shape has no `files` arm at
+  all; normalizing one synthesizes an empty array indistinguishable from a realm
+  with no file rows, and carrying that forward would publish the realm as having
+  no file types. Rebuilding is what gives such a realm its `files` arm, so it
+  keeps rebuilding until one pass has written the partitioned shape.
 
 ## Target files
 
