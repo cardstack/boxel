@@ -5,7 +5,7 @@ import {
   ember,
 } from '@embroider/vite';
 import { babel } from '@rollup/plugin-babel';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -52,6 +52,46 @@ const _devHttps = devHttpsConfig();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const require = createRequire(import.meta.url);
+
+// Base-realm modules served from the host bundle (see shimBundledBase in
+// app/lib/bundled-base.ts) import host tools as
+// `@cardstack/boxel-host/tools/<name>` or
+// `@cardstack/boxel-host/commands/<name>`. At runtime the virtual network
+// shims those specifiers to modules under app/tools (see app/tools/index.ts),
+// where a tool is registered under its bare name wherever its file sits — a
+// tool in a subdirectory is registered under the bare name too. Read the real
+// layout rather than assuming the directory is flat, so the bundler resolves
+// every tool the runtime serves.
+function hostToolAliases() {
+  let root = path.join(__dirname, 'app', 'tools');
+  let byName = new Map();
+  let walk = (dir) => {
+    for (let entry of readdirSync(dir, { withFileTypes: true })) {
+      let full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      let name = entry.name.replace(/\.(gts|gjs|ts|js)$/, '');
+      if (name === entry.name || name === 'index') {
+        continue;
+      }
+      // A file directly under app/tools wins: it is what a flat specifier
+      // names, and nothing deeper can be reached by that name as well.
+      let existing = byName.get(name);
+      if (!existing || path.dirname(full) === root) {
+        byName.set(name, full);
+      }
+    }
+  };
+  walk(root);
+  return [...byName].flatMap(([name, file]) =>
+    ['tools', 'commands'].map((segment) => ({
+      find: `@cardstack/boxel-host/${segment}/${name}`,
+      replacement: file,
+    })),
+  );
+}
 
 // TODO: working around possible upstream problem. The app blueprint uses this
 // for guiding babel, but it includes '.json' which doesn't work in babel.
@@ -300,16 +340,7 @@ export default defineConfig(({ mode }) => ({
   },
   resolve: {
     alias: [
-      // Base-realm modules served from the host bundle (see shimBundledBase in
-      // app/lib/bundled-base.ts) import host tools as
-      // `@cardstack/boxel-host/tools/*` or `@cardstack/boxel-host/commands/*`.
-      // At runtime the virtual network shims those specifiers to app/tools
-      // modules (see app/tools/index.ts); this alias gives the bundler the
-      // same 1:1 mapping.
-      {
-        find: /^@cardstack\/boxel-host\/(?:tools|commands)\//,
-        replacement: `${__dirname}/app/tools/`,
-      },
+      ...hostToolAliases(),
       { find: 'path', replacement: require.resolve('path-browserify') },
       { find: 'stream', replacement: require.resolve('stream-browserify') },
       { find: /^util$/, replacement: require.resolve('util/') },
