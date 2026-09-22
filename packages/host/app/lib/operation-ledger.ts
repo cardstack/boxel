@@ -318,7 +318,18 @@ export default class OperationLedger {
     // while that is in flight would mark it sent behind the rebase's back, and
     // a re-application that then failed would reject a caller whose write is
     // already on its way to the realm.
-    await chain.applying;
+    //
+    // Waited to a standstill rather than once: `chain.applying` is a field, and
+    // awaiting it captures whichever promise it held when the expression ran. A
+    // foreign reload arriving in the gap replaces it with a fresh re-apply that
+    // the first await knows nothing about. Looping until the field is unchanged
+    // across an await is what makes this "nothing is being re-applied" rather
+    // than "whatever was in flight a moment ago has finished".
+    let applying;
+    do {
+      applying = chain.applying;
+      await applying;
+    } while (applying !== chain.applying);
     if (!chain.pending.includes(entry)) {
       throw precedingFailed();
     }
@@ -460,6 +471,13 @@ export default class OperationLedger {
         try {
           await this.#env.applyLocally(instance, entry.operation, entry.params);
         } catch (err: unknown) {
+          if (entry.sent) {
+            // It went to the realm while this re-application was in flight.
+            // Its outcome is the realm's to report now, and failing it here
+            // would reject a caller whose write may well land — so this is the
+            // re-application not happening, and nothing more.
+            continue;
+          }
           // The program no longer runs against what the card now holds — an
           // assertion this state does not satisfy, say. It cannot be shown
           // locally and it must not be sent as though it had been, so it is

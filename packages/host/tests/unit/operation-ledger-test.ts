@@ -64,6 +64,8 @@ interface Harness {
   // When set, `reload` fires the reload subscribers the way the real store
   // does, so an abort's re-read re-enters the ledger.
   notifyOnReload?: boolean;
+  // When set, every local application waits on it.
+  blockApply?: Deferred<void>;
   attempt(
     params?: Record<string, unknown>,
   ): Promise<OperationsAnswer | undefined>;
@@ -107,6 +109,12 @@ function setup(
     localId: () => 'local-1',
     lower: async () => deterministicTransform(),
     applyLocally: async (_instance, _operation, params) => {
+      // Held open when a test needs a re-application to still be in flight
+      // while something else happens. Without a way to stall this, the races
+      // around rebasing cannot be constructed at all.
+      if (harness.blockApply) {
+        await harness.blockApply.promise;
+      }
       applied.push({ params });
     },
     reload: async () => {
@@ -588,6 +596,56 @@ module('Unit | operation ledger', function () {
       'v2',
       'the next write names the version the realm last reported',
     );
+  });
+
+  test('a send waits for a re-application that begins while it is already waiting', async function (assert) {
+    // The narrow half of the rebase race. Waiting on `chain.applying` once
+    // captures whichever promise the field held when the expression ran, so a
+    // foreign reload arriving in the gap installs a fresh re-apply the waiter
+    // knows nothing about — and the entry is then marked sent behind it.
+    let h = setup({ version: 'v1' });
+    let first = h.attempt({ body: 'one' });
+    let second = h.attempt({ body: 'two' });
+    await drain();
+    assert.strictEqual(h.sends.length, 1, 'only the first is in flight');
+
+    // A foreign write starts re-applying the unsent second entry, and is held
+    // open so the second entry's send finds it in flight and waits on it.
+    let firstReapply = new Deferred<void>();
+    h.blockApply = firstReapply;
+    h.foreignWrite();
+    h.sends[0].answer.fulfill(answerWith({ version: 'v2', baseMatched: true }));
+    await first;
+    await drain();
+    assert.strictEqual(
+      h.sends.length,
+      1,
+      'the second entry is not sent while it is being re-applied',
+    );
+
+    // A second foreign write lands while that wait is still outstanding, which
+    // is the case a single await cannot see.
+    let secondReapply = new Deferred<void>();
+    h.blockApply = secondReapply;
+    h.foreignWrite();
+    firstReapply.fulfill();
+    await drain();
+    assert.strictEqual(
+      h.sends.length,
+      1,
+      'and still not sent, because another re-application began while it waited',
+    );
+
+    h.blockApply = undefined;
+    secondReapply.fulfill();
+    await drain();
+    assert.strictEqual(
+      h.sends.length,
+      2,
+      'it is sent once nothing is being re-applied any more',
+    );
+    h.sends[1].answer.fulfill(answerWith({ version: 'v3', baseMatched: true }));
+    await second;
   });
 
   test('a program that is not deterministic is declined', async function (assert) {
