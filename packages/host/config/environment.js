@@ -102,12 +102,6 @@ function environmentDefaults() {
 module.exports = function (environment) {
   let defaults = environmentDefaults();
   let skipCatalog = process.env.SKIP_CATALOG === 'true';
-  // The pretui realm is opt-in for a local stack (mise-tasks/services/realm-server
-  // serves it only under START_PRETUI=true) and always present in a deployment.
-  let startPretui =
-    environment === 'production' ||
-    process.env.START_PRETUI === 'true' ||
-    Boolean(process.env.RESOLVED_PRETUI_REALM_URL);
 
   const ENV = {
     modulePrefix: '@cardstack/host',
@@ -192,9 +186,8 @@ module.exports = function (environment) {
       process.env.RESOLVED_SKILLS_REALM_URL || defaults.skillsRealmURL,
     resolvedOpenRouterRealmURL:
       process.env.RESOLVED_OPENROUTER_REALM_URL || defaults.openRouterRealmURL,
-    resolvedPretuiRealmURL: startPretui
-      ? process.env.RESOLVED_PRETUI_REALM_URL || defaults.pretuiRealmURL
-      : undefined,
+    resolvedPretuiRealmURL:
+      process.env.RESOLVED_PRETUI_REALM_URL || defaults.pretuiRealmURL,
     // The live test realm-server's /test/ realm — used by host tests
     // that load source modules from it via
     // `tests/helpers#testModuleRealm`. Derived from BOXEL_ENVIRONMENT via

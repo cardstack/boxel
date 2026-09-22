@@ -63,9 +63,6 @@ if [ "${SKIP_SOFTWARE_FACTORY:-}" = "true" ]; then
 fi
 START_BOXEL_HOMEPAGE=$(if [ -z "$SKIP_BOXEL_HOMEPAGE" ]; then echo "true"; else echo ""; fi)
 START_SUBMISSION=$(if [ -z "$SKIP_SUBMISSION" ]; then echo "true"; else echo ""; fi)
-# Opt-in, unlike the realms above: `START_PRETUI=true` serves packages/pretui
-# as @cardstack/pretui/. Host consumption of the package does not need it.
-START_PRETUI=$(if [ "${START_PRETUI:-}" = "true" ]; then echo "true"; else echo ""; fi)
 
 DEFAULT_CATALOG_REALM_URL="${REALM_BASE_URL}/catalog/"
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
@@ -124,10 +121,10 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   --fromUrl='@cardstack/skills/' \
   --toUrl="${REALM_BASE_URL}/skills/" \
   \
-  ${START_PRETUI:+--path='../pretui'} \
-  ${START_PRETUI:+--username='pretui_realm'} \
-  ${START_PRETUI:+--fromUrl='@cardstack/pretui/'} \
-  ${START_PRETUI:+--toUrl="${REALM_BASE_URL}/pretui/"} \
+  --path='../pretui' \
+  --username='pretui_realm' \
+  --fromUrl='@cardstack/pretui/' \
+  --toUrl="${REALM_BASE_URL}/pretui/" \
   \
   ${START_SUBMISSION:+--path="${SUBMISSION_REALM_PATH}"} \
   ${START_SUBMISSION:+--username='submission_realm'} \
