@@ -25,6 +25,7 @@ import {
   resolveFileDefCodeRef,
 } from '../file-def-code-ref.ts';
 import { baseRef } from '../constants.ts';
+import { realmConfigHrefFor } from '../paths.ts';
 import { CARD_INSTANCE_FILE_KEY } from '../search-doc-keys.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 import type { FileDefBindings } from '../file-def-bindings.ts';
@@ -72,7 +73,7 @@ export async function performFileIndexing({
   resourceCreatedAt,
   hasModulePrerender,
   isCardInstance,
-  realmURL: _realmURL,
+  realmURL,
   auth: _auth,
   jobInfo,
   precomputedExtractResult,
@@ -205,6 +206,29 @@ export async function performFileIndexing({
   );
   let fileTypes = extractResult.types ?? fallbackTypes;
   let deps = new Set(extractResult.deps ?? []);
+  // The realm's config document, as a dependency of every file row.
+  //
+  // What a file's row says it is depends on the realm's `fileTypes` bindings,
+  // and the bindings reach the extract as a render parameter rather than as a
+  // module it fetches — so nothing else puts this edge in the graph, and
+  // without it editing a binding re-indexes the config card alone. Every
+  // already-stored file would keep the class it was last indexed as while
+  // dispatch resolved the new one, which is the disagreement the binding
+  // exists to prevent; and `enumerateFileRenderings` keys a file's fitted and
+  // embedded HTML on `types[0]`, so a skewed row would contribute no
+  // candidates at all and say nothing about why.
+  //
+  // Recorded for every file, not only for a bound one. A row indexed while the
+  // realm bound nothing is exactly the row that must be revisited when the
+  // realm binds its first extension, and a conditional edge is absent from
+  // precisely those rows — it would never heal.
+  //
+  // The config document's own file row is the exception, since an edge from it
+  // to itself is a cycle the invalidation walk has no reason to carry.
+  let realmConfigHref = realmConfigHrefFor(realmURL);
+  if (fileURL !== realmConfigHref) {
+    deps.add(realmConfigHref);
+  }
 
   // Shared by the success entry and the dependency-error entry below, so the
   // two rows carry the same search keys. Two of them are synthetic (stamped

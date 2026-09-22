@@ -201,6 +201,7 @@ export class IndexRunner {
     changes: PrerenderedHtmlChange[];
     generation: number;
     loaderEpoch: string;
+    fileDefBindings: FileDefBindings;
   }) => void;
   readonly stats: Stats = {
     instancesIndexed: 0,
@@ -279,6 +280,7 @@ export class IndexRunner {
       changes: PrerenderedHtmlChange[];
       generation: number;
       loaderEpoch: string;
+      fileDefBindings: FileDefBindings;
     }): void;
   }) {
     this.#indexWriter = indexWriter;
@@ -387,7 +389,7 @@ export class IndexRunner {
     current.#perfLog.debug(
       `${jobIdentity(current.#jobInfo)} completed invalidations in ${discoverMs} ms`,
     );
-    current.#notifyInvalidationsReady(
+    await current.#notifyInvalidationsReady(
       discoverResult.urls,
       new Set(discoverResult.deletedUrls),
     );
@@ -597,7 +599,7 @@ export class IndexRunner {
       try {
         await current.batch.invalidate(urls);
         discoverMs = Date.now() - discoverStart;
-        current.#notifyInvalidationsReady(
+        await current.#notifyInvalidationsReady(
           current.batch.invalidations,
           new Set(
             [...operations]
@@ -741,7 +743,7 @@ export class IndexRunner {
   // genuine deletions (the URLs in `deletes`) as 'delete', everything else —
   // fan-out dependents are always re-renders — as 'update'. Only fires in
   // split mode; the fused path renders HTML inline and enqueues nothing.
-  #notifyInvalidationsReady(urls: string[], deletes: Set<string>) {
+  async #notifyInvalidationsReady(urls: string[], deletes: Set<string>) {
     if (!this.#onInvalidationsReady || urls.length === 0) {
       return;
     }
@@ -755,6 +757,14 @@ export class IndexRunner {
       })),
       generation: this.batch.currentGeneration,
       loaderEpoch: this.batch.loaderEpoch,
+      // This pass's answer, handed on rather than left for the HTML job to
+      // read again. The two jobs write different halves of the same row —
+      // this pass writes `types`, that one writes the HTML keyed on
+      // `types[0]` — so two independent reads of a document an author can
+      // edit between them would key the HTML under one class and read it
+      // under another, and the row would simply have no fitted or embedded
+      // candidates with nothing saying why.
+      fileDefBindings: await this.getFileDefBindings(),
     });
   }
 

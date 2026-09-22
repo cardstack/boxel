@@ -132,13 +132,31 @@ module(basename(import.meta.filename), function () {
   });
 
   module('what is refused', function () {
+    test("an extension that names the platform's own machinery", function (assert) {
+      let { bindingsFor, warnings } = collect();
+      let bindings = bindingsFor({
+        '.gts': AUDIT_LOG,
+        '.ts': AUDIT_LOG,
+        '.json': AUDIT_LOG,
+      });
+
+      assert.deepEqual(
+        bindings,
+        {},
+        'a module\u2019s source and a card instance\u2019s stored document ' +
+          'are the platform\u2019s to type, though all three pass the ' +
+          'is-this-a-file test',
+      );
+      assert.strictEqual(warnings().length, 3, 'each is reported on its own');
+    });
+
     test('an extension the platform does not read as a file', function (assert) {
       let { bindingsFor, warnings } = collect();
-      let bindings = bindingsFor({ '.log': AUDIT_LOG });
+      let bindings = bindingsFor({ '.parquet': AUDIT_LOG });
 
       assert.deepEqual(bindings, {}, 'nothing binds');
       assert.true(
-        warnings()[0]?.includes('.log'),
+        warnings()[0]?.includes('.parquet'),
         `the refusal names the extension: ${warnings()[0]}`,
       );
     });
@@ -178,7 +196,7 @@ module(basename(import.meta.filename), function () {
       let { bindingsFor, warnings } = collect();
       let bindings = bindingsFor({
         '.txt': AUDIT_LOG,
-        '.log': AUDIT_LOG,
+        '.parquet': AUDIT_LOG,
       });
 
       assert.deepEqual(Object.keys(bindings), ['.txt']);
@@ -214,6 +232,29 @@ module(basename(import.meta.filename), function () {
           module: rri(`${baseRealm.url}markdown-file-def`),
           name: 'MarkdownDef',
         },
+      );
+    });
+
+    test('a log is a text file, bindable like any other', function (assert) {
+      assert.deepEqual(
+        resolveFileDefCodeRef(
+          new URL(`${REALM.href}audit.log`),
+          virtualNetwork,
+          {},
+        ),
+        { module: rri(`${baseRealm.url}text-file-def`), name: 'TextFileDef' },
+        'the platform types it as text rather than leaving it a bare FileDef',
+      );
+      assert.deepEqual(
+        resolveFileDefCodeRef(
+          new URL(`${REALM.href}audit.log`),
+          virtualNetwork,
+          {
+            '.log': { module: rri(`${REALM.href}audit-log`), name: 'AuditLog' },
+          },
+        ),
+        { module: rri(`${REALM.href}audit-log`), name: 'AuditLog' },
+        'and a realm can bind it to a subclass of its own',
       );
     });
 

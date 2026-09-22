@@ -383,7 +383,11 @@ import {
   computeContentHashFromRanges,
   isSampledContentHash,
 } from './content-hash.ts';
-import { resolveFileDefCodeRef, urlNamesFile } from './file-def-code-ref.ts';
+import {
+  boundFileDefCodeRef,
+  resolveFileDefCodeRef,
+  urlNamesFile,
+} from './file-def-code-ref.ts';
 import {
   FILE_TYPE_BINDINGS_ATTRIBUTE,
   NO_FILE_DEF_BINDINGS,
@@ -8603,7 +8607,17 @@ export class Realm {
       : { contentHash: undefined, contentSize: undefined };
     let contentHash = persistedMeta.contentHash ?? searchHash;
     let contentSize = persistedMeta.contentSize ?? searchSize;
+    // A binding wins over the row, and the row wins over everything else.
+    //
+    // The row records what some past pass resolved, so it lags a binding the
+    // realm has since declared or changed. Dispatch reads the bindings live,
+    // so deferring to a stale row here would serve a document naming one class
+    // while an operation against the same file resolved another — and a client
+    // that hydrated the served class would not carry the operation at all. The
+    // row still answers for every extension the realm says nothing about,
+    // which is all of them for a realm that binds nothing.
     let adoptsFrom =
+      boundFileDefCodeRef(new URL(fileURL), fileTypes) ??
       codeRefFromInternalKey(fileEntry.types?.[0]) ??
       (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
         ? fileEntry.resource?.meta?.adoptsFrom
