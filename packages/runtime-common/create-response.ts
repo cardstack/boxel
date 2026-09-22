@@ -69,7 +69,7 @@ export function createResponse({
       // CORS-safelisted and survives regardless; it is named alongside the
       // pair so the range trio reads as one unit.
       'Access-Control-Expose-Headers':
-        'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable,X-Boxel-Realm-Archived,X-Boxel-Canonical-Path,X-Boxel-Not-Ready,Authorization,Cache-Control,ETag,Retry-After,Content-Range,Accept-Ranges,Content-Length',
+        'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable,X-Boxel-Realm-Archived,X-Boxel-Canonical-Path,X-Boxel-Not-Ready,X-Boxel-Index-Pending,Authorization,Cache-Control,ETag,Retry-After,Content-Range,Accept-Ranges,Content-Length',
     },
   });
 }

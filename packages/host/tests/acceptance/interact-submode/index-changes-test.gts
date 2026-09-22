@@ -38,12 +38,11 @@ module('Acceptance | interact submode | index changes tests', function (hooks) {
     // caches under this module's name, which the outer prefix cannot match.
     setupRealmCacheTeardown(hooks);
 
-    test('a card another client created reads as being prepared, then renders itself once indexing lands', async function (assert) {
+    test('a card another client created renders from its file before indexing lands', async function (assert) {
       // Another client's write lands on the realm's file system, with no
       // indexing pass behind it yet. Writing through the adapter reproduces
       // that: the bytes are on the realm, and nothing about the card has
-      // passed through this tab — no instance in its store to fall back on,
-      // which is what makes the placeholder the right thing to show.
+      // passed through this tab — no instance in its store to fall back on.
       let { adapter } = getTestRealmRegistry().get(testRealmURL)!;
       let cardURL = `${testRealmURL}Person/late`;
       await adapter.write(
@@ -79,17 +78,14 @@ module('Acceptance | interact submode | index changes tests', function (hooks) {
       });
 
       assert
+        .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
+        .hasText('Late', 'the card renders from what the realm holds');
+      assert
         .dom('[data-test-card-awaiting-index]')
-        .containsText(
-          'Preparing this card',
-          'the card reads as being prepared rather than missing',
-        );
+        .doesNotExist('nothing stands in for it');
       assert
         .dom('[data-test-card-error]')
         .doesNotExist('nothing is reported as an error');
-      assert
-        .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
-        .doesNotExist('the card itself has nothing to render yet');
 
       // Indexing catches up with the file that was already there — the same
       // bytes, now with a row behind them.
@@ -114,11 +110,11 @@ module('Acceptance | interact submode | index changes tests', function (hooks) {
       await settled();
 
       assert
-        .dom('[data-test-card-awaiting-index]')
-        .doesNotExist('the placeholder gives way on its own');
-      assert
         .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
-        .hasText('Late', 'the card renders without a reload');
+        .hasText('Late', 'the card still renders once its row lands');
+      assert
+        .dom('[data-test-card-error]')
+        .doesNotExist('and nothing is reported as an error');
     });
 
     test('stack item live updates when index changes', async function (assert) {

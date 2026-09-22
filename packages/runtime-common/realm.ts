@@ -143,7 +143,6 @@ import {
 import {
   systemError,
   notFound,
-  notIndexedYet,
   notAcceptable,
   methodNotAllowed,
   badRequest,
@@ -623,6 +622,16 @@ function maskLoggedURL(urlString: string): string {
 // anonymous readers, other users' sessions, and any read that exhausts the
 // drain budget.
 export const SKIP_INDEX_WAIT_HEADER = 'x-boxel-skip-index-wait';
+
+// Set on a card+json response whose document was built from the card's stored
+// file because the index has no row for it yet: a create that answered before
+// its own index pass landed, or a read of a card whose pass is still pending.
+// The document carries what the file says — the id, the attributes and links
+// the writer stored, `lastModified`, `version` — and none of what only the
+// index knows: computed fields, resolved links, `meta.screenshots`. The index
+// event for the card follows when the pass lands, and a caller that needs the
+// indexed document reads it again then.
+export const INDEX_PENDING_HEADER = 'x-boxel-index-pending';
 function isSkipIndexWaitRequest(request: Request): boolean {
   return (request.headers.get(SKIP_INDEX_WAIT_HEADER) ?? '').length > 0;
 }
@@ -719,6 +728,14 @@ const LANE_DIAGNOSTIC_BUDGET_MS = 1_000;
 // previous generation, and the index event that follows the swap refreshes
 // live clients.
 const READ_INDEX_DRAIN_BUDGET_MS = 10_000;
+// How long a card create waits for its own index pass before answering from
+// the document it stored. The pass runs in the realm's one indexing lane, so
+// behind a long pass it can be minutes away, and until the 201 arrives the
+// client holds the new card under a local id with nothing to link to it by.
+// Sized so a create on a quiet realm still lands in the wait and answers from
+// the index, and a create behind a busy lane has its id within about a second
+// of the commit.
+const CREATE_INDEX_WAIT_BUDGET_MS = 1_000;
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
 // How long a conditional write waits for the realm's indexing lane before it
@@ -1604,6 +1621,16 @@ export interface WriteOptions {
   // Called at most once, and not at all by a write that failed before reaching
   // durability.
   onDurable?: () => void;
+  // Handed the settle of this commit's own index pass, on a write that does
+  // not wait for it (`waitForIndex: false`). A caller that can use indexed
+  // state if it arrives soon, and can answer without it otherwise, waits on
+  // this for as long as it is willing to rather than for the whole lane. It
+  // resolves whether the pass succeeded or failed — the pass's failure is
+  // the index's to record, not this caller's to throw.
+  //
+  // Not called when the commit queued no pass, because nothing on disk
+  // changed.
+  onIndexQueued?: (indexed: Promise<void>) => void;
 }
 
 export interface RealmAdapter {
@@ -1744,6 +1771,10 @@ interface Options {
   // READ_INDEX_DRAIN_BUDGET_MS; tests shrink it to exercise the timeout path
   // without holding real time.
   readIndexDrainBudgetMs?: number;
+  // How long a card create waits for its own index pass before answering from
+  // the document it stored. Defaults to CREATE_INDEX_WAIT_BUDGET_MS; tests
+  // move it to pin one branch or the other rather than race the worker.
+  createIndexWaitBudgetMs?: number;
 }
 
 interface UpdateItem {
@@ -1907,6 +1938,7 @@ export class Realm {
   #cardDocumentCache: CardDocumentCache | undefined;
   #screenshotSyncWaitMs: number;
   #readIndexDrainBudgetMs: number;
+  #createIndexWaitBudgetMs: number;
   #cachedRealmInfo: RealmInfo | null = null;
   // The `config` half of the same parse, held apart from `#cachedRealmInfo`
   // for the reason the lifecycle timestamps below are: that object is what the
@@ -2131,6 +2163,8 @@ export class Realm {
       opts?.screenshotSyncWaitMs ?? SCREENSHOT_SYNC_WAIT_BUDGET_MS;
     this.#readIndexDrainBudgetMs =
       opts?.readIndexDrainBudgetMs ?? READ_INDEX_DRAIN_BUDGET_MS;
+    this.#createIndexWaitBudgetMs =
+      opts?.createIndexWaitBudgetMs ?? CREATE_INDEX_WAIT_BUDGET_MS;
     let owner: string | undefined;
     let _fetch = fetcher(
       virtualNetwork.fetch,
@@ -4238,6 +4272,12 @@ export class Realm {
         // caller has its answer, so they are nobody's latency and this write
         // reports no wait for them.
         stageCursor?.mark('enqueue');
+        options?.onIndexQueued?.(
+          settled.then(
+            () => undefined,
+            () => undefined,
+          ),
+        );
         settled.catch((err: unknown) => {
           // Covers worker job rejection AND post-worker realm-side work
           // (onInvalidation / handleExecutableInvalidations / broadcast).
@@ -8608,35 +8648,53 @@ export class Realm {
     return await this.#adapter.exists(localPath);
   }
 
-  // The index has no row for `localPath`, so there is no card document to
-  // serve. Which 404 that is depends on the source file: a write lands on the
-  // realm's file system first and is indexed after, so a card whose `.json` is
-  // already on disk is one this realm has not caught up with rather than one
-  // that does not exist. `notIndexedYet` says so, letting a caller hold a
-  // placeholder until the realm broadcasts the index event for it. A read
-  // served by the replica that took the write rarely gets here — that path
-  // drains its own in-flight indexing first — but a read served by any other
-  // replica has no such handle on the write.
+  // The index has no row for `localPath`. Which answer that is depends on the
+  // source file: a write lands on the realm's file system first and is indexed
+  // after, so a card whose `.json` is already on disk is one the index has not
+  // caught up with rather than one that does not exist, and the realm serves
+  // it from the file (see `#pendingCardResponse`).
   private async missingInstanceResponse(
+    request: Request,
+    requestContext: RequestContext,
+    localPath: LocalPath,
+  ): Promise<Response> {
+    return await this.#pendingCardResponse(request, requestContext, localPath);
+  }
+
+  // A card+json answer for a card whose file is on disk and whose index row is
+  // not: the document the file holds, the way a create that answered before
+  // its pass landed reports it (see `serializedInstanceEcho`), marked with
+  // INDEX_PENDING_HEADER. The file is durable the moment a write commits, so
+  // the card exists from then on — it is only the index that has not caught
+  // up, and a reader that asks for the card by id in that window is asking
+  // for something the realm holds.
+  //
+  // Served uncached and with no validator. An ETag is a function of the index
+  // row, and there is none; and the answer is provisional in a way a cache
+  // must not keep, since the document the index will serve adds computed
+  // fields and resolved links this one does not have. The card's index event
+  // follows when its pass lands.
+  //
+  // A path whose file is not a single card document answers 404, as a card
+  // that does not exist.
+  async #pendingCardResponse(
     request: Request,
     requestContext: RequestContext,
     localPath: LocalPath,
   ): Promise<Response> {
     let sourcePath = `${localPath}.json` as LocalPath;
     if (await this.isIgnored(this.paths.fileURL(sourcePath))) {
-      // An ignored path is never visited, so no amount of waiting produces an
-      // index row for it.
+      // An ignored path is never visited, so it is never a card.
       return notFound(request, requestContext);
     }
     let source = await this.readFileAsText(sourcePath);
     if (!source) {
       return notFound(request, requestContext);
     }
-    // The marker promises an index row is coming, so it has to match what the
-    // indexer will actually make one for: a `.json` whose `data` is a single
-    // card resource. A collection document (which `isCardDocumentString` also
-    // accepts) never becomes an instance row, and neither does anything else
-    // — those are genuinely not cards, not cards in waiting.
+    // Only what the indexer would make an instance row for: a `.json` whose
+    // `data` is a single card resource. A collection document (which
+    // `isCardDocumentString` also accepts) never becomes an instance, and
+    // neither does anything else — those are not cards.
     let parsed: unknown;
     try {
       parsed = JSON.parse(source.content);
@@ -8646,7 +8704,56 @@ export class Realm {
     if (!isSingleCardDocument(parsed)) {
       return notFound(request, requestContext);
     }
-    return notIndexedYet(request, requestContext);
+    let url = this.paths.fileURL(localPath);
+    // The version is the fingerprint the write recorded over the bytes it
+    // stored. Not recomputed here when there is none: this is the decoded
+    // text, not the bytes, and a hash over it can disagree with the one every
+    // other answer for the card reports.
+    let version = this.#dbAdapter
+      ? (await getContentMeta(this.#dbAdapter, this.url, sourcePath))
+          .contentHash
+      : undefined;
+    let doc = await this.serializedInstanceEcho(
+      parsed,
+      url.href,
+      source.lastModified,
+      version,
+    );
+    this.#serveInstanceIdsAsRRI(doc);
+    let created = await this.getCreatedTime(sourcePath);
+    return createResponse({
+      requestContext,
+      body: request.method === 'HEAD' ? null : JSON.stringify(doc, null, 2),
+      init: {
+        headers: {
+          'content-type': SupportedMimeType.CardJson,
+          'cache-control': 'no-store',
+          ...lastModifiedHeader(doc),
+          ...(created != null
+            ? { 'x-created': formatRFC7231(created * 1000) }
+            : {}),
+          [INDEX_PENDING_HEADER]: 'true',
+        },
+      },
+    });
+  }
+
+  // Whether a card+json read of `url` should be answered from the card's file
+  // before it waits on anyone's indexing: the realm has a pass in flight and
+  // the index has no row for the card, so there is nothing a wait could make
+  // fresher than the file already is — only a row that does not exist yet.
+  // A card whose row exists (clean or errored) waits as it always has, since
+  // there the row may be the one the requester's own write is superseding,
+  // and so does a path with no card source at all — an uploaded file asked
+  // for as card+json is answered with its metadata, not as a card.
+  async #readsPendingCard(url: URL, localPath: LocalPath): Promise<boolean> {
+    if (!this.incrementalIndexing()) {
+      return false;
+    }
+    if (!(await this.#adapter.exists(`${localPath}.json`))) {
+      return false;
+    }
+    return (await this.#realmIndexQueryEngine.instance(url)) === undefined;
   }
 
   private async fileMetaDocument(
@@ -9041,11 +9148,11 @@ export class Realm {
   ): Promise<Response> {
     let duringPrerender = isDuringPrerenderRequest(request);
     // A skip-index-wait caller (see SKIP_INDEX_WAIT_HEADER) gets the same
-    // write-side treatment as a prerender write: index deferred, answer from
-    // the serialized echo. `answerFromEcho` gates exactly those two decisions
-    // (whether the batch waits for indexing, and whether the new card is read
-    // back out of the index or echoed) and nothing prerender-specific beyond
-    // them.
+    // treatment as a prerender write: it answers from the serialized echo
+    // without waiting any time at all for the index pass. `answerFromEcho`
+    // gates exactly that decision and nothing prerender-specific beyond it;
+    // every other create waits for its own pass, bounded, and echoes only if
+    // the pass outlives the wait.
     let answerFromEcho = duringPrerender || isSkipIndexWaitRequest(request);
     let body = await request.text();
     let json;
@@ -9082,6 +9189,9 @@ export class Realm {
     }
     let lid =
       typeof primaryResource.lid === 'string' ? primaryResource.lid : undefined;
+    // The settle of the create's own index pass, handed over once the pass is
+    // queued. Absent for an echoing caller, which does not wait for it.
+    let indexed: Promise<void> | undefined;
     let result: BatchEntryResult;
     try {
       result = (
@@ -9110,20 +9220,37 @@ export class Realm {
             ...(requestContext.authenticatedUser
               ? { actor: requestContext.authenticatedUser }
               : {}),
-            // Waiting decides two things and an echoing caller wants neither:
-            // the batch drains indexing already in flight before it stages,
-            // and it returns only once its own index job has landed. A
-            // prerender-originated write MUST NOT wait — the job it would wait
-            // on needs the render slot, and on the queued-command path the
-            // worker, that this caller is holding, so waiting deadlocks — and
-            // it has nothing to read back either, since it answers from what
-            // it wrote. Skipping the drain costs the write nothing: serializing
-            // a card resolves its type through `lookupDefinition`, which reads
-            // the module off disk rather than out of the index, and the commit
-            // drops a rewritten module's cached definition as it writes the
-            // bytes.
-            ...(answerFromEcho ? { waitForIndex: false } : {}),
-            reportStoredContent: answerFromEcho,
+            // A create never waits on the indexing lane as a whole. Waiting
+            // would decide two things: the batch would drain indexing already
+            // in flight before it stages, and it would return only once its
+            // own index job has landed — and that job runs in the realm's one
+            // lane, behind every pass queued ahead of it, so a create behind a
+            // long pass would hold its answer (and the client its new card's
+            // id) for as long as that pass takes. Skipping the drain costs the
+            // write nothing: serializing a card resolves its type through
+            // `lookupDefinition`, which reads the module off disk rather than
+            // out of the index, and the commit drops a rewritten module's
+            // cached definition as it writes the bytes.
+            //
+            // What the create does wait for is its own pass, for a bounded
+            // time (see `#createIndexWaitBudgetMs` below). An echoing caller
+            // does not wait for even that: a prerender-originated write MUST
+            // NOT — the job it would wait on needs the render slot, and on the
+            // queued-command path the worker, that this caller is holding, so
+            // waiting deadlocks — and it has nothing to read back either,
+            // since it answers from what it wrote.
+            waitForIndex: false,
+            // Always reported, because any create may end up answering from
+            // what it stored: an echoing caller by choice, and every other
+            // caller whose pass outlives the wait.
+            reportStoredContent: true,
+            ...(answerFromEcho
+              ? {}
+              : {
+                  onIndexQueued: (settled: Promise<void>) => {
+                    indexed = settled;
+                  },
+                }),
             // A side-load claiming another realm is not this realm's to
             // create, and a `POST` carrying one has always stored the card
             // with that edge empty rather than refusing the write.
@@ -9154,8 +9281,22 @@ export class Realm {
     // answer for what it is reporting.
     let version = result.meta.version;
     let newURL = result.id;
+    // Whether the pass landed while the create was willing to wait for it.
+    // Bounded, because the pass waits its turn in the realm's indexing lane
+    // and the create's answer must not: past the budget the create answers
+    // from what it stored, marked as such, and the index event for the card
+    // follows when the pass lands. A realm that indexes promptly lands inside
+    // the wait and answers from the index, so its writer's next search sees
+    // the card as it always has.
+    let pendingPass = indexed;
+    let landed =
+      !answerFromEcho &&
+      (pendingPass === undefined ||
+        (await timings.time('awaitIndex', () =>
+          settledBy(pendingPass, Date.now() + this.#createIndexWaitBudgetMs),
+        )));
     let doc: SingleCardDocument;
-    if (answerFromEcho) {
+    if (!landed) {
       // See serializedInstanceEcho: the write indexed deferred, so there is
       // nothing to read back yet. The document is the one the commit stored,
       // reported by the batch rather than read back off the file — which has
@@ -9192,7 +9333,8 @@ export class Realm {
       // response document is not part of that path, and could not be — the
       // index answers in ids, never in the `lid` a caller would match on.
       // Writes that answer from the serialized echo — prerender and
-      // skip-index-wait callers — return no `included` at all and always have.
+      // skip-index-wait callers, and a create whose pass outlived the wait —
+      // return no `included` at all.
       let entry = await timings.time('readback', () =>
         this.#realmIndexQueryEngine.cardDocument(new URL(newURL)),
       );
@@ -9229,6 +9371,7 @@ export class Realm {
           'content-type': SupportedMimeType.CardJson,
           ...lastModifiedHeader(doc),
           ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
+          ...(landed ? {} : { [INDEX_PENDING_HEADER]: 'true' }),
         },
       },
       requestContext,
@@ -10141,10 +10284,6 @@ export class Realm {
     if (!(await this.permittedToRead(request, requestContext))) {
       return this.realmIdentityResponse(requestContext);
     }
-    // Read-your-writes, as on the `GET`: a validator computed off an index the
-    // requester's own write has not reached yet would 304 their next `GET`
-    // against state they just superseded.
-    await this.drainRequestersOwnIndexing(request, requestContext);
     let requestedLocalPath = this.paths.local(new URL(request.url));
     if (requestedLocalPath.endsWith('.json')) {
       // The canonical extension-less URL is the only one that ever carries a
@@ -10167,6 +10306,19 @@ export class Realm {
     }
     let localPath = requestedLocalPath === '' ? 'index' : requestedLocalPath;
     let url = this.paths.fileURL(localPath);
+    // The headers the `GET` would send, which for a card whose row is not
+    // there yet are the file-backed answer's.
+    if (await this.#readsPendingCard(url, localPath)) {
+      return await this.#pendingCardResponse(
+        request,
+        requestContext,
+        localPath,
+      );
+    }
+    // Read-your-writes, as on the `GET`: a validator computed off an index the
+    // requester's own write has not reached yet would 304 their next `GET`
+    // against state they just superseded.
+    await this.drainRequestersOwnIndexing(request, requestContext);
     let start = Date.now();
     try {
       let {
@@ -10313,10 +10465,6 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    // Read-your-writes: wait (scoped, bounded) on the requester's own
-    // in-flight incremental indexing before reading the card from the
-    // index. See drainRequestersOwnIndexing.
-    await this.drainRequestersOwnIndexing(request, requestContext);
     let requestedLocalPath = this.paths.local(new URL(request.url));
     let requestedHadJsonExtension = requestedLocalPath.endsWith('.json');
     // `.json` requests always 302 to the canonical no-extension URL,
@@ -10350,6 +10498,17 @@ export class Realm {
       localPath = 'index';
     }
     let url = this.paths.fileURL(localPath);
+    if (await this.#readsPendingCard(url, localPath)) {
+      return await this.#pendingCardResponse(
+        request,
+        requestContext,
+        localPath,
+      );
+    }
+    // Read-your-writes: wait (scoped, bounded) on the requester's own
+    // in-flight incremental indexing before reading the card from the
+    // index. See drainRequestersOwnIndexing.
+    await this.drainRequestersOwnIndexing(request, requestContext);
     let start = Date.now();
     try {
       let cacheControl = this.cardJsonCacheControl(requestContext);
@@ -10686,11 +10845,14 @@ export class Realm {
       return notFound(request, requestContext);
     }
     if (assembly.kind === 'not-indexed') {
-      // The card's source is on disk and the index has not caught up. A read
-      // served by the replica that took the write rarely gets here — that path
-      // drains its own in-flight indexing first — but a read served by any
-      // other replica has no such handle on the write.
-      return notIndexedYet(request, requestContext);
+      // The card's source is on disk and the index has not caught up — on any
+      // replica, which is why this does not rely on the replica that took the
+      // write having drained its own indexing first.
+      return await this.#pendingCardResponse(
+        request,
+        requestContext,
+        this.paths.local(url),
+      );
     }
     if (assembly.kind === 'redirect') {
       return createResponse({

@@ -182,6 +182,9 @@ export interface BatchCore {
       // them, so a caller holding write locks over those files can end its
       // critical section at the boundary the locks are actually for.
       onDurable?: () => void;
+      // Handed the settle of the commit's own index pass when the commit
+      // does not wait for it. See `CommitBatchOptions.onIndexQueued`.
+      onIndexQueued?: (indexed: Promise<void>) => void;
     },
   ): Promise<{
     writes: {
@@ -283,6 +286,14 @@ export interface CommitBatchOptions {
   // what it wrote — which would otherwise have to go back to the file the
   // commit just closed.
   reportStoredContent?: boolean;
+  // Handed the settle of the batch's own index pass, on a batch that does not
+  // wait for it (`waitForIndex: false`). It is for a caller that would rather
+  // answer from indexed state but will not wait on the whole indexing lane
+  // for it: the pass queues behind every other pass in the realm, so how long
+  // it takes is not this batch's to bound, but how long the caller waits for
+  // it is. Resolves whether the pass succeeded or failed, and is never called
+  // for a batch that changed nothing on disk.
+  onIndexQueued?: (indexed: Promise<void>) => void;
   // What a link to a side-loaded resource the batch will not write means. Such
   // a resource is one claiming another realm, which is not this batch's to
   // create, so the link resolves to nothing either way — the question is
@@ -1923,6 +1934,7 @@ async function commitStaged(
       initiatingUser: opts.actor ?? null,
       ...(stageCursor ? { stageCursor } : {}),
       onDurable: releaseLocks,
+      ...(opts.onIndexQueued ? { onIndexQueued: opts.onIndexQueued } : {}),
     },
   );
   // Emitted here rather than where the record was built: a staged entry is not

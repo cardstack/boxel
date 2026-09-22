@@ -21,6 +21,7 @@ import {
   baseRRI,
   rri,
   SKIP_INDEX_WAIT_HEADER,
+  INDEX_PENDING_HEADER,
   searchEntryWireQueryFromQuery,
   setWriteTimingSinkForTests,
   type LooseSingleCardDocument,
@@ -1156,19 +1157,40 @@ module(basename(import.meta.filename), function () {
               );
             });
 
-            test('the 404 for a single-card source says it is awaiting indexing rather than missing', async function (assert) {
+            test('a single-card source is served from its file, marked as awaiting its index row', async function (assert) {
               let response = await request
                 .get('/unindexed-card')
                 .set('Accept', 'application/vnd.card+json');
 
               assert.strictEqual(
                 response.status,
-                404,
-                `HTTP 404 status: ${response.text}`,
+                200,
+                `HTTP 200 status: ${response.text}`,
               );
-              assert.true(
-                response.body.errors?.[0]?.awaitingIndex,
-                'the error carries the awaiting-index marker',
+              assert.strictEqual(
+                response.headers[INDEX_PENDING_HEADER],
+                'true',
+                'the answer says the index has not caught up with the card',
+              );
+              assert.strictEqual(
+                response.body.data.id,
+                `${testRealmHref}unindexed-card`,
+                'the card is identified by its own URL',
+              );
+              assert.strictEqual(
+                response.body.data.attributes?.firstName,
+                'Pending',
+                'the document is what the file holds',
+              );
+              assert.strictEqual(
+                response.headers['cache-control'],
+                'no-store',
+                'a provisional answer is not kept by a cache',
+              );
+              assert.strictEqual(
+                response.headers['etag'],
+                undefined,
+                'there is no index row to build a validator from',
               );
             });
 
@@ -1180,12 +1202,18 @@ module(basename(import.meta.filename), function () {
 
               assert.strictEqual(
                 response.status,
-                404,
-                `HTTP 404 status: ${response.text}`,
+                200,
+                `HTTP 200 status: ${response.text}`,
               );
-              assert.true(
-                response.body.errors?.[0]?.awaitingIndex,
-                'the error carries the awaiting-index marker',
+              assert.strictEqual(
+                response.headers[INDEX_PENDING_HEADER],
+                'true',
+                'the answer says the index has not caught up with the card',
+              );
+              assert.strictEqual(
+                response.body.data.attributes?.firstName,
+                'Pending',
+                'the document is what the file holds',
               );
             });
 

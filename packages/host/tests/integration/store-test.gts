@@ -79,6 +79,29 @@ import type {
   RealmEventContent,
 } from '@cardstack/base/matrix-event';
 
+// The error a card+json read raises when the realm answers the awaiting-index
+// 404 — the card's source is on the realm but its index row is not. The realm
+// serves such a card from its file, so the store's handling of this answer is
+// pinned by stubbing the read rather than by staging the realm into it.
+function awaitingIndexError(url: string) {
+  let err = new Error('awaiting index') as any;
+  err.status = 404;
+  err.responseText = JSON.stringify({
+    errors: [
+      {
+        id: url,
+        status: 404,
+        title: 'Not Found',
+        message: `${url} has not finished indexing`,
+        isCardError: true,
+        awaitingIndex: true,
+        additionalErrors: null,
+      },
+    ],
+  });
+  return err;
+}
+
 module('Integration | Store', function (hooks) {
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
@@ -3301,10 +3324,11 @@ module('Integration | Store', function (hooks) {
       .containsText('Hassan', 'card is still rendered');
   });
 
-  test('a card the realm holds but has not indexed yet shows as being prepared, then renders once indexing lands', async function (assert) {
+  test('a card the realm holds but has not indexed yet renders from its file, then from the index once indexing lands', async function (assert) {
     // Writing through the adapter puts the source on the realm without
     // enqueuing an indexing pass — the state a card+json read sees between a
-    // write landing and the index catching up with it.
+    // write landing and the index catching up with it. The realm serves the
+    // card from its file in that window.
     await testRealmAdapter.write(
       'Person/pending.json',
       JSON.stringify({
@@ -3324,19 +3348,22 @@ module('Integration | Store', function (hooks) {
       },
     );
 
-    await waitFor('[data-test-card-awaiting-index]');
+    await waitFor(
+      `[data-stack-card="${testRealmURL}Person/pending"] [data-test-field="name"]`,
+    );
+    assert
+      .dom(
+        `[data-stack-card="${testRealmURL}Person/pending"] [data-test-field="name"]`,
+      )
+      .containsText('Pending', 'the card renders from what the realm holds');
     assert
       .dom('[data-test-card-awaiting-index]')
-      .containsText(
-        'Preparing this card',
-        'the card reads as on its way rather than missing',
-      );
+      .doesNotExist('nothing stands in for it');
     assert
       .dom('[data-test-card-error]')
       .doesNotExist('no card error is reported');
 
-    // The realm indexes the file and broadcasts the invalidation, which is
-    // what the placeholder is waiting on.
+    // The realm indexes the file and broadcasts the invalidation.
     await testRealm.write(
       'Person/pending.json',
       JSON.stringify({
@@ -3348,15 +3375,15 @@ module('Integration | Store', function (hooks) {
         },
       } as LooseSingleCardDocument),
     );
+    await settled();
 
-    await waitFor('[data-test-card-awaiting-index]', { count: 0 });
     assert
       .dom(
         `[data-stack-card="${testRealmURL}Person/pending"] [data-test-field="name"]`,
       )
       .containsText(
         'Pending Person',
-        'the real card takes over once it is indexed',
+        'the indexed card takes over once it lands',
       );
   });
 
@@ -3367,8 +3394,7 @@ module('Integration | Store', function (hooks) {
     storeService.addReference(`${testRealmURL}Person/hassan`);
     await storeService.flush();
 
-    // On the realm's file system, never seen by the index: the read below
-    // comes back as the awaiting-index 404.
+    // On the realm's file system, never seen by the index.
     await testRealmAdapter.write(
       'Person/racing.json',
       JSON.stringify({
@@ -3381,25 +3407,25 @@ module('Integration | Store', function (hooks) {
       } as LooseSingleCardDocument),
     );
 
-    // Hold that 404 open after the realm has produced it but before the store
-    // records it, so the invalidation below arrives in the gap. Without the
-    // in-flight check the store finds nothing to reload, drops the event, and
-    // then installs a placeholder that no later event ever clears.
+    // The first read answers with the awaiting-index 404, held open before
+    // the store records it so the invalidation below arrives in the gap.
+    // Without the in-flight check the store finds nothing to reload, drops the
+    // event, and then installs a placeholder that no later event ever clears.
+    // The 404 is stubbed because the realm serves a card whose row is pending
+    // from its file; this pins what the store does with one, whoever sends it.
     let cardService = getService('card-service') as any;
     let originalFetchJSON = cardService.fetchJSON.bind(cardService);
     let reached404 = new Deferred<void>();
     let release404 = new Deferred<void>();
+    let firstRead = true;
     cardService.fetchJSON = async (url: string | URL, args?: any) => {
-      if (!String(url).includes('Person/racing')) {
+      if (!String(url).includes('Person/racing') || !firstRead) {
         return originalFetchJSON(url, args);
       }
-      try {
-        return await originalFetchJSON(url, args);
-      } catch (err) {
-        reached404.fulfill();
-        await release404.promise;
-        throw err;
-      }
+      firstRead = false;
+      reached404.fulfill();
+      await release404.promise;
+      throw awaitingIndexError(`${testRealmURL}Person/racing`);
     };
 
     // Deliver exactly one index event, inside the window. The realm broadcasts
@@ -3476,7 +3502,20 @@ module('Integration | Store', function (hooks) {
       } as LooseSingleCardDocument),
     );
 
-    let placeholder = await storeService.get(`${testRealmURL}Person/swept`);
+    let cardService = getService('card-service') as any;
+    let originalFetchJSON = cardService.fetchJSON.bind(cardService);
+    cardService.fetchJSON = async (url: string | URL, args?: any) => {
+      if (String(url).includes('Person/swept')) {
+        throw awaitingIndexError(`${testRealmURL}Person/swept`);
+      }
+      return originalFetchJSON(url, args);
+    };
+    let placeholder: unknown;
+    try {
+      placeholder = await storeService.get(`${testRealmURL}Person/swept`);
+    } finally {
+      delete cardService.fetchJSON;
+    }
     assert.true(
       (placeholder as CardErrorJSONAPI).awaitingIndex,
       'the read leaves an awaiting-index placeholder',
@@ -3522,7 +3561,7 @@ module('Integration | Store', function (hooks) {
     );
   });
 
-  test('a reload that 404s while the row is being rebuilt keeps the card instead of deleting it', async function (assert) {
+  test('a reload while the row is being rebuilt keeps the card instead of deleting it', async function (assert) {
     let url = `${testRealmURL}Person/rebuilt`;
     await testRealm.write(
       'Person/rebuilt.json',
@@ -3605,22 +3644,7 @@ module('Integration | Store', function (hooks) {
     // comes back as the awaiting-index 404 while the instance stays live.
     cardService.fetchJSON = async (fetchUrl: string | URL, args?: any) => {
       if (String(fetchUrl).includes(url)) {
-        let err = new Error('awaiting index') as any;
-        err.status = 404;
-        err.responseText = JSON.stringify({
-          errors: [
-            {
-              id: url,
-              status: 404,
-              title: 'Not Found',
-              message: `${url} has not finished indexing`,
-              isCardError: true,
-              awaitingIndex: true,
-              additionalErrors: null,
-            },
-          ],
-        });
-        throw err;
+        throw awaitingIndexError(url);
       }
       return originalFetchJSON(fetchUrl, args);
     };
@@ -3679,17 +3703,17 @@ module('Integration | Store', function (hooks) {
     let originalFetchJSON = cardService.fetchJSON.bind(cardService);
     let reached404 = new Deferred<void>();
     let release404 = new Deferred<void>();
+    // The first read answers with the awaiting-index 404 and is parked
+    // before the store records it; every later read goes to the realm.
+    let firstRead = true;
     cardService.fetchJSON = async (fetchUrl: string | URL, args?: any) => {
-      if (!String(fetchUrl).includes('Person/swept-inflight')) {
+      if (!String(fetchUrl).includes('Person/swept-inflight') || !firstRead) {
         return originalFetchJSON(fetchUrl, args);
       }
-      try {
-        return await originalFetchJSON(fetchUrl, args);
-      } catch (err) {
-        reached404.fulfill();
-        await release404.promise;
-        throw err;
-      }
+      firstRead = false;
+      reached404.fulfill();
+      await release404.promise;
+      throw awaitingIndexError(url);
     };
 
     let messageService = getService('message-service');

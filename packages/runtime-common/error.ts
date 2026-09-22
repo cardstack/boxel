@@ -914,21 +914,6 @@ export function notFound(
   );
 }
 
-// The instance's source file is on the realm but the index — which is what
-// card+json is served from — has no row for it yet. Still a 404, because there
-// is no card document to hand back; the `awaitingIndex` marker is what tells
-// the caller apart from `notFound`, so it can wait for the realm's index event
-// rather than treat the reference as broken.
-export function notIndexedYet(
-  request: Request,
-  requestContext: RequestContext,
-  message = `${request.url} has not finished indexing`,
-): Response {
-  let error = new CardError(message, { status: 404, id: request.url });
-  error.awaitingIndex = true;
-  return responseWithError(error, requestContext);
-}
-
 export function notAcceptable(
   request: Request,
   requestContext: RequestContext,
