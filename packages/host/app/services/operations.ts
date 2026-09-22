@@ -33,7 +33,7 @@ import {
 } from '@cardstack/runtime-common';
 import { lowerOperationDeclarations } from '@cardstack/runtime-common/card-operations';
 import type { OperationDefinition } from '@cardstack/runtime-common/card-operations';
-import type { Loader } from '@cardstack/runtime-common/loader';
+import { Loader } from '@cardstack/runtime-common/loader';
 
 import { makeDefinitionLookup } from '../lib/definition-lookup';
 import OperationLedger from '../lib/operation-ledger';
@@ -295,6 +295,26 @@ export default class OperationsService
     return this.#ledger;
   }
 
+  // The loader that built this instance's class.
+  //
+  // Not the session's current loader, which is a different object after any
+  // reset — and a card the store is already holding keeps the class the
+  // loader that built it produced. Every identity check downstream compares
+  // against that class: `getDeclaredOperations` asks whether it extends
+  // `BaseDef`, and the `BaseDef` it compares against is whichever copy of the
+  // base module the importing loader resolved. Ask the current loader after a
+  // reset and the answer is "this class does not extend BaseDef" — true of
+  // the two copies, and useless — so every operation on a resident card would
+  // quietly stop being optimistic from the first reset onward.
+  //
+  // Falls back to the session's loader for a class no loader claims, which is
+  // the same loader that would have been used before this existed.
+  private loaderFor(instance: CardDef): Loader {
+    return (
+      Loader.getLoaderFor(instance.constructor) ?? this.loaderService.loader
+    );
+  }
+
   // The operation as the realm stored it, lowered here from the same
   // declaration by the same function the indexer runs.
   //
@@ -315,7 +335,7 @@ export default class OperationsService
   private async loweredOperationsFor(
     instance: CardDef,
   ): Promise<Record<string, OperationDefinition> | undefined> {
-    let loader = this.loaderService.loader;
+    let loader = this.loaderFor(instance);
     let codeRef = identifyCard(
       instance.constructor as typeof CardAPI.BaseDef,
     ) as CodeRef | undefined;
@@ -344,7 +364,9 @@ export default class OperationsService
     loader: Loader,
   ): Promise<Record<string, OperationDefinition> | undefined> {
     try {
-      let api = await this.cardService.getAPI();
+      // Both resolved through the instance's own loader, so the classes these
+      // modules compare against are the classes this card was built from.
+      let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
       let operationsApi = await loader.import<typeof OperationsAPI>(
         '@cardstack/base/operations',
       );
@@ -374,7 +396,7 @@ export default class OperationsService
       // here means it cannot, which the realm is entirely able to cope with —
       // so it is reported and the write goes out pessimistically.
       console.warn(
-        `PROBE could not lower operations for ${JSON.stringify(codeRef)} locally, so writes to it are sent and awaited: ${
+        `could not lower operations for ${JSON.stringify(codeRef)} locally, so writes to it are sent and awaited: ${
           (err as Error)?.message ?? String(err)
         }`,
         (err as Error)?.stack,
@@ -423,10 +445,11 @@ export default class OperationsService
     if (!codeRef) {
       throw new Error('the card names no type to plan the program against');
     }
-    let api = await this.cardService.getAPI();
+    let loader = this.loaderFor(instance);
+    let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
     let lookupDefinition = makeDefinitionLookup(
       api,
-      this.loaderService.loader,
+      loader,
       'optimistic operation lowering',
     );
     let definition = await lookupDefinition(codeRef);
