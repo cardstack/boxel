@@ -63,10 +63,18 @@ export default defineConfig({
   // services stream their request logs into this job's log for the whole run,
   // so by the time the run ends anything a terminal reporter printed is tens of
   // thousands of lines from the end — and the Actions logs API serves only a
-  // tail, so it is unreachable there. GitHub annotations are attached to the
-  // job rather than written into its log, so they survive that volume: a
-  // failure names its test, file and line on the job's own page, and triage
-  // does not have to start by fetching an artifact.
+  // tail, so it is unreachable there.
+  //
+  // This reporter has no side channel: at the end of the run it writes
+  // `::error file=…,line=…::` workflow commands to this step's stdout, and the
+  // runner turns them into annotations as it reads the stream. They outlive the
+  // log volume because that conversion happens at emit time, not because they
+  // bypass the log — so a failure names its test, file and line on the job's
+  // own page, and triage does not have to start by fetching an artifact.
+  //
+  // What that costs: anything that filters, buffers or redirects the Playwright
+  // step's stdout — a `tail`, a `grep`, a redirect to a file — destroys the
+  // annotations silently. Bound the output of the steps around it instead.
   reporter: process.env.CI
     ? [
         [

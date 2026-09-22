@@ -148,6 +148,11 @@ export async function setRealmRedirects(page: Page) {
   );
 }
 
+// The rejection Playwright raises for a second `tracing.start` on a context
+// that already has one. It is the signal that the runner owns that context's
+// trace, so it is matched rather than inferred from failure in general.
+const TRACE_ALREADY_STARTED = 'Tracing has been already started';
+
 // Runs `body` against a page in a context built by hand, rather than the one the
 // `page` fixture provides. Two situations need that: a second browser identity
 // inside one test, and `beforeAll`, which only sees worker-scoped fixtures.
@@ -168,12 +173,13 @@ export async function setRealmRedirects(page: Page) {
 // Ownership is decided by whether the start succeeds, never by the attempt
 // number. The runner starts tracing on the contexts it hands out whenever the
 // attempt's trace mode calls for it, and it stops and attaches that trace
-// itself; a second `start` on such a context throws. The suite's
+// itself; a second `start` on such a context throws with
+// `TRACE_ALREADY_STARTED`, and that one rejection is what cedes ownership —
+// stopping the runner's trace here would take its artifact away. The suite's
 // `retry-with-trace` normalizes to `on-first-retry`, so that is the second
-// attempt and no other — which makes the collision invisible on a first run and
-// certain on the retry that a flake depends on. Where the start fails, the
-// runner's trace already covers the attempt, and stopping it here would take
-// that artifact away.
+// attempt and no other, which makes the collision invisible on a first run and
+// certain on the retry that a flake depends on. Any other rejection leaves the
+// attempt with no trace from either side and is reported rather than absorbed.
 //
 // Closing is best-effort on every path: a context that has wedged can fail or
 // hang on close, and that must not replace the real error, nor turn a completed
@@ -188,7 +194,20 @@ export async function withTracedContext<T>(
     .start({ screenshots: true, snapshots: true })
     .then(
       () => true,
-      () => false,
+      (e: unknown) => {
+        // Only an already-started trace means the runner owns this one.
+        // `start` awaits several calls, and a rejection from a later one
+        // arrives after the recording has taken — leaving a trace nobody
+        // stops and no artifact on either side. Say so rather than letting it
+        // read as a clean attempt.
+        let message = e instanceof Error ? e.message : String(e);
+        if (!message.includes(TRACE_ALREADY_STARTED)) {
+          console.log(
+            `[withTracedContext] ${name}: no trace for this attempt — tracing.start failed with: ${message}`,
+          );
+        }
+        return false;
+      },
     );
   let keepTrace = test.info().retry > 0;
   try {
@@ -1259,10 +1278,20 @@ export async function waitForPublishedMarker(
   }
 }
 
-// Index-only readiness, deliberately without `awaitPrerenderHtml`: this runs on
-// a path that has already failed, so it has to answer rather than hold. A 200
-// here means the realm is still serving and the stale URL is the anomaly; a 503
-// means readiness itself regressed after publish.
+// How long to give the readiness probe below. Readiness spends one shared
+// budget across its gates and answers not-ready only once that budget is gone,
+// then spends a little more naming what held it — so a deadline under the sum
+// of the two turns every genuinely-not-ready realm into an aborted request, and
+// reports the one case this probe exists to name as a network fault. This sits
+// above both. It is the cost of the failure path, not of a passing test.
+const READINESS_PROBE_TIMEOUT_MS = 15_000;
+
+// Index-only readiness: `awaitPrerenderHtml` would add its own, much longer
+// wait on top of the shared budget, and this runs on a path that is already out
+// of time. A 200 means the realm is still serving and the stale URL is the
+// anomaly; a 503 means readiness itself regressed after publish, and
+// `X-Boxel-Not-Ready` carries which gate refused — the poll loops discard the
+// body, so that header is the only place the stage is readable.
 async function probeRealmReadiness(
   page: Page,
   publishedRealmURL: string,
@@ -1270,9 +1299,13 @@ async function probeRealmReadiness(
   try {
     let response = await page.request.get(
       `${publishedRealmURL}_readiness-check`,
-      { headers: { Accept: 'text/html' }, timeout: 5_000 },
+      {
+        headers: { Accept: 'text/html' },
+        timeout: READINESS_PROBE_TIMEOUT_MS,
+      },
     );
-    return `HTTP ${response.status()}`;
+    let stage = response.headers()['x-boxel-not-ready'];
+    return `HTTP ${response.status()}${stage ? ` (${stage})` : ''}`;
   } catch (e) {
     return `unreachable (${e instanceof Error ? e.message : String(e)})`;
   }

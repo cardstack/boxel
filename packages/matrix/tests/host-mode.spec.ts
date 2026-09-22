@@ -374,7 +374,10 @@ test.describe('Host mode', () => {
       { publishedRealmURL: realm.publishedRealmURL },
     );
 
-    expect(html).toContain('data-test-host-mode-isolated');
+    // The gate matched on the marker attribute, so assert on what it did not
+    // decide: the isolated template's own content reached the served HTML,
+    // rather than an element carrying the marker and nothing inside it.
+    expect(html).toContain('Host mode isolated');
 
     await page.goto(realm.publishedCardURL, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-test-host-mode-isolated]')).toBeVisible();
