@@ -557,9 +557,15 @@ jobs:
       - name: Run Playwright tests
         run: pnpm test:group ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         working-directory: packages/matrix
-      - name: Print realm server logs
+      # The services above stream their output into this job's log as the run
+      # goes, so the file is a second copy of what is already there — and at
+      # tens of thousands of lines it pushes the Playwright run's own output
+      # past the tail the Actions logs API will serve, which is what a failed
+      # shard is read from. The tail below is for a glance; the whole file is
+      # the realm server log artifact.
+      - name: Print the tail of the realm server log
         if: ${{ !cancelled() }}
-        run: cat /tmp/server.log
+        run: tail -n 500 /tmp/server.log
       - name: Extract worker and prerender logs
         if: ${{ !cancelled() }}
         run: |
