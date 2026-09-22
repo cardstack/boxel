@@ -370,7 +370,10 @@ test.describe('Publish realm', () => {
         ),
       );
       try {
-        await waitForPublishedMarker(page, publishedRealmURL, sentinel, budget);
+        await waitForPublishedMarker(page, publishedRealmURL, sentinel, {
+          timeout: budget,
+          publishedRealmURL,
+        });
       } catch (e) {
         let body = await page.request
           .get(publishedRealmURL, {
