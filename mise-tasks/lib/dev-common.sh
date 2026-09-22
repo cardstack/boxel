@@ -344,6 +344,9 @@ fi
 if [ -z "${SKIP_EXPERIMENTS:-}" ]; then
   PHASE1_URLS="${PHASE1_URLS}|${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/experiments/${READY_PATH}"
 fi
+if [ "${START_PRETUI:-}" = "true" ]; then
+  PHASE1_URLS="${PHASE1_URLS}|${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/pretui/${READY_PATH}"
+fi
 PHASE1_URLS="${PHASE1_URLS}|${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/software-factory/${READY_PATH}"
 
 PHASE1_URLS="${PHASE1_URLS}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}"

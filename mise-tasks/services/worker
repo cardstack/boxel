@@ -33,6 +33,7 @@ START_EXPERIMENTS=$(if [ -z "${SKIP_EXPERIMENTS:-}" ]; then echo "true"; else ec
 # the definitions cache the host's prerender writes under its prefix, so the
 # three have to agree on what the variable means, not just on its name.
 START_CATALOG=$(if [ "${SKIP_CATALOG:-}" = "true" ]; then echo ""; else echo "true"; fi)
+START_PRETUI=$(if [ "${START_PRETUI:-}" = "true" ]; then echo "true"; else echo ""; fi)
 
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
@@ -62,6 +63,9 @@ NODE_ENV=development \
   \
   --fromUrl='@cardstack/skills/' \
   --toUrl="${REALM_BASE_URL}/skills/" \
+  \
+  ${START_PRETUI:+--fromUrl='@cardstack/pretui/'} \
+  ${START_PRETUI:+--toUrl="${REALM_BASE_URL}/pretui/"} \
   \
   --fromUrl='@cardstack/openrouter/' \
   --toUrl="${REALM_BASE_URL}/openrouter/" \

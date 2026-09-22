@@ -65,6 +65,14 @@ export const PREFIX_REALMS: readonly PrefixRealm[] = Object.freeze([
     prefix: '@cardstack/openrouter/',
     hostConfigKey: 'resolvedOpenRouterRealmURL',
   },
+  // `packages/pretui` is served as this realm and is also a workspace package
+  // the host compiles from the same source. The host never registers a package
+  // namespace for it, so the prefix is a plain realm mapping and the two
+  // consumers resolve one spelling to the same files.
+  {
+    prefix: '@cardstack/pretui/',
+    hostConfigKey: 'resolvedPretuiRealmURL',
+  },
 ]);
 
 /** Just the prefixes, for comparing one side's registered set against this one. */
