@@ -34,6 +34,7 @@ import {
   isSparseItemResource,
   loadCardDef,
   resolveFileDefCodeRef,
+  type FileDefBindings,
   searchEntryWireQueryFromQuery,
   getTypeRefsFromFilter,
   X_BOXEL_JOB_PRIORITY_HEADER,
@@ -3310,6 +3311,7 @@ export default class StoreService extends Service implements StoreInterface {
     let fileDefCodeRef = resolveFileDefCodeRef(
       new URL(url),
       this.network.virtualNetwork,
+      this.renderFileDefBindingsFor(url),
     );
     let extractor = new FileDefAttributesExtractor({
       loaderService: this.loaderService,
@@ -3330,6 +3332,25 @@ export default class StoreService extends Service implements StoreInterface {
       return new CardError(msg, { status: 500 });
     }
     return { data: result.resource };
+  }
+
+  // The file type bindings the render was handed, when they apply to this file.
+  //
+  // A render is given one realm's bindings — the realm whose index pass asked
+  // for it — and a card may link a file in another realm, where they mean
+  // nothing. So a file outside that realm falls back to the platform table,
+  // which is the same answer its own realm gives it unless that realm has
+  // bound the extension, and a realm's bindings are not this render's to read.
+  private renderFileDefBindingsFor(url: string): FileDefBindings | undefined {
+    let carried = (
+      globalThis as unknown as {
+        __boxelFileDefBindings?: { realm: string; types: FileDefBindings };
+      }
+    ).__boxelFileDefBindings;
+    if (!carried) {
+      return undefined;
+    }
+    return url.startsWith(carried.realm) ? carried.types : undefined;
   }
 
   // this function is used to determine if the instance will be auto-saved or

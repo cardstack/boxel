@@ -1,6 +1,7 @@
 import { baseRealm, baseFileRef } from './constants.ts';
 import { canonicalModuleKey } from './code-ref.ts';
 import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
+import type { FileDefBindings } from './file-def-bindings.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
@@ -117,6 +118,21 @@ function extensionOfName(name: string): string {
   return dot <= 0 ? '' : name.slice(dot).toLowerCase();
 }
 
+// An extension as this module's tables key on it: lowercase, with the leading
+// dot. Exported so a realm's hand-written binding is keyed the same way the
+// table it overrides is keyed, rather than matching only when the author
+// happened to spell it the way the lookup does — `.TXT` and `txt` name the
+// same files `.txt` does. Returns undefined for anything that is not one
+// extension, which is what a binding for it is refused on.
+export function normalizeFileExtension(extension: string): string | undefined {
+  let trimmed = extension.trim().toLowerCase();
+  if (!trimmed) {
+    return undefined;
+  }
+  let dotted = trimmed.startsWith('.') ? trimmed : `.${trimmed}`;
+  return /^\.[a-z0-9]+$/.test(dotted) ? dotted : undefined;
+}
+
 function extensionOf(url: URL): string {
   return extensionOfName(url.pathname.split('/').pop() ?? '');
 }
@@ -150,11 +166,26 @@ export function referenceNamesFile(reference: string): boolean {
   return segmentNamesFile(path.slice(path.lastIndexOf('/') + 1));
 }
 
+// The `FileDef` subclass a stored file is, from its extension.
+//
+// `bindings` is the realm's own answer for the extensions it has bound (see
+// `file-def-bindings.ts`), consulted ahead of the platform table. A realm binds
+// nothing by default, and then this resolves exactly what it always has.
+//
+// A bound ref is returned verbatim: bindings are resolved once, against the
+// realm's URL, where they are parsed. Resolving one here against the file's URL
+// is what would make a binding mean a different module for a file in a
+// subdirectory than for one at the realm root.
 export function resolveFileDefCodeRef(
   fileURL: URL,
   virtualNetwork: VirtualNetwork,
+  bindings?: FileDefBindings,
 ): ResolvedCodeRef {
   let extension = extensionOf(fileURL);
+  let bound = extension ? bindings?.[extension] : undefined;
+  if (bound) {
+    return bound;
+  }
   let mapping = extension
     ? FILEDEF_CODE_REF_BY_EXTENSION[extension]
     : undefined;
