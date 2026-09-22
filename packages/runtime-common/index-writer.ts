@@ -2972,10 +2972,6 @@ export class Batch {
     ]);
   }
 
-  // Each invalidated URL's rows as the production index still holds them:
-  // the row type (`instance` / `file`) and whether it is already a tombstone,
-  // plus `cardTypes` — the row's adoption chain, which is the pre-pass half of
-  // `#touchedTypes`.
   // The adoption chains `boxel_index_working` currently holds for these URLs.
   // Feeds `#touchedTypes` only — see `tombstoneEntries` for why the tombstone
   // decisions read production instead.
@@ -3001,6 +2997,10 @@ export class Batch {
     return rows.map((row) => row.types);
   }
 
+  // Each invalidated URL's rows as the production index still holds them:
+  // the row type (`instance` / `file`) and whether it is already a tombstone,
+  // plus `cardTypes` — the row's adoption chain, which is the pre-pass half of
+  // `#touchedTypes`.
   private async existingIndexTypes(
     invalidations: string[],
   ): Promise<Map<string, ExistingIndexRowType[]>> {

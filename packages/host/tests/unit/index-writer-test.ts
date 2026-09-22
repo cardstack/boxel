@@ -3273,15 +3273,46 @@ module('Unit | index-writer', function (hooks) {
       ],
     );
 
-    // Nothing to carry forward on the first pass, so it rebuilds in full and
-    // leaves the row the next pass merges over.
-    let batch = await indexWriter.createBatch(
-      new URL(testRealmURL),
-      virtualNetwork,
-    );
-    await batch.done();
+    // The prior value is planted rather than produced by a first pass, and the
+    // tied pair is planted in reverse `code_ref` order. Deriving it from a
+    // rebuild would arrive already in the order a rebuild produces, so the
+    // merged form would agree with the rebuild whether or not the ordering is
+    // total — the tie would never get the chance to disagree, and this test
+    // could not fail. Totals are the true ones: this test is about the two
+    // forms ordering the same set identically, so a count only a carry could
+    // produce would make them differ for an unrelated reason.
+    await plantRealmMeta(adapter, 1, {
+      instances: [
+        makeCardTypeSummary(
+          `${testRealmURL}persona/Persona`,
+          'Person',
+          iconHTML,
+          1,
+        ),
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          1,
+        ),
+        makeCardTypeSummary(
+          `${testRealmURL}nameless/Nameless`,
+          null as unknown as string,
+          iconHTML,
+          1,
+        ),
+      ],
+      files: [
+        makeCardTypeSummary(
+          `${testRealmURL}markdown-file-def/MarkdownDef`,
+          'Markdown',
+          iconHTML,
+          1,
+        ),
+      ],
+    });
 
-    batch = await indexWriter.createBatch(
+    let batch = await indexWriter.createBatch(
       new URL(testRealmURL),
       virtualNetwork,
     );
