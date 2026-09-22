@@ -18,10 +18,12 @@ export class PretuiDemo extends CardDef {
         <h2><@fields.headline /></h2>
         <div class='row'>
           <Switch
+            @controlId='pretui-demo-notifications'
             @checked={{@model.notifications}}
             @onCheckedChange={{this.setNotifications}}
           />
-          <span>Notifications {{if @model.notifications 'on' 'off'}}</span>
+          <label for='pretui-demo-notifications'>Notifications
+            {{if @model.notifications 'on' 'off'}}</label>
         </div>
         <div class='row'>
           <Button @tone='primary'>Save</Button>
