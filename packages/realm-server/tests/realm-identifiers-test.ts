@@ -518,7 +518,13 @@ module(basename(import.meta.filename), function () {
 
       test('throws on a bare local identifier that resolves to neither', function (assert) {
         let vn = makeVN();
-        assert.throws(() => vn.toURL('welcome-to-boxel-sample'), /Invalid URL/);
+        // Pinned on naming the identifier rather than on the platform's
+        // wording: what a caller needs from this throw is which identifier
+        // could not be resolved.
+        assert.throws(
+          () => vn.toURL('welcome-to-boxel-sample'),
+          /cannot resolve "welcome-to-boxel-sample" to a URL/,
+        );
       });
     });
 

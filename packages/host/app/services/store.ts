@@ -4356,7 +4356,7 @@ export function asURL(
   // virtual/url-mapped alias unchanged, so that spelling would split from the
   // RRI and orphan an inflight-load deferred. gc-card-store and render-service
   // key the same way. Locals stay as-is.
-  return isLocalId(id) ? id : vn.toRealURLHref(id);
+  return isLocalId(id) ? id : vn.keyForIdentifier(id);
 }
 
 function isSystemCardDefaultId(

@@ -7,6 +7,7 @@ import {
 import StringField from '@cardstack/base/string';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
+import { cn } from '@cardstack/boxel-ui/helpers';
 
 // 🧩 PATTERN: CSS-only 3D flip primitive.
 //
@@ -37,7 +38,7 @@ export class Flashcard extends CardDef {
     <template>
       <div class='flashcard'>
         <div
-          class='flip-container {{if this.isFlipped "is-flipped"}}'
+          class={{cn 'flip-container' is-flipped=this.isFlipped}}
           role='button'
           tabindex='0'
           {{on 'click' this.flip}}
@@ -100,10 +101,10 @@ export class Flashcard extends CardDef {
           justify-content: center;
           padding: 2rem;
           box-sizing: border-box;
-          border-radius: var(--radius, 1rem);
-          background: var(--card, white);
-          color: var(--card-foreground, currentColor);
-          box-shadow: var(--shadow-md, 0 4px 16px rgba(0, 0, 0, 0.1));
+          border-radius: var(--boxel-border-radius);
+          background-color: var(--card);
+          color: var(--card-foreground);
+          box-shadow: var(--shadow-md);
         }
 
         /* The back is pre-rotated so it sits behind the front in
@@ -111,7 +112,8 @@ export class Flashcard extends CardDef {
            facing the camera. */
         .back {
           transform: rotateY(180deg);
-          background: var(--secondary, #f5f5f5);
+          background-color: var(--secondary);
+          color: var(--secondary-foreground);
         }
       </style>
     </template>

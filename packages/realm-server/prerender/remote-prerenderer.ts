@@ -297,6 +297,7 @@ export function createRemotePrerenderer(
       jobId,
       screenshots,
       renderScope,
+      cardSource,
     }: PrerenderVisitArgs): Promise<RenderVisitResponse> {
       return await requestWithRetry<RenderVisitResponse>(
         'prerender-visit',
@@ -317,6 +318,7 @@ export function createRemotePrerenderer(
           ...(jobId ? { jobId } : {}),
           ...(screenshots ? { screenshots } : {}),
           ...(renderScope ? { renderScope } : {}),
+          ...(cardSource ? { cardSource } : {}),
         },
       );
     },

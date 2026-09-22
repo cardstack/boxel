@@ -148,23 +148,38 @@ export async function setRealmRedirects(page: Page) {
   );
 }
 
+// The rejection Playwright raises for a second `tracing.start` on a context
+// that already has one. It is the signal that the runner owns that context's
+// trace, so it is matched rather than inferred from failure in general.
+const TRACE_ALREADY_STARTED = 'Tracing has been already started';
+
 // Runs `body` against a page in a context built by hand, rather than the one the
 // `page` fixture provides. Two situations need that: a second browser identity
 // inside one test, and `beforeAll`, which only sees worker-scoped fixtures.
 //
 // Playwright attaches traces, video and screenshots in its own `context`
-// fixture, so a context from `browser.newContext()` records nothing — a failure
-// in one is reported with no artifact to open. This starts a trace and keeps it
-// when there is something to explain, so the failing run carries the same
-// evidence a fixture-backed page would.
+// fixture, so on the attempts the runner does not trace, a context from
+// `browser.newContext()` carries no artifact of its own — a failure in one is
+// reported with nothing to open. This fills that gap: it starts a trace and
+// keeps it when there is something to explain, so the failing run carries the
+// same evidence a fixture-backed page would.
 //
 // The trace is kept in two cases. When `body` throws, obviously. And on any
 // retry, whatever `body` does — because the context has to close when `body`
 // returns, so a failure *after* that point (an assertion about what the session
 // persisted, say) can no longer be traced from here. Keeping the trace for the
-// whole of a retried attempt covers that, and mirrors the suite's
-// `trace: 'retry-with-trace'`: a first attempt stays cheap, and the attempt that
-// runs because something already failed records everything.
+// whole of a retried attempt covers that.
+//
+// Ownership is decided by whether the start succeeds, never by the attempt
+// number. The runner starts tracing on the contexts it hands out whenever the
+// attempt's trace mode calls for it, and it stops and attaches that trace
+// itself; a second `start` on such a context throws with
+// `TRACE_ALREADY_STARTED`, and that one rejection is what cedes ownership —
+// stopping the runner's trace here would take its artifact away. The suite's
+// `retry-with-trace` normalizes to `on-first-retry`, so that is the second
+// attempt and no other, which makes the collision invisible on a first run and
+// certain on the retry that a flake depends on. Any other rejection leaves the
+// attempt with no trace from either side and is reported rather than absorbed.
 //
 // Closing is best-effort on every path: a context that has wedged can fail or
 // hang on close, and that must not replace the real error, nor turn a completed
@@ -175,7 +190,25 @@ export async function withTracedContext<T>(
   body: (page: Page) => Promise<T>,
 ): Promise<T> {
   let context = await browser.newContext();
-  await context.tracing.start({ screenshots: true, snapshots: true });
+  let ownsTrace = await context.tracing
+    .start({ screenshots: true, snapshots: true })
+    .then(
+      () => true,
+      (e: unknown) => {
+        // Only an already-started trace means the runner owns this one.
+        // `start` awaits several calls, and a rejection from a later one
+        // arrives after the recording has taken — leaving a trace nobody
+        // stops and no artifact on either side. Say so rather than letting it
+        // read as a clean attempt.
+        let message = e instanceof Error ? e.message : String(e);
+        if (!message.includes(TRACE_ALREADY_STARTED)) {
+          console.log(
+            `[withTracedContext] ${name}: no trace for this attempt — tracing.start failed with: ${message}`,
+          );
+        }
+        return false;
+      },
+    );
   let keepTrace = test.info().retry > 0;
   try {
     let page = await context.newPage();
@@ -185,14 +218,14 @@ export async function withTracedContext<T>(
     keepTrace = true;
     throw e;
   } finally {
-    if (keepTrace) {
+    if (ownsTrace && keepTrace) {
       let tracePath = test.info().outputPath(`${name}-trace.zip`);
       await context.tracing.stop({ path: tracePath }).catch(() => {});
       await test
         .info()
         .attach(`${name}-trace`, { path: tracePath })
         .catch(() => {});
-    } else {
+    } else if (ownsTrace) {
       await context.tracing.stop().catch(() => {});
     }
     await context.close().catch(() => {});
@@ -1136,49 +1169,145 @@ export async function waitUntil<T>(
 // is bounded by the 60s test timeout). 45s stays under that test timeout while
 // leaving headroom for the navigation/assertions that follow.
 //
-// On timeout, throw with the last observed HTTP status and whether a body
-// arrived without the marker. A bare `page.goto` failure only reports "timeout
-// exceeded"; this distinguishes "still erroring" (publish/index not done) from
-// "served but missing the marker" (indexed, wrong/stale content) from "request
-// kept failing" — so the next CI failure is diagnosable without a re-run.
+// On timeout, throw with everything needed to tell the candidate causes apart
+// without a re-run. A bare `page.goto` failure only reports "timeout exceeded".
+//
+// The first split is the last observed status: "still erroring" (publish/index
+// not done), "served but missing the marker", or "request kept failing".
+//
+// "Served but missing the marker" is the one that needs more than a status,
+// because publishing already gated on `_readiness-check?awaitPrerenderHtml=true`
+// — which holds until *every* live, non-errored index row has HTML at its own
+// generation — so a 200 without the marker is not simply "needs longer". Three
+// things separate the remaining explanations, and the message carries all
+// three:
+//
+//   - the poll census (count, elapsed, slowest single request, status
+//     histogram), which says whether the budget was spent sampling or lost to
+//     one slow response;
+//   - which `data-test-*` markers the served document does carry, which
+//     separates a bare shell (nothing rendered for this URL) from another
+//     card's HTML (the routing rule or rewrite resolved elsewhere);
+//   - the realm's own readiness at the moment of failure, which says whether
+//     the realm stopped being ready after publish or was ready all along while
+//     this one URL stayed stale.
+//
+// Returns the body that carried the marker, so a caller can assert against the
+// server-rendered HTML it just gated on.
+const DATA_TEST_MARKER_RE = /data-test-[a-z0-9-]+/g;
+
 export async function waitForPublishedMarker(
   page: Page,
   url: string,
   marker: string,
-  timeout = 45_000,
-) {
+  opts: { timeout?: number; publishedRealmURL?: string } = {},
+): Promise<string> {
+  let timeout = opts.timeout ?? 45_000;
   let lastStatus: number | undefined;
   let lastBodyMissingMarker = false;
   let lastError: string | undefined;
+  let lastBody = '';
+  let polls = 0;
+  let slowestPollMs = 0;
+  let statuses = new Map<string, number>();
+  let started = Date.now();
   try {
-    await waitUntil(async () => {
+    // `waitUntil` only ever returns a truthy result, so the `false` the
+    // condition uses to mean "poll again" cannot reach here.
+    return (await waitUntil(async () => {
+      polls++;
+      let pollStarted = Date.now();
       try {
         let response = await page.request.get(url, {
           headers: { Accept: 'text/html' },
         });
         lastStatus = response.status();
         lastError = undefined;
+        let status = String(lastStatus);
+        statuses.set(status, (statuses.get(status) ?? 0) + 1);
         if (!response.ok()) {
           lastBodyMissingMarker = false;
           return false;
         }
         let text = await response.text();
+        lastBody = text;
         lastBodyMissingMarker = !text.includes(marker);
-        return !lastBodyMissingMarker;
+        return lastBodyMissingMarker ? false : text;
       } catch (e) {
         lastError = e instanceof Error ? e.message : String(e);
+        statuses.set('error', (statuses.get('error') ?? 0) + 1);
         return false;
+      } finally {
+        slowestPollMs = Math.max(slowestPollMs, Date.now() - pollStarted);
       }
-    }, timeout);
+    }, timeout)) as string;
   } catch {
     let detail = lastError
       ? `last request error: ${lastError}`
       : lastBodyMissingMarker
         ? `last response HTTP ${lastStatus} served without marker "${marker}" (realm reachable but still indexing or rendering other content)`
         : `last response HTTP ${lastStatus ?? 'none'} not OK (publish/index not ready)`;
+    let observed = [
+      `${polls} polls over ${Date.now() - started}ms`,
+      `slowest poll ${slowestPollMs}ms`,
+      `responses ${
+        [...statuses].map(([status, n]) => `${status}x${n}`).join(' ') || 'none'
+      }`,
+    ];
+    if (lastBodyMissingMarker) {
+      let seen = [...new Set(lastBody.match(DATA_TEST_MARKER_RE) ?? [])];
+      observed.push(
+        `last body ${lastBody.length}B carrying ${
+          seen.slice(0, 12).join(', ') || 'no data-test markers'
+        }`,
+      );
+    }
+    if (opts.publishedRealmURL) {
+      observed.push(
+        `realm readiness ${await probeRealmReadiness(
+          page,
+          opts.publishedRealmURL,
+        )}`,
+      );
+    }
     throw new Error(
-      `waitForPublishedMarker timed out after ${timeout}ms for ${url}; ${detail}`,
+      `waitForPublishedMarker timed out after ${timeout}ms for ${url}; ${detail}; ${observed.join(
+        '; ',
+      )}`,
     );
+  }
+}
+
+// How long to give the readiness probe below. Readiness spends one shared
+// budget across its gates and answers not-ready only once that budget is gone,
+// then spends a little more naming what held it — so a deadline under the sum
+// of the two turns every genuinely-not-ready realm into an aborted request, and
+// reports the one case this probe exists to name as a network fault. This sits
+// above both. It is the cost of the failure path, not of a passing test.
+const READINESS_PROBE_TIMEOUT_MS = 15_000;
+
+// Index-only readiness: `awaitPrerenderHtml` would add its own, much longer
+// wait on top of the shared budget, and this runs on a path that is already out
+// of time. A 200 means the realm is still serving and the stale URL is the
+// anomaly; a 503 means readiness itself regressed after publish, and
+// `X-Boxel-Not-Ready` carries which gate refused — the poll loops discard the
+// body, so that header is the only place the stage is readable.
+async function probeRealmReadiness(
+  page: Page,
+  publishedRealmURL: string,
+): Promise<string> {
+  try {
+    let response = await page.request.get(
+      `${publishedRealmURL}_readiness-check`,
+      {
+        headers: { Accept: 'text/html' },
+        timeout: READINESS_PROBE_TIMEOUT_MS,
+      },
+    );
+    let stage = response.headers()['x-boxel-not-ready'];
+    return `HTTP ${response.status()}${stage ? ` (${stage})` : ''}`;
+  } catch (e) {
+    return `unreachable (${e instanceof Error ? e.message : String(e)})`;
   }
 }
 
