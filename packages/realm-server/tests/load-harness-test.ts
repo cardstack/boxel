@@ -71,6 +71,11 @@ import {
   realmPermissionsFor,
 } from '../scripts/load-harness/lib/permissions.ts';
 import type { Session } from '../scripts/load-harness/lib/auth.ts';
+import {
+  assignWriters,
+  idleSessions,
+  isAssignmentError,
+} from '../scripts/load-harness/lib/writers.ts';
 
 // The load harness runs against deployed environments with real credentials, so
 // none of it can be exercised from a test. Its decision-making can: the guard
@@ -2530,6 +2535,172 @@ module(basename(import.meta.filename), function () {
       });
     },
   );
+
+  module('writer assignment — which identity drives which block', function () {
+    const realm = 'https://example.test/owner/load-test/';
+
+    function session(username: string): Session {
+      return {
+        userId: `@${username}:test`,
+        username,
+        accessToken: 'x',
+        serverToken: 'Bearer s',
+        realmTokens: {},
+      };
+    }
+
+    function block(label: string, username?: string) {
+      return {
+        label,
+        method: 'POST' as const,
+        path: label,
+        adoptsFrom: { module: `${realm}${label}`, name: label },
+        attributes: {},
+        ...(username ? { username } : {}),
+      };
+    }
+
+    function assign(
+      writes: ReturnType<typeof block>[],
+      sessions: Session[],
+      writerCount: number,
+      requestedReaders = sessions.length - writerCount,
+    ) {
+      return assignWriters({
+        writes,
+        sessions,
+        writerCount,
+        requestedWriters: writerCount,
+        requestedReaders,
+      });
+    }
+
+    // Narrowing helpers that throw rather than return, so a test that gets the
+    // wrong variant fails on the spot with the other variant's contents rather
+    // than on a downstream property access.
+    function assignmentOf(result: ReturnType<typeof assign>) {
+      if (isAssignmentError(result)) {
+        throw new Error(`expected an assignment, got refusal: ${result.error}`);
+      }
+      return result;
+    }
+
+    function refusalOf(result: ReturnType<typeof assign>): string {
+      if (!isAssignmentError(result)) {
+        throw new Error(
+          `expected a refusal, got ${result.assignments.length} assignments`,
+        );
+      }
+      return result.error;
+    }
+
+    test('unpinned blocks take sessions in file order, readers get the tail', function (assert) {
+      // What the harness did before pinning existed, and what it still does
+      // when no block names a username.
+      let sessions = [session('a'), session('b'), session('c')];
+      let result = assignmentOf(
+        assign([block('one'), block('two')], sessions, 2),
+      );
+      assert.deepEqual(
+        result.assignments.map((x) => [x.session.username, x.write.label]),
+        [
+          ['a', 'one'],
+          ['b', 'two'],
+        ],
+      );
+      assert.deepEqual(
+        result.readerSessions.map((s) => s.username),
+        ['c'],
+      );
+    });
+
+    test('a pinned block takes its own row wherever it sits in the file', function (assert) {
+      // The point of pinning: "writer A on realm R, writer B on realm R" stated
+      // in the workload rather than depending on how the CSV is sorted.
+      let sessions = [session('a'), session('b'), session('c')];
+      let result = assignmentOf(
+        assign([block('one'), block('two', 'c')], sessions, 2),
+      );
+      assert.deepEqual(
+        result.assignments.map((x) => [x.session.username, x.write.label]),
+        [
+          ['a', 'one'],
+          ['c', 'two'],
+        ],
+        'the pinned block took c, and the unpinned one took the first free row',
+      );
+      assert.deepEqual(
+        result.readerSessions.map((s) => s.username),
+        ['b'],
+        'and b reads rather than being skipped over',
+      );
+    });
+
+    test('a pinned block cannot be driven by two writer slots', function (assert) {
+      // `blockFor` cycles when slots outnumber blocks. An unpinned block takes
+      // another session each time round; a pinned one would put a second loop
+      // on the same identity writing the same block, doubling its cadence while
+      // the summary still called it one writer.
+      let sessions = [session('a'), session('b'), session('c'), session('d')];
+      let error = refusalOf(
+        assign([block('one'), block('two', 'c')], sessions, 4),
+      );
+      assert.ok(error.includes('"two" is pinned to c'), error);
+      assert.ok(
+        error.includes('slots 1 and 3'),
+        `it names both slots: ${error}`,
+      );
+    });
+
+    test('two blocks on one identity is allowed, and costs a session', function (assert) {
+      // Self-contention is a real thing to measure — it has its own bucket —
+      // so this assigns rather than refusing. What it must not do is quietly
+      // hand the freed-up session to a reader: reader count is what the rest of
+      // the summary is read against, so a run that grew one is not comparable
+      // to a run that asked for the same numbers.
+      let sessions = [
+        session('a'),
+        session('b'),
+        session('c'),
+        session('d'),
+        session('e'),
+        session('f'),
+      ];
+      let result = assignmentOf(
+        assign([block('one', 'a'), block('two', 'a')], sessions, 2, 4),
+      );
+      assert.deepEqual(
+        result.assignments.map((x) => [x.session.username, x.write.label]),
+        [
+          ['a', 'one'],
+          ['a', 'two'],
+        ],
+        'one identity drives both blocks',
+      );
+      assert.strictEqual(
+        result.readerSessions.length,
+        4,
+        'readers stay at --readers rather than absorbing the spare session',
+      );
+      assert.deepEqual(
+        idleSessions(sessions, result).map((s) => s.username),
+        ['f'],
+        'and the spare is reported as driving nothing rather than vanishing',
+      );
+    });
+
+    test('a pinned username with no session refuses, naming the rows in use', function (assert) {
+      let sessions = [session('a'), session('b')];
+      let error = refusalOf(
+        assign([block('one'), block('two', 'nobody')], sessions, 2),
+      );
+      assert.ok(error.includes('"nobody"'), error);
+      assert.ok(
+        error.includes('a, b'),
+        `and says which rows are in use: ${error}`,
+      );
+    });
+  });
 
   module('realm write permission', function () {
     const realm = 'https://example.test/owner/load-test/';

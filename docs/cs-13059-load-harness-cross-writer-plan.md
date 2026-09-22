@@ -68,8 +68,10 @@ Four members carry the weight:
   however large the realm is. Patching a hub card that many instances link to
   makes the pass visit all of them, which is the expensive write the cheap one
   is supposed to be waiting behind. (A patch that changes nothing leaves the
-  file alone and indexes nothing, so the attributes have to vary — `${n}` and
-  `${date}` already do.)
+  file alone and indexes nothing, so the attributes have to vary per write.
+  `${n}` is the only placeholder that does: `${date}` is today, the same string
+  for every write in a run, and a block varying by nothing else is refused at
+  load.)
 - **`everyMs`** — a per-block cadence. This is what produces both halves of the
   measurement rather than one: a hub every 30 s and a leaf every 5 s gives leaf
   writes that land inside a hub pass and leaf writes that do not, from one run.
@@ -130,10 +132,14 @@ server's own number for a specific slow write, and it costs one header.
 
 ## What this does not claim
 
-The driver sees HTTP windows, not `jobs` rows. "Behind" is a necessary
-consequence of a serial lane, not a direct reading of one — a write could
-finish after another for its own reasons. The summary says so in its own words
-and names the join (`corr=`) that confirms it. The third gap the ticket lists —
+The driver sees HTTP windows, not `jobs` rows, and the count is an estimate
+that errs in **both** directions. A window ends when the response body has been
+read, which is past `awaitIndex` — the realm still clears caches, serializes
+the card and sends bytes — so these are the ends of response tails rather than
+of passes. A genuinely blocked write whose blocker had the longer tail ends
+first and is scored clear; a slow tail can put a write behind one it never
+waited on. The summary says so in its own words and names the join (`corr=`)
+that settles any particular write. The third gap the ticket lists —
 the benchmark's browser half authenticating as one user — is the benchmark
 protocol's, not the harness's, and is out of scope here.
 
@@ -148,6 +154,8 @@ protocol's, not the harness's, and is out of scope here.
 | `setup-realm.ts`             | grant read (and write for the first N) to the non-owner rows                                                                    |
 | `workload.example.json`      | a two-writer hub/leaf example                                                                                                   |
 | `README.md`                  | the cross-writer section                                                                                                        |
+| `lib/writers.ts`             | new — which session drives which block, and which are left to read; extracted from the driver so it can be tested               |
+| `lib/writers.ts`             | new — which session drives which block, and which are left to read; extracted from the driver so it can be tested               |
 | `tests/load-harness-test.ts` | parsing, assignment, and classification — including the empty-bucket refusal                                                    |
 
 ## Testing

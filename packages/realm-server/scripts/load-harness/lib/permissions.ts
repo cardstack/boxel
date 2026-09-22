@@ -47,9 +47,19 @@ export async function readRealmPermissions({
     },
   });
   if (!response.ok) {
+    // Only 403 implicates the session. This is the first call `grantAccess`
+    // makes, so it is also what a mistyped `--grants-only --realm <url>`
+    // produces — and that flag exists for a hand-typed URL on a box with no
+    // checkout, which is exactly where a wrong URL is likely and a
+    // misattributed cause is expensive.
     throw new Error(
-      `GET ${realmUrl}_permissions → ${response.status}. Only the realm owner ` +
-        `may read them, so this is usually the wrong session.`,
+      `GET ${realmUrl}_permissions → ${response.status}` +
+        (response.status === 403
+          ? `. Only the realm owner may read a realm's permissions, so this is ` +
+            `usually the wrong session.`
+          : response.status === 404
+            ? `. No realm is served at that URL — check --realm.`
+            : `.`),
     );
   }
   return (

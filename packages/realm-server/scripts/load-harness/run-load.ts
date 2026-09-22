@@ -98,6 +98,11 @@ import {
   matrixIdFor,
   realmPermissionsFor,
 } from './lib/permissions.ts';
+import {
+  assignWriters,
+  idleSessions,
+  isAssignmentError,
+} from './lib/writers.ts';
 
 let args = parseArgsOrExit(process.argv.slice(2), {
   csv: '',
@@ -196,6 +201,33 @@ if (args.emitWorkload && !args.deriveWorkload) {
   process.exit(1);
 }
 exitIfProduction(args.matrixUrl, args.realmServerUrl, args.realm);
+
+// Numeric flags that would misbehave rather than fail. `parseArgs` coerces with
+// `Number()`, so `--write-every-ms 20s` arrives as NaN — and `setTimeout`
+// coerces a NaN delay to zero, so that writer stops pausing between writes and
+// issues them back to back for the whole run, bounded only by the realm's own
+// write latency. Against a shared realm that is a typo turning the harness into
+// something other than what was asked for. `everyMs` inside a workload file is
+// already checked this way in `parseWrite`; this is the same value one `??`
+// away, and it had nothing.
+for (let [flag, value, floor] of [
+  ['--write-every-ms', args.writeEveryMs, 1],
+  ['--idle-re-run-ms', args.idleReRunMs, 1],
+  ['--minutes', args.minutes, 0],
+  ['--readers', args.readers, 0],
+  ['--writers', args.writers, 0],
+] as [string, number, number][]) {
+  if (!Number.isFinite(value) || value < floor) {
+    console.error(
+      `${flag} must be a number ${floor === 0 ? '0 or greater' : 'greater than 0'} ` +
+        `(parsed as ${value}).\n` +
+        `  A non-numeric value reaches here as NaN, which compares false against ` +
+        `every bound —\n  so left unchecked it does not fail, it changes what the ` +
+        `run does.`,
+    );
+    process.exit(1);
+  }
+}
 
 let realmUrl = ensureTrailingSlash(args.realm);
 let searchUrl = `${args.realmServerUrl.replace(/\/$/, '')}/_federated-search`;
@@ -939,94 +971,29 @@ if (args.writers > 0 && writerCount < workload.writes.length) {
   process.exit(1);
 }
 
-// Which session drives which block. A block that pins a `username` takes that
-// credential row wherever it sits in the file; the rest take sessions in file
-// order, which is what the harness did before any of this existed. This is the
-// step that makes "writer A on realm R, writer B on realm R, A ≠ B" a property
-// of the workload rather than of how the CSV happens to be sorted.
-interface WriterAssignment {
-  session: Session;
-  write: WriteSpec;
+// Which session drives which block, and which are left to read. The logic is
+// in `lib/writers.ts` rather than here: it is pure given the workload, the
+// sessions and the slot count, and this file is a script that starts a run on
+// import — so logic kept here could only be reached by running the thing it is
+// part of. The refusals come back as strings for the same reason.
+let assignment =
+  writerCount > 0
+    ? assignWriters({
+        writes: workload.writes,
+        sessions,
+        writerCount,
+        requestedWriters: args.writers,
+        requestedReaders: args.readers,
+      })
+    : { assignments: [], readerSessions: sessions.slice(0, args.readers) };
+if (isAssignmentError(assignment)) {
+  console.error(assignment.error);
+  process.exit(1);
 }
-
-function assignWriters(): WriterAssignment[] {
-  let byUsername = new Map(sessions.map((s) => [s.username, s]));
-  let taken = new Set<Session>();
-  let slots: (WriterAssignment | undefined)[] = Array.from({
-    length: writerCount,
-  });
-  let blockFor = (i: number) => workload.writes[i % workload.writes.length]!;
-
-  // Pinned blocks first, so an unpinned one cannot take the session a pinned
-  // one needs and leave it unsatisfiable.
-  let pinnedSlots = new Map<string, number>();
-  for (let i = 0; i < writerCount; i++) {
-    let write = blockFor(i);
-    if (!write.username) {
-      continue;
-    }
-    // `blockFor` cycles when there are more slots than blocks, and an unpinned
-    // block simply takes another session each time round. A pinned one cannot:
-    // it would put a second loop on the same identity writing the same block,
-    // doubling that block's cadence while the summary still called it one
-    // writer. Two blocks pinned to one username is a different thing and stays
-    // allowed — that is self-contention, which has its own bucket.
-    let alreadyAt = pinnedSlots.get(write.label);
-    if (alreadyAt !== undefined) {
-      console.error(
-        `Write block "${write.label}" is pinned to ${write.username}, so only ` +
-          `one writer can drive it —\n` +
-          `  but --writers ${args.writers} against ${workload.writes.length} ` +
-          `block${workload.writes.length === 1 ? '' : 's'} assigns it to slots ` +
-          `${alreadyAt} and ${i}.\n` +
-          `  Pass --writers ${workload.writes.length}, or drop the "username" ` +
-          `from that block so the\n  extra slots can take sessions of their own.`,
-      );
-      process.exit(1);
-    }
-    pinnedSlots.set(write.label, i);
-    let session = byUsername.get(write.username);
-    if (!session) {
-      console.error(
-        `Write block "${write.label}" is pinned to username ` +
-          `"${write.username}", which has no authenticated session.\n` +
-          `  The credential file's rows in use are: ` +
-          `${sessions.map((s) => s.username).join(', ')}.\n` +
-          `  Either that row is missing from the CSV, its login failed, or it\n` +
-          `  sits past --readers + --writers rows and was never read.`,
-      );
-      process.exit(1);
-    }
-    slots[i] = { session, write };
-    taken.add(session);
-  }
-
-  let free = sessions.filter((s) => !taken.has(s));
-  for (let i = 0; i < writerCount; i++) {
-    if (slots[i]) {
-      continue;
-    }
-    let session = free.shift();
-    if (!session) {
-      console.error(
-        `Not enough sessions to fill ${writerCount} writer slots once the ` +
-          `pinned blocks took theirs.`,
-      );
-      process.exit(1);
-    }
-    slots[i] = { session, write: blockFor(i) };
-    taken.add(session);
-  }
-  return slots as WriterAssignment[];
-}
-
-let writerAssignments = writerCount > 0 ? assignWriters() : [];
+let writerAssignments = assignment.assignments;
 let writerSessions = writerAssignments.map((a) => a.session);
-// Whatever the writers did not take, in file order. Readers were the tail of
-// the list before pinning existed and still are — pinning only changes which
-// sessions end up in the head.
-let writerSessionSet = new Set(writerSessions);
-let readerSessions = sessions.filter((s) => !writerSessionSet.has(s));
+let readerSessions = assignment.readerSessions;
+let unused = idleSessions(sessions, assignment);
 
 // Can these writers actually write? `_realm-auth` states each user's
 // permissions in the realm token it mints, so the answer is already in hand
@@ -1108,6 +1075,19 @@ console.log(
   `${readerSessions.length} readers, ${writerSessions.length} writers, ${args.minutes} min. ` +
     `Ctrl-C to stop early.\n`,
 );
+if (unused.length) {
+  // Two blocks pinned to one identity need one fewer session than the
+  // credential arithmetic reserved. Readers are capped at `--readers` so the
+  // spare does not quietly become extra search load, which would make this run
+  // incomparable to one that asked for the same numbers.
+  console.log(
+    `  ${unused.length} session(s) drove nothing (${unused
+      .map((s) => s.username)
+      .join(', ')}) — write blocks sharing an identity need fewer\n` +
+      `  sessions than --readers + --writers reserves. Readers stay at ` +
+      `--readers rather than absorbing the spare.\n`,
+  );
+}
 if (writerAssignments.length) {
   // Which identity drives which block, printed before the run rather than
   // inferred from the summary: whether two writers are two people is the one
@@ -1251,8 +1231,9 @@ async function finish() {
 
   // A writer that authenticated, ran its loop and landed nothing wrote no rows
   // into the fairness ledger, so every count below is missing that identity
-  // without saying so. The likeliest cause is the grant, which is why the
-  // message names it.
+  // without saying so. Both causes with an obvious name — the write grant and a
+  // PATCH target the realm does not hold — are refused before the clock starts,
+  // so the message sends the reader past them.
   let silentWriters = writerAssignments.filter(
     ({ session }) => !writersWithWrites.has(session.userId),
   );
