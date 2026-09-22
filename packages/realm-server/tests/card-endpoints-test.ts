@@ -28,7 +28,6 @@ import {
 } from '@cardstack/runtime-common';
 import { parse } from 'qs';
 import {
-  findRealmEvent,
   setupPermissionedRealmCached,
   setupPermissionedRealmsCached,
   setupMatrixRoom,
@@ -44,7 +43,6 @@ import {
 import {
   ABSENT_OR_NULL_CLIENT_REQUEST_ID,
   expectIncrementalIndexEvent,
-  waitForIncrementalIndexEvent,
 } from './helpers/indexing.ts';
 import type { IncrementalIndexEventContent } from '@cardstack/base/matrix-event';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -5371,12 +5369,44 @@ module(basename(import.meta.filename), function () {
           );
         });
 
-        // `jade` links to `hassan`, so patching `hassan` re-indexes `jade` in
-        // the same pass. The realm computed `jade`'s new state, so nobody holds
-        // it and every client wants to re-read it — which is precisely the
-        // difference `versions` exists to draw, and why it names the files the
-        // request wrote rather than everything the pass touched.
+        // `hassan-tag` reads `hassan`'s name into a computed field, so patching
+        // `hassan` re-indexes `hassan-tag` in the same pass. The realm computed
+        // `hassan-tag`'s new state, so nobody holds it and every client wants
+        // to re-read it — which is precisely the difference `versions` exists
+        // to draw, and why it names the files the request wrote rather than
+        // everything the pass touched.
         test('a dependent re-indexed by the same pass is invalidated without a version', async function (assert) {
+          await testRealm.write(
+            'friend-tag.gts',
+            `
+              import { contains, field, linksTo, CardDef } from '@cardstack/base/card-api';
+              import StringField from '@cardstack/base/string';
+              import { Friend } from './friend';
+
+              export class FriendTag extends CardDef {
+                @field friend = linksTo(() => Friend);
+                @field friendName = contains(StringField, {
+                  computeVia: function (this: FriendTag) {
+                    return this.friend?.firstName;
+                  },
+                });
+              }
+            `,
+          );
+          await testRealm.write(
+            'hassan-tag.json',
+            JSON.stringify({
+              data: {
+                relationships: { friend: { links: { self: './hassan' } } },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./friend-tag.gts'),
+                    name: 'FriendTag',
+                  },
+                },
+              },
+            }),
+          );
           let realmEventTimestampStart = Date.now();
 
           let response = await request
@@ -5398,16 +5428,31 @@ module(basename(import.meta.filename), function () {
             `HTTP 200 status: ${response.text}`,
           );
 
-          await waitForIncrementalIndexEvent(
-            getMessagesSince,
-            realmEventTimestampStart,
+          // The setup writes above publish their own incremental events, which
+          // can land after the timestamp baseline, so pick the patch's event
+          // by the card it wrote rather than taking the first one.
+          let content: IncrementalIndexEventContent | undefined;
+          await waitUntil(
+            async () => {
+              let messages = await getMessagesSince(realmEventTimestampStart);
+              content = messages
+                .map((m) => m.content as IncrementalIndexEventContent)
+                .find(
+                  (c) =>
+                    c?.eventName === 'index' &&
+                    c.indexType === 'incremental' &&
+                    c.invalidations?.includes(`${testRealmHref}hassan`),
+                );
+              return Boolean(content);
+            },
+            { timeout: 5000 },
           );
-          let messages = await getMessagesSince(realmEventTimestampStart);
-          let content = findRealmEvent(messages, 'index', 'incremental')
-            ?.content as IncrementalIndexEventContent;
+          if (!content) {
+            throw new Error('no incremental index event named hassan');
+          }
 
           assert.true(
-            content.invalidations.includes(`${testRealmHref}jade`),
+            content.invalidations.includes(`${testRealmHref}hassan-tag`),
             `the pass invalidated the dependent: ${JSON.stringify(
               content.invalidations,
             )}`,
