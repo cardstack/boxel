@@ -47,9 +47,30 @@ function captureResult(
     height: 300,
     deviceScaleFactor: 2,
     contentType: 'image/png',
-    imageType: 'png',
+    outputType: 'png',
     keyBy: 'generation',
     base64: PNG_BASE64,
+    ...overrides,
+  };
+}
+
+// A tiny stand-in pdf: the persist path treats bytes as opaque, and the page
+// count rides on the result, not the bytes.
+const PDF_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46, 1, 2, 3, 4, 5, 6]);
+const PDF_BASE64 = Buffer.from(PDF_BYTES).toString('base64');
+
+function pdfCaptureResult(
+  overrides: Partial<DeclaredScreenshotCaptureResult> = {},
+): DeclaredScreenshotCaptureResult {
+  return {
+    name: 'statement',
+    specHash: 'c'.repeat(64),
+    deviceScaleFactor: 2,
+    pageCount: 3,
+    contentType: 'application/pdf',
+    outputType: 'pdf',
+    keyBy: 'generation',
+    base64: PDF_BASE64,
     ...overrides,
   };
 }
@@ -162,7 +183,7 @@ module(basename(import.meta.filename), function (hooks) {
             name: 'hero',
             specHash: 'b'.repeat(64),
             contentType: 'image/webp',
-            imageType: 'webp',
+            outputType: 'webp',
             width: 640,
             height: 360,
           }),
@@ -201,6 +222,71 @@ module(basename(import.meta.filename), function (hooks) {
       adapter.objects.has(expectedObjectKey),
       'the bytes landed in the object store',
     );
+  });
+
+  test('a pdf capture persists with null dimensions and a paged-document manifest entry', async function (assert) {
+    let specHash = await declaredCaptureSpecHash('statement', {
+      format: 'isolated',
+      type: 'pdf',
+    });
+    let { manifest, errors } = await persist({
+      result: {
+        entries: [pdfCaptureResult({ specHash })],
+      },
+    });
+    assert.deepEqual(errors, [], 'no per-slot errors');
+    let expectedObjectKey = await computeMediaCacheKey(PDF_BYTES);
+    assert.deepEqual(manifest!.statement, {
+      specHash,
+      objectKey: expectedObjectKey,
+      contentType: 'application/pdf',
+      pageCount: 3,
+      byteSize: PDF_BYTES.byteLength,
+    });
+    assert.notOk(
+      'width' in manifest!.statement,
+      'a pdf entry carries no raster geometry',
+    );
+
+    let [row] = await ledgerRows();
+    assert.strictEqual(row.lane, 'declared');
+    assert.strictEqual(row.content_type, 'application/pdf');
+    assert.strictEqual(row.width, null, 'a pdf ledger row has null width');
+    assert.strictEqual(row.height, null, 'a pdf ledger row has null height');
+    assert.ok(
+      adapter.objects.has(expectedObjectKey),
+      'the pdf bytes landed in the object store',
+    );
+  });
+
+  test('a pdf capture and a raster capture of the same format hash distinctly', async function (assert) {
+    let pdfHash = await declaredCaptureSpecHash('statement', {
+      format: 'isolated',
+      type: 'pdf',
+    });
+    let rasterHash = await declaredCaptureSpecHash('statement', {
+      format: 'isolated',
+      width: 400,
+      height: 300,
+    });
+    assert.notStrictEqual(
+      pdfHash,
+      rasterHash,
+      'the pdf output type gives the slot a distinct capture identity',
+    );
+    let canonical = JSON.parse(
+      canonicalDeclaredCaptureString('statement', {
+        format: 'isolated',
+        type: 'pdf',
+      }),
+    );
+    assert.deepEqual(
+      Object.keys(canonical).sort(),
+      ['declared', 'media', 'source', 'type'],
+      'a pdf identity is name + source + print media + type, no raster geometry',
+    );
+    assert.strictEqual(canonical.media, 'print');
+    assert.strictEqual(canonical.type, 'pdf');
   });
 
   test('a file-content-keyed capture records the source hash on ledger and manifest', async function (assert) {

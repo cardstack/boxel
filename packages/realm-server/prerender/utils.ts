@@ -9,10 +9,11 @@ import {
   SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
   SCREENSHOT_DEFAULT_IMAGE_TYPE,
   SCREENSHOT_MAX_CAPTURES,
+  SCREENSHOT_MAX_PDF_CAPTURES,
   SCREENSHOT_MAX_PHYSICAL_EDGE_PX,
   captureOutputContentType,
   checkPdfCaptureBounds,
-  screenshotContentType,
+  type CaptureOutputType,
   type CaptureContentType,
   type DeclaredScreenshotCaptureResult,
   type DeclaredScreenshotError,
@@ -2089,7 +2090,9 @@ interface ResolvedDeclaredEntry {
   payload: DeclaredScreenshotSpecPayload;
   specHash: string;
   deviceScaleFactor: number;
-  imageType: ScreenshotImageType;
+  // The encoded output. Raster types (`png`/`jpeg`/`webp`) rasterize a capture
+  // box; `pdf` paginates the print-media render onto paper instead.
+  outputType: CaptureOutputType;
   background: string;
   keyBy: 'generation' | 'file-content';
 }
@@ -2170,7 +2173,9 @@ async function captureRenderBasedEntry(
   opts?: CaptureOptions,
 ): Promise<ScreenshotCaptureItem | RenderError> {
   let { name, payload, deviceScaleFactor } = resolved;
-  let box = { width: payload.width, height: payload.height };
+  // A render-based slot is always raster (validation refuses render for pdf),
+  // so it always declares a capture box.
+  let box = { width: payload.width!, height: payload.height! };
   await page.setViewport({ ...box, deviceScaleFactor });
   await transitionTo(page, 'render.screenshot', name);
   await waitForRoutePathSuffix(page, `/screenshot/${name}`, opts);
@@ -2193,7 +2198,11 @@ async function captureRenderBasedEntry(
     page,
     { name, viewport: box, deviceScaleFactor },
     deviceScaleFactor,
-    { type: resolved.imageType, background: resolved.background },
+    // A render-based slot is always raster, so its output is an image type.
+    {
+      type: resolved.outputType as ScreenshotImageType,
+      background: resolved.background,
+    },
   );
 }
 
@@ -2258,13 +2267,14 @@ export async function captureDeclaredScreenshots(
   for (let name of names.slice(0, SCREENSHOT_MAX_CAPTURES)) {
     let payload = roster[name];
     let specHash = await declaredCaptureSpecHash(name, payload);
+    let outputType = payload.type ?? SCREENSHOT_DEFAULT_IMAGE_TYPE;
     let resolved: ResolvedDeclaredEntry = {
       name,
       payload,
       specHash,
       deviceScaleFactor:
         payload.deviceScaleFactor ?? SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
-      imageType: payload.type ?? SCREENSHOT_DEFAULT_IMAGE_TYPE,
+      outputType,
       background: payload.background ?? SCREENSHOT_DEFAULT_BACKGROUND,
       keyBy: payload.keyBy ?? 'generation',
     };
@@ -2276,14 +2286,21 @@ export async function captureDeclaredScreenshots(
         contentHash: args.contentHash,
       })
     ) {
+      // A carry-forward copies the prior manifest entry wholesale in persist,
+      // so its geometry/page facts ride there, not on this result — carry only
+      // the identity fields. A pdf slot has no raster box to report.
       entries.push({
         name,
         specHash,
-        width: payload.width,
-        height: payload.height,
-        deviceScaleFactor: resolved.deviceScaleFactor,
-        contentType: screenshotContentType(resolved.imageType),
-        imageType: resolved.imageType,
+        ...(outputType === 'pdf'
+          ? {}
+          : {
+              width: payload.width,
+              height: payload.height,
+              deviceScaleFactor: resolved.deviceScaleFactor,
+            }),
+        contentType: captureOutputContentType(outputType),
+        outputType,
         keyBy: resolved.keyBy,
         ...(payload.useAsThumbnail ? { useAsThumbnail: true } : {}),
         carriedForward: true,
@@ -2301,13 +2318,21 @@ export async function captureDeclaredScreenshots(
     entries.push({
       name: resolved.name,
       specHash: resolved.specHash,
-      // Declared captures are always raster (their payload type is an image
-      // type), so the item always carries pixel dimensions.
-      width: item.width!,
-      height: item.height!,
-      deviceScaleFactor: item.deviceScaleFactor,
-      contentType: screenshotContentType(resolved.imageType),
-      imageType: resolved.imageType,
+      // Raster captures carry pixel dimensions; a pdf carries a page count and
+      // no single pixel extent — and no device scale, matching the manifest and
+      // the carry-forward branch, which both omit it for a pdf. The item
+      // reflects which one this render made.
+      ...(resolved.outputType === 'pdf'
+        ? {
+            pageCount: item.pageCount,
+          }
+        : {
+            width: item.width!,
+            height: item.height!,
+            deviceScaleFactor: item.deviceScaleFactor,
+          }),
+      contentType: captureOutputContentType(resolved.outputType),
+      outputType: resolved.outputType,
       keyBy: resolved.keyBy,
       ...(resolved.payload.useAsThumbnail ? { useAsThumbnail: true } : {}),
       base64: item.base64,
@@ -2315,10 +2340,25 @@ export async function captureDeclaredScreenshots(
     });
   };
 
+  // A pdf entry paginates one print-media render onto paper — it cannot ride a
+  // shared raster batch (pdf is singular-only) — so pdf slots are captured one
+  // at a time, apart from the raster format groups and render-based slots.
+  // Their per-card sub-cap is far lower than the raster batch cap because each
+  // is much heavier; name-sorted, so which slots overflow is deterministic.
+  let pdfEntries: ResolvedDeclaredEntry[] = [];
   let byFormat = new Map<DeclaredScreenshotFormat, ResolvedDeclaredEntry[]>();
   let renderBased: ResolvedDeclaredEntry[] = [];
   for (let resolved of fresh) {
-    if (resolved.payload.render) {
+    if (resolved.outputType === 'pdf') {
+      if (pdfEntries.length >= SCREENSHOT_MAX_PDF_CAPTURES) {
+        errors.push({
+          name: resolved.name,
+          message: `declared pdf screenshots exceed the pdf capture cap of ${SCREENSHOT_MAX_PDF_CAPTURES}; "${resolved.name}" was not captured`,
+        });
+        continue;
+      }
+      pdfEntries.push(resolved);
+    } else if (resolved.payload.render) {
       renderBased.push(resolved);
     } else {
       let format = resolved.payload.format!;
@@ -2331,20 +2371,22 @@ export async function captureDeclaredScreenshots(
   for (let format of [...byFormat.keys()].sort()) {
     let group = byFormat.get(format)!;
     let captures: ScreenshotCaptureEntry[] = group.map((resolved) =>
+      // A format group holds only raster slots (pdf captures on its own path),
+      // so every member declares a capture box.
       format === 'fitted'
         ? {
             name: resolved.name,
             envelope: {
-              width: resolved.payload.width,
-              height: resolved.payload.height,
+              width: resolved.payload.width!,
+              height: resolved.payload.height!,
             },
             deviceScaleFactor: resolved.deviceScaleFactor,
           }
         : {
             name: resolved.name,
             viewport: {
-              width: resolved.payload.width,
-              height: resolved.payload.height,
+              width: resolved.payload.width!,
+              height: resolved.payload.height!,
             },
             deviceScaleFactor: resolved.deviceScaleFactor,
           },
@@ -2352,7 +2394,12 @@ export async function captureDeclaredScreenshots(
     let entryOutput = Object.fromEntries(
       group.map((resolved) => [
         resolved.name,
-        { type: resolved.imageType, background: resolved.background },
+        // pdf slots are captured on their own path below, never in a raster
+        // format group, so this output type is always a raster image type.
+        {
+          type: resolved.outputType as ScreenshotImageType,
+          background: resolved.background,
+        },
       ]),
     );
     // One shared render serves the whole group, so each member records the
@@ -2383,6 +2430,36 @@ export async function captureDeclaredScreenshots(
       if (resolved) {
         finish(resolved, item, groupMs);
       }
+    }
+  }
+
+  // Each pdf slot renders and paginates on its own — pdf output is
+  // singular-only, so it can't share a batch render — under print media, from
+  // the slot's own viewport-filling format (isolated/embedded). A per-slot
+  // failure never fails the visit; it records under the broken-links model.
+  for (let resolved of pdfEntries) {
+    let entry: ScreenshotCaptureEntry = {
+      name: resolved.name,
+      type: 'pdf',
+      media: 'print',
+    };
+    let entryStart = Date.now();
+    let shot = await captureScreenshot(page, resolved.payload.format!, 0, {
+      ...opts,
+      captureSpec: { captures: [entry] },
+    });
+    let captureMs = Date.now() - entryStart;
+    if ('type' in shot) {
+      errors.push({
+        name: resolved.name,
+        message: renderErrorMessage(shot),
+        captureMs,
+      });
+      continue;
+    }
+    let item = shot.captures.find((c) => c.name === resolved.name);
+    if (item) {
+      finish(resolved, item, captureMs);
     }
   }
 

@@ -16,7 +16,6 @@ import type {
   CaptureMedia,
   CaptureOutputType,
   ScreenshotFormat,
-  ScreenshotImageType,
   ScreenshotManifest,
 } from './capture-spec.ts';
 import type { ErrorEntry } from './error.ts';
@@ -1299,11 +1298,16 @@ export type DeclaredScreenshotCaptureResult = {
   name: string;
   specHash: string;
   // CSS px of the capture box; physical pixels are these × deviceScaleFactor.
-  width: number;
-  height: number;
-  deviceScaleFactor: number;
+  // Absent for a pdf capture, which has no raster geometry — `pageCount`
+  // describes the paged document instead.
+  width?: number;
+  height?: number;
+  deviceScaleFactor?: number;
+  // Page count of a pdf capture; absent for raster output. The document's byte
+  // size is derived from the persisted bytes, so it rides only on the manifest.
+  pageCount?: number;
   contentType: string;
-  imageType: ScreenshotImageType;
+  outputType: CaptureOutputType;
   keyBy: 'generation' | 'file-content';
   useAsThumbnail?: boolean;
   base64?: string;

@@ -69,6 +69,18 @@ export default class RenderScreenshotRoute extends Route<Model> {
       );
     }
 
+    // A paged (pdf) slot has no capture box — it paginates a print-media
+    // render onto the card's own `@page` paper. Declaration validation refuses
+    // `render` for `type: 'pdf'` today, so such a slot cannot reach this route
+    // — but that refusal names itself temporary, and without this the missing
+    // box would reach the template as `width: undefinedpx` and capture a
+    // collapsed box rather than failing.
+    if (spec.width == null || spec.height == null) {
+      throw new Error(
+        `declared screenshot "${name}" declares no capture box — a paged screenshot does not render through this route`,
+      );
+    }
+
     let Component = instance.constructor.getComponent(instance, undefined, {
       componentOverride: spec.render,
     });

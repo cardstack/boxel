@@ -622,6 +622,11 @@ export async function persistDeclaredScreenshots({
       for (let i = 0; i < binaryString.length; i++) {
         bytes[i] = binaryString.charCodeAt(i);
       }
+      // A pdf capture is a paged document, not a raster tile: it persists with
+      // null pixel dimensions (the ledger and both adapters are
+      // format-agnostic) and carries the paginated document's page count and
+      // byte size on the manifest instead of width/height/deviceScaleFactor.
+      let isPdf = entry.contentType === 'application/pdf';
       let { objectKey } = await putMedia(dbAdapter, mediaCacheAdapter, {
         bytes,
         contentType: entry.contentType,
@@ -632,16 +637,25 @@ export async function persistDeclaredScreenshots({
         sourceContentHash:
           entry.keyBy === 'file-content' ? (contentHash ?? null) : null,
         lane: 'declared',
-        width: entry.width,
-        height: entry.height,
+        width: isPdf ? null : entry.width,
+        height: isPdf ? null : entry.height,
       });
       let manifestEntry: ScreenshotManifestEntry = {
         specHash: entry.specHash,
         objectKey,
         contentType: entry.contentType,
-        width: entry.width,
-        height: entry.height,
-        deviceScaleFactor: entry.deviceScaleFactor,
+        ...(isPdf
+          ? {
+              ...(entry.pageCount !== undefined
+                ? { pageCount: entry.pageCount }
+                : {}),
+              byteSize: bytes.byteLength,
+            }
+          : {
+              width: entry.width,
+              height: entry.height,
+              deviceScaleFactor: entry.deviceScaleFactor,
+            }),
         ...(entry.useAsThumbnail ? { useAsThumbnail: true as const } : {}),
         ...(entry.keyBy === 'file-content' && contentHash
           ? { sourceContentHash: contentHash }
