@@ -845,19 +845,19 @@ module(basename(import.meta.filename), function (hooks) {
       );
       // Another client's write joins that pending module flush, and so
       // announces it; the instance pass that follows is the mixed write's
-      // alone.
-      peerWrite = Promise.resolve(
-        request
-          .patch('/shared-pass-mixed-peer')
-          .set('Accept', 'application/vnd.card+json')
-          .set('X-Boxel-Client-Request-Id', 'instance:peer-tab')
-          .send({
-            data: {
-              type: 'card',
-              attributes: { firstName: 'Peer' },
-              meta: { adoptsFrom: PERSON },
-            },
-          }),
+      // alone. It is one that does not wait for indexing before it writes —
+      // a write that does would first drain the pending module pass, and so
+      // could never join it from this replica.
+      peerWrite = realm.write(
+        'shared-pass-mixed-peer.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Peer' },
+            meta: { adoptsFrom: PERSON },
+          },
+        }),
+        { clientRequestId: 'instance:peer-tab', waitForIndex: false },
       );
       await waitUntil(async () =>
         (await pendingIndexCallers()).includes('instance:peer-tab'),
@@ -866,6 +866,7 @@ module(basename(import.meta.filename), function (hooks) {
       release.fulfill();
     }
     await Promise.all([mixedWrite, peerWrite, holder.done]);
+    await realm.incrementalIndexing();
 
     let mixedEvent = async () =>
       (await incrementalIndexEventsSince(since)).find(
