@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from 'fs';
 
 import { lowerOperationDeclarations } from '@cardstack/runtime-common/card-operations';
 import type {
+  BaseOperation,
   OperationErrorCode,
   OperationLoweringIssueCode,
 } from '@cardstack/runtime-common/card-operations';
@@ -83,6 +84,18 @@ const DOCUMENTED_LOWERING_CODES = [
   'instance-out-of-scope',
 ] as const;
 
+const DOCUMENTED_BASE_OPERATIONS = [
+  'read',
+  'readSource',
+  'create',
+  'update',
+  'delete',
+  'query',
+  'transform',
+  'appendContainsMany',
+  'appendLine',
+] as const;
+
 const DOCUMENTED_ERROR_CODES = [
   'unknown-operation',
   'operation-not-allowed',
@@ -108,6 +121,14 @@ export type EveryDocumentedLoweringCodeIsReal = Assignable<
 export type EveryLoweringCodeIsDocumented = Assignable<
   (typeof DOCUMENTED_LOWERING_CODES)[number],
   OperationLoweringIssueCode
+>;
+export type EveryDocumentedBaseIsReal = Assignable<
+  BaseOperation,
+  (typeof DOCUMENTED_BASE_OPERATIONS)[number]
+>;
+export type EveryBaseIsDocumented = Assignable<
+  (typeof DOCUMENTED_BASE_OPERATIONS)[number],
+  BaseOperation
 >;
 export type EveryDocumentedErrorCodeIsReal = Assignable<
   OperationErrorCode,
@@ -142,8 +163,12 @@ function shows(assert: Assert, snippet: string) {
  * cell is `heading`. Exact tokens rather than substrings, so a name cannot
  * count as listed because it appears inside a neighbouring code span.
  */
-function tableTokens(heading: string): string[] {
+function tableTokens(assert: Assert, heading: string): string[] {
   const start = skill.indexOf(`| ${heading}`);
+  assert.true(
+    start !== -1,
+    `the skill has no "| ${heading}" table — a renamed header cell is a different failure from a diverged list`,
+  );
   if (start === -1) {
     return [];
   }
@@ -212,6 +237,11 @@ const Clinician = definition('Clinician', {
   activeCaseload: scalar({ type: 'containsMany' }),
 });
 
+const Comment = definition('Comment', {
+  body: scalar(),
+  postedBy: scalar(),
+});
+
 const VitalsReading = definition('VitalsReading', {
   heartRate: scalar(),
   recordedBy: scalar(),
@@ -220,10 +250,10 @@ const VitalsReading = definition('VitalsReading', {
 // A card carrying one field of each shape the skill's rules talk about.
 const Record_ = definition('PatientRecord', {
   status: scalar(),
-  severity: scalar(),
   // Computed, so a write into it is refused.
   cardTitle: scalar({ isComputed: true }),
   tags: scalar({ type: 'containsMany' }),
+  comments: compound('Comment', { type: 'containsMany' }),
   vitals: compound('VitalsReading', { type: 'containsMany' }),
   // Not searchable, so reading across it is refused.
   facility: compound('Clinician', { type: 'linksTo' }),
@@ -234,6 +264,7 @@ const Record_ = definition('PatientRecord', {
 
 const graph = new Map<string, Definition>([
   [refKey(ref('Clinician')), Clinician],
+  [refKey(ref('Comment')), Comment],
   [refKey(ref('VitalsReading')), VitalsReading],
 ]);
 
@@ -243,10 +274,7 @@ const StringFieldClass = function StringField() {} as unknown as never;
 
 const params = (key: string) => ({ $ref: 'params', key }) as never;
 const actor = () => ({ $ref: 'actor' }) as never;
-const instance = (key?: string) =>
-  (key === undefined
-    ? { $ref: 'instance' }
-    : { $ref: 'instance', key }) as never;
+const instance = (key: string) => ({ $ref: 'instance', key }) as never;
 const card = (value: unknown) => ({ $ref: 'card', value }) as never;
 
 async function lower(
@@ -304,7 +332,7 @@ module(basename(import.meta.filename), function () {
   module('the closed lists match the engine', function () {
     test('the lowering-findings table lists exactly the codes lowering can record', function (assert) {
       assert.deepEqual(
-        tableTokens('Finding').sort(),
+        tableTokens(assert, 'Finding').sort(),
         [...DOCUMENTED_LOWERING_CODES].sort(),
         "the skill's findings table and the engine's issue codes have diverged",
       );
@@ -312,24 +340,18 @@ module(basename(import.meta.filename), function () {
 
     test('the refusals table lists exactly the codes a caller can see', function (assert) {
       assert.deepEqual(
-        tableTokens('Code').sort(),
+        tableTokens(assert, 'Code').sort(),
         [...DOCUMENTED_ERROR_CODES].sort(),
         "the skill's refusals table and the engine's error codes have diverged",
       );
     });
 
-    test('the base-operations table lists exactly the nine behaviors', function (assert) {
-      assert.deepEqual(tableTokens('Base').sort(), [
-        'appendContainsMany',
-        'appendLine',
-        'create',
-        'delete',
-        'query',
-        'read',
-        'readSource',
-        'transform',
-        'update',
-      ]);
+    test('the base-operations table lists exactly the behaviors the engine carries', function (assert) {
+      assert.deepEqual(
+        tableTokens(assert, 'Base').sort(),
+        [...DOCUMENTED_BASE_OPERATIONS].sort(),
+        "the skill's base-operations table and the engine's behaviors have diverged",
+      );
     });
   });
 
@@ -347,11 +369,25 @@ module(basename(import.meta.filename), function () {
           addComment: {
             base: 'transform',
             params: { body: StringFieldClass },
-            append: { to: 'tags', value: params('body') },
+            append: {
+              to: 'comments',
+              value: { body: params('body'), postedBy: actor() },
+            },
           },
         }),
         [],
         'the shape the skill opens with is one the realm accepts',
+      );
+      assert.deepEqual(
+        await codesFor({
+          addComment: {
+            base: 'transform',
+            params: { body: StringFieldClass },
+            append: { to: 'comments', value: { nope: params('body') } },
+          },
+        }),
+        ['unknown-field'],
+        'and the members of an appended object are resolved against the collection it lands in',
       );
     });
   });

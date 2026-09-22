@@ -131,6 +131,13 @@ jobs:
               # regenerates the skill while touching only `packages/boxel-cli`,
               # which nothing else here matches.
               - 'packages/boxel-cli/plugin/skills/card-operations-authoring/**'
+              # That suite also asserts the worked example the skill cites
+              # still exists. `realm-server-test` runs unconditionally on main,
+              # so without this a rename in that realm would merge green and
+              # redden main on a commit whose own CI never ran the suite. The
+              # file rather than the directory: a directory rename moves this
+              # path too, and this filter fans out to six shards.
+              - 'packages/experiments-realm/clinical/patient-record.gts'
               - 'packages/billing/**'
               - 'packages/boxel-icons/**'
               - 'packages/boxel-ui/**'
