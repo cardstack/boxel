@@ -623,6 +623,24 @@ export class VirtualNetwork {
    * same entry. `unresolveURL` alone is NOT usable as the key — it leaves a
    * virtual/url-mapped alias unchanged, so those spellings split from the RRI.
    */
+  // The key form of an identifier, for the stores that fold every spelling of
+  // one resource onto a single key. `toRealURLHref` where it resolves, and the
+  // identifier unchanged where it does not.
+  //
+  // An identifier minted from a realm prefix this network does not carry — one
+  // canonicalized by a network that had the mapping and then read by a network
+  // that never did — cannot be folded onto anything. It still needs a key, and
+  // being its own splits it from the spellings it should have joined, which
+  // costs a cache hit. Throwing instead costs the caller: these run inside
+  // tasks nobody awaits, where a throw is an unhandled rejection.
+  keyForIdentifier(id: string): string {
+    try {
+      return this.toRealURLHref(id);
+    } catch {
+      return id;
+    }
+  }
+
   toRealURLHref(id: string): string {
     let cached = this.realURLHrefCache.get(id);
     if (cached !== undefined) {
