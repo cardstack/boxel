@@ -3,8 +3,8 @@ import * as QUnit from 'qunit';
 /**
  * Discovers all *.test.gts module URLs in a realm using the _mtimes endpoint,
  * which returns a flat map of every file URL in the realm in one request.
- * A module registers its tests either at import time or from an exported
- * `runTests()` function; both are collected.
+ * A module declares its QUnit modules either at import time or from an
+ * exported `runTests()` function; both shapes are collected.
  *
  * @param {string} realmURL - The base realm URL (e.g. "http://localhost:4201/catalog/")
  * @returns {Promise<string[]>} Absolute module URLs (without the file extension)
@@ -116,7 +116,10 @@ export async function loadRealmTests(application) {
   // Under ESM, `QUnit` is a frozen namespace — we can't monkey-patch
   // `QUnit.module`. Instead, snapshot `QUnit.config.modules` before each
   // module is imported and diff after its runTests() call (if any), so both
-  // import-time and runTests-time registrations are attributed to it.
+  // import-time and runTests-time declarations are attributed to it. The set
+  // feeds the log line and the empty-realm placeholder only: every test is
+  // queued, and validated, at the moment it is declared, so nothing assigned
+  // to QUnit's config after this loop can exclude one.
   const capturedModules = new Set();
   const moduleList = () =>
     Array.isArray(qunitAny.config?.modules) ? qunitAny.config.modules : [];
@@ -168,8 +171,6 @@ export async function loadRealmTests(application) {
       ...capturedModules,
     ]);
   }
-
-  QUnit.config.testFilter = (testInfo) => capturedModules.has(testInfo.module);
 
   if (!QUnit.config.started) {
     QUnit.start();
