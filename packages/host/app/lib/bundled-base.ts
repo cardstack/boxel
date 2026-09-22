@@ -342,15 +342,12 @@ export const BUNDLED_BASE_MODULES: Record<
   datetime: () => import('@cardstack/base/datetime'),
   image: () => import('@cardstack/base/image'),
   'positioned-card': () => import('@cardstack/base/positioned-card'),
-  'skill-frontmatter-field': () =>
-    import('@cardstack/base/skill-frontmatter-field'),
   typography: () => import('@cardstack/base/typography'),
   website: () => import('@cardstack/base/website'),
   address: () => import('@cardstack/base/address'),
   'cards-grid': () => import('@cardstack/base/cards-grid'),
   'date-range-field': () => import('@cardstack/base/date-range-field'),
   'datetime-stamp': () => import('@cardstack/base/datetime-stamp'),
-  'frontmatter-kinds': () => import('@cardstack/base/frontmatter-kinds'),
   'process-card': () => import('@cardstack/base/process-card'),
   'structured-theme-variables': () =>
     import('@cardstack/base/structured-theme-variables'),
