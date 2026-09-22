@@ -152,9 +152,21 @@ protocol's, not the harness's, and is out of scope here.
 
 ## Testing
 
-`packages/realm-server/tests/load-harness-test.ts` is a standalone unit suite
-(seconds, no realm stack), which is where the parsing and the classification
-go. The parts that need a server — the permission grant, the PATCH write path —
-are exercised by an actual run against the local `user/tessar-admin` realm with
-two accounts, which is also what demonstrates the acceptance criterion: a
-non-zero cross-writer blocked count from a single run.
+`packages/realm-server/tests/load-harness-test.ts` is a standalone unit suite —
+it runs under `node --experimental-strip-types` against a four-line QUnit
+driver in seconds, with no test-pg and no ports — and is where the parsing and
+the classification go.
+
+The parts that need a server are exercised by an actual run against a local
+stack. The realm for that is purpose-built rather than borrowed: a `Hub` card
+with 40 `Leaf` cards linking to it, so a hub PATCH invalidates 41 files and a
+leaf POST invalidates one. That asymmetry is the point — a realm without a real
+fan-out gives two indistinguishable writes and a fairness score that means
+nothing.
+
+Two things that could only be shown by running it did show up that way. The
+write-permission preflight refused the first attempt, naming the account with
+no grant and printing the `--grants-only` command that fixed it; and
+`matrixDomainFor` was taking `URL.host`, so that refusal offered
+`@user:localhost:8008` — an id no account has — for pasting into the command it
+recommended.
