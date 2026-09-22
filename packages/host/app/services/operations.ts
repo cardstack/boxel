@@ -476,6 +476,12 @@ export default class OperationsService
           },
         },
         overlays,
+        // No `resolveReference`, unlike the realm's own run. A relationship is
+        // stored relative to the file that holds it, so the realm resolves the
+        // stored spelling on the way in; this serialization was asked for
+        // absolute URLs, so its links arrive already resolved and a second
+        // pass would have nothing to do.
+        //
         // A program naming a card to link to gets the identity back, the same
         // answer the realm's own planner is given. Whether that card exists is
         // the realm's to refuse, and it does so on the write.
