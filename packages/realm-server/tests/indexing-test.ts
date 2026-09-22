@@ -1946,9 +1946,15 @@ module(basename(import.meta.filename), function () {
         // that changed no module must not ask for the drop.
         //
         // `loaderResetReason` is the direct reading and `moduleEvaluationCount`
-        // is its consequence; both are asserted because a count above zero with
-        // no reason recorded means the tab was cold to begin with, which is a
-        // different fact from the pass having thrown its graph away.
+        // is its consequence, and the two are asserted over different sets of
+        // passes. The reason is the pass's own doing, so every pass is held to
+        // it. The count is only the pass's doing on a tab that had a graph to
+        // keep: a tab the pool has just created evaluates the whole reachable
+        // set whatever the pass asks for, and says so by naming `coldTab`, so
+        // the count is read on the passes that named nothing. Which passes
+        // those are is not fixed — the pool is free to hand any pass a new
+        // page — hence several passes and a floor of one warm one, rather than
+        // a count read off whichever pass happens to be first.
         let diagnosticsFor = async (localPath: string) => {
           let [row] = (await testDbAdapter.execute(
             `SELECT diagnostics FROM boxel_index WHERE realm_url = $1 AND url = $2 AND type = 'instance'`,
@@ -1974,33 +1980,36 @@ module(basename(import.meta.filename), function () {
             }),
           );
 
-        await write('Ringo Starr');
-        let first = await diagnosticsFor('ringo.json');
-        assert.strictEqual(
-          first?.loaderResetReason,
-          undefined,
-          `a pass whose invalidation set holds no executable records no loader reset, got: ${JSON.stringify(first?.loaderResetReason)}`,
-        );
-        assert.strictEqual(
-          first?.moduleEvaluationCount,
-          0,
-          `and evaluates no module, got: ${JSON.stringify(first?.moduleEvaluationCount)} (a count above zero with no reason above means the tab arrived cold)`,
-        );
+        // Each write is its own isolated pass, so a per-pass drop is paid
+        // again on every one of them rather than once.
+        let passes: Awaited<ReturnType<typeof diagnosticsFor>>[] = [];
+        for (let firstName of ['Ringo Starr', 'Richard Starkey', 'Ringo']) {
+          await write(firstName);
+          passes.push(await diagnosticsFor('ringo.json'));
+        }
 
-        // A second isolated pass over the same card: each write is its own
-        // pass, so a per-pass drop would be paid again here rather than once.
-        await write('Richard Starkey');
-        let second = await diagnosticsFor('ringo.json');
-        assert.strictEqual(
-          second?.loaderResetReason,
-          undefined,
-          `the next pass over the same card records no reset either, got: ${JSON.stringify(second?.loaderResetReason)}`,
+        for (let [index, pass] of passes.entries()) {
+          let reason = pass?.loaderResetReason ?? 'none';
+          assert.ok(
+            ['none', 'coldTab'].includes(reason),
+            `pass ${index + 1} holds no executable in its invalidation set, so nothing but a new page can have cleared the loader, got: ${reason}`,
+          );
+        }
+
+        let warmPasses = passes.filter(
+          (pass) => pass?.loaderResetReason === undefined,
         );
-        assert.strictEqual(
-          second?.moduleEvaluationCount,
-          0,
-          `and still evaluates no module, got: ${JSON.stringify(second?.moduleEvaluationCount)}`,
+        assert.ok(
+          warmPasses.length > 0,
+          `at least one pass ran on a tab that already held a graph, so the count below measures something, got reasons: ${JSON.stringify(passes.map((pass) => pass?.loaderResetReason))}`,
         );
+        for (let pass of warmPasses) {
+          assert.strictEqual(
+            pass?.moduleEvaluationCount,
+            0,
+            `a pass on a warm tab evaluates no module, got: ${JSON.stringify(pass?.moduleEvaluationCount)}`,
+          );
+        }
 
         // The mirror: a pass that rewrites the module the card adopts from
         // must still drop the graph. Without this, the assertions above would

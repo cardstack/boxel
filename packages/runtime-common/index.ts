@@ -291,14 +291,22 @@ export interface BuildModelDiagnostics {
   // earlier card in the same job rather than not happening.
   moduleEvaluationCount?: number;
   moduleEvaluationTotalMs?: number;
-  // Present only when this visit dropped the tab's loader before building
-  // the model, naming which of the two synchronizations did it. A drop
-  // makes a nonzero `moduleEvaluationCount` expected rather than
-  // surprising: the graph was warm and this visit threw it away, so the
-  // re-fetch and re-evaluation it pays for is the drop's price and not a
-  // property of the card. Its absence alongside a large count is the
-  // reading that says the tab had never evaluated the graph at all.
-  loaderResetReason?: 'clearCache' | 'loaderEpoch';
+  // Present only when this visit cleared the tab's loader before building
+  // the model, naming what cleared it. Any of the three makes a nonzero
+  // `moduleEvaluationCount` expected rather than surprising, but they do
+  // not carry the same reading:
+  //
+  //   - `clearCache` and `loaderEpoch` are drops. The graph was warm and
+  //     this visit threw it away, so the re-fetch and re-evaluation it pays
+  //     for is the drop's price and not a property of the card.
+  //   - `coldTab` is not a drop. The tab held no epoch, so this is its
+  //     first epoch-carrying visit and there was no graph to discard; the
+  //     count is the price of the page being new, which the pool decided
+  //     and the pass had no part in.
+  //
+  // Absence alongside a large count is neither, and is worth a look: a warm
+  // tab that nothing cleared has no accounted reason to evaluate a graph.
+  loaderResetReason?: 'clearCache' | 'loaderEpoch' | 'coldTab';
   // Per-field hydration wall-clock, keyed by dotted field path from the
   // card's root — the deserialization sibling of `searchDocFieldsMs`, and
   // the breakdown of `buildModelMs.hydrate`. Same bounding, so a cheap card

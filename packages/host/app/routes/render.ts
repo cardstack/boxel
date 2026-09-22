@@ -497,15 +497,23 @@ export default class RenderRoute extends Route<Model> {
         });
         this.store.resetCache();
         (globalThis as any).__boxelLoaderEpoch = parsedOptions.loaderEpoch;
-        loaderResetReason = 'loaderEpoch';
+        // A tab holding no epoch is a tab whose first epoch-carrying visit
+        // this is: the reset above swept an empty loader, so naming it
+        // `loaderEpoch` would report a module change this pass did not make
+        // and a warm graph it did not throw away. The two differ in what a
+        // reader can do about a large `moduleEvaluationCount` — a drop is
+        // attributable to the pass, a cold tab is the pool handing it a new
+        // page — so they get different names rather than one.
+        loaderResetReason = held === undefined ? 'coldTab' : 'loaderEpoch';
       }
     }
     if (parsedOptions.clearCache) {
       // Never overwrites: the two fire together on the first visit of a pass
       // that invalidated an executable, because the condition that mints a
-      // fresh epoch is the condition that arms the flag. The epoch is the
-      // reset that reached every other tab serving that pass, so it is the
-      // one the row should name.
+      // fresh epoch is the condition that arms the flag. The epoch block
+      // above already named the reset that reached every other tab serving
+      // that pass, or named the cold tab that had no graph for any of this
+      // to be about, and either is the more specific reading.
       loaderResetReason ??= 'clearCache';
       this.loaderService.resetLoader({
         clearFetchCache: true,
