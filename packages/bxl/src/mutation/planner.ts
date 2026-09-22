@@ -1,6 +1,6 @@
 import { parseNativeJq } from '../bxl/bridge/native.ts';
 import {
-  mutationBuiltinLibraries,
+  requestContextBuiltinLibraries,
   resolveBuiltinRegistry,
   type ResolvedBuiltinRegistry,
 } from '../bxl/registry/index.ts';
@@ -2582,7 +2582,7 @@ export function prepareBxlMutation(
   const preparedOptions = { ...options, syntax };
   const parsed = parseBxlMutationProgram(source, preparedOptions);
   const registry = resolveBuiltinRegistry(
-    mutationBuiltinLibraries(options.libraries),
+    requestContextBuiltinLibraries(options.libraries),
   );
 
   return Object.freeze({

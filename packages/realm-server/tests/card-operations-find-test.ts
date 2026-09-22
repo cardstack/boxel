@@ -240,6 +240,7 @@ function stub(opts: StubOptions): Stub {
     openStoredFile: notReached('openStoredFile') as any,
     storedFileMeta: notReached('storedFileMeta') as any,
     isIgnored: notReached('isIgnored') as any,
+    realmConfig: notReached('realmConfig') as any,
     fileMetaDocument: notReached('fileMetaDocument') as any,
     resolveCodeRef: (codeRef) => codeRef as any,
     fileDefCodeRef: notReached('fileDefCodeRef') as any,

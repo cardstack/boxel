@@ -66,6 +66,16 @@ export type CardJsonAssembly =
       // that aborted or whose realms could not be placed leaves no
       // `links.search` marker behind, yet still depends on other cards.
       queryBacked: boolean;
+      // Whether the body is an `output` projection rather than the realm's
+      // canonical document. A projected body is per-operation and may be
+      // per-actor, and the validator above describes the unprojected document,
+      // so the response carries `no-store` and the assembly is never retained.
+      // The handler decides not to populate before assembling — it cannot key
+      // a projection on a validator that does not move with it — and the
+      // retention predicate checks this too, so a definition that changed
+      // between the two cannot leave a projection filed under a card's
+      // ordinary validator.
+      projected: boolean;
       // The validator the lookup was keyed on, so retention can check that
       // the assembly agrees with it.
       keyEtag: string;
@@ -188,6 +198,14 @@ export class CardDocumentCache {
         assembly.kind === 'document' &&
         assembly.etag !== undefined &&
         !assembly.queryBacked &&
+        // A projected body is not a function of its own index row either: the
+        // projection comes from the type's declaration, which can change
+        // without the row moving, and it may differ per caller. The handler
+        // decides not to populate before assembling, but that decision is
+        // taken from a definition read before the assembly — so this is the
+        // check that makes "nothing projected is retained" a property of the
+        // cache rather than of the handler's timing.
+        !assembly.projected &&
         // The key came from a read taken before the assembly; if the
         // assembly's own validator disagrees, a write landed in between and
         // this entry would be filed under a validator that does not describe

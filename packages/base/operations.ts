@@ -1,12 +1,14 @@
 import {
   assertQuery,
   buildOperations,
+  codeRefForDef,
   getOperationsTransport,
   identifyCard,
   InvalidQueryError,
   localId,
   realmURL,
   type CarriedOperationInfo,
+  type CarriedQueryDeclaration,
   type CodeRef,
   type InvokeOptions,
   type OperationDocument,
@@ -15,6 +17,9 @@ import {
   type OperationWriteResult,
   type OperationsSubject,
   type QueryTargetHandle,
+  type SearchEntries,
+  type SearchEntryWireQuery,
+  type SearchInvokeOptions,
 } from '@cardstack/runtime-common';
 
 import {
@@ -418,7 +423,20 @@ export type SetClause = { readonly [fieldName: string]: OperationValue };
 export type FillClause = { readonly [fieldName: string]: OperationValue };
 
 // Projects or reshapes the result. May reference the actor, which makes the
-// operation's response per-actor.
+// operation's response per-actor — and on a `read`, makes the card's plain
+// `GET` uncacheable, since a per-caller body cannot be held in a shared cache
+// or answered with a 304.
+//
+// **It is not an access boundary.** An `output` decides the shape of this
+// operation's answer and nothing more: the realm checks its own read/write
+// permission and nothing else, so a field left out here is still reachable by
+// any caller permitted to read the realm — through the card's plain `read`,
+// through its stored source, through a search. Leave a value out because a
+// consumer does not need it, never because a caller may not have it.
+//
+// A projection of a `read` stays a JSON:API document: the response it is
+// served in carries a `data` member and every client reads it. What the
+// projection puts below `data` is the author's.
 export type OperationOutput =
   | BxlProgram
   | { readonly [key: string]: OperationValue };
@@ -462,6 +480,11 @@ interface OperationCommon {
   readonly optimistic?: boolean;
   // The raw escape hatch: author-supplied BXL in place of the declarative
   // clauses, for anything they don't express.
+  //
+  // `input` runs first, over the payload the caller sent, and produces the
+  // payload the operation uses — so a value it supplies satisfies a declared
+  // param the caller left out. It reads `.` (that payload), `params()` and
+  // `actor()`, and it produces an object.
   readonly input?: BxlProgram;
   readonly transformations?: BxlProgram;
   readonly output?: OperationOutput;
@@ -1795,10 +1818,18 @@ function quoteList(values: readonly string[]): string {
 //
 // What a bucket carries is what can be invoked on what it was built for. A
 // file's bucket has its reads and the two writes that work on its bytes and
-// nothing else; a class's has the creates. `readSource` has no member at all —
-// the card source and byte routes serve stored bytes — and a query is reached
-// through the entry search API, so a declared one answers with where to find it
-// rather than sending a batch the realm would refuse.
+// nothing else; a class's has the creates and the saved searches its author
+// declared. `readSource` has no member at all — the card source and byte routes
+// serve stored bytes.
+//
+// **A saved search is as fresh as the index.** A declared `query` is carried
+// out by the search engine rather than by the realm's operation endpoint, so it
+// reads the search index — which lags a write until that write is indexed. To
+// read a card you just wrote, read the card (`operations(card).read()`, or the
+// store); a query is for collections, and its resource refreshes itself as the
+// realms it covers index. It is also the one member that is not awaited: it
+// answers the live entries resource, so make the call once and keep what it
+// answers rather than calling it again per render.
 //
 // **Typing an instance call.** A def's operations are declared as statics, and
 // TypeScript cannot read a class's statics through an instance type, so an
@@ -1821,6 +1852,8 @@ export type {
   OperationResultTree,
   OperationValueResult,
   OperationWriteResult,
+  SearchEntries,
+  SearchInvokeOptions,
 } from '@cardstack/runtime-common';
 export { OperationsError } from '@cardstack/runtime-common';
 
@@ -1855,16 +1888,14 @@ type InstanceScopedBase =
   | 'appendLine'
   | 'appendContainsMany'
   | 'create';
-type TypeScopedBase = 'create';
+type TypeScopedBase = 'create' | 'query';
 
 type ScopedBase<Scope extends 'instance' | 'type'> = Scope extends 'instance'
   ? InstanceScopedBase
   : TypeScopedBase;
 
 // The names a def declares that are invocable in this scope, read off the
-// class the declarations are statics of. A declared query is left out: it runs
-// on the search engine rather than in a batch, so it has no callable form here
-// yet.
+// class the declarations are statics of.
 type DeclaredNames<Type, Scope extends 'instance' | 'type'> = {
   [Name in keyof OperationsOf<Type>]: OperationsOf<Type>[Name] extends {
     base: infer Base extends BaseOperationName;
@@ -1886,10 +1917,41 @@ type ScopedArgs<
   : PayloadArgs<Declaration>;
 
 type DeclaredOperationMembers<Type, Scope extends 'instance' | 'type'> = {
-  [Name in DeclaredNames<Type, Scope>]: (
-    ...args: ScopedArgs<OperationsOf<Type>[Name], Scope>
-  ) => Promise<ResultOf<OperationsOf<Type>[Name]>>;
+  [Name in DeclaredNames<Type, Scope>]: OperationsOf<Type>[Name] extends {
+    base: 'query';
+  }
+    ? QueryOperation<OperationsOf<Type>[Name]>
+    : (
+        ...args: ScopedArgs<OperationsOf<Type>[Name], Scope>
+      ) => Promise<ResultOf<OperationsOf<Type>[Name]>>;
 };
+
+// A saved search, as the two ways one is reached.
+//
+// Called, it answers the live entries resource a search runs as — the one
+// return shape in this API that is not an awaited result, because a query is
+// carried out by the search engine rather than by the realm's operation
+// endpoint: results are a collection that re-runs as realms index, not a
+// document a request returns once. Make the call once and keep what it
+// answers — a field, a one-time assignment, never in a getter or during a
+// render — since every call builds an independent search.
+//
+// `.query()` answers the wire query the same invocation resolves to, which is
+// what a card hands to `@context.searchResultsComponent` to render the rows
+// itself.
+export interface QueryOperation<Declaration> {
+  (
+    ...args: [...PayloadArgs<Declaration>, opts?: SearchInvokeOptions]
+  ): SearchEntries;
+  // Answers no query when the session cannot say who the caller is — nobody
+  // signed in, or a render, which authenticates as itself rather than as a
+  // viewer. The search component reads that as an idle search, so a card hands
+  // the result over either way and an actor-scoped search renders its rows
+  // when a viewer is there to have them.
+  query(
+    ...args: [...PayloadArgs<Declaration>, opts?: SearchInvokeOptions]
+  ): SearchEntryWireQuery | undefined;
+}
 
 // Whether the call named the class its operations are declared on. It did not
 // when the type parameter is still its own constraint, which is every call
@@ -2095,6 +2157,35 @@ export type BatchOperations<Type> =
         UncheckedBatchOperations
     : WithDeclared<CardBatchBaseOperations, BatchMembers<Type>>;
 
+// A file's, in the batch. Its writes work on the file's bytes, which is what
+// puts a log line and the card change that produced it in one commit.
+export interface FileBatchBaseOperations {
+  read(): BatchHandle<OperationDocument>;
+  update(payload: { content: string }): BatchHandle<OperationWriteResult>;
+  appendLine(payload: { line: string }): BatchHandle<OperationWriteResult>;
+}
+
+export type FileBatchOperations<Type> =
+  NamesNoClass<Type, FileDefConstructor> extends true
+    ? WithDeclared<FileBatchBaseOperations, BatchMembers<Type>> &
+        UncheckedBatchOperations
+    : WithDeclared<FileBatchBaseOperations, BatchMembers<Type>>;
+
+// A file named by its path, whose type nothing here knows. A path says where
+// the bytes are and not what they are, so what it carries is what every file
+// carries and nothing more — a name a `FileDef` subclass declares is not
+// reachable this way.
+//
+// Deliberately not the unchecked fallback a call that named no class gets.
+// That fallback is honest where a `Proxy` passes every name to the realm to
+// resolve, as a query target's does; the bucket behind a path is a plain
+// object built from the operations above, so a name outside them would type-
+// check and then arrive as a bare `TypeError` rather than as a sentence. And
+// the realm could not resolve one anyway: it types a file by its *registered*
+// extension, so the unregistered ones a log tends to use resolve as a card and
+// carry no declared file operation at all.
+export type PathBatchOperations = FileBatchBaseOperations;
+
 // The operations of whatever a search reached. Which ones those cards carry is
 // their own types' to say and the realm resolves each name against the card it
 // reached, so a name is not knowable here — and for the same reason the result
@@ -2118,6 +2209,31 @@ export type BatchBuilder<Type> = BatchOperations<Type> & {
   on<Other extends CardDefConstructor>(
     instance: InstanceType<Other>,
   ): BatchOperations<Other>;
+  // A file in this batch's realm. It is reached the same way a card is, and
+  // for the same reason: an entry that appends to a log has to commit with the
+  // card change it records, or the two can disagree.
+  //
+  // `Other` is never inferred here — `InstanceType<Other>` is not an inference
+  // site — so each overload's parameter is its constraint's instance type, and
+  // which one a value selects is decided by assignability to that. A card and
+  // a file are assignable to neither the other's, so their order carries
+  // nothing.
+  on<Other extends FileDefConstructor>(
+    instance: InstanceType<Other>,
+  ): FileBatchOperations<Other>;
+  // A file named by its path in this batch's realm, for the file no instance
+  // can stand for: one the realm does not hold yet. A `FileDef` is hydrated
+  // from a stored file, so a log that has never been written has nothing to
+  // pass here — and an `appendLine` creates the file it appends to, which is
+  // the whole reason a card needs to be able to name one.
+  //
+  // Written the way the realm addresses it: `'logs/lot-114.txt'`, or with a
+  // leading slash for the realm's root. An absolute URL works too, and one
+  // outside this batch's realm is refused — a batch commits under one realm's
+  // write lock. A realm addressed by a registered prefix is refused rather
+  // than resolved: resolving a prefix means reading the virtual network, which
+  // is no part of what a card module can see.
+  on(path: string): PathBatchOperations;
   on<Expect extends 'one' | 'many'>(
     target: QueryTarget<Expect>,
   ): QueriedOperations<Expect>;
@@ -2208,6 +2324,19 @@ function adoptedResource(instance: unknown): Record<string, unknown> {
 // declarations and an instance's identity are only readable from inside a card
 // module, which is where this runs.
 function subjectFor(target: unknown): OperationsSubject {
+  if (typeof target === 'string') {
+    // A file named by its path. Which operations it carries is the file
+    // family's to say and is answered here, where `FileDef` is in scope; where
+    // the path points is the batch's to say, since a path alone names no
+    // realm. So the path travels as the id and the batch resolves it.
+    return {
+      scope: 'instance',
+      family: 'file',
+      displayName: `file ${target}`,
+      operations: carriedOperations(FileDef),
+      id: target,
+    };
+  }
   if (isDefConstructor(target)) {
     let codeRef = identifyCard(target);
     if (!codeRef) {
@@ -2261,9 +2390,33 @@ function carriedOperations(
     carried[base] = { base, declared: false };
   }
   for (let [name, declaration] of Object.entries(declaredOperations(owner))) {
-    carried[name] = { base: declaration.base, declared: true };
+    carried[name] = {
+      base: declaration.base,
+      declared: true,
+      ...(declaration.base === 'query'
+        ? { query: queryDeclaration(declaration) }
+        : {}),
+    };
   }
   return carried;
+}
+
+// A declared query travels whole rather than resolved, because a saved search
+// is resolved when it is invoked: the query still names its types with the
+// classes themselves and still holds the markers an invocation fills, and what
+// fills them — the caller's identity, the payload — is known only then.
+function queryDeclaration(
+  declaration: OperationDeclaration,
+): CarriedQueryDeclaration {
+  let { query, params } = declaration as QueryOperationDeclaration;
+  return {
+    ...(query === undefined
+      ? {}
+      : { query: query as unknown as Record<string, unknown> }),
+    ...(params === undefined
+      ? {}
+      : { params: params as unknown as Record<string, unknown> }),
+  };
 }
 
 // Which def family the target belongs to, which is what decides the shape of
@@ -2289,24 +2442,10 @@ function familyOf(
 }
 
 // A def class, or a thunk deferring one past its own class body, as the code
-// ref that names it.
+// ref that names it — the same reading the realm gives a declaration it
+// lowers, so a class written in a query means one type on both sides.
 function identifyDef(value: unknown): CodeRef | undefined {
-  if (typeof value !== 'function') {
-    return undefined;
-  }
-  let direct = identifyCard(value as typeof BaseDef);
-  if (direct) {
-    return direct;
-  }
-  let resolved: unknown;
-  try {
-    resolved = (value as () => unknown)();
-  } catch {
-    return undefined;
-  }
-  return typeof resolved === 'function'
-    ? identifyCard(resolved as typeof BaseDef)
-    : undefined;
+  return codeRefForDef(value, identifyCard);
 }
 
 function defName(owner: typeof BaseDef): string {

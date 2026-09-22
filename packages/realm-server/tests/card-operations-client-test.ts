@@ -7,12 +7,16 @@ import {
   mintedIdentities,
   rri,
   type CarriedOperationInfo,
+  type CarriedQueryDeclaration,
   type OperationsAnswer,
   type OperationsEnvelope,
   type OperationsEnvironment,
   type OperationsMethod,
+  type OperationsSearch,
   type OperationsSubject,
   type OperationsTransport,
+  type SearchEntries,
+  type SearchEntryWireQuery,
   type WireGroup,
   type WireInvocation,
 } from '@cardstack/runtime-common';
@@ -48,16 +52,34 @@ const ACTIVITY: CodeRef = { module: rri(`${REALM}report`), name: 'Activity' };
 // one: a filter names types with the classes themselves.
 const REPORT_CLASS = () => REPORT;
 
+// Who the session this core runs in authenticates the caller as.
+const ACTOR = '@tester:localhost';
+
 function carried(
-  entries: Record<string, [base: string, declared: boolean]>,
+  entries: Record<
+    string,
+    [base: string, declared: boolean, query?: CarriedQueryDeclaration]
+  >,
 ): Record<string, CarriedOperationInfo> {
   return Object.fromEntries(
-    Object.entries(entries).map(([name, [base, declared]]) => [
+    Object.entries(entries).map(([name, [base, declared, query]]) => [
       name,
-      { base, declared } as CarriedOperationInfo,
+      { base, declared, ...(query ? { query } : {}) } as CarriedOperationInfo,
     ]),
   );
 }
+
+// A saved search as its author wrote it: the type named by the class itself,
+// and a marker where the caller's identity goes.
+const OPEN_REPORTS: CarriedQueryDeclaration = {
+  query: {
+    filter: {
+      on: REPORT_CLASS,
+      eq: { status: 'open', 'author.userId': { $ref: 'actor' } },
+    },
+    sort: [{ on: REPORT_CLASS, by: 'createdAt', direction: 'desc' }],
+  },
+};
 
 // Everything a card def carries, as the card-facing module reports it: the base
 // operations its def type implies, plus what its author declared.
@@ -74,7 +96,7 @@ const CARD_OPERATIONS = carried({
   addComment: ['transform', true],
   addActivity: ['transform', true],
   createActivity: ['create', true],
-  openReports: ['query', true],
+  openReports: ['query', true, OPEN_REPORTS],
 });
 
 const FILE_OPERATIONS = carried({
@@ -99,13 +121,42 @@ function reportInstance(
   };
 }
 
-function reportType(): OperationsSubject {
+function reportType(
+  overrides: Partial<OperationsSubject> = {},
+): OperationsSubject {
   return {
     scope: 'type',
     family: 'card',
     displayName: 'Report',
     codeRef: REPORT,
     operations: CARD_OPERATIONS,
+    ...overrides,
+  } as OperationsSubject;
+}
+
+// A saved search whose scope the caller fills and whose filter reads a payload
+// member, for the cases about what an invocation supplies.
+function statusType(): OperationsSubject {
+  return {
+    scope: 'type',
+    family: 'card',
+    displayName: 'Report',
+    codeRef: REPORT,
+    operations: carried({
+      byStatus: [
+        'query',
+        true,
+        {
+          query: {
+            filter: {
+              on: REPORT_CLASS,
+              eq: { status: { $ref: 'params', key: 'status' } },
+            },
+          },
+          params: { status: 'the field class' },
+        },
+      ],
+    }),
   };
 }
 
@@ -133,6 +184,38 @@ function fileInstance(): OperationsSubject {
   };
 }
 
+// A stand-in for something the caller holds — an instance, a class — named so
+// the stubbed environment can resolve it back to a subject.
+//
+// An object rather than a bare string, and that is the production split rather
+// than a harness convenience: a string handed to the card-facing module names
+// a *file's path*, so a test that named an instance with one would be handing
+// the core something it now reads as a path.
+function handle(name: string): { stub: string } {
+  return { stub: name };
+}
+
+function stubName(target: unknown): string {
+  return typeof target === 'object' && target !== null && 'stub' in target
+    ? String((target as { stub: unknown }).stub)
+    : String(target);
+}
+
+// What the card-facing module answers for a path, standing in for it here.
+// Which operations a file carries is the file family's to say and is answered
+// where `FileDef` is in scope; where the path points is the batch's to say,
+// since a path names no realm — so the path travels as the id and the batch
+// resolves it.
+function fileAtPath(path: string): OperationsSubject {
+  return {
+    scope: 'instance',
+    family: 'file',
+    displayName: `file ${path}`,
+    operations: FILE_OPERATIONS,
+    id: path,
+  };
+}
+
 interface Sent {
   realmURL: string;
   method: OperationsMethod;
@@ -140,9 +223,58 @@ interface Sent {
   opts?: { clientRequestId?: string; adopted?: string[] };
 }
 
+// One search a query asked the session for: the wire query it resolved to, the
+// thunk it is read back through, and what the caller was handed.
+interface Searched {
+  // What the search resolved to when the session was asked for it, and the
+  // thunk it is read back through — which answers nothing at all once the
+  // session can no longer resolve the query.
+  query: SearchEntryWireQuery | undefined;
+  owner: object | undefined;
+  getQuery: () => SearchEntryWireQuery | undefined;
+  resource: SearchEntries;
+}
+
 interface Harness {
   sent: Sent[];
+  searched: Searched[];
+  session: { actor: string | undefined; realmsKnown: boolean };
   env: OperationsEnvironment;
+}
+
+// The search half of the bridge, as a record of what a query asked for. A host
+// answers with a live resource; nothing here is live, so this reads the thunk
+// once and keeps it, which is what lets a test read it again.
+function searchOf(
+  searched: Searched[],
+  opts?: { actor?: string | null; realm?: string },
+  session?: { actor: string | undefined; realmsKnown: boolean },
+): OperationsSearch {
+  return {
+    actor: () => (session ? session.actor : undefined),
+    realmFor: (identifier: string) => {
+      if (session && !session.realmsKnown) {
+        return undefined;
+      }
+      let realm = opts?.realm ?? REALM;
+      return identifier.startsWith(realm) ? realm : undefined;
+    },
+    entries(getQuery, entryOpts) {
+      let resource: SearchEntries = {
+        entries: [],
+        isLoading: false,
+        meta: { page: { total: 0 } },
+        errors: undefined,
+      };
+      searched.push({
+        query: getQuery(),
+        owner: entryOpts?.owner,
+        getQuery,
+        resource,
+      });
+      return resource;
+    },
+  };
 }
 
 // The transport, as a record of what a call handed it and a script for what to
@@ -152,9 +284,22 @@ function harness(opts?: {
   answer?: OperationsAnswer;
   defaultRealm?: string;
   subjects?: Record<string, OperationsSubject>;
+  actor?: string | null;
+  realm?: string;
+  // A session that carries out no searches at all, which is every session
+  // outside a host: a saved search answers with a live resource, and building
+  // one is the host's.
+  noSearch?: true;
   resources?: Record<string, Record<string, unknown>>;
 }): Harness {
   let sent: Sent[] = [];
+  let searched: Searched[] = [];
+  // What the session answers for right now. A standing search reads it again
+  // on every recompute, so a test moves the session by writing here.
+  let session = {
+    actor: opts?.actor === null ? undefined : (opts?.actor ?? ACTOR),
+    realmsKnown: true,
+  };
   let transport: OperationsTransport = {
     async send(realmURL, method, envelope, sendOpts) {
       sent.push({ realmURL, method, envelope, opts: sendOpts });
@@ -163,13 +308,19 @@ function harness(opts?: {
     defaultWritableRealm() {
       return opts?.defaultRealm;
     },
+    ...(opts?.noSearch ? {} : { search: searchOf(searched, opts, session) }),
   };
   return {
     sent,
+    searched,
+    session,
     env: {
       transport,
       subject(target: unknown) {
-        let named = opts?.subjects?.[target as string];
+        if (typeof target === 'string') {
+          return fileAtPath(target);
+        }
+        let named = opts?.subjects?.[stubName(target)];
         if (!named) {
           throw new Error(`the test did not describe ${String(target)}`);
         }
@@ -181,7 +332,7 @@ function harness(opts?: {
           : undefined;
       },
       resourceFor(instance: unknown) {
-        let named = opts?.resources?.[instance as string];
+        let named = opts?.resources?.[stubName(instance)];
         if (!named) {
           throw new Error(
             `the test did not describe a resource for ${String(instance)}`,
@@ -250,7 +401,12 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         bucket.query,
         undefined,
-        'and a query the author did not declare was never invoked this way',
+        'and a bare query saves no search, so there is nothing for it to run',
+      );
+      assert.strictEqual(
+        bucket.openReports,
+        undefined,
+        'a saved search reads a collection of a type, so it is invoked on the class rather than on one card',
       );
     });
 
@@ -258,13 +414,8 @@ module(basename(import.meta.filename), function () {
       let bucket = buildOperations(reportType(), harness().env);
       assert.deepEqual(
         Object.keys(bucket).sort(),
-        ['create', 'createActivity'],
-        'the base create and a declared one',
-      );
-      assert.strictEqual(
-        bucket.openReports,
-        undefined,
-        'a declared query has no member either: a query is reached through the entry search API, and its absence says so the way readSource does',
+        ['create', 'createActivity', 'openReports'],
+        'the base create, a declared one, and the saved search a collection is read through',
       );
       assert.strictEqual(
         bucket.atomic,
@@ -290,7 +441,7 @@ module(basename(import.meta.filename), function () {
       for (let subject of [reportInstance(), reportType(), fileInstance()]) {
         let bucket = buildOperations(subject, harness().env);
         for (let [name, info] of Object.entries(subject.operations)) {
-          if (info.base !== 'readSource' && info.base !== 'query') {
+          if (info.base !== 'readSource') {
             continue;
           }
           assert.strictEqual(
@@ -552,9 +703,9 @@ module(basename(import.meta.filename), function () {
         bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>
       )((b: any) => {
         if (attributes === undefined) {
-          b.create(target);
+          b.create(handle(target));
         } else {
-          b.create(target, attributes);
+          b.create(handle(target), attributes);
         }
       });
     }
@@ -593,8 +744,8 @@ module(basename(import.meta.filename), function () {
       let bucket = buildOperations(reportInstance(), env);
       await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
         (b: any) => {
-          b.create('ACTIVITY', { headline: 'One' });
-          b.create('ACTIVITY', { headline: 'Two' });
+          b.create(handle('ACTIVITY'), { headline: 'One' });
+          b.create(handle('ACTIVITY'), { headline: 'Two' });
         },
       );
 
@@ -659,8 +810,8 @@ module(basename(import.meta.filename), function () {
       let bucket = buildOperations(reportInstance(), env);
       await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
         (b: any) => {
-          b.create('UNSAVED');
-          b.create('UNSAVED');
+          b.create(handle('UNSAVED'));
+          b.create(handle('UNSAVED'));
         },
       );
 
@@ -775,7 +926,7 @@ module(basename(import.meta.filename), function () {
       let [created] = (await (
         bucket.atomic as (build: (b: any) => unknown) => Promise<any[]>
       )((b: any) => {
-        let activity = b.create('ACTIVITY', { headline: 'Lab safety' });
+        let activity = b.create(handle('ACTIVITY'), { headline: 'Lab safety' });
         b.addActivity({ activity });
         return [activity];
       })) as any[];
@@ -820,7 +971,9 @@ module(basename(import.meta.filename), function () {
       let bucket = buildOperations(reportInstance(), env);
       await (bucket.atomic as (build: (b: any) => unknown) => Promise<any>)(
         (b: any) => {
-          let activity = b.create('ACTIVITY', { headline: 'Lab safety' });
+          let activity = b.create(handle('ACTIVITY'), {
+            headline: 'Lab safety',
+          });
           b.appendContainsMany({
             field: 'comments',
             items: [{ body: 'see activity', activity }],
@@ -973,7 +1126,7 @@ module(basename(import.meta.filename), function () {
       await assert.rejects(
         (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
           (b: any) => {
-            b.on('ELSEWHERE').escalate();
+            b.on(handle('ELSEWHERE')).escalate();
           },
         ),
         /a batch commits to one realm/,
@@ -987,10 +1140,144 @@ module(basename(import.meta.filename), function () {
       let bucket = buildOperations(reportInstance(), env);
       await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
         (b: any) => {
-          b.on('NEARBY').delete();
+          b.on(handle('NEARBY')).delete();
         },
       );
       assert.strictEqual(entries(sent[0])[0].href, `${REALM}report-2`);
+    });
+
+    test('a file is targeted by its path, resolved against the batch realm', async function (assert) {
+      // The only way to reach a file the realm does not hold yet: a `FileDef`
+      // is hydrated from a stored file, so a log that has never been written
+      // has no instance to pass — and appending a line creates it.
+      let { sent, env } = batchHarness({
+        'atomic:results': [{ data: null }, { data: null }],
+      });
+      let bucket = buildOperations(reportInstance(), env);
+      await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
+        (b: any) => {
+          b.on('logs/lot-114.txt').appendLine({ line: 'opened' });
+          b.on('/logs/lot-114.txt').appendLine({ line: 'bid 1250' });
+        },
+      );
+      assert.deepEqual(
+        entries(sent[0]).map((entry: any) => entry.href),
+        [`${REALM}logs/lot-114.txt`, `${REALM}logs/lot-114.txt`],
+        'a bare path names one under the realm, and a leading slash names the ' +
+          "realm's root rather than the origin's — the two spellings the " +
+          'endpoint reads',
+      );
+      assert.deepEqual(
+        entries(sent[0]).map((entry: any) => entry['boxel:name']),
+        ['appendLine', 'appendLine'],
+        'and the entries run the behavior every file carries',
+      );
+    });
+
+    test('a path names a file no instance stands for', async function (assert) {
+      // The realm comes from the batch rather than from the path, so a path
+      // needs nothing resolved for it — which is the whole point, since the
+      // file it names may not be stored yet and so has no instance to resolve.
+      let { sent, env } = batchHarness({ 'atomic:results': [{ data: null }] });
+      let bucket = buildOperations(reportInstance(), env);
+      await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
+        (b: any) => {
+          b.on('never-described.txt').appendLine({ line: 'x' });
+        },
+      );
+      assert.strictEqual(
+        entries(sent[0])[0].href,
+        `${REALM}never-described.txt`,
+      );
+      assert.strictEqual(sent[0].realmURL, REALM, 'committed to one realm');
+    });
+
+    test('a path outside the batch realm is refused before anything is sent', async function (assert) {
+      let { sent, env } = batchHarness({ 'atomic:results': [] });
+      let bucket = buildOperations(reportInstance(), env);
+      let atomic = bucket.atomic as (
+        build: (b: any) => unknown,
+      ) => Promise<unknown>;
+
+      await assert.rejects(
+        atomic((b: any) => {
+          b.on('http://example.com/other/notes.txt').appendLine({ line: 'x' });
+        }),
+        /a batch commits to one realm/,
+        'an absolute url in another realm is no more committable than an ' +
+          'instance in one',
+      );
+      await assert.rejects(
+        atomic((b: any) => {
+          b.on('').appendLine({ line: 'x' });
+        }),
+        /names no file/,
+        'and an empty path names nothing to run against',
+      );
+      assert.strictEqual(sent.length, 0);
+    });
+
+    test('a realm addressed by a registered prefix is refused rather than resolved', async function (assert) {
+      // The spelling that would otherwise fail silently: it is not a URL, so
+      // it would resolve as a relative path, land inside the caller's own
+      // realm, pass containment, and create a file at a nonsense path instead
+      // of refusing a target in another realm. Resolving it properly means
+      // reading the virtual network, which a card module cannot see.
+      let { sent, env } = batchHarness({ 'atomic:results': [] });
+      let bucket = buildOperations(reportInstance(), env);
+      await assert.rejects(
+        (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
+          (b: any) => {
+            b.on('@cardstack/base/notes.txt').appendLine({ line: 'x' });
+          },
+        ),
+        /registered prefix/,
+        'the refusal names what it cannot do rather than inventing a path',
+      );
+      assert.strictEqual(sent.length, 0);
+    });
+
+    test('a directory is refused where the caller can see the path they wrote', async function (assert) {
+      // Each of these reaches the realm as the realm root or a directory, and
+      // comes back describing the bytes it did not find rather than the path
+      // the caller wrote.
+      let { sent, env } = batchHarness({ 'atomic:results': [] });
+      let bucket = buildOperations(reportInstance(), env);
+      let atomic = bucket.atomic as (
+        build: (b: any) => unknown,
+      ) => Promise<unknown>;
+      for (let path of ['/', '.', 'logs/']) {
+        await assert.rejects(
+          atomic((b: any) => {
+            b.on(path).appendLine({ line: 'x' });
+          }),
+          /names a directory/,
+          `${path} names no file`,
+        );
+      }
+      assert.strictEqual(sent.length, 0);
+    });
+
+    test('repeated slashes in a path name one file, not two', async function (assert) {
+      // The realm maps every spelling onto one file but addresses them as
+      // different local paths, so two entries that differ only in a doubled
+      // separator would take two write locks over one file and read as
+      // unrelated to each other.
+      let { sent, env } = batchHarness({
+        'atomic:results': [{ data: null }, { data: null }],
+      });
+      let bucket = buildOperations(reportInstance(), env);
+      await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
+        (b: any) => {
+          b.on('logs//lot-114.txt').appendLine({ line: 'first' });
+          b.on('logs/lot-114.txt').appendLine({ line: 'second' });
+        },
+      );
+      assert.deepEqual(
+        entries(sent[0]).map((entry: any) => entry.href),
+        [`${REALM}logs/lot-114.txt`, `${REALM}logs/lot-114.txt`],
+        'both entries name the one file',
+      );
     });
 
     test('the batch refuses what it cannot carry out', async function (assert) {
@@ -1023,7 +1310,7 @@ module(basename(import.meta.filename), function () {
       );
       await assert.rejects(
         atomic((b: any) => {
-          let created = b.create('ACTIVITY');
+          let created = b.create(handle('ACTIVITY'));
           b.on(created).delete();
         }),
         /no URL to target/,
@@ -1054,7 +1341,9 @@ module(basename(import.meta.filename), function () {
       let escaped: unknown;
       await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
         (b: any) => {
-          escaped = b.create('ACTIVITY', { headline: 'From batch one' });
+          escaped = b.create(handle('ACTIVITY'), {
+            headline: 'From batch one',
+          });
         },
       );
 
@@ -1063,7 +1352,7 @@ module(basename(import.meta.filename), function () {
       await assert.rejects(
         (later.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
           (b: any) => {
-            b.create('ACTIVITY', { headline: 'From batch two' });
+            b.create(handle('ACTIVITY'), { headline: 'From batch two' });
             b.addActivity({ activity: escaped });
           },
         ),
@@ -1191,6 +1480,279 @@ module(basename(import.meta.filename), function () {
         },
       );
       assert.strictEqual(sent[0].method, 'QUERY');
+    });
+
+    test('a saved search is never an entry of a batch', async function (assert) {
+      let { sent, env } = batchHarness({
+        'atomic:results': [{ data: { type: 'card', id: 'a', meta: {} } }],
+      });
+      let bucket = buildOperations(reportInstance(), env);
+      await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
+        (b: any) => {
+          assert.strictEqual(
+            b.openReports,
+            undefined,
+            'a batch is anchored on a card and a saved search runs against a type, so no entry of one can name a search',
+          );
+          b.escalate();
+        },
+      );
+      assert.strictEqual(
+        entries(sent[0]).length,
+        1,
+        'so only the operation the batch could carry was sent',
+      );
+    });
+  });
+
+  // A saved search is declared like any other operation and carried out
+  // nowhere near the others: it is planned and run by the search engine, so
+  // what a call produces is a wire query and a live resource rather than an
+  // envelope and an awaited result.
+  module('a saved search', function () {
+    function openReports(env: OperationsEnvironment) {
+      return buildOperations(reportType(), env).openReports as any;
+    }
+
+    test('resolves its markers and addresses the query for the search engine', function (assert) {
+      let { env } = harness();
+
+      assert.deepEqual(
+        openReports(env).query(),
+        {
+          filter: {
+            'item.on': REPORT,
+            eq: {
+              'item.status': 'open',
+              'item.author.userId': ACTOR,
+            },
+          },
+          sort: [
+            { by: 'item.createdAt', 'item.on': REPORT, direction: 'desc' },
+          ],
+          realms: [REALM],
+        },
+        'the class became the type it names, the actor marker became the caller, and the card-rooted query became the entry-addressed one',
+      );
+    });
+
+    test('answers with the resource the session builds, and the search follows what the thunk reads', function (assert) {
+      let { searched, session, env } = harness();
+      let owner = {};
+      let payload = { status: 'open' } as Record<string, unknown>;
+      let byStatus = buildOperations(statusType(), env).byStatus as any;
+
+      let results = byStatus(payload, { owner });
+
+      assert.strictEqual(searched.length, 1, 'one search was asked for');
+      assert.strictEqual(
+        results,
+        searched[0].resource,
+        'and what the call answers with is what the session built for it',
+      );
+      assert.strictEqual(
+        searched[0].owner,
+        owner,
+        'tied to the life the caller named, so the search ends when that does',
+      );
+
+      // The thunk is the whole affordance: one call stands for a search that
+      // moves, so re-reading it has to follow both of the things it resolves
+      // against — the payload the caller handed over, and the session.
+      payload.status = 'closed';
+      assert.deepEqual(
+        (searched[0].getQuery() as any).filter.eq,
+        { 'item.status': 'closed' },
+        'a re-read follows the payload the call was given, rather than pinning what it resolved to once',
+      );
+
+      session.actor = '@someone-else:localhost';
+      assert.deepEqual(
+        (buildOperations(reportType(), env).openReports as any).query().filter
+          .eq['item.author.userId'],
+        '@someone-else:localhost',
+        'and it follows the session, which is what the actor is read from',
+      );
+    });
+
+    test('a standing search parks when the session can no longer resolve it', function (assert) {
+      let { searched, session, env } = harness();
+
+      openReports(env)();
+      assert.ok(searched[0].getQuery(), 'the search has a query to run');
+
+      session.actor = undefined;
+      assert.strictEqual(
+        searched[0].getQuery(),
+        undefined,
+        'signing out withdraws what the query compares against, so the search parks rather than throwing inside a render',
+      );
+
+      session.actor = ACTOR;
+      session.realmsKnown = false;
+      assert.strictEqual(
+        searched[0].getQuery(),
+        undefined,
+        'and so does losing the realms it covers, which a sign-out takes with it',
+      );
+
+      session.realmsKnown = true;
+      assert.ok(
+        searched[0].getQuery(),
+        'a session that can answer again resumes the same search',
+      );
+    });
+
+    test('a payload the declaration cannot resolve is refused at the call, not in a render', function (assert) {
+      let { searched, env } = harness();
+      let byStatus = buildOperations(statusType(), env).byStatus as any;
+
+      assert.throws(
+        () => byStatus({}),
+        /requires a value for params\("status"\)/,
+        'the call raises it where the caller is',
+      );
+      assert.strictEqual(
+        searched.length,
+        0,
+        'and no search was started for a query that never resolved',
+      );
+    });
+
+    test('a type named by a nested code ref still covers its own realm', function (assert) {
+      let { env } = harness();
+      // What `identifyCard` answers for a card class reached as a superclass
+      // rather than as its own module export.
+      let nested = reportType({
+        codeRef: { type: 'ancestorOf', card: REPORT },
+      });
+
+      assert.deepEqual(
+        (buildOperations(nested, env).openReports as any).query().realms,
+        [REALM],
+        'the module the ref wraps is what says which realm the type sits in',
+      );
+    });
+
+    test('a payload fills the markers its declaration names', function (assert) {
+      let { env } = harness();
+      let byStatus = buildOperations(statusType(), env).byStatus as any;
+
+      assert.deepEqual(
+        byStatus.query({ status: 'escalated' }).filter,
+        { 'item.on': REPORT, eq: { 'item.status': 'escalated' } },
+        'the payload member the declaration names is what the filter compares against',
+      );
+      assert.throws(
+        () => byStatus.query({}),
+        /requires a value for params\("status"\)/,
+        'and a payload that leaves one unsupplied is refused rather than compared against nothing',
+      );
+    });
+
+    test('the realms a search covers are the declaration\u2019s, then the call\u2019s, then the type\u2019s own', function (assert) {
+      let { env } = harness();
+      let elsewhere = 'http://example.com/other/';
+
+      assert.deepEqual(
+        openReports(env).query(undefined, { realms: [elsewhere] }).realms,
+        [elsewhere],
+        'a declaration that named no scope leaves it to the caller',
+      );
+
+      let pinned = reportType({
+        operations: carried({
+          pinnedReports: [
+            'query',
+            true,
+            {
+              query: {
+                filter: { on: REPORT_CLASS, eq: { status: 'open' } },
+                realms: [elsewhere],
+              },
+            },
+          ],
+        }),
+      });
+      assert.deepEqual(
+        (buildOperations(pinned, env).pinnedReports as any).query(undefined, {
+          realms: [REALM],
+        }).realms,
+        [elsewhere],
+        'a declaration that named its scope has decided, and a call does not widen it',
+      );
+    });
+
+    test('a search that would cover every readable realm is refused', function (assert) {
+      let { env } = harness({ realm: 'http://example.com/nowhere-near/' });
+
+      assert.throws(
+        () => openReports(env).query(),
+        /names no realm to search/,
+        'a saved search whose scope nobody named would fan out across the whole session, which is never what it meant',
+      );
+
+      let empty = reportType({
+        operations: carried({
+          everywhere: [
+            'query',
+            true,
+            {
+              query: {
+                filter: { on: REPORT_CLASS, eq: { status: 'open' } },
+                realms: [],
+              },
+            },
+          ],
+        }),
+      });
+      assert.throws(
+        () => (buildOperations(empty, env).everywhere as any).query(),
+        /names an empty list of realms/,
+        'and a declaration that writes the empty list is refused for what it wrote, since no realms on the wire means every realm',
+      );
+    });
+
+    test('a session that cannot say who the caller is answers no query at all', function (assert) {
+      let { searched, env } = harness({ actor: null });
+
+      assert.strictEqual(
+        openReports(env).query(),
+        undefined,
+        'a search comparing against the caller has nothing to compare, and nothing the caller sent is wrong — so it answers no query rather than refusing one',
+      );
+
+      let idle = openReports(env)();
+      assert.strictEqual(
+        searched[0].getQuery(),
+        undefined,
+        'and the resource it answers with is an idle search, which renders no rows rather than somebody else\u2019s',
+      );
+      assert.ok(idle, 'the caller still gets a resource to hold');
+
+      let openToAll = reportType({
+        operations: carried({
+          everyReport: [
+            'query',
+            true,
+            { query: { filter: { on: REPORT_CLASS, eq: { status: 'open' } } } },
+          ],
+        }),
+      });
+      assert.ok(
+        (buildOperations(openToAll, env).everyReport as any).query(),
+        'a saved search that does not read the caller is unaffected',
+      );
+    });
+
+    test('a session that carries out no searches says so', function (assert) {
+      let { env } = harness({ noSearch: true });
+
+      assert.throws(
+        () => openReports(env)(),
+        /nothing in this environment registered a search/,
+        'a query is carried out by the search engine, which is the one half of the bridge an environment can lack',
+      );
     });
   });
 });

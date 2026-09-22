@@ -252,12 +252,23 @@ export const INDEX_WRITING_JOB_TYPES = [
 // `column` qualifies the name for a query that aliases `jobs`; it is spelled
 // into the SQL rather than bound, so the type enumerates the two forms instead
 // of taking any string.
+//
+// Absent and empty are different filters, and the truthiness test that reads
+// naturally here collapses them in the expensive direction — a caller whose
+// list came out empty would get the whole lane instead of nothing. Every
+// reader sharing this helper inherits that distinction rather than restating
+// it, so a caller that computes its list cannot land on the wrong one.
 export function jobTypeFilter(
   jobTypes: string[] | undefined,
   column: 'job_type' | 'j.job_type' = 'job_type',
 ): Expression {
-  if (!jobTypes?.length) {
+  if (!jobTypes) {
     return [];
+  }
+  if (jobTypes.length === 0) {
+    // A filter no row can match. `IN ()` is a syntax error, so the empty set
+    // is spelled as a predicate that is simply never true.
+    return ['AND FALSE'];
   }
   let expression: Expression = [`AND ${column} IN`, '('];
   jobTypes.forEach((jobType, index) => {
@@ -376,7 +387,8 @@ export async function awaitRealmIndexSettled(
     // Narrows the lane to particular job types. Absent means the whole
     // `indexing:<realm>` lane, including members that only need mutual
     // exclusion with a pass — which is a stronger claim than any caller here
-    // wants, so both readiness and the write-path drain pass a list.
+    // wants, so both readiness and the write-path drain pass a list. Empty is
+    // a filter naming no job rather than no filter, so it settles at once.
     jobTypes?: string[];
     // Narrows the lane to passes this writer has a stake in. Reading your own
     // write matters; being made to read someone else's does not, and serving
@@ -414,6 +426,14 @@ export async function awaitRealmIndexSettled(
   let initiatedBy = opts?.initiatedBy;
 
   let hasSettled = async () => {
+    // An absent `jobTypes` is no filter; an empty one is a filter that names
+    // no job, which no row can match. Collapsing the two is cheap to do and
+    // expensive to have done — it turns "wait for nothing" into "wait for
+    // every job in the realm's lane", which is how a caller whose list came
+    // out empty ends up queued behind a full reindex rather than proceeding.
+    if (jobTypes && jobTypes.length === 0) {
+      return true;
+    }
     let expression: Expression = [
       `SELECT 1 FROM jobs WHERE status = 'unfulfilled' AND concurrency_group =`,
       param(indexingConcurrencyGroup(realmURL)),

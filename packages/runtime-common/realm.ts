@@ -49,6 +49,21 @@ import {
 // refuses every other method outright — so no HTTP cache reaches either body,
 // and the in-process caches that do hold one key on the served mode directly.
 const LINK_SHAPE_VARY = [X_BOXEL_LINK_SHAPE_HEADER];
+
+// The cache directive a card+json response carries when a declared `output`
+// projected its body.
+//
+// `no-store` rather than the ordinary `max-age=0, must-revalidate`, and for a
+// reason that holds whether or not the projection reads `actor()`: the
+// validator is built from the index row, and a row does not move when a type
+// gains, changes or loses an `output`, so a stored copy of the unprojected
+// body would keep answering as fresh. `private` says the rest — a projection
+// may be per-caller, so no shared cache may hold one either.
+//
+// The `ETag` is still emitted alongside it. It identifies the card's state for
+// a conditional *write*, which is what `If-Match` asks about, and that question
+// is about the card rather than about the representation it was read in.
+const PROJECTED_CARD_JSON_CACHE_CONTROL = 'private, no-store';
 import {
   CARD_DOCUMENT_CACHE_HEADER,
   type CardDocumentCache,
@@ -198,11 +213,19 @@ import {
   type FileMetaResource,
 } from './index.ts';
 import {
+  assertParamsSupplied,
   canonicalizeTarget,
   newOperationScope,
+  readShape,
   resolveOperation,
   runOperation,
 } from './card-operations/dispatch.ts';
+import type { ReadShape } from './card-operations/dispatch.ts';
+import {
+  runInputTransform,
+  runOutputTransform,
+  type TransformContext,
+} from './card-operations/transforms.ts';
 import type {
   OperationCore,
   OperationScope,
@@ -214,11 +237,13 @@ import {
   atEntry,
   batchEntryFor,
   carriesOperationsExt,
+  entryWithPayload,
   errorsDocument,
   invocationsIn,
   needsActor,
   paramsFor,
   parseOperationsEnvelope,
+  projectedResult,
   readResult,
   resultsTree,
   stagedTree,
@@ -1183,6 +1208,17 @@ export function ifNoneMatchMatches(headerValue: string, etag: string): boolean {
     .some((token) => token.trim().replace(/^W\//, '') === normalizedEtag);
 }
 
+// Whether a conditional header names anything to compare against. RFC 9110
+// §5.6.1.2 has a recipient parse and ignore empty elements in a comma list, so
+// a value that is empty, whitespace, or only commas is a well-formed list of
+// no validators rather than a malformed one. Kept beside `ifNoneMatchMatches`
+// and splitting the same way, so the question "does this name a validator" and
+// the question "does this match" cannot answer from different readings of the
+// same header.
+export function namesAValidator(headerValue: string): boolean {
+  return headerValue.split(',').some((token) => token.trim() !== '');
+}
+
 // A handle's content fingerprint, read in bounded ranges rather than by
 // streaming the file.
 //
@@ -1857,6 +1893,22 @@ export class Realm {
   // replicas via the realm_index_updated broadcast. `null` means "not yet
   // computed"; an empty array is a valid cached result (no routing rules).
   #cachedHostRoutingMap: HostRoutingRule[] | null = null;
+
+  // Whether a card's `read` carries a transform stage, by card URL. Asked by
+  // the card+json `GET` before it takes either path that answers without
+  // running the read, and the lookup behind it is a database read — so on a
+  // realm serving conditional requests it would be a round trip added to
+  // exactly the requests that exist to avoid one.
+  //
+  // Cleared by `clearRealmIndexCaches()` alongside the entries above, which is
+  // sound because the answer is a function of the card's `adoptsFrom` and its
+  // type's declarations, and neither moves without an index swap — a card's
+  // stored type is changed by a write, and a module's declarations by
+  // reindexing it. A foreign realm's module could change without this realm
+  // swapping, and does not reach this: a card with foreign-realm dependencies
+  // is served no validator at all, so neither fast path is taken and this is
+  // never asked.
+  #readShapeByURL = new Map<string, ReadShape>();
 
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
@@ -3069,6 +3121,7 @@ export class Realm {
   clearRealmIndexCaches(): void {
     this.invalidateCachedRealmInfo();
     this.#cachedHostRoutingMap = null;
+    this.#readShapeByURL.clear();
   }
 
   // Drop local realm-index caches AND broadcast the same wipe to peer
@@ -4596,9 +4649,14 @@ export class Realm {
       if (!isOperationFailure(err)) {
         throw err;
       }
-      // A batch is all-or-nothing, so the first refusal is the whole answer:
-      // nothing was written, no index job was enqueued and no event was
-      // broadcast, whichever stage produced it.
+      // A batch is all-or-nothing, so the first refusal is the whole answer,
+      // and for every stage up to the commit it means nothing was written, no
+      // index job was enqueued and no event was broadcast.
+      //
+      // One refusal reaches here from past that point: an `output` projects a
+      // write's result, which does not exist until the write has committed, so
+      // a program failing there answers 400 over a batch that landed. The
+      // status is the same and what it says about the realm is not.
       return this.#operationsResponse(
         errorsDocument(err.error),
         err.error.status,
@@ -4765,12 +4823,42 @@ export class Realm {
 
     let writes = resolved.filter(({ definition }) => isWrite(definition.base));
     if (writes.length > 0) {
+      // Each entry's own two steps before it is staged, in the order
+      // `runOperation` runs them for a read: the `input` stage over the
+      // payload, then the `params` check against what it produced. A value an
+      // `input` supplies is what the check then sees, which is most of what an
+      // `input` is for.
+      //
+      // The check belongs here and not in the executors: a declared param with
+      // no value is the caller's mistake, and the behaviors read the payload
+      // differently enough that some would never notice — a `delete` reads no
+      // payload at all, so a declaration requiring one would be carried out
+      // over a card the caller had not said enough to remove.
+      //
+      // The transformed entry keeps its `position`, which is the key both the
+      // staging schedule and the results are looked up by, and the envelope's
+      // own members. Only the payload moves.
       let staged = new Map<EntryPosition, BatchEntry>();
-      for (let { entry, definition } of writes) {
+      for (let write of writes) {
         try {
+          if (write.definition.input) {
+            write.entry = entryWithPayload(
+              write.entry,
+              await runInputTransform(
+                write.definition,
+                paramsFor(write.entry),
+                this.#transformContext(write.entry, caller),
+              ),
+            );
+          }
+          let { entry, definition } = write;
+          assertParamsSupplied(definition, paramsFor(entry), {
+            name: entry.name,
+            ...(entry.href ? { id: entry.href } : {}),
+          });
           staged.set(entry.position, batchEntryFor(entry, definition));
         } catch (err: unknown) {
-          throw atEntry(err, entry.position);
+          throw atEntry(err, write.entry.position);
         }
       }
       // The tree the caller sent, with the entries that only read taken out of
@@ -4795,13 +4883,42 @@ export class Realm {
       );
       // The coordinator answers in the flat order of the entries it staged,
       // which is the order they were sent in.
-      for (let [index, { entry }] of writes.entries()) {
-        results.set(
-          entry.position,
-          writeResult(committed[index], (url) =>
-            this.#virtualNetwork.unresolveURL(url),
-          ),
+      for (let [index, { entry, definition }] of writes.entries()) {
+        let result = writeResult(committed[index], (url) =>
+          this.#virtualNetwork.unresolveURL(url),
         );
+        if (!definition.output) {
+          results.set(entry.position, result);
+          continue;
+        }
+        // The `output` stage runs after the commit, over the result the wire
+        // would otherwise carry. It projects what the caller is told about the
+        // write and cannot unmake one: a program that fails here answers 400
+        // over a card that has already changed, which is the one place the
+        // batch's all-or-nothing does not reach.
+        //
+        // Lowering narrows what can get here but does not close it. It refuses
+        // a program that does not parse or reaches outside the dialect; it
+        // does not ask how many values one yields, what shape they are, or
+        // whether it names a context slot this transport fills. So a
+        // declaration can be shipped whose write commits and whose projection
+        // refuses on every call, and the author learns it at the first
+        // invocation rather than at the edit.
+        try {
+          results.set(
+            entry.position,
+            projectedResult(
+              entry,
+              await runOutputTransform(
+                definition,
+                result,
+                this.#transformContext(entry, caller),
+              ),
+            ),
+          );
+        } catch (err: unknown) {
+          throw atEntry(err, entry.position);
+        }
       }
     }
 
@@ -4810,6 +4927,27 @@ export class Realm {
       200,
       requestContext,
     );
+  }
+
+  // What an entry's transform stages read besides the value they are handed:
+  // the payload as it stands and the caller, named for the refusal a failed
+  // stage answers with. The target's stored document is deliberately not among
+  // them — see `card-operations/transforms.ts`.
+  #transformContext(
+    entry: EnvelopeEntry,
+    caller: { actor: string; clientRequestId: string },
+  ): TransformContext {
+    return {
+      name: entry.name,
+      params: paramsFor(entry),
+      // The same reader a read's stages reach through the operation core. One
+      // declaration's `output` runs on both transports, so a setting it names
+      // has to be answerable on both — otherwise the same program projects a
+      // read and refuses a write.
+      realmConfig: () => this.getRealmConfig(),
+      ...(entry.href ? { id: entry.href } : {}),
+      ...(caller.actor ? { actor: caller.actor } : {}),
+    };
   }
 
   // Which behavior one entry's name means for its target, labelled with the
@@ -5114,6 +5252,7 @@ export class Realm {
         openStoredFile: (localPath) => this.#operationStoredFile(localPath),
         storedFileMeta: (localPath, file, opts) =>
           this.#operationStoredFileMeta(localPath, file, opts),
+        realmConfig: () => this.getRealmConfig(),
         isIgnored: (url) => this.isIgnored(url),
         fileMetaDocument: (localPath) =>
           this.#operationFileMetaDocument(localPath),
@@ -8996,7 +9135,10 @@ export class Realm {
     url: URL,
   ): (() => Promise<void>) | undefined {
     let ifMatch = request.headers.get('if-match');
-    if (!ifMatch || ifMatch.trim() === '*') {
+    // `null` is an absent header, `''` a present one whose value is empty.
+    // Only the first asks for nothing, so they cannot share a test — see the
+    // refusal below for what the second means.
+    if (ifMatch === null || ifMatch.trim() === '*') {
       return undefined;
     }
     let refuse = (): never => {
@@ -9011,6 +9153,46 @@ export class Realm {
       });
     };
     return async () => {
+      // A present `If-Match` that names no validator — empty, whitespace, or
+      // bare commas — is a caller that asked for the check and gave nothing to
+      // check against, which is what a client does when it interpolates an
+      // ETag it never read. Zero listed validators means none of them matches,
+      // so RFC 9110 §13.1.1 makes the condition false. Refusing is what makes
+      // that visible: treated as an absent header it would write
+      // unconditionally, and the caller would be told its conditional write
+      // succeeded while the lost update it asked to be protected from is
+      // exactly what happened.
+      //
+      // A 412 rather than a 400, because the recovery it asks for is the one
+      // that works — re-read the card and retry with the validator that read
+      // hands back, which is precisely what the caller failed to send.
+      //
+      // Ahead of the lane check, and not only to save the work: this refusal
+      // is decided by the request alone, so letting it reach a query that can
+      // fail closed would let an unsatisfiable precondition come back as the
+      // lane's 503 — "retry this", for a request no retry can fix.
+      //
+      // "Ahead of the lane check" is as early as it gets, not as early as it
+      // could be. This runs inside the precondition closure, so a request the
+      // realm can answer from the header alone still takes the batch's file
+      // locks and waits out the coordinator's drain before being told 412.
+      // That is latency and lock-holding rather than a wrong answer, and it
+      // buys a single error path: hoisting the check to where `ifMatch` is
+      // first read would put the throw outside `commitBatch`, which both call
+      // sites reach without a `try`, so their refusal handling would have to
+      // grow a second entry point to catch it.
+      if (!namesAValidator(ifMatch)) {
+        throw new OperationFailure({
+          id: url.href,
+          status: 412,
+          code: 'version-conflict',
+          title: 'Precondition Failed',
+          detail:
+            `${request.method} of ${url.href} sent an If-Match naming no ` +
+            `validator, so nothing can match it; re-read the card and send ` +
+            `the ETag that read returns`,
+        });
+      }
       // The validator is built from the index, and the index lags the bytes:
       // a commit records a file's hash before it indexes, and a write that
       // deferred its indexing releases the lock without having indexed at all.
@@ -9039,6 +9221,14 @@ export class Realm {
       // refuse. The refusal is a 5xx rather than a 412 because nothing about
       // the caller's request is wrong and repeating it is the remedy.
       if (this.#dbAdapter) {
+        // Scoped by job type and deliberately not by writer. The gate also
+        // narrows to passes a given user initiated, which is right for asking
+        // "have my own writes landed" and wrong here: what can move this
+        // card's row out from under the comparison is *any* writer's pending
+        // pass, and a concurrent writer is the whole case `If-Match` exists
+        // to catch. Narrowing to the requesting user would report settled
+        // while someone else's incremental index was about to change the
+        // answer — the silent accept this refusal is here to prevent.
         let settled = await awaitRealmIndexSettled(this.#dbAdapter, this.url, {
           jobTypes: CONTENT_MOVING_INDEX_JOB_TYPES,
           timeoutMs: CONDITIONAL_WRITE_INDEX_SETTLE_BUDGET_MS,
@@ -9866,13 +10056,24 @@ export class Realm {
             resolveLinksOnly ? 'links-only' : 'full',
             skipLinkAssemblyBudget,
           );
-      let cacheControl = this.cardJsonCacheControl(requestContext);
+      // The headers a `GET` of this card would send, which for a projected
+      // body are not the ordinary ones: the read reports whether its full mode
+      // would project, and the two answers differ in the cache directive and
+      // in whether a conditional request may be answered from the validator.
+      let cacheControl = result.projected
+        ? PROJECTED_CARD_JSON_CACHE_CONTROL
+        : this.cardJsonCacheControl(requestContext);
       let lastModified: Record<string, string> =
         result.lastModified != null
           ? { 'last-modified': formatRFC7231(result.lastModified * 1000) }
           : {};
       let ifNoneMatch = request.headers.get('if-none-match');
-      if (ifNoneMatch && etag && ifNoneMatchMatches(ifNoneMatch, etag)) {
+      if (
+        !result.projected &&
+        ifNoneMatch &&
+        etag &&
+        ifNoneMatchMatches(ifNoneMatch, etag)
+      ) {
         // A conditional request is answered the same way whichever verb asked
         // it: the validator matched, so there is nothing to send.
         return createResponse({
@@ -10009,13 +10210,23 @@ export class Realm {
       // generation. Note that today's conditional-GET traffic already pays
       // it — card+json is served `max-age=0, must-revalidate` with an ETag,
       // so a client that has seen the card once sends `If-None-Match`.
+      // One memo of the index-row peek for this request, shared with the
+      // projection question below so that asking it costs the definition
+      // lookup and not a second row read.
+      let scope = newOperationScope(this.operationCore);
       let peekEtag: string | undefined;
+      // Whether this card's type specializes `read` with an `output`. A
+      // projected body is not what this request's validator describes, so the
+      // two fast paths below — the conditional 304 and the shared response
+      // cache — are both off for one, and the question has to be settled
+      // before either is taken rather than learned from the assembly. A read
+      // the core cannot resolve is treated the same way, since both fast paths
+      // answer without assembling and its refusal needs the assembly.
+      let assembles = false;
       if (ifNoneMatch || documentCache) {
         await this.getRealmInfo();
         let realmInfoHash = this.getCachedRealmInfoHash();
-        let instanceEntry = await this.#realmIndexQueryEngine.instance(url, {
-          includeErrors: true,
-        });
+        let instanceEntry = await scope.peekInstance(url);
         if (instanceEntry === undefined) {
           if (await this.nonJsonFileExists(localPath)) {
             // A path that points to a non-JSON file (e.g. an uploaded
@@ -10050,11 +10261,24 @@ export class Realm {
             skipLinkAssemblyBudget,
           );
         }
-        if (
-          ifNoneMatch &&
-          peekEtag &&
-          ifNoneMatchMatches(ifNoneMatch, peekEtag)
-        ) {
+        // Asked only where an answer would be taken from it: on a conditional
+        // hit, and on a request a configured cache would serve or retain.
+        // Every other request assembles, and the assembly resolves the same
+        // definition anyway.
+        let matchedEtag =
+          ifNoneMatch && peekEtag && ifNoneMatchMatches(ifNoneMatch, peekEtag)
+            ? peekEtag
+            : undefined;
+        if (matchedEtag || (documentCache && peekEtag)) {
+          assembles =
+            (await readShape(
+              this.operationCore,
+              url,
+              scope,
+              this.#readShapeByURL,
+            )) !== 'plain';
+        }
+        if (matchedEtag && !assembles) {
           return createResponse({
             requestContext,
             varyOn: LINK_SHAPE_VARY,
@@ -10062,7 +10286,7 @@ export class Realm {
             init: {
               status: 304,
               headers: {
-                etag: peekEtag,
+                etag: matchedEtag,
                 'cache-control': cacheControl,
                 ...(instanceEntry.lastModified != null
                   ? {
@@ -10094,7 +10318,7 @@ export class Realm {
         );
       let assembly: CardJsonAssembly;
       let cacheOutcome: CardDocumentCacheOutcome | undefined;
-      if (documentCache && peekEtag) {
+      if (documentCache && peekEtag && !assembles) {
         ({ assembly, outcome: cacheOutcome } =
           await documentCache.getOrPopulate({
             url: url.href,
@@ -10129,7 +10353,9 @@ export class Realm {
         init: {
           headers: {
             'content-type': SupportedMimeType.CardJson,
-            'cache-control': cacheControl,
+            'cache-control': assembly.projected
+              ? PROJECTED_CARD_JSON_CACHE_CONTROL
+              : cacheControl,
             ...(assembly.etag ? { etag: assembly.etag } : {}),
             ...etagSuppressedHeader(assembly.etagSuppressed),
             ...(assembly.lastModified != null
@@ -10173,12 +10399,12 @@ export class Realm {
     // response around it: the validator, the redirect, the creation time, and
     // the mapping from a refusal to a status.
     //
-    // The caller travels with the request although a plain read never consults
-    // it, so that the first read that does cannot silently read a stale one.
-    // That an assembly is shareable between callers rests on the same thing
-    // the response cache's sharing does: a plain read is the same document for
-    // everyone permitted to ask for it. A `read` an author has specialized is
-    // refused rather than served, so nothing actor-dependent reaches here.
+    // The caller travels with the request because a specialized `read` reads
+    // it: an `output` may project by `actor()`, which makes the body
+    // per-caller. That is also why such an assembly is never shared — the
+    // handler keeps a projected read out of the response cache before calling
+    // here, since the cache's sharing rests on a plain read being the same
+    // document for everyone permitted to ask for it.
     let result: OperationResult;
     try {
       // The read runs `attachRealmInfo()`, which (re)populates the realm-info
@@ -10205,8 +10431,8 @@ export class Realm {
         `the read of ${url.href} answered with something other than a document`,
       );
     }
-    let { document, headers, queryBacked } = result;
-    if (document.data.type === 'file-meta') {
+    let { document, headers, queryBacked, projected } = result;
+    if (headers.type === 'file-meta') {
       // A file's metadata is derived from its bytes, so there is no index row
       // to validate it against and nothing here to cache.
       return { kind: 'file-meta', body: JSON.stringify(document, null, 2) };
@@ -10251,8 +10477,16 @@ export class Realm {
       etag: responseEtag,
       etagSuppressed: foreignDeps,
       queryBacked,
+      projected,
       keyEtag: keyEtag ?? '',
-      lastModified: card.data.meta.lastModified,
+      // Off the row for a projected body: an `output` decides what the
+      // document holds, so a projection that drops `meta` would otherwise take
+      // the modification time with it. The row is where the value comes from
+      // either way — `data.meta.lastModified` is the read's own copy of it —
+      // so the unprojected path keeps reading the body and the two agree.
+      lastModified: projected
+        ? headers.lastModified
+        : card.data.meta.lastModified,
       created: createdAt,
     };
   }

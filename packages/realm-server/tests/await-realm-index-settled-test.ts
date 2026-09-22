@@ -151,6 +151,40 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    // The two tests above are what keep these from being vacuous: the same
+    // job, in the same lane, holds the gate when nothing narrows it. So a
+    // `jobTypes` that lets these pass is narrowing rather than just failing to
+    // find the row.
+    test('jobTypes narrows the lane to the types named', async function (assert) {
+      await enqueueIndexJob(dbAdapter, realmURL);
+      assert.true(
+        await awaitRealmIndexSettled(dbAdapter, realmURL, {
+          timeoutMs: 200,
+          pollIntervalMs: 50,
+          jobTypes: ['incremental-index'],
+        }),
+        'a from-scratch job does not hold a gate asking only about incremental work',
+      );
+    });
+
+    // An empty list is a filter naming no job, not the absence of a filter.
+    // The distinction is worth a test because the cheap spelling of the check
+    // — a truthiness test on the array — collapses them, and it collapses them
+    // in the expensive direction: a caller whose list came out empty would
+    // wait on the realm's entire lane instead of proceeding, which is how a
+    // conditional write ends up queued behind a full reindex.
+    test('an empty jobTypes names no job and so settles at once', async function (assert) {
+      await enqueueIndexJob(dbAdapter, realmURL);
+      assert.true(
+        await awaitRealmIndexSettled(dbAdapter, realmURL, {
+          timeoutMs: 200,
+          pollIntervalMs: 50,
+          jobTypes: [],
+        }),
+        'the unfulfilled job is in the lane and still does not hold this gate',
+      );
+    });
+
     // Whether a job succeeded is not the question the gate answers — a rejected
     // job is finished, and holding readiness open for one would hang forever on
     // an index that is never coming. A failed index surfaces as errored content
@@ -469,6 +503,29 @@ module(basename(import.meta.filename), function (hooks) {
         await outstandingIndexJobs(dbAdapter, realmURL),
         [{ id: held, jobType: 'from-scratch-index', claimed: false }],
         'only this realm’s unfulfilled index-lane job',
+      );
+    });
+
+    // The gate short-circuits an empty list before it builds a query, so this
+    // is the only path that reaches the shared filter with one. Absent and
+    // empty have to stay different here too: a caller whose list came out
+    // empty getting back the whole lane would name jobs the gate was never
+    // waiting on.
+    test('an empty job-type list names no job, an absent one no filter', async function (assert) {
+      await enqueueIndexJob(dbAdapter, realmURL);
+      assert.deepEqual(
+        (await outstandingIndexJobs(dbAdapter, realmURL, [])).map(
+          ({ jobType }) => jobType,
+        ),
+        [],
+        'an empty list matches nothing',
+      );
+      assert.deepEqual(
+        (await outstandingIndexJobs(dbAdapter, realmURL, undefined)).map(
+          ({ jobType }) => jobType,
+        ),
+        ['from-scratch-index'],
+        'an absent list is no filter at all',
       );
     });
 

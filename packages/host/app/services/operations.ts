@@ -7,14 +7,21 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   mintedIdentities,
   OperationsError,
+  rri,
   SupportedMimeType,
   type OperationsAnswer,
   type OperationsEnvelope,
   type OperationsMethod,
+  type OperationsSearch,
   type OperationsTransport,
+  type SearchEntries,
+  type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
+import { getSearchEntriesResource } from '../resources/search-entries';
+
 import type CardService from './card-service';
+import type MatrixService from './matrix-service';
 import type NetworkService from './network';
 import type RealmService from './realm';
 import type StoreService from './store';
@@ -34,6 +41,12 @@ import type StoreService from './store';
 // comes back is handed over as the realm reported it: which entry answered
 // what, and what each answer means, belongs to the client core, which is
 // isomorphic and testable without any of this.
+//
+// A saved search is the other half of the bridge. A `query` operation is never
+// sent to `_operations` — it is carried out by the search engine, which the
+// host already reaches through its live entries resource — so what this
+// supplies for one is the session it runs in: who the caller is, which realm
+// holds a type, and the resource a search answers with.
 // ============================================================================
 
 export default class OperationsService
@@ -41,6 +54,7 @@ export default class OperationsService
   implements OperationsTransport
 {
   @service declare private cardService: CardService;
+  @service declare private matrixService: MatrixService;
   @service declare private network: NetworkService;
   @service declare private realm: RealmService;
   @service declare private store: StoreService;
@@ -65,6 +79,59 @@ export default class OperationsService
   // an operation and one minted by the store end up in the same place.
   defaultWritableRealm(): string | undefined {
     return this.realm.defaultWritableRealm?.path;
+  }
+
+  // What a saved search needs from this session.
+  //
+  // The resource is the host's one live search: it issues the wire query
+  // through the store, subscribes to each realm it covers, and re-runs as
+  // those realms index — which is what makes a query's freshness index
+  // freshness. It reads its query back through the thunk, so the search
+  // follows what the invocation resolves to rather than being rebuilt.
+  //
+  // A search with no owner is tied to this service, and a service is destroyed
+  // when the application instance is — not when a session ends, since signing
+  // out resets state rather than tearing services down. So an ownerless search
+  // lives for the life of the tab: it keeps its realm subscriptions and keeps
+  // re-running across a sign-out and the next sign-in. That is the right bound
+  // for a search the whole session reads and the wrong one for a search a
+  // single view wants, which is why a caller with a shorter life — a
+  // component, a controller — names itself as the owner and has its search
+  // torn down with it. A card instance is not owned by the application, so a
+  // card that keeps a search in a field takes the tab-lived one; a card that
+  // wants the search to end with a view hands the query to the search
+  // component instead of holding the resource.
+  search: OperationsSearch = {
+    actor: () => this.actorForSearch(),
+    realmFor: (identifier: string) => this.realm.realmOf(rri(identifier)),
+    entries: (
+      getQuery: () => SearchEntryWireQuery,
+      opts?: { owner?: object },
+    ): SearchEntries => getSearchEntriesResource(opts?.owner ?? this, getQuery),
+  };
+
+  // Who a saved search compares against, when the session can say.
+  //
+  // Nobody, inside the dedicated prerender app: that app authenticates as
+  // itself so it can render any card, and its identity is not the identity of
+  // whoever is later served the HTML it produces. A search that resolved the
+  // actor there would put one user's rows into a rendering everyone reads, and
+  // the store's own rule for that app — render as a pure function of the
+  // document you were handed — is the same rule. The saved search answers no
+  // rows there and the live render that follows fills them in.
+  //
+  // Nobody, too, before the matrix client is up or after a sign-out, where
+  // reading the id throws rather than answering. A query that does not read
+  // the actor is unaffected in all three cases.
+  private actorForSearch(): string | undefined {
+    if ((globalThis as any).__boxelPrerenderApp) {
+      return undefined;
+    }
+    try {
+      return this.matrixService.userId ?? undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   async send(
