@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from '@lukeed/uuid';
 import { heartbeatJob } from '../queue.ts';
 
 import {
+  cardSourceForVisit,
   delay,
   flattenPrerenderHtmlVisitMeta,
   hasCardExtension,
@@ -784,6 +785,18 @@ async function visitForPrerenderedHtml({
     fileDefBindings,
   );
 
+  // Floored once and used by both consumers below, so the modified time the
+  // render stamps onto the card's document and the one the file's HTML bakes
+  // are the same number even for a file whose adapter reports no mtime.
+  let fileLastModified = fileRef.lastModified ?? unixTime(Date.now());
+
+  let cardSource = cardSourceForVisit({
+    source: fileRef.content,
+    realmURL: realmURL.href,
+    lastModified: fileLastModified,
+    isCardInstance: Boolean(parsedCardResource),
+  });
+
   // Hand through the write-time content hash + size so the extract pass can
   // skip buffering the file (same optimization as the index visit; only
   // forwarded when both are present).
@@ -825,7 +838,7 @@ async function visitForPrerenderedHtml({
     // reader. Sourcing it from the row would need a per-path accessor that
     // does not exist — `realm_file_meta` carries createdAt, contentHash and
     // contentSize, not lastModified.
-    fileLastModified: fileRef.lastModified ?? unixTime(Date.now()),
+    fileLastModified,
     fileCreatedAt,
   };
 
@@ -881,6 +894,12 @@ async function visitForPrerenderedHtml({
       : {}),
     visitType: 'prerender-html',
     renderOptions,
+    // The bytes this visit already read, so the card's format renders build
+    // their model from them rather than fetching the instance's source again.
+    // This job runs separately from the index pass and so cannot share that
+    // pass's read — but its own read, the one that answered "is this card JSON"
+    // above, now feeds the render too, which is the pair that can collapse.
+    ...(cardSource ? { cardSource } : {}),
     ...(jobPriority !== undefined ? { priority: jobPriority } : {}),
     ...(jobInfo ? { jobId: `${jobInfo.jobId}.${jobInfo.reservationId}` } : {}),
     ...(screenshotVisitArgs ? { screenshots: screenshotVisitArgs } : {}),

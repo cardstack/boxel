@@ -25,6 +25,7 @@ import {
   isJsonContentType,
   rri,
   type CardErrorsJSONAPI,
+  type CardSourceVisitArgs,
   type DeclaredScreenshotRoster,
   type LooseSingleCardDocument,
   type RealmIdentifier,
@@ -120,6 +121,14 @@ const renderReadyLogger = runtimeLogger('render-ready');
 const READY_SETTLE_MAX_PASSES = 20;
 const READY_SETTLE_REQUIRED_STABLE_PASSES = 2;
 const SETTLE_LOG_PRECISION = 1;
+
+// What the card branch needs to build a model, once a stash has been validated
+// and parsed: the same three values the `card+source` GET otherwise supplies.
+interface StashedCardSource {
+  realmURL: string;
+  lastModified: Date;
+  doc: LooseSingleCardDocument;
+}
 
 export default class RenderRoute extends Route<Model> {
   @service('render-store') declare store: RenderStoreService;
@@ -680,41 +689,57 @@ export default class RenderRoute extends Route<Model> {
     this.#hydrateFieldsMs = hydrateFieldsMs;
 
     enterStage('buildModel:fetching-source', 'fetchSource');
-    let response: Response;
-    try {
-      response = await this.#authGuard.race(() =>
-        this.#fetchCardSourceWithGatewayRetry(id),
-      );
-    } catch (err: any) {
-      if (this.#authGuard.isAuthError(err)) {
-        this.#processRenderError(err);
+    let realmURL: string;
+    let lastModified: Date;
+    let doc: LooseSingleCardDocument | CardErrorsJSONAPI;
+    let cardSourceFrom: BuildModelDiagnostics['cardSourceFrom'];
+    let stashedSource = this.#stashedCardSource(id);
+    if (stashedSource) {
+      // An indexing visit whose caller already read these bytes. Building from
+      // them rather than fetching them again is what keeps one indexing pass
+      // from reading a card's stored source twice — and the second read is the
+      // one that crosses the public balancer, so it is also the one that can
+      // answer with something other than the card.
+      ({ realmURL, lastModified, doc } = stashedSource);
+      cardSourceFrom = 'stash';
+    } else {
+      cardSourceFrom = 'fetch';
+      let response: Response;
+      try {
+        response = await this.#authGuard.race(() =>
+          this.#fetchCardSourceWithGatewayRetry(id),
+        );
+      } catch (err: any) {
+        if (this.#authGuard.isAuthError(err)) {
+          this.#processRenderError(err);
+          throw err;
+        }
         throw err;
       }
-      throw err;
-    }
 
-    // Guard the parse. This is the document-loading path the CS-12966 incident
-    // ran through: the render fetches the card's own document through the
-    // public balancer, and when that comes back a gateway error the body is
-    // the balancer's HTML error page, not a card document. Parsing it as one
-    // failed, and that parse failure was latched as the card's render verdict
-    // — one 502 that lasted milliseconds served 500 to every reader for days.
-    // A balancer 5xx, or any body that is not the JSON the request asked for,
-    // is a statement about the network rather than the card: surface it as a
-    // gateway failure the prerender server classifies and the write site
-    // withholds, instead of letting `response.json()` throw on the HTML.
-    let contentType = response.headers.get('content-type');
-    if (
-      isGatewayFailureStatus(response.status) ||
-      !isJsonContentType(contentType)
-    ) {
-      throw this.#gatewayFailureError(id, { response, contentType });
-    }
+      // Guard the parse. This is the document-loading path the CS-12966
+      // incident ran through: the render fetches the card's own document
+      // through the public balancer, and when that comes back a gateway error
+      // the body is the balancer's HTML error page, not a card document.
+      // Parsing it as one failed, and that parse failure was latched as the
+      // card's render verdict — one 502 that lasted milliseconds served 500 to
+      // every reader for days. A balancer 5xx, or any body that is not the JSON
+      // the request asked for, is a statement about the network rather than the
+      // card: surface it as a gateway failure the prerender server classifies
+      // and the write site withholds, instead of letting `response.json()`
+      // throw on the HTML.
+      let contentType = response.headers.get('content-type');
+      if (
+        isGatewayFailureStatus(response.status) ||
+        !isJsonContentType(contentType)
+      ) {
+        throw this.#gatewayFailureError(id, { response, contentType });
+      }
 
-    let realmURL = response.headers.get('x-boxel-realm-url')!;
-    let lastModified = new Date(response.headers.get('last-modified')!);
-    let doc: LooseSingleCardDocument | CardErrorsJSONAPI =
-      await response.json();
+      realmURL = response.headers.get('x-boxel-realm-url')!;
+      lastModified = new Date(response.headers.get('last-modified')!);
+      doc = await response.json();
+    }
     let canonicalId = id.replace(/\.json$/, '');
 
     let state = new TrackedMap<string, unknown>();
@@ -843,6 +868,7 @@ export default class RenderRoute extends Route<Model> {
         moduleTotalsAfter.totalMs - moduleTotalsBefore.totalMs,
       ),
       ...(loaderResetReason ? { loaderResetReason } : {}),
+      ...(cardSourceFrom ? { cardSourceFrom } : {}),
       ...(moduleEvaluationsMs ? { moduleEvaluationsMs } : {}),
       ...(prunedHydrateFieldsMs
         ? { hydrateFieldsMs: prunedHydrateFieldsMs }
@@ -869,6 +895,61 @@ export default class RenderRoute extends Route<Model> {
     }
     this.store.resetCache();
     this.lastStoreResetKey = resetKey;
+  }
+
+  // What the card branch would otherwise read off its own `card+source` GET,
+  // when this render's caller already read those bytes and stashed them on the
+  // page (`__boxelCardRenderData`, the card-branch twin of
+  // `__boxelFileRenderData`). An indexing visit stashes; an on-demand `/render`
+  // of a live card has no read behind it and stashes nothing, so it fetches.
+  //
+  // Every way the stash can fail to describe this render returns `undefined`
+  // and costs only the fetch that would have happened anyway — which is why
+  // this validates rather than trusts. The one that matters is the URL: a
+  // prerender tab serves many cards, and an unkeyed stash outliving its visit
+  // would otherwise build this render's model from another card's document.
+  // The runner clears the stash at the start and end of every visit; this is
+  // what makes a survivor inert rather than wrong.
+  #stashedCardSource(id: string): StashedCardSource | undefined {
+    let stashed = (globalThis as any).__boxelCardRenderData as
+      | (CardSourceVisitArgs & { url: string })
+      | undefined;
+    if (
+      !stashed ||
+      typeof stashed.source !== 'string' ||
+      typeof stashed.realmURL !== 'string' ||
+      typeof stashed.lastModified !== 'number' ||
+      typeof stashed.url !== 'string'
+    ) {
+      return undefined;
+    }
+    // Both spellings reach this route: an indexing visit names the card
+    // instance's file (`…/card-1.json`) while the model is keyed on the
+    // instance (`…/card-1`), so both sides are compared stripped — the same
+    // normalization `#buildModel` applies to produce `canonicalId`.
+    if (stashed.url.replace(/\.json$/, '') !== id.replace(/\.json$/, '')) {
+      return undefined;
+    }
+    let doc: LooseSingleCardDocument;
+    try {
+      doc = JSON.parse(stashed.source) as LooseSingleCardDocument;
+    } catch (err: any) {
+      // Only a caller that already parsed these bytes as a card resource
+      // stashes them, so this is unreachable by construction — but a stash that
+      // cannot be parsed is a statement about the stash, not about the card,
+      // and the card is still readable from the realm. Fetching is both the
+      // honest answer and the one that cannot make this path worse than the
+      // one it replaces.
+      console.warn(
+        `ignoring unparseable stashed card source for ${id}; fetching instead: ${err?.message}`,
+      );
+      return undefined;
+    }
+    return {
+      realmURL: stashed.realmURL,
+      lastModified: new Date(stashed.lastModified),
+      doc,
+    };
   }
 
   // Fetch the card's source document, retrying once when the first attempt
