@@ -948,6 +948,44 @@ function encodedSize(content: IncrementalIndexEventContent): number {
   return new TextEncoder().encode(JSON.stringify(content)).length;
 }
 
+// The versions a shared pass's announcer may report: those of the cards no
+// other writer in the pass changed.
+//
+// A version says which bytes a card holds, and it is only this writer's to say
+// for a card nobody else wrote in the same pass. When a second writer's publish
+// joins the pending pass with its own write to the same card, the index holds
+// whichever bytes that pass read — the later write — while the announcer's
+// version describes its own. A tab holding the announcer's version would match
+// it, skip the re-read, and keep a card the other writer has since changed.
+// A writer whose cards are unknown could have changed any of them, so its
+// presence withholds the whole map.
+function versionsOnlyThisWriterChanged(
+  passes: (SharedIndexPass | undefined)[],
+  versions: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!versions) {
+    return versions;
+  }
+  let own = new Set(passes.map((pass) => pass?.waiterId));
+  let changedByOthers = new Set<string>();
+  for (let pass of passes) {
+    for (let caller of pass?.callers ?? []) {
+      if (own.has(caller.waiterId)) {
+        continue;
+      }
+      if (caller.urls === null) {
+        return undefined;
+      }
+      for (let url of caller.urls) {
+        changedByOthers.add(url);
+      }
+    }
+  }
+  return Object.fromEntries(
+    Object.entries(versions).filter(([url]) => !changedByOthers.has(url)),
+  );
+}
+
 // Every publish the passes behind a broadcast indexed, for the event's
 // `coalescedWrites`. Undefined when no pass was shared, which leaves the event
 // in the single-writer form `clientRequestId` alone describes.
@@ -3076,24 +3114,56 @@ export class Realm {
       realmURL: this.url,
     };
     let coalescedWrites = coalescedWritesFor(passes, invalidations);
+    let versions = opts?.versions;
     if (coalescedWrites) {
-      let withWrites: IncrementalIndexEventContent = {
-        ...content,
-        coalescedWrites,
-      };
-      if (encodedSize(withWrites) <= MAX_EVENT_CONTENT_BYTES) {
-        content = withWrites;
-      } else {
-        // Dropped whole, like `versions`: a subscriber that cannot find its
-        // own request in a partial list would read its own write as a
-        // stranger's anyway, and a list that silently omitted a writer would
-        // let another writer's tab keep a card that writer changed.
-        this.#log.warn(
-          `index event for ${this.url} dropped coalescedWrites for ${coalescedWrites.length} writer(s): the event would not fit with it, so those writers will re-read their own cards`,
-        );
-      }
+      versions = versionsOnlyThisWriterChanged(passes, versions);
+      content = this.#withCoalescedWrites(content, coalescedWrites);
     }
-    this.broadcastRealmEvent(withVersionsIfItFits(content, opts?.versions));
+    this.broadcastRealmEvent(withVersionsIfItFits(content, versions));
+  }
+
+  // `coalescedWrites` on a shared pass's event, as much of it as fits.
+  //
+  // Never simply dropped, because the other writers have stood down: this
+  // event is the only one that names them, so without the list their tabs
+  // cannot find their own writes and a waiter keyed on a request id would never
+  // hear its pass land. So it degrades in steps. First it keeps every writer's
+  // id and loses what each one changed — `changed: null` says "may have changed
+  // any of them", so every tab re-reads whatever another writer might have
+  // touched. Only when even the ids will not fit does the list go, and then the
+  // announcer's own `clientRequestId` and `clientAuthored` go with it: the
+  // single-writer rules those feed would otherwise let the announcer's tab keep
+  // a card another writer changed.
+  #withCoalescedWrites(
+    content: IncrementalIndexEventContent,
+    coalescedWrites: CoalescedIndexWrite[],
+  ): IncrementalIndexEventContent {
+    let full = { ...content, coalescedWrites };
+    if (encodedSize(full) <= MAX_EVENT_CONTENT_BYTES) {
+      return full;
+    }
+    let idsOnly = {
+      ...content,
+      coalescedWrites: coalescedWrites.map(({ clientRequestId }) => ({
+        clientRequestId,
+        changed: null,
+      })),
+    };
+    if (encodedSize(idsOnly) <= MAX_EVENT_CONTENT_BYTES) {
+      this.#log.warn(
+        `index event for ${this.url} reports ${coalescedWrites.length} coalesced writer(s) without the cards each changed: the event would not fit with them, so those writers will re-read each other's cards`,
+      );
+      return idsOnly;
+    }
+    this.#log.warn(
+      `index event for ${this.url} dropped coalescedWrites for ${coalescedWrites.length} writer(s): the event would not fit even their ids, so every subscriber re-reads the pass`,
+    );
+    let {
+      clientRequestId: _clientRequestId,
+      clientAuthored: _clientAuthored,
+      ...anonymous
+    } = content;
+    return anonymous;
   }
 
   private async invalidateURLs(

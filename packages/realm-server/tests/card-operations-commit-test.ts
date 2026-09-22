@@ -332,6 +332,7 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         'commit-delete',
         'shared-pass-first',
         'shared-pass-second',
+        'shared-pass-both',
         'version-target',
         'patch-over-http',
         'patch-over-batch',
@@ -802,6 +803,88 @@ module(basename(import.meta.filename), function (hooks) {
       event.clientRequestId,
       'instance:first-tab',
       'the first writer to join the pass announces it',
+    );
+  });
+
+  test("a shared pass does not report the announcer's version for a card another writer also changed", async function (assert) {
+    let card = `${testRealmHref}shared-pass-both`;
+    let patch = (firstName: string) => ({
+      data: {
+        type: 'card',
+        attributes: { firstName },
+        meta: { adoptsFrom: PERSON },
+      },
+    });
+    let { holder, release } = await holdIndexingLane();
+    let since = Date.now();
+    let writes: Promise<unknown>[] = [];
+    try {
+      writes.push(
+        Promise.resolve(
+          request
+            .patch('/shared-pass-both')
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-Boxel-Client-Request-Id', 'instance:earlier-tab')
+            .send(patch('Earlier')),
+        ),
+      );
+      await waitUntil(async () =>
+        (await pendingIndexCallers()).includes('instance:earlier-tab'),
+      );
+      // The same card again, from another client, while the pass that will
+      // index the first write is still pending — so the pass reads these
+      // bytes, not the ones the announcer wrote.
+      writes.push(
+        Promise.resolve(
+          request
+            .patch('/shared-pass-both')
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-Boxel-Client-Request-Id', 'instance:later-tab')
+            .send(patch('Later')),
+        ),
+      );
+      await waitUntil(async () =>
+        (await pendingIndexCallers()).includes('instance:later-tab'),
+      );
+    } finally {
+      release.fulfill();
+    }
+    let responses = (await Promise.all(writes)) as { status: number }[];
+    await holder.done;
+    assert.deepEqual(
+      responses.map((response) => response.status),
+      [200, 200],
+      'both writes are served',
+    );
+    assert.true(
+      readFileSync(realmFile('shared-pass-both.json'), 'utf8').includes(
+        'Later',
+      ),
+      'the card holds the later write',
+    );
+
+    let eventsForCard = async () =>
+      (await incrementalIndexEventsSince(since)).filter((event) =>
+        event.invalidations.includes(card),
+      );
+    await waitUntil(async () => (await eventsForCard()).length > 0);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    let events = await eventsForCard();
+    assert.strictEqual(
+      events.length,
+      1,
+      `the shared pass is announced once (got ${events.length})`,
+    );
+    let [event] = events;
+    assert.strictEqual(
+      event.clientRequestId,
+      'instance:earlier-tab',
+      'the earlier writer announces the pass',
+    );
+    assert.strictEqual(
+      event.versions?.[card],
+      undefined,
+      "the event does not report the announcer's version for a card the pass read from another writer's bytes",
     );
   });
 

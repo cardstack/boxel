@@ -150,7 +150,15 @@ export interface SharedIndexPass {
   // invalidations, and a subscriber handed several copies of one pass would
   // act on each, so exactly one caller — the first that announces its passes
   // as they land — speaks for all of them.
+  //
+  // Standing down makes the pass's announcement depend on that one caller. If
+  // the announcer's process dies after the pass lands, or its post-pass work
+  // throws before the broadcast, the pass goes unannounced for every writer it
+  // carried; subscribers catch up on the next event naming those cards.
   announcedByPeer: boolean;
+  // This caller's own entry among `callers`, so whoever announces can tell
+  // its own write from the others the pass carried.
+  waiterId: string;
   callers: CoalescedCaller[];
 }
 

@@ -634,6 +634,7 @@ function sharedPassFor(
   let announcer = callers.find((caller) => caller.announcesPass);
   return {
     announcedByPeer: announcer !== undefined && announcer.waiterId !== waiterId,
+    waiterId,
     callers,
   };
 }
