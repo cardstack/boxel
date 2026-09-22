@@ -400,7 +400,7 @@ export default class OperationLedger {
     if (unsent.length === 0) {
       return;
     }
-    chain.applying = chain.applying.then(async () => {
+    let reapplied = chain.applying.then(async () => {
       for (let entry of unsent) {
         if (entry.sent || !chain.pending.includes(entry)) {
           // Sent while the re-read was being applied, or cancelled by
@@ -414,16 +414,20 @@ export default class OperationLedger {
           // The program no longer runs against what the card now holds — an
           // assertion this state does not satisfy, say. It cannot be shown
           // locally and it must not be sent as though it had been, so it is
-          // failed here and the queue behind it goes with it.
-          // A foreign write is the one case where this client genuinely does
-          // not know what the card now holds, so the next operation names no
-          // base and reconciles as unconfirmed.
+          // failed here and the queue behind it goes with it. No version is
+          // carried through: nothing of ours wrote this state, so there is
+          // none this client could name.
           await this.#abort(chain, entry, undefined);
           entry.settled.reject(err as Error);
           return;
         }
       }
     }, ignore);
+    // Swallowed the same way every other link in this chain is: the chain is
+    // an ordering, and a rejection left on it is an unhandled one nobody is
+    // positioned to answer. What went wrong has already reached the entry's
+    // own caller.
+    chain.applying = reapplied.then(ignore, ignore);
   }
 
   #chainFor(key: string): Chain {
