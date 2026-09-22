@@ -227,9 +227,18 @@ module(basename(import.meta.filename), function () {
              WHERE realm_url = $1 AND file_path = $2`,
             { bind: [realmURL.href, 'person-1.json'] },
           )) as { content_hash: string | null }[];
-          let recordedHash = row?.content_hash ?? null;
+          // A row exists — indexing calls `ensureFileCreatedAt`, which inserts
+          // one carrying `created_at` alone. Asserted separately from the hash
+          // because coalescing the two would let "no row at all" satisfy the
+          // check, and that distinction is what this control rests on: the
+          // claim is that the realm recorded a creation time and no hash, not
+          // that it recorded nothing.
+          assert.ok(
+            row,
+            'indexing recorded a realm_file_meta row for the path',
+          );
           assert.strictEqual(
-            recordedHash,
+            row.content_hash,
             null,
             'the fixture reached disk without the write path, so no hash was recorded for it',
           );
@@ -247,6 +256,41 @@ module(basename(import.meta.filename), function () {
             typeof response.body.data.meta.version,
             'string',
             'and the read reports a version regardless',
+          );
+        });
+
+        // The value a row without a fingerprint reports, which is every row in a
+        // realm until it is re-indexed. Absent rather than null, so a client
+        // reads "no version" — the same silence it read before the column
+        // existed, which it treats as "I cannot confirm this".
+        test('a card whose row carries no version reports none', async function (assert) {
+          await dbAdapter.execute(
+            `UPDATE boxel_index SET source_content_hash = NULL
+             WHERE realm_url = $1 AND url = $2 AND type = 'instance'`,
+            { bind: [realmURL.href, `${testRealmHref}person-1.json`] },
+          );
+
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+          // The positive control: an absence assertion alone would also hold
+          // for a response carrying no `meta`, so establishing that this meta
+          // is populated is what makes the absence a statement about `version`.
+          assert.ok(
+            response.body.data.meta.adoptsFrom,
+            'the response carries a populated card meta',
+          );
+          assert.false(
+            'version' in response.body.data.meta,
+            `the key is omitted rather than null: ${JSON.stringify(
+              response.body.data.meta,
+            )}`,
           );
         });
 
