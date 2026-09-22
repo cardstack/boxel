@@ -3,11 +3,14 @@ const { module, test } = QUnit;
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
 import { basename } from 'path';
+import { createServer, type Server } from 'http';
+import type { AddressInfo } from 'net';
 import sinon from 'sinon';
 
 import {
   closeServer,
   setupPermissionedRealmCached,
+  waitUntil,
   testCreatePrerenderAuth,
 } from './helpers/index.ts';
 import {
@@ -1786,6 +1789,124 @@ module(basename(import.meta.filename), function () {
           'unhandledRejection listener removed on close',
         );
       }
+    });
+  });
+
+  module('createPrerenderHttpServer manager registration', function (hooks) {
+    // A listener standing in for the prerender manager. It records which
+    // prerender server each registration heartbeat and unregister names.
+    let manager: Server;
+    let requests: { method: string; serverURL: string }[];
+    let previousManagerURL: string | undefined;
+    let previousInterval: string | undefined;
+
+    hooks.beforeEach(async function () {
+      requests = [];
+      manager = createServer((req, res) => {
+        let chunks: Buffer[] = [];
+        req.on('data', (chunk: Buffer) => chunks.push(chunk));
+        req.on('end', () => {
+          let url = new URL(req.url ?? '/', 'http://manager');
+          if (url.pathname === '/prerender-servers') {
+            let serverURL =
+              req.method === 'DELETE'
+                ? url.searchParams.get('url')
+                : JSON.parse(Buffer.concat(chunks).toString('utf8')).data
+                    .attributes.url;
+            requests.push({ method: req.method ?? '', serverURL });
+          }
+          res.statusCode = 204;
+          res.end();
+        });
+      });
+      await new Promise<void>((resolve, reject) => {
+        manager.once('error', reject);
+        manager.listen(0, '127.0.0.1', () => resolve());
+      });
+      previousManagerURL = process.env.PRERENDER_MANAGER_URL;
+      previousInterval = process.env.PRERENDER_HEARTBEAT_INTERVAL_MS;
+      process.env.PRERENDER_MANAGER_URL = `http://127.0.0.1:${(manager.address() as AddressInfo).port}`;
+      process.env.PRERENDER_HEARTBEAT_INTERVAL_MS = '1000';
+    });
+
+    hooks.afterEach(async function () {
+      await closeServer(manager);
+      if (previousManagerURL === undefined) {
+        delete process.env.PRERENDER_MANAGER_URL;
+      } else {
+        process.env.PRERENDER_MANAGER_URL = previousManagerURL;
+      }
+      if (previousInterval === undefined) {
+        delete process.env.PRERENDER_HEARTBEAT_INTERVAL_MS;
+      } else {
+        process.env.PRERENDER_HEARTBEAT_INTERVAL_MS = previousInterval;
+      }
+    });
+
+    async function listen(server: Server): Promise<string> {
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(0, '127.0.0.1', () => resolve());
+      });
+      return `:${(server.address() as AddressInfo).port}`;
+    }
+
+    test('registerWithManager=false never registers with or unregisters from the manager', async function (assert) {
+      let registered = createPrerenderHttpServer({
+        maxPages: 1,
+        fatalExitOnUncaught: false,
+      });
+      let unregistered = createPrerenderHttpServer({
+        maxPages: 1,
+        fatalExitOnUncaught: false,
+        registerWithManager: false,
+      });
+      let registeredPort: string | undefined;
+      let unregisteredPort: string | undefined;
+      try {
+        unregisteredPort = await listen(unregistered);
+        registeredPort = await listen(registered);
+        // Heartbeats repeat every second, so waiting for the default server's
+        // second one gives the opted-out server's loop time to have posted.
+        await waitUntil(
+          async () =>
+            requests.filter(
+              (r) =>
+                r.method === 'POST' && r.serverURL.endsWith(registeredPort!),
+            ).length >= 2,
+          {
+            timeout: 10000,
+            timeoutMessage: 'default server heartbeats reach the manager',
+          },
+        );
+      } finally {
+        // Its close handler unregisters as soon as the browser has stopped,
+        // so awaiting that stop puts any unregister it would send ahead of
+        // the default server's, which the wait below observes.
+        await closeServer(unregistered);
+        await (
+          unregistered as Server & { __stopPrerenderer?: () => Promise<void> }
+        ).__stopPrerenderer?.();
+        await closeServer(registered);
+      }
+      await waitUntil(
+        async () =>
+          requests.some(
+            (r) =>
+              r.method === 'DELETE' && r.serverURL.endsWith(registeredPort!),
+          ),
+        {
+          timeout: 60000,
+          timeoutMessage: () =>
+            `default server unregisters from the manager; saw ${JSON.stringify(requests)}`,
+        },
+      );
+
+      assert.deepEqual(
+        requests.filter((r) => r.serverURL.endsWith(unregisteredPort!)),
+        [],
+        'the manager never hears from the opted-out server',
+      );
     });
   });
 });

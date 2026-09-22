@@ -1758,6 +1758,11 @@ export function createPrerenderHttpServer(options?: {
   // pass false so the qunit runner isn't torn down before teardown hooks can
   // release hardcoded test ports (CS-10813).
   fatalExitOnUncaught?: boolean;
+  // Default true. Gates the heartbeat that registers this server with the
+  // prerender manager, and the unregister on close. A server that is only
+  // reached directly by its own URL passes false, so a machine-wide manager
+  // never routes other clients' renders to it.
+  registerWithManager?: boolean;
 }): Server {
   let draining = false;
   let drainingResolved = false;
@@ -1793,6 +1798,7 @@ export function createPrerenderHttpServer(options?: {
   let recyclingForHostChange = false;
   let isClosing = false;
   let fatalExitOnUncaught = options?.fatalExitOnUncaught ?? true;
+  let registerWithManager = options?.registerWithManager ?? true;
   let serverURL = resolvePrerenderServerURL(options?.port);
   let { app, prerenderer } = buildPrerenderApp({
     getHostShellHash: () => reportedHostShellHash,
@@ -1832,6 +1838,7 @@ export function createPrerenderHttpServer(options?: {
   );
 
   async function sendHeartbeat(status?: 'active' | 'draining') {
+    if (!registerWithManager) return;
     try {
       const managerURL = resolvePrerenderManagerURL();
       const capacity = prerenderer.currentPoolCapacity;
@@ -1944,7 +1951,7 @@ export function createPrerenderHttpServer(options?: {
   }
 
   function startHeartbeatLoop() {
-    if (heartbeatTimer) return;
+    if (heartbeatTimer || !registerWithManager) return;
     void sendHeartbeat();
     heartbeatTimer = setInterval(() => {
       void sendHeartbeat();
@@ -1965,6 +1972,7 @@ export function createPrerenderHttpServer(options?: {
   server.on('close', async () => {
     stopHeartbeatLoop();
     await stopPrerendererOnce();
+    if (!registerWithManager) return;
     try {
       await unregisterWithManager(serverURL);
     } catch (e) {

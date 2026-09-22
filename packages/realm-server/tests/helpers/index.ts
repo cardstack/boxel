@@ -1063,6 +1063,11 @@ async function startTestPrerenderServer(): Promise<string> {
   let server = createPrerenderHttpServer({
     maxPages: 1,
     fatalExitOnUncaught: false, // tests share the qunit process; see CS-10813
+    // The suite reaches this server directly through
+    // createRemotePrerenderer(url). Registering it would let a machine-wide
+    // prerender manager route other stacks' index passes to it, rendering
+    // them with this process's host bundle and sharing its single page.
+    registerWithManager: false,
   });
   prerenderServer = server;
   trackServer(server);
