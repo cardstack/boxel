@@ -8,7 +8,7 @@ When you need to edit a `.gts` or `.json` file from inside the Boxel app, load t
 - Trigger: any code-change intent — adding/editing imports, fields, templates, computed properties, or creating new `.gts` files.
 
 Key reminders for the runtime context:
-- ALWAYS the `run-realm-code` tool — for `.gts` and `.json` files alike; avoid `write-text-file` (tool calls don't stream; UI freezes).
-- For new files, mark the URL line with `(new)`.
+- ALWAYS use the `run-realm-code` tool for `.gts` and `.json` files alike.
+- For new files, include the URL in `fileUrls` and call `Realm.createFile`.
 
-For the full block format, matching rules, and recovery from failed matches, read the canonical skill.
+For the full script format and recovery from failed edits, read the canonical skill.

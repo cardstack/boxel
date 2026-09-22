@@ -7,5 +7,5 @@ The `run-realm-code` tool call format is defined in the canonical [`source-code-
 Key reminders:
 
 - ALWAYS use the `run-realm-code` tool to create and edit files — `.gts` and `.json` alike; never `write-text-file`.
-- For new files, append `(new)` after the file URL line.
-- SEARCH text must match the existing file exactly; keep blocks small.
+- For new files, include the URL in `fileUrls` and call `Realm.createFile`.
+- For existing files, read the source first and pass the exact current text to `Realm.replaceCode`.

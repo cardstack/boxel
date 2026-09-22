@@ -61,7 +61,6 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
           return { status: 'staged', url };
         };
         globalThis.Realm = Object.freeze({ replaceCode, createFile });
-        globalThis.__realmFiles = contents;
         globalThis.__realmOperations = changes;
       })();
     `;
@@ -76,24 +75,21 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
     // an already-resolved promise.
     let resolvedPromise = vm.resolvePromise(promise);
     while (runtime.hasPendingJob()) {
-      vm.unwrapResult(runtime.executePendingJobs()).dispose();
+      vm.unwrapResult(runtime.executePendingJobs());
     }
     let resolved = await resolvedPromise;
     promise.dispose();
     let value = vm.unwrapResult(resolved);
     let scriptResult = JSON.stringify(vm.dump(value)) ?? '';
     value.dispose();
-    let filesHandle = vm.getProp(vm.global, '__realmFiles');
     let operationsHandle = vm.getProp(vm.global, '__realmOperations');
     let output: RealmRunnerResponse = {
       type: 'success',
       result: {
-        files: vm.dump(filesHandle) as Record<string, string>,
         operations: vm.dump(operationsHandle) as RealmRunnerOperation[],
         scriptResult,
       },
     };
-    filesHandle.dispose();
     operationsHandle.dispose();
     vm.dispose();
     runtime.dispose();

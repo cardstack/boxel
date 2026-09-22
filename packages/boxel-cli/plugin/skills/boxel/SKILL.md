@@ -156,7 +156,7 @@ Sibling skills:
 
 ## ✅ Always
 
-- For code-generation/editing, use **realm runner** as the primary mechanism (see `source-code-editing`).
+- For code-generation/editing, use the **`run-realm-code`** tool (see `source-code-editing`).
 - Run the import preflight from `references/common-imports.md` AND the lint gate from `references/lint-workflow.md` before reporting a `.gts` file as done.
 - Assign an icon to every CardDef and FieldDef.
 - Provide an `embedded` template for every FieldDef.
@@ -169,5 +169,5 @@ Sibling skills:
 
 | Problem | Fix |
 |---------|-----|
-| SEARCH didn't match | Re-read the file, include a unique nearby marker, retry with a smaller window. |
+| `Realm.replaceCode` failed | Re-read the file, use the exact current text, and retry with a smaller replacement. |
 | Schema break on existing instances | Propose instance updates or a migration; batch ≤10; confirm before continuing. |

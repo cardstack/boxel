@@ -63,7 +63,7 @@ So read it as your first action, before you plan the work or tell the user what 
 ├─ Long markdown field (>500 chars)?  → ApplyMarkdownEditCommand_c112
 ├─ Small/targeted change?              → patch-fields_3e67
 ├─ Full card update?                   → patchCardInstance
-├─ Bulk / malformed JSON?              → Code mode + `run-realm-code`
+├─ Bulk / malformed JSON?              → `run-realm-code`
 └─ After change                        → show-card_566f to verify
 ```
 
@@ -84,7 +84,7 @@ Full create/edit tool tables, file naming, and path rules: `references/card-tool
 ```
 ├─ INTERACT MODE:
 │   ├─ Display card                  → show-card_566f
-│   ├─ Create card / definition      → switch-submode_dd88 (submode: "code", createFile: true, codePath: realmUrl + filename), then `run-realm-code` with `Realm.createFile`
+│   ├─ Create card / definition      → `run-realm-code` with `Realm.createFile`
 │   ├─ Switch to code                → switch-submode_dd88 (submode: "code"; pass codePath to target a specific realm — a bare switch stays in the current realm)
 │   └─ Open workspace                → open-workspace_1696 (lands in interact mode)
 ├─ CODE MODE:

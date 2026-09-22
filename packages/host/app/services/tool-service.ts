@@ -1148,22 +1148,22 @@ export default class ToolService extends Service {
   });
 
   private attachedFilesForToolResult(
-    toolName: string,
+    toolName: string | undefined,
     resultCard: CardDef | undefined,
   ): FileDef[] {
-    if (!resultCard || !toolName.startsWith('run-realm-code_')) {
+    if (!resultCard || !toolName?.startsWith('run-realm-code_')) {
       return [];
     }
     let files = (
       resultCard as CardDef & {
-        files?: Array<{ fileUrl?: string }>;
+        files?: Array<{ fileUrl?: string; status?: string }>;
       }
     ).files;
     if (!Array.isArray(files)) {
       return [];
     }
     return files.flatMap((file) => {
-      if (!file.fileUrl) {
+      if (!file.fileUrl || file.status !== 'saved') {
         return [];
       }
       return [

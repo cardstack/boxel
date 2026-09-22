@@ -6,13 +6,41 @@ import type {
   RealmRunnerResult,
 } from './types';
 
+function makeRealmWorker(workerURL: string): Worker {
+  let absoluteURL = new URL(workerURL, window.location.href);
+  if (absoluteURL.origin === window.location.origin) {
+    return new Worker(absoluteURL, { type: 'module' });
+  }
+
+  // The host bundle can be served from a different origin than the realm page.
+  // Browser workers cannot be constructed from that URL directly, but a
+  // same-origin Blob worker may import it. Give the worker the host assets URL
+  // too, so QuickJS resolves its WASM asset from the same origin.
+  let assetsURL = (
+    globalThis as typeof globalThis & {
+      __boxelAssetsURL?: string;
+    }
+  ).__boxelAssetsURL;
+  let blob = new Blob(
+    [
+      `globalThis.__boxelAssetsURL = ${JSON.stringify(assetsURL ?? new URL('../', absoluteURL).href)};`,
+      `importScripts(${JSON.stringify(absoluteURL.href)});`,
+    ],
+    { type: 'text/javascript' },
+  );
+  let blobURL = URL.createObjectURL(blob);
+  try {
+    return new Worker(blobURL);
+  } finally {
+    URL.revokeObjectURL(blobURL);
+  }
+}
+
 export default function runRealmCode(
   request: Omit<RealmRunnerRequest, 'type'>,
 ): Promise<RealmRunnerResult> {
   return new Promise((resolve, reject) => {
-    let worker = new Worker(new URL(WorkerURL, window.location.href), {
-      type: 'module',
-    });
+    let worker = makeRealmWorker(WorkerURL);
     let timer = window.setTimeout(() => {
       worker.terminate();
       reject(

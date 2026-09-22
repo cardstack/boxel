@@ -373,8 +373,8 @@ In rough priority order:
 - **Format choice = who owns the cell size.** `embedded` for lists; `fitted` for uniform tile grids.
 - **Every user-facing card goes through `design-playbook.md`.**
 - **Delegated render** — `<@fields.X />` injects host CardContainer chrome; override via `:deep()`, theme cascade, or `@displayContainer={{false}}`. → `boxel-ui-guidelines/references/delegated-render-control.md`
-- **Read before writing.** Fetch a file’s current contents before a realm runner edit so the SEARCH block matches exactly.
-- **the `run-realm-code` tool for file creation and edits** — every text file, `.gts`, `.json`, `.md` and `README` alike. There is no file-writing tool (a tool call cannot stream, and skips the code-patch pipeline).
+- **Read before writing.** Fetch a file’s current contents before calling `Realm.replaceCode`.
+- **the `run-realm-code` tool for file creation and edits** — every source file, `.gts`, `.json`, `.md` and `README` alike.
 - **One CardDef per file.** FieldDefs and helpers can co-locate.
 - **Three formats minimum.** Every CardDef ships `isolated`, `embedded`, AND `fitted`.
 

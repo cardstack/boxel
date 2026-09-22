@@ -13,7 +13,6 @@ export interface RealmRunnerOperation {
 
 export interface RealmRunnerResult {
   operations: RealmRunnerOperation[];
-  files: Record<string, string>;
   scriptResult: string;
 }
 
