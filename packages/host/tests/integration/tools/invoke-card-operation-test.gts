@@ -151,6 +151,12 @@ interface SentRequest {
 // assertion about where a create was sent able to fail.
 const SESSION_DEFAULT_REALM = 'http://test-realm/somewhere-else/';
 
+// A third realm, so that a case asserting a caller-named realm was forwarded
+// stands on its own: were it the session default, a regression that forwarded
+// nothing at all would leave the recorded realm unchanged and the assertion
+// would still hold.
+const REALM_NAMED_BY_CALLER = 'http://test-realm/named-by-the-caller/';
+
 // A transport that records instead of reaching the realm, for the cases about
 // what a call puts on the wire, and about a refusal that has to happen before
 // a request is sent at all.
@@ -403,14 +409,14 @@ module('Integration | tools | invoke-card-operation', function (hooks) {
       cardId: `${testRealmURL}report-realm-forwarded`,
       operation: 'create',
       payload: { headline: 'Elsewhere' },
-      realm: SESSION_DEFAULT_REALM,
+      realm: REALM_NAMED_BY_CALLER,
     });
 
     assert.strictEqual(sent.length, 1, 'one batch was sent');
     assert.strictEqual(
       sent[0].realmURL,
-      SESSION_DEFAULT_REALM,
-      'to the realm the caller named rather than the one holding the card',
+      REALM_NAMED_BY_CALLER,
+      'to the realm the caller named, which is neither the realm holding the card nor the one this session writes to by default',
     );
   });
 

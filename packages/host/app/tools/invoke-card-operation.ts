@@ -38,7 +38,7 @@ export default class InvokeCardOperationTool extends HostBaseTool<
 
 Naming an operation a card does not carry is refused with the list of the ones it does, so a wrong guess costs one call and answers the question. The card's source shows the same names, written as its "@operation" declarations, together with the "params" each one takes.
 
-"payload" supplies those params, keyed exactly as the declaration names them. A param the declaration requires and the payload omits is refused before anything is sent.
+"payload" supplies those params, keyed exactly as the declaration names them. A param the declaration requires and the payload omits is refused before anything is sent - unless the declaration computes that param itself, in which case leaving it out is how you take the value it computes rather than one you invented.
 
 Besides a type's declared operations, the plain "create" mints a new card of the type of the card at "cardId". It alone reads the other two inputs: "payload" as the new card's field values, "relationships" as the cards it is created linking to - JSON:API relationship objects such as {"author": {"links": {"self": "<card id>"}}} - and "realm" as where it lands, which defaults to the realm holding the card at "cardId". Every other operation acts on that card and runs in that card's own realm, so it takes neither "realm" nor "relationships".
 
@@ -117,6 +117,17 @@ A write answers the card it wrote and the version that card now holds; a read an
     if (scope === 'instance' && input.realm) {
       throw new Error(
         `"${name}" acts on ${input.cardId} and runs in the realm that holds it, so it cannot be given a realm to run in. A realm names where a card a "create" mints lands.`,
+      );
+    }
+    if (mintsACard && !input.realm && !card[realmURL]) {
+      // The realm a minted card lands in is the one holding the card that
+      // named its type, so a target that is in no realm yet leaves the caller's
+      // description of where it goes unanswerable. Refused rather than allowed
+      // to fall back to whichever realm the session writes to by default: that
+      // fallback is the silent write to an unnamed realm this tool exists not
+      // to do.
+      throw new Error(
+        `"${name}" mints a new card in the realm holding ${input.cardId}, and that card is in no realm yet. Name where it should land with "realm".`,
       );
     }
     if (input.relationships && !mintsACard) {
@@ -252,13 +263,12 @@ function invokeOptions(
   if (!mintsACard) {
     return undefined;
   }
+  // A realm is always present by the time this runs: a mint with neither a
+  // named realm nor a target in one is refused above.
   let realm = input.realm || card[realmURL]?.href;
   let relationships = input.relationships as
     | Record<string, unknown>
     | undefined;
-  if (!realm && !relationships) {
-    return undefined;
-  }
   return {
     ...(realm ? { realm } : {}),
     ...(relationships ? { relationships } : {}),
