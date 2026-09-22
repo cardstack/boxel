@@ -67,11 +67,12 @@ export interface PrerenderHtmlArgs extends WorkerArgs {
   //
   // Carried rather than read again there so the pass that writes a file's
   // `types` and the pass that writes the HTML keyed on `types[0]` share one
-  // answer by construction. `null` — rather than absent — for a realm that
-  // binds nothing and for a job enqueued before this existed, for the same
-  // index-signature reason `queueWaitMs` is nullable: the args object has to
-  // satisfy `JSONTypes.Object`, which has no `undefined`. The pass reads the
-  // config itself when it is null.
+  // answer by construction. A realm that binds nothing sends `{}` — an answer,
+  // and the one that lets the pass skip the config read entirely. `null` means
+  // only that this job predates the field, and is what sends the pass to read
+  // the document for itself. Nullable rather than optional for the same
+  // index-signature reason `queueWaitMs` is: the args object has to satisfy
+  // `JSONTypes.Object`, which has no `undefined`.
   fileDefBindings: SerializedFileDefBindings | null;
   // True when a from-scratch index pass spawned this job (directly or via
   // coalescing, OR-preserved below): the realm-wide module pre-warm sweep runs
@@ -222,6 +223,10 @@ function choosePrerenderHtmlCoalesceDecision(
           // Newest-wins, like the generation and epoch beside it: the merged
           // job renders from current source, so the newest pass's answer for
           // what a file's class is belongs with it.
+          // Newest-wins, like the generation and epoch beside it. `??` is
+          // right because only an absent payload is null: a newest pass whose
+          // realm binds nothing carries `{}`, which wins as it should rather
+          // than falling through to the older pass's map.
           fileDefBindings:
             newest.fileDefBindings ??
             (newest === incomingArgs ? existingArgs : incomingArgs)

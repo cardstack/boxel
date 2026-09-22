@@ -200,6 +200,46 @@ export function boundFileDefCodeRef(
   return extension ? bindings[extension] : undefined;
 }
 
+// The class a served file-meta resource names, in the one order the three
+// answers are allowed to take.
+//
+// A realm's binding wins, because it is the realm's current statement and the
+// row is a record of what some past pass resolved — deferring to a stale row
+// would serve a document naming one class while an operation against the same
+// file resolved another. The row wins over everything else, since it is what
+// the indexer extracted. The platform table is the floor.
+//
+// One function rather than the chain written out at each site: the realm
+// serves a file's own document and the query engine builds the resource for a
+// linked FileDef and for a file-meta search item, and a client that hydrates
+// either has to get the same class. Two copies of this order drift, and the
+// drift is invisible until a realm edits a binding on a populated realm.
+export function servedFileDefCodeRef(
+  fileURL: URL,
+  {
+    bindings,
+    rowAdoptsFrom,
+    resourceAdoptsFrom,
+    fallback,
+  }: {
+    bindings: FileDefBindings | undefined;
+    // The row's first type, already decoded from its internal key by the
+    // caller — `codeRefFromInternalKey` lives in the barrel, and reaching the
+    // barrel from a leaf is a cycle (see `executableExtensions` in
+    // `constants.ts`).
+    rowAdoptsFrom: CodeRef | undefined;
+    resourceAdoptsFrom: CodeRef | undefined;
+    fallback: CodeRef;
+  },
+): CodeRef {
+  return (
+    boundFileDefCodeRef(fileURL, bindings) ??
+    rowAdoptsFrom ??
+    resourceAdoptsFrom ??
+    fallback
+  );
+}
+
 // The `FileDef` subclass a stored file is, from its extension.
 //
 // `bindings` is the realm's own answer for the extensions it has bound (see

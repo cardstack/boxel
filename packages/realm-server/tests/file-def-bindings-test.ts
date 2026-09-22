@@ -7,8 +7,8 @@ import {
   baseFileRef,
   parseFileDefBindings,
   readFileDefBindings,
-  boundFileDefCodeRef,
   resolveFileDefCodeRef,
+  servedFileDefCodeRef,
   rri,
   VirtualNetwork,
   type FileDefBindings,
@@ -282,48 +282,69 @@ module(basename(import.meta.filename), function () {
     });
   });
 
-  // What a realm looks like between a binding being written and the re-index
-  // that re-types its already-stored files. The two readers that decide
-  // whether an operation is reachable — the class a served document names and
-  // the class dispatch resolves — both read the bindings live, so they move
-  // together; the row is what lags. Pinned here so a later change that makes
-  // the served class defer to the row again has to fail this.
-  module('before the files are re-indexed', function () {
-    let virtualNetwork = new VirtualNetwork();
-    let bindings: FileDefBindings = {
-      '.txt': { module: rri(`${REALM.href}audit-log`), name: 'AuditLog' },
+  // The order the three answers take when a file-meta resource is built —
+  // the property that makes omitting a config dependency edge safe, since it
+  // is what lets a binding take effect on an already-indexed realm without a
+  // pass. Asserted against the function both readers call, so reordering it
+  // fails here; an end-to-end fixture cannot see this, because every realm
+  // that binds before it indexes has a row that already agrees.
+  module('what a served resource names', function () {
+    const BOUND = { module: rri(`${REALM.href}audit-log`), name: 'AuditLog' };
+    const ROW = { module: rri(`${REALM.href}stale`), name: 'StaleDef' };
+    const RESOURCE = {
+      module: rri(`${REALM.href}resource`),
+      name: 'ResourceDef',
     };
+    let bindings: FileDefBindings = { '.txt': BOUND };
+    let url = new URL(`${REALM.href}audit.txt`);
 
-    test('a newly bound extension resolves to the realm\u2019s class at once', function (assert) {
+    test('the realm\u2019s binding wins over a row that disagrees', function (assert) {
       assert.deepEqual(
-        resolveFileDefCodeRef(
-          new URL(`${REALM.href}audit.txt`),
-          virtualNetwork,
+        servedFileDefCodeRef(url, {
           bindings,
-        ),
-        { module: rri(`${REALM.href}audit-log`), name: 'AuditLog' },
-        'nothing about this answer waits on a pass',
+          rowAdoptsFrom: ROW,
+          resourceAdoptsFrom: RESOURCE,
+          fallback: baseFileRef,
+        }),
+        BOUND,
+        'a row written before the binding does not outrank it',
       );
     });
 
-    test('the binding is readable apart from the fallback it would take', function (assert) {
-      // `boundFileDefCodeRef` is what lets a served document prefer the realm
-      // over a row written before the binding existed: it answers only where
-      // the realm has spoken, so an unbound extension leaves the row in
-      // charge rather than being overwritten by the platform table.
+    test('the row wins where the realm has said nothing', function (assert) {
       assert.deepEqual(
-        boundFileDefCodeRef(new URL(`${REALM.href}audit.txt`), bindings),
-        { module: rri(`${REALM.href}audit-log`), name: 'AuditLog' },
+        servedFileDefCodeRef(new URL(`${REALM.href}notes.md`), {
+          bindings,
+          rowAdoptsFrom: ROW,
+          resourceAdoptsFrom: RESOURCE,
+          fallback: baseFileRef,
+        }),
+        ROW,
+        'an unbound extension leaves the indexer\u2019s answer in charge',
       );
-      assert.strictEqual(
-        boundFileDefCodeRef(new URL(`${REALM.href}notes.md`), bindings),
-        undefined,
-        'an extension the realm did not bind has no realm answer to prefer',
+    });
+
+    test('the resource answers when there is no row', function (assert) {
+      assert.deepEqual(
+        servedFileDefCodeRef(new URL(`${REALM.href}notes.md`), {
+          bindings,
+          rowAdoptsFrom: undefined,
+          resourceAdoptsFrom: RESOURCE,
+          fallback: baseFileRef,
+        }),
+        RESOURCE,
       );
-      assert.strictEqual(
-        boundFileDefCodeRef(new URL(`${REALM.href}audit.txt`), undefined),
-        undefined,
-        'and neither does a realm that binds nothing',
+    });
+
+    test('the fallback answers when nothing else does', function (assert) {
+      assert.deepEqual(
+        servedFileDefCodeRef(new URL(`${REALM.href}notes.md`), {
+          bindings: undefined,
+          rowAdoptsFrom: undefined,
+          resourceAdoptsFrom: undefined,
+          fallback: baseFileRef,
+        }),
+        baseFileRef,
       );
     });
   });
