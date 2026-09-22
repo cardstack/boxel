@@ -507,6 +507,16 @@ function computeFields(
         // query context are not the row's own). Such a value serializes here
         // with no invalidation edge to keep it true, so it can go stale — a
         // known limitation, not addressed by exempting the field.
+        //
+        // Once in the document, a resolved computed link is a first-class
+        // relationship, not just a stored-row entry: `loadLinks` walks every
+        // relationship carrying a `links.self` and side-loads its target into
+        // `included[]` on every served card document and search-result item,
+        // spending the same expansion budget authored links spend. That is
+        // intended — a resolved computed link names a real target and should
+        // serve like an authored one — but it does widen the served closure,
+        // so a card sitting near the budget can now trade an authored target
+        // out of `included[]` for a computed one.
         if (
           opts?.usedLinksToFieldsOnly &&
           !maybeField.computeVia &&

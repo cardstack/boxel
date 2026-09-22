@@ -1548,6 +1548,17 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       // writes the data bucket it reads.) A full serialization
       // (`includeUnrenderedFields`) still emits `{ self: null }`, matching how it
       // renders every declared link.
+      //
+      // Absence here is not a positive assertion of emptiness. `LinksTo.getter`
+      // collapses a not-loaded source, a link-error, and a link-not-found target
+      // all to `undefined`, so a computed link that "derives nothing", one whose
+      // source was not resident, and one over a broken target arrive here alike
+      // and are all spelled the same way in the row: no entry. Nor does the
+      // `brokenLinks` diagnostic recover the distinction — `getBrokenLinks` skips
+      // `computeVia` fields, so a broken computed link is invisible there too.
+      // In practice the render route's settle loop drains the store before this
+      // runs, so a resolvable source is resident; the residual ambiguity is a
+      // genuinely broken target, which indexes clean and silent.
       if (this.computeVia && !opts?.includeUnrenderedFields) {
         return { relationships: {} };
       }
@@ -2091,6 +2102,14 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       // never writes the data bucket it reads.) A full serialization
       // (`includeUnrenderedFields`) still emits `{ self: null }`, matching how it
       // renders every declared link.
+      //
+      // As with the singular case, absence is not a positive assertion of
+      // emptiness: a computed that legitimately derives no members, one whose
+      // source was not resident, and one whose members surfaced as broken
+      // (`isNonPresentLink` above catches the not-loaded/sentinel forms) can all
+      // land here as an empty/absent value, and `getBrokenLinks` does not see
+      // computed fields, so a broken computed link leaves no `brokenLinks` trace
+      // either. The render route's settle loop covers residency in practice.
       if (this.computeVia && !opts?.includeUnrenderedFields) {
         return { relationships: {} };
       }

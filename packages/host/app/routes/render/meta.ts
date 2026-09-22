@@ -254,7 +254,11 @@ export default class RenderMetaRoute extends Route<Model> {
       // The rest of emulating the on-disk file serialization: a relationship
       // slot keeps its `links` but drops the resolved `data`, so the serialized
       // instance is a pure function of the card's own data rather than of which
-      // targets happen to be loaded.
+      // targets happen to be loaded. With `includeComputeds: true` the document
+      // now also carries entries derived by `computeVia`, whose *presence*
+      // (unlike an authored link's) depends on the settle loop above having made
+      // the computed's inputs resident — so that "pure function of the card's
+      // own data" guarantee rests on the settle, not on this `delete` alone.
       for (let { relationship } of relationshipEntries(
         serialized.data.relationships,
       )) {
