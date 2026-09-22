@@ -91,13 +91,18 @@ in the same commit as the card change.
 
 Two things about them are worth knowing before copying the pattern:
 
-- **The line is composed by the caller.** Which `FileDef` type a realm file
-  gets is decided by its extension, so a `.txt` here is base's `TextFileDef`
-  and a realm cannot declare its own operations on it. Only the base
-  `appendLine` and `update` are available, and the base `appendLine` takes the
-  line as its payload. A value the realm knows and the caller does not — the
-  authenticated actor — therefore belongs on the card, which is where
-  `recordVitals` and `requestConsult` stamp it.
+- **The line is composed by the caller, and that is a limitation rather than
+  the authoring model.** A named `appendLine` on a `FileDef` subclass is a
+  legal declaration — the authoring guide covers it, and such a declaration
+  says which param carries the line. What decides whether one can be _reached_
+  is which class a stored file resolves to, and that comes from the file's
+  extension: a `.txt` here is base's `TextFileDef`, so only the base
+  `appendLine` and `update` are available on it, and the base `appendLine`
+  takes the line as its payload. Until a realm can bind its files to its own
+  `FileDef` subclasses, a value the realm knows and the caller does not — the
+  authenticated actor — has to be stamped on the card instead, which is what
+  `recordVitals` and `requestConsult` do. Treat the audit line here as
+  caller-supplied text, not as something a caller could not have forged.
 - **`appendLine` creates the file it appends to**, so nothing here has to
   exist first. These logs are checked in for a different reason: a
   `linksTo(FileDef)` needs a stored file to hydrate an instance from, and
