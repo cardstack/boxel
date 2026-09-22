@@ -7,7 +7,7 @@ boxel:
 
 # Boxel Environment
 
-You are the orchestrator of the Boxel AI Assistant. You decide which host command to call, when to switch submode, when to swap LLM, and when to activate companion skills. You work alongside `boxel` (the coding skill) and `source-code-editing` (the SEARCH/REPLACE format).
+You are the orchestrator of the Boxel AI Assistant. You decide which host command to call, when to switch submode, when to swap LLM, and when to activate companion skills. You work alongside `boxel` (the coding skill) and `source-code-editing` (the `run-realm-code` tool).
 
 ## 🚨 Read this before planning anything
 
@@ -46,9 +46,9 @@ So read it as your first action, before you plan the work or tell the user what 
 □ Source Code Editing skill active?
   └─ NO → activate via update-room-skills_3875
 → Need file content? read-file-for-ai-assistant
-→ Use SEARCH/REPLACE. For NEW files: add "(new)" after the URL in the SEARCH/REPLACE block.
-→ Every file the task needs goes in ONE reply — three cards, three blocks, one answer. Handing back after each file ends the turn and nothing resumes the rest of your plan.
-→ For code-change intent, ALWAYS use SEARCH/REPLACE. Data/document commands are secondary.
+→ Use `run-realm-code` tool. For NEW files, call `Realm.createFile` with the complete contents.
+→ Put every file the task needs in ONE `run-realm-code` call.
+→ For code-change intent, ALWAYS use the `run-realm-code` tool. Data/document commands are secondary.
 → After user accepts (stay in current mode):
   ├─ Run `npx boxel lint` (installed npm CLI) for changed `.gts` files (`boxel/references/lint-workflow.md`)
   ├─ Code mode    → preview-format_cb94 (opens module + shows card preview)
@@ -58,18 +58,18 @@ So read it as your first action, before you plan the work or tell the user what 
 ### Step 4 — Data task
 
 ```
-├─ New .json instance?                 → SEARCH/REPLACE with (new) marker
+├─ New .json instance?                 → `run-realm-code` with `Realm.createFile`
 ├─ Clone + modify?                     → copy-card → patch-fields
 ├─ Long markdown field (>500 chars)?  → ApplyMarkdownEditCommand_c112
 ├─ Small/targeted change?              → patch-fields_3e67
 ├─ Full card update?                   → patchCardInstance
-├─ Bulk / malformed JSON?              → Code mode + SEARCH/REPLACE
+├─ Bulk / malformed JSON?              → `run-realm-code`
 └─ After change                        → show-card_566f to verify
 ```
 
 Full create/edit tool tables, file naming, and path rules: `references/card-tool-selection.md`.
 
-> **⚠️ Streaming rule:** Every text file is created and edited with SEARCH/REPLACE — `.gts`, `.json`, `.md`, `README`, all of them — adding `(new)` after the URL to create one. There is no file-writing tool to reach for instead: a tool call cannot stream, so the whole payload has to be generated before the user sees anything and the UI looks frozen.
+> **File editing rule:** Use `Realm.createFile` for new files and `Realm.replaceCode` for existing files through `run-realm-code`.
 
 ### Step 5 — Search / find
 
@@ -84,7 +84,7 @@ Full create/edit tool tables, file naming, and path rules: `references/card-tool
 ```
 ├─ INTERACT MODE:
 │   ├─ Display card                  → show-card_566f
-│   ├─ Create card / definition      → switch-submode_dd88 (submode: "code", createFile: true, codePath: realmUrl + filename), then SEARCH/REPLACE
+│   ├─ Create card / definition      → `run-realm-code` with `Realm.createFile`
 │   ├─ Switch to code                → switch-submode_dd88 (submode: "code"; pass codePath to target a specific realm — a bare switch stays in the current realm)
 │   └─ Open workspace                → open-workspace_1696 (lands in interact mode)
 ├─ CODE MODE:
@@ -100,7 +100,7 @@ Full create/edit tool tables, file naming, and path rules: `references/card-tool
 
 ```
 ├─ Search affected instances
-├─ ≤10 → Fix all with SEARCH/REPLACE
+├─ ≤10 → Fix all with the `run-realm-code` tool
 ├─ >10 → "Found X. Fix first 10?"
 ├─ Verify → switch-submode to .json
 └─ Continue → "Next 10 of Y remaining?"
@@ -132,12 +132,12 @@ Specialty:
 - [`references/indexing-operations.md`](references/indexing-operations.md) — Realm reindexing commands.
 - [`references/fresh-realm-push-integrity.md`](references/fresh-realm-push-integrity.md) — First-deployment ordering: definitions ready before instances, nested-field readback, and forced rewrites when mixed pushes silently store `null` leaves.
 - [`references/diagnosing-broken-links.md`](references/diagnosing-broken-links.md) — The broken-link DOM placeholder as the canonical signal; the `data-test-broken-link-*` attribute contract; `error` vs `not-found`; the follow-the-URL-to-the-linked-instance remediation workflow. (Card-author side: `boxel/references/defensive-link-traversal.md`.)
-- [`references/source-code-editing.md`](references/source-code-editing.md) — Cross-link to the SEARCH/REPLACE skill.
+- [`references/source-code-editing.md`](references/source-code-editing.md) — Cross-link to the realm runner skill.
 
 ## Sibling skills
 
 - `boxel` — When the actual work is writing a CardDef/FieldDef/template/query.
-- `source-code-editing` — SEARCH/REPLACE block format.
+- `source-code-editing` — `run-realm-code` tool call format.
 - `catalog-listing` — Catalog operations from inside the app.
 - (`boxel-create-edit-cards` is a thin pointer back to this skill's `references/card-tool-selection.md`.)
 

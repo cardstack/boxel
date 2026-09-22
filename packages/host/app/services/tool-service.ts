@@ -54,6 +54,7 @@ import type MessageCodePatchResult from '../lib/matrix-classes/message-code-patc
 import type MessageTool from '../lib/matrix-classes/message-tool';
 import type { RoomResource } from '../resources/room';
 import type { CardDef } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 import type { CodePatchStatus } from '@cardstack/base/matrix-event';
 import type { IEvent } from 'matrix-js-sdk';
 
@@ -1072,6 +1073,10 @@ export default class ToolService extends Service {
         toolCallId: commandRequestId!,
         status: 'applied',
         resultCard,
+        attachedFiles: this.attachedFilesForToolResult(
+          command.name,
+          resultCard,
+        ),
         context: userContextForAiBot,
       });
     } catch (e) {
@@ -1103,6 +1108,10 @@ export default class ToolService extends Service {
             toolCallId: commandRequestId!,
             status: 'applied',
             resultCard,
+            attachedFiles: this.attachedFilesForToolResult(
+              command.name,
+              resultCard,
+            ),
           });
         } catch (sendError) {
           console.error(
@@ -1137,6 +1146,34 @@ export default class ToolService extends Service {
       this.currentlyExecutingToolRequestIds.delete(commandRequestId!);
     }
   });
+
+  private attachedFilesForToolResult(
+    toolName: string | undefined,
+    resultCard: CardDef | undefined,
+  ): FileDef[] {
+    if (!resultCard || !toolName?.startsWith('run-realm-code_')) {
+      return [];
+    }
+    let files = (
+      resultCard as CardDef & {
+        files?: Array<{ fileUrl?: string; status?: string }>;
+      }
+    ).files;
+    if (!Array.isArray(files)) {
+      return [];
+    }
+    return files.flatMap((file) => {
+      if (!file.fileUrl || file.status !== 'saved') {
+        return [];
+      }
+      return [
+        this.matrixService.fileAPI.createFileDef({
+          sourceUrl: file.fileUrl,
+          name: file.fileUrl.split('/').pop(),
+        }),
+      ];
+    });
+  }
 
   async validate(command: MessageTool): Promise<boolean> {
     let error: string | undefined;

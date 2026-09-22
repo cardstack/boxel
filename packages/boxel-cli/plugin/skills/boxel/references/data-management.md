@@ -41,7 +41,7 @@ my-realm/
 
 ## JSON Instance Format Quick Reference
 
-**When creating `.json` card instances via SEARCH/REPLACE, follow this structure:**
+**When creating `.json` card instances via `run-realm-code` tool, follow this structure:**
 
 **Naming:** Use natural names for JSON files (e.g., `Author/jane-doe.json`, `Product/laptop-pro.json`) - don't append `-sample-data`
 

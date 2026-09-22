@@ -14,4 +14,4 @@ Read:
 1. `../boxel-environment/references/card-tool-selection.md` — the create/edit tool tables, quick decision tree, file naming, and path rules.
 2. `../boxel-environment/SKILL.md` — the master decision tree (Step 4 covers data tasks).
 
-`source-code-editing` defines the SEARCH/REPLACE format used to create and edit files (`.gts` and `.json` alike). Never use `write-text-file`.
+`source-code-editing` defines the `run-realm-code` tool used to create and edit files (`.gts` and `.json` alike). Never use `write-text-file`.

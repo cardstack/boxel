@@ -5,7 +5,7 @@
 `set-active-llm_1887` with `attributes.roomId` set to the current room ID and `attributes.llmId` set to "anthropic/claude-sonnet-4.6"
 → `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to e.g. "https://[domain]/user/card.gts"
 → Prompt "improve code structure"
-→ Emit a code patch search/replace block
+→ Emit a code patch `run-realm-code` tool call
 ```
 **Note:** Always verify/switch to code-approved LLM first
 
@@ -13,14 +13,14 @@
 ```json
 `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to e.g. "data.csv"
 → Prompt "generate CardDef from CSV"
-→ Emit a code patch search/replace block
+→ Emit a code patch `run-realm-code` tool call
 ```
 
 ### 3. Live Preview Development
 ```json
 `show-card_566f` with `attributes.cardId` set to e.g. "https://[domain]/user/Card/instance"
 → Prompt "enhance UX for this card"
-→ Emit a code patch search/replace block
+→ Emit a code patch `run-realm-code` tool call
 → `show-card_566f` with `attributes.cardId` set to e.g. "https://[domain]/user/Card/instance"
 ```
 
@@ -28,7 +28,7 @@
 ```json
 `SearchCardsByQueryCommand_847d` with `attributes.query` set to valid query JSON that includes a filter
 → Prompt "detect relationship patterns"
-→ Emit a code patch search/replace block to create a transformation command
+→ Emit a code patch `run-realm-code` tool call to create a transformation command
 → `transform-cards_33d7` with `attributes.query` and `attributes.commandRef` set to perform a bulk update
 ```
 
@@ -36,7 +36,7 @@
 ```json
 `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to e.g. "https://[domain]/user/schema.gts"
 → `SearchCardsByQueryCommand_847d` with `attributes.query` set to valid query json with a filter specified
-→ Emit a code patch search/replace block creating a migration command
+→ Emit a code patch `run-realm-code` tool call creating a migration command
 → `transform-cards_33d7` with `attributes.query` and `attributes.commandRef` set to perform bulk migration
 ```
 
@@ -45,7 +45,7 @@
 `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to "https://[domain]/user/card.gts"
 → `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to "https://[domain]/user/Card/instance.json"
 → `SearchCardsByQueryCommand_847d` with `attributes.query` set to e.g. '{"filter": {"contains": {"imports": "card"}}}'
-→ Emit a code patch search/replace block
+→ Emit a code patch `run-realm-code` tool call
 ```
 
 ### 7. Intelligent Debug Escalation
@@ -58,14 +58,14 @@ Prompt "debug this error: ..."
 ```json
 `switch-submode_dd88` with `attributes.submode` set to "code" and `attributes.codePath` set to the target file's URL (a bare submode switch stays in whatever realm the UI last showed)
 → `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to "https://[domain]/user/card.gts"
-→ Emit a code patch search/replace block
+→ Emit a code patch `run-realm-code` tool call
 → (offer refresh)
 ```
 
 ### Card Creation
 ```json
 `switch-submode_dd88` with `attributes.submode` set to "code", `attributes.createFile` set to true, and `attributes.codePath` set to the new file's URL in the target realm
-→ Emit a code patch search/replace block to create the new file
+→ Emit a code patch `run-realm-code` tool call to create the new file
 → `show-card_566f` with `attributes.cardId` set to the url of the new file
 ```
 
@@ -78,7 +78,7 @@ Prompt "debug this error: ..."
 ### Schema Migration
 1. Update schema with breaking changes:
 ```json
-→ Emit a code patch search/replace block
+→ Emit a code patch `run-realm-code` tool call
 ```
 2. Add migration command to same file:
 ```typescript

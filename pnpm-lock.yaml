@@ -1781,7 +1781,7 @@ importers:
         version: 8.0.1(@babel/core@7.29.7)(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(@ember/test-waiters@4.1.2)(axe-core@4.12.1)(qunit@2.26.0)
       ember-auto-import:
         specifier: ^2.7.2
-        version: 2.13.1(@glint/template@1.7.7)(webpack@5.107.2(postcss@8.5.15))
+        version: 2.13.1(@glint/template@1.7.7)(webpack@5.107.2)
       ember-cli:
         specifier: ^5.4.1
         version: 5.12.0(@babel/core@7.29.7)(@types/node@24.13.2)
@@ -1823,7 +1823,7 @@ importers:
         version: 0.14.6(patch_hash=364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425)(@babel/eslint-parser@7.29.7(@babel/core@7.29.7)(eslint@8.57.1))(@typescript-eslint/parser@8.67.0(eslint@8.57.1)(typescript@5.9.3))(typescript@5.9.3)
       ember-freestyle:
         specifier: 'catalog:'
-        version: 0.24.0(@babel/core@7.29.7)(@ember/string@4.0.1)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(webpack@5.107.2(postcss@8.5.15))
+        version: 0.24.0(@babel/core@7.29.7)(@ember/string@4.0.1)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(webpack@5.107.2)
       ember-load-initializers:
         specifier: ^3.0.0
         version: 3.0.1(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
@@ -2207,6 +2207,9 @@ importers:
       ember-modify-based-class-resource:
         specifier: 'catalog:'
         version: 1.1.2(@babel/core@7.29.7)(@glimmer/component@2.1.1)(@glint/template@1.7.7)(ember-resources@7.0.8(@glimmer/component@2.1.1)(@glint/template@1.7.7))
+      quickjs-emscripten:
+        specifier: ^0.31.0
+        version: 0.31.0
       reactiveweb:
         specifier: 'catalog:'
         version: 1.9.3(@babel/core@7.29.7)(@ember/test-waiters@4.1.2)(@glimmer/component@2.1.1)(@glint/template@1.7.7)
@@ -2336,7 +2339,7 @@ importers:
         version: 1.31.14(typescript@5.9.3)
       '@percy/ember':
         specifier: 'catalog:'
-        version: 5.0.1(@babel/core@7.29.7)(@glint/template@1.7.7)(webpack@5.107.2)
+        version: 5.0.1(@babel/core@7.29.7)(@glint/template@1.7.7)(webpack@5.107.2(postcss@8.5.15))
       '@rollup/plugin-babel':
         specifier: ^6.0.4
         version: 6.1.0(@babel/core@7.29.7)(@types/babel__core@7.20.5)(rollup@4.62.0)
@@ -2441,7 +2444,7 @@ importers:
         version: 1.0.3(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
       ember-auto-import:
         specifier: ^2.7.2
-        version: 2.13.1(@glint/template@1.7.7)(webpack@5.107.2)
+        version: 2.13.1(@glint/template@1.7.7)(webpack@5.107.2(postcss@8.5.15))
       ember-basic-dropdown:
         specifier: ^9.0.0
         version: 9.0.0(@babel/core@7.29.7)(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(@embroider/macros@1.20.5(@babel/core@7.29.7)(@glint/template@1.7.7))(@glimmer/component@2.1.1)
@@ -2495,13 +2498,13 @@ importers:
         version: 0.14.6(patch_hash=364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425)(@babel/eslint-parser@7.29.7(@babel/core@7.29.7)(eslint@8.57.1))(@typescript-eslint/parser@8.67.0(eslint@8.57.1)(typescript@5.9.3))(typescript@5.9.3)
       ember-exam:
         specifier: ^10.1.0
-        version: 10.1.0(@glint/template@1.7.7)(ember-qunit@9.1.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(qunit@2.26.0))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(qunit@2.26.0)(webpack@5.107.2)
+        version: 10.1.0(@glint/template@1.7.7)(ember-qunit@9.1.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(qunit@2.26.0))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(qunit@2.26.0)(webpack@5.107.2(postcss@8.5.15))
       ember-focus-trap:
         specifier: ^1.0.1
         version: 1.2.0(@babel/core@7.29.7)
       ember-freestyle:
         specifier: 'catalog:'
-        version: 0.24.0(@babel/core@7.29.7)(@ember/string@4.0.1)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(webpack@5.107.2)
+        version: 0.24.0(@babel/core@7.29.7)(@ember/string@4.0.1)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(webpack@5.107.2(postcss@8.5.15))
       ember-keyboard:
         specifier: 'catalog:'
         version: 9.0.4(@babel/core@7.29.7)(@ember/test-helpers@5.4.3(@babel/core@7.29.7))
@@ -5784,6 +5787,21 @@ packages:
   '@jest/schemas@29.6.3':
     resolution: {integrity: sha512-mo5j5X+jIZmJQveBKeS/clAueipV7KgiX1vMgCxam1RNYiqE1w62n0/tJJnHtjW8ZHcQco5gY85jA3mi0L+nSA==}
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
+
+  '@jitl/quickjs-ffi-types@0.31.0':
+    resolution: {integrity: sha512-1yrgvXlmXH2oNj3eFTrkwacGJbmM0crwipA3ohCrjv52gBeDaD7PsTvFYinlAnqU8iPME3LGP437yk05a2oejw==}
+
+  '@jitl/quickjs-wasmfile-debug-asyncify@0.31.0':
+    resolution: {integrity: sha512-YkdzQdr1uaftFhgEnTRjTTZHk2SFZdpWO7XhOmRVbi6CEVsH9g5oNF8Ta1q3OuSJHRwwT8YsuR1YzEiEIJEk6w==}
+
+  '@jitl/quickjs-wasmfile-debug-sync@0.31.0':
+    resolution: {integrity: sha512-8XvloaaWBONqcHXYs5tWOjdhQVxzULilIfB2hvZfS6S+fI4m2+lFiwQy7xeP8ExHmiZ7D8gZGChNkdLgjGfknw==}
+
+  '@jitl/quickjs-wasmfile-release-asyncify@0.31.0':
+    resolution: {integrity: sha512-uz0BbQYTxNsFkvkurd7vk2dOg57ElTBLCuvNtRl4rgrtbC++NIndD5qv2+AXb6yXDD3Uy1O2PCwmoaH0eXgEOg==}
+
+  '@jitl/quickjs-wasmfile-release-sync@0.31.0':
+    resolution: {integrity: sha512-hYduecOByj9AsAfsJhZh5nA6exokmuFC8cls39+lYmTCGY51bgjJJJwReEu7Ff7vBWaQCL6TeDdVlnp2WYz0jw==}
 
   '@joplin/turndown-plugin-gfm@1.0.67':
     resolution: {integrity: sha512-FZfW5EZfidhzd1IaY1uxHnIZPTVOxAdleMZ4/1U6Nt5b7+Qj5JThDnaIomuJtetnUBzuRNbe9FWMuqD4B3dlWA==}
@@ -13837,6 +13855,13 @@ packages:
   quick-temp@0.1.9:
     resolution: {integrity: sha512-yI0h7tIhKVObn03kD+Ln9JFi4OljD28lfaOsTdfpTR0xzrhGOod+q66CjGafUqYX2juUfT9oHIGrTBBo22mkRA==}
 
+  quickjs-emscripten-core@0.31.0:
+    resolution: {integrity: sha512-oQz8p0SiKDBc1TC7ZBK2fr0GoSHZKA0jZIeXxsnCyCs4y32FStzCW4d1h6E1sE0uHDMbGITbk2zhNaytaoJwXQ==}
+
+  quickjs-emscripten@0.31.0:
+    resolution: {integrity: sha512-K7Yt78aRPLjPcqv3fIuLW1jW3pvwO21B9pmFOolsjM/57ZhdVXBr51GqJpalgBlkPu9foAvhEAuuQPnvIGvLvQ==}
+    engines: {node: '>=16.0.0'}
+
   qunit-dom@3.5.1:
     resolution: {integrity: sha512-ZnvTADVXASdjLxrUDuS/8NaOzadhxN+fZgafjuQV1EOMFd3dJqLkP0RqsGdAxQBxZ7KzKg57AAJO20dM6/PxkA==}
 
@@ -18609,6 +18634,24 @@ snapshots:
     dependencies:
       '@sinclair/typebox': 0.27.10
 
+  '@jitl/quickjs-ffi-types@0.31.0': {}
+
+  '@jitl/quickjs-wasmfile-debug-asyncify@0.31.0':
+    dependencies:
+      '@jitl/quickjs-ffi-types': 0.31.0
+
+  '@jitl/quickjs-wasmfile-debug-sync@0.31.0':
+    dependencies:
+      '@jitl/quickjs-ffi-types': 0.31.0
+
+  '@jitl/quickjs-wasmfile-release-asyncify@0.31.0':
+    dependencies:
+      '@jitl/quickjs-ffi-types': 0.31.0
+
+  '@jitl/quickjs-wasmfile-release-sync@0.31.0':
+    dependencies:
+      '@jitl/quickjs-ffi-types': 0.31.0
+
   '@joplin/turndown-plugin-gfm@1.0.67': {}
 
   '@jridgewell/gen-mapping@0.3.13':
@@ -19480,10 +19523,10 @@ snapshots:
 
   '@percy/dom@1.31.14': {}
 
-  '@percy/ember@5.0.1(@babel/core@7.29.7)(@glint/template@1.7.7)(webpack@5.107.2)':
+  '@percy/ember@5.0.1(@babel/core@7.29.7)(@glint/template@1.7.7)(webpack@5.107.2(postcss@8.5.15))':
     dependencies:
       '@percy/sdk-utils': 1.31.14
-      ember-auto-import: 2.13.1(@glint/template@1.7.7)(webpack@5.107.2)
+      ember-auto-import: 2.13.1(@glint/template@1.7.7)(webpack@5.107.2(postcss@8.5.15))
       ember-cli-babel: 8.3.1(@babel/core@7.29.7)
     transitivePeerDependencies:
       - '@babel/core'
@@ -24018,13 +24061,13 @@ snapshots:
       content-tag: 4.2.0
       oxc-parser: 0.130.0
 
-  ember-exam@10.1.0(@glint/template@1.7.7)(ember-qunit@9.1.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(qunit@2.26.0))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(qunit@2.26.0)(webpack@5.107.2):
+  ember-exam@10.1.0(@glint/template@1.7.7)(ember-qunit@9.1.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(qunit@2.26.0))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(qunit@2.26.0)(webpack@5.107.2(postcss@8.5.15)):
     dependencies:
       '@babel/core': 7.29.7
       chalk: 5.6.2
       cli-table3: 0.6.5
       debug: 4.4.3
-      ember-auto-import: 2.13.1(@glint/template@1.7.7)(webpack@5.107.2)
+      ember-auto-import: 2.13.1(@glint/template@1.7.7)(webpack@5.107.2(postcss@8.5.15))
       ember-cli-babel: 8.3.1(@babel/core@7.29.7)
       ember-qunit: 9.1.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(qunit@2.26.0)
       ember-source: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)
@@ -28802,6 +28845,18 @@ snapshots:
       mktemp: 2.0.3
       rimraf: 5.0.10
       underscore.string: 3.3.6
+
+  quickjs-emscripten-core@0.31.0:
+    dependencies:
+      '@jitl/quickjs-ffi-types': 0.31.0
+
+  quickjs-emscripten@0.31.0:
+    dependencies:
+      '@jitl/quickjs-wasmfile-debug-asyncify': 0.31.0
+      '@jitl/quickjs-wasmfile-debug-sync': 0.31.0
+      '@jitl/quickjs-wasmfile-release-asyncify': 0.31.0
+      '@jitl/quickjs-wasmfile-release-sync': 0.31.0
+      quickjs-emscripten-core: 0.31.0
 
   qunit-dom@3.5.1:
     dependencies:
