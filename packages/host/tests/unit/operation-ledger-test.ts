@@ -92,6 +92,7 @@ function setup(
   let sends: Sent[] = [];
   let applied: Harness['applied'] = [];
   let reloadSubscribers: ((instance: CardDef) => void)[] = [];
+  let lockQueue: Promise<unknown> = Promise.resolve();
   let harness = {
     instance,
     sends,
@@ -121,7 +122,17 @@ function setup(
       heldVersion = version;
       harness.recorded.push(version);
     },
-    withLock: async (_localId, fn) => await fn(),
+    // A real queue rather than a pass-through: what this suite needs to be
+    // able to say is that a save *waits*, and a stand-in that runs everything
+    // immediately cannot say it.
+    withLock: (_localId, fn) => {
+      let run = lockQueue.then(() => fn());
+      lockQueue = run.then(
+        () => undefined,
+        () => undefined,
+      );
+      return run;
+    },
     send: async (_realmURL, envelope, clientRequestId) => {
       let answer = new Deferred<OperationsAnswer>();
       sends.push({ envelope, clientRequestId, answer });
@@ -398,6 +409,67 @@ module('Unit | operation ledger', function () {
       'the third was never sent, so nothing was written for it',
     );
     assert.strictEqual(h.reloads, 1, 'the card was re-read once');
+  });
+
+  test('a save cannot run while operations are still pending', async function (assert) {
+    // The card carries every queued entry's effect as soon as it is queued, so
+    // while a chain is draining the instance holds work the realm has not been
+    // told about. A save that got the lock in between would serialize those
+    // effects and write them, and the entries still to send would then run
+    // their programs again on top — a relative program appends twice, and
+    // reconciliation cannot undo it: it reports that the file moved, which is
+    // true and too late.
+    let h = setup({ version: 'v1' });
+    let first = h.attempt({ body: 'one' });
+    let second = h.attempt({ body: 'two' });
+    await drain();
+
+    let saved = false;
+    let save = h.env.withLock('local-1', async () => {
+      saved = true;
+    });
+    await drain();
+    assert.false(
+      saved,
+      'the save waits, because the chain holds the card’s lock',
+    );
+
+    h.sends[0].answer.fulfill(answerWith({ version: 'v2', baseMatched: true }));
+    await first;
+    await drain();
+    assert.false(saved, 'still waiting with one entry left to send');
+
+    h.sends[1].answer.fulfill(answerWith({ version: 'v3', baseMatched: true }));
+    await second;
+    await drain();
+    await save;
+    assert.true(
+      saved,
+      'and runs once the chain has drained, over state the realm already has',
+    );
+  });
+
+  test('a rollback releases the card’s lock', async function (assert) {
+    // The lock is held for the chain's life, so every way a chain can end has
+    // to give it back — including the one that ends by re-reading the card and
+    // rejecting what was queued.
+    let h = setup({ version: 'v1' });
+    let first = h.attempt({ body: 'one' });
+    let second = h.attempt({ body: 'two' });
+    await drain();
+
+    h.sends[0].answer.fulfill(
+      answerWith({ version: 'v9', baseMatched: false }),
+    );
+    await first;
+    await rejection(second);
+    await drain();
+
+    let saved = false;
+    await h.env.withLock('local-1', async () => {
+      saved = true;
+    });
+    assert.true(saved, 'the lock was given back');
   });
 
   test('a fresh operation after a cascade is carried normally', async function (assert) {

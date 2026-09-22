@@ -3997,12 +3997,18 @@ export default class StoreService extends Service implements StoreInterface {
       { data: resource } as LooseSingleCardDocument,
       this.store,
     );
+    // The served metadata underneath, the serialization's on top. A
+    // serialization rebuilds `meta` from scratch and produces only what it can
+    // derive from the instance — `adoptsFrom`, the realm, and the per-field
+    // metadata, which the mutation legitimately moves. Everything else the card
+    // was served with (`realmInfo`, `lastModified`, `resourceCreatedAt`,
+    // `screenshots`, and the `version` / `generation` the next operation and
+    // the store's own event rules read) is absent from it, so assigning it
+    // wholesale would drop realm branding and modification times until
+    // something re-read the card.
     instance[meta] = {
+      ...held,
       ...instance[meta],
-      ...(held?.version === undefined ? {} : { version: held.version }),
-      ...(held?.generation === undefined
-        ? {}
-        : { generation: held.generation }),
     } as CardResourceMeta;
   }
 

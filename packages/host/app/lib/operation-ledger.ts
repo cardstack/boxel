@@ -134,6 +134,9 @@ interface Chain {
   version: string | undefined;
   applying: Promise<unknown>;
   sending: Promise<unknown>;
+  // The card's mutation lock, held for as long as anything is pending. See
+  // `#holdLock`.
+  lock: Deferred<void> | undefined;
 }
 
 const settledPromise = Promise.resolve();
@@ -253,6 +256,7 @@ export default class OperationLedger {
       return undefined;
     }
     chain.pending.push(entry);
+    this.#holdLock(chain, this.#env.localId(instance));
     let sent = chain.sending.then(() => this.#deliver(chain, entry));
     chain.sending = sent.then(ignore, ignore);
     // Nothing awaits `sent` here: the caller awaits the entry's own deferred,
@@ -265,65 +269,105 @@ export default class OperationLedger {
     return entry;
   }
 
+  // Take the card's mutation lock for as long as anything is pending, rather
+  // than around each send.
+  //
+  // An entry is applied to the live instance as soon as it is queued, so while
+  // a chain is draining the instance carries effects the realm has not been
+  // told about yet. An autosave that acquired the lock in between — triggered
+  // by the user editing any field — would serialize the whole instance, those
+  // effects included, and write them; the entries still to send would then run
+  // their programs a second time on top of a card that already has them. A
+  // relative program appends twice, and reconciliation cannot undo it: the base
+  // check reports that the file moved, which is true and too late.
+  //
+  // Held once for the chain, an autosave waits for the last entry to settle and
+  // then serializes state the realm already has.
+  #holdLock(chain: Chain, key: string) {
+    if (chain.lock) {
+      return;
+    }
+    let released = new Deferred<void>();
+    chain.lock = released;
+    // Not awaited: this call's purpose is to occupy the lock until the chain
+    // drains, and whoever queued behind it is released by `#releaseLock`.
+    void this.#env.withLock(key, () => released.promise).then(ignore, ignore);
+  }
+
+  #releaseLock(chain: Chain) {
+    if (chain.pending.length > 0 || !chain.lock) {
+      return;
+    }
+    chain.lock.fulfill();
+    chain.lock = undefined;
+  }
+
   // Send one entry and reconcile what comes back. Runs after every entry
-  // queued ahead of it on this card has settled.
+  // queued ahead of it on this card has settled, and under the lock the chain
+  // is already holding.
   async #deliver(chain: Chain, entry: LedgerEntry): Promise<OperationsAnswer> {
     if (!chain.pending.includes(entry)) {
       // Cancelled while it waited its turn: something ahead of it failed, or
       // reconciled against a base the realm had moved past, and this entry's
       // local effect went with the re-read that followed. Its caller has
       // already been told; this is the send not happening.
+      this.#releaseLock(chain);
       throw precedingFailed();
     }
-    return await this.#env.withLock(
-      this.#env.localId(entry.instance),
-      async () => {
-        // Read here rather than when the entry was queued: a foreign write in
-        // between re-read the card and cleared the chain's version, and the
-        // base this write names has to describe the bytes it was actually
-        // computed over.
-        let baseVersion =
-          chain.version ?? this.#env.heldVersion(entry.instance);
-        let envelope = baseVersion
-          ? this.#env.stamp(entry.envelope, baseVersion)
-          : entry.envelope;
-        entry.sent = true;
-        let answer: OperationsAnswer;
-        try {
-          answer = await this.#env.send(
-            entry.realmURL,
-            envelope,
-            entry.clientRequestId,
-          );
-        } catch (err: unknown) {
-          // The realm said nothing about what it now holds, so there is no
-          // version the next operation could name.
-          await this.#abort(chain, entry, undefined);
-          throw err;
-        }
-        let result = this.#env.writeResult(answer);
-        if (result?.baseMatched === true) {
-          this.#settleAt(chain, entry, result.version);
-          this.#retire(chain, entry);
-          return answer;
-        }
-        // The write landed either way — a moved base is not a refusal — so
-        // this entry's own call succeeds. What did not survive is the claim
-        // that local state equals the result, so the card is re-read and the
-        // entries queued behind it, which were computed on top of state that
-        // is now gone, are rejected.
-        //
-        // The version rides through the re-read. A write that is not confirmed
-        // still wrote, and the realm reported the version of the bytes it
-        // stored — which is exactly what the re-read then brings back, since a
-        // write resolves only once its indexing has settled. Dropping it would
-        // leave the next operation with no base to name either, and a card
-        // whose first unconfirmed write is its last confirmable one: the chain
-        // could never start.
-        await this.#abort(chain, entry, result?.version);
+    // A foreign re-read may be re-applying this very entry right now. Sending
+    // while that is in flight would mark it sent behind the rebase's back, and
+    // a re-application that then failed would reject a caller whose write is
+    // already on its way to the realm.
+    await chain.applying;
+    if (!chain.pending.includes(entry)) {
+      throw precedingFailed();
+    }
+    return await (async () => {
+      // Read here rather than when the entry was queued: a foreign write in
+      // between re-read the card and cleared the chain's version, and the
+      // base this write names has to describe the bytes it was actually
+      // computed over.
+      let baseVersion = chain.version ?? this.#env.heldVersion(entry.instance);
+      let envelope = baseVersion
+        ? this.#env.stamp(entry.envelope, baseVersion)
+        : entry.envelope;
+      entry.sent = true;
+      let answer: OperationsAnswer;
+      try {
+        answer = await this.#env.send(
+          entry.realmURL,
+          envelope,
+          entry.clientRequestId,
+        );
+      } catch (err: unknown) {
+        // The realm said nothing about what it now holds, so there is no
+        // version the next operation could name.
+        await this.#abort(chain, entry, undefined);
+        throw err;
+      }
+      let result = this.#env.writeResult(answer);
+      if (result?.baseMatched === true) {
+        this.#settleAt(chain, entry, result.version);
+        this.#retire(chain, entry);
+        this.#releaseLock(chain);
         return answer;
-      },
-    );
+      }
+      // The write landed either way — a moved base is not a refusal — so
+      // this entry's own call succeeds. What did not survive is the claim
+      // that local state equals the result, so the card is re-read and the
+      // entries queued behind it, which were computed on top of state that
+      // is now gone, are rejected.
+      //
+      // The version rides through the re-read. A write that is not confirmed
+      // still wrote, and the realm reported the version of the bytes it
+      // stored — which is exactly what the re-read then brings back, since a
+      // write resolves only once its indexing has settled. Dropping it would
+      // leave the next operation with no base to name either, and a card
+      // whose first unconfirmed write is its last confirmable one: the chain
+      // could never start.
+      await this.#abort(chain, entry, result?.version);
+      return answer;
+    })();
   }
 
   // Put the card back on authoritative state and fail everything still queued.
@@ -356,11 +400,16 @@ export default class OperationLedger {
         `could not re-read ${entry.instance.id} after an operation reconciled against a base the realm had moved past`,
         err,
       );
+      this.#releaseLock(chain);
       return;
     }
     if (version) {
       this.#settleAt(chain, entry, version);
     }
+    // Released after the re-read rather than before it, so an autosave cannot
+    // serialize the card in the window where local state is known wrong and
+    // the correction has not landed.
+    this.#releaseLock(chain);
   }
 
   // Record where the card now stands: on the chain, which is what the next
@@ -438,6 +487,7 @@ export default class OperationLedger {
         version: undefined,
         applying: settledPromise,
         sending: settledPromise,
+        lock: undefined,
       };
       this.#chains.set(key, chain);
     }
