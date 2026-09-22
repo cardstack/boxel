@@ -16,6 +16,11 @@ import { TextFileDef } from '@cardstack/base/text-file-def';
 // reached by name.
 export class AuditLog extends TextFileDef {
   static displayName = 'Audit Log';
+  // What the file chooser offers when someone links a log to a record.
+  // `TextFileDef` accepts `.txt`/`.text`, which are the extensions it is bound
+  // to by default — this realm binds `.log` instead, so inheriting that list
+  // would leave the picker unable to see the very files this type is for.
+  static acceptTypes = '.log,text/plain';
 
   // The caller says what happened. The realm says when, and who.
   //
