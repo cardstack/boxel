@@ -144,7 +144,16 @@ Three things about it are worth knowing before copying the pattern:
   or every card instance rather than a realm's own content. The binding is also
   realm-wide, which is why these logs use `.log` rather than `.txt`: every
   `.txt` in this realm would otherwise become an audit log, including a
-  hello-world file and three format-preview samples.
+  hello-world file and three format-preview samples. It also means one
+  extension maps to one class with no path scoping, so a second feature in
+  this realm wanting `.log` files would have to adopt `AuditLog` or pick a
+  different extension.
+
+- **Bind before the files are indexed, or expect a window.** A realm that adds
+  a binding to files it already holds keeps the old class in those rows until
+  the next pass re-indexes them, so a search by the bound type will not find
+  them yet. These fixtures are bound from the start, so the rows carry
+  `AuditLog` immediately.
 
 - **`appendLine` creates the file it appends to**, so nothing here has to
   exist first, and a binding adds a name rather than taking the base
