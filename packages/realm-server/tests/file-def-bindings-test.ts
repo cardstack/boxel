@@ -7,6 +7,7 @@ import {
   baseFileRef,
   parseFileDefBindings,
   readFileDefBindings,
+  boundFileDefCodeRef,
   resolveFileDefCodeRef,
   rri,
   VirtualNetwork,
@@ -278,6 +279,52 @@ module(basename(import.meta.filename), function () {
           `${path} is typed the same with an empty map as with none`,
         );
       }
+    });
+  });
+
+  // What a realm looks like between a binding being written and the re-index
+  // that re-types its already-stored files. The two readers that decide
+  // whether an operation is reachable — the class a served document names and
+  // the class dispatch resolves — both read the bindings live, so they move
+  // together; the row is what lags. Pinned here so a later change that makes
+  // the served class defer to the row again has to fail this.
+  module('before the files are re-indexed', function () {
+    let virtualNetwork = new VirtualNetwork();
+    let bindings: FileDefBindings = {
+      '.txt': { module: rri(`${REALM.href}audit-log`), name: 'AuditLog' },
+    };
+
+    test('a newly bound extension resolves to the realm\u2019s class at once', function (assert) {
+      assert.deepEqual(
+        resolveFileDefCodeRef(
+          new URL(`${REALM.href}audit.txt`),
+          virtualNetwork,
+          bindings,
+        ),
+        { module: rri(`${REALM.href}audit-log`), name: 'AuditLog' },
+        'nothing about this answer waits on a pass',
+      );
+    });
+
+    test('the binding is readable apart from the fallback it would take', function (assert) {
+      // `boundFileDefCodeRef` is what lets a served document prefer the realm
+      // over a row written before the binding existed: it answers only where
+      // the realm has spoken, so an unbound extension leaves the row in
+      // charge rather than being overwritten by the platform table.
+      assert.deepEqual(
+        boundFileDefCodeRef(new URL(`${REALM.href}audit.txt`), bindings),
+        { module: rri(`${REALM.href}audit-log`), name: 'AuditLog' },
+      );
+      assert.strictEqual(
+        boundFileDefCodeRef(new URL(`${REALM.href}notes.md`), bindings),
+        undefined,
+        'an extension the realm did not bind has no realm answer to prefer',
+      );
+      assert.strictEqual(
+        boundFileDefCodeRef(new URL(`${REALM.href}audit.txt`), undefined),
+        undefined,
+        'and neither does a realm that binds nothing',
+      );
     });
   });
 

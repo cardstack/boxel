@@ -25,7 +25,6 @@ import {
   resolveFileDefCodeRef,
 } from '../file-def-code-ref.ts';
 import { baseRef } from '../constants.ts';
-import { realmConfigHrefFor } from '../paths.ts';
 import { CARD_INSTANCE_FILE_KEY } from '../search-doc-keys.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 import type { FileDefBindings } from '../file-def-bindings.ts';
@@ -73,7 +72,7 @@ export async function performFileIndexing({
   resourceCreatedAt,
   hasModulePrerender,
   isCardInstance,
-  realmURL,
+  realmURL: _realmURL,
   auth: _auth,
   jobInfo,
   precomputedExtractResult,
@@ -206,29 +205,27 @@ export async function performFileIndexing({
   );
   let fileTypes = extractResult.types ?? fallbackTypes;
   let deps = new Set(extractResult.deps ?? []);
-  // The realm's config document, as a dependency of every file row.
+  // Deliberately NOT an edge to the realm's config document.
   //
-  // What a file's row says it is depends on the realm's `fileTypes` bindings,
-  // and the bindings reach the extract as a render parameter rather than as a
-  // module it fetches — so nothing else puts this edge in the graph, and
-  // without it editing a binding re-indexes the config card alone. Every
-  // already-stored file would keep the class it was last indexed as while
-  // dispatch resolved the new one, which is the disagreement the binding
-  // exists to prevent; and `enumerateFileRenderings` keys a file's fitted and
-  // embedded HTML on `types[0]`, so a skewed row would contribute no
-  // candidates at all and say nothing about why.
+  // A file's class depends on the realm's `fileTypes` bindings, so an edge
+  // from every file row to `realm.json` would make a binding edit re-index
+  // the files it re-types. It would also make every *other* edit to that
+  // document do the same, and those are the common ones — a rename, an icon
+  // or background change, a routing rule. Under such an edge a rename does
+  // not show its new name until every file in the realm has been re-indexed,
+  // which is a steep price on the frequent edit to buy something for the rare
+  // one.
   //
-  // Recorded for every file, not only for a bound one. A row indexed while the
-  // realm bound nothing is exactly the row that must be revisited when the
-  // realm binds its first extension, and a conditional edge is absent from
-  // precisely those rows — it would never heal.
-  //
-  // The config document's own file row is the exception, since an edge from it
-  // to itself is a cycle the invalidation walk has no reason to carry.
-  let realmConfigHref = realmConfigHrefFor(realmURL);
-  if (fileURL !== realmConfigHref) {
-    deps.add(realmConfigHref);
-  }
+  // What that edge would have bought is bounded, because `adoptsFrom` on a
+  // served file-meta document is resolved from the realm's live bindings
+  // ahead of the row (see `fileMetaDocumentFromIndex`): the class a client
+  // hydrates and the class an operation dispatches against agree from the
+  // moment a binding is written, with no pass in between. What lags a binding
+  // change until the next re-index is the row's `types` — so a search by the
+  // bound type does not find the file, and `enumerateFileRenderings`, which
+  // keys fitted and embedded HTML on `types[0]`, has no candidates under the
+  // new class. Editing bindings on a realm that already holds files therefore
+  // wants a realm re-index, which the `fileTypes` field says.
 
   // Shared by the success entry and the dependency-error entry below, so the
   // two rows carry the same search keys. Two of them are synthetic (stamped
