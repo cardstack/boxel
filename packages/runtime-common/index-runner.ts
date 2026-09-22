@@ -6,11 +6,12 @@ import { v4 as uuidv4 } from '@lukeed/uuid';
 
 import {
   logger,
-  hasExecutableExtension,
+  passInvalidatesExecutables,
   isCardResource,
   jobIdentity,
   Deferred,
   RealmPaths,
+  realmConfigHrefFor,
   type IndexWriter,
   type Batch,
   type LooseCardResource,
@@ -199,7 +200,21 @@ export class IndexRunner {
     fileErrors: 0,
     totalIndexEntries: 0,
   };
-  #shouldClearCacheForNextRender = true;
+  // Armed only by a pass whose invalidation set contains an executable — the
+  // same condition that mints a fresh loader epoch. A pass that touches no
+  // module has nothing to drop: the tab's evaluated graph still describes the
+  // modules on disk, and asking it to drop the graph costs a full re-fetch and
+  // re-evaluation of every module the first card reaches. That cost is
+  // amortized across a large pass and is the whole of a one-row pass, which is
+  // what a single card save produces.
+  #shouldClearCacheForNextRender = false;
+  // Unconditional, unlike the loader drop above: every pass sends this on its
+  // first render. Dropping the store is what stops a pass being handed an
+  // instance, a cached document, or a local-id pairing another pass left on
+  // the tab, and that is true whether or not any module changed. It is also
+  // cheap — the instances are rebuilt from documents the pass is fetching
+  // anyway — so there is nothing here to trade away.
+  #shouldResetStoreForNextRender = true;
   // Identifier for this runner's indexing batch (CS-10758 step 3).
   // Threaded into PrerenderVisitArgs and released from the fromScratch /
   // incremental finally blocks. One runner = one batch: if fromScratch
@@ -352,8 +367,14 @@ export class IndexRunner {
     invalidations = discoverResult.urls.map((href) => new URL(href));
     // The from-scratch URL list lives outside the batch's invalidation set
     // until each visit writes its row; feed the loader-epoch scan up front
-    // so the epoch is fixed before the enqueue and the first visit.
+    // so the epoch is fixed before the enqueue and the first visit. The
+    // loader reset reads the same list for the same reason: it is decided
+    // before the first visit, and `batch.invalidations` is empty until that
+    // visit has already been dispatched.
     current.batch.noteInvalidatedURLs(discoverResult.urls);
+    if (passInvalidatesExecutables(discoverResult.urls)) {
+      current.#scheduleClearCacheForNextRender();
+    }
     current.#perfLog.debug(
       `${jobIdentity(current.#jobInfo)} completed invalidations in ${discoverMs} ms`,
     );
@@ -590,10 +611,7 @@ export class IndexRunner {
             invalidations,
           );
         orderMs = Date.now() - orderStart;
-        let hasExecutableInvalidation = invalidations.some((url) =>
-          hasExecutableExtension(url.href),
-        );
-        if (hasExecutableInvalidation) {
+        if (passInvalidatesExecutables(invalidations.map((url) => url.href))) {
           if (!current.#shouldClearCacheForNextRender) {
             current.#log.debug(
               `${jobIdentity(current.#jobInfo)} detected executable invalidation, scheduling loader reset`,
@@ -771,6 +789,7 @@ export class IndexRunner {
         prerenderer: this.#prerenderer,
         virtualNetwork: this.#virtualNetwork,
         consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
+        consumeResetStoreForRender: () => this.#consumeResetStoreForRender(),
         logDebug: (message) => this.#log.debug(message),
         logWarn: (message) => this.#log.warn(message),
       });
@@ -1147,6 +1166,14 @@ export class IndexRunner {
     return true;
   }
 
+  #consumeResetStoreForRender(): boolean {
+    if (!this.#shouldResetStoreForNextRender) {
+      return false;
+    }
+    this.#shouldResetStoreForNextRender = false;
+    return true;
+  }
+
   private get ignoreMap() {
     if (this.#ignoreMap) {
       return this.#ignoreMap;
@@ -1453,10 +1480,6 @@ function visitClassRank(url: URL, realmConfigHref: string): number {
     return 0;
   }
   return url.href.endsWith('.json') ? 2 : 1;
-}
-
-function realmConfigHrefFor(realmURL: URL): string {
-  return new RealmPaths(realmURL).fileURL('realm.json').href;
 }
 
 function sortInvalidations(urls: URL[], realmURL: URL): URL[] {

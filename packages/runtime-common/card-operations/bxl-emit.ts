@@ -80,14 +80,17 @@ export function checkMutationProgram(
   }
 }
 
-// Canonicalize and syntax-check a single BXL expression — the `input` and
-// `output` stages, which shape a payload and project a result rather than
-// planning a write.
+// Canonicalize and check a single BXL expression — the `input` and `output`
+// stages, which shape a payload and project a result rather than planning a
+// write.
 //
-// The `compute` profile is the permissive one: an expression here may read
-// the request context (`params()`, `actor()`, `instance()`) and may be
-// volatile. Volatility is not an error, it is recorded — see
-// `usesVolatileCall`.
+// BXL's `transform` profile is enforced here, which is the same profile the
+// realm runs these programs under. Enforcing it at the declaration is what
+// turns a program reaching outside the dialect into a lowering issue the
+// author sees against their own edit, rather than a refusal at whichever
+// invocation first ran it. The profile allows the request context
+// (`params()`, `actor()`, `instance()`) and allows a volatile call, which is
+// not an error but is recorded — see `usesVolatileCall`.
 export function checkExpressionProgram(source: string): ProgramCheck {
   let canonical: string;
   try {
@@ -95,10 +98,18 @@ export function checkExpressionProgram(source: string): ProgramCheck {
   } catch (err: any) {
     return { error: err?.message ?? String(err) };
   }
+  let issues: { severity: string; code: string; message: string }[];
   try {
-    parseBxlAst(canonical, { readableSyntax: false, profile: 'compute' });
+    issues = parseBxlAst(canonical, {
+      readableSyntax: false,
+      profile: 'transform',
+    }).profileIssues;
   } catch (err: any) {
     return { error: err?.message ?? String(err) };
+  }
+  let errors = issues.filter((issue) => issue.severity === 'error');
+  if (errors.length > 0) {
+    return { error: errors.map((issue) => issue.message).join(' ') };
   }
   return { source: canonical };
 }

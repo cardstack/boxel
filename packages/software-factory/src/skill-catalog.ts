@@ -217,8 +217,12 @@ function readFrontmatterDescription(block: string): string | undefined {
   }
 
   let value = lines[index].slice('description:'.length).trim();
-  if (!/^[>|][-+]?$/.test(value)) {
-    return value;
+  // `>`/`|`, optionally followed by a chomping (`-`/`+`) and/or indentation
+  // (`1`-`9`) indicator, means the value is the indented block that follows.
+  // Anything else is a plain scalar whose wrapping quotes, if any, are not
+  // part of the value.
+  if (!/^[>|][0-9+-]*$/.test(value)) {
+    return value.replace(/^(['"])(.*)\1$/, '$2');
   }
 
   let folded = value.startsWith('>');

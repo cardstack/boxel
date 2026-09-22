@@ -78,6 +78,12 @@ import {
   type FileDef,
 } from './card-api';
 import { MarkdownDef } from './markdown-file-def'; // realm README
+// Content-only markdown renderer: the README's prose with no file shell chrome
+// (no file bar, metadata, or fixed-height scroll box). The card owns the frame.
+// Imported from its own module rather than the `file-formats/index` barrel,
+// which would also pull the audio renderer and the metadata field shapes into
+// this card's graph for nothing.
+import { MarkdownPreview } from './file-formats/markdown-preview';
 import type { RealmEventContent } from './matrix-event';
 import type { Spec } from './spec';
 import { now as clockNow, nowDate } from './helpers/clock';
@@ -657,7 +663,13 @@ class Isolated extends Component<typeof Workspace> {
                 realm that just got cloned or remixed. }}
                   {{#if @model.readme}}
                     <div class='readme-embed'>
-                      <@fields.readme @format='embedded' />
+                      <div class='readme-body'>
+                        <MarkdownPreview
+                          @model={{@model.readme}}
+                          @format='isolated'
+                          @displayContainer={{false}}
+                        />
+                      </div>
                     </div>
                   {{else}}
                     <p class='welcome-copy'>This space holds cards — documents,
@@ -693,7 +705,13 @@ class Isolated extends Component<typeof Workspace> {
                       class='readme-embed
                         {{unless this.readmeExpanded "collapsed"}}'
                     >
-                      <@fields.readme @format='embedded' />
+                      <div class='readme-body'>
+                        <MarkdownPreview
+                          @model={{@model.readme}}
+                          @format='isolated'
+                          @displayContainer={{false}}
+                        />
+                      </div>
                     </div>
                     <button
                       type='button'
@@ -2279,27 +2297,33 @@ class Isolated extends Component<typeof Workspace> {
         font: 400 14px/1.6 var(--grid-sans);
         color: var(--grid-ink-body);
       }
-      /* README rendering: hero on empty spaces, collapsed once pinned */
+      /* README rendering: the realm's markdown document, content-only (no file
+         shell chrome). The card owns its own frame and its own collapse clamp,
+         so nothing reaches into the renderer's markup. */
       .readme-embed {
         position: relative;
         width: 100%;
         max-width: 720px;
-      }
-      .readme-embed :deep(.boxel-card-container) {
         border: 1px solid var(--grid-border);
         border-radius: 12px;
         box-shadow: var(--grid-shadow-rest);
+        /* The card's own light tier, like every other panel here: the markdown
+           inherits this stylesheet's fixed --grid-ink, so a surface that moved
+           with the theme would leave the two on different schemes. */
+        background-color: var(--grid-surface);
+        overflow: hidden;
       }
-      /* b MarkdownDef's embedded format self-caps its content at 200px
-         with a fade mask (base def scoped style). Collapsed state = that
-         built-in preview. Everywhere else — hero on unpinned realms, or
-         after Read more — lift the inner cap so the whole document renders
-         inline. The extra .markdown-embedded hop outranks the scoped rule. */
-      .readme-embed:not(.collapsed)
-        :deep(.markdown-embedded .markdown-embedded__content) {
-        max-height: none;
-        mask-image: none;
-        -webkit-mask-image: none;
+      .readme-body {
+        padding: 20px 24px;
+      }
+      /* Collapsed (About this space, before Read more): bound the height and
+         fade the cut so it reads as "more below". The empty-space hero and the
+         expanded state render the whole document. */
+      .readme-embed.collapsed .readme-body {
+        max-height: 200px;
+        overflow: hidden;
+        -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent);
+        mask-image: linear-gradient(to bottom, #000 72%, transparent);
       }
       .readme-toggle {
         justify-self: start;

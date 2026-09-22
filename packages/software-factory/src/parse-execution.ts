@@ -28,9 +28,9 @@ import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { specRef } from '@cardstack/runtime-common/constants';
 import { PREFIX_REALMS } from '@cardstack/runtime-common/realm-prefixes';
 import {
-  cacheDirForPrefix,
-  fetchRealmSources,
-} from '@cardstack/runtime-common/realm-source-cache';
+  REALM_CACHE_DIR,
+  stageRealmSources,
+} from '@cardstack/runtime-common/realm-source-staging';
 
 import { logger } from './logger.ts';
 import type {
@@ -76,12 +76,6 @@ const HOST_PKG_PATH = join(PACKAGES_PATH, 'host');
  * type declarations that realm .gts files import from.
  */
 const NODE_MODULES_PATH = join(HOST_PKG_PATH, 'node_modules');
-
-/**
- * Where fetched realm module sources land inside a run's temp dir. A `paths`
- * alias points each realm prefix at a subdirectory of this.
- */
-const REALM_CACHE_DIR = '.realm-sources';
 
 /**
  * The realm prefixes a card may import, minus the base realm.
@@ -619,93 +613,6 @@ export async function runParseInMemory(
  * 4. Parses the output for errors originating from the temp directory
  * 5. Maps errors back to original realm file paths
  */
-/**
- * Fetch the realm modules the files import and write them into the run's temp
- * dir, returning the `paths` entries that alias each prefix at them.
- *
- * A prefix that could not be fetched is returned in `shimmedPrefixes` instead
- * of aliased. Degrading is the point: a realm being briefly unreachable must
- * not turn a correct card red, and the shim still carries field, component and
- * command reuse.
- */
-async function stageRealmSources(
-  tempDir: string,
-  files: { path: string; content: string }[],
-  options: RunGlintCheckOptions,
-): Promise<{
-  realmPaths: Record<string, string[]>;
-  shimmedPrefixes: string[];
-}> {
-  let referenced = RESOLVABLE_PREFIXES.filter((prefix) =>
-    files.some((file) => file.content.includes(prefix)),
-  );
-  if (referenced.length === 0) {
-    return { realmPaths: {}, shimmedPrefixes: [] };
-  }
-
-  if (!options.targetRealm) {
-    log.warn(
-      `Realm-prefixed imports (${referenced.join(', ')}) but no target realm to resolve them against — falling back to the ambient shim.`,
-    );
-    return { realmPaths: {}, shimmedPrefixes: referenced };
-  }
-
-  // Every prefix realm is served on the target's own origin under its own
-  // name, which is the same assumption `deriveCatalogRealmUrl` makes.
-  let prefixRealmURLs = Object.fromEntries(
-    referenced.map((prefix) => [
-      prefix,
-      new URL(`/${cacheDirForPrefix(prefix)}/`, options.targetRealm).href,
-    ]),
-  );
-
-  let result: Awaited<ReturnType<typeof fetchRealmSources>>;
-  try {
-    result = await fetchRealmSources({
-      entries: files,
-      prefixRealmURLs,
-      fetch: options.fetchFn,
-    });
-  } catch (error: unknown) {
-    log.warn(
-      `Could not fetch realm sources (${error instanceof Error ? error.message : String(error)}) — falling back to the ambient shim.`,
-    );
-    return { realmPaths: {}, shimmedPrefixes: referenced };
-  }
-
-  for (let [cachePath, source] of result.modules) {
-    let absolutePath = resolve(join(tempDir, REALM_CACHE_DIR, cachePath));
-    if (!absolutePath.startsWith(join(tempDir, REALM_CACHE_DIR) + '/')) {
-      log.warn(`Skipping realm module with unsafe path: ${cachePath}`);
-      continue;
-    }
-    mkdirSync(dirname(absolutePath), { recursive: true });
-    writeFileSync(absolutePath, source, 'utf8');
-  }
-
-  if (result.failures.length > 0) {
-    log.warn(
-      `Could not fetch ${result.failures.length} realm module(s): ${result.failures
-        .map((f) => `${f.specifier} (${f.reason})`)
-        .join(', ')}`,
-    );
-  }
-
-  let realmPaths: Record<string, string[]> = {};
-  for (let prefix of result.resolvedPrefixes) {
-    realmPaths[`${prefix}*`] = [
-      `${join(tempDir, REALM_CACHE_DIR, cacheDirForPrefix(prefix))}/*`,
-    ];
-  }
-
-  return {
-    realmPaths,
-    shimmedPrefixes: referenced.filter(
-      (prefix) => !result.resolvedPrefixes.includes(prefix),
-    ),
-  };
-}
-
 export interface RunGlintCheckOptions {
   /**
    * The realm the files belong to. Its origin is where realm-prefixed imports
@@ -735,27 +642,14 @@ export async function runGlintCheck(
       writeFileSync(resolved, file.content, 'utf8');
     }
 
-    let { realmPaths, shimmedPrefixes } = await stageRealmSources(
+    let { realmPaths } = await stageRealmSources({
       tempDir,
       files,
-      options,
-    );
-
-    if (shimmedPrefixes.length > 0) {
-      // Bodiless is the only form that works: a `const v: any` body leaves
-      // named imports unresolved, and `export =` is rejected under
-      // `module: es2022`. This types every import from the prefix as `any`,
-      // which carries field, component and command reuse but not card-level
-      // adoption — a subclass that declares a template still needs the real
-      // static side.
-      writeFileSync(
-        join(tempDir, 'realm-shims.d.ts'),
-        shimmedPrefixes
-          .map((prefix) => `declare module '${prefix}*';`)
-          .join('\n') + '\n',
-        'utf8',
-      );
-    }
+      prefixes: RESOLVABLE_PREFIXES,
+      origin: options.targetRealm,
+      fetchFn: options.fetchFn,
+      onWarn: (message) => log.warn(message),
+    });
 
     {
       let tsconfig = {
@@ -786,6 +680,18 @@ export async function runGlintCheck(
             '@cardstack/boxel-ui/*': [
               `${join(PACKAGES_PATH, 'boxel-ui', 'src')}/*`,
             ],
+            // Map icons to their committed .gts sources. Without this the
+            // import resolves through the package's exports map, whose types
+            // live in the gitignored `declarations/` build output — in an
+            // environment with `dist/` built but no `declarations/` (CI's
+            // restored web-assets artifact), the import falls through to the
+            // untyped rollup JS, every icon types as `object`, and each
+            // unannotated `static icon = X` in the base package breaks its
+            // class's `typeof BaseDef` constraint.
+            '@cardstack/boxel-icons/*': [
+              `${join(PACKAGES_PATH, 'boxel-icons', 'src', 'icons')}/*`,
+              `${join(PACKAGES_PATH, 'boxel-icons', 'src')}/*`,
+            ],
             '*': [`${HOST_PKG_PATH}/types/*`],
           },
         },
@@ -808,13 +714,22 @@ export async function runGlintCheck(
       '.bin',
       'ember-tsc',
     );
+    // SF_PARSE_DEBUG dumps the raw compiler output plus the program-membership
+    // ("--explainFiles") entries for the packages whose duplication produces
+    // nominal type mismatches. For diagnosing environment-specific gate
+    // failures; off in normal operation.
+    let debug = !!process.env.SF_PARSE_DEBUG;
+    let tscArgs = ['--noEmit', '--project', join(tempDir, 'tsconfig.json')];
+    if (debug) {
+      tscArgs.push('--explainFiles');
+    }
     let { output, exitedWithError } = await new Promise<{
       output: string;
       exitedWithError: boolean;
     }>((resolvePromise, reject) => {
       let child = execFile(
         emberTscBin,
-        ['--noEmit', '--project', join(tempDir, 'tsconfig.json')],
+        tscArgs,
         {
           cwd: tempDir,
           timeout: 120_000,
@@ -837,19 +752,53 @@ export async function runGlintCheck(
       );
     });
 
+    if (debug) {
+      // Non-indented lines are either diagnostics or (--explainFiles) program
+      // file paths; indented lines belong to the preceding one (elaboration or
+      // inclusion reason). Print every diagnostic and the entries for the
+      // packages prone to duplicate-copy mismatches.
+      let interesting = /@glint|@glimmer|card-api|ember-provide-consume/;
+      let keep = false;
+      for (let line of output.split('\n')) {
+        if (/^\S/.test(line)) {
+          keep = /error TS/.test(line) || interesting.test(line);
+        }
+        if (keep && line.trim()) {
+          console.error(`[SF_PARSE_DEBUG] ${line}`);
+        }
+      }
+    }
+
     let errors: ParseErrorData[] = [];
     let totalDiagnosticLines = 0;
     let lines = output.split('\n');
+
+    // tsc elaborates many diagnostics ("Types of property 'x' are
+    // incompatible.", "Type 'A' is not assignable to type 'B'.") as indented
+    // continuation lines under the error line. Those name the actual
+    // incompatibility, so fold them into the error's message instead of
+    // dropping them.
+    let current: ParseErrorData | null = null;
 
     for (let line of lines) {
       let match = line.match(
         /^(.+?)\((\d+),(\d+)\):\s*error\s+(TS\d+):\s*(.+)/,
       );
       if (!match) {
+        if (current && /^\s+\S/.test(line)) {
+          current.message += `\n${line.trimEnd()}`;
+        } else if (/^\S/.test(line)) {
+          // A non-indented line that isn't a diagnostic — e.g. an
+          // --explainFiles program-file path under SF_PARSE_DEBUG — ends the
+          // previous diagnostic. Clear `current` so the indented inclusion
+          // reasons that follow it don't fold into an unrelated error.
+          current = null;
+        }
         continue;
       }
 
       totalDiagnosticLines++;
+      current = null;
 
       let [, filePath, lineStr, colStr, tsCode, message] = match;
 
@@ -868,12 +817,13 @@ export async function runGlintCheck(
         continue;
       }
 
-      errors.push({
+      current = {
         file: originalFile.path,
         line: parseInt(lineStr, 10),
         column: parseInt(colStr, 10),
         message,
-      });
+      };
+      errors.push(current);
     }
 
     if (exitedWithError && errors.length === 0 && totalDiagnosticLines === 0) {

@@ -1002,4 +1002,22 @@ module('skill-catalog > descriptions', function () {
     let entries = await catalogSkills([dir]);
     assert.strictEqual(entries[0].description, 'Just one line.');
   });
+
+  // The README reader strips wrapping quotes from a plain description; the
+  // catalog reader must match it so `list_skills` and the generated table
+  // advertise the same text.
+  test('a quoted single-line description drops its wrapping quotes', async function (assert) {
+    let dir = await mkdtemp(join(tmpdir(), 'skills-'));
+    await mkdir(join(dir, 'quoted'), { recursive: true });
+    await writeFile(
+      join(dir, 'quoted', 'SKILL.md'),
+      ['---', 'name: quoted', 'description: "A quoted line."', '---', ''].join(
+        '\n',
+      ),
+      'utf8',
+    );
+
+    let entries = await catalogSkills([dir]);
+    assert.strictEqual(entries[0].description, 'A quoted line.');
+  });
 });

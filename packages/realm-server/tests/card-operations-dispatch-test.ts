@@ -151,6 +151,13 @@ function stub(opts: StubOptions = {}): Stub {
       },
     },
     indexQueryEngine: {
+      // A query is how an entry that describes its target finds one. Dispatch
+      // is handed a target that is already settled, so reaching this is the
+      // stub reporting that something asked the index a question it had no
+      // business asking.
+      async searchEntries() {
+        throw new Error('dispatch searched the index');
+      },
       async cardDocument(url) {
         calls.push('cardDocument');
         if (document === 'missing' || !isCanonicalKey(url)) {
@@ -300,6 +307,10 @@ function stub(opts: StubOptions = {}): Stub {
         content: file.createRangeStream(0, file.size - 1),
       });
       return { version: fromRanges, createdAt };
+    },
+    async realmConfig() {
+      calls.push('realmConfig');
+      return {};
     },
     async isIgnored() {
       return false;
@@ -722,13 +733,15 @@ module(basename(import.meta.filename), function () {
     });
     test('a declared read the executor cannot carry out is refused', async function (assert) {
       // Serving the plain document would be a well-formed answer to a different
-      // question than the declaration asked.
+      // question than the declaration asked. The two transform stages are
+      // carried out — see `card-operations-transforms-test.ts` — so what is
+      // left is a program over the target, which a read does not run.
       let { core } = stub({
         operations: {
           summary: {
             base: 'read',
             deterministic: true,
-            output: { source: 'PROJECT(.title)', syntax: 'solidified' },
+            program: { source: '.title = "x";', syntax: 'solidified' },
           },
         },
       });
@@ -737,7 +750,7 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(error.status, 501);
       assert.true(
-        error.detail.includes('output'),
+        error.detail.includes('program'),
         `the refusal names the stage: ${error.detail}`,
       );
     });
@@ -796,6 +809,7 @@ module(basename(import.meta.filename), function () {
         headersOnly: true,
       });
       assert.deepEqual(fromRow, {
+        projected: false,
         type: 'file-meta',
         indexedAt: 1700,
         lastModified: 1699,
@@ -816,6 +830,7 @@ module(basename(import.meta.filename), function () {
         headersOnly: true,
       });
       assert.deepEqual(fromDisk, {
+        projected: false,
         type: 'file-meta',
         indexedAt: null,
         lastModified: 42,
@@ -852,7 +867,7 @@ module(basename(import.meta.filename), function () {
         read: {
           base: 'read' as const,
           deterministic: true,
-          output: { source: 'PROJECT(.title)', syntax: 'solidified' as const },
+          program: { source: '.title = "x";', syntax: 'solidified' as const },
         },
       };
       for (let spelling of [
@@ -997,17 +1012,11 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(error.status, 400);
     });
     test('a read refuses any clause it does not carry out', async function (assert) {
-      // Not only the program stages: a declaration rebound onto `read` may carry
-      // a clause belonging to the base it came from, and ignoring it is the same
-      // failure as ignoring a projection.
-      for (let clause of [
-        'program',
-        'input',
-        'output',
-        'fill',
-        'of',
-        'query',
-      ]) {
+      // Not only the program: a declaration rebound onto `read` may carry a
+      // clause belonging to the base it came from, and ignoring it is the same
+      // failure as ignoring a projection. `input` and `output` are absent
+      // because a read runs both.
+      for (let clause of ['program', 'fill', 'of', 'query']) {
         let { core } = stub({
           operations: {
             look: {

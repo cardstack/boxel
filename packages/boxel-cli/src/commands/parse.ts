@@ -16,9 +16,9 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import {
-  cacheDirForPrefix,
-  fetchRealmSources,
-} from '@cardstack/runtime-common/realm-source-cache';
+  REALM_CACHE_DIR,
+  stageRealmSources,
+} from '@cardstack/runtime-common/realm-source-staging';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
 import {
@@ -188,12 +188,6 @@ const CLI_DEPENDENCY_PACKAGES = (() => {
 })();
 
 /**
- * Where fetched realm module sources land inside a parse run's temp dir. A
- * `paths` alias points each realm prefix at a subdirectory of this.
- */
-const REALM_CACHE_DIR = '.realm-sources';
-
-/**
  * The realm prefixes a card may import and this command can fetch.
  *
  * Spelled out here rather than imported from
@@ -288,17 +282,10 @@ async function retryWithPoll<T>(
  * available means the imports get the shim.
  */
 function realmOriginForPrefixes(
-  normalizedRealmUrl: string,
+  realmUrl: string | undefined,
   pm: ProfileManager,
 ): string | undefined {
-  if (normalizedRealmUrl) {
-    return normalizedRealmUrl;
-  }
-  try {
-    return pm.getActiveProfile()?.profile.realmServerUrl ?? undefined;
-  } catch {
-    return undefined;
-  }
+  return realmUrl || pm.getActiveProfile()?.profile.realmServerUrl;
 }
 
 // ---------------------------------------------------------------------------
@@ -678,75 +665,6 @@ interface RunGlintCheckOptions {
   fetchFn?: typeof globalThis.fetch;
 }
 
-/**
- * Fetch the realm modules these files import and write them into the parse
- * workspace, returning the `paths` entries aliasing each prefix at them.
- *
- * A prefix that could not be fetched is shimmed instead. Degrading matters
- * more here than completeness: `boxel parse` is the loop an author runs by
- * hand, and a gate that goes red because a realm was briefly unreachable
- * reports a problem in code that is correct.
- */
-async function stageRealmSources(
-  tempDir: string,
-  files: { path: string; content: string }[],
-  options: RunGlintCheckOptions,
-): Promise<{
-  realmPaths: Record<string, string[]>;
-  shimmedPrefixes: string[];
-}> {
-  let referenced = RESOLVABLE_PREFIXES.filter((prefix) =>
-    files.some((file) => file.content.includes(prefix)),
-  );
-  if (referenced.length === 0) {
-    return { realmPaths: {}, shimmedPrefixes: [] };
-  }
-  if (!options.realmOrigin) {
-    return { realmPaths: {}, shimmedPrefixes: referenced };
-  }
-
-  let prefixRealmURLs = Object.fromEntries(
-    referenced.map((prefix) => [
-      prefix,
-      new URL(`/${cacheDirForPrefix(prefix)}/`, options.realmOrigin).href,
-    ]),
-  );
-
-  let result;
-  try {
-    result = await fetchRealmSources({
-      entries: files,
-      prefixRealmURLs,
-      fetch: options.fetchFn,
-    });
-  } catch {
-    return { realmPaths: {}, shimmedPrefixes: referenced };
-  }
-
-  for (let [cachePath, source] of result.modules) {
-    let absolutePath = resolve(join(tempDir, REALM_CACHE_DIR, cachePath));
-    if (!absolutePath.startsWith(join(tempDir, REALM_CACHE_DIR) + '/')) {
-      continue;
-    }
-    mkdirSync(dirname(absolutePath), { recursive: true });
-    writeFileSync(absolutePath, source, 'utf8');
-  }
-
-  let realmPaths: Record<string, string[]> = {};
-  for (let prefix of result.resolvedPrefixes) {
-    realmPaths[`${prefix}*`] = [
-      `${join(tempDir, REALM_CACHE_DIR, cacheDirForPrefix(prefix))}/*`,
-    ];
-  }
-
-  return {
-    realmPaths,
-    shimmedPrefixes: referenced.filter(
-      (prefix) => !result.resolvedPrefixes.includes(prefix),
-    ),
-  };
-}
-
 async function runGlintCheck(
   files: { path: string; content: string }[],
   glintOptions: RunGlintCheckOptions = {},
@@ -770,24 +688,14 @@ async function runGlintCheck(
       writeFileSync(resolved, file.content, 'utf8');
     }
 
-    let { realmPaths, shimmedPrefixes } = await stageRealmSources(
+    let { realmPaths } = await stageRealmSources({
       tempDir,
       files,
-      glintOptions,
-    );
-
-    if (shimmedPrefixes.length > 0) {
-      // Bodiless is the only declaration form that works: a `const v: any`
-      // body leaves named imports unresolved, and `export =` is rejected
-      // under `module: es2022`.
-      writeFileSync(
-        join(tempDir, 'realm-shims.d.ts'),
-        shimmedPrefixes
-          .map((prefix) => `declare module '${prefix}*';`)
-          .join('\n') + '\n',
-        'utf8',
-      );
-    }
+      prefixes: RESOLVABLE_PREFIXES,
+      origin: glintOptions.realmOrigin,
+      fetchFn: glintOptions.fetchFn,
+      onWarn: (message) => cliLog.warn(message),
+    });
 
     {
       let tsconfig = {

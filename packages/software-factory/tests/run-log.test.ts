@@ -803,8 +803,11 @@ module('run-log > autolinkCardReferences directives', function () {
 // literal, invisible to this package's own build.
 module('run-log > seeded module', function () {
   test('passes the parse gate', async function (assert) {
-    // ember-tsc caps itself at 120s; match that rather than QUnit's default.
-    assert.timeout(120_000);
+    // ember-tsc caps itself at 120s, but that clock starts only after the temp
+    // dir, files, and node_modules symlink are in place — strictly after
+    // QUnit's would. Give QUnit slack above 120s so a hung compile surfaces as
+    // the gate's own "ember-tsc was killed" rejection, not a bare QUnit timeout.
+    assert.timeout(130_000);
     let errors = await runGlintCheck([
       { path: 'run-log.gts', content: RUN_LOG_GTS },
     ]);

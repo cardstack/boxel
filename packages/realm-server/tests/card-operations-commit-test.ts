@@ -1800,6 +1800,69 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('the first line creates the file, which the realm announces as added', async function (assert) {
+    let since = Date.now();
+    let jobsBefore = await indexJobIds();
+    assert.false(
+      existsSync(realmFile('created.log')),
+      'the path holds nothing before the append',
+    );
+
+    let [result] = await commit(
+      [
+        {
+          op: 'appendLine',
+          href: `${testRealmHref}created.log`,
+          params: { line: 'deploy 41' },
+        },
+      ],
+      'append-creates',
+    );
+
+    assert.strictEqual(
+      readFileSync(realmFile('created.log'), 'utf8'),
+      'deploy 41\n',
+      'the file holds the line and its terminator and nothing else, so the ' +
+        'first append wrote a file rather than adding to one',
+    );
+    assert.strictEqual(
+      result?.meta.version,
+      computeContentHash('deploy 41\n'),
+      'and the version reported is the one those bytes hash to',
+    );
+
+    // Which of the two the realm says it did is the whole difference between
+    // a file the batch created and one it added to, and a subscriber acts on
+    // it: a path it has never seen arriving as an update names a file it
+    // holds nothing for.
+    await waitUntil(
+      async () =>
+        eventsNaming(await realmEventsSince(since), 'created.log').length > 0,
+    );
+    let updates = (await realmEventsSince(since)).filter(
+      (event) => event.eventName === 'update',
+    );
+    assert.deepEqual(
+      updates.flatMap((event) => event.added ?? []),
+      ['created.log'],
+      'the realm announces the path as an added file',
+    );
+    assert.deepEqual(
+      updates.flatMap((event) => event.updated ?? []),
+      [],
+      'and not as an updated one',
+    );
+
+    let newJobs = (await indexJobIds()).filter(
+      (id) => !jobsBefore.includes(id),
+    );
+    assert.strictEqual(
+      newJobs.length,
+      1,
+      `the created file is indexed like any other write (got ${newJobs.length})`,
+    );
+  });
+
   test('a line is appended to a text file, and to nothing else', async function (assert) {
     let png = readFileSync(realmFile('chart.png'), 'utf8');
     let card = readFileSync(realmFile('file-update-refused.json'), 'utf8');

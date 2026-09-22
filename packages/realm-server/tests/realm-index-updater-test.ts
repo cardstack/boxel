@@ -24,9 +24,9 @@ const serializedWorkerError: PgPrimitive = {
   errno: -2,
 };
 
-function makeStubRealm(): Realm {
+function makeStubRealm(url: string = realmURL): Realm {
   return {
-    url: realmURL,
+    url,
     getRealmOwnerUsername: async () => 'test_user',
   } as unknown as Realm;
 }
@@ -265,6 +265,297 @@ module(basename(import.meta.filename), function (hooks) {
 
     waiters[0].rejectFromResult(serializedWorkerError);
     await updater.incrementalIndexing();
+  });
+
+  test('an instance-only pass is outside the write-path gate', async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    let { settled } = await updater.enqueueUpdate([
+      new URL(`${realmURL}Person/mango.json`),
+    ]);
+    settled.catch(() => {});
+
+    assert.notStrictEqual(
+      updater.incrementalIndexing(),
+      undefined,
+      'the pass really is in flight — the wide gate sees it',
+    );
+    assert.strictEqual(
+      updater.incrementalIndexingAffectingStaging(),
+      undefined,
+      'a fan-out that touched no module gates no writer',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await updater.incrementalIndexing();
+  });
+
+  test('a pass that wrote a module holds the write-path gate', async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    let { settled } = await updater.enqueueUpdate([
+      new URL(`${realmURL}person.gts`),
+    ]);
+    settled.catch(() => {});
+
+    let gate = updater.incrementalIndexingAffectingStaging();
+    assert.notStrictEqual(
+      gate,
+      undefined,
+      'a module write is what a staging write waits for',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await gate;
+
+    assert.strictEqual(
+      updater.incrementalIndexingAffectingStaging(),
+      undefined,
+      'the gate drains once the module pass settles',
+    );
+  });
+
+  test('a module removal holds the write-path gate as a module write does', async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    let { settled } = await updater.enqueueUpdate(
+      [new URL(`${realmURL}person.gts`)],
+      { delete: true },
+    );
+    settled.catch(() => {});
+
+    assert.notStrictEqual(
+      updater.incrementalIndexingAffectingStaging(),
+      undefined,
+      'a module that is gone changes what resolves just as one that moved does',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await updater.incrementalIndexing();
+  });
+
+  test('a change set that mixes a module with instances holds the gate', async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    let { settled } = await updater.enqueueChanges([
+      { url: new URL(`${realmURL}Person/mango.json`), operation: 'update' },
+      { url: new URL(`${realmURL}person.gts`), operation: 'update' },
+    ]);
+    settled.catch(() => {});
+
+    assert.notStrictEqual(
+      updater.incrementalIndexingAffectingStaging(),
+      undefined,
+      'one module anywhere in the change set is enough',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await updater.incrementalIndexing();
+  });
+
+  test('an instance-only pass does not keep the write-path gate open after a module pass settles', async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    let modulePass = await updater.enqueueUpdate([
+      new URL(`${realmURL}person.gts`),
+    ]);
+    modulePass.settled.catch(() => {});
+    let instancePass = await updater.enqueueUpdate([
+      new URL(`${realmURL}Person/mango.json`),
+    ]);
+    instancePass.settled.catch(() => {});
+
+    assert.notStrictEqual(
+      updater.incrementalIndexingAffectingStaging(),
+      undefined,
+      'the module pass holds the gate',
+    );
+
+    // Only the module pass settles; the instance pass stays in flight. Awaited
+    // through the job's own promise rather than through the gate: a gate that
+    // was not narrowed would never resolve here, and a test that hangs says
+    // less than one that fails on the next assertion.
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await modulePass.settled.catch(() => {});
+
+    assert.strictEqual(
+      updater.incrementalIndexingAffectingStaging(),
+      undefined,
+      'the write path is released while the instance fan-out is still running',
+    );
+    assert.notStrictEqual(
+      updater.incrementalIndexing(),
+      undefined,
+      'and the instance fan-out really is still running',
+    );
+
+    waiters[1].rejectFromResult(serializedWorkerError);
+    await updater.incrementalIndexing();
+  });
+
+  test("a pass that wrote the realm's config document holds the write-path gate", async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    // Not an executable, but a staging batch resolves the realm's settings
+    // partly out of this card's index row, and that row wins over the copy
+    // read off disk.
+    let { settled } = await updater.enqueueUpdate([
+      new URL(`${realmURL}realm.json`),
+    ]);
+    settled.catch(() => {});
+
+    assert.notStrictEqual(
+      updater.incrementalIndexingAffectingStaging(),
+      undefined,
+      'a config write is waited for even though it touches no module',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await updater.incrementalIndexing();
+
+    assert.strictEqual(
+      updater.incrementalIndexingAffectingStaging(),
+      undefined,
+      'and the gate drains once it settles',
+    );
+  });
+
+  test("removing the realm's config document holds the write-path gate", async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    // The settings a batch resolves come from this document's index row, so a
+    // removal moves them exactly as a write does — the row is about to go.
+    let { settled } = await updater.enqueueUpdate(
+      [new URL(`${realmURL}realm.json`)],
+      { delete: true },
+    );
+    settled.catch(() => {});
+
+    assert.notStrictEqual(
+      updater.incrementalIndexingAffectingStaging(),
+      undefined,
+      'a config removal is waited for as a config write is',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await updater.incrementalIndexing();
+  });
+
+  test('a card whose path merely ends in realm.json does not hold the gate', async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    // The realm's config document is the one at the realm root. A card stored
+    // under that name somewhere below it is an ordinary instance.
+    let { settled } = await updater.enqueueUpdate([
+      new URL(`${realmURL}nested/realm.json`),
+    ]);
+    settled.catch(() => {});
+
+    assert.notStrictEqual(
+      updater.incrementalIndexing(),
+      undefined,
+      'the pass really is in flight',
+    );
+    assert.strictEqual(
+      updater.incrementalIndexingAffectingStaging(),
+      undefined,
+      'matching on name alone would have held the gate here',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await updater.incrementalIndexing();
+  });
+
+  test('the config document is recognized however the realm URL is spelled', async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    // A base without a trailing slash. Resolving 'realm.json' against it
+    // relatively would land a path segment up, at http://127.0.0.1:4444/,
+    // and the gate would match a URL no change set ever contains — holding
+    // for nothing, silently, with every other test still green.
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm('http://127.0.0.1:4444/test'),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    let { settled } = await updater.enqueueUpdate([
+      new URL('http://127.0.0.1:4444/test/realm.json'),
+    ]);
+    settled.catch(() => {});
+
+    assert.notStrictEqual(
+      updater.incrementalIndexingAffectingStaging(),
+      undefined,
+      'the config document is found from a base with no trailing slash',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await updater.incrementalIndexing();
+  });
+
+  test('a copy holds the write-path gate', async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    let copyPromise = updater.copy(new URL('http://127.0.0.1:4444/source/'));
+    copyPromise.catch(() => {});
+    while (waiters.length === 0) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+
+    assert.notStrictEqual(
+      updater.incrementalIndexingAffectingStaging(),
+      undefined,
+      'a copy indexes the whole source realm, modules included',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await updater.incrementalIndexing();
+    await settleMicrotasksAndUnhandledRejections();
   });
 
   test('a failing copy job throws from copy() and resolves the gate', async function (assert) {

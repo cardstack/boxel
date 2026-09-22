@@ -74,6 +74,14 @@ export interface IncrementalArgs extends WorkerArgs {
   // Empty on every other index path; see `deferPrerenderHtml` for why it is
   // not optional.
   carriedPrerenderHtmlChanges: IncrementalChange[];
+  // Whether the caller that published this will read the index for these same
+  // URLs once the pass lands — the read-your-writes contract a card write
+  // answers its response from. Read only by the coalesce handler, never by the
+  // pass itself: what it governs is which existing pass this publish is
+  // allowed to be satisfied by, not what the pass does. See
+  // `chooseIncrementalCoalesceDecision`. Non-optional for the same reason
+  // `deferPrerenderHtml` is.
+  readsOwnWrite: boolean;
 }
 
 // An invalidation set an index pass computed but deliberately did not enqueue
@@ -214,6 +222,7 @@ function parseIncrementalArgsForCoalesce(
     coalescedCallers,
     deferPrerenderHtml,
     carriedPrerenderHtmlChanges,
+    readsOwnWrite,
   } = args;
   if (
     typeof realmURL !== 'string' ||
@@ -237,6 +246,7 @@ function parseIncrementalArgsForCoalesce(
     carriedPrerenderHtmlChanges: Array.isArray(carriedPrerenderHtmlChanges)
       ? (carriedPrerenderHtmlChanges as IncrementalChange[])
       : [],
+    readsOwnWrite: readsOwnWrite === true,
   };
 }
 
@@ -273,6 +283,7 @@ function chooseIncrementalCoalesceDecision(
         jobId: sameTypeCandidate.id,
         update: {
           ...maxPriorityAndTimeout(sameTypeCandidate, incoming),
+          initiatedBy: mergeInitiators(sameTypeCandidate, incoming),
         },
       };
     }
@@ -282,6 +293,12 @@ function chooseIncrementalCoalesceDecision(
       jobId: sameTypeCandidate.id,
       update: {
         ...maxPriorityAndTimeout(sameTypeCandidate, incoming),
+        // The merged pass carries both callers' work, so the row has to name
+        // both: a writer whose pass was absorbed into someone else's job
+        // would otherwise be invisible to its own gate and would not wait for
+        // indexing of bytes it wrote. A publish naming nobody adds nobody,
+        // which leaves an all-untagged job still reading as the realm owner.
+        initiatedBy: mergeInitiators(sameTypeCandidate, incoming),
         args: {
           ...existingArgs,
           changes: mergeIncrementalChanges(
@@ -304,6 +321,11 @@ function chooseIncrementalCoalesceDecision(
             existingArgs.carriedPrerenderHtmlChanges,
             incomingArgs.carriedPrerenderHtmlChanges,
           ),
+          // OR, because the field says whether anyone waiting on this job
+          // will read the index for its changes, and one such caller is
+          // enough to make that true of the merged job.
+          readsOwnWrite:
+            existingArgs.readsOwnWrite || incomingArgs.readsOwnWrite,
         },
       },
     };
@@ -316,8 +338,20 @@ function chooseIncrementalCoalesceDecision(
   // already cover every (url, operation) we need — operation mismatch
   // (update vs delete) means different work, so we must enqueue a new
   // job in that case.
+  //
+  // Covering the URL is not enough for a caller that will read the index for
+  // its own write. A claimed pass reads each file it visits once, and it was
+  // claimed before this publish existed — so it may have already read the
+  // bytes this publish supersedes, and attaching would settle the caller
+  // against a version of its card that predates the write it just made. The
+  // file-watcher echo this branch was built for has no such stake: it
+  // announces bytes some other write already put on disk and reads nothing
+  // afterwards. A publish that does have the stake inserts instead, and the
+  // next one behind it merges into that pending job rather than into the
+  // running one — which is what keeps a burst of saves to one card at the two
+  // passes read-your-writes actually costs, rather than one per save.
   let incomingArgs = parseIncrementalArgsForCoalesce(incoming.args);
-  if (incomingArgs) {
+  if (incomingArgs && !incomingArgs.readsOwnWrite) {
     for (let candidate of inFlightCandidates) {
       if (candidate.jobType !== incoming.jobType) {
         continue;
@@ -335,6 +369,30 @@ function chooseIncrementalCoalesceDecision(
   return { type: 'insert' };
 }
 
+// The callers a merged job carries, deduped. Order is not meaningful — the
+// gate asks about membership — so the existing set keeps its order and new
+// names go on the end, which keeps a row stable when the same caller
+// publishes twice.
+//
+// Reachable only from a join onto a PENDING candidate. A join onto one already
+// claimed carries no update at all, because the worker holds its args in
+// memory and would never see the write — so a publish that attaches there
+// leaves the row naming whoever enqueued it and not itself. Nothing gates on
+// the column yet; a gate that does has to decide whether a publish naming a
+// writer may take that branch, since this is the one join where the row cannot
+// be made to describe every writer waiting on the pass.
+function mergeInitiators(
+  existing: QueueCoalesceCandidate,
+  incoming: { initiatedBy?: string[] },
+): string[] {
+  return [
+    ...new Set([
+      ...(existing.initiatedBy ?? []),
+      ...(incoming.initiatedBy ?? []),
+    ]),
+  ];
+}
+
 function chooseFromScratchCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
@@ -348,6 +406,12 @@ function chooseFromScratchCoalesceDecision(
       jobId: sameTypeCandidate.id,
       update: {
         ...maxPriorityAndTimeout(sameTypeCandidate, incoming),
+        // The merged pass carries both callers' work, so the row has to name
+        // both: a writer whose pass was absorbed into someone else's job
+        // would otherwise be invisible to its own gate and would not wait for
+        // indexing of bytes it wrote. A publish naming nobody adds nobody,
+        // which leaves an all-untagged job still reading as the realm owner.
+        initiatedBy: mergeInitiators(sameTypeCandidate, incoming),
         args: {
           ...(isObjectLike(sameTypeCandidate.args)
             ? sameTypeCandidate.args

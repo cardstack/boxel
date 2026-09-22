@@ -47,6 +47,21 @@ import {
 // refuses every other method outright — so no HTTP cache reaches either body,
 // and the in-process caches that do hold one key on the served mode directly.
 const LINK_SHAPE_VARY = [X_BOXEL_LINK_SHAPE_HEADER];
+
+// The cache directive a card+json response carries when a declared `output`
+// projected its body.
+//
+// `no-store` rather than the ordinary `max-age=0, must-revalidate`, and for a
+// reason that holds whether or not the projection reads `actor()`: the
+// validator is built from the index row, and a row does not move when a type
+// gains, changes or loses an `output`, so a stored copy of the unprojected
+// body would keep answering as fresh. `private` says the rest — a projection
+// may be per-caller, so no shared cache may hold one either.
+//
+// The `ETag` is still emitted alongside it. It identifies the card's state for
+// a conditional *write*, which is what `If-Match` asks about, and that question
+// is about the card rather than about the representation it was read in.
+const PROJECTED_CARD_JSON_CACHE_CONTROL = 'private, no-store';
 import {
   CARD_DOCUMENT_CACHE_HEADER,
   type CardDocumentCache,
@@ -196,11 +211,19 @@ import {
   type FileMetaResource,
 } from './index.ts';
 import {
+  assertParamsSupplied,
   canonicalizeTarget,
   newOperationScope,
+  readShape,
   resolveOperation,
   runOperation,
 } from './card-operations/dispatch.ts';
+import type { ReadShape } from './card-operations/dispatch.ts';
+import {
+  runInputTransform,
+  runOutputTransform,
+  type TransformContext,
+} from './card-operations/transforms.ts';
 import type {
   OperationCore,
   OperationScope,
@@ -212,12 +235,13 @@ import {
   atEntry,
   batchEntryFor,
   carriesOperationsExt,
+  entryWithPayload,
   errorsDocument,
   invocationsIn,
-  isWrite,
   needsActor,
   paramsFor,
   parseOperationsEnvelope,
+  projectedResult,
   readResult,
   resultsTree,
   stagedTree,
@@ -227,12 +251,15 @@ import {
   type EnvelopeResult,
   type ResolvedEnvelopeEntry,
 } from './card-operations/envelope.ts';
+import { resolveQueryTargets } from './card-operations/find-targets.ts';
+import { settledWithin, STAGING_WIDTH } from './card-operations/coordinator.ts';
 import {
   OperationFailure,
   isDocumentResult,
   isHeadResult,
   isOperationFailure,
   isSourceResult,
+  isWrite,
   type EntryPosition,
   type OperationRequest,
   type OperationResult,
@@ -567,11 +594,11 @@ function maskLoggedURL(urlString: string): string {
 // ordinary interactive save can take it safely.
 //
 // Motivation: the default synchronous-indexing contract makes a single-card
-// save await `incrementalIndexing()`, which resolves only once EVERY in-flight
-// incremental/copy job for the realm settles — so an unrelated reindex
-// draining in the worker pool can stall (and time out) the save. A caller that
-// consumes the returned instance directly (e.g. SaveCardCommand) doesn't need
-// the freshly-indexed read-back and can opt out.
+// save wait twice on the realm's indexing — once before it stages and once for
+// its own pass — and the second of those is the whole fan-out of the card
+// being written. A caller that consumes the returned instance directly (e.g.
+// SaveCardCommand) doesn't need the freshly-indexed read-back and can opt out
+// of both.
 //
 // The tradeoff is narrower than full read-your-write loss. The writer's own
 // next card read still waits: the deferred job is tagged with the writer
@@ -1174,6 +1201,17 @@ export function ifNoneMatchMatches(headerValue: string, etag: string): boolean {
     .some((token) => token.trim().replace(/^W\//, '') === normalizedEtag);
 }
 
+// Whether a conditional header names anything to compare against. RFC 9110
+// §5.6.1.2 has a recipient parse and ignore empty elements in a comma list, so
+// a value that is empty, whitespace, or only commas is a well-formed list of
+// no validators rather than a malformed one. Kept beside `ifNoneMatchMatches`
+// and splitting the same way, so the question "does this name a validator" and
+// the question "does this match" cannot answer from different readings of the
+// same header.
+export function namesAValidator(headerValue: string): boolean {
+  return headerValue.split(',').some((token) => token.trim() !== '');
+}
+
 // A handle's content fingerprint, read in bounded ranges rather than by
 // streaming the file.
 //
@@ -1435,6 +1473,13 @@ export interface CommitBatchResult {
 
 export interface WriteOptions {
   clientRequestId?: string | null;
+  // The cards among this write's own files whose content the caller supplied
+  // verbatim, named the way the invalidation event names them. Reported on
+  // that event so a client holding these cards can tell them from the ones
+  // this write left the realm to compute. A writer that names none says
+  // nothing about the pass, which is what every writer but the operations
+  // coordinator does.
+  clientAuthored?: string[];
   serializeFile?: boolean | null;
   // When false, the write returns as soon as the source bytes are durable;
   // the *final* index flush kicks off in the background. Callers that need
@@ -1466,6 +1511,20 @@ export interface WriteOptions {
   // any of them can be the whole of a slow write. Absent, and so a no-op, for
   // every caller that is not reporting.
   stageCursor?: StageCursor;
+  // Announced once everything this write was asked for is durable — the bytes
+  // and the rows describing them — and before the index pass that follows. A
+  // caller holding write locks over those files releases them here rather than
+  // across an index wait no other writer of those files has any stake in.
+  //
+  // Not announced by a write that REMOVED something, which keeps its locks to
+  // the end: an index pass resolves a removal and a write of one url as the
+  // removal whichever reached it first, so a writer that recreated the path
+  // while the removal's pass was pending would be folded into it. The commit
+  // states the case in full at the boundary it fires this from.
+  //
+  // Called at most once, and not at all by a write that failed before reaching
+  // durability.
+  onDurable?: () => void;
 }
 
 export interface RealmAdapter {
@@ -1827,6 +1886,22 @@ export class Realm {
   // replicas via the realm_index_updated broadcast. `null` means "not yet
   // computed"; an empty array is a valid cached result (no routing rules).
   #cachedHostRoutingMap: HostRoutingRule[] | null = null;
+
+  // Whether a card's `read` carries a transform stage, by card URL. Asked by
+  // the card+json `GET` before it takes either path that answers without
+  // running the read, and the lookup behind it is a database read — so on a
+  // realm serving conditional requests it would be a round trip added to
+  // exactly the requests that exist to avoid one.
+  //
+  // Cleared by `clearRealmIndexCaches()` alongside the entries above, which is
+  // sound because the answer is a function of the card's `adoptsFrom` and its
+  // type's declarations, and neither moves without an index swap — a card's
+  // stored type is changed by a write, and a module's declarations by
+  // reindexing it. A foreign realm's module could change without this realm
+  // swapping, and does not reach this: a card with foreign-realm dependencies
+  // is served no validator at all, so neither fast path is taken and this is
+  // never asked.
+  #readShapeByURL = new Map<string, ReadShape>();
 
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
@@ -2404,6 +2479,16 @@ export class Realm {
     return this.#realmIndexUpdater.incrementalIndexing();
   }
 
+  // The write path's gate: the in-flight passes that can move what a staging
+  // write resolves — the ones that touched an executable module or the realm's
+  // config document. Same contract as `incrementalIndexing()`, undefined when
+  // nothing qualifying is pending so a caller can check synchronously, over a
+  // narrower set. See `RealmIndexUpdater.incrementalIndexingAffectingStaging`
+  // for why an instance-only pass is not in it.
+  incrementalIndexingAffectingStaging(): Promise<void> | undefined {
+    return this.#realmIndexUpdater.incrementalIndexingAffectingStaging();
+  }
+
   private startReindex(opts?: {
     clearLastModified?: boolean;
     priority?: number;
@@ -2570,6 +2655,13 @@ export class Realm {
       // work, against a worker pool that is slow to reach it — and the second
       // is the one a card write spends its seconds in.
       stageCursor?: StageCursor;
+      // Whether this caller reads the index for these urls once the pass
+      // lands. Absent for the callers that await a pass without reading one —
+      // the file watcher announcing a change made elsewhere, a removal
+      // answering 204 — which is what lets those attach to a pass already
+      // running instead of adding one to the realm's serial lane. See
+      // `IncrementalArgs.readsOwnWrite`.
+      readsOwnWrite?: boolean;
     },
   ): Promise<
     IndexPassResult & { deferredPrerenderHtml?: DeferredPrerenderHtml }
@@ -2592,6 +2684,7 @@ export class Realm {
       ...(opts?.carriedPrerenderHtmlChanges?.length
         ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
         : {}),
+      ...(opts?.readsOwnWrite ? { readsOwnWrite: true } : {}),
       onEnqueued: () => stageCursor?.mark('enqueue'),
       onDeferredPrerenderHtml: (deferred) => {
         deferredPrerenderHtml = deferred;
@@ -2712,10 +2805,38 @@ export class Realm {
     invalidations: string[],
     opts?: {
       clientRequestId?: string | null;
+      clientAuthored?: string[];
       generation?: number;
       invalidatedTypes?: string[];
     },
   ): void {
+    // Narrowed to what the pass actually invalidated. A writer names the cards
+    // it wrote; whether a given one reached this event depends on what the
+    // index did with it, and a name the event does not carry would describe a
+    // card nobody can match it against.
+    //
+    // A dropped name is not a harmless narrowing, though: it turns a card its
+    // writer said to leave alone into one every client re-reads, which is the
+    // edit loss this member exists to prevent. Nothing is known to produce one
+    // — both sides spell a card as its realm href without the `.json` — so a
+    // drop means the two spellings have diverged, and it is said out loud
+    // rather than absorbed.
+    let clientAuthored = opts?.clientAuthored?.filter((url) =>
+      invalidations.includes(url),
+    );
+    let authorshipReported = clientAuthored !== undefined;
+    if (
+      opts?.clientAuthored &&
+      clientAuthored &&
+      clientAuthored.length !== opts.clientAuthored.length
+    ) {
+      let dropped = opts.clientAuthored.filter(
+        (url) => !invalidations.includes(url),
+      );
+      this.#log.warn(
+        `index event for ${this.url} dropped ${dropped.length} client-authored name(s) that the pass did not invalidate, so their holders will re-read them: ${dropped.join(', ')}`,
+      );
+    }
     this.broadcastRealmEvent({
       eventName: 'index',
       indexType: 'incremental',
@@ -2723,6 +2844,7 @@ export class Realm {
       ...(opts && Object.prototype.hasOwnProperty.call(opts, 'clientRequestId')
         ? { clientRequestId: opts.clientRequestId }
         : {}),
+      ...(authorshipReported ? { clientAuthored } : {}),
       ...(opts?.generation !== undefined
         ? { generation: opts.generation }
         : {}),
@@ -2941,6 +3063,7 @@ export class Realm {
   clearRealmIndexCaches(): void {
     this.invalidateCachedRealmInfo();
     this.#cachedHostRoutingMap = null;
+    this.#readShapeByURL.clear();
   }
 
   // Drop local realm-index caches AND broadcast the same wipe to peer
@@ -3206,7 +3329,11 @@ export class Realm {
     let results = await this.#dbAdapter.withFileWriteLocks(
       this.url,
       [path],
-      () => this._batchWriteUnlocked(new Map([[path, contents]]), options),
+      (releaseLocks) =>
+        this._batchWriteUnlocked(new Map([[path, contents]]), {
+          ...options,
+          onDurable: releaseLocks,
+        }),
     );
     return results[0];
   }
@@ -3215,8 +3342,14 @@ export class Realm {
     files: Map<LocalPath, string | Uint8Array>,
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
-    return this.#dbAdapter.withFileWriteLocks(this.url, [...files.keys()], () =>
-      this._batchWriteUnlocked(files, options),
+    return this.#dbAdapter.withFileWriteLocks(
+      this.url,
+      [...files.keys()],
+      (releaseLocks) =>
+        this._batchWriteUnlocked(files, {
+          ...options,
+          onDurable: releaseLocks,
+        }),
     );
   }
 
@@ -3397,14 +3530,20 @@ export class Realm {
     // Callers that DO read indexed state after the write (the JSON-API
     // postCardInstance / patchCardInstance handlers) keep the original
     // deadlock-prevention semantics by omitting waitForIndex.
+    //
+    // What they wait for is narrower than all of it. Only a pass that touched
+    // an executable module or the realm's config document can move what the
+    // write below resolves, so an instance-only fan-out — however many cards
+    // it invalidates — is not waited for here. That is what keeps one card's
+    // fan-out from gating every other card's write in the realm.
     let stageCursor = options?.stageCursor;
     if (options?.waitForIndex !== false) {
-      await this.incrementalIndexing();
+      await this.incrementalIndexingAffectingStaging();
       // A batch coordinator drains before it stages, and this gate drains
-      // again. Both wait on the same realm-wide indexing, so they are one
-      // stage reached twice rather than two stages, and they accumulate
-      // together — a write that queued behind indexing it did not ask for
-      // spent that time here however many gates it passed through.
+      // again. Both wait on the same set of passes, so they are one stage
+      // reached twice rather than two stages, and they accumulate together —
+      // a write that queued behind indexing it did not ask for spent that
+      // time here however many gates it passed through.
       stageCursor?.mark('drain');
     }
     let urls: URL[] = [];
@@ -3432,6 +3571,10 @@ export class Realm {
     let invalidatedTypes = makeInvalidatedTypeAccumulator();
     let indexGeneration: number | undefined;
     let clientRequestId: string | null = options?.clientRequestId ?? null;
+    // Passed through as supplied. An empty list is a writer saying it authored
+    // none of what it wrote, which is not the same as a writer that said
+    // nothing — so the two stay distinguishable all the way to the event.
+    let clientAuthored: string[] | undefined = options?.clientAuthored;
     let initiatingUser: string | null = options?.initiatingUser ?? null;
     // The module→instance flush below runs an index pass whose invalidation
     // set is every dependent of the modules written so far — including the
@@ -3456,6 +3599,9 @@ export class Realm {
       } = await this.updateIndexAndCollectInvalidations(changes, {
         clientRequestId,
         initiatedBy: initiatingUser,
+        // The write answers from the index once this lands, so it cannot be
+        // settled by a pass that read the file before these bytes did.
+        readsOwnWrite: true,
         ...(stageCursor ? { stageCursor } : {}),
         ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
         // Handed over either way: a pass that renders folds this into the job
@@ -3831,6 +3977,27 @@ export class Realm {
     // the caller may or may not be waiting for — so this is the boundary that
     // says how much of a slow write was the write.
     stageCursor?.mark('persist');
+    // And the boundary the write locks end at, for a commit that only wrote.
+    // Indexing reads the files back off disk rather than from anything this
+    // commit is holding, so the pass below indexes whatever the last write
+    // left — which is what the realm should hold however the writers
+    // interleaved.
+    //
+    // A commit that REMOVED something keeps its locks to the end instead,
+    // because a removal's place in the order is not settled when its bytes are
+    // gone. An index pass resolves a removal and a write of one url as the
+    // removal, whichever reached it first — `mergeIncrementalChanges` at the
+    // queue and the visit loop's own `operations` map both give `delete`
+    // precedence, and the visit is then skipped without asking whether the
+    // file came back. So a writer that recreated the path while this pass was
+    // still pending would have its write folded into this removal and the row
+    // dropped for a file that is on disk. Holding until the pass has run is
+    // what keeps the two ordered; the durable write alone does not, and
+    // neither would holding until the job is merely enqueued, since the
+    // absorption happens for as long as that job sits unclaimed.
+    if (deleteURLs.length === 0) {
+      options?.onDurable?.();
+    }
     let waitForIndex = options?.waitForIndex !== false;
     let changes: IndexChange[] = [
       ...asUpdates(urls),
@@ -3841,6 +4008,7 @@ export class Realm {
         await performIndex(changes);
         this.broadcastIncrementalInvalidationEvent([...invalidations], {
           clientRequestId,
+          ...(clientAuthored ? { clientAuthored } : {}),
           generation: indexGeneration,
           invalidatedTypes: invalidatedTypes.value,
         });
@@ -3893,6 +4061,7 @@ export class Realm {
                 [...new Set([...priorInvalidations, ...deferredInvalidations])],
                 {
                   clientRequestId,
+                  ...(clientAuthored ? { clientAuthored } : {}),
                   generation: meta.generation ?? indexGeneration,
                   invalidatedTypes: types.value,
                 },
@@ -3921,6 +4090,7 @@ export class Realm {
       // behavior.
       this.broadcastIncrementalInvalidationEvent([...invalidations], {
         clientRequestId,
+        ...(clientAuthored ? { clientAuthored } : {}),
         generation: indexGeneration,
         invalidatedTypes: invalidatedTypes.value,
       });
@@ -4421,9 +4591,14 @@ export class Realm {
       if (!isOperationFailure(err)) {
         throw err;
       }
-      // A batch is all-or-nothing, so the first refusal is the whole answer:
-      // nothing was written, no index job was enqueued and no event was
-      // broadcast, whichever stage produced it.
+      // A batch is all-or-nothing, so the first refusal is the whole answer,
+      // and for every stage up to the commit it means nothing was written, no
+      // index job was enqueued and no event was broadcast.
+      //
+      // One refusal reaches here from past that point: an `output` projects a
+      // write's result, which does not exist until the write has committed, so
+      // a program failing there answers 400 over a batch that landed. The
+      // status is the same and what it says about the realm is not.
       return this.#operationsResponse(
         errorsDocument(err.error),
         err.error.status,
@@ -4462,21 +4637,43 @@ export class Realm {
     // be a group whose members are entries in their own right. The tree is
     // what the answer mirrors and what the coordinator schedules staging by;
     // everything between reads the entries in it, in the order they were sent.
-    let tree = parseOperationsEnvelope(body, this.url, {
-      resolveIdentifier: (href) => this.#resolveAtomicHref(href),
-    });
+    let envelopeOptions = {
+      resolveIdentifier: (href: string) => this.#resolveAtomicHref(href),
+    };
+    let parsed = parseOperationsEnvelope(body, this.url, envelopeOptions);
+    // One row peek per target for the whole request: entries often name the
+    // same card, and which behavior a name resolves to is read off the
+    // target's stored type.
+    let scope = newOperationScope(this.operationCore);
+    // An entry may describe the card it runs against with a query instead of
+    // naming one, and this is where such a query becomes cards — against the
+    // index as it stands now, which is the pre-batch state every other part of
+    // a batch is evaluated against. Everything after it reads a tree whose
+    // entries all name an href, so a found target takes the write lock,
+    // collides with a parallel sibling and rolls back exactly as a named one
+    // does.
+    let tree = await resolveQueryTargets(
+      this.operationCore,
+      scope,
+      parsed,
+      envelopeOptions,
+    );
     let entries = invocationsIn(tree);
     let caller = this.#callerOf(request, requestContext);
-    // One row peek per target for the whole resolution pass: entries often
-    // name the same card, and which behavior a name resolves to is read off
-    // the target's stored type.
-    let scope = newOperationScope(this.operationCore);
     // Settled rather than raced, so the entry a refusal names is the earliest
     // one the caller got wrong rather than whichever index read came back
     // first. A batch with two bad entries would otherwise report a different
     // one run to run.
-    let outcomes = await Promise.allSettled(
-      entries.map((entry) => this.#resolveEnvelopeEntry(entry, scope)),
+    //
+    // Bounded at the width staging is bounded at. Resolving an entry reads the
+    // target's index row, and how many entries a batch holds is the caller's
+    // number — a query target makes it one a small envelope can choose, since
+    // one entry expanding into its ceiling of targets arrives here as that many
+    // entries, each a distinct card and so each its own read. Unbounded, a
+    // batch would put that many point reads on the pool at once and reach the
+    // staging limiter only after the pool was already spent.
+    let outcomes = await settledWithin(STAGING_WIDTH, entries, (entry) =>
+      this.#resolveEnvelopeEntry(entry, scope),
     );
     let refused = outcomes.find((outcome) => outcome.status === 'rejected');
     if (refused) {
@@ -4568,12 +4765,42 @@ export class Realm {
 
     let writes = resolved.filter(({ definition }) => isWrite(definition.base));
     if (writes.length > 0) {
+      // Each entry's own two steps before it is staged, in the order
+      // `runOperation` runs them for a read: the `input` stage over the
+      // payload, then the `params` check against what it produced. A value an
+      // `input` supplies is what the check then sees, which is most of what an
+      // `input` is for.
+      //
+      // The check belongs here and not in the executors: a declared param with
+      // no value is the caller's mistake, and the behaviors read the payload
+      // differently enough that some would never notice — a `delete` reads no
+      // payload at all, so a declaration requiring one would be carried out
+      // over a card the caller had not said enough to remove.
+      //
+      // The transformed entry keeps its `position`, which is the key both the
+      // staging schedule and the results are looked up by, and the envelope's
+      // own members. Only the payload moves.
       let staged = new Map<EntryPosition, BatchEntry>();
-      for (let { entry, definition } of writes) {
+      for (let write of writes) {
         try {
+          if (write.definition.input) {
+            write.entry = entryWithPayload(
+              write.entry,
+              await runInputTransform(
+                write.definition,
+                paramsFor(write.entry),
+                this.#transformContext(write.entry, caller),
+              ),
+            );
+          }
+          let { entry, definition } = write;
+          assertParamsSupplied(definition, paramsFor(entry), {
+            name: entry.name,
+            ...(entry.href ? { id: entry.href } : {}),
+          });
           staged.set(entry.position, batchEntryFor(entry, definition));
         } catch (err: unknown) {
-          throw atEntry(err, entry.position);
+          throw atEntry(err, write.entry.position);
         }
       }
       // The tree the caller sent, with the entries that only read taken out of
@@ -4590,17 +4817,50 @@ export class Realm {
         {
           clientRequestId: caller.clientRequestId || null,
           actor: caller.actor || undefined,
+          // One request, several cards, and not all of them from the same
+          // place — which is the case the event's authorship naming exists
+          // for, and the only front door that produces it.
+          reportAuthorship: true,
         },
       );
       // The coordinator answers in the flat order of the entries it staged,
       // which is the order they were sent in.
-      for (let [index, { entry }] of writes.entries()) {
-        results.set(
-          entry.position,
-          writeResult(committed[index], (url) =>
-            this.#virtualNetwork.unresolveURL(url),
-          ),
+      for (let [index, { entry, definition }] of writes.entries()) {
+        let result = writeResult(committed[index], (url) =>
+          this.#virtualNetwork.unresolveURL(url),
         );
+        if (!definition.output) {
+          results.set(entry.position, result);
+          continue;
+        }
+        // The `output` stage runs after the commit, over the result the wire
+        // would otherwise carry. It projects what the caller is told about the
+        // write and cannot unmake one: a program that fails here answers 400
+        // over a card that has already changed, which is the one place the
+        // batch's all-or-nothing does not reach.
+        //
+        // Lowering narrows what can get here but does not close it. It refuses
+        // a program that does not parse or reaches outside the dialect; it
+        // does not ask how many values one yields, what shape they are, or
+        // whether it names a context slot this transport fills. So a
+        // declaration can be shipped whose write commits and whose projection
+        // refuses on every call, and the author learns it at the first
+        // invocation rather than at the edit.
+        try {
+          results.set(
+            entry.position,
+            projectedResult(
+              entry,
+              await runOutputTransform(
+                definition,
+                result,
+                this.#transformContext(entry, caller),
+              ),
+            ),
+          );
+        } catch (err: unknown) {
+          throw atEntry(err, entry.position);
+        }
       }
     }
 
@@ -4609,6 +4869,27 @@ export class Realm {
       200,
       requestContext,
     );
+  }
+
+  // What an entry's transform stages read besides the value they are handed:
+  // the payload as it stands and the caller, named for the refusal a failed
+  // stage answers with. The target's stored document is deliberately not among
+  // them — see `card-operations/transforms.ts`.
+  #transformContext(
+    entry: EnvelopeEntry,
+    caller: { actor: string; clientRequestId: string },
+  ): TransformContext {
+    return {
+      name: entry.name,
+      params: paramsFor(entry),
+      // The same reader a read's stages reach through the operation core. One
+      // declaration's `output` runs on both transports, so a setting it names
+      // has to be answerable on both — otherwise the same program projects a
+      // read and refuses a write.
+      realmConfig: () => this.getRealmConfig(),
+      ...(entry.href ? { id: entry.href } : {}),
+      ...(caller.actor ? { actor: caller.actor } : {}),
+    };
   }
 
   // Which behavior one entry's name means for its target, labelled with the
@@ -4913,6 +5194,7 @@ export class Realm {
         openStoredFile: (localPath) => this.#operationStoredFile(localPath),
         storedFileMeta: (localPath, file, opts) =>
           this.#operationStoredFileMeta(localPath, file, opts),
+        realmConfig: () => this.getRealmConfig(),
         isIgnored: (url) => this.isIgnored(url),
         fileMetaDocument: (localPath) =>
           this.#operationFileMetaDocument(localPath),
@@ -4998,7 +5280,7 @@ export class Realm {
             localPath,
           ),
         drainIndexing: async () => {
-          await this.incrementalIndexing();
+          await this.incrementalIndexingAffectingStaging();
         },
         isIgnored: (url) => this.isIgnored(url),
         // Narrowed to the two documents a program reads values from, each
@@ -8795,7 +9077,10 @@ export class Realm {
     url: URL,
   ): (() => Promise<void>) | undefined {
     let ifMatch = request.headers.get('if-match');
-    if (!ifMatch || ifMatch.trim() === '*') {
+    // `null` is an absent header, `''` a present one whose value is empty.
+    // Only the first asks for nothing, so they cannot share a test — see the
+    // refusal below for what the second means.
+    if (ifMatch === null || ifMatch.trim() === '*') {
       return undefined;
     }
     let refuse = (): never => {
@@ -8810,6 +9095,46 @@ export class Realm {
       });
     };
     return async () => {
+      // A present `If-Match` that names no validator — empty, whitespace, or
+      // bare commas — is a caller that asked for the check and gave nothing to
+      // check against, which is what a client does when it interpolates an
+      // ETag it never read. Zero listed validators means none of them matches,
+      // so RFC 9110 §13.1.1 makes the condition false. Refusing is what makes
+      // that visible: treated as an absent header it would write
+      // unconditionally, and the caller would be told its conditional write
+      // succeeded while the lost update it asked to be protected from is
+      // exactly what happened.
+      //
+      // A 412 rather than a 400, because the recovery it asks for is the one
+      // that works — re-read the card and retry with the validator that read
+      // hands back, which is precisely what the caller failed to send.
+      //
+      // Ahead of the lane check, and not only to save the work: this refusal
+      // is decided by the request alone, so letting it reach a query that can
+      // fail closed would let an unsatisfiable precondition come back as the
+      // lane's 503 — "retry this", for a request no retry can fix.
+      //
+      // "Ahead of the lane check" is as early as it gets, not as early as it
+      // could be. This runs inside the precondition closure, so a request the
+      // realm can answer from the header alone still takes the batch's file
+      // locks and waits out the coordinator's drain before being told 412.
+      // That is latency and lock-holding rather than a wrong answer, and it
+      // buys a single error path: hoisting the check to where `ifMatch` is
+      // first read would put the throw outside `commitBatch`, which both call
+      // sites reach without a `try`, so their refusal handling would have to
+      // grow a second entry point to catch it.
+      if (!namesAValidator(ifMatch)) {
+        throw new OperationFailure({
+          id: url.href,
+          status: 412,
+          code: 'version-conflict',
+          title: 'Precondition Failed',
+          detail:
+            `${request.method} of ${url.href} sent an If-Match naming no ` +
+            `validator, so nothing can match it; re-read the card and send ` +
+            `the ETag that read returns`,
+        });
+      }
       // The validator is built from the index, and the index lags the bytes:
       // a commit records a file's hash before it indexes, and a write that
       // deferred its indexing releases the lock without having indexed at all.
@@ -8838,6 +9163,14 @@ export class Realm {
       // refuse. The refusal is a 5xx rather than a 412 because nothing about
       // the caller's request is wrong and repeating it is the remedy.
       if (this.#dbAdapter) {
+        // Scoped by job type and deliberately not by writer. The gate also
+        // narrows to passes a given user initiated, which is right for asking
+        // "have my own writes landed" and wrong here: what can move this
+        // card's row out from under the comparison is *any* writer's pending
+        // pass, and a concurrent writer is the whole case `If-Match` exists
+        // to catch. Narrowing to the requesting user would report settled
+        // while someone else's incremental index was about to change the
+        // answer — the silent accept this refusal is here to prevent.
         let settled = await awaitRealmIndexSettled(this.#dbAdapter, this.url, {
           jobTypes: CONTENT_MOVING_INDEX_JOB_TYPES,
           timeoutMs: CONDITIONAL_WRITE_INDEX_SETTLE_BUDGET_MS,
@@ -9665,13 +9998,24 @@ export class Realm {
             resolveLinksOnly ? 'links-only' : 'full',
             skipLinkAssemblyBudget,
           );
-      let cacheControl = this.cardJsonCacheControl(requestContext);
+      // The headers a `GET` of this card would send, which for a projected
+      // body are not the ordinary ones: the read reports whether its full mode
+      // would project, and the two answers differ in the cache directive and
+      // in whether a conditional request may be answered from the validator.
+      let cacheControl = result.projected
+        ? PROJECTED_CARD_JSON_CACHE_CONTROL
+        : this.cardJsonCacheControl(requestContext);
       let lastModified: Record<string, string> =
         result.lastModified != null
           ? { 'last-modified': formatRFC7231(result.lastModified * 1000) }
           : {};
       let ifNoneMatch = request.headers.get('if-none-match');
-      if (ifNoneMatch && etag && ifNoneMatchMatches(ifNoneMatch, etag)) {
+      if (
+        !result.projected &&
+        ifNoneMatch &&
+        etag &&
+        ifNoneMatchMatches(ifNoneMatch, etag)
+      ) {
         // A conditional request is answered the same way whichever verb asked
         // it: the validator matched, so there is nothing to send.
         return createResponse({
@@ -9808,13 +10152,23 @@ export class Realm {
       // generation. Note that today's conditional-GET traffic already pays
       // it — card+json is served `max-age=0, must-revalidate` with an ETag,
       // so a client that has seen the card once sends `If-None-Match`.
+      // One memo of the index-row peek for this request, shared with the
+      // projection question below so that asking it costs the definition
+      // lookup and not a second row read.
+      let scope = newOperationScope(this.operationCore);
       let peekEtag: string | undefined;
+      // Whether this card's type specializes `read` with an `output`. A
+      // projected body is not what this request's validator describes, so the
+      // two fast paths below — the conditional 304 and the shared response
+      // cache — are both off for one, and the question has to be settled
+      // before either is taken rather than learned from the assembly. A read
+      // the core cannot resolve is treated the same way, since both fast paths
+      // answer without assembling and its refusal needs the assembly.
+      let assembles = false;
       if (ifNoneMatch || documentCache) {
         await this.getRealmInfo();
         let realmInfoHash = this.getCachedRealmInfoHash();
-        let instanceEntry = await this.#realmIndexQueryEngine.instance(url, {
-          includeErrors: true,
-        });
+        let instanceEntry = await scope.peekInstance(url);
         if (instanceEntry === undefined) {
           if (await this.nonJsonFileExists(localPath)) {
             // A path that points to a non-JSON file (e.g. an uploaded
@@ -9849,11 +10203,24 @@ export class Realm {
             skipLinkAssemblyBudget,
           );
         }
-        if (
-          ifNoneMatch &&
-          peekEtag &&
-          ifNoneMatchMatches(ifNoneMatch, peekEtag)
-        ) {
+        // Asked only where an answer would be taken from it: on a conditional
+        // hit, and on a request a configured cache would serve or retain.
+        // Every other request assembles, and the assembly resolves the same
+        // definition anyway.
+        let matchedEtag =
+          ifNoneMatch && peekEtag && ifNoneMatchMatches(ifNoneMatch, peekEtag)
+            ? peekEtag
+            : undefined;
+        if (matchedEtag || (documentCache && peekEtag)) {
+          assembles =
+            (await readShape(
+              this.operationCore,
+              url,
+              scope,
+              this.#readShapeByURL,
+            )) !== 'plain';
+        }
+        if (matchedEtag && !assembles) {
           return createResponse({
             requestContext,
             varyOn: LINK_SHAPE_VARY,
@@ -9861,7 +10228,7 @@ export class Realm {
             init: {
               status: 304,
               headers: {
-                etag: peekEtag,
+                etag: matchedEtag,
                 'cache-control': cacheControl,
                 ...(instanceEntry.lastModified != null
                   ? {
@@ -9893,7 +10260,7 @@ export class Realm {
         );
       let assembly: CardJsonAssembly;
       let cacheOutcome: CardDocumentCacheOutcome | undefined;
-      if (documentCache && peekEtag) {
+      if (documentCache && peekEtag && !assembles) {
         ({ assembly, outcome: cacheOutcome } =
           await documentCache.getOrPopulate({
             url: url.href,
@@ -9928,7 +10295,9 @@ export class Realm {
         init: {
           headers: {
             'content-type': SupportedMimeType.CardJson,
-            'cache-control': cacheControl,
+            'cache-control': assembly.projected
+              ? PROJECTED_CARD_JSON_CACHE_CONTROL
+              : cacheControl,
             ...(assembly.etag ? { etag: assembly.etag } : {}),
             ...etagSuppressedHeader(assembly.etagSuppressed),
             ...(assembly.lastModified != null
@@ -9972,12 +10341,12 @@ export class Realm {
     // response around it: the validator, the redirect, the creation time, and
     // the mapping from a refusal to a status.
     //
-    // The caller travels with the request although a plain read never consults
-    // it, so that the first read that does cannot silently read a stale one.
-    // That an assembly is shareable between callers rests on the same thing
-    // the response cache's sharing does: a plain read is the same document for
-    // everyone permitted to ask for it. A `read` an author has specialized is
-    // refused rather than served, so nothing actor-dependent reaches here.
+    // The caller travels with the request because a specialized `read` reads
+    // it: an `output` may project by `actor()`, which makes the body
+    // per-caller. That is also why such an assembly is never shared — the
+    // handler keeps a projected read out of the response cache before calling
+    // here, since the cache's sharing rests on a plain read being the same
+    // document for everyone permitted to ask for it.
     let result: OperationResult;
     try {
       // The read runs `attachRealmInfo()`, which (re)populates the realm-info
@@ -10004,8 +10373,8 @@ export class Realm {
         `the read of ${url.href} answered with something other than a document`,
       );
     }
-    let { document, headers, queryBacked } = result;
-    if (document.data.type === 'file-meta') {
+    let { document, headers, queryBacked, projected } = result;
+    if (headers.type === 'file-meta') {
       // A file's metadata is derived from its bytes, so there is no index row
       // to validate it against and nothing here to cache.
       return { kind: 'file-meta', body: JSON.stringify(document, null, 2) };
@@ -10050,8 +10419,16 @@ export class Realm {
       etag: responseEtag,
       etagSuppressed: foreignDeps,
       queryBacked,
+      projected,
       keyEtag: keyEtag ?? '',
-      lastModified: card.data.meta.lastModified,
+      // Off the row for a projected body: an `output` decides what the
+      // document holds, so a projection that drops `meta` would otherwise take
+      // the modification time with it. The row is where the value comes from
+      // either way — `data.meta.lastModified` is the read's own copy of it —
+      // so the unprojected path keeps reading the body and the two agree.
+      lastModified: projected
+        ? headers.lastModified
+        : card.data.meta.lastModified,
       created: createdAt,
     };
   }
@@ -12285,6 +12662,30 @@ export class Realm {
       this.invalidateCache(localPath);
 
       if (hasExecutableExtension(localPath)) {
+        // Mint before the delete, for the same reason and in the same order
+        // as the write path: deleting the cached definition only guarantees
+        // the next lookup re-derives one, not what it derives it FROM. The
+        // repopulate prerenders the module, and a prerender tab that already
+        // evaluated it keeps serving the evaluated copy — so the definition
+        // cached under the new bytes' URL would describe the old ones.
+        //
+        // The write path mints because it knows it changed a module. Nothing
+        // wrote this one through the realm, so nothing else on this path
+        // says so: the index pass that covers the module mints its own epoch,
+        // but a pass carrying only instances does not, and on an external
+        // edit the two can be separate passes. Minting here is what makes the
+        // order between them stop mattering.
+        //
+        // Best-effort, like the invalidate below it: a failure leaves the
+        // staleness this call removes, and the covering index pass's own mint
+        // is still the backstop.
+        try {
+          await mintRealmLoaderEpoch(this.#dbAdapter, this.url);
+        } catch (err: unknown) {
+          this.#log.error(
+            `failed to mint a loader epoch for ${this.url} after an external edit to ${tracked.url.href}; a prerender tab holding the pre-edit module may keep rendering its previous schema: ${stringifyErrorForLog(err)}`,
+          );
+        }
         await this.#definitionLookup.invalidate(tracked.url.href);
       }
 

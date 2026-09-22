@@ -1,0 +1,271 @@
+import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
+import Service, { service } from '@ember/service';
+
+import { v4 as uuidv4 } from 'uuid';
+
+import {
+  mintedIdentities,
+  OperationsError,
+  rri,
+  SupportedMimeType,
+  type OperationsAnswer,
+  type OperationsEnvelope,
+  type OperationsMethod,
+  type OperationsSearch,
+  type OperationsTransport,
+  type SearchEntries,
+  type SearchEntryWireQuery,
+} from '@cardstack/runtime-common';
+
+import { getSearchEntriesResource } from '../resources/search-entries';
+
+import type CardService from './card-service';
+import type MatrixService from './matrix-service';
+import type NetworkService from './network';
+import type RealmService from './realm';
+import type StoreService from './store';
+
+// ============================================================================
+// The transport a card's operations are carried out over.
+//
+// `operations(card).addComment(…)` builds a batch and hands it here; this
+// service is the one place that knows how a batch reaches a realm — the
+// authenticated fetch, the method the realm derives its permission check from,
+// and the client request id a write is tracked by. A card module has no
+// service to inject, so the service registers itself on the global bridge the
+// runtime declares (`getOperationsTransport`) and a call reads it back from
+// there.
+//
+// Nothing here decides what a batch says. The envelope arrives built, and what
+// comes back is handed over as the realm reported it: which entry answered
+// what, and what each answer means, belongs to the client core, which is
+// isomorphic and testable without any of this.
+//
+// A saved search is the other half of the bridge. A `query` operation is never
+// sent to `_operations` — it is carried out by the search engine, which the
+// host already reaches through its live entries resource — so what this
+// supplies for one is the session it runs in: who the caller is, which realm
+// holds a type, and the resource a search answers with.
+// ============================================================================
+
+export default class OperationsService
+  extends Service
+  implements OperationsTransport
+{
+  @service declare private cardService: CardService;
+  @service declare private matrixService: MatrixService;
+  @service declare private network: NetworkService;
+  @service declare private realm: RealmService;
+  @service declare private store: StoreService;
+
+  constructor(owner: Owner) {
+    super(owner);
+    // Registered on construction rather than when a session starts: a card can
+    // invoke an operation as soon as it renders, and the transport itself holds
+    // nothing session-scoped — the credentials live in the authenticated fetch
+    // and the realm list in the realm service, both of which answer for the
+    // session in hand.
+    (globalThis as any)._CARDSTACK_OPERATIONS_TRANSPORT = this;
+    registerDestructor(this, () => {
+      if ((globalThis as any)._CARDSTACK_OPERATIONS_TRANSPORT === this) {
+        delete (globalThis as any)._CARDSTACK_OPERATIONS_TRANSPORT;
+      }
+    });
+  }
+
+  // The realm a class-scoped create lands in when the caller names none. The
+  // same realm a card created through the store lands in, so a card minted by
+  // an operation and one minted by the store end up in the same place.
+  defaultWritableRealm(): string | undefined {
+    return this.realm.defaultWritableRealm?.path;
+  }
+
+  // What a saved search needs from this session.
+  //
+  // The resource is the host's one live search: it issues the wire query
+  // through the store, subscribes to each realm it covers, and re-runs as
+  // those realms index — which is what makes a query's freshness index
+  // freshness. It reads its query back through the thunk, so the search
+  // follows what the invocation resolves to rather than being rebuilt.
+  //
+  // A search with no owner is tied to this service, and a service is destroyed
+  // when the application instance is — not when a session ends, since signing
+  // out resets state rather than tearing services down. So an ownerless search
+  // lives for the life of the tab: it keeps its realm subscriptions and keeps
+  // re-running across a sign-out and the next sign-in. That is the right bound
+  // for a search the whole session reads and the wrong one for a search a
+  // single view wants, which is why a caller with a shorter life — a
+  // component, a controller — names itself as the owner and has its search
+  // torn down with it. A card instance is not owned by the application, so a
+  // card that keeps a search in a field takes the tab-lived one; a card that
+  // wants the search to end with a view hands the query to the search
+  // component instead of holding the resource.
+  search: OperationsSearch = {
+    actor: () => this.actorForSearch(),
+    realmFor: (identifier: string) => this.realm.realmOf(rri(identifier)),
+    entries: (
+      getQuery: () => SearchEntryWireQuery,
+      opts?: { owner?: object },
+    ): SearchEntries => getSearchEntriesResource(opts?.owner ?? this, getQuery),
+  };
+
+  // Who a saved search compares against, when the session can say.
+  //
+  // Nobody, inside the dedicated prerender app: that app authenticates as
+  // itself so it can render any card, and its identity is not the identity of
+  // whoever is later served the HTML it produces. A search that resolved the
+  // actor there would put one user's rows into a rendering everyone reads, and
+  // the store's own rule for that app — render as a pure function of the
+  // document you were handed — is the same rule. The saved search answers no
+  // rows there and the live render that follows fills them in.
+  //
+  // Nobody, too, before the matrix client is up or after a sign-out, where
+  // reading the id throws rather than answering. A query that does not read
+  // the actor is unaffected in all three cases.
+  private actorForSearch(): string | undefined {
+    if ((globalThis as any).__boxelPrerenderApp) {
+      return undefined;
+    }
+    try {
+      return this.matrixService.userId ?? undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async send(
+    realmURL: string,
+    method: OperationsMethod,
+    envelope: OperationsEnvelope,
+    opts?: { clientRequestId?: string; adopted?: string[] },
+  ): Promise<OperationsAnswer> {
+    this.assertMayWrite(method);
+    let headers: Record<string, string> = {
+      Accept: SupportedMimeType.BoxelOperations,
+      'Content-Type': SupportedMimeType.BoxelOperations,
+    };
+    if (method !== 'POST') {
+      // A read-only batch is sent as a `QUERY`, which is the method the realm
+      // reads as "authorized to read" — spelled the way every other QUERY the
+      // host sends is, since a browser request cannot carry the method itself.
+      // It takes no lock and mints nothing, so none of what follows applies.
+      headers['X-HTTP-Method-Override'] = 'QUERY';
+      return await this.fetchAnswer(realmURL, headers, envelope);
+    }
+    // Every write carries an id identifying who asked for it: the realm stamps
+    // it on the index event the write produces, which is what lets a client
+    // tell its own write's echo from anyone else's. The `instance:` prefix is
+    // the convention the store's own writes use.
+    //
+    // Registering it is what lets the store recognize the echo as ours. The
+    // store does not read that as "skip this pass": the event names which of
+    // the cards it carries were written from content this client sent, and
+    // only those are skipped — the rest of the batch took state the realm
+    // computed, which nothing here holds and the event is the only word of.
+    // So a card this batch minted from an instance keeps whatever was typed
+    // into it while the batch was in flight, and a card the batch transformed
+    // or appended to still refreshes.
+    let clientRequestId = opts?.clientRequestId ?? `instance:${uuidv4()}`;
+    this.cardService.clientRequestIds.add(clientRequestId);
+    headers['X-Boxel-Client-Request-Id'] = clientRequestId;
+
+    // The cards this batch mints that the store is already holding instances
+    // of. Their saves and this write are the same card being written, so they
+    // queue behind one another: an autosave that starts while the batch is in
+    // flight waits for the realm to name the card and then PATCHes it, rather
+    // than posting a second one.
+    let adopted = opts?.adopted ?? [];
+    return await this.store.withMutationLocks(adopted, async () => {
+      let answer = await this.fetchAnswer(realmURL, headers, envelope);
+      // Held instances take their names from the answer rather than from the
+      // event that follows it: the answer is the first and the certain word,
+      // and the promotion it drives — the identity map, the realm
+      // subscription, autosave, consumers in other realms — is what the store
+      // does for any card it learns a URL for.
+      await this.store.adoptMintedIdentities(mintedIdentities(answer));
+      return answer;
+    });
+  }
+
+  private async fetchAnswer(
+    realmURL: string,
+    headers: Record<string, string>,
+    envelope: OperationsEnvelope,
+  ): Promise<OperationsAnswer> {
+    let response = await this.network.authedFetch(`${realmURL}_operations`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(envelope),
+    });
+    if (!response.ok) {
+      throw await refusal(response);
+    }
+    return (await response.json()) as OperationsAnswer;
+  }
+
+  // A store rendering for the indexer must never write: the render holds the
+  // only worker while a write takes the realm's write lock and waits for a
+  // reindex that needs that worker, so the write and the render wait on each
+  // other. The prerender app marks itself, and every write from it is refused.
+  //
+  // This is the first of the two arms the store's own gate has, not both. The
+  // store also refuses when its *own instance* is the render store and a
+  // render is in flight (`isRenderStore && __boxelRenderContext`), which it can
+  // ask because the caller is the store. An operation reaches the realm without
+  // going through a store, so there is no such instance to ask about, and the
+  // remaining signal — `__boxelRenderContext` alone — is set around every
+  // in-browser index render in the ordinary app too: reading it here would
+  // refuse a card's write for coinciding with someone else's indexing, which is
+  // the failure the store's own comment warns against. So the deadlock this
+  // guards is the prerender app's, which is where the sole worker and the write
+  // lock meet.
+  private assertMayWrite(method: OperationsMethod) {
+    if (method !== 'POST') {
+      return;
+    }
+    if ((globalThis as any).__boxelPrerenderApp) {
+      throw new Error(
+        `an operation that writes cannot run in a render: the render holds the worker a write would wait on, so the two would wait on each other`,
+      );
+    }
+  }
+}
+
+// The realm's refusal, as the caller sees it.
+//
+// A batch is all-or-nothing, so a refused one answers with a single JSON:API
+// error and nothing was written — including the entry it names. A response
+// that is not that document at all is reported by status alone rather than
+// read for members it does not carry.
+async function refusal(response: Response): Promise<Error> {
+  let body = await response.text();
+  let error: Record<string, unknown> | undefined;
+  try {
+    let parsed = JSON.parse(body) as { errors?: Record<string, unknown>[] };
+    error = parsed?.errors?.[0];
+  } catch {
+    error = undefined;
+  }
+  if (!error) {
+    return new OperationsError({
+      status: response.status,
+      detail: body || response.statusText,
+    });
+  }
+  let meta = (error.meta ?? {}) as { entry?: number | string };
+  return new OperationsError({
+    status: Number(error.status ?? response.status),
+    ...(typeof error.code === 'string' ? { code: error.code } : {}),
+    ...(typeof error.title === 'string' ? { title: error.title } : {}),
+    ...(typeof error.detail === 'string' ? { detail: error.detail } : {}),
+    ...(typeof error.id === 'string' ? { id: error.id } : {}),
+    ...(meta.entry === undefined ? {} : { entry: meta.entry }),
+  });
+}
+
+declare module '@ember/service' {
+  interface Registry {
+    operations: OperationsService;
+  }
+}
