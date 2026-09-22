@@ -2,6 +2,8 @@ import { Deferred } from './deferred.ts';
 import { resolveRangeHeader } from './http-range.ts';
 import {
   awaitRealmIndexSettled,
+  INDEX_WRITING_JOB_TYPES,
+  readLaneHoldersBestEffort,
   indexingConcurrencyGroup,
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
   CONTENT_MOVING_INDEX_JOB_TYPES,
@@ -691,6 +693,11 @@ const ARCHIVED_SEAL_EXEMPT_PATHS = new Set(['_readiness-check', '_session']);
 // carries its own, longer one — a published realm's HTML can take minutes and
 // its callers are pollers with deadlines to match.
 const READINESS_REQUEST_BUDGET_MS = 10_000;
+// How long the readiness lane gate will spend naming the jobs that held it.
+// Separate from the budget above and much smaller, because it is spent after
+// that budget is already gone: it buys a log line, not an answer, so it is
+// sized to be lost in the noise of a request that has already held for 10s.
+const LANE_DIAGNOSTIC_BUDGET_MS = 1_000;
 // How long a card read holds its connection on the read-your-writes indexing
 // drain (see `drainRequestersOwnIndexing`) before serving the current index
 // generation anyway. Bounded for the same reason the readiness gates are: an
@@ -2409,15 +2416,66 @@ export class Realm {
     // `curl --max-time 15`, and a request that spent its budget on startup and
     // then started another full budget here would blow past that and hand the
     // probe a connection timeout instead of a status it can read.
+    //
+    // Narrowed to the jobs that write the index. The lane also carries work
+    // that only has to stay off a running pass — `scoped-css-gc` — and such a
+    // job says nothing about whether the index is behind its source. Gating on
+    // the bare lane makes any backlog in front of that job read as an
+    // unfinished index, and the daily GC cron enqueues one job per realm: on a
+    // slow background queue that is every realm at once, for as long as the
+    // sweep takes to drain.
+    let laneWaitStartedAt = Date.now();
     if (
       !(await awaitRealmIndexSettled(this.#dbAdapter, this.url, {
         timeoutMs: Math.max(0, requestDeadline - Date.now()),
+        jobTypes: INDEX_WRITING_JOB_TYPES,
       }))
     ) {
       // The lane never drained within budget — a job queued behind a long
       // backlog, or one whose worker died and has yet to be reaped. Keep the
       // caller polling instead of reporting a realm ready whose index is
       // knowably behind its source.
+      //
+      // Name the jobs. This is the one gate here that can hold a realm for
+      // hours on state no part of this process owns, and without the ids an
+      // operator cannot tell it from the two in-process gates above — they
+      // differ only in which log line is absent.
+      //
+      // Strictly best-effort, and bounded: the read happens after the budget is
+      // spent, so it must not be able to turn this 503 into a 500 or extend the
+      // request. Every outcome is reported distinctly, including the two ways
+      // the read itself can fail, because a lane that drained just after the
+      // gate expired, a database that refused, and one that never answered each
+      // send whoever reads this somewhere different.
+      let read = await readLaneHoldersBestEffort(
+        this.#dbAdapter,
+        this.url,
+        INDEX_WRITING_JOB_TYPES,
+        LANE_DIAGNOSTIC_BUDGET_MS,
+      );
+      let heldBy: string;
+      switch (read.outcome) {
+        case 'read':
+          heldBy = read.holders.length
+            ? read.holders
+                .map(
+                  ({ id, jobType, claimed }) =>
+                    `job ${id} (${jobType}, ${claimed ? 'claimed' : 'waiting'})`,
+                )
+                .join(', ')
+            : 'the lane drained after the gate expired';
+          break;
+        case 'failed':
+          heldBy = `could not read the lane: ${read.reason}`;
+          break;
+        case 'timed-out':
+          heldBy = `could not read the lane within ${LANE_DIAGNOSTIC_BUDGET_MS}ms`;
+          break;
+      }
+      this.#log.warn(
+        `readiness check for ${this.url} is still waiting on queued index work after ${Date.now() - laneWaitStartedAt}ms: ` +
+          heldBy,
+      );
       return notReady('index');
     }
 

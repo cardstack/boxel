@@ -21,10 +21,18 @@ import { isObjectLike } from 'lodash-es';
 
 export const INCREMENTAL_INDEX_JOB_TIMEOUT_SEC = 10 * 60;
 
-// Every job that writes a realm's index — from-scratch, incremental, copy —
-// shares one concurrency group, which is what makes them serialize per realm.
-// Anything that reasons about a realm's index jobs as a set (enqueue,
-// teardown, quiescence) must use this same name.
+// The name of a realm's index lane. Membership in it means one thing only:
+// serialize against everything else in it. Every job that writes the realm's
+// index joins — from-scratch, incremental, copy — and so does work that must
+// not overlap a running pass without writing the index itself, today
+// `scoped-css-gc` (see `runtime-common/scoped-css-gc.ts`).
+//
+// So the lane's membership does not answer "is this realm's index behind its
+// source". A reader asking that must narrow to `INDEX_WRITING_JOB_TYPES`;
+// reading the bare lane reports a realm as mid-index for as long as a GC sweep
+// sits queued behind an unrelated backlog. A caller that wants the lane itself
+// — cancelling a realm's outstanding work on teardown — wants every member and
+// should not narrow.
 export function indexingConcurrencyGroup(realmURL: string): string {
   return `indexing:${realmURL}`;
 }
@@ -226,6 +234,150 @@ export const CONTENT_MOVING_INDEX_JOB_TYPES = [
   'copy-index',
 ];
 
+// The jobs in a realm's index lane that write the index, which is what a reader
+// asking "is this realm's index behind its source" is waiting on. A superset of
+// `CONTENT_MOVING_INDEX_JOB_TYPES`: a from-scratch pass re-derives rows without
+// moving bytes, so it does not gate a conditional write, but it does leave the
+// index behind its source until it lands.
+//
+// An allow-list of index-writing types, not a deny-list of the rest. The lane
+// carries work that only needs mutual exclusion with a pass, and a deny-list
+// would silently make the next such job to join a readiness signal.
+export const INDEX_WRITING_JOB_TYPES = [
+  'from-scratch-index',
+  ...CONTENT_MOVING_INDEX_JOB_TYPES,
+];
+
+// `AND job_type IN (...)`, or nothing when the caller wants the whole lane.
+// `column` qualifies the name for a query that aliases `jobs`; it is spelled
+// into the SQL rather than bound, so the type enumerates the two forms instead
+// of taking any string.
+//
+// Absent and empty are different filters, and the truthiness test that reads
+// naturally here collapses them in the expensive direction — a caller whose
+// list came out empty would get the whole lane instead of nothing. Every
+// reader sharing this helper inherits that distinction rather than restating
+// it, so a caller that computes its list cannot land on the wrong one.
+export function jobTypeFilter(
+  jobTypes: string[] | undefined,
+  column: 'job_type' | 'j.job_type' = 'job_type',
+): Expression {
+  if (!jobTypes) {
+    return [];
+  }
+  if (jobTypes.length === 0) {
+    // A filter no row can match. `IN ()` is a syntax error, so the empty set
+    // is spelled as a predicate that is simply never true.
+    return ['AND FALSE'];
+  }
+  let expression: Expression = [`AND ${column} IN`, '('];
+  jobTypes.forEach((jobType, index) => {
+    if (index > 0) {
+      expression.push(',');
+    }
+    expression.push(param(jobType));
+  });
+  expression.push(')');
+  return expression;
+}
+
+// The unfulfilled jobs holding a realm's lane, oldest first — what a gate that
+// expired was waiting on. For diagnostics only: a caller deciding anything must
+// ask `awaitRealmIndexSettled`, whose answer is one query rather than a read
+// that can disagree with the gate it explains.
+//
+// Capped because it lands in a log line. A realm's lane serializes, so it holds
+// a handful in practice; the cap only bounds a pathological backlog, and a lane
+// that deep is diagnosed from the queue, not from one realm's readiness log.
+const OUTSTANDING_INDEX_JOBS_LOG_CAP = 10;
+
+// `claimed` separates the two states a reader of this has to tell apart: a job
+// waiting behind a backlog, and a job whose worker died holding it and has yet
+// to be reaped. The ids and types read identically for both, so without it the
+// log line names the lane's occupants but not which kind of stuck they are.
+//
+// A live reservation is an uncompleted one that has not expired, the same
+// predicate `currentJobProgress` reads for `has_worker`. An expired reservation
+// is a dead attempt: the job is claimable again, which reads as waiting.
+// `job_reservations(job_id)` is indexed, so the subquery stays well inside the
+// budget the only caller bounds this with.
+export interface LaneHolder {
+  id: number;
+  jobType: string;
+  claimed: boolean;
+}
+
+export async function outstandingIndexJobs(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+  jobTypes?: string[],
+): Promise<LaneHolder[]> {
+  if (dbAdapter.kind !== 'pg') {
+    return [];
+  }
+  let rows = (await query(dbAdapter, [
+    `SELECT id, job_type,`,
+    `EXISTS (SELECT 1 FROM job_reservations jr WHERE jr.job_id = jobs.id`,
+    `AND jr.completed_at IS NULL AND jr.locked_until > NOW()) AS claimed`,
+    `FROM jobs WHERE status = 'unfulfilled' AND concurrency_group =`,
+    param(indexingConcurrencyGroup(realmURL)),
+    ...jobTypeFilter(jobTypes),
+    `ORDER BY id LIMIT ${OUTSTANDING_INDEX_JOBS_LOG_CAP}`,
+  ])) as { id: number | string; job_type: string; claimed: boolean }[];
+  return rows.map((row) => ({
+    id: Number(row.id),
+    jobType: row.job_type,
+    claimed: Boolean(row.claimed),
+  }));
+}
+
+// `outstandingIndexJobs` for a log line on a path that must still answer.
+//
+// Never throws, and never outlives `timeoutMs`. Both matter because the only
+// caller reads the lane AFTER a gate has already spent its budget: a rejection
+// there would replace that gate's deliberate answer with an unexpected-exception
+// 500, losing the headers the answer is carried in, and a slow read would push
+// the request past the deadline the budget exists to bound. A lane that has not
+// drained is also the case where the database is least likely to answer
+// quickly, so neither is a remote possibility — it is the expected weather.
+//
+// Three outcomes rather than a value-or-nothing, because each sends whoever
+// reads the log somewhere different. An empty lane says the lane drained just
+// after the gate expired. A rejection says the database answered and refused,
+// and carries why. A timeout says it did not answer at all. Collapsing the last
+// two would print a budget the query may never have spent — a connection error
+// returning in 2ms would read as a slow database.
+export type LaneHoldersRead =
+  | { outcome: 'read'; holders: LaneHolder[] }
+  | { outcome: 'failed'; reason: string }
+  | { outcome: 'timed-out' };
+
+export async function readLaneHoldersBestEffort(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+  jobTypes: string[] | undefined,
+  timeoutMs: number,
+): Promise<LaneHoldersRead> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let expired = new Promise<LaneHoldersRead>((resolve) => {
+    timer = setTimeout(() => resolve({ outcome: 'timed-out' }), timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      outstandingIndexJobs(dbAdapter, realmURL, jobTypes).then(
+        (holders): LaneHoldersRead => ({ outcome: 'read', holders }),
+        (error): LaneHoldersRead => ({
+          outcome: 'failed',
+          reason: error instanceof Error ? error.message : String(error),
+        }),
+      ),
+      expired,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function awaitRealmIndexSettled(
   dbAdapter: DBAdapter,
   realmURL: string,
@@ -233,9 +385,10 @@ export async function awaitRealmIndexSettled(
     timeoutMs?: number;
     pollIntervalMs?: number;
     // Narrows the lane to particular job types. Absent means the whole
-    // `indexing:<realm>` lane, which is what a caller wanting "all indexing
-    // has settled" — a readiness probe, a publish — asks for. Empty is a
-    // filter naming no job rather than no filter, so it settles at once.
+    // `indexing:<realm>` lane, including members that only need mutual
+    // exclusion with a pass — which is a stronger claim than any caller here
+    // wants, so both readiness and the write-path drain pass a list. Empty is
+    // a filter naming no job rather than no filter, so it settles at once.
     jobTypes?: string[];
     // Narrows the lane to passes this writer has a stake in. Reading your own
     // write matters; being made to read someone else's does not, and serving
@@ -299,16 +452,7 @@ export async function awaitRealmIndexSettled(
         `))`,
       );
     }
-    if (jobTypes) {
-      expression.push('AND job_type IN', '(');
-      jobTypes.forEach((jobType, index) => {
-        if (index > 0) {
-          expression.push(',');
-        }
-        expression.push(param(jobType));
-      });
-      expression.push(')');
-    }
+    expression.push(...jobTypeFilter(jobTypes));
     expression.push('LIMIT 1');
     let rows = await query(dbAdapter, expression);
     return rows.length === 0;
