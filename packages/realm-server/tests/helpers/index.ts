@@ -3191,6 +3191,8 @@ export function realmConfigCardJSON(
     // The realm's own settings, which a card operation reads with
     // `realmConfig("key")`.
     config?: Record<string, unknown>;
+    // Which FileDef subclass each file extension in this realm binds to.
+    fileTypes?: Record<string, { module: string; name: string }>;
   } = {},
 ): string {
   let attrs: Record<string, unknown> = {};
@@ -3212,6 +3214,9 @@ export function realmConfigCardJSON(
   }
   if (config.config !== undefined) {
     attrs.config = config.config;
+  }
+  if (config.fileTypes !== undefined) {
+    attrs.fileTypes = config.fileTypes;
   }
   return JSON.stringify({
     data: {

@@ -63,6 +63,7 @@ function prerenderHtmlArgs(
     loaderEpoch: 'epoch-a',
     spawningJobId: 100,
     coalescedPublishes: null,
+    fileDefBindings: null,
     preWarm: false,
     ...overrides,
   };

@@ -385,7 +385,17 @@ import {
   computeContentHashFromRanges,
   isSampledContentHash,
 } from './content-hash.ts';
-import { resolveFileDefCodeRef, urlNamesFile } from './file-def-code-ref.ts';
+import {
+  resolveFileDefCodeRef,
+  servedFileDefCodeRef,
+  urlNamesFile,
+} from './file-def-code-ref.ts';
+import {
+  FILE_TYPE_BINDINGS_ATTRIBUTE,
+  NO_FILE_DEF_BINDINGS,
+  parseFileDefBindings,
+  type FileDefBindings,
+} from './file-def-bindings.ts';
 
 import type { Utils } from './matrix-backend-authentication.ts';
 import { MatrixBackendAuthentication } from './matrix-backend-authentication.ts';
@@ -1842,6 +1852,13 @@ export class Realm {
   // neither. `null` means "not yet parsed"; an empty map is a realm that
   // carries no settings, which is what an operation naming one is told.
   #cachedRealmConfig: Record<string, JsonValue> | null = null;
+  // The third half of the same parse: which FileDef subclass each bound file
+  // extension resolves to in this realm. Held apart from `#cachedRealmInfo`
+  // for the same reason the settings above are — it is not what the realm
+  // serves and not what the card+json ETag hashes. `null` means "not yet
+  // parsed"; an empty map is a realm that binds nothing, which is every realm
+  // that has not asked for one.
+  #cachedFileDefBindings: FileDefBindings | null = null;
   // Bumped by every invalidation, and captured by a parse before it starts.
   // A parse that reads the realm's state and then has an index swap land
   // underneath it is holding values the realm has already moved past, so it
@@ -1861,7 +1878,11 @@ export class Realm {
   // cache share one read instead of each running their own. Nulled once it
   // settles (see getRealmInfo).
   #realmInfoPromise:
-    | Promise<{ info: RealmInfo; config: Record<string, JsonValue> }>
+    | Promise<{
+        info: RealmInfo;
+        config: Record<string, JsonValue>;
+        fileTypes: FileDefBindings;
+      }>
     | undefined;
   // Realm lifecycle timestamps, served by `getDetailedRealmInfo` on top of the
   // plain info. Cached separately from `#cachedRealmInfo` rather than folded
@@ -5265,8 +5286,12 @@ export class Realm {
           );
           return isResolvedCodeRef(absolute) ? absolute : undefined;
         },
-        fileDefCodeRef: (url) =>
-          resolveFileDefCodeRef(url, this.#virtualNetwork),
+        fileDefCodeRef: async (url) =>
+          resolveFileDefCodeRef(
+            url,
+            this.#virtualNetwork,
+            await this.getFileDefBindings(),
+          ),
         unresolveInstanceIds: (doc) => this.#serveInstanceIdsAsRRI(doc),
       };
     }
@@ -8559,14 +8584,17 @@ export class Realm {
       return undefined;
     }
     let fileURL = this.paths.fileURL(localPath).href;
-    let fileDefCodeRef = resolveFileDefCodeRef(
-      new URL(fileURL),
-      this.#virtualNetwork,
-    );
     let name = localPath.split('/').pop() ?? localPath;
     let inferredContentType = inferContentType(name);
     let createdAt = await this.getCreatedTime(localPath);
-    let { info: realmInfo } = await this.parseRealmInfo();
+    // One parse for both halves it needs: the info this document carries and
+    // the bindings that say which class it is.
+    let { info: realmInfo, fileTypes } = await this.parseRealmInfo();
+    let fileDefCodeRef = resolveFileDefCodeRef(
+      new URL(fileURL),
+      this.#virtualNetwork,
+      fileTypes,
+    );
     let persistedMeta = this.#dbAdapter
       ? await getContentMeta(this.#dbAdapter, this.url, localPath)
       : { contentHash: undefined, contentSize: undefined };
@@ -8615,7 +8643,7 @@ export class Realm {
     let name = localPath.split('/').pop() ?? localPath;
     let inferredContentType = inferContentType(name);
     let createdAt = fileEntry.resourceCreatedAt ?? fileEntry.lastModified;
-    let { info: realmInfo } = await this.parseRealmInfo();
+    let { info: realmInfo, fileTypes } = await this.parseRealmInfo();
     let searchDoc = fileEntry.searchDoc ?? {};
     let searchHash =
       typeof searchDoc.contentHash === 'string'
@@ -8637,11 +8665,27 @@ export class Realm {
       : { contentHash: undefined, contentSize: undefined };
     let contentHash = persistedMeta.contentHash ?? searchHash;
     let contentSize = persistedMeta.contentSize ?? searchSize;
-    let adoptsFrom =
-      codeRefFromInternalKey(fileEntry.types?.[0]) ??
-      (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
+    // A binding wins over the row, and the row wins over everything else.
+    //
+    // The row records what some past pass resolved, so it lags a binding the
+    // realm has since declared or changed. Dispatch reads the bindings live,
+    // so deferring to a stale row here would serve a document naming one class
+    // while an operation against the same file resolved another — and a client
+    // that hydrated the served class would not carry the operation at all. The
+    // row still answers for every extension the realm says nothing about,
+    // which is all of them for a realm that binds nothing.
+    let adoptsFrom = servedFileDefCodeRef(new URL(fileURL), {
+      bindings: fileTypes,
+      rowAdoptsFrom: codeRefFromInternalKey(fileEntry.types?.[0]),
+      resourceAdoptsFrom: isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
         ? fileEntry.resource?.meta?.adoptsFrom
-        : resolveFileDefCodeRef(new URL(fileURL), this.#virtualNetwork));
+        : undefined,
+      fallback: resolveFileDefCodeRef(
+        new URL(fileURL),
+        this.#virtualNetwork,
+        fileTypes,
+      ),
+    });
     let resourceAttributes =
       (fileEntry as IndexedFile).resource?.attributes ?? {};
     let baseAttributes = {
@@ -12342,17 +12386,39 @@ export class Realm {
     return structuredClone((await this.#parsedRealmInfo()).config);
   }
 
-  // Both halves of one parse, which is why they are read together rather than
-  // each through its own accessor: `clearRealmIndexCaches()` nulls the cache
-  // on every index swap, so a settings read that primed the cache and then
-  // reached for the field would answer an empty map for a realm that has
+  // Which FileDef subclass each bound extension names in this realm, for the
+  // paths that have to type a stored file: the operation core's definition
+  // lookup and the two that compose a served file-meta document.
+  //
+  // Not copied per caller, unlike the settings above. What comes back is a
+  // frozen map of frozen refs that nothing stamps into a document — a ref read
+  // out of it is spread into one — so there is nothing here for a caller to
+  // write through, and this is asked once per file served rather than once per
+  // batch.
+  async getFileDefBindings(): Promise<FileDefBindings> {
+    return (await this.#parsedRealmInfo()).fileTypes;
+  }
+
+  // All three halves of one parse, which is why they are read together rather
+  // than each through its own accessor: `clearRealmIndexCaches()` nulls the
+  // cache on every index swap, so a settings read that primed the cache and
+  // then reached for the field would answer an empty map for a realm that has
   // settings whenever a swap landed in between.
   async #parsedRealmInfo(): Promise<{
     info: RealmInfo;
     config: Record<string, JsonValue>;
+    fileTypes: FileDefBindings;
   }> {
-    if (this.#cachedRealmInfo && this.#cachedRealmConfig) {
-      return { info: this.#cachedRealmInfo, config: this.#cachedRealmConfig };
+    if (
+      this.#cachedRealmInfo &&
+      this.#cachedRealmConfig &&
+      this.#cachedFileDefBindings
+    ) {
+      return {
+        info: this.#cachedRealmInfo,
+        config: this.#cachedRealmConfig,
+        fileTypes: this.#cachedFileDefBindings,
+      };
     }
     if (!this.#realmInfoPromise) {
       let parse = (async () => {
@@ -12363,18 +12429,19 @@ export class Realm {
         // memoizes them. The hash covers the served half alone, which is
         // exactly the bytes a response carries — so editing a setting does not
         // invalidate every card's cached representation in the realm.
-        let { info, config } = await this.parseRealmInfo();
+        let { info, config, fileTypes } = await this.parseRealmInfo();
         let settings = config ?? {};
         if (generation === this.#realmInfoGeneration) {
           this.#cachedRealmInfo = info;
           this.#cachedRealmConfig = settings;
+          this.#cachedFileDefBindings = fileTypes;
           this.#cachedRealmInfoHash = computeContentHash(JSON.stringify(info));
         }
         // Answered either way: this is the realm as the caller asking for it
         // found it, which is what every reader of a memoized parse gets. What
         // the check above prevents is that reading outliving the request, by
         // becoming the answer given to everyone after it.
-        return { info, config: settings };
+        return { info, config: settings, fileTypes };
       })();
       this.#realmInfoPromise = parse;
       // Clears the slot only while this parse still owns it. An invalidation
@@ -12412,6 +12479,7 @@ export class Realm {
     this.#realmInfoGeneration++;
     this.#cachedRealmInfo = null;
     this.#cachedRealmConfig = null;
+    this.#cachedFileDefBindings = null;
     this.#cachedRealmInfoHash = null;
     this.#cachedRegistryTimestamps = null;
     this.#cachedIndexCounts = null;
@@ -12435,6 +12503,7 @@ export class Realm {
   private async parseRealmInfo(): Promise<{
     info: RealmInfo;
     config: Record<string, JsonValue> | undefined;
+    fileTypes: FileDefBindings;
   }> {
     let [lastPublishedAt, metadata] = await Promise.all([
       this.getLastPublishedAt(),
@@ -12454,6 +12523,8 @@ export class Realm {
       lastPublishedAt,
       includePrerenderedDefaultRealmIndex: null,
     };
+
+    let fileTypes: FileDefBindings = NO_FILE_DEF_BINDINGS;
 
     // Overlay from the RealmConfig card file at /realm.json on disk. The
     // file is the source of truth — card writes update it, publish
@@ -12508,6 +12579,21 @@ export class Realm {
         if ('config' in attrs) {
           assignRealmConfig(realmInfo, attrs.config, this.#log);
         }
+        // Read here, from the stored document, and deliberately not from the
+        // indexed row the overlay below reads. A binding decides which class a
+        // stored file is, and the index runner resolves that answer for itself
+        // — through its own reader, from these same bytes — while it writes
+        // the file's row. Honouring the indexed row here would leave an edited
+        // binding live for the pass and stale for the realm until the swap
+        // landed, which is a file typed one way at index time and another at
+        // invocation time: the one disagreement this binding exists to avoid.
+        // The indexed overlay is for post-index transformations of what the
+        // realm serves, and a code ref has none.
+        fileTypes = parseFileDefBindings(attrs[FILE_TYPE_BINDINGS_ATTRIBUTE], {
+          realmURL: new URL(this.url),
+          virtualNetwork: this.#virtualNetwork,
+          logWarn: (message) => this.#log.warn(message),
+        });
       }
     } catch (e) {
       this.#log.warn(`failed to read RealmConfig card from disk: ${e}`);
@@ -12554,7 +12640,7 @@ export class Realm {
     }
 
     let { config, ...info } = realmInfo;
-    return { info, config };
+    return { info, config, fileTypes };
   }
 
   // RealmInfo plus the realm-lifecycle timestamps, for the realm server's batch

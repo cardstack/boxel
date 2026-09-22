@@ -8,7 +8,11 @@ import type { DirResult } from 'tmp';
 import type { PgAdapter } from '@cardstack/postgres';
 
 import {
+  baseFileRef,
+  baseRealmRRI,
+  baseRef,
   BOXEL_OPERATIONS_EXT,
+  codeRefFromInternalKey,
   rri,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
@@ -262,12 +266,45 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         }
       }
     `,
+    // A FileDef subclass of the realm's own, carrying a named operation built
+    // on `appendLine`. `appendLine` takes no clause and refuses a
+    // `transformations` program — it appends to stored bytes rather than
+    // running a program over a document — so the line the realm stamps is
+    // composed by the `input` stage, which runs over the payload before the
+    // `params` check and can therefore supply the `line` the caller never
+    // sent. The stage adds to the payload rather than replacing it, because
+    // what it produces is what the `params` check then reads: a program
+    // answering `{ line: … }` alone would drop the declared `what` and be
+    // refused for not supplying it.
+    'audit-log.gts': `
+      import { TextFileDef } from "@cardstack/base/text-file-def";
+      import StringField from "@cardstack/base/string";
+      import { operation, bxl } from "@cardstack/base/operations";
+
+      export class AuditLog extends TextFileDef {
+        @operation static record = {
+          base: 'appendLine',
+          params: { what: StringField },
+          input: bxl\`. + { line: (realmConfig("auditPrefix") + " " + actor() + " " + params("what")) }\`,
+        };
+      }
+    `,
     // The realm's own config document, carrying the settings a transform reads
-    // with `realmConfig(…)`.
+    // with `realmConfig(…)` and the binding that makes a stored `.txt` an
+    // `AuditLog` rather than the platform's `TextFileDef`.
     'realm.json': realmConfigCardJSON({
       name: 'Card Operations Envelope Test Realm',
-      config: { timezone: 'UTC' },
+      config: { timezone: 'UTC', auditPrefix: '[audit]' },
+      fileTypes: {
+        '.txt': { module: './audit-log', name: 'AuditLog' },
+      },
     }),
+    'audit.txt': 'opened\n',
+    // Unbound, and a `.log` on purpose: the platform types it `TextFileDef`,
+    // whose `extractAttributes` refuses any extension outside its own list.
+    // A `.log` in the code-ref table but not in that list indexes as a
+    // file-error rather than as text, and this is the file that says so.
+    'startup.log': 'ready\n',
     'staged.gts': `
       import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
       import StringField from "@cardstack/base/string";
@@ -2208,6 +2245,219 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           304,
           'and its conditional fast path is untouched',
         );
+      });
+    });
+
+    // ========================================================================
+    // A file bound to one of the realm's own FileDef subclasses.
+    //
+    // The realm's `realm.json` binds `.txt` to its `AuditLog`, so `audit.txt`
+    // is an `AuditLog` rather than the platform's `TextFileDef` — and the
+    // operations `AuditLog` declares are reachable against it. Every assertion
+    // here is about the binding being the *same* answer in two places that
+    // resolve it independently: the pass that wrote the file's row, and the
+    // dispatch that resolves an operation's definition when one is invoked. A
+    // disagreement between them is the failure this binding is designed
+    // against, and it is not one either half reports on its own — the row wins
+    // when a document is served, so a dispatch honouring a binding the index
+    // ignored is silently inert.
+    // ========================================================================
+    module('realm file type bindings', function () {
+      function auditLines(): string[] {
+        return readFileSync(realmFile('audit.txt'), 'utf8')
+          .split('\n')
+          .filter((line) => line.length > 0);
+      }
+
+      test('the file is indexed as the class the realm bound', async function (assert) {
+        let rows = (await testDbAdapter.execute(
+          `select types from boxel_index where url = $1 and type = 'file'`,
+          { bind: [`${testRealmHref}audit.txt`] },
+        )) as { types: string[] | null }[];
+
+        assert.strictEqual(rows.length, 1, 'the file has an index row');
+        // The row's `types` are the extractor's walk of the real prototype
+        // chain, not the synthetic fallback assembled beside
+        // `resolveFileDefCodeRef` — so the platform classes `AuditLog` extends
+        // sit between it and the terminator. Asserted as head, membership and
+        // tail rather than as one literal chain, because inserting a class
+        // between `TextFileDef` and `FileDef` would be a change to the file
+        // family and not to this binding.
+        let types = (rows[0].types ?? []).map((key) =>
+          codeRefFromInternalKey(key),
+        );
+        assert.deepEqual(
+          types[0],
+          { module: rri(`${testRealmHref}audit-log`), name: 'AuditLog' },
+          'the row is typed by the binding — and this is the entry that ' +
+            'decides, since a served document reads its type off the first one',
+        );
+        assert.deepEqual(
+          types.slice(-2),
+          [baseFileRef, baseRef],
+          'with the chain the platform puts behind every file still intact, ' +
+            'so a search for files finds this one',
+        );
+        assert.true(
+          types.some(
+            (ref) =>
+              ref?.name === 'TextFileDef' &&
+              ref.module === rri(`${baseRealmRRI}text-file-def`),
+          ),
+          'and the platform class the binding extends is on the chain',
+        );
+      });
+
+      test('the document the realm serves names the same class', async function (assert) {
+        let response = await request
+          .get('/audit.txt')
+          .set('Accept', SupportedMimeType.CardJson)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(realm, TESTER, ['read', 'write'])}`,
+          );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          response.body.data.meta.adoptsFrom,
+          { module: rri(`${testRealmHref}audit-log`), name: 'AuditLog' },
+          'a client hydrating this document builds the bound class, which is ' +
+            'what puts the declared operation on the instance at all',
+        );
+      });
+
+      test('an operation declared on the bound class is invocable by name', async function (assert) {
+        let before = auditLines().length;
+        let response = await post(
+          envelope(
+            invoke('record', {
+              href: '/audit.txt',
+              data: { what: 'consult requested' },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let lines = auditLines();
+        assert.strictEqual(lines.length, before + 1, 'one line was appended');
+        assert.strictEqual(
+          lines[lines.length - 1],
+          `[audit] ${TESTER} consult requested`,
+          'the realm supplied the prefix from its own settings and the actor ' +
+            'it authenticated; the caller sent neither',
+        );
+      });
+
+      test('a caller cannot forge the line the realm composes', async function (assert) {
+        // `line` is what the base `appendLine` appends, and it is not a param
+        // this operation declares. The `input` stage computes it over whatever
+        // the caller sent and its value lands last, so a `line` in the payload
+        // is overwritten rather than honoured.
+        let response = await post(
+          envelope(
+            invoke('record', {
+              href: '/audit.txt',
+              data: {
+                what: 'follow-up scheduled',
+                line: '[audit] @someone-else:localhost approved',
+              },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let lines = auditLines();
+        assert.strictEqual(
+          lines[lines.length - 1],
+          `[audit] ${TESTER} follow-up scheduled`,
+          'the line is the one the realm composed',
+        );
+      });
+
+      test('the base operations stay on a bound file', async function (assert) {
+        let before = auditLines().length;
+        let response = await post(
+          envelope(
+            invoke('appendLine', {
+              href: '/audit.txt',
+              data: { line: 'appended directly' },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let lines = auditLines();
+        assert.strictEqual(lines.length, before + 1, 'one line was appended');
+        assert.strictEqual(
+          lines[lines.length - 1],
+          'appended directly',
+          'a declaration adds a name to the class rather than replacing what ' +
+            'the def kind already carries',
+        );
+      });
+
+      test('a file whose extension the realm does not bind keeps the platform class', async function (assert) {
+        let response = await request
+          .get('/notes.md')
+          .set('Accept', SupportedMimeType.CardJson)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(realm, TESTER, ['read', 'write'])}`,
+          );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        // Asserted by class rather than by the module's exact spelling: a
+        // served `adoptsFrom` reads as a registered prefix when it comes off
+        // the index row and as a full URL when it comes off the platform
+        // table, both resolve to the same module, and which one answers is
+        // not what this test is about.
+        let { module, name } = response.body.data.meta.adoptsFrom;
+        assert.strictEqual(
+          name,
+          'MarkdownDef',
+          'the binding is per extension, and this one has none',
+        );
+        assert.true(
+          String(module).endsWith('/markdown-file-def'),
+          `and it names the platform's markdown module: ${module}`,
+        );
+      });
+
+      test('a log the realm does not bind is the platform text class', async function (assert) {
+        let response = await request
+          .get('/startup.log')
+          .set('Accept', SupportedMimeType.CardJson)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(realm, TESTER, ['read', 'write'])}`,
+          );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          response.body.data.meta.adoptsFrom.name,
+          'TextFileDef',
+          'a log is text rather than the bare FileDef an unlisted extension ' +
+            'falls back to',
+        );
+        // That the text family also *accepts* a `.log` — `extractAttributes`
+        // refuses any extension outside its own list, so naming the class is
+        // only half of it — is asserted where the extract actually runs, in
+        // the host's `text-file-def` acceptance suite. The fixture files here
+        // are served without one, so a content assertion would pass or fail
+        // for reasons that have nothing to do with the extension.
+      });
+
+      test('an operation the bound class does not declare is still unknown', async function (assert) {
+        // `escalate` is declared on a card in this realm, not on `AuditLog`.
+        // Binding an extension adds the bound class's operations to its
+        // files; it does not put every name in the realm within reach.
+        let response = await post(
+          envelope(invoke('escalate', { href: '/audit.txt' })),
+        );
+
+        assert.strictEqual(response.status, 404, 'HTTP 404 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.code, 'unknown-operation');
       });
     });
   });
