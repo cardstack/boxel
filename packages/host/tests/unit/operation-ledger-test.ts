@@ -462,6 +462,22 @@ module('Unit | operation ledger', function () {
     assert.strictEqual(h.reloads, 0, 'there is nothing to put right');
   });
 
+  test('a failure while deciding eligibility declines rather than fails the call', async function (assert) {
+    // Working out whether this *can* be optimistic is not work the caller
+    // asked for, so a failure in it must not become a failure of their
+    // operation — it costs them the pessimistic path they would have taken.
+    let h = setup({
+      lower: async () => {
+        throw new Error('the type could not be resolved');
+      },
+    });
+    let answer = await h.attempt({ body: 'one' });
+
+    assert.strictEqual(answer, undefined, 'the ledger declines to carry it');
+    assert.strictEqual(h.applied.length, 0, 'nothing was applied locally');
+    assert.strictEqual(h.sends.length, 0, 'and nothing was sent from here');
+  });
+
   test('a card this session is not holding is declined', async function (assert) {
     let h = setup({ held: () => undefined });
     let answer = await h.attempt({ body: 'one' });

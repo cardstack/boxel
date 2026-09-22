@@ -203,7 +203,20 @@ export default class OperationLedger {
       clientRequestId: string;
     },
   ): Promise<LedgerEntry | undefined> {
-    let operation = await this.#env.lower(instance, args.candidate.name);
+    let operation: LoweredOperation | undefined;
+    try {
+      operation = await this.#env.lower(instance, args.candidate.name);
+    } catch (err: unknown) {
+      // Deciding whether this *can* be optimistic is not work the caller asked
+      // for, so a failure in it is not a failure of their operation. Nothing
+      // has been applied or sent at this point, so declining costs the call
+      // only the pessimistic path it would have taken anyway.
+      console.debug(
+        `could not decide optimistic eligibility for "${args.candidate.name}", so it is sent and awaited`,
+        err,
+      );
+      return undefined;
+    }
     if (
       !operation ||
       operation.invalid ||
