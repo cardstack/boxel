@@ -13,6 +13,7 @@ import {
 
 import config from '@cardstack/host/config/environment';
 
+import { shimBundledBase } from '../lib/bundled-base';
 import { shimExternals } from '../lib/externals';
 import { authErrorEventMiddleware } from '../utils/auth-error-guard';
 import { scheduleNativeTimeout } from '../utils/render-timer-stub';
@@ -97,6 +98,7 @@ export default class NetworkService extends Service {
       virtualNetwork.addRealmMapping(prefix, resolvedRealmURL.href);
     }
     shimExternals(virtualNetwork);
+    shimBundledBase(virtualNetwork);
     virtualNetwork.addImportMap('@cardstack/boxel-icons/', (rest) => {
       return `${config.iconsURL}/@cardstack/boxel-icons/v1/icons/${rest}.js`;
     });
