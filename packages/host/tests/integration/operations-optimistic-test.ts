@@ -1,6 +1,9 @@
+import { waitUntil } from '@ember/test-helpers';
+
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { Deferred } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
@@ -12,6 +15,7 @@ import {
 import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
+import { getTestRealmRegistry } from '../helpers/test-realm-registry';
 
 import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 import type * as OperationsModule from '@cardstack/base/operations';
@@ -131,6 +135,7 @@ function realmContents() {
     'report-opted-out.json': reportFile('Opted Out'),
     'report-computed.json': reportFile('Computed'),
     'report-agrees.json': reportFile('Agrees'),
+    'report-contested.json': reportFile('Contested'),
   };
 }
 
@@ -352,5 +357,77 @@ module('Integration | operations optimistic', function (hooks) {
       'Agrees',
       'with nothing else disturbed',
     );
+  });
+  test('a reload does not keep an unconfirmed operation effect on a field the user also edited', async function (assert) {
+    let report = await cardAt('report-contested');
+    let network = getService('network');
+    // Hold the first operation on the wire, so a second one queues behind it
+    // unsent: the ledger re-applies exactly that one onto whatever a reload
+    // leaves.
+    let firstSent = new Deferred<void>();
+    let releaseFirst = new Deferred<void>();
+    let operationSends = 0;
+    let holdFirst = async (request: Request) => {
+      if (request.method === 'POST' && request.url.endsWith('/_operations')) {
+        if (operationSends++ === 0) {
+          firstSent.fulfill();
+          await releaseFirst.promise;
+        }
+      }
+      return null;
+    };
+    network.virtualNetwork.mount(holdFirst, { prepend: true });
+
+    let first: Promise<unknown> | undefined;
+    let second: Promise<unknown> | undefined;
+    try {
+      first = (operations(report) as any)
+        .addComment({ body: 'one' })
+        .catch(() => undefined);
+      await firstSent.promise;
+      second = (operations(report) as any)
+        .addComment({ body: 'two' })
+        .catch(() => undefined);
+      await waitUntil(() => (report as any).comments.length === 2, {
+        timeout: 15000,
+      });
+
+      // The user edits the same field both operations changed.
+      (report as any).comments[0].body = 'one, edited';
+
+      // Another client's write lands, and the store re-reads the card: the
+      // same re-read an index event or a rollback performs.
+      let { realm } = getTestRealmRegistry().get(testRealmURL)!;
+      await realm.write(
+        'report-contested.json',
+        JSON.stringify(reportFile('Moved')),
+      );
+      await getService('store').reloadForRollback(report);
+      // A timeout falls through to the assertions below, which report what
+      // the card holds instead.
+      await waitUntil(
+        () => (report as any).comments.some((c: any) => c.body === 'two'),
+        { timeout: 15000 },
+      ).catch(() => undefined);
+      // The re-application runs right after the reload lands; give it the
+      // turn it needs before counting.
+      await new Promise((resolve) => setTimeout(resolve, 250));
+
+      assert.strictEqual(
+        (report as any).headline,
+        'Moved',
+        "the re-read took the other client's state",
+      );
+      assert.deepEqual(
+        (report as any).comments.map((c: any) => c.body),
+        ['two'],
+        'the queued operation applies once onto the state the realm served, not a second time onto its own unconfirmed effect',
+      );
+    } finally {
+      releaseFirst.fulfill();
+      await first;
+      await second;
+      network.virtualNetwork.unmount(holdFirst);
+    }
   });
 });

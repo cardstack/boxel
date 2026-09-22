@@ -90,6 +90,9 @@ export interface LedgerEnvironment {
   // Fires when the store re-reads a card, whoever caused it. What a foreign
   // write looks like from here.
   onReload(cb: (instance: CardDef) => void): () => void;
+  // Told when a card's chain has drained and its lock is released: nothing
+  // applied to the card locally is unconfirmed any more.
+  drained(localId: string): void;
 }
 
 // The part of a lowered operation the ledger reads.
@@ -133,6 +136,8 @@ interface Chain {
   // this client was told no longer describes what the card now holds.
   version: string | undefined;
   applying: Promise<unknown>;
+  // The card's local id the lock is held under, while it is held.
+  lockKey?: string;
   sending: Promise<unknown>;
   // The card's mutation lock, held for as long as anything is pending. See
   // `#holdLock`.
@@ -289,6 +294,7 @@ export default class OperationLedger {
     }
     let released = new Deferred<void>();
     chain.lock = released;
+    chain.lockKey = key;
     // Not awaited: this call's purpose is to occupy the lock until the chain
     // drains, and whoever queued behind it is released by `#releaseLock`.
     void this.#env.withLock(key, () => released.promise).then(ignore, ignore);
@@ -300,6 +306,10 @@ export default class OperationLedger {
     }
     chain.lock.fulfill();
     chain.lock = undefined;
+    if (chain.lockKey !== undefined) {
+      this.#env.drained(chain.lockKey);
+      chain.lockKey = undefined;
+    }
   }
 
   // Send one entry and reconcile what comes back. Runs after every entry
