@@ -269,6 +269,18 @@ export interface IndexedInstance {
   generation: number;
   realmURL: string;
   indexedAt: number | null;
+  // The content hash of the stored source `instance` was serialized from, as
+  // the pass that indexed those bytes recorded it. The card+json GET serves it
+  // as `meta.version`; a client sends it back as the base its next write is
+  // computed against.
+  //
+  // Null when the row predates the stamp or its pass produced no fingerprint,
+  // in which case the GET reports no version at all. Never substitute
+  // `realm_file_meta.content_hash` for a null here: that column describes
+  // whatever the file holds now rather than the bytes behind this row's
+  // document, and it is empty for every file that reached disk outside the
+  // realm's own write API.
+  sourceContentHash: string | null;
 }
 
 interface InstanceError extends Partial<
@@ -687,11 +699,13 @@ export class IndexQueryEngine {
       resource_created_at: resourceCreatedAt,
       types,
       deps,
+      source_content_hash: sourceContentHash,
     } = maybeResult;
     let baseResult = {
       canonicalURL,
       realmURL,
       instance,
+      sourceContentHash: sourceContentHash ?? null,
       isolatedHtml,
       headHtml,
       embeddedHtml,

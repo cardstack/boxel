@@ -1795,6 +1795,7 @@ module('Unit | index-writer', function (hooks) {
         file_alias: `${testRealmURL2}1`,
         generation: 2,
         host_shell_generation: null,
+        source_content_hash: null,
         realm_url: testRealmURL2,
         type: 'instance',
         has_error: false,
@@ -1945,6 +1946,7 @@ module('Unit | index-writer', function (hooks) {
         file_alias: `${testRealmURL}1`,
         generation: 2,
         host_shell_generation: null,
+        source_content_hash: null,
         realm_url: testRealmURL,
         type: 'instance',
         has_error: true,
@@ -2295,6 +2297,7 @@ module('Unit | index-writer', function (hooks) {
         file_alias: `${testRealmURL}1`,
         generation: 2,
         host_shell_generation: null,
+        source_content_hash: null,
         realm_url: testRealmURL,
         type: 'instance',
         has_error: true,
@@ -2710,6 +2713,7 @@ module('Unit | index-writer', function (hooks) {
         headHtml: null,
         markdown: null,
         screenshots: null,
+        sourceContentHash: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be an error document`);
@@ -2768,6 +2772,11 @@ module('Unit | index-writer', function (hooks) {
       deps: new Set(),
       displayNames: [],
       types: [],
+      // The fingerprint of the source the render read to produce `resource`.
+      // Written and read back alongside it, because the card+json GET serves
+      // the two together and a client uses the hash as the base its next write
+      // is computed against.
+      sourceContentHash: 'abc123',
     });
 
     let entry = await indexQueryEngine.getInstance(
@@ -2809,6 +2818,7 @@ module('Unit | index-writer', function (hooks) {
         headHtml: null,
         markdown: null,
         screenshots: null,
+        sourceContentHash: 'abc123',
       });
     } else {
       assert.ok(false, `expected index entry to not be an error document`);

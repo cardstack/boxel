@@ -15,6 +15,7 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import {
   beginRuntimeDependencyTrackingSession,
+  computeContentHash,
   endRuntimeDependencyTrackingSession,
   formattedError,
   loadCardDef,
@@ -97,6 +98,19 @@ export type Model = {
   cardId: string;
   renderOptions: ReturnType<typeof parseRenderRouteOptions>;
   capturedDeps?: string[];
+  // The content hash of the stored source this build read to hydrate
+  // `instance`. The render.meta route reports it onward, the indexer persists it
+  // as `boxel_index.source_content_hash`, and the card+json GET serves it as
+  // `meta.version` — the base a client's next write is computed against.
+  //
+  // Taken here because this is the read the served document comes from. The
+  // worker's own read of the same file, earlier in the visit, is a separate
+  // `card+source` GET that can be answered by a different realm-server replica,
+  // so a hash from there can describe bytes this build never saw.
+  //
+  // Absent on the file-extract and file-render branches, which read no card
+  // source.
+  sourceContentHash?: string;
   // The model build's own timing breakdown, bounded and rounded for
   // persistence. A model is built once per visit and shared by every child
   // route step in it, so this rides the model rather than any one step: the
@@ -713,8 +727,17 @@ export default class RenderRoute extends Route<Model> {
 
     let realmURL = response.headers.get('x-boxel-realm-url')!;
     let lastModified = new Date(response.headers.get('last-modified')!);
+    // Read as text and parsed here rather than through `response.json()`, so the
+    // bytes can be fingerprinted before they become an object. This is the read
+    // the card document is built from, so a hash taken over exactly these bytes
+    // is the one thing that can describe the document the index row will hold.
+    // The card+source route serves a `.json` card's stored bytes verbatim and
+    // the text round-trips UTF-8, so this is the same value
+    // `computeContentHash` gives for the file on disk.
+    let sourceText = await response.text();
+    let sourceContentHash = computeContentHash(sourceText);
     let doc: LooseSingleCardDocument | CardErrorsJSONAPI =
-      await response.json();
+      JSON.parse(sourceText);
     let canonicalId = id.replace(/\.json$/, '');
 
     let state = new TrackedMap<string, unknown>();
@@ -739,6 +762,7 @@ export default class RenderRoute extends Route<Model> {
       nonce,
       cardId: canonicalId,
       renderOptions: parsedOptions,
+      sourceContentHash,
       get status(): RenderStatus {
         return (state.get('status') as RenderStatus) ?? 'loading';
       },

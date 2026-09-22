@@ -351,6 +351,13 @@ export default class RenderMetaRoute extends Route<Model> {
       searchDoc,
       deps: this.network.virtualNetwork.unresolveURLs(deps),
       diagnostics,
+      // Reported alongside `serialized` because it describes the bytes
+      // `serialized` was produced from: the model build fingerprinted the
+      // card+source read it hydrated the instance from. Travelling together is
+      // the point — the index row stores the pair, and the card+json GET serves
+      // the document with `meta.version` set from the hash, which a client then
+      // uses as the base its next write is computed against.
+      sourceContentHash: renderModel.sourceContentHash ?? null,
     };
 
     let parsedOptions = renderModel.renderOptions;

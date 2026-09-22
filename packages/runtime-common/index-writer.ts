@@ -135,6 +135,20 @@ export interface InstanceEntry {
   types: string[];
   displayNames: string[];
   deps: Set<string>;
+  // The content hash of the stored source the render read to produce
+  // `resource`, persisted to `boxel_index.source_content_hash` and served as
+  // `meta.version` on the card+json GET.
+  //
+  // Reported by the render rather than computed here, because a client sends it
+  // back as the base its next write is computed against and the realm answers
+  // `baseMatched` from it. The worker's own read of the same file is a separate
+  // `card+source` GET that can be answered by a different replica, so a hash
+  // taken from there can describe bytes the document was not built from.
+  //
+  // Undefined when the render produced no fingerprint — an older prerenderer,
+  // or a render that built no card document. The column is then null and the
+  // GET reports no version, which is what it did before the column existed.
+  sourceContentHash?: string;
   // Per-row render timing diagnostics (launch/waits/render timings
   // plus host-side breadcrumbs). Populated from the Prerenderer's
   // `response.meta` and persisted onto `boxel_index.diagnostics`.
@@ -1455,6 +1469,7 @@ export class Batch {
           // a document instead of a resource
           type: 'instance',
           pristine_doc: entry.resource,
+          source_content_hash: entry.sourceContentHash ?? null,
           search_doc: entry.searchData,
           icon_html: entry.iconHTML,
           deps: [...entry.deps],
