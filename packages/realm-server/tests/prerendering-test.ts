@@ -618,6 +618,64 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('the loader-reset reason tells a new page apart from a module change', async function (assert) {
+      // `moduleEvaluationCount` is the cost a reader wants attributed, and
+      // two unrelated things drive it up: a pass that changed a module and
+      // asked every tab to drop its graph, and a page the pool created for
+      // this visit, which has no graph yet. `loaderResetReason` is what
+      // separates them, so each of the three states is pinned here.
+      //
+      // The module's `afterEach` disposes the affinity, so the first visit
+      // below is guaranteed to land on a page the pool has just created.
+      const cardURL = `${realmURL}1`;
+      let visit = (loaderEpoch: string) =>
+        prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+          renderOptions: { loaderEpoch },
+        });
+
+      let cold = await visit('epoch-1');
+      assert.false(cold.pool.reused, 'the first visit gets a new page');
+      assert.strictEqual(
+        cold.response.diagnostics?.loaderResetReason,
+        'coldTab',
+        `a page holding no epoch names itself rather than the epoch, because it had no graph to drop, got: ${JSON.stringify(cold.response.diagnostics?.loaderResetReason)}`,
+      );
+      assert.ok(
+        (cold.response.diagnostics?.moduleEvaluationCount ?? 0) > 0,
+        `and evaluates the graph it lacks, got: ${JSON.stringify(cold.response.diagnostics?.moduleEvaluationCount)}`,
+      );
+
+      let warm = await visit('epoch-1');
+      assert.true(warm.pool.reused, 'the second visit reuses that page');
+      assert.strictEqual(
+        warm.response.diagnostics?.loaderResetReason,
+        undefined,
+        `an unchanged epoch clears nothing, got: ${JSON.stringify(warm.response.diagnostics?.loaderResetReason)}`,
+      );
+      assert.strictEqual(
+        warm.response.diagnostics?.moduleEvaluationCount,
+        0,
+        `so the graph the first visit evaluated is still there, got: ${JSON.stringify(warm.response.diagnostics?.moduleEvaluationCount)}`,
+      );
+
+      let changed = await visit('epoch-2');
+      assert.true(changed.pool.reused, 'the third visit reuses it too');
+      assert.strictEqual(
+        changed.response.diagnostics?.loaderResetReason,
+        'loaderEpoch',
+        `a moved epoch is a drop, and the page that paid for it names the epoch, got: ${JSON.stringify(changed.response.diagnostics?.loaderResetReason)}`,
+      );
+      assert.ok(
+        (changed.response.diagnostics?.moduleEvaluationCount ?? 0) > 0,
+        `and evaluates the graph again, got: ${JSON.stringify(changed.response.diagnostics?.moduleEvaluationCount)}`,
+      );
+    });
+
     test("a module's lowered operations report whether they read the actor", async function (assert) {
       // Lowering runs in the prerender host, and this is where the realm
       // server sees what it produced: the visit hands back the definitions it

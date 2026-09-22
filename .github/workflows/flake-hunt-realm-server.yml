@@ -1,0 +1,225 @@
+# Run one realm-server shard many times over, to measure how often an
+# intermittent test fails rather than to gate a change. A shard that fails
+# 1 run in 5 needs about 20 copies before a green sweep means anything, and
+# re-running CI by hand that many times also re-runs the other five shards.
+#
+# The repeat job below mirrors `realm-server-test` in ci.yaml step for step,
+# because a shard that runs under different service setup measures a different
+# thing. Keep the two in step when either moves.
+#
+# Two ways in. `workflow_dispatch` takes the settings as inputs, and GitHub
+# offers it only for the copy of this file on the default branch. A push to a
+# `flake-hunt-**` branch runs the copy on that branch with the defaults below,
+# which is how a change to this file — or a fix that has not merged yet — gets
+# swept. Same trick as ci.yaml's `ci-bisect-**` branches.
+name: Flake Hunt (Realm Server)
+
+on:
+  push:
+    branches:
+      - flake-hunt-**
+  workflow_dispatch:
+    inputs:
+      shardIndex:
+        description: Which shard to repeat
+        required: true
+        type: string
+        default: "5"
+      shardTotal:
+        description: How many shards the suite splits into. Must match `shardTotal` in ci.yaml, or the shard runs a different set of modules than CI gives it.
+        required: true
+        type: string
+        default: "6"
+      repeats:
+        description: How many copies to run (1-30)
+        required: true
+        type: string
+        default: "20"
+      maxParallel:
+        description: How many copies to run at a time. Lower this to leave runners for ordinary CI.
+        required: true
+        type: string
+        default: "10"
+      testModules:
+        description: "Optional `|`-separated module list, overriding the shard's own. Warning: the modules a shard runs alongside the one under test are part of what makes an intermittent failure appear, so a narrowed list measures a different thing."
+        required: false
+        type: string
+        default: ""
+      qunitFilter:
+        description: Optional QUnit filter, applied within the modules above
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  # Lets the report job below read this run's own job list to count the copies.
+  actions: read
+  contents: read
+  id-token: write
+  # Lets the warm-test-images step pull the private GHCR mirror packages.
+  packages: read
+
+jobs:
+  plan:
+    name: Plan the sweep
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Every setting is resolved once, here, and read from `needs.plan` by the
+    # jobs below. A push carries no inputs, so each one falls back to the
+    # default its `workflow_dispatch` input declares; keeping the fallback in
+    # one place stops the two entry points from drifting apart.
+    outputs:
+      copies: ${{ steps.settings.outputs.copies }}
+      shardIndex: ${{ steps.settings.outputs.shardIndex }}
+      shardTotal: ${{ steps.settings.outputs.shardTotal }}
+      maxParallel: ${{ steps.settings.outputs.maxParallel }}
+      testModules: ${{ steps.settings.outputs.testModules }}
+      qunitFilter: ${{ steps.settings.outputs.qunitFilter }}
+    steps:
+      - name: Resolve the settings
+        id: settings
+        env:
+          SHARD_INDEX: ${{ inputs.shardIndex || '5' }}
+          SHARD_TOTAL: ${{ inputs.shardTotal || '6' }}
+          REPEATS: ${{ inputs.repeats || '20' }}
+          MAX_PARALLEL: ${{ inputs.maxParallel || '10' }}
+          TEST_MODULES: ${{ inputs.testModules }}
+          QUNIT_FILTER: ${{ inputs.qunitFilter }}
+        run: |
+          set -euo pipefail
+          require_range() {
+            local name="$1" value="$2" low="$3" high="$4"
+            if ! [[ "$value" =~ ^[0-9]+$ ]] || [ "$value" -lt "$low" ] || [ "$value" -gt "$high" ]; then
+              echo "$name must be a whole number from $low to $high, got: $value" >&2
+              exit 1
+            fi
+          }
+          require_range repeats "$REPEATS" 1 30
+          require_range maxParallel "$MAX_PARALLEL" 1 30
+          require_range shardTotal "$SHARD_TOTAL" 1 20
+          require_range shardIndex "$SHARD_INDEX" 1 "$SHARD_TOTAL"
+          {
+            echo "copies=$(seq 1 "$REPEATS" | jq -R . | jq -sc .)"
+            echo "shardIndex=$SHARD_INDEX"
+            echo "shardTotal=$SHARD_TOTAL"
+            echo "maxParallel=$MAX_PARALLEL"
+            echo "testModules=$TEST_MODULES"
+            echo "qunitFilter=$QUNIT_FILTER"
+          } >> "$GITHUB_OUTPUT"
+
+  test-web-assets:
+    name: Build test web assets
+    uses: ./.github/workflows/test-web-assets.yaml
+    with:
+      caller: flake-hunt-realm-server
+
+  repeat:
+    name: Shard copy ${{ matrix.copy }}
+    needs: [plan, test-web-assets]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      # Every copy runs: the point is the failure count, and fail-fast would
+      # stop the sweep at the first one and report a denominator of nothing.
+      fail-fast: false
+      max-parallel: ${{ fromJSON(needs.plan.outputs.maxParallel) }}
+      matrix:
+        copy: ${{ fromJSON(needs.plan.outputs.copies) }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Download test web assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          path: .test-web-assets-artifact
+      - name: Restore test web assets into workspace
+        shell: bash
+        run: |
+          shopt -s dotglob
+          cp -a .test-web-assets-artifact/. ./
+      - name: Compute shard test modules
+        id: shard_modules
+        shell: bash
+        env:
+          OVERRIDE: ${{ needs.plan.outputs.testModules }}
+          SHARD_INDEX: ${{ needs.plan.outputs.shardIndex }}
+          SHARD_TOTAL: ${{ needs.plan.outputs.shardTotal }}
+        run: |
+          set -euo pipefail
+          if [ -n "$OVERRIDE" ]; then
+            echo "modules=$OVERRIDE" >> "$GITHUB_OUTPUT"
+          else
+            echo "modules=$(node scripts/shard-test-modules.cjs "$SHARD_INDEX" "$SHARD_TOTAL")" >> "$GITHUB_OUTPUT"
+          fi
+        working-directory: packages/realm-server
+      - name: Warm test Docker images from the GHCR mirror
+        continue-on-error: true
+        uses: ./.github/actions/warm-test-images
+      - name: Start test services (icons + host dist + realm servers)
+        run: mise run test-services:realm-server | tee -a /tmp/server.log &
+      - name: create realm users
+        run: pnpm register-realm-users
+        working-directory: packages/matrix
+      - name: realm server test suite
+        run: pnpm test:wait-for-servers
+        working-directory: packages/realm-server
+        env:
+          TEST_MODULES: ${{ steps.shard_modules.outputs.modules }}
+          QUNIT_FILTER: ${{ needs.plan.outputs.qunitFilter }}
+          JUNIT_OUTPUT_FILE: ${{ github.workspace }}/junit/realm-server-copy-${{ matrix.copy }}.xml
+      # Only on a copy that failed. A green sweep of 20 copies has nothing to
+      # read, and the upload costs about a minute on each one.
+      - name: Print realm server logs
+        if: failure()
+        run: cat /tmp/server.log
+      - name: Upload realm server log
+        if: failure()
+        uses: ./.github/actions/upload-artifact-retry
+        with:
+          name: flake-hunt-server-log-copy-${{ matrix.copy }}
+          path: /tmp/server.log
+          retention-days: 7
+
+  report:
+    name: Sweep result
+    needs: [plan, repeat]
+    # The whole output of a sweep is its failure count, so the report runs
+    # whatever the matrix did. Without `!cancelled()` a single failed copy
+    # would skip the job that states the rate.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Count the copies
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          SHARD_INDEX: ${{ needs.plan.outputs.shardIndex }}
+          SHARD_TOTAL: ${{ needs.plan.outputs.shardTotal }}
+        run: |
+          set -euo pipefail
+          # Counted from this run's own job list rather than from
+          # `needs.repeat.result`, which collapses the whole matrix to one
+          # word and cannot tell 1 failure in 20 from 20 in 20.
+          conclusions=$(gh api --paginate \
+            "repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100" \
+            --jq '.jobs[] | select(.name | startswith("Shard copy ")) | .conclusion')
+          total=$(echo "$conclusions" | grep -c . || true)
+          failed=$(echo "$conclusions" | grep -cvx success || true)
+          {
+            echo "## Flake hunt: shard $SHARD_INDEX of $SHARD_TOTAL"
+            echo
+            echo "| copies | failed | pass rate |"
+            echo "| -- | -- | -- |"
+            if [ "$total" -gt 0 ]; then
+              echo "| $total | $failed | $(( (total - failed) * 100 / total ))% |"
+            else
+              echo "| 0 | 0 | no copies ran |"
+            fi
+            echo
+            if [ "$failed" -gt 0 ]; then
+              echo "Each failed copy uploaded its server log as an artifact."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
