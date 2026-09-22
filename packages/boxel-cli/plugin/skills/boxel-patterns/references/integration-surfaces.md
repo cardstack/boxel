@@ -89,7 +89,7 @@ Available only inside the running Boxel app. Each is a default-export `Command` 
 | `patch-fields` | Surgical field updates on an instance (requires approval). |
 | `patch-card-instance` | Full-card replace (use sparingly). |
 | `apply-markdown-edit` | Targeted edits in long markdown fields (requires approval). |
-| `write-text-file` | Avoid — create and edit files with SEARCH/REPLACE instead (tool calls don't stream; UI freezes). |
+| `write-text-file` | Avoid — create and edit files with the `run-realm-code` tool instead (tool calls don't stream; UI freezes). |
 | `copy-card`, `copy-source`, `copy-file-to-realm` | Duplicate a card, source file, or FileDef-backed asset (requires approval where applicable). |
 | `transform-cards` | Bulk command-applied transform (requires approval). |
 | `read-file-for-ai-assistant`, `read-card-for-ai-assistant` | Load file or card content into context. |

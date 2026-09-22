@@ -81,6 +81,7 @@ import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
 import { humanReadable } from '../code-ref.ts';
 
 const CARD_PATCH_COMMAND_NAMES = new Set(['patchCardInstance', 'patchFields']);
+const SOURCE_CODE_TOOL_NAME_PREFIX = 'run-realm-code_';
 const CHECK_CORRECTNESS_TOOL_NAME = 'checkCorrectness';
 
 function getLog() {
@@ -1173,15 +1174,11 @@ function buildFailedCodePatchMessage(
 
 // The instruction that goes with a failed patch, for this request only. It
 // applies while the bot's most recent reply that carried patches has a
-// failed block and nothing has replaced it: a re-read turn in between keeps
-// it, a later reply with new patches ends it, and a new message from the
-// user ends it too. Consecutive replies since the user's message whose
-// every block failed are counted, and at the same cap the correctness check
-// uses the retrying stops and the model is told to report to the user
-// instead — otherwise a model that cannot get the SEARCH block right would
-// loop, fail, and pay for it until someone noticed. A reply that landed some
-// of its blocks is progress, not another failed attempt at the same thing:
-// it ends the count, so three replies that each finish part of the job are
+// failed edit and nothing has replaced it: a re-read turn in between keeps
+// it, a later reply with a new edit ends it, and a new message from the user
+// ends it too. Consecutive replies since the user's message whose edit failed
+// are counted; a reply that makes progress ends the count, so three replies
+// that each finish part of the job are
 // never mistaken for three failures in a row.
 function buildFailedCodePatchFollowUp(
   history: DiscreteMatrixEvent[],
@@ -1417,13 +1414,11 @@ type FormattedCorrectnessSummary = {
   hasErrors: boolean;
 };
 
-// Sent after a correctness check fails. The fix must be a SEARCH/REPLACE block
-// against the file: a card that just failed its check is usually not indexed,
-// so any card-editing tool (patch-fields, patchCardInstance) applies to
-// nothing and costs a turn. Name no tool, ban them all.
-const SEARCH_REPLACE_FIX_INSTRUCTION = `1. Fix the errors above by editing the failing file(s) with SEARCH/REPLACE blocks. Do not call any tool to make the fix — a card that just failed its check is not indexed yet, so a tool applies to nothing.
-2. First re-fetch the files that have errors so the SEARCH block matches their current content, then write the fixing blocks in the same reply.
-3. One short sentence of prose before the blocks saying there is an issue you are fixing; do not mention SEARCH/REPLACE blocks in the prose.`;
+// Sent after a correctness check fails. The runner can edit source immediately
+// after a failed check, while instance-oriented tools still cannot reliably
+// address a card that has not been indexed yet.
+const CODE_FIX_INSTRUCTION = `1. Fix the errors above by re-reading the failing file(s), then use the run-realm-code tool. Pass every affected file URL and make awaited Realm.replaceCode calls with exact current text.
+2. Keep all fixes in one tool call or one reply, and do not repeat a failed match without re-reading the file.`;
 
 const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
   'Summarize the results above in one short sentence confirming that the target is now auto-corrected. Mention any warnings if they exist. Do not mention correctness or automated checks or tool calls.';
@@ -1442,7 +1437,7 @@ const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have 
 // (buildFailedCodePatchFollowUp), so it is present only while the retry is
 // pending and disappears once the next patch lands, rather than standing in
 // history as an order a weak model keeps obeying after the fix.
-const FAILED_CODE_PATCH_RETRY_INSTRUCTION = `A code block in your last reply was not applied; the reason is recorded after that reply. Re-read the file and send a new block whose SEARCH lines are copied exactly from the current file. Do not send the same block again.`;
+const FAILED_CODE_PATCH_RETRY_INSTRUCTION = `A code edit in your last reply was not applied; the reason is recorded after that reply. Re-read the file and use the run-realm-code tool with the current contents. Do not repeat a failed edit.`;
 const FAILED_CODE_PATCH_LIMIT_INSTRUCTION = `Code patches have failed to apply ${MAX_CORRECTNESS_FIX_ATTEMPTS} times in a row. Do not send another patch. Tell the user which file could not be updated and why, and ask how they want to proceed.`;
 
 const CHECK_CORRECTNESS_SUMMARY_INSTRUCTION =
@@ -1686,7 +1681,7 @@ function toCheckCorrectnessResultContent(
 
   return {
     toolMessage,
-    followUpUserMessage: SEARCH_REPLACE_FIX_INSTRUCTION,
+    followUpUserMessage: CODE_FIX_INSTRUCTION,
   };
 }
 
@@ -1722,7 +1717,7 @@ export async function buildPromptForModel(
     let body = event.content.body;
 
     if (event.sender === aiBotUserId) {
-      // Past search/replace blocks ride in history verbatim. Eliding them
+      // Past prose edits ride in history verbatim. Eliding them
       // rewrote already-sent messages — the placeholder text even changed
       // once the patch result arrived — which broke the cache prefix, and
       // models imitated the "[Omitting …]" placeholder in place of a real
@@ -1927,7 +1922,7 @@ function collectPendingCodePatchCorrectnessCheck(
       getToolRequests<Partial<EncodedToolRequest>>(content) ?? []
     ).map((request) => decodeToolRequest(request));
     let relevantTools = toolRequests.filter((request) =>
-      isCardPatchCommand(request.name),
+      isCodeEditingTool(request.name),
     );
     let hasRelevantChanges =
       codePatchBlocks.length > 0 || relevantTools.length > 0;
@@ -2001,7 +1996,7 @@ function hasUnresolvedCodePatches(
       getToolRequests<Partial<EncodedToolRequest>>(content) ?? []
     ).map((request) => decodeToolRequest(request));
     let relevantTools = toolRequests.filter((request) =>
-      isCardPatchCommand(request.name),
+      isCodeEditingTool(request.name),
     );
     let hasRelevantChanges =
       codePatchBlocks.length > 0 || relevantTools.length > 0;
@@ -2051,7 +2046,7 @@ function buildCodePatchCorrectnessMessage(
     getToolRequests<Partial<EncodedToolRequest>>(content) ?? []
   ).map((request) => decodeToolRequest(request));
   let relevantTools = toolRequests.filter((request) =>
-    isCardPatchCommand(request.name),
+    isCodeEditingTool(request.name),
   );
 
   if (codePatchBlocks.length === 0 && relevantTools.length === 0) {
@@ -2095,7 +2090,7 @@ function buildCodePatchCorrectnessMessage(
     return undefined;
   }
 
-  let files = gatherPatchedFiles(codePatchResults);
+  let files = gatherPatchedFiles(codePatchResults, relevantTools, toolResults);
   let cards = gatherPatchedCards(relevantTools, toolResults);
 
   if (files.length === 0 && cards.length === 0) {
@@ -2119,15 +2114,20 @@ function buildCodePatchCorrectnessMessage(
   };
 }
 
-function isCardPatchCommand(name?: string) {
+function isCodeEditingTool(name?: string) {
   if (!name) {
     return false;
   }
-  return CARD_PATCH_COMMAND_NAMES.has(name);
+  return (
+    CARD_PATCH_COMMAND_NAMES.has(name) ||
+    name.startsWith(SOURCE_CODE_TOOL_NAME_PREFIX)
+  );
 }
 
 function gatherPatchedFiles(
   codePatchResults: CodePatchResultEvent[],
+  relevantTools: Partial<ToolRequest>[],
+  toolResults: ToolResultEvent[],
 ): CodePatchCorrectnessFile[] {
   let filesByKey = new Map<string, CodePatchCorrectnessFile>();
   for (let result of codePatchResults) {
@@ -2163,6 +2163,29 @@ function gatherPatchedFiles(
         entry.lintIssues = mergeLintIssues(entry.lintIssues, lintIssues);
       }
       filesByKey.set(key, entry);
+    }
+  }
+
+  for (let request of relevantTools) {
+    if (!request.name?.startsWith(SOURCE_CODE_TOOL_NAME_PREFIX)) {
+      continue;
+    }
+    let result = findLast(
+      toolResults,
+      (toolResult) => toolResult.content.commandRequestId === request.id,
+    );
+    if (result?.content['m.relates_to']?.key !== 'applied') {
+      continue;
+    }
+    for (let file of result.content.data?.attachedFiles ?? []) {
+      let sourceUrl = file.sourceUrl ?? file.url ?? file.name ?? '';
+      if (!sourceUrl || filesByKey.has(sourceUrl)) {
+        continue;
+      }
+      filesByKey.set(sourceUrl, {
+        sourceUrl,
+        displayName: formatFileDisplayName(sourceUrl),
+      });
     }
   }
   return Array.from(filesByKey.values());

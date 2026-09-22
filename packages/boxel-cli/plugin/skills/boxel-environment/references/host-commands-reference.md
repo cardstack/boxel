@@ -64,8 +64,8 @@ Quick lookup of every command available to this skill, what it does, and notable
 
 ## Editing
 
-- **SEARCH/REPLACE** — The way to create or edit files, `.gts` and `.json` alike. Streams as visible text so the user sees real-time progress, and runs through the code-patch pipeline with correctness checking. Create a new file by marking its URL line with `(new)`.
-- There is no file-writing tool. Every text file — `.gts`, `.json`, `.md`, `README`, anything — is written with SEARCH/REPLACE, adding `(new)` after the URL to create one. A tool call cannot stream, so the UI sits frozen through a long generation and the write skips the code-patch pipeline; SEARCH/REPLACE streams as it is produced and goes through lint and correctness checks.
+- **realm runner** — The way to create or edit files, `.gts` and `.json` alike. Streams as visible text so the user sees real-time progress, and runs through the code-patch pipeline with correctness checking. Create a new file by marking its URL line with `(new)`.
+- There is no file-writing tool. Every text file — `.gts`, `.json`, `.md`, `README`, anything — is written with the `run-realm-code` tool, adding `(new)` after the URL to create one. A tool call cannot stream, so the UI sits frozen through a long generation and the write skips the code-patch pipeline; realm runner streams as it is produced and goes through lint and correctness checks.
 - `patch-fields_3e67` — Fine-grained card field updates (requires approval).
 - `patchCardInstance` — Update card data only.
 - `ApplyMarkdownEditCommand_c112` — Edit long markdown fields (>500 chars) surgically without truncation (requires approval).

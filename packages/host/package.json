@@ -198,6 +198,7 @@
   },
   "dependencies": {
     "ember-modify-based-class-resource": "catalog:",
+    "quickjs-emscripten": "^0.31.0",
     "reactiveweb": "catalog:",
     "unique-names-generator": "^4.7.1"
   },

@@ -1,6 +1,6 @@
 ---
 name: boxel
-description: Use whenever creating, reading, or editing Boxel cards (.gts files), card instances (.json), fields, templates, queries, or anything in a Boxel realm. Required for any Boxel coding work — covers CardDef, FieldDef, contains/linksTo, templates, formats, queries, and core patterns. Companion skills - boxel-design (visual decisions), boxel-ui-guidelines (template UI), source-code-editing (SEARCH/REPLACE), boxel-environment (running the Boxel app).
+description: Use whenever creating, reading, or editing Boxel cards (.gts files), card instances (.json), fields, templates, queries, or anything in a Boxel realm. Required for any Boxel coding work — covers CardDef, FieldDef, contains/linksTo, templates, formats, queries, and core patterns. Companion skills - boxel-design (visual decisions), boxel-ui-guidelines (template UI), source-code-editing (`run-realm-code` tool), boxel-environment (running the Boxel app).
 boxel:
   kind: skill
 ---
@@ -97,7 +97,7 @@ Core syntax and patterns (load when topic comes up):
 - `references/core-patterns.md` — Card definitions, computed cardTitle, field definitions, computed properties.
 - `references/prefers-wide-format.md` — When `static prefersWideFormat = true` is required (app-card homes, sectioned-record nav, 3D layouts, routed pages, dashboards, slide decks). Default is `false`; the most-forgotten static property. **Decide at CardDef creation time, not after the layout looks cramped.**
 - `references/template-syntax.md` — Field access, compound fields, `@fields` delegation, array handling, fallback values, and Glimmer syntax gotchas (the `{{#if (this.x)}}` parens trap, HTML-tag-shadowing block params).
-- `references/file-editing.md` — Pointer to the `source-code-editing` skill, which defines the SEARCH/REPLACE format.
+- `references/file-editing.md` — Pointer to the `source-code-editing` skill, which defines the `run-realm-code` tool.
 - `references/data-management.md` — File organization, JSON instance format, field value patterns, relationships.
 - `references/card-references.md` — `links.self` shapes: relative (`./Foo/bar` / `../Foo/bar`) vs absolute vs registered-prefix; FileDef-typed relationships need the file extension; `$REALM` and `@cardstack/...` rules; common silent-failure modes.
 - `references/defensive-programming.md` — Optional chaining, default values, try/catch, array validation.
@@ -136,7 +136,7 @@ Sibling skills:
 - `boxel-file-def` — file-typed fields (FileDef, ImageDef, MarkdownDef).
 - `boxel-flavored-markdown` — BFM content authoring.
 - `boxel-markdown-format` — static `markdown` template format.
-- `source-code-editing` — SEARCH/REPLACE block format (always consult before editing).
+- `source-code-editing` — `run-realm-code` tool call format (always consult before editing).
 - `boxel-environment` — running, navigating, and orchestrating the live Boxel app.
 
 ---
@@ -156,7 +156,7 @@ Sibling skills:
 
 ## ✅ Always
 
-- For code-generation/editing, use **SEARCH/REPLACE** as the primary mechanism (see `source-code-editing`).
+- For code-generation/editing, use **realm runner** as the primary mechanism (see `source-code-editing`).
 - Run the import preflight from `references/common-imports.md` AND the lint gate from `references/lint-workflow.md` before reporting a `.gts` file as done.
 - Assign an icon to every CardDef and FieldDef.
 - Provide an `embedded` template for every FieldDef.
