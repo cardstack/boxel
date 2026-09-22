@@ -278,9 +278,13 @@ export function describeFairness(reading: FairnessReading): string {
       `    different identity's overlapping write`,
   );
   // `overlappedOther` is a strict superset of `behindOther` — being behind
-  // implies overlapping — while `behindSelf` is disjoint from both. Printed
-  // flat these three read as a partition that does not add up, so the nesting
-  // is spelled rather than left to be inferred.
+  // implies overlapping — while `behindSelf` is disjoint from `behindOther`
+  // alone, since `classify` returns one state. It is NOT disjoint from
+  // `overlappedOther`, which asks a different question and is counted
+  // separately: a write behind an earlier write of its own, which also merely
+  // overlaps a stranger's, lands in both. Printed flat these three read as a
+  // partition that does not add up, so the nesting is spelled rather than left
+  // to be inferred.
   out.push(
     `  same-writer blocked:  ${reading.behindSelf}` +
       `  (a write behind an earlier write of its own)`,

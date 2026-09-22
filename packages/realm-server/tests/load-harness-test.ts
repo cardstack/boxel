@@ -2436,6 +2436,44 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('behind-self and overlapped-another-identity are not exclusive', function (assert) {
+        // They answer different questions and are counted separately, so one
+        // write can land in both. `classify` returns a single state, which
+        // makes `behindSelf` and `behindOther` exclusive — but
+        // `overlappedOther` is computed apart from the classification and is
+        // not a fourth bucket of a partition. Pinned down because the comment
+        // justifying the rendered shape once claimed otherwise.
+        let mine = record('leaf', '@a:test', 50, 150);
+        let subject = record('leaf', '@a:test', 100, 200);
+        let stranger = record('hub', '@b:test', 180, 300);
+        let all = [mine, subject, stranger];
+
+        assert.strictEqual(
+          classify(subject, all),
+          'behind-self',
+          'it is behind its own earlier write, not the stranger it merely overlaps',
+        );
+        let reading = readFairness(all);
+        assert.strictEqual(reading.behindSelf, 1);
+        assert.strictEqual(
+          reading.behindOther,
+          1,
+          'the stranger started inside this write and finished later, so it is behind it',
+        );
+        assert.strictEqual(
+          reading.overlappedOther,
+          2,
+          'and the behind-self write is ALSO counted as overlapping a stranger — ' +
+            'the two sets are not exclusive',
+        );
+        assert.strictEqual(
+          reading.behindSelf + reading.behindOther + reading.overlappedOther,
+          4,
+          'three counts over three writes: they do not partition, which is why ' +
+            'the summary spells the nesting instead of printing them flat',
+        );
+      });
+
       test('the score compares a block against itself, not against other blocks', function (assert) {
         let records = [
           // Leaf alone: 100ms each.
