@@ -384,8 +384,8 @@ import {
   isSampledContentHash,
 } from './content-hash.ts';
 import {
-  boundFileDefCodeRef,
   resolveFileDefCodeRef,
+  servedFileDefCodeRef,
   urlNamesFile,
 } from './file-def-code-ref.ts';
 import {
@@ -8616,16 +8616,18 @@ export class Realm {
     // that hydrated the served class would not carry the operation at all. The
     // row still answers for every extension the realm says nothing about,
     // which is all of them for a realm that binds nothing.
-    let adoptsFrom =
-      boundFileDefCodeRef(new URL(fileURL), fileTypes) ??
-      codeRefFromInternalKey(fileEntry.types?.[0]) ??
-      (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
+    let adoptsFrom = servedFileDefCodeRef(new URL(fileURL), {
+      bindings: fileTypes,
+      rowAdoptsFrom: codeRefFromInternalKey(fileEntry.types?.[0]),
+      resourceAdoptsFrom: isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
         ? fileEntry.resource?.meta?.adoptsFrom
-        : resolveFileDefCodeRef(
-            new URL(fileURL),
-            this.#virtualNetwork,
-            fileTypes,
-          ));
+        : undefined,
+      fallback: resolveFileDefCodeRef(
+        new URL(fileURL),
+        this.#virtualNetwork,
+        fileTypes,
+      ),
+    });
     let resourceAttributes =
       (fileEntry as IndexedFile).resource?.attributes ?? {};
     let baseAttributes = {

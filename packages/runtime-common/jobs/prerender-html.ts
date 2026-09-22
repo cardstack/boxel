@@ -289,10 +289,13 @@ export async function enqueuePrerenderHtmlJob(
     spawningJobId,
     coalescedPublishes: null,
     preWarm,
-    fileDefBindings:
-      fileDefBindings && Object.keys(fileDefBindings).length > 0
-        ? (fileDefBindings as SerializedFileDefBindings)
-        : null,
+    // `{}` and `null` are different answers here, and the pass reads them
+    // differently: `{}` is "this realm binds nothing", which is an answer, and
+    // `null` is "this job carries none", which sends the pass to the config
+    // document. A spawning pass always has an answer — every realm that binds
+    // nothing included — so it never sends `null`; only a job enqueued before
+    // the payload carried the field does.
+    fileDefBindings: (fileDefBindings ?? {}) as SerializedFileDefBindings,
   };
   return await queuePublisher.publish({
     jobType: 'prerender_html',
