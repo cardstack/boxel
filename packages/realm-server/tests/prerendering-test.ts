@@ -681,13 +681,14 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a page warmed without an epoch reports the drop, not a cold page', async function (assert) {
+    test('a page warmed without an epoch reports a discard the pass did not cause', async function (assert) {
       // Not every visit carries an epoch. An on-demand render carries none,
       // and the module route holds its epoch under a key of its own, so both
       // leave a page with a warm loader and no epoch recorded against this
-      // route. The first epoch-carrying visit onto such a page does discard a
-      // graph, and calling that `coldTab` would file a real drop under the one
-      // name that tells a reader the pass had no part in it.
+      // route. The first epoch-carrying visit onto such a page discards a real
+      // graph without the pass having done anything to deserve it, which is
+      // the one case `coldTab` and `loaderEpoch` each describe wrongly: the
+      // first denies the discard, the second bills the pass for it.
       //
       // Settles the refill for the same reason as the test above: a stolen
       // tab arrives warm, so the warming visit would find nothing left to
@@ -721,8 +722,12 @@ module(basename(import.meta.filename), function () {
       assert.true(epochCarrying.pool.reused, 'and the next visit reuses it');
       assert.strictEqual(
         epochCarrying.meta?.diagnostics?.loaderResetReason,
-        'loaderEpoch',
-        `the first epoch onto a warm page is a drop, whatever the page has recorded, got: ${JSON.stringify(epochCarrying.meta?.diagnostics?.loaderResetReason)}`,
+        'firstEpoch',
+        `the first epoch onto a warm page discards a graph the pass did not cause, got: ${JSON.stringify(epochCarrying.meta?.diagnostics?.loaderResetReason)}`,
+      );
+      assert.ok(
+        (epochCarrying.meta?.diagnostics?.moduleEvaluationCount ?? 0) > 0,
+        `and pays to rebuild it, got: ${JSON.stringify(epochCarrying.meta?.diagnostics?.moduleEvaluationCount)}`,
       );
     });
 

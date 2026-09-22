@@ -491,17 +491,10 @@ export default class RenderRoute extends Route<Model> {
     if (parsedOptions.loaderEpoch !== undefined) {
       let held = (globalThis as any).__boxelLoaderEpoch as string | undefined;
       if (held !== parsedOptions.loaderEpoch) {
-        // Whether the reset below throws a graph away, read off the loader
-        // rather than inferred from the held epoch. A tab reaches its first
-        // epoch-carrying visit with a warm loader often enough that the two
-        // are not the same question: the module route warms this same loader
-        // while holding its epoch under its own key, and a render carrying no
-        // epoch at all (an on-demand visit) warms it without recording one.
-        // Both leave `held` undefined over a graph the reset does discard.
-        //
-        // The counter is per-Loader and `resetLoader` installs a new instance,
-        // so this reads what the outgoing loader evaluated, and only a loader
-        // that evaluated nothing reports a page with nothing to lose.
+        // Whether the reset throws a graph away, read off the loader rather
+        // than inferred from the held epoch. The counter is per-Loader and
+        // `resetLoader` installs a new instance, so this reads what the
+        // outgoing loader evaluated.
         let evaluatedBeforeReset =
           this.loaderService.loader.moduleEvaluationTotals.count > 0;
         this.loaderService.resetLoader({
@@ -510,10 +503,25 @@ export default class RenderRoute extends Route<Model> {
         });
         this.store.resetCache();
         (globalThis as any).__boxelLoaderEpoch = parsedOptions.loaderEpoch;
-        // The two differ in what a reader can do about a large
-        // `moduleEvaluationCount`: a drop is attributable to the pass, while
-        // a page carrying no graph is the pool's choice of where to run it.
-        loaderResetReason = evaluatedBeforeReset ? 'loaderEpoch' : 'coldTab';
+        // Two questions decide the name, and they are independent: did this
+        // reset discard a graph, and did the pass cause the discard. The held
+        // epoch answers only the second — a tab arrives at its first
+        // epoch-carrying visit over a warm loader often enough to matter,
+        // because the module route warms this same loader under an epoch key
+        // of its own and a visit carrying no epoch warms it under none.
+        //
+        //   - nothing evaluated: the reset swept an empty loader.
+        //   - warm, but this tab had recorded no epoch: a real discard, and
+        //     the pass did not cause it. The tab had never synchronized to
+        //     this series, which is a fact about where the pool ran the pass
+        //     rather than about anything the pass did.
+        //   - warm, and the recorded epoch moved: the series advanced, so a
+        //     module changed and the discard follows from that.
+        loaderResetReason = !evaluatedBeforeReset
+          ? 'coldTab'
+          : held === undefined
+            ? 'firstEpoch'
+            : 'loaderEpoch';
       }
     }
     if (parsedOptions.clearCache) {

@@ -1988,11 +1988,17 @@ module(basename(import.meta.filename), function () {
           passes.push(await diagnosticsFor('ringo.json'));
         }
 
+        // `coldTab` and `firstEpoch` are the two readings that say the tab it
+        // landed on had never synchronized to this realm's epoch series, which
+        // is a fact about where the pool ran the pass. The pass is answerable
+        // for `loaderEpoch` and `clearCache` only, and an invalidation set
+        // holding no executable is the condition under which it may record
+        // neither.
         for (let [index, pass] of passes.entries()) {
           let reason = pass?.loaderResetReason ?? 'none';
           assert.ok(
-            ['none', 'coldTab'].includes(reason),
-            `pass ${index + 1} holds no executable in its invalidation set, so nothing but a new page can have cleared the loader, got: ${reason}`,
+            ['none', 'coldTab', 'firstEpoch'].includes(reason),
+            `pass ${index + 1} holds no executable in its invalidation set, so nothing the pass did can have cleared the loader, got: ${reason}`,
           );
         }
 

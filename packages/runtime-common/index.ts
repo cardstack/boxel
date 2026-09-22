@@ -292,23 +292,31 @@ export interface BuildModelDiagnostics {
   moduleEvaluationCount?: number;
   moduleEvaluationTotalMs?: number;
   // Present only when this visit cleared the tab's loader before building
-  // the model, naming what cleared it. Any of the three makes a nonzero
-  // `moduleEvaluationCount` expected rather than surprising, but they do
-  // not carry the same reading:
+  // the model, naming what cleared it. All four make a nonzero
+  // `moduleEvaluationCount` expected rather than surprising, but they answer
+  // two independent questions — was a graph discarded, and did the pass
+  // cause it — and only one value answers yes to both:
   //
-  //   - `clearCache` and `loaderEpoch` are drops. The graph was warm and
-  //     this visit threw it away, so the re-fetch and re-evaluation it pays
-  //     for is the drop's price and not a property of the card.
-  //   - `coldTab` is not a drop. The loader this visit replaced had
-  //     evaluated nothing, so the reset swept an empty graph; the count is
-  //     the price of building a first one, which the pool decided by where
-  //     it ran the pass and the pass had no part in. It does not say the
-  //     page was new — a page can reach this state more than once — only
-  //     that nothing was thrown away to reach it.
+  //   - `clearCache` and `loaderEpoch` discarded a graph the pass is
+  //     answerable for. The epoch moved or the flag was armed because an
+  //     executable changed, so the re-fetch and re-evaluation is that
+  //     change's price and not a property of the card.
+  //   - `firstEpoch` discarded a graph the pass is not answerable for. The
+  //     tab was warm from work in another series — a visit carrying no
+  //     epoch, or the module route, which keeps its own epoch key — and had
+  //     recorded no epoch of this one. The cost is where the pool ran the
+  //     pass, not what the pass did.
+  //   - `coldTab` discarded nothing. The loader this visit replaced had
+  //     evaluated nothing, so the count is the price of building a first
+  //     graph rather than rebuilding one. It does not say the page was new:
+  //     a page can arrive in that state more than once.
   //
-  // Absence alongside a large count is neither, and is worth a look: a warm
-  // tab that nothing cleared has no accounted reason to evaluate a graph.
-  loaderResetReason?: 'clearCache' | 'loaderEpoch' | 'coldTab';
+  // So a count attributable to the pass is `clearCache` or `loaderEpoch`,
+  // and a fleet showing mostly `firstEpoch` is a pool-routing finding rather
+  // than an indexing one. Absence alongside a large count is none of the
+  // four, and is worth a look: a warm tab that nothing cleared has no
+  // accounted reason to evaluate a graph.
+  loaderResetReason?: 'clearCache' | 'loaderEpoch' | 'coldTab' | 'firstEpoch';
   // Per-field hydration wall-clock, keyed by dotted field path from the
   // card's root — the deserialization sibling of `searchDocFieldsMs`, and
   // the breakdown of `buildModelMs.hydrate`. Same bounding, so a cheap card
