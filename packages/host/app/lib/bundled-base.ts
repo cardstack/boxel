@@ -87,6 +87,13 @@ function rebaseSpecifier(
 // `shimAsyncModule` calls in externals.ts: the boxel-cli guard that reads
 // literal shim ids out of that file covers `@cardstack/base/*` through its
 // path alias already, so nothing is lost to it here.
+// The base modules a bundled module may import while still leaving the set
+// closed: each one's whole content is a re-export, so it is fetched on purpose
+// and the copy the bundler puts in the chunk exposes the same class from that
+// same chunk. Anything else a bundled module imports has to be bundled too —
+// `Integration | bundled base modules` fails when it is not.
+export const FETCHED_RE_EXPORTS = new Set(['string', 'markdown', 'text-area']);
+
 export const BUNDLED_BASE_MODULES: Record<
   string,
   () => Promise<Record<string, unknown>>
@@ -112,6 +119,11 @@ export const BUNDLED_BASE_MODULES: Record<
   // re-exporter instead costs one request and gets the attribution right, and
   // the two module records that leaves behind expose the same class from the
   // same chunk, so nothing compares them and disagrees.
+  //
+  // `file-api`, `command`, `commands/search-card-result`, `theme`, `index`,
+  // `command-field`, `frontmatter-parse` and `file-formats/index` are out on
+  // the same rule; `FETCHED_RE_EXPORTS` lists the three a bundled module still
+  // imports, which are the ones the closure check has to allow.
   'card-api': () => import('@cardstack/base/card-api'),
   '-private': () => import('@cardstack/base/-private'),
   'card-serialization': () => import('@cardstack/base/card-serialization'),
