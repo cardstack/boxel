@@ -348,7 +348,7 @@ export function serializeCardResource(
     )
     .map(([fieldName]) => serializedGet(model, fieldName, doc, visited, opts));
   let realmURL = getCardMeta(model, 'realmURL');
-  return merge(
+  let resource = merge(
     {
       attributes: {},
     },
@@ -361,6 +361,19 @@ export function serializeCardResource(
     // is falsy we know the model is a CardDef which has [localId].
     model.id ? { id: model.id } : { lid: (model as CardDef)[localId] },
   );
+  // A computed link that resolved to nothing contributes `{ relationships: {} }`
+  // (it omits its own entry, see `LinksTo`/`LinksToMany` `serialize`), which the
+  // merge above can leave behind as an empty `relationships` object on a card
+  // that has no other relationships. That empty object is not a shape the wire
+  // format ever otherwise carries — a card without relationships has no key at
+  // all — so drop it to keep serialization a pure function of the card's data.
+  if (
+    (resource as LooseCardResource).relationships &&
+    Object.keys((resource as LooseCardResource).relationships!).length === 0
+  ) {
+    delete (resource as LooseCardResource).relationships;
+  }
+  return resource;
 }
 
 export function serializeFileDef(

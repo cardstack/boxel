@@ -2382,6 +2382,13 @@ function subjectFor(target: unknown): OperationsSubject {
 // it. The client core reads the distinction for one behavior: a declared create
 // is anchored on an instance for context, while the base create it builds on
 // has no instance to read.
+//
+// `optimistic` travels for a different reason than the rest: it is the one
+// term of the client's eligibility that is already plain data on the
+// declaration. Every other term — whether the program is deterministic, what
+// the program even is — needs the declaration lowered, which needs a
+// definition graph. Carrying the author's own answer here lets a call respect
+// an opt-out without building one.
 function carriedOperations(
   owner: typeof BaseDef,
 ): Record<string, CarriedOperationInfo> {
@@ -2393,6 +2400,9 @@ function carriedOperations(
     carried[name] = {
       base: declaration.base,
       declared: true,
+      ...(declaration.optimistic === undefined
+        ? {}
+        : { optimistic: declaration.optimistic }),
       ...(declaration.base === 'query'
         ? { query: queryDeclaration(declaration) }
         : {}),

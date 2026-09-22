@@ -552,6 +552,11 @@ function mergeCardVisitResults(
     searchDoc: index?.searchDoc ?? null,
     displayNames: index?.displayNames ?? null,
     types: index?.types ?? null,
+    // From the index visit, the visit that produced `serialized` — the two have
+    // to describe one read of the source or the pairing means nothing. The
+    // prerender-html visit builds its own model from its own source read, and
+    // that read is behind no document this row stores.
+    sourceContentHash: index?.sourceContentHash ?? null,
     deps: mergeDeps(index?.deps ?? null, html?.deps ?? null),
     ...(index?.diagnostics ? { diagnostics: index.diagnostics } : {}),
     iconHTML: index?.iconHTML ?? null,

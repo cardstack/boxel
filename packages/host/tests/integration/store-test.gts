@@ -3764,8 +3764,16 @@ module('Integration | Store', function (hooks) {
         'the realm reported the generation its pass committed',
       );
 
+      // Delivered without `versions` throughout, so the generation rule is the
+      // only one that can answer. A card the store loaded from a read carries
+      // the version its document was assembled from, so an event naming that
+      // same version suppresses a reload on its own — correctly, and covered by
+      // its own test. Leaving `versions` here would let either rule account for
+      // the counts below, and the claim this test makes is about the
+      // generation.
+      let { versions: _versions, ...onGeneration } = event;
       reads = countCardReads('Person/echoed');
-      events.deliver(event);
+      events.deliver(onGeneration as RealmEventContent);
       await settled();
       assert.strictEqual(reads.count, 1, 'the event is acted on once');
       assert.strictEqual(
@@ -3774,7 +3782,7 @@ module('Integration | Store', function (hooks) {
         'and the store holds what the pass wrote',
       );
 
-      events.deliver(event);
+      events.deliver(onGeneration as RealmEventContent);
       await settled();
       assert.strictEqual(
         reads.count,
@@ -3782,12 +3790,11 @@ module('Integration | Store', function (hooks) {
         'the same event delivered a second time is a no-op',
       );
 
-      // The control, and the reason the count above is about the generation
-      // rather than about anything else in the event: the same event with
-      // nothing but its generation removed. With no generation there is no
-      // floor to compare against, which is what a realm too old to report one
-      // gives every client.
-      let { generation: _generation, ...withoutGeneration } = event;
+      // The control, and the reason the count above is about the generation:
+      // the same event with nothing but its generation removed. With no
+      // generation there is no floor to compare against, which is what a realm
+      // too old to report one gives every client.
+      let { generation: _generation, ...withoutGeneration } = onGeneration;
       events.deliver(withoutGeneration as RealmEventContent);
       await settled();
       assert.strictEqual(

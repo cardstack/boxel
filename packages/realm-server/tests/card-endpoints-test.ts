@@ -187,16 +187,12 @@ module(basename(import.meta.filename), function () {
           onRealmSetup,
         });
 
-        // The read path reports no version, and that is a decision rather than
-        // an omission. The served document is assembled from the index while
-        // the hash describes the file, and the two are separate channels a
-        // deferred index pass leaves at different points — so a version read
-        // here would be a statement about the file and not about the document
-        // it shipped with. Adding one would also move none of the `ETag`'s
-        // inputs, so every cached body in the fleet would revalidate against an
-        // unchanged validator and be answered with a document that predates the
-        // key. Pinned so a later reader pays that cost deliberately.
-        test('a card+json GET carries no version', async function (assert) {
+        // The version the read reports is the base a client's next write is
+        // computed against, so it has to name the bytes this document was
+        // assembled from. Asserted against the file rather than against another
+        // response: comparing two responses would hold just as well if both
+        // reported the same wrong value.
+        test('a card+json GET reports the version of the stored bytes', async function (assert) {
           let response = await request
             .get('/person-1')
             .set('Accept', 'application/vnd.card+json');
@@ -206,19 +202,95 @@ module(basename(import.meta.filename), function () {
             200,
             `HTTP 200 status: ${response.text}`,
           );
-          // The positive control comes first. An absence assertion on its own
-          // would also hold for a response carrying no `meta` at all, so it
-          // would pass for a broken read as readily as for a correct one —
-          // establishing that this IS a populated card meta is what makes the
-          // absence below a statement about `version`.
+          assert.strictEqual(
+            response.body.data.meta.version,
+            computeContentHash(
+              readFileSync(
+                join(dir.name, 'realm_server_1', 'test', 'person-1.json'),
+                'utf8',
+              ),
+            ),
+            'the response reports the hash of the bytes on disk',
+          );
+        });
+
+        // The decisive test for where the value comes from. `realm_file_meta`
+        // holds a content hash only for paths written through the realm's own
+        // write API; a fixture copied onto disk — like every seeded base,
+        // catalog or skills realm in a deployment — has a row with a creation
+        // time and nothing else, permanently. Serving the version from there
+        // would report nothing for this card, so finding one here is what says
+        // it was recorded by the pass that indexed the bytes.
+        test('a card the realm never wrote through its write API still reports a version', async function (assert) {
+          let [row] = (await dbAdapter.execute(
+            `SELECT content_hash FROM realm_file_meta
+             WHERE realm_url = $1 AND file_path = $2`,
+            { bind: [realmURL.href, 'person-1.json'] },
+          )) as { content_hash: string | null }[];
+          // A row exists — indexing calls `ensureFileCreatedAt`, which inserts
+          // one carrying `created_at` alone. Asserted separately from the hash
+          // because coalescing the two would let "no row at all" satisfy the
+          // check, and that distinction is what this control rests on: the
+          // claim is that the realm recorded a creation time and no hash, not
+          // that it recorded nothing.
+          assert.ok(
+            row,
+            'indexing recorded a realm_file_meta row for the path',
+          );
+          assert.strictEqual(
+            row.content_hash,
+            null,
+            'the fixture reached disk without the write path, so no hash was recorded for it',
+          );
+
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+          assert.strictEqual(
+            typeof response.body.data.meta.version,
+            'string',
+            'and the read reports a version regardless',
+          );
+        });
+
+        // The value a row without a fingerprint reports, which is every row in a
+        // realm until it is re-indexed. Absent rather than null, so a client
+        // reads "no version" — the same silence it read before the column
+        // existed, which it treats as "I cannot confirm this".
+        test('a card whose row carries no version reports none', async function (assert) {
+          await dbAdapter.execute(
+            `UPDATE boxel_index SET source_content_hash = NULL
+             WHERE realm_url = $1 AND url = $2 AND type = 'instance'`,
+            { bind: [realmURL.href, `${testRealmHref}person-1.json`] },
+          );
+
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+          // The positive control: an absence assertion alone would also hold
+          // for a response carrying no `meta`, so establishing that this meta
+          // is populated is what makes the absence a statement about `version`.
           assert.ok(
             response.body.data.meta.adoptsFrom,
             'the response carries a populated card meta',
           );
-          assert.strictEqual(
-            response.body.data.meta.version,
-            undefined,
-            'the read path reports no version',
+          assert.false(
+            'version' in response.body.data.meta,
+            `the key is omitted rather than null: ${JSON.stringify(
+              response.body.data.meta,
+            )}`,
           );
         });
 
@@ -246,6 +318,7 @@ module(basename(import.meta.filename), function () {
           delete json.data.meta.lastModified;
           delete json.data.meta.resourceCreatedAt;
           delete json.data.meta.generation;
+          delete json.data.meta.version;
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
             testRealmHref,
@@ -926,8 +999,8 @@ module(basename(import.meta.filename), function () {
           let etag = response.get('etag') ?? '';
           assert.ok(etag, 'response carries an ETag');
           assert.true(
-            /^"\d+(?:-[0-9a-f]+)?:card-rri-lb\d+"$/.test(etag),
-            `ETag matches "<indexed_at>(-<realmInfoHash>)?:card-rri-lb<budget>" pattern (got ${etag})`,
+            /^"\d+(?:-[0-9a-f]+)?:card-srcver-lb\d+"$/.test(etag),
+            `ETag matches "<indexed_at>(-<realmInfoHash>)?:card-srcver-lb<budget>" pattern (got ${etag})`,
           );
           assert.strictEqual(
             response.get('cache-control'),
@@ -1181,6 +1254,7 @@ module(basename(import.meta.filename), function () {
           delete json.data.meta.lastModified;
           delete json.data.meta.resourceCreatedAt;
           delete json.data.meta.generation;
+          delete json.data.meta.version;
 
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
@@ -2751,6 +2825,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -2886,6 +2961,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -2993,6 +3069,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -3034,6 +3111,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -3245,6 +3323,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -3703,6 +3782,7 @@ module(basename(import.meta.filename), function () {
           delete json.data.meta.lastModified;
           delete json.data.meta.resourceCreatedAt;
           delete json.data.meta.generation;
+          delete json.data.meta.version;
           let cardFile = join(dir.name, 'realm_server_1', 'test', entry);
           assert.ok(existsSync(cardFile), 'card json exists');
           let card = readJSONSync(cardFile);
@@ -3930,7 +4010,7 @@ module(basename(import.meta.filename), function () {
           let patchEtag = patchResponse.get('etag') ?? '';
           assert.ok(patchEtag, 'PATCH response carries an ETag');
           assert.true(
-            /^"\d+(?:-[0-9a-f]+)?:card-rri-write-echo"$/.test(patchEtag),
+            /^"\d+(?:-[0-9a-f]+)?:card-srcver-write-echo"$/.test(patchEtag),
             `PATCH ETag names the write-echo shape (got ${patchEtag})`,
           );
           assert.notStrictEqual(
@@ -3951,7 +4031,7 @@ module(basename(import.meta.filename), function () {
             'old ETag no longer matches → fresh 200',
           );
           assert.true(
-            /^"\d+(?:-[0-9a-f]+)?:card-rri-lb\d+"$/.test(
+            /^"\d+(?:-[0-9a-f]+)?:card-srcver-lb\d+"$/.test(
               staleResponse.get('etag') ?? '',
             ),
             `GET reports a validator for the read shape (got ${staleResponse.get('etag')})`,
@@ -4037,8 +4117,8 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(
             patchResponse.get('etag'),
             (initialEtag ?? '').replace(
-              /:card-rri-lb\d+"$/,
-              ':card-rri-write-echo"',
+              /:card-srcver-lb\d+"$/,
+              ':card-srcver-write-echo"',
             ),
             'no-op PATCH validates the unchanged state under the write-echo shape',
           );
@@ -4340,6 +4420,7 @@ module(basename(import.meta.filename), function () {
           delete json.data.meta.lastModified;
           delete json.data.meta.resourceCreatedAt;
           delete json.data.meta.generation;
+          delete json.data.meta.version;
           {
             let cardFile = join(
               dir.name,
@@ -4485,6 +4566,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -4620,6 +4702,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -4727,6 +4810,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -4768,6 +4852,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -4875,6 +4960,7 @@ module(basename(import.meta.filename), function () {
           delete json.data.meta.lastModified;
           delete json.data.meta.resourceCreatedAt;
           delete json.data.meta.generation;
+          delete json.data.meta.version;
           {
             let cardFile = join(
               dir.name,
@@ -4954,6 +5040,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -5039,6 +5126,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -5265,6 +5353,22 @@ module(basename(import.meta.filename), function () {
               versions: { [`${testRealmHref}person-1`]: storedHash },
             },
           );
+
+          // The write channel and the read channel have to agree, or a client
+          // cannot chain one onto the other: operation 1 takes its base from a
+          // read and operation 2 from the version the write returned, and both
+          // describe the same file. Read after the event above, so the index
+          // pass the write waited on has landed and the row the GET assembles
+          // from is the one this write produced.
+          let read = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(read.status, 200, `HTTP 200 status: ${read.text}`);
+          assert.strictEqual(
+            read.body.data.meta.version,
+            storedHash,
+            'a read after the write reports the version the write stored',
+          );
         });
 
         // `jade` links to `hassan`, so patching `hassan` re-indexes `jade` in
@@ -5341,10 +5445,24 @@ module(basename(import.meta.filename), function () {
           );
           let before = readFileSync(cardFile, 'utf8');
           let modifiedBefore = statSync(cardFile).mtimeMs;
-          // Read off the bytes rather than from a warm-up write, so the value
-          // echoed is the one this file actually holds and no write has run
-          // before the one under test.
-          let version = computeContentHash(before);
+          // Taken from a read rather than from a warm-up write, so this is the
+          // value a client that has only looked at the card would echo, and no
+          // write has run before the one under test. A GET is what makes the
+          // round trip real: the strip has to hold for the value the server
+          // actually serves, not only for one the test computed for itself.
+          let read = await request
+            .get('/person-2')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(read.status, 200, `HTTP 200 status: ${read.text}`);
+          let version = read.body.data.meta.version;
+          // Without this the echo below would carry `version: undefined`, which
+          // serializes away — leaving a patch that strips nothing and a test
+          // that passes for the wrong reason.
+          assert.strictEqual(
+            version,
+            computeContentHash(before),
+            'the read reports the version of the bytes on disk',
+          );
 
           let response = await request
             .patch('/person-2')

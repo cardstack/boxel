@@ -279,6 +279,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private realmServer: RealmServerService;
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
   private cardInvalidationSubscribers: Map<string, Set<() => void>> = new Map();
+  private cardReloadSubscribers: Set<(instance: CardDef) => void> = new Set();
   private referenceCount: ReferenceCount = new Map();
   private newReferencePromises: Promise<void>[] = [];
   private autoSaveStates: TrackedMap<string, AutoSaveState> = new TrackedMap();
@@ -421,6 +422,7 @@ export default class StoreService extends Service implements StoreInterface {
     clearInterval(this.gcInterval);
     this.subscriptions = new Map();
     this.cardInvalidationSubscribers = new Map();
+    this.cardReloadSubscribers = new Set();
     this.onSaveSubscriber = undefined;
     this.referenceCount = new Map();
     this.newReferencePromises = [];
@@ -2962,6 +2964,12 @@ export default class StoreService extends Service implements StoreInterface {
           this.setIdentityContext(maybeReloadedInstance);
           await this.startAutoSaving(maybeReloadedInstance);
         }
+        if (!isDelete && maybeReloadedInstance === instance) {
+          // The same object, refreshed in place: whatever a reader computed on
+          // top of its previous state is gone, and only this case leaves that
+          // reader still holding the card it computed against.
+          this.notifyCardReloadSubscribers(instance);
+        }
         if (isDelete) {
           await this.stopAutoSaving(instance);
           // Snapshot the consumers BEFORE removing the deleted instance from
@@ -3910,6 +3918,111 @@ export default class StoreService extends Service implements StoreInterface {
     );
   }
 
+  // Fires whenever this store re-reads a card from its realm and keeps the
+  // same instance — which is what a foreign write looks like from outside the
+  // store.
+  //
+  // Distinct from `subscribeToCardInvalidation`, which fires only when a card
+  // is deleted. A reader holding something computed on top of the card's
+  // previous state — the optimistic ledger's unsent entries — needs to know
+  // that state is gone, and a deletion notice never tells it.
+  //
+  // Not fired for a reload that replaced the instance (the card's type
+  // changed) or that resolved to an error: in neither case is there a card
+  // whose earlier state a subscriber could still be reasoning about.
+  onCardReloaded(cb: (instance: CardDef) => void): () => void {
+    this.cardReloadSubscribers.add(cb);
+    return () => {
+      this.cardReloadSubscribers.delete(cb);
+    };
+  }
+
+  private notifyCardReloadSubscribers(instance: CardDef) {
+    // Snapshotted so a subscriber unsubscribing from its own callback does not
+    // mutate the set being walked, and isolated so one subscriber's throw does
+    // not cost the others their notice.
+    for (let subscriber of [...this.cardReloadSubscribers]) {
+      try {
+        subscriber(instance);
+      } catch (err) {
+        console.error(`card reload subscriber threw for ${instance.id}`, err);
+      }
+    }
+  }
+
+  // The version this session believes the card's stored bytes carry, and the
+  // recording of a new one.
+  //
+  // The same channel `#recordWrittenVersion` uses for a card+json write, and
+  // for the same reason: a version reaches an instance from a response that
+  // carries one and from nowhere else, since nothing here can compute a hash
+  // of bytes it did not write. Exposed so an operation's write result feeds
+  // the reload-suppression rules the way a save's does — an operation that
+  // wrote a card without recording its version leaves its own echo looking
+  // like a stranger's.
+  operationVersionOf(instance: CardDef): string | undefined {
+    return instance[meta]?.version;
+  }
+
+  recordOperationVersion(instance: CardDef, version: string) {
+    this.#recordWrittenVersion(instance, {
+      data: { meta: { version } },
+    } as SingleCardDocument);
+  }
+
+  // Put a source document an operation produced onto a held instance.
+  //
+  // `updateFromSerialized` writes the instance's data bucket directly and
+  // announces nothing to change subscribers, so this does not mark the card
+  // dirty or schedule a save — the same reason a reload does not. That is the
+  // point: the write is already on its way to the realm as an operation, and
+  // an autosave racing it would send the card a second time.
+  //
+  // The realm-managed members of `meta` are carried across by hand. A
+  // serialization built from an instance rebuilds `meta` from scratch —
+  // `adoptsFrom`, the realm, the per-field metadata — and the deserializer
+  // assigns what it is handed wholesale, so applying one would otherwise drop
+  // the `version` and `generation` this store holds. Those are exactly what
+  // the next operation names as its base and what the index event rules read
+  // to decide whether to re-read the card, so losing them here would turn
+  // every optimistic write after the first into an unconfirmable one.
+  async applyOperationSource(
+    instance: CardDef,
+    resource: LooseCardResource,
+  ): Promise<void> {
+    let api = await this.cardService.getAPI();
+    let held = instance[meta];
+    await api.updateFromSerialized(
+      instance,
+      { data: resource } as LooseSingleCardDocument,
+      this.store,
+    );
+    // The served metadata underneath, the serialization's on top. A
+    // serialization rebuilds `meta` from scratch and produces only what it can
+    // derive from the instance — `adoptsFrom`, the realm, and the per-field
+    // metadata, which the mutation legitimately moves. Everything else the card
+    // was served with (`realmInfo`, `lastModified`, `resourceCreatedAt`,
+    // `screenshots`, and the `version` / `generation` the next operation and
+    // the store's own event rules read) is absent from it, so assigning it
+    // wholesale would drop realm branding and modification times until
+    // something re-read the card.
+    instance[meta] = {
+      ...held,
+      ...instance[meta],
+    } as CardResourceMeta;
+  }
+
+  // Re-read a card from its realm, discarding whatever this tab holds for it.
+  //
+  // The rollback an optimistic operation takes when the realm reports it ran
+  // from a different base. Routed through the same task an index event's
+  // reload takes, so a rollback and an invalidation leave the store in the
+  // same place — the autosave re-subscription and the identity bookkeeping
+  // included.
+  async reloadForRollback(instance: CardDef): Promise<void> {
+    await this.reloadTask.perform(instance);
+  }
+
   // Pairs every card a committed batch minted with the instance this store was
   // already holding for it, and promotes that instance the way a save does.
   //
@@ -4003,9 +4116,11 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   // Keep the version a card+json write reported — the fingerprint of the bytes
-  // the realm stored. The write responses are the only channel a client gets
-  // one on; the card+json GET deliberately reports none, so a version reaches
-  // an instance here or not at all. `#indexStateAlreadyHeld` is what reads it.
+  // the realm stored. A card+json read reports one too, and
+  // `_updateFromSerialized` assigns a served `meta` onto the instance wholesale,
+  // so a read lands one without passing through here; this records the write's,
+  // which no read is guaranteed to follow. `#indexStateAlreadyHeld` reads
+  // whichever is held.
   //
   // Recorded rather than left to the server-state merge above, which runs only
   // when the identity or the realm info moved and so skips the ordinary save.
