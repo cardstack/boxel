@@ -141,11 +141,25 @@ export interface ComputePassSnapshot {
 // running at that moment, and the two serializers ask `isQueryTaintedField`
 // after evaluating a field. Taint therefore reaches a computed that reads a
 // query field through another computed, on the same terms.
+//
+// Both live in shared state rather than in module scope, because the compute
+// that records a taint and the serializer that reads it need not resolve the
+// same instance of this module while several loaders cooperate in one
+// environment. A split there loses the record silently — the serializer finds
+// nothing and stores the derived value — which is the one outcome this is here
+// to prevent. (`passComputeMemo` above stays module-local: a miss on a memo
+// costs a recompute, not a wrong answer.)
 interface ComputeFrame {
   tainted: boolean;
 }
-let computeFrames: ComputeFrame[] = [];
-let queryTaintedFields = new WeakMap<BaseDef, Set<string>>();
+const computeFrames = initSharedState(
+  'queryTaintComputeFrames',
+  () => [] as ComputeFrame[],
+);
+const queryTaintedFields = initSharedState(
+  'queryTaintedFields',
+  () => new WeakMap<BaseDef, Set<string>>(),
+);
 
 // Raised by every read of a query-backed field (`ensureQueryFieldSearchResource`
 // is the single funnel for the getters and the relationship probe alike). Marks

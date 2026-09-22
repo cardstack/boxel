@@ -3742,6 +3742,28 @@ module(`Integration | realm indexing`, function (hooks) {
       `${testRealmURL}Issue/issue-2`,
     ];
 
+    // The first hop has to resolve before the board is written, or the board's
+    // `cards` reduces over an empty set — which the used-only serialization
+    // omits anyway, leaving the assertion below satisfied without the omission
+    // under test having done anything.
+    let project = await realm.realmIndexQueryEngine.cardDocument(
+      new URL(`${testRealmURL}Project/proj-1`),
+      { loadLinks: true },
+    );
+    assert.deepEqual(
+      project?.type === 'doc'
+        ? (
+            (project.doc.data.relationships?.issues as Relationship)?.data as
+              | { id: string }[]
+              | undefined
+          )
+            ?.map((d) => d.id)
+            .sort()
+        : undefined,
+      issueIds,
+      'the query-backed Project.issues resolves both issues',
+    );
+
     await realm.write(
       'board-1.json',
       JSON.stringify({
