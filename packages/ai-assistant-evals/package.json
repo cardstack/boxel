@@ -13,13 +13,19 @@
     "eval:users": "node ensure-users.ts",
     "eval": "node run-eval.ts",
     "eval:judge": "node judge-result.ts",
-    "lint": "tsc --noEmit -p tsconfig.json"
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
+    "lint:js": "eslint . --ext .ts --report-unused-disable-directives --cache",
+    "lint:js:fix": "eslint . --ext .ts --report-unused-disable-directives --fix",
+    "lint:types": "ember-tsc --noEmit"
   },
   "devDependencies": {
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
+    "@glint/ember-tsc": "catalog:",
     "@playwright/test": "catalog:",
     "@types/node": "catalog:",
+    "concurrently": "catalog:",
     "typescript": "catalog:"
   },
   "volta": {

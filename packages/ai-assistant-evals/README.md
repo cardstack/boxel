@@ -107,8 +107,10 @@ every model as a tab of one headed browser and runs them at once.
   `MATRIX_USERNAME=ai-assistant-eval-user-1 MATRIX_PASSWORD=password node
 ./scripts/register-test-user.ts` — the `pnpm register-test-user` script
   hardcodes its own username and ignores the env. Each user must be
-  different: the ai-bot serializes all generations of one user behind a
-  per-user cost lock, so two models on the same user take turns.
+  different: which room the assistant panel opens on is that account's own
+  state, so two browsers signed in as one account race over it and a prompt
+  can land in the other model's room. A run that puts more models than users
+  on screen at once stops before it opens a browser.
 - `EVAL_HOST_URL`, `EVAL_MATRIX_URL` — default `https://localhost:4200`,
   `http://localhost:8008`.
 - `EVAL_MAX_MINUTES` (default 15) is a safety net only: a run still going after

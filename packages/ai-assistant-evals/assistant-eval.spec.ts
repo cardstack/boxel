@@ -957,9 +957,20 @@ const RUN_LABEL = EVAL_BUNDLE
   ? `evaluation ${process.env.EVAL_NAME ?? EVAL_BUNDLE}`
   : EVAL_PROMPT;
 
-if (MODELS.length > USERS.length) {
-  console.warn(
-    `[eval] ${MODELS.length} models but only ${USERS.length} users (EVAL_USERS): models sharing an account race over which room the panel opens on, and a prompt can land in the wrong room — register more users with \`pnpm eval:users\` after naming them in EVAL_USERS`,
+// More models than users means two models share an account, and which room
+// the panel opens on is that account's own state: the two race over it and a
+// prompt can land in the other model's room. Both parallel modes put
+// same-account models on screen together — tabs starts every model at once,
+// and workers dispatch the next model as soon as any worker frees, while the
+// rest are still going. Stop here, before the first browser opens, rather
+// than spend generations on rooms whose results cannot be attributed. A run
+// that never overlaps — one worker, no tabs — can share accounts safely.
+const CONCURRENT_MODELS = TABS_MODE
+  ? MODELS.length
+  : Number(process.env.EVAL_WORKERS ?? 5);
+if (MODELS.length > USERS.length && CONCURRENT_MODELS > 1) {
+  throw new Error(
+    `[eval] ${MODELS.length} models but only ${USERS.length} users (EVAL_USERS): models sharing an account race over which room the panel opens on, and a prompt can land in the wrong room. Register more users with \`pnpm eval:users\` after naming them in EVAL_USERS, or run the models one at a time with EVAL_WORKERS=1`,
   );
 }
 
@@ -1012,7 +1023,14 @@ test.afterAll(async () => {
   );
   let rows: RunResult[] = [];
   for (let file of files) {
-    rows.push(JSON.parse(await readFile(join(RESULTS_DIR, file), 'utf8')));
+    let row: RunResult = JSON.parse(
+      await readFile(join(RESULTS_DIR, file), 'utf8'),
+    );
+    // Only this run's models. A plain `pnpm eval:models` writes into one
+    // directory every time, so earlier sweeps left their own rows here.
+    if (MODELS.includes(row.requestedModel)) {
+      rows.push(row);
+    }
   }
   rows.sort((a, b) => a.requestedModel.localeCompare(b.requestedModel));
   let header =

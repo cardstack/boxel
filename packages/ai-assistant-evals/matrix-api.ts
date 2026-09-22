@@ -105,6 +105,13 @@ export async function addRealmToAccountData(
   if (current.ok) {
     let json = (await current.json()) as { realms?: string[] };
     realms = json.realms ?? [];
+  } else if (current.status !== 404) {
+    // Only a 404 means "this account has no realm list yet". Any other
+    // failure leaves the existing list unknown, and the write below would
+    // replace it with this one realm alone.
+    throw new Error(
+      `could not read the account data of ${userId}: ${current.status} ${await current.text()}`,
+    );
   }
   if (realms.includes(realmUrl)) {
     return false;

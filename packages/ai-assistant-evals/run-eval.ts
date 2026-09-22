@@ -312,6 +312,18 @@ async function main() {
     .map((m) => m.trim())
     .filter(Boolean);
 
+  // Two models on one account race over which room the panel opens on, so a
+  // parallel run needs an account per model. Say so before the report card is
+  // written, rather than letting the spec find it.
+  if (models.length > evalUsers().length && !args.headed) {
+    throw new Error(
+      `${models.length} models but only ${evalUsers().length} users: models sharing an account ` +
+        'race over which room the panel opens on, and a prompt can land in the wrong room. ' +
+        'Register more users with `pnpm eval:users` after naming them in EVAL_USERS, or run ' +
+        'fewer models',
+    );
+  }
+
   // One browser per model signs in as its own matrix user. A missing account
   // only shows up on that browser's first action, by which point the session
   // has a report card and the other models are already spending, so it is
