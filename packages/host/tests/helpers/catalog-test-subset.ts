@@ -64,9 +64,12 @@ async function verifyServedSubset() {
     marker.revision !== manifest.revision ||
     JSON.stringify([...marker.files].sort()) !== JSON.stringify(expectedFiles)
   ) {
+    // The manifest is read when the host is built, so either side can be the
+    // stale one.
     throw new Error(
-      `The catalog test subset the stack serves is stale: it is ${marker.revision}, the manifest pins ${manifest.revision}. ` +
-        `Run \`pnpm --dir packages/catalog catalog:test-subset\` (add --into-clone when the stack serves the full catalog clone); the running realm picks the files up without a restart.`,
+      `The catalog test subset the stack serves (${marker.revision}) is not the one this host build pins (${manifest.revision}). ` +
+        `If packages/catalog/test-subset.json changed since the host was built, rebuild the host. ` +
+        `Otherwise run \`pnpm --dir packages/catalog catalog:test-subset\` (add --into-clone when the stack serves the full catalog clone); the running realm picks the files up without a restart.`,
     );
   }
   if (marker.divergent.length > 0) {

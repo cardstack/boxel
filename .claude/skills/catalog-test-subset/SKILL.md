@@ -68,6 +68,8 @@ The test helpers fail every test in a module when the served subset doesn't matc
 - after editing a subset file in a local catalog checkout (see co-developing below);
 - whenever a test fails with "catalog test subset … is stale" or "does not serve the catalog test subset".
 
+The host test build reads the manifest when it is built, so after a manifest change also rebuild the host dist before running host tests. When the guard can't tell which side is stale, its message names both fixes.
+
 Starting a stack runs it automatically. Re-running it against a running stack is enough, because the realm picks up the files without a restart.
 
 | Stack                                                                         | Serves as `/catalog/`                  | Sync to run                                       |
