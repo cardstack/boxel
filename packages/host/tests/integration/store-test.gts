@@ -1,6 +1,7 @@
 import { service } from '@ember/service';
 import {
   type RenderingTestContext,
+  find,
   waitUntil,
   waitFor,
   click,
@@ -47,6 +48,7 @@ import {
   setupCardLogs,
   setupIntegrationTestRealm,
   type TestContextWithSave,
+  withSavesHeldOpen,
   withSlowSave,
   setupOperatorModeStateCleanup,
 } from '../helpers';
@@ -1676,9 +1678,25 @@ module('Integration | Store', function (hooks) {
       },
     );
 
+    let nameInput = `[data-test-stack-card="${testRealmURL}Person/hassan"] [data-test-field="name"] input`;
+    let typedSoFar = () => (find(nameInput) as HTMLInputElement | null)?.value;
+
+    // Every save records the keystrokes that had landed when it serialized, so
+    // a save that carries a half-typed value says which keystroke it caught
+    // rather than only which value it missed.
+    let startedAt = Date.now();
+    let saveLog: string[] = [];
+    let saveTrace = () => `saves so far: ${saveLog.join(' | ')}`;
+
     let saveCount = 0;
     this.onSave((url, doc) => {
       saveCount++;
+      let savedName = (doc as SingleCardDocument).data?.attributes?.name;
+      saveLog.push(
+        `#${saveCount} @${Date.now() - startedAt}ms saved=${JSON.stringify(
+          savedName,
+        )} typed=${JSON.stringify(typedSoFar())}`,
+      );
       assert.strictEqual(
         url.href,
         `${testRealmURL}Person/hassan`,
@@ -1687,34 +1705,62 @@ module('Integration | Store', function (hooks) {
       switch (saveCount) {
         case 1:
           assert.strictEqual(
-            (doc as SingleCardDocument).data?.attributes?.name,
+            savedName,
             'Hassan ',
-            'the initial instance mutation event is saved',
+            `the initial instance mutation event is saved (${saveTrace()})`,
           );
           break;
         case 2:
           assert.strictEqual(
-            (doc as SingleCardDocument).data?.attributes?.name,
+            savedName,
             'Hassan Paper',
-            'the final instance mutation event is saved',
+            `the final instance mutation event is saved (${saveTrace()})`,
           );
           break;
         default:
-          assert.ok(false, `unexpected number of saves: ${saveCount}`);
+          assert.ok(
+            false,
+            `unexpected number of saves: ${saveCount} (${saveTrace()})`,
+          );
       }
     });
 
-    // slow down the save so we can get deterministic results
-    await withSlowSave(1000, async () => {
-      // typeIn will fire an event for each character, which in turn results in multiple instance updated events
-      await typeIn(
-        `[data-test-stack-card="${testRealmURL}Person/hassan"] [data-test-field="name"] input`,
-        ' Paper',
-      );
-
-      // the leading edge and trailing edge of the key events are saved and the intermediate events are dropped
-      assert.strictEqual(saveCount, 2, 'the number of auto-saves is correct');
+    // Hold the leading-edge save open until every keystroke has landed. The
+    // autosave queue gates its next drain on the save in flight, so the
+    // keystrokes typed behind the held save are all still queued when it
+    // releases, and they coalesce into the one save that follows it.
+    await withSavesHeldOpen(async (release) => {
+      // typeIn fires an event per character, each of which is an instance
+      // mutation event. It waits for settled only after the last character, and
+      // waitUntil polls without waiting for settled at all, so the keystrokes
+      // land while the held save still has the queue closed.
+      let keystrokes = typeIn(nameInput, ' Paper');
+      // Typing that fails leaves the wait below to time out and report the
+      // input it got stuck on; this keeps the same rejection from also being
+      // reported as an unhandled one on the way there.
+      keystrokes.catch(() => {});
+      try {
+        await waitUntil(() => typedSoFar() === 'Hassan Paper', {
+          timeout: 30_000,
+        });
+      } catch (err) {
+        throw new Error(
+          `timed out waiting for the keystrokes to land, input holds ${JSON.stringify(
+            typedSoFar(),
+          )} (${saveTrace()})`,
+          { cause: err },
+        );
+      }
+      release();
+      await keystrokes;
     });
+
+    // the leading edge and trailing edge of the key events are saved and the intermediate events are dropped
+    assert.strictEqual(
+      saveCount,
+      2,
+      `the number of auto-saves is correct (${saveTrace()})`,
+    );
   });
 
   test<TestContextWithSave>('getSaveState works for initially unsaved instance', async function (assert) {
