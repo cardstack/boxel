@@ -574,6 +574,8 @@ class Isolated extends Component<typeof Workspace> {
         <div class='frame-actions' data-test-frame-actions>
           <div
             class='search-box'
+            role='search'
+            aria-label='Search this space'
             {{this.setupSearchHotkey}}
             {{on 'focusout' this.onSearchFocusOut}}
           >
@@ -624,6 +626,7 @@ class Isolated extends Component<typeof Workspace> {
                         @size='auto'
                         class='search-result'
                         {{on 'click' (this.openResult result)}}
+                        {{on 'keydown' this.onSearchKeydown}}
                       >
                         <span
                           class='search-result-title'
@@ -640,6 +643,7 @@ class Isolated extends Component<typeof Workspace> {
                   @size='auto'
                   class='search-see-all'
                   {{on 'click' this.seeAllResults}}
+                  {{on 'keydown' this.onSearchKeydown}}
                 >
                   See all
                   {{this.searchTotal}}
@@ -2468,20 +2472,23 @@ class Isolated extends Component<typeof Workspace> {
     this.runSearch.perform();
   }
 
+  // Wired to the input and to every result button, so Escape dismisses the
+  // search from wherever focus is. Left to bubble, the operator mode reads
+  // Escape on anything but a text field as "close this card" and the whole
+  // workspace goes.
   @action private onSearchKeydown(ev: Event) {
     let ke = ev as KeyboardEvent;
+    let target = ev.target as HTMLElement;
     if (ke.key === 'Escape') {
-      // Escape dismisses the search only; left to bubble, the operator mode
-      // reads it as "close this card" and the whole workspace goes away.
       ke.stopPropagation();
       this.searchTerm = '';
       this.searchResults.splice(0, this.searchResults.length);
       this.searchAnnouncement = ''; // dismissed, not "no matches"
       this.clearLibrarySearch(); // Esc also restores the rail selection
-      (ev.target as HTMLInputElement).blur();
-    } else if (ke.key === 'Enter') {
-      this.seeAllResults(); // Enter = full results in Library
-      (ev.target as HTMLInputElement).blur();
+      target.blur();
+    } else if (ke.key === 'Enter' && target instanceof HTMLInputElement) {
+      this.seeAllResults(); // Enter in the field = full results in Library
+      target.blur();
     }
   }
 
