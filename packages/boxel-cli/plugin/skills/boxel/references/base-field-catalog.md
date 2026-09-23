@@ -12,7 +12,7 @@ Every field listed here is importable from a stable specifier and ready to use w
 | `BigIntegerField` | `'@cardstack/base/big-integer'` | For values beyond `Number.MAX_SAFE_INTEGER`. |
 | `TextAreaField` | `'@cardstack/base/text-area'` | Multi-line plain text (sub-page). For paragraphs that aren't markdown. |
 | `EmailField` | `'@cardstack/base/email'` | Validates as `user@domain`. Renders as `mailto:` link. |
-| `UrlField` | `'@cardstack/base/url'` | Validates URL shape. Renders as `<a>` in non-edit modes. |
+| `UrlField` | `'@cardstack/base/url'` | Validates URL shape. Renders as `<a>` in non-edit modes. **External URLs only** — a URL that points at a realm resource (a card instance or realm file) must be a `linksTo` / `linksToMany` field instead, never a string. |
 | `PhoneNumberField` | `'@cardstack/base/phone-number'` | Country code + national number. Compound field. |
 | `EthereumAddressField` | `'@cardstack/base/ethereum-address'` | Web3 address with checksum validation. |
 | `ColorField` | `'@cardstack/base/color'` | Renders a color swatch + picker in edit mode. |
@@ -85,8 +85,27 @@ For a `linksToMany(ImageDef)` gallery, the URL twin is `containsMany(UrlField)`:
 - `relationships.<field>.links.self` is for card identifiers — relative paths (`"../Theme/foo"`) or absolute realm URLs only.
 - External URLs (Unsplash, S3, CDN, any `https://` URL pointing at non-card content) go in `attributes.<field>URL` on the URL-twin field.
 - Uploaded card-side images go in the linked ImageDef as a normal `linksTo` relationship.
+- The rule cuts both ways: a URL that points at a **realm resource** never goes in a `UrlField`/`StringField` attribute — see "Realm-resource URLs — always a relationship, never a string" below.
 
 **Future direction (not implemented yet):** a single compound `Image` FieldDef that wraps either a URL or an ImageDef link and exposes a unified `.src` accessor. Until then, use the pair-of-fields approach above.
+
+### 🔗 Realm-resource URLs — always a relationship, never a string
+
+The general rule, not image-specific: if a field's value is the URL of a **realm resource** — a card instance or a realm file, whether as an absolute realm URL, a relative path, or any URL a realm serves — model it as `linksTo` / `linksToMany` (a `FileDef` subtype for files), never as `contains(StringField)` or `contains(UrlField)`. This applies to any pointer field: `author`, `owner`, `relatedDoc`, `parentProject`, and so on.
+
+Both versions pass lint, write, index, and render a clickable link. The string version then decays with no error:
+
+- The index only tracks relationship links as dependencies — nothing re-indexes the referrer when the target changes, and no `brokenLinks` diagnostic fires when the target is deleted.
+- The template cannot render the target card (`<@fields.author @format='embedded' />` needs a relationship).
+- Queries cannot traverse it (`author.name` filters need a relationship).
+- Relationship links are relative paths that survive a realm copy or rename; the string holds an absolute URL that keeps pointing at the old realm.
+
+**Two carve-outs — string is correct there:**
+
+- A `FileDef` subtype's own `id` / `url` / `sourceUrl` descriptor fields are strings that hold the realm file URL by design. Populate them as strings (`new ImageDef({ id: fileIdentifier, url: fileIdentifier, sourceUrl: fileIdentifier, ... })`) — never try to convert them into relationships. The relationship lives one level up: the card's field pointing at the `ImageDef` is the `linksTo`.
+- A curated public path routed via `hostRoutingRules` (a nav target like `/about` or `/pricing` in a site config) is a routed path, not a resource identifier — decoupling the public URL from the card id is the point of the routing mechanism. `UrlField` is correct there. See the `build-site-config-with-theme` and `link-host-mode-paths` patterns.
+
+Everything else `UrlField` holds should be an external (non-realm) URL.
 
 ### 🔴 DateField vs DateTimeField — the schema-vs-value contract
 
@@ -211,6 +230,7 @@ These extend `FileDef` and must be used with `linksTo`, never `contains`. See `b
 Need text?
 ├── Single line, generic → StringField
 ├── Email/URL/phone → EmailField / UrlField / PhoneNumberField
+│   (UrlField = external URLs only; a realm resource URL is a linksTo, see below)
 ├── Multi-line plain → TextAreaField
 └── Markdown
     ├── Stored on the card → MarkdownField (or RichMarkdownField for editor chrome)
@@ -230,6 +250,10 @@ Need a date?
 
 Need an image / file?
 └── Always linksTo(ImageDef) or specific subtype. NEVER contains(ImageDef).
+
+Need to reference another card or a realm file (even if you have it as a URL)?
+└── Always linksTo / linksToMany. NEVER StringField or UrlField holding the URL.
+    (Carve-outs: a FileDef's own id/url/sourceUrl fields; hostRoutingRules nav paths — see the section above.)
 
 Need bounded choices?
 └── enumField(StringField, { options: [...] })

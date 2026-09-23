@@ -74,7 +74,10 @@ import { setupRenderingTest } from '../helpers/setup';
 import type { TestRealmAdapter } from '../helpers/adapter';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardDef as CardDefType } from '@cardstack/base/card-api';
-import type { RealmEventContent } from '@cardstack/base/matrix-event';
+import type {
+  IncrementalIndexEventContent,
+  RealmEventContent,
+} from '@cardstack/base/matrix-event';
 
 module('Integration | Store', function (hooks) {
   setupRenderingTest(hooks);
@@ -124,6 +127,89 @@ module('Integration | Store', function (hooks) {
   }
 
   const noop = () => {};
+
+  async function writePerson(path: string, name: string) {
+    await testRealm.write(
+      path,
+      JSON.stringify({
+        data: {
+          attributes: { name },
+          meta: {
+            adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+  }
+
+  // Take the realm's broadcasts into a list instead of delivering them, so a
+  // test decides which events the store sees and how many times it sees each
+  // one. Replaying the realm's own event rather than a hand-built one is what
+  // keeps these tests honest about the generation and the versions a realm
+  // actually reports.
+  function interceptRealmEvents() {
+    let messageService = getService('message-service');
+    let deliver = messageService.relayRealmEvent.bind(messageService);
+    let captured: RealmEventContent[] = [];
+    messageService.relayRealmEvent = (event: RealmEventContent) => {
+      captured.push(event);
+    };
+    function find(url: string) {
+      return captured.find(
+        (event): event is IncrementalIndexEventContent =>
+          event.eventName === 'index' &&
+          (event as IncrementalIndexEventContent).indexType === 'incremental' &&
+          (event as IncrementalIndexEventContent).invalidations.includes(url),
+      );
+    }
+    return {
+      deliver,
+      // The realm's next incremental event naming `url`, once it arrives.
+      // Matrix hands a broadcast over some time after the write that caused
+      // it, so this waits rather than reading the list once; the list is
+      // emptied afterwards so a later call cannot answer with this event
+      // again.
+      async nextEventFor(url: string): Promise<IncrementalIndexEventContent> {
+        await waitUntil(() => find(url) !== undefined, {
+          timeout: 10_000,
+          timeoutMessage: `the realm broadcast no incremental index event naming ${url}`,
+        });
+        let event = find(url)!;
+        captured.length = 0;
+        return event;
+      },
+      restore() {
+        messageService.relayRealmEvent = deliver;
+      },
+    };
+  }
+
+  // Count the card+json reads of one card. A reload is exactly one of these,
+  // so the count says how many times an event was acted on — which is what
+  // these tests are about, since a reload overwrites the in-memory instance
+  // with server state and so is the window an unwanted one opens.
+  function countCardReads(pathFragment: string) {
+    let cardService = getService('card-service') as any;
+    let originalFetchJSON = cardService.fetchJSON.bind(cardService);
+    let count = 0;
+    cardService.fetchJSON = async (fetchUrl: string | URL, args?: any) => {
+      if (
+        String(fetchUrl).includes(pathFragment) &&
+        (args?.method ?? 'GET') === 'GET'
+      ) {
+        count++;
+      }
+      return originalFetchJSON(fetchUrl, args);
+    };
+    return {
+      get count() {
+        return count;
+      },
+      stop() {
+        delete cardService.fetchJSON;
+      },
+    };
+  }
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     class Person extends CardDef {
@@ -2422,6 +2508,237 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  // Holds back the response to the create of `held` once the realm has stored
+  // it — the window in which the card is on disk but the tab has no id for it
+  // yet — and records every card write the tab sends in the meantime. `fail`
+  // makes the held create report an error instead of its response when it is
+  // released.
+  function holdCreateResponse(held: CardDefType, opts?: { fail?: true }) {
+    let cardService = getService('card-service') as any;
+    let originalFetchJSON = cardService.fetchJSON.bind(cardService);
+    let writes: { method: string; body: LooseSingleCardDocument }[] = [];
+    let stored = new Deferred<void>();
+    let release = new Deferred<void>();
+    cardService.fetchJSON = async (url: string | URL, args?: any) => {
+      if (args?.method !== 'POST' && args?.method !== 'PATCH') {
+        return originalFetchJSON(url, args);
+      }
+      let body = JSON.parse(args.body) as LooseSingleCardDocument;
+      writes.push({ method: args.method, body });
+      if (args.method !== 'POST' || body.data.lid !== held[localId]) {
+        return originalFetchJSON(url, args);
+      }
+      let response = await originalFetchJSON(url, args);
+      stored.fulfill();
+      await release.promise;
+      if (opts?.fail) {
+        throw new Error('the create response never arrived');
+      }
+      return response;
+    };
+    return {
+      writes,
+      stored: stored.promise,
+      release: () => release.fulfill(),
+      restore() {
+        release.fulfill();
+        delete cardService.fetchJSON;
+      },
+    };
+  }
+
+  function includedLids(body: LooseSingleCardDocument) {
+    return (body.included ?? []).flatMap((resource) =>
+      'lid' in resource && resource.lid ? [resource.lid] : [],
+    );
+  }
+
+  test('a save does not send a linked card whose create is still in flight as a card to create', async function (assert) {
+    let friend = new PersonDef({ name: 'Friend' });
+    await storeService.add(friend, { doNotPersist: true });
+    let person = new PersonDef({ name: 'Person' });
+    (person as any).bestFriend = friend;
+    await storeService.add(person, { doNotPersist: true });
+
+    let hold = holdCreateResponse(friend);
+    let personResult: unknown;
+    try {
+      let creatingFriend = (storeService as any).persistAndUpdate(friend);
+      await hold.stored;
+      let savingPerson = (storeService as any).persistAndUpdate(person);
+      let personSettledWhileFriendHeld = await Promise.race([
+        savingPerson.then(() => true),
+        new Promise((r) => setTimeout(() => r(false), 500)),
+      ]);
+      assert.false(
+        personSettledWhileFriendHeld,
+        "the save waits while the linked card's create is unanswered",
+      );
+      assert.deepEqual(
+        hold.writes.map((w) => w.method),
+        ['POST'],
+        "nothing but the linked card's own create went out while it was unanswered",
+      );
+      hold.release();
+      [, personResult] = await Promise.all([creatingFriend, savingPerson]);
+    } finally {
+      hold.restore();
+    }
+    await settled();
+
+    assert.true(
+      isCardInstance(personResult),
+      `the save succeeded (resolved as: ${JSON.stringify(personResult)})`,
+    );
+    let personWrite = hold.writes.find(
+      (w) => w.body.data.lid === person[localId],
+    );
+    assert.ok(personWrite, 'the card linking to it was saved');
+    assert.deepEqual(
+      includedLids(personWrite!.body),
+      [],
+      'the save carried no card to create',
+    );
+    assert.strictEqual(
+      (personWrite!.body.data.relationships as any)?.bestFriend?.links?.self,
+      friend.id,
+      'the save linked to the id the realm assigned the linked card',
+    );
+    let file = await testRealmAdapter.openFile(
+      `${person.id!.substring(testRealmURL.length)}.json`,
+    );
+    assert.ok(file, 'the realm holds the saved card');
+  });
+
+  test("a save started in the same turn as a linked card's create does not send that card again", async function (assert) {
+    let friend = new PersonDef({ name: 'Friend' });
+    await storeService.add(friend, { doNotPersist: true });
+    let person = new PersonDef({ name: 'Person' });
+    (person as any).bestFriend = friend;
+    await storeService.add(person, { doNotPersist: true });
+
+    let hold = holdCreateResponse(friend);
+    let results: unknown[];
+    try {
+      // Neither save has serialized by the time the other starts, so the
+      // linked card's create is not yet on the wire when the second save
+      // begins looking for it.
+      let creatingFriend = (storeService as any).persistAndUpdate(friend);
+      let savingPerson = (storeService as any).persistAndUpdate(person);
+      await hold.stored;
+      hold.release();
+      results = await Promise.all([creatingFriend, savingPerson]);
+    } finally {
+      hold.restore();
+    }
+    await settled();
+
+    assert.true(
+      results.every((r) => isCardInstance(r)),
+      `both saves succeeded (resolved as: ${JSON.stringify(results)})`,
+    );
+    assert.deepEqual(
+      hold.writes.map((w) => includedLids(w.body)),
+      [[], []],
+      'neither request carried a card to create besides its own',
+    );
+  });
+
+  test('a save still creates a linked card that was never saved alongside it', async function (assert) {
+    let friend = new PersonDef({ name: 'Friend' });
+    let person = new PersonDef({ name: 'Person' });
+    (person as any).bestFriend = friend;
+    await storeService.add(person, { doNotPersist: true });
+
+    let hold = holdCreateResponse(friend);
+    let personResult: unknown;
+    try {
+      personResult = await (storeService as any).persistAndUpdate(person);
+    } finally {
+      hold.restore();
+    }
+    await settled();
+
+    assert.true(
+      isCardInstance(personResult),
+      `the save succeeded (resolved as: ${JSON.stringify(personResult)})`,
+    );
+    assert.deepEqual(
+      hold.writes.map((w) => includedLids(w.body)),
+      [[friend[localId]]],
+      'one request carried the unsaved linked card as a card to create',
+    );
+    let personFile = await testRealmAdapter.openFile(
+      `${person.id!.substring(testRealmURL.length)}.json`,
+    );
+    let friendPath = JSON.parse(personFile!.content as string).data
+      .relationships.bestFriend.links.self;
+    assert.ok(
+      await testRealmAdapter.openFile(
+        `${new URL(friendPath, person.id!).href.substring(testRealmURL.length)}.json`,
+      ),
+      'the realm holds the linked card, created with the save',
+    );
+  });
+
+  test('a save waiting on a linked card whose create fails does not hang', async function (assert) {
+    let friend = new PersonDef({ name: 'Friend' });
+    await storeService.add(friend, { doNotPersist: true });
+    let person = new PersonDef({ name: 'Person' });
+    (person as any).bestFriend = friend;
+    await storeService.add(person, { doNotPersist: true });
+
+    let hold = holdCreateResponse(friend, { fail: true });
+    let friendResult: unknown;
+    let personResult: unknown;
+    try {
+      let creatingFriend = (storeService as any).persistAndUpdate(friend);
+      await hold.stored;
+      let savingPerson = (storeService as any).persistAndUpdate(person);
+      let personSettledWhileFriendHeld = await Promise.race([
+        savingPerson.then(() => true),
+        new Promise((r) => setTimeout(() => r(false), 500)),
+      ]);
+      assert.false(
+        personSettledWhileFriendHeld,
+        "the save waits while the linked card's create is unanswered",
+      );
+      assert.deepEqual(
+        hold.writes.map((w) => w.method),
+        ['POST'],
+        "nothing but the linked card's own create went out while it was unanswered",
+      );
+      hold.release();
+      [friendResult, personResult] = await Promise.all([
+        creatingFriend,
+        savingPerson,
+      ]);
+    } finally {
+      hold.restore();
+    }
+    await settled();
+
+    assert.false(
+      isCardInstance(friendResult),
+      "the linked card's create reported its failure",
+    );
+    // The failed create left the card with no id, so the save sends it as a
+    // card to create — and the realm, which did store it, says so. What
+    // matters is that the save answers instead of waiting on a create that
+    // will never deliver an id.
+    assert.false(
+      isCardInstance(personResult),
+      'the save answered with the error the realm gave it',
+    );
+    assert.deepEqual(
+      includedLids(
+        hold.writes.find((w) => w.body.data.lid === person[localId])!.body,
+      ),
+      [friend[localId]],
+      'with no create left on the wire, the save sent the linked card as a card to create',
+    );
+  });
+
   test('loads FileDef links from included resources', async function (assert) {
     await testRealm.writeMany(
       new Map<string, string>([
@@ -3654,6 +3971,371 @@ module('Integration | Store', function (hooks) {
       'Swept In Flight Person',
       'and it is the indexed state',
     );
+  });
+
+  test('a duplicate incremental event does not reload a card the store already holds at that generation', async function (assert) {
+    let url = `${testRealmURL}Person/echoed`;
+    let events = interceptRealmEvents();
+    let reads: ReturnType<typeof countCardReads> | undefined;
+    try {
+      await writePerson('Person/echoed.json', 'Echoed');
+      await events.nextEventFor(url);
+      storeService.addReference(url);
+      await storeService.flush();
+
+      // A second write, whose event the store does not get to hear until this
+      // test hands it over — so what is replayed below is the realm's own
+      // event, naming a generation a pass really reached and a card it really
+      // wrote.
+      await writePerson('Person/echoed.json', 'Echoed Again');
+      let event = await events.nextEventFor(url);
+      assert.strictEqual(
+        typeof event.generation,
+        'number',
+        'the realm reported the generation its pass committed',
+      );
+
+      // Delivered without `versions` throughout, so the generation rule is the
+      // only one that can answer. A card the store loaded from a read carries
+      // the version its document was assembled from, so an event naming that
+      // same version suppresses a reload on its own — correctly, and covered by
+      // its own test. Leaving `versions` here would let either rule account for
+      // the counts below, and the claim this test makes is about the
+      // generation.
+      let { versions: _versions, ...onGeneration } = event;
+      reads = countCardReads('Person/echoed');
+      events.deliver(onGeneration as RealmEventContent);
+      await settled();
+      assert.strictEqual(reads.count, 1, 'the event is acted on once');
+      assert.strictEqual(
+        (storeService.peek(url) as any).name,
+        'Echoed Again',
+        'and the store holds what the pass wrote',
+      );
+
+      events.deliver(onGeneration as RealmEventContent);
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        1,
+        'the same event delivered a second time is a no-op',
+      );
+
+      // The control, and the reason the count above is about the generation:
+      // the same event with nothing but its generation removed. With no
+      // generation there is no floor to compare against, which is what a realm
+      // too old to report one gives every client.
+      let { generation: _generation, ...withoutGeneration } = onGeneration;
+      events.deliver(withoutGeneration as RealmEventContent);
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        2,
+        'while an otherwise identical event carrying no generation does reload',
+      );
+    } finally {
+      reads?.stop();
+      events.restore();
+    }
+  });
+
+  test('a duplicate arriving while the first reload is still in flight is coalesced into it', async function (assert) {
+    // The rules read the instance, and an instance does not reflect a reload
+    // until that reload returns — so a second delivery inside that window is
+    // the one case a comparison against the card alone cannot answer. It is
+    // also the one that costs something: the first reload lands, the user
+    // types, and the second lands on top of what they typed.
+    let url = `${testRealmURL}Person/coalesced`;
+    let events = interceptRealmEvents();
+    let reads: ReturnType<typeof countCardReads> | undefined;
+    try {
+      await writePerson('Person/coalesced.json', 'Coalesced');
+      await events.nextEventFor(url);
+      storeService.addReference(url);
+      await storeService.flush();
+
+      await writePerson('Person/coalesced.json', 'Coalesced Again');
+      let event = await events.nextEventFor(url);
+
+      // Both deliveries before anything settles, so the second is decided
+      // while the first reload's fetch is still out.
+      reads = countCardReads('Person/coalesced');
+      events.deliver(event);
+      events.deliver(event);
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        1,
+        'the duplicate is answered by the reload already in flight',
+      );
+      assert.strictEqual(
+        (storeService.peek(url) as any).name,
+        'Coalesced Again',
+        'and that reload still brought the state the pass wrote',
+      );
+
+      // The control: the same back-to-back pair with both members removed, so
+      // neither rule has anything to answer with. Two reloads — which is what
+      // the count above is measuring the absence of.
+      let { generation: _generation, versions: _versions, ...bare } = event;
+      events.deliver(bare as RealmEventContent);
+      events.deliver(bare as RealmEventContent);
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        3,
+        'while a pair carrying neither member reloads twice',
+      );
+    } finally {
+      reads?.stop();
+      events.restore();
+    }
+  });
+
+  test('an incremental event overtaken by a newer one does not reload', async function (assert) {
+    let url = `${testRealmURL}Person/overtaken`;
+    let events = interceptRealmEvents();
+    let reads: ReturnType<typeof countCardReads> | undefined;
+    try {
+      await writePerson('Person/overtaken.json', 'Overtaken');
+      await events.nextEventFor(url);
+      storeService.addReference(url);
+      await storeService.flush();
+
+      await writePerson('Person/overtaken.json', 'Second');
+      let earlier = await events.nextEventFor(url);
+      await writePerson('Person/overtaken.json', 'Third');
+      let later = await events.nextEventFor(url);
+      assert.true(
+        later.generation! > earlier.generation!,
+        'the two passes are ordered by generation',
+      );
+
+      reads = countCardReads('Person/overtaken');
+      events.deliver(later);
+      await settled();
+      assert.strictEqual(reads.count, 1, 'the newer event is acted on');
+      assert.strictEqual(
+        (storeService.peek(url) as any).name,
+        'Third',
+        'and the store holds the state that pass wrote',
+      );
+
+      events.deliver(earlier);
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        1,
+        'the older event arriving after it is ignored',
+      );
+    } finally {
+      reads?.stop();
+      events.restore();
+    }
+  });
+
+  test("a write's echo is recognized by its version once the request id has aged out of this client's memory", async function (assert) {
+    let url = `${testRealmURL}Person/aged-out`;
+    let events = interceptRealmEvents();
+    let reads: ReturnType<typeof countCardReads> | undefined;
+    try {
+      await writePerson('Person/aged-out.json', 'Aged Out');
+      await events.nextEventFor(url);
+      storeService.addReference(url);
+      await storeService.flush();
+
+      let instance = storeService.peek(url) as CardDefType;
+      (instance as any).name = 'Aged Out Edit';
+      storeService.save(url);
+      await settled();
+      let event = await events.nextEventFor(url);
+
+      // Which rule can answer for this event, established before asking
+      // whether it was answered: the pass moved past the generation the store
+      // last read this card at, so the ordering rule cannot suppress it, and
+      // the version the write returned is the one the event reports.
+      assert.true(
+        event.generation! > api.getCardMeta(instance, 'generation')!,
+        'the event names a generation past the one the store holds',
+      );
+      assert.strictEqual(
+        api.getCardMeta(instance, 'version'),
+        event.versions?.[url],
+        'and the store recorded the version its own write returned',
+      );
+
+      // The echo, arriving with a request id this client no longer recognizes
+      // — what a tab is handed once 250 writes have pushed the id that caused
+      // this one out of `clientRequestIds`.
+      let agedOut = {
+        ...event,
+        clientRequestId: 'instance:aged-out-of-this-clients-memory',
+      };
+      reads = countCardReads('Person/aged-out');
+      events.deliver(agedOut as RealmEventContent);
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        0,
+        'the echo of our own write is not read back',
+      );
+      assert.strictEqual(
+        (storeService.peek(url) as any).name,
+        'Aged Out Edit',
+        'and the edit stands',
+      );
+
+      // The control: the same unrecognized event with its versions map taken
+      // away — an older realm, or a map dropped whole because the event it rode
+      // in would not otherwise fit. Absence is not a statement about what a
+      // request wrote, so it reloads.
+      let { versions: _versions, ...withoutVersions } = agedOut;
+      events.deliver(withoutVersions as RealmEventContent);
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        1,
+        'while the same event without the map does reload',
+      );
+    } finally {
+      reads?.stop();
+      events.restore();
+    }
+  });
+
+  // Holds the in-browser queue on a job of its own, so index publishes that
+  // arrive meanwhile fold into one pending pass — how concurrent writers' saves
+  // meet in a realm under load.
+  async function holdIndexQueue() {
+    let { queue } = getService('queue');
+    let started = new Deferred<void>();
+    let release = new Deferred<void>();
+    queue.register('hold-index-queue', async () => {
+      started.fulfill();
+      await release.promise;
+      return null;
+    });
+    let holder = await queue.publish<null>({
+      jobType: 'hold-index-queue',
+      concurrencyGroup: null,
+      timeout: 30,
+      args: null,
+    });
+    await started.promise;
+    let pendingCallers = () =>
+      ((queue as any).jobs as { jobType: string; args: any }[])
+        .filter((job) => job.jobType === 'incremental-index')
+        .flatMap((job) =>
+          (job.args?.coalescedCallers ?? []).map(
+            (caller: { clientRequestId: string | null }) =>
+              caller.clientRequestId,
+          ),
+        );
+    return { holder, release, pendingCallers };
+  }
+
+  test("this client's own write, announced under another writer's id in a pass they shared, is not read back", async function (assert) {
+    let mine = `${testRealmURL}Person/shared-mine`;
+    let theirs = `${testRealmURL}Person/shared-theirs`;
+    let events = interceptRealmEvents();
+    let reads: ReturnType<typeof countCardReads> | undefined;
+    let theirReads: ReturnType<typeof countCardReads> | undefined;
+    let hold: Awaited<ReturnType<typeof holdIndexQueue>> | undefined;
+    try {
+      await writePerson('Person/shared-mine.json', 'Mine');
+      await events.nextEventFor(mine);
+      await writePerson('Person/shared-theirs.json', 'Theirs');
+      await events.nextEventFor(theirs);
+      storeService.addReference(mine);
+      storeService.addReference(theirs);
+      await storeService.flush();
+
+      hold = await holdIndexQueue();
+      // The other writer's publish opens the pass, so it is the one that
+      // announces it and this client's write reaches the event only as one of
+      // the pass's coalesced writes.
+      let theirWrite = testRealm.write(
+        'Person/shared-theirs.json',
+        JSON.stringify({
+          data: {
+            attributes: { name: 'Theirs Edited' },
+            meta: {
+              adoptsFrom: { module: testRRI('person'), name: 'Person' },
+            },
+          },
+        } as LooseSingleCardDocument),
+        { clientRequestId: 'instance:another-tab' },
+      );
+      await waitUntil(() =>
+        hold!.pendingCallers().includes('instance:another-tab'),
+      );
+      let instance = storeService.peek(mine) as CardDefType;
+      (instance as any).name = 'Mine Edited';
+      let ownSave = storeService.save(mine);
+      await waitUntil(() => hold!.pendingCallers().length === 2);
+      hold.release.fulfill();
+      await Promise.all([theirWrite, ownSave, hold.holder.done]);
+      await settled();
+
+      let event = await events.nextEventFor(mine);
+      assert.strictEqual(
+        event.clientRequestId,
+        'instance:another-tab',
+        "the pass is announced under the other writer's id",
+      );
+      assert.deepEqual(
+        [...event.invalidations].sort(),
+        [mine, theirs].sort(),
+        'and it carries both writes',
+      );
+      assert.strictEqual(
+        event.coalescedWrites?.length,
+        2,
+        'with both writers among its coalesced writes',
+      );
+
+      reads = countCardReads('Person/shared-mine');
+      theirReads = countCardReads('Person/shared-theirs');
+      events.deliver(event as RealmEventContent);
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        0,
+        'the card this client wrote is not read back',
+      );
+      assert.strictEqual(
+        (storeService.peek(mine) as any).name,
+        'Mine Edited',
+        'and its edit stands',
+      );
+      assert.strictEqual(
+        theirReads.count,
+        1,
+        'while the card the other writer changed is',
+      );
+      assert.strictEqual(
+        (storeService.peek(theirs) as any).name,
+        'Theirs Edited',
+        'and the store holds what that writer wrote',
+      );
+
+      // The control: the same event without the list, which is what a client
+      // is handed when the realm cannot report who shared the pass. Nothing
+      // in it names this client's write, so the card is read back.
+      let { coalescedWrites: _coalescedWrites, ...announcedAlone } = event;
+      events.deliver(announcedAlone as RealmEventContent);
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        1,
+        'while the same event without its coalesced writes reads it back',
+      );
+    } finally {
+      hold?.release.fulfill();
+      reads?.stop();
+      theirReads?.stop();
+      events.restore();
+    }
   });
 
   test('an instance can be restored after a loader reset', async function (assert) {

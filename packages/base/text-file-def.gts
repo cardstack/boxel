@@ -18,7 +18,7 @@ import {
 import type { FilePreviewSignature } from './file-formats/file-preview-stage';
 import { fencedCodeBlock } from './markdown-helpers';
 
-const TEXT_EXTENSIONS = new Set(['.txt', '.text']);
+const TEXT_EXTENSIONS = new Set(['.txt', '.text', '.log']);
 const EXCERPT_MAX_LENGTH = 500;
 
 function getExtension(url: string): string {

@@ -23,14 +23,14 @@ type SaveResult<T = any> = {
 
 class OptimisticSave {
   pending: Array<Promise<any>> = [];
-  readonly commandContext: any;
+  readonly toolContext: any;
 
-  constructor(commandContext: any) {
-    this.commandContext = commandContext;
+  constructor(toolContext: any) {
+    this.toolContext = toolContext;
   }
 
   save<T = any>(card: T, realm: string): SaveResult<T> {
-    let command = new SaveCardCommand(this.commandContext);
+    let command = new SaveCardCommand(this.toolContext);
     let saved = command
       .execute({ card: card as any, realm })
       .then((persisted: any) => (persisted ?? card) as T);
@@ -89,7 +89,7 @@ export class PipelineLauncher extends CardDef {
       this.status = 'running';
       this.message = '';
 
-      let cx = this.args.context?.commandContext;
+      let cx = this.args.context?.toolContext;
       let realm = (this.args.model as any)?.[realmURL]?.href;
       if (!cx || !realm) {
         this.status = 'failed';

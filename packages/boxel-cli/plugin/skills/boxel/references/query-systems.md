@@ -82,7 +82,8 @@ Also: `realmURL` is a Symbol exported from `runtime-common` — import it direct
 `AnyFilter`, `EveryFilter`, `NotFilter`, `EqFilter`, `InFilter`, `ContainsFilter`, `RangeFilter`, `MatchesFilter`, `CardTypeFilter` — see the boxel monorepo's `packages/runtime-common/query.ts` for the exact shapes.
 
 - `type`: match all cards adopting from a type (the `CardTypeFilter`; the only filter that does NOT use `on`).
-- `eq`, `in`, `contains`, `range`, `matches`: predicates over fields; each must include `on` (or be inside a clause that supplies it implicitly, like a query-backed `linksToMany`).
+- `eq`, `in`, `contains`, `range`: predicates over fields; each must include `on` (or be inside a clause that supplies it implicitly, like a query-backed `linksToMany`).
+- `matches`: full-text search over the card's indexed markdown — a **bare string** (`{ "matches": "text" }`), not a field-keyed object. It's a typed predicate, so keep it under an `on`/`type` scope (see composition pattern 5).
 - `any`: OR union.
 - `every`: AND union.
 - `not`: negation.
@@ -103,6 +104,10 @@ These shapes have been confirmed against a live realm + indexer (not just inferr
 
 // 4. "All of this type, filtered by a substring match on a string field"
 { every: [{ type: ref }, { on: ref, contains: { cardTitle: 'launch' } }] }
+
+// 5. "All of this type, full-text matched over its indexed markdown"
+//    (`matches` is a bare string — realm full text, not a field key)
+{ every: [{ type: ref }, { on: ref, matches: 'launch' }] }
 ```
 
 Custom-field sorts need `on: ref` inside the sort entry:
@@ -168,18 +173,38 @@ const query: Query = {
 });
 ```
 
+**Where a query-backed field is current, and where it is not:**
+
+A query-backed relationship resolves when its owner card is loaded and re-resolves when a realm event reports a matching card changed, so it is correct on every surface that loads the card. Anything produced at **index time** is the exception — the indexed document, and the prerendered HTML built from it. A card the query merely *matched* is deliberately not a dependency of the card holding the query (making it one would turn every write in a realm into an invalidation of every card whose query might match it), so a query-backed relationship, and anything computed from one, is not refreshed in the index when matching cards change.
+
+That lands on the most natural thing to write with this feature:
+
+```ts
+@field itemCount = contains(NumberField, {
+  computeVia: function (this: Board) {
+    return this.items?.length ?? 0;
+  },
+});
+```
+
+On a loaded card this counts what the field holds. In the indexed document it holds the value as of the last time the card was indexed. A count indexed as `0` before any match existed is the worst version, since `0` is also a real answer.
+
+**A query-backed field holds one page of results, not the whole match set** — on a loaded card a query with no `page` is clamped to the server ceiling, and one declaring a `page.size` above that ceiling is rejected with a 400 rather than trimmed. The bound applies to live reads; it is not applied during indexing. For a true total, run the query with `getCards` and read `meta.page.total`.
+
+So:
+
+- Read the number from a loaded card, gated on `getRelationshipMembershipState(this, 'items').isLoaded`. Read the field unconditionally — gating the read itself means it never resolves during indexing.
+- When a number must be correct in the index, hold the links explicitly (`linksToMany(Item)`) and compute over that: membership lives in the card's own document, so adding or removing an item rewrites and reindexes it.
+- Add `searchable: true` to that declared link only when the rollup reads fields *of* the targets (summing `item.price`, not counting items) — that is what puts target data in the doc, and what makes each target a dependency.
+
 **When to use what to query cards:**
-- Efficient display-only → `@context.searchResultsComponent` (the newer `<SearchResults>` surface; older builds used `PrerenderedCardSearch`)
+- Efficient display-only → `@context.searchResultsComponent` (the `<SearchResults>` surface)
 - Need data manipulation → `getCards`
 - Treat query result as a field → query-backed fields
 
-### ⚠️ Legacy `@isLive={{true}}` is expensive — default it OFF
+### No `@isLive` on result lists
 
-This applies to the older `<PrerenderedCardSearch>` surface. `<PrerenderedCardSearch @isLive={{true}}>` subscribes to realm change events. Every card create/edit/delete anywhere in the realm fires a re-fetch. On a dashboard with 4 sections, editing an unrelated card triggers 4× re-fetches per autosave — heavy CPU use that can make other tabs (including edit forms) feel sluggish even though the card-store itself is local-first in-memory.
-
-The default behavior without `@isLive` is "fetch on mount, refetch when `@query` or `@realms` change." That's correct for ~95% of dashboards.
-
-Use `@isLive={{true}}` only when the section needs to reflect changes the user makes in *another* tab without manually refreshing (a live results ticker during an event, a notifications inbox, etc.). Don't default it on. (New work should prefer `@context.searchResultsComponent`, which has no `@isLive` arg — liveness is handled by the surface.)
+`@context.searchResultsComponent` has no `@isLive` arg — results are live by default. The surface fetches on mount, re-runs the search when `@query` changes, and re-issues it when the realm invalidates matching cards, so the list reflects new, edited, and deleted cards without any remount; do not try to force per-keystroke refetches.
 
 **Query-backed relationship vs explicit linked composition:**
 
@@ -188,7 +213,7 @@ Use `@isLive={{true}}` only when the section needs to reflect changes the user m
 | The app owner curates the exact list/order manually (playlist, selected demos, hand-picked recipe plan) | Plain `linksToMany` with explicit JSON relationships |
 | The app should discover cards from the realm by status/date/owner/type | `linksToMany(Target, { query })` |
 | You need a reverse lookup such as "all Tasks whose project points to this Project" | `linksToMany(Target, { query })` with `eq: { 'project.id': '$this.id' }` |
-| You only need display HTML for a dashboard and not model objects | `@context.searchResultsComponent` (older builds used `<PrerenderedCardSearch>`) |
+| You only need display HTML for a dashboard and not model objects | `@context.searchResultsComponent` |
 | The filter depends on local UI state or needs live updates while the card is open | `this.args.context.getCards(...)` in the component |
 
 If a brief says "use queries", do not satisfy it with explicit `linksToMany` alone. Include at least one query-backed field, a `@context.searchResultsComponent` section, or a component-level `getCards` call.
@@ -196,7 +221,7 @@ If a brief says "use queries", do not satisfy it with explicit `linksToMany` alo
 For benchmark-style coverage, exercise both common query surfaces across the set:
 
 - **Schema query:** `linksToMany(Target, { query })` plus `computeVia` rollups over the materialized relationship.
-- **Display query:** `@context.searchResultsComponent` in an isolated dashboard section when the card only needs rendered results, not model objects. (The older `<PrerenderedCardSearch>` surface still works but is superseded.)
+- **Display query:** `@context.searchResultsComponent` in an isolated dashboard section when the card only needs rendered results, not model objects.
 
 ## `@context.searchResultsComponent` — entry-rooted result lists
 
@@ -244,31 +269,14 @@ class BlogPost extends CardDef {
 ```
 
 - `@query` — an `entry`-rooted query (`SearchEntryWireQuery`). Build it from a normal query with `searchEntryWireQueryFromQuery`, then set `realms` (and optionally `page`). Changing it re-runs the search.
-- `@mode` — hydration of prerendered rows on interaction: `'none'` (stay inert), `'hover'` (default), `'click'`, `'touch'`.
+- `@mode` — hydration of prerendered rows on interaction: `'none'` (stay inert) or `'hover'` (default). A full live row ignores it.
+- `@overlays` — whether each row registers with the operator-mode overlay (chip, options menu, selection toggle). Defaults to `true`; pass `false` for a card that lays results out in its own UI.
+- `@displayContainer` — whether each row renders inside its card-container chrome. Defaults to `true`; pass `false` for a consumer that frames results itself — the same switch `<@fields.x @displayContainer={{false}} />` offers. It applies to the inert prerendered HTML and the hydrated card alike: the boundary ring goes on every row, and an atom-format row additionally collapses to `display: contents` (fitted and embedded rows keep their box).
 - Yields `results`: `results.entries` (each `entry` exposes `.component`, `.id`, `.isError`, plus `.displayName` / `.iconHtml` for a row with no HTML yet), `results.isLoading`, `results.meta` (`{ page: { total } }`), and `results.errors`.
 
-> boxel-skills prefers `@context.searchResultsComponent` (above) as the display surface for new work. `@context.prerenderedCardSearchComponent` / `<PrerenderedCardSearch>` is the older surface it supersedes. The pattern library still uses `PrerenderedCardSearch` in places, so the contrast is captured below; a tree-wide migration to `searchResultsComponent` is a separate follow-up.
+## Removed: `PrerenderedCardSearch`
 
-## Legacy: `PrerenderedCardSearch`
-
-Still works, but superseded by `@context.searchResultsComponent` — prefer that surface for new work. `PrerenderedCardSearch` takes a legacy `@query` (an ordinary `Query`, not entry-rooted), plus `@format`, `@realms`, and `@isLive` as separate args, and yields through **named blocks** (`<:loading>` / `<:empty>` / `<:response as |cards|>`) where each yielded card exposes `.url` / `.component`:
-
-```hbs
-<PrerenderedCardSearch
-  @query={{this.toWatchQuery}}
-  @realms={{this.realmHrefs}}
-  @format='fitted'
->
-  <:loading>Loading…</:loading>
-  <:response as |cards|>
-    {{#each cards key='url' as |card|}}
-      {{card.component}}
-    {{/each}}
-  </:response>
-</PrerenderedCardSearch>
-```
-
-Contrast with `@context.searchResultsComponent`, which takes a single entry-rooted `@query` (build with `searchEntryWireQueryFromQuery`, carry `realms`/`format` inside the query), a single block `as |results|`, and yields `entry.component` / `entry.id` rather than `card.url` / `card.component`. The query-filter shapes (`eq`, `every`, `on`-scoped sorts, `page`, and the three silent-zero-rows failure modes above) are identical across both surfaces — only the component contract differs.
+`<PrerenderedCardSearch>` and `@context.prerenderedCardSearchComponent` no longer exist. If you meet them in older card code, migrate to `@context.searchResultsComponent`: build the entry-rooted `@query` with `searchEntryWireQueryFromQuery` (carry `realms`/`format` inside the query instead of separate `@realms`/`@format` args), replace the named blocks (`<:loading>` / `<:empty>` / `<:response as |cards|>`) with the single `as |results|` block, and read `entry.component` / `entry.id` instead of `card.component` / `card.url`. Drop `@isLive`. The query-filter shapes (`eq`, `every`, `on`-scoped sorts, `page`, and the three silent-zero-rows failure modes above) are unchanged.
 
 Prerender covers `embedded`, `fitted`, `atom`, `head` only (no isolated). For isolated, use `getCards` and render the card via its own component.
 ```

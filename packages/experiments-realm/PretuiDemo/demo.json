@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "headline": "Pret UI from a card",
+      "notifications": false,
+      "cardInfo": {
+        "name": "Pret UI Demo"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../pretui-demo",
+        "name": "PretuiDemo"
+      }
+    }
+  }
+}

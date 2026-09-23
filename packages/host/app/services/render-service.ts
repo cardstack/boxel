@@ -159,7 +159,7 @@ export class CardStoreWithErrors implements CardStore {
     // one key. Plain `toURL` is NOT a total fold (an RRI resolves to its
     // virtual alias while a real URL stays real, splitting the two), which
     // orphaned inflight-load deferreds during render.
-    return isLocalId(key) ? id : this.#virtualNetwork.toRealURLHref(id);
+    return isLocalId(key) ? id : this.#virtualNetwork.keyForIdentifier(id);
   }
 
   trackLoad(load: Promise<unknown>) {

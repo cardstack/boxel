@@ -1740,6 +1740,44 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a pdf capture paginates its own card, not the one the pooled page was already showing', async function (assert) {
+      // The pooled page keeps the previous capture's render route up while the
+      // next transition is in flight, and Ember holds the old URL through a
+      // loading substate. The route-arrival wait matches on the path suffix,
+      // which every card's render route shares (`/html/isolated/0`), so
+      // without an identity check it returns on the *previous* render and
+      // `page.pdf()` paginates the host's loading screen as valid-looking
+      // bytes: one Letter page, no card.
+      //
+      // So: leave the page on one card's render, then capture a different one.
+      let first = await screenshot(`${realmURL}1`, { type: 'pdf' });
+      assert.strictEqual(first.response.status, 'ready', 'first pdf captured');
+
+      let { response } = await screenshot(`${realmURL}paged-card`, {
+        type: 'pdf',
+        media: 'print',
+      });
+      assert.strictEqual(
+        response.status,
+        'ready',
+        `second pdf captured (got ${response.status}: ${response.error ?? ''})`,
+      );
+      let capture = response.captures?.[0];
+      assert.ok(
+        (capture?.pageCount ?? 0) >= 2,
+        `paginated the paged card's own flow, not a one-page loading screen (got ${capture?.pageCount})`,
+      );
+      let box = firstMediaBox(Buffer.from(response.base64!, 'base64'));
+      let isA4 =
+        box != null &&
+        Math.abs(box.width - 595) <= 3 &&
+        Math.abs(box.height - 842) <= 3;
+      assert.ok(
+        isA4,
+        `paper is the card's own A4 \`@page\`, not the Letter fallback a render without the card would use (got ${box?.width}×${box?.height}pt)`,
+      );
+    });
+
     test('print media does not bleed into the next pooled capture', async function (assert) {
       // Media emulation is sticky per pooled page, so a print capture must
       // restore screen media in its `finally`. Engage print on the page…
@@ -9049,6 +9087,79 @@ module(basename(import.meta.filename), function () {
         result.response.fileExtract?.status,
         'ready',
         'file extract reports ready',
+      );
+    });
+
+    test('a visit carrying the card source renders from it instead of fetching', async function (assert) {
+      // The out-of-process half of the read collapse: the caller's bytes have
+      // to survive the prerender-visit POST, the request boundary's validation
+      // and the CDP hand-off to the page. Stashing source that differs from
+      // what the realm holds is what makes the two distinguishable — 'Sequoia'
+      // can only have reached the template through the stash.
+      const cardFileURL = `${realmURL}maple.json`;
+      let result = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        renderOptions: { cardRender: true },
+        cardSource: {
+          source: JSON.stringify({
+            data: {
+              attributes: { name: 'Sequoia' },
+              meta: {
+                adoptsFrom: { module: rri('./person'), name: 'Person' },
+              },
+            },
+          }),
+          realmURL,
+          lastModified: Date.parse('2026-01-02T03:04:05Z'),
+        },
+      });
+
+      assert.notOk(result.response.pageUnusableError, 'no page-unusable error');
+      assert.ok(
+        result.response.card?.isolatedHTML?.includes('Sequoia'),
+        `the stashed source reached the render, got: ${result.response.card?.isolatedHTML}`,
+      );
+      // And the render says so itself. Without this the assertion above is the
+      // only evidence, and a visit whose stash was dropped somewhere on the
+      // wire would render the realm's copy and fail in a way that reads like a
+      // content bug rather than a plumbing one.
+      //
+      // Read off `meta.diagnostics`, not the card sub-response: the settlement
+      // step lifts the card's host-side diagnostics up here and deletes them
+      // from the sub-response, and this is the blob the indexer persists into
+      // `boxel_index.diagnostics`.
+      assert.strictEqual(
+        result.response.meta?.diagnostics?.cardSourceFrom,
+        'stash',
+        'the model build reports it took the stashed path',
+      );
+    });
+
+    test('a visit with no card source fetches, and says so', async function (assert) {
+      // The control for the test above, and the path an on-demand render of a
+      // live card takes forever: same visit, no stash, the realm's own bytes.
+      const cardFileURL = `${realmURL}maple.json`;
+      let result = await prerenderer.prerenderVisit({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardFileURL,
+        auth: auth(),
+        renderOptions: { cardRender: true },
+      });
+
+      assert.ok(
+        result.response.card?.isolatedHTML?.includes('Maple'),
+        `the realm's own source was rendered, got: ${result.response.card?.isolatedHTML}`,
+      );
+      assert.strictEqual(
+        result.response.meta?.diagnostics?.cardSourceFrom,
+        'fetch',
+        'the model build reports it fetched for itself',
       );
     });
 

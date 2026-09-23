@@ -94,9 +94,7 @@ export class SpinningCubeCard extends CardDef {
       <style scoped>
         .three-host {
           width: 100%;
-          height: 500px;       /* Three.js needs explicit dimensions */
-          border-radius: var(--radius, 8px);
-          overflow: hidden;
+          height: 31.25rem;       /* Three.js needs explicit dimensions */
         }
       </style>
     </template>

@@ -22,6 +22,8 @@ const testRealm = new URL('http://127.0.0.1:4445/test/');
 // `type` reached the encoder.
 const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47];
 const RIFF_MAGIC = [0x52, 0x49, 0x46, 0x46];
+// "%PDF" — the header Chromium's print-to-pdf writer emits.
+const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46];
 
 function makeFileSystem() {
   return {
@@ -89,6 +91,154 @@ function makeFileSystem() {
         }
         static screenshots: Record<string, ScreenshotSpec> = {
           tile: { format: 'isolated', width: 170, height: 250, useAsThumbnail: true },
+        };
+      }
+
+      // Declares a pdf screenshot: a paged document of the isolated render,
+      // paginated under print media. An inline break-before forces a second
+      // page (independent of paper size and immune to CSS scoping), so the
+      // page count is a meaningful, non-trivial assertion.
+      export class Statement extends CardDef {
+        @field name = contains(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1>Statement: <@fields.name/></h1>
+            <section style='break-before: page;'>Continued</section>
+          </template>
+        }
+        static screenshots: Record<string, ScreenshotSpec> = {
+          statement: { format: 'isolated', type: 'pdf' },
+        };
+      }
+
+      // A mixed roster: one pdf slot and one raster slot on the same card.
+      // Pins the capture leg order — raster format groups first, then the pdf
+      // slots one at a time under print media — by asserting both manifest
+      // entries land with the right shape. A media or viewport leak out of the
+      // pdf leg onto the raster leg (or vice versa) would show up here.
+      export class Combo extends CardDef {
+        @field name = contains(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1>Combo doc: <@fields.name/></h1>
+          </template>
+        }
+        static fitted = class Fitted extends Component<typeof this> {
+          <template>
+            <h2>Combo tile: <@fields.name/></h2>
+          </template>
+        }
+        static screenshots: Record<string, ScreenshotSpec> = {
+          doc: { format: 'isolated', type: 'pdf' },
+          tile: { format: 'fitted', width: 200, height: 150 },
+        };
+      }
+
+      // Declares more pdf slots than the per-card pdf sub-cap
+      // (SCREENSHOT_MAX_PDF_CAPTURES = 3). The roster is captured name-sorted,
+      // so "a"/"b"/"c" capture and the fourth slot "d" deterministically
+      // overflows: no ledger row, no manifest entry, one recorded error. Each
+      // renders the same trivial isolated format, so the render cost is minimal
+      // while still exercising the cap.
+      export class PdfHeavy extends CardDef {
+        @field name = contains(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1>Heavy: <@fields.name/></h1>
+          </template>
+        }
+        static screenshots: Record<string, ScreenshotSpec> = {
+          a: { format: 'isolated', type: 'pdf' },
+          b: { format: 'isolated', type: 'pdf' },
+          c: { format: 'isolated', type: 'pdf' },
+          d: { format: 'isolated', type: 'pdf' },
+        };
+      }
+
+      // A capture-only component that renders a multi-page document flow
+      // itself — three pages via inline break-before rules. Its page count
+      // differs from the card's single-page isolated template, so the
+      // captured pdf's page count alone proves the content came from the
+      // component and not the template.
+      class InvoiceDocument extends Component<typeof Invoice> {
+        <template>
+          <article>
+            <h1>Invoice: <@fields.name/></h1>
+            <section style='break-before: page;'>Line items</section>
+            <section style='break-before: page;'>Totals</section>
+          </article>
+        </template>
+      }
+
+      export class Invoice extends CardDef {
+        @field name = contains(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1>Invoice (isolated one-pager): <@fields.name/></h1>
+          </template>
+        }
+        static screenshots: Record<string, ScreenshotSpec> = {
+          invoice: { render: InvoiceDocument, type: 'pdf' },
+        };
+      }
+
+      // Two render-based pdf slots on one card, captured back-to-back on the
+      // same pooled page. The alpha slot renders a one-page flow; the beta
+      // slot, a three-page flow. They sort alpha-before-beta, so beta captures
+      // second, while alpha's shorter document is still the mounted DOM. beta's
+      // own page count (three, not alpha's one) is the proof the capture engine
+      // waited for beta's render before paginating — the per-slot guard against
+      // paginating a prior slot's still-mounted DOM into this slot.
+      class AlphaDocument extends Component<typeof MultiPdf> {
+        <template>
+          <article><h1>Alpha: <@fields.name/></h1></article>
+        </template>
+      }
+      class BetaDocument extends Component<typeof MultiPdf> {
+        <template>
+          <article>
+            <h1>Beta: <@fields.name/></h1>
+            <section style='break-before: page;'>Two</section>
+            <section style='break-before: page;'>Three</section>
+          </article>
+        </template>
+      }
+
+      export class MultiPdf extends CardDef {
+        @field name = contains(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1>MultiPdf (isolated one-pager): <@fields.name/></h1>
+          </template>
+        }
+        static screenshots: Record<string, ScreenshotSpec> = {
+          alpha: { render: AlphaDocument, type: 'pdf' },
+          beta: { render: BetaDocument, type: 'pdf' },
+        };
+      }
+
+      // A capture-only pdf component that discovers it can never render and
+      // swaps the pending signal for the definitive-failure signal — the same
+      // contract the raster DoomedShot follows, exercised on the pdf path.
+      class BrokenDocument extends Component<typeof BrokenReport> {
+        markFailed = modifier((el) => {
+          el.removeAttribute('data-screenshot-pending');
+          el.setAttribute('data-screenshot-failed', 'fixture: document cannot render');
+        });
+        <template>
+          <div data-screenshot-pending='true' {{this.markFailed}}>never ready</div>
+        </template>
+      }
+
+      export class BrokenReport extends CardDef {
+        @field name = contains(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1>Broken report: <@fields.name/></h1>
+          </template>
+        }
+        static screenshots: Record<string, ScreenshotSpec> = {
+          doc: { render: BrokenDocument, type: 'pdf' },
         };
       }
 
@@ -170,6 +320,45 @@ function makeFileSystem() {
           adoptsFrom: {
             module: rri('./product'),
             name: 'Plain',
+          },
+        },
+      },
+    },
+    'report.json': {
+      data: {
+        attributes: {
+          name: 'Q3',
+        },
+        meta: {
+          adoptsFrom: {
+            module: rri('./product'),
+            name: 'Statement',
+          },
+        },
+      },
+    },
+    'combo.json': {
+      data: {
+        attributes: {
+          name: 'Both',
+        },
+        meta: {
+          adoptsFrom: {
+            module: rri('./product'),
+            name: 'Combo',
+          },
+        },
+      },
+    },
+    'pdf-heavy.json': {
+      data: {
+        attributes: {
+          name: 'Heavy',
+        },
+        meta: {
+          adoptsFrom: {
+            module: rri('./product'),
+            name: 'PdfHeavy',
           },
         },
       },
@@ -383,6 +572,373 @@ module(basename(import.meta.filename), function (hooks) {
       served!.headers.get('etag'),
       `"${manifest.card.objectKey}"`,
       'the ETag is the capture content hash',
+    );
+  });
+
+  test('a declared pdf is captured under print media, persisted, and served at ?name=', async function (assert) {
+    await writeAndSettle(
+      'report.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Q3' },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'Statement' },
+          },
+        },
+      }),
+    );
+
+    let row = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}report.json`,
+    );
+    assert.ok(row, 'the instance row exists');
+    let manifest = row!.screenshots as ScreenshotManifest | null;
+    assert.ok(manifest?.statement, 'the pdf capture landed in the manifest');
+
+    let statement = manifest!.statement;
+    assert.strictEqual(
+      statement.specHash,
+      await declaredCaptureSpecHash('statement', {
+        format: 'isolated',
+        type: 'pdf',
+      }),
+      'the manifest records the pdf capture identity',
+    );
+    assert.strictEqual(statement.contentType, 'application/pdf');
+    assert.strictEqual(
+      statement.width,
+      undefined,
+      'a pdf manifest entry carries no raster width',
+    );
+    assert.strictEqual(statement.height, undefined);
+    assert.strictEqual(statement.deviceScaleFactor, undefined);
+    assert.true(
+      (statement.pageCount ?? 0) >= 2,
+      'the @page break paginated the render into multiple pages',
+    );
+    assert.true(
+      (statement.byteSize ?? 0) > 0,
+      'the manifest records the document byte size',
+    );
+    assert.notOk(statement.useAsThumbnail, 'a pdf is never a thumbnail');
+
+    let ledger = await declaredLedgerRows(`${testRealm}report`);
+    assert.strictEqual(ledger.length, 1, 'one ledger row for the pdf slot');
+    assert.strictEqual(ledger[0].lane, 'declared');
+    assert.strictEqual(ledger[0].content_type, 'application/pdf');
+    assert.strictEqual(
+      ledger[0].width,
+      null,
+      'the pdf ledger row has null width',
+    );
+    assert.strictEqual(ledger[0].height, null);
+    assert.ok(
+      startsWith(objectBytes(statement.objectKey), PDF_MAGIC),
+      'the persisted bytes are a PDF document',
+    );
+
+    let statementTiming = (row!.diagnostics as any)?.screenshotTimingsMs
+      ?.statement;
+    assert.strictEqual(
+      typeof statementTiming,
+      'number',
+      'the pdf capture records a per-slot timing',
+    );
+    assert.true(
+      statementTiming > 0,
+      'the pdf capture timing is a positive duration',
+    );
+
+    // The card+json join projects the paged facts, and the durable ?name=
+    // URL serves the document.
+    let response = await realm.handle(
+      new Request(`${testRealm}report`, {
+        headers: { Accept: 'application/vnd.card+json' },
+      }),
+    );
+    assert.strictEqual(response!.status, 200);
+    let json = await response!.json();
+    assert.deepEqual(
+      json.data.meta.screenshots.statement,
+      {
+        url: `${testRealm}_screenshot/report?name=statement`,
+        hash: statement.objectKey,
+        contentType: 'application/pdf',
+        pageCount: statement.pageCount,
+        byteSize: statement.byteSize,
+      },
+      'meta.screenshots projects the pdf entry with its paged facts, no raster geometry',
+    );
+
+    let served = await realm.handle(
+      new Request(`${testRealm}_screenshot/report?name=statement`),
+    );
+    assert.strictEqual(served!.status, 200);
+    assert.strictEqual(
+      served!.headers.get('content-type'),
+      'application/pdf',
+      'the ?name= URL serves the pdf',
+    );
+    assert.strictEqual(
+      served!.headers.get('etag'),
+      `"${statement.objectKey}"`,
+      'the ETag is the capture content hash',
+    );
+    assert.true(
+      (served!.headers.get('content-disposition') ?? '').startsWith('inline'),
+      'the pdf serves inline with a filename',
+    );
+  });
+
+  test('a mixed pdf + raster roster captures both legs side by side', async function (assert) {
+    await writeAndSettle(
+      'combo.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Both' },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'Combo' },
+          },
+        },
+      }),
+    );
+
+    let row = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}combo.json`,
+    );
+    let manifest = row!.screenshots as ScreenshotManifest | null;
+    assert.ok(manifest, 'the manifest landed on the row');
+    assert.deepEqual(
+      Object.keys(manifest!).sort(),
+      ['doc', 'tile'],
+      'both the pdf slot and the raster slot joined the manifest',
+    );
+
+    // The pdf leg: paged document, no raster geometry.
+    let doc = manifest!.doc;
+    assert.strictEqual(doc.contentType, 'application/pdf');
+    assert.strictEqual(
+      doc.width,
+      undefined,
+      'the pdf entry carries no raster width',
+    );
+    assert.strictEqual(doc.height, undefined);
+    assert.strictEqual(doc.deviceScaleFactor, undefined);
+    assert.true(
+      (doc.pageCount ?? 0) >= 1,
+      'the pdf entry records a page count',
+    );
+    assert.true((doc.byteSize ?? 0) > 0, 'the pdf entry records a byte size');
+    assert.ok(
+      startsWith(objectBytes(doc.objectKey), PDF_MAGIC),
+      'the pdf slot persisted a PDF document',
+    );
+
+    // The raster leg rendered unaffected by the pdf leg that shares the pass —
+    // it kept its declared box, its raster encoding, and no paged facts leaked
+    // onto it.
+    let tile = manifest!.tile;
+    assert.strictEqual(
+      tile.contentType,
+      'image/png',
+      'the raster slot rendered as png, not pulled onto the pdf path',
+    );
+    assert.strictEqual(
+      tile.width,
+      200,
+      'the raster slot kept its declared box',
+    );
+    assert.strictEqual(tile.height, 150);
+    assert.strictEqual(tile.deviceScaleFactor, 2);
+    assert.strictEqual(
+      tile.pageCount,
+      undefined,
+      'a raster entry carries no page count',
+    );
+    assert.ok(
+      startsWith(objectBytes(tile.objectKey), PNG_MAGIC),
+      'the raster slot persisted a PNG',
+    );
+
+    let ledger = await declaredLedgerRows(`${testRealm}combo`);
+    assert.strictEqual(ledger.length, 2, 'one ledger row per slot');
+  });
+
+  test('declared pdf slots beyond the per-card pdf cap overflow deterministically with a recorded error', async function (assert) {
+    await writeAndSettle(
+      'pdf-heavy.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Heavy' },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'PdfHeavy' },
+          },
+        },
+      }),
+    );
+
+    let row = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}pdf-heavy.json`,
+    );
+    let manifest = row!.screenshots as ScreenshotManifest | null;
+    assert.deepEqual(
+      Object.keys(manifest ?? {}).sort(),
+      ['a', 'b', 'c'],
+      'the first three name-sorted pdf slots capture; the fourth overflows',
+    );
+
+    let ledger = await declaredLedgerRows(`${testRealm}pdf-heavy`);
+    assert.strictEqual(
+      ledger.length,
+      3,
+      'the overflow slot persists no ledger row',
+    );
+
+    let errors = (row!.diagnostics as any)?.screenshotErrors as
+      | { name: string; message: string }[]
+      | undefined;
+    let overflow = errors?.find((e) => e.name === 'd');
+    assert.ok(overflow, 'the overflow slot records a screenshot error');
+    assert.ok(
+      overflow!.message.includes('exceed the pdf capture cap of 3'),
+      `the error names the cap it exceeded (got: ${overflow?.message})`,
+    );
+  });
+
+  test('a declared pdf render component paginates its own document flow, not the isolated template', async function (assert) {
+    await writeAndSettle(
+      'invoice.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'INV-1' },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'Invoice' },
+          },
+        },
+      }),
+    );
+
+    let row = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}invoice.json`,
+    );
+    assert.ok(row, 'the instance row exists');
+    let manifest = row!.screenshots as ScreenshotManifest | null;
+    assert.ok(manifest?.invoice, 'the render-based pdf capture landed');
+
+    let invoice = manifest!.invoice;
+    assert.strictEqual(
+      invoice.specHash,
+      await declaredCaptureSpecHash('invoice', { render: true, type: 'pdf' }),
+      'the manifest records the render-based pdf identity',
+    );
+    assert.strictEqual(invoice.contentType, 'application/pdf');
+    assert.strictEqual(
+      invoice.width,
+      undefined,
+      'a render-based pdf carries no raster box either',
+    );
+    assert.strictEqual(
+      invoice.pageCount,
+      3,
+      "the component's three-page flow drove the document, not the one-page isolated template",
+    );
+    assert.ok(
+      startsWith(objectBytes(invoice.objectKey), PDF_MAGIC),
+      'the persisted bytes are a PDF document',
+    );
+
+    let served = await realm.handle(
+      new Request(`${testRealm}_screenshot/invoice?name=invoice`),
+    );
+    assert.strictEqual(served!.status, 200);
+    assert.strictEqual(
+      served!.headers.get('content-type'),
+      'application/pdf',
+      'the ?name= URL serves the component-rendered pdf',
+    );
+  });
+
+  test('back-to-back pdf render slots each paginate their own document, not the prior slot’s DOM', async function (assert) {
+    await writeAndSettle(
+      'multi-pdf.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'MP-1' },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'MultiPdf' },
+          },
+        },
+      }),
+    );
+
+    let row = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}multi-pdf.json`,
+    );
+    assert.ok(row, 'the instance row exists');
+    let manifest = row!.screenshots as ScreenshotManifest | null;
+    assert.ok(manifest?.alpha, 'the first pdf slot captured');
+    assert.ok(manifest?.beta, 'the second pdf slot captured');
+
+    assert.strictEqual(
+      manifest!.alpha.pageCount,
+      1,
+      'the first pdf slot paginates its own one-page flow',
+    );
+    // The regression this pins: without a per-slot flush wait, the second pdf
+    // slot could paginate the first slot's still-mounted one-page DOM into a
+    // valid-looking PDF. A page count of three is only reachable from beta's
+    // own render.
+    assert.strictEqual(
+      manifest!.beta.pageCount,
+      3,
+      "the second pdf slot paginates its own three-page flow, not the first slot's one-page DOM",
+    );
+  });
+
+  test('a failing pdf render component fails its slot under the broken-links model without failing the row', async function (assert) {
+    await writeAndSettle(
+      'broken.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Broken' },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'BrokenReport' },
+          },
+        },
+      }),
+    );
+
+    let row = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}broken.json`,
+    );
+    assert.ok(row, 'the instance row still indexes');
+    let manifest = row!.screenshots as ScreenshotManifest | null;
+    assert.notOk(
+      manifest?.doc,
+      'no manifest entry lands for the failed pdf slot',
+    );
+    assert.deepEqual(
+      await declaredLedgerRows(`${testRealm}broken`),
+      [],
+      'a failed pdf slot persists no ledger row',
+    );
+
+    let errors = (row!.diagnostics as any)?.screenshotErrors as
+      | { name: string; message: string }[]
+      | undefined;
+    let docError = errors?.find((e) => e.name === 'doc');
+    assert.ok(docError, 'the failed pdf slot records a screenshot error');
+    assert.ok(
+      docError!.message.includes(
+        'signaled data-screenshot-failed: fixture: document cannot render',
+      ),
+      `the error carries the component's stated cause (got: ${docError?.message})`,
     );
   });
 

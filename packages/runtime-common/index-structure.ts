@@ -39,6 +39,27 @@ export interface BoxelIndexTable {
   // The icon renders in the index visit, so it lives here rather than on
   // `prerendered_html` with the other rendered output.
   icon_html: string | null;
+  // The content hash of the source bytes this row's document was built from,
+  // served as `meta.version` on the single-card card+json GET. A client sends
+  // it back as the base its next write is computed against, and the realm
+  // answers `baseMatched` by comparing that base against the bytes it executed
+  // from — so the value has to identify the bytes behind `pristine_doc` and
+  // nothing else. A version naming newer bytes than the document beside it
+  // would turn a client's honest "I cannot confirm this" into a false
+  // confirmation.
+  //
+  // Stamped from the render's own read of the source, which is the read whose
+  // result is serialized into `pristine_doc`. The worker's separate read of the
+  // same file (`reader.readFile` in the visit) is a different read that can see
+  // different bytes, so it is not the one this comes from.
+  //
+  // Instance rows only. A file row's hash already rides inside its
+  // `pristine_doc` as the file-meta resource's `contentHash`.
+  //
+  // Null means no pass has stamped the row, or the pass produced no document.
+  // The GET then reports no version, which is what it did before this column
+  // existed. Nothing that decides row liveness may read it.
+  source_content_hash: string | null;
   indexed_at: string | null; // pg represents big integers as strings in javascript
   last_modified: string | null; // pg represents big integers as strings in javascript
   resource_created_at: string | null; // pg represents big integers as strings in javascript
@@ -194,6 +215,27 @@ export function normalizeRealmMetaValue(raw: unknown): RealmMetaValue {
     instances: value.instances ?? [],
     files: value.files ?? [],
   };
+}
+
+// Whether `raw` already carries both arms, so `normalizeRealmMetaValue` would
+// hand it back as-is rather than synthesizing an arm it never had.
+//
+// The legacy shape is a bare `CardTypeSummary[]` of instances, and normalizing
+// it fabricates `files: []`. That empty array is indistinguishable from a realm
+// that genuinely has no file rows, so a caller that carries a prior value
+// forward instead of recomputing it has to ask this first — otherwise it
+// publishes the fabricated arm as though a pass had established it, and the
+// realm's file types vanish from the sidebar. Recomputing is what re-establishes
+// the arm, so a realm still on the legacy shape has to keep recomputing until
+// one pass has written the partitioned one.
+export function isPartitionedRealmMetaValue(
+  raw: unknown,
+): raw is RealmMetaValue {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return false;
+  }
+  let value = raw as Partial<RealmMetaValue>;
+  return Array.isArray(value.instances) && Array.isArray(value.files);
 }
 
 export const coerceTypes = Object.freeze({

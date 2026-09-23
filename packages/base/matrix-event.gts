@@ -471,6 +471,21 @@ export type IndexRealmEventContent =
   | CopiedIndexEventContent
   | IncrementalIndexInitiationContent;
 
+// One publish an index pass indexed alongside others. See
+// `IncrementalIndexEventContent.coalescedWrites`.
+export interface CoalescedIndexWrite {
+  clientRequestId: string | null;
+  // Which of the event's `invalidations` this publish asked the pass to index
+  // — the cards it wrote or removed, spelled as `invalidations` spells them.
+  // Null when the realm could not say, which a subscriber has to read as "may
+  // have changed any of them".
+  changed: string[] | null;
+  // The publish's own `clientAuthored`, narrowed to the event's invalidations.
+  // Absent when the publish made no such report, in which case everything in
+  // `changed` is what it wrote.
+  clientAuthored?: string[];
+}
+
 export interface IncrementalIndexEventContent {
   eventName: 'index';
   indexType: 'incremental';
@@ -502,6 +517,53 @@ export interface IncrementalIndexEventContent {
   // the question at all, which leaves a client with only the request id to go
   // on, as it had before this member existed.
   clientAuthored?: string[];
+  // The version each card this request wrote directly now holds: URL → the
+  // content hash of the bytes the commit stored. A client holding a card can
+  // compare its own version against the one here and recognize an event it has
+  // already applied, or one that describes state older than what it holds.
+  //
+  // Keyed exactly as `invalidations` keys a card — the realm href with a
+  // trailing `.json` removed — so where a URL appears in both, the two join by
+  // construction. That is deliberately NOT how a write *response* spells the
+  // same card: response ids are canonicalized to registered-prefix form, so a
+  // client that reads an id off a write and looks it up here would miss on any
+  // realm reached through a prefix.
+  //
+  // This is not a subset of `invalidations`, and a consumer that iterates that
+  // list to read this one will miss entries. What the two lists describe comes
+  // apart in both directions: a card re-indexed as a dependency is invalidated
+  // with no version, and a file written with the bytes it already held has a
+  // version while invalidating nothing — the commit leaves such a file alone,
+  // so no pass touches it. Read this map on its own terms: it names what the
+  // request wrote, and `invalidations` names what the index moved.
+  //
+  // Only the files the request wrote. A dependent re-indexed because something
+  // it depends on changed is in `invalidations` and not here, which is the
+  // distinction the member exists to draw: the realm computed that card's new
+  // state, so nobody holds it and everybody wants it.
+  //
+  // Absent means no information, and unlike `clientAuthored` an empty map
+  // would say the same thing — so the member is present only when it has
+  // something to report, and nothing reads emptiness as a statement. It is
+  // also dropped whole rather than truncated past a size budget, for the
+  // reason `invalidatedTypes` is: a client cannot tell a partial map from a
+  // complete one, so a missing key would read as "this card is not one the
+  // request wrote" — the opposite of true.
+  versions?: Record<string, string>;
+  // Every publish the pass indexed, when it indexed more than one. The realm
+  // folds publishes that arrive while a pass is still queued into that pass,
+  // and announces the result once, from one of its callers — so
+  // `clientRequestId` and `clientAuthored` name only that caller, and a
+  // subscriber looking for its own write has to look here for it.
+  //
+  // Includes the announcing caller itself, and callers with no request id (a
+  // file-watcher echo, a removal), whose `changed` still says which cards
+  // someone other than a request-id holder moved.
+  //
+  // Absent when the pass indexed one publish, and when the list would not fit
+  // in the event — dropped whole, since a subscriber cannot tell a partial
+  // list from a complete one.
+  coalescedWrites?: CoalescedIndexWrite[];
   // The realm generation the indexing pass committed. Lets a consumer correlate
   // this search-doc update with the prerendered HTML that belongs to it.
   generation?: number;

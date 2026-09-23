@@ -32,17 +32,29 @@ export class LandingBoard extends CardDef {
         <section class='board-sections'>
           {{#if @model.hero}}
             {{!-- Hero: full bleed → isolated --}}
-            <@fields.hero @format='isolated' />
+            <@fields.hero
+              @format='isolated'
+              @displayContainer={{false}}
+              class='board-section'
+            />
           {{/if}}
 
           {{#if @model.metrics}}
             {{!-- Metrics: compact panel → embedded --}}
-            <@fields.metrics @format='embedded' />
+            <@fields.metrics
+              @format='embedded'
+              @displayContainer={{false}}
+              class='board-section'
+            />
           {{/if}}
 
           {{#if @model.testimonial}}
             {{!-- Testimonial: tile-sized → fitted --}}
-            <@fields.testimonial @format='fitted' />
+            <@fields.testimonial
+              @format='fitted'
+              @displayContainer={{false}}
+              class='board-section'
+            />
           {{/if}}
         </section>
       </article>
@@ -52,7 +64,6 @@ export class LandingBoard extends CardDef {
           display: grid;
           gap: 2rem;
           padding: 2rem;
-          background: var(--background);
         }
 
         .board-sections {
@@ -60,12 +71,11 @@ export class LandingBoard extends CardDef {
           gap: 1.5rem;
         }
 
-        /* 🎯 The chrome-strip trick — sections styled as full cards
-              shed their chrome when delegated into a board. */
-        .board-sections > * {
-          background: transparent !important;
-          border: none !important;
-          padding: 0 !important;
+        /* `class` lands on each section's CardContainer. displayContainer=false
+           drops the halo; this drops the wrapper's own surface so the section
+           sits flush on the board. */
+        .board-section {
+          background-color: transparent;
         }
       </style>
     </template>
