@@ -532,6 +532,21 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(heartbeat.processLoad, 3);
     });
 
+    test('a fan-out at one level reports the reading closest to the next rung', function (assert) {
+      loads[OTHER_REALM] = 3;
+      let decision = policy.decideAcross({
+        realms: [REALM, OTHER_REALM],
+        rowClass: 'multi-row',
+        requested: 'full',
+      });
+      assert.strictEqual(decision.level, 'full', 'both realms are at full');
+      assert.strictEqual(
+        decision.load,
+        3,
+        'the busier realm is reported even when it is named second',
+      );
+    });
+
     test('a fan-out is decided by the most loaded realm it names', function (assert) {
       loads[REALM] = 20;
       let decision = policy.decideAcross({

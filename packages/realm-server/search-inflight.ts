@@ -444,8 +444,9 @@ export function getRealmSearchRequestsInFlight(realm: string): number {
 
 // The process's sustained count of search requests in flight — the context
 // the link-shape policy logs each decision beside, while each realm's level is
-// decided on that realm's own share (`getRealmSearchRequestLoad`). Separate from `getSearchInFlight` twice over — it counts
-// requests rather than computations, and it is a mean over minutes rather than
+// decided on the requests in flight that name it (`getRealmSearchRequestLoad`).
+// Separate from `getSearchInFlight` twice over — it counts requests rather
+// than computations, and it is a mean over minutes rather than
 // the instantaneous value admission control acts on, because a decision that
 // must hold for minutes cannot follow a count that moves per request.
 export function getSearchRequestLoad(): number {

@@ -80,9 +80,11 @@ its slot back early. `searchRequests` counts every admitted search request until
 its response ends, and `searchLoad` is that count's time-weighted mean. The
 first two differ by the live-search cache's miss rate.
 
-The link-shape policy's thresholds are compared against a realm's own share of
-that mean — the requests in flight that name the realm — so a busy realm does
-not degrade its idle neighbours. `realmSearchLoadMax` is the highest of those
+The link-shape policy's thresholds are compared against a realm's own reading —
+the same mean over only the requests in flight that name the realm — so a busy
+realm does not degrade its idle neighbours. A request naming several realms
+counts in full toward each, so the per-realm readings need not sum to
+`searchLoad`. `realmSearchLoadMax` is the highest of those
 per-realm readings: the number to hold against a rung. It never exceeds
 `searchLoad`, and when load is concentrated on one realm the two are close.
 

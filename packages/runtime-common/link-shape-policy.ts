@@ -398,7 +398,9 @@ export class LinkShapePolicy {
   //
   // Every named realm is consulted, so each advances on reads it actually
   // serves rather than only on its own routes' traffic, and the most degraded
-  // answer wins. Most degraded rather than least because the fan-out's cost is
+  // answer wins. Between realms at the same level, the one with the higher
+  // reading is reported, since it is the one closest to the next rung and so
+  // the reading that explains the decision. Most degraded rather than least because the fan-out's cost is
   // the sum across realms: if assembling one realm's closure is already more
   // than the process should be doing, adding the others' does not make it
   // less. A request naming no realms has nothing to consult and keeps its
@@ -412,10 +414,13 @@ export class LinkShapePolicy {
     let worst: LinkShapeDecision | undefined;
     for (let realm of realms) {
       let decision = this.decide({ realm, rowClass, requested });
+      let rank = LINK_SHAPE_LEVELS.indexOf(decision.level ?? 'full');
+      let worstRank = worst
+        ? LINK_SHAPE_LEVELS.indexOf(worst.level ?? 'full')
+        : -1;
       if (
-        !worst ||
-        LINK_SHAPE_LEVELS.indexOf(decision.level ?? 'full') >
-          LINK_SHAPE_LEVELS.indexOf(worst.level ?? 'full')
+        rank > worstRank ||
+        (rank === worstRank && (decision.load ?? 0) > (worst?.load ?? 0))
       ) {
         worst = decision;
       }
