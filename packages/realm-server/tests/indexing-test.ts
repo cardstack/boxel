@@ -44,8 +44,8 @@ import {
 import {
   depsForIndexEntry,
   errorDocForIndexEntry,
-  indexedAtForIndexEntry,
   maxPrerenderHtmlJobId,
+  prerenderedHtmlRowFor,
   settlePrerenderHtmlJobs,
   typeForIndexEntry,
 } from './helpers/indexing.ts';
@@ -1946,9 +1946,16 @@ module(basename(import.meta.filename), function () {
         // that changed no module must not ask for the drop.
         //
         // `loaderResetReason` is the direct reading and `moduleEvaluationCount`
-        // is its consequence; both are asserted because a count above zero with
-        // no reason recorded means the tab was cold to begin with, which is a
-        // different fact from the pass having thrown its graph away.
+        // is its consequence, and the two are asserted over different sets of
+        // passes. The reason is the pass's own doing, so every pass is held to
+        // it. The count is only the pass's doing on a tab already synchronized
+        // to this realm's epoch series: a pass routed onto a tab that is not
+        // rebuilds the whole reachable set whatever it asks for, and says so
+        // by naming `firstEpoch`, so the count is read on the passes that
+        // named nothing. Which passes those are is not fixed — the pool
+        // chooses — hence several passes and a floor of one that named
+        // nothing, rather than a count read off whichever pass happens to be
+        // first.
         let diagnosticsFor = async (localPath: string) => {
           let [row] = (await testDbAdapter.execute(
             `SELECT diagnostics FROM boxel_index WHERE realm_url = $1 AND url = $2 AND type = 'instance'`,
@@ -1974,33 +1981,41 @@ module(basename(import.meta.filename), function () {
             }),
           );
 
-        await write('Ringo Starr');
-        let first = await diagnosticsFor('ringo.json');
-        assert.strictEqual(
-          first?.loaderResetReason,
-          undefined,
-          `a pass whose invalidation set holds no executable records no loader reset, got: ${JSON.stringify(first?.loaderResetReason)}`,
-        );
-        assert.strictEqual(
-          first?.moduleEvaluationCount,
-          0,
-          `and evaluates no module, got: ${JSON.stringify(first?.moduleEvaluationCount)} (a count above zero with no reason above means the tab arrived cold)`,
-        );
+        // Each write is its own isolated pass, so a per-pass drop is paid
+        // again on every one of them rather than once.
+        let passes: Awaited<ReturnType<typeof diagnosticsFor>>[] = [];
+        for (let firstName of ['Ringo Starr', 'Richard Starkey', 'Ringo']) {
+          await write(firstName);
+          passes.push(await diagnosticsFor('ringo.json'));
+        }
 
-        // A second isolated pass over the same card: each write is its own
-        // pass, so a per-pass drop would be paid again here rather than once.
-        await write('Richard Starkey');
-        let second = await diagnosticsFor('ringo.json');
-        assert.strictEqual(
-          second?.loaderResetReason,
-          undefined,
-          `the next pass over the same card records no reset either, got: ${JSON.stringify(second?.loaderResetReason)}`,
+        // `firstEpoch` says the tab it landed on had never synchronized to
+        // this realm's epoch series, which is a fact about where the pool ran
+        // the pass. The pass is answerable for `loaderEpoch` and `clearCache`
+        // only, and an invalidation set holding no executable is the condition
+        // under which it may record neither.
+        for (let [index, pass] of passes.entries()) {
+          let reason = pass?.loaderResetReason ?? 'none';
+          assert.ok(
+            ['none', 'firstEpoch'].includes(reason),
+            `pass ${index + 1} holds no executable in its invalidation set, so nothing the pass did can have cleared the loader, got: ${reason}`,
+          );
+        }
+
+        let warmPasses = passes.filter(
+          (pass) => pass?.loaderResetReason === undefined,
         );
-        assert.strictEqual(
-          second?.moduleEvaluationCount,
-          0,
-          `and still evaluates no module, got: ${JSON.stringify(second?.moduleEvaluationCount)}`,
+        assert.ok(
+          warmPasses.length > 0,
+          `at least one pass ran on a tab that already held a graph, so the count below measures something, got reasons: ${JSON.stringify(passes.map((pass) => pass?.loaderResetReason))}`,
         );
+        for (let pass of warmPasses) {
+          assert.strictEqual(
+            pass?.moduleEvaluationCount,
+            0,
+            `a pass on a warm tab evaluates no module, got: ${JSON.stringify(pass?.moduleEvaluationCount)}`,
+          );
+        }
 
         // The mirror: a pass that rewrites the module the card adopts from
         // must still drop the graph. Without this, the assertions above would
@@ -3479,11 +3494,31 @@ module(basename(import.meta.filename), function () {
         return depsForIndexEntry(testDbAdapter, url, type);
       }
 
-      async function indexedAtFor(
-        url: string,
-        type: 'instance' | 'file' = 'instance',
-      ): Promise<string | null> {
-        return indexedAtForIndexEntry(testDbAdapter, url, type);
+      // The generation a card's HTML was last rendered at, read once the
+      // realm's prerender channel has settled. A consumer that only renders
+      // a changed card is re-rendered by the prerender-html job rather than
+      // re-indexed, so its HTML generation — not its index row — is what
+      // shows it was invalidated.
+      async function renderedGenerationFor(url: string, afterJobId?: number) {
+        await settlePrerenderHtmlJobs(
+          testDbAdapter,
+          realm.url,
+          afterJobId !== undefined ? { afterJobId } : undefined,
+        );
+        return (await prerenderedHtmlRowFor(testDbAdapter, url))?.generation;
+      }
+
+      // Writes a file and returns the consumer's rendered generation before
+      // and after the write.
+      async function renderedGenerationsAround(
+        consumerURL: string,
+        write: () => Promise<unknown>,
+      ) {
+        let before = await renderedGenerationFor(consumerURL);
+        let baseline = await maxPrerenderHtmlJobId(testDbAdapter, realm.url);
+        await write();
+        let after = await renderedGenerationFor(consumerURL, baseline);
+        return { before: before ?? -1, after: after ?? -1 };
       }
 
       setupPermissionedRealmCached(hooks, {
@@ -3850,47 +3885,43 @@ module(basename(import.meta.filename), function () {
           'instance relationship deps use concrete .json URL form',
         );
 
-        let beforeLinksToInvalidation = await indexedAtFor(
+        let linksToRender = await renderedGenerationsAround(
           `${testRealm}consumer-relationship.json`,
+          () =>
+            realm.write(
+              'friend-a.json',
+              JSON.stringify({
+                data: {
+                  attributes: { name: 'Friend A Updated' },
+                  relationships: {
+                    next: { links: { self: './deep-1' } },
+                  },
+                  meta: { adoptsFrom: personType },
+                },
+              } as LooseSingleCardDocument),
+            ),
         );
-        await realm.write(
-          'friend-a.json',
-          JSON.stringify({
-            data: {
-              attributes: { name: 'Friend A Updated' },
-              relationships: {
-                next: { links: { self: './deep-1' } },
-              },
-              meta: { adoptsFrom: personType },
-            },
-          } as LooseSingleCardDocument),
-        );
-        let afterLinksToInvalidation = await indexedAtFor(
-          `${testRealm}consumer-relationship.json`,
-        );
-        assert.notStrictEqual(
-          afterLinksToInvalidation,
-          beforeLinksToInvalidation,
-          'updating linksTo relationship target invalidates consumer instance',
+        assert.ok(
+          linksToRender.after > linksToRender.before,
+          `updating linksTo relationship target re-renders consumer instance (${JSON.stringify(linksToRender)})`,
         );
 
-        let beforeLinksToManyInvalidation = afterLinksToInvalidation;
-        await realm.write(
-          'friend-b.json',
-          JSON.stringify({
-            data: {
-              attributes: { name: 'Friend B Updated' },
-              meta: { adoptsFrom: personType },
-            },
-          } as LooseSingleCardDocument),
-        );
-        let afterLinksToManyInvalidation = await indexedAtFor(
+        let linksToManyRender = await renderedGenerationsAround(
           `${testRealm}consumer-relationship.json`,
+          () =>
+            realm.write(
+              'friend-b.json',
+              JSON.stringify({
+                data: {
+                  attributes: { name: 'Friend B Updated' },
+                  meta: { adoptsFrom: personType },
+                },
+              } as LooseSingleCardDocument),
+            ),
         );
-        assert.notStrictEqual(
-          afterLinksToManyInvalidation,
-          beforeLinksToManyInvalidation,
-          'updating linksToMany relationship target invalidates consumer instance',
+        assert.ok(
+          linksToManyRender.after > linksToManyRender.before,
+          `updating linksToMany relationship target re-renders consumer instance (${JSON.stringify(linksToManyRender)})`,
         );
       });
 
@@ -3998,17 +4029,17 @@ module(basename(import.meta.filename), function () {
           'the dotted target is recorded at its row URL rather than its bare id',
         );
 
-        let beforeInvalidation = await indexedAtFor(
+        let render = await renderedGenerationsAround(
           `${testRealm}dotted-consumer.json`,
+          () =>
+            realm.write(
+              'hello.test.json',
+              dottedTarget('Dotted Target Updated'),
+            ),
         );
-        await realm.write(
-          'hello.test.json',
-          dottedTarget('Dotted Target Updated'),
-        );
-        assert.notStrictEqual(
-          await indexedAtFor(`${testRealm}dotted-consumer.json`),
-          beforeInvalidation,
-          'writing the dotted-id instance invalidates the consumer linking to it',
+        assert.ok(
+          render.after > render.before,
+          `writing the dotted-id instance re-renders the consumer linking to it (${JSON.stringify(render)})`,
         );
       });
 
@@ -4637,33 +4668,30 @@ module(basename(import.meta.filename), function () {
           'deps include second node in relationship cycle',
         );
 
-        let beforeIndexedAt = await indexedAtFor(
+        let render = await renderedGenerationsAround(
           `${testRealm}loop-consumer.json`,
-        );
-        await realm.write(
-          'loop-b.json',
-          JSON.stringify({
-            data: {
-              attributes: { name: 'Loop B Updated' },
-              relationships: {
-                next: { links: { self: './loop-a' } },
-              },
-              meta: {
-                adoptsFrom: {
-                  module: rri('./loop-card'),
-                  name: 'LoopCard',
+          () =>
+            realm.write(
+              'loop-b.json',
+              JSON.stringify({
+                data: {
+                  attributes: { name: 'Loop B Updated' },
+                  relationships: {
+                    next: { links: { self: './loop-a' } },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./loop-card'),
+                      name: 'LoopCard',
+                    },
+                  },
                 },
-              },
-            },
-          } as LooseSingleCardDocument),
+              } as LooseSingleCardDocument),
+            ),
         );
-        let afterIndexedAt = await indexedAtFor(
-          `${testRealm}loop-consumer.json`,
-        );
-        assert.notStrictEqual(
-          afterIndexedAt,
-          beforeIndexedAt,
-          'updating one cycle node invalidates and reindexes consumer',
+        assert.ok(
+          render.after > render.before,
+          `updating one cycle node invalidates and re-renders consumer (${JSON.stringify(render)})`,
         );
 
         let loopA = await realm.realmIndexQueryEngine.instance(
@@ -4905,11 +4933,31 @@ module(basename(import.meta.filename), function () {
         return depsForIndexEntry(testDbAdapter, url, type);
       }
 
-      async function indexedAtFor(
-        url: string,
-        type: 'instance' | 'file' = 'instance',
-      ): Promise<string | null> {
-        return indexedAtForIndexEntry(testDbAdapter, url, type);
+      // The generation a card's HTML was last rendered at, read once the
+      // realm's prerender channel has settled. A consumer that only renders
+      // a changed card is re-rendered by the prerender-html job rather than
+      // re-indexed, so its HTML generation — not its index row — is what
+      // shows it was invalidated.
+      async function renderedGenerationFor(url: string, afterJobId?: number) {
+        await settlePrerenderHtmlJobs(
+          testDbAdapter,
+          realm.url,
+          afterJobId !== undefined ? { afterJobId } : undefined,
+        );
+        return (await prerenderedHtmlRowFor(testDbAdapter, url))?.generation;
+      }
+
+      // Writes a file and returns the consumer's rendered generation before
+      // and after the write.
+      async function renderedGenerationsAround(
+        consumerURL: string,
+        write: () => Promise<unknown>,
+      ) {
+        let before = await renderedGenerationFor(consumerURL);
+        let baseline = await maxPrerenderHtmlJobId(testDbAdapter, realm.url);
+        await write();
+        let after = await renderedGenerationFor(consumerURL, baseline);
+        return { before: before ?? -1, after: after ?? -1 };
       }
 
       setupPermissionedRealmCached(hooks, {
@@ -5228,28 +5276,22 @@ module(basename(import.meta.filename), function () {
           'deps include second FileDef linksToMany relationship target URL',
         );
 
-        let beforeLinksToInvalidation = await indexedAtFor(
+        let linksToRender = await renderedGenerationsAround(
           `${testRealm}file-relationship-consumer.json`,
+          () => realm.write('primary-note.txt', 'primary note v2'),
         );
-        await realm.write('primary-note.txt', 'primary note v2');
-        let afterLinksToInvalidation = await indexedAtFor(
-          `${testRealm}file-relationship-consumer.json`,
-        );
-        assert.notStrictEqual(
-          afterLinksToInvalidation,
-          beforeLinksToInvalidation,
-          'updating FileDef linksTo target invalidates consumer instance',
+        assert.ok(
+          linksToRender.after > linksToRender.before,
+          `updating FileDef linksTo target re-renders consumer instance (${JSON.stringify(linksToRender)})`,
         );
 
-        let beforeLinksToManyInvalidation = afterLinksToInvalidation;
-        await realm.write('attachment-a.txt', 'attachment a v2');
-        let afterLinksToManyInvalidation = await indexedAtFor(
+        let linksToManyRender = await renderedGenerationsAround(
           `${testRealm}file-relationship-consumer.json`,
+          () => realm.write('attachment-a.txt', 'attachment a v2'),
         );
-        assert.notStrictEqual(
-          afterLinksToManyInvalidation,
-          beforeLinksToManyInvalidation,
-          'updating FileDef linksToMany target invalidates consumer instance',
+        assert.ok(
+          linksToManyRender.after > linksToManyRender.before,
+          `updating FileDef linksToMany target re-renders consumer instance (${JSON.stringify(linksToManyRender)})`,
         );
       });
 

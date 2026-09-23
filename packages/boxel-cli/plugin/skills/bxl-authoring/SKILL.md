@@ -22,10 +22,9 @@ export class Claim extends CardDef {
 }
 ```
 
-`@cardstack/bxl` is a platform module — the host serves it to card code, so the
-bare specifier is the import. Only the package root is card-facing. `expression`
-is the factory (`bxl` and `expr` are aliases); it compiles the source once when
-the class body runs, then evaluates it against the card instance on each read.
+`expression` is the factory (`bxl` and `expr` are aliases); it compiles the
+source once when the class body runs, then evaluates it against the card
+instance on each read.
 
 The rest of this skill is the decision layer and the trap list. For the full
 syntax surface — labels, row selectors, predicates, the Excel function matrix —
@@ -222,12 +221,22 @@ the part worth understanding before you aggregate over one:
 - The browser resolves the inverse live during render, so the number a viewer
   sees can be the converged one while the indexed value — the one search filters
   and sorts on — is still from the last visit.
+- It resolves a **bounded page** of its query, not the whole match set — 500
+  rows by default. An aggregate over an inverse with more matches than that
+  reduces over the first page and reports a confidently wrong number, with
+  nothing in the card to say so. `COUNT([Claims[]])` over 600 claims is 500.
 
 Guidance: aggregate over query-backed inverses for display and reporting; do not
 treat such a field as a promptly-correct index-time fact, and do not build a
-filter or sort that depends on it being current. When the aggregate must be
-index-accurate, put the edge on the aggregating card (a stored `linksToMany`)
-so a write to either side invalidates it. Where you accept the lag, say so in a
+filter or sort that depends on it being current. Before reducing over one,
+check the match count against the rows in hand:
+`getRelationshipMembershipState(this, 'claims')` reports `totalMatchCount` and
+`isPartial`. A **count-shaped** rollup should read `totalMatchCount` rather than
+aggregate at all, which sidesteps the page ceiling entirely; where the rows
+themselves are needed, the field must declare a page big enough to hold them —
+see [`query-backed-relationships`](../query-backed-relationships/SKILL.md).
+When the aggregate must be index-accurate, put the edge on the aggregating card
+(a stored `linksToMany`) so a write to either side invalidates it. Where you accept the lag, say so in a
 comment at the field — the indexed value is server-computed and may differ from
 the one on screen, and the next reader has no other way to tell that was a
 choice.
@@ -345,7 +354,10 @@ and fails to identify.
    is guarded or rewritten as `CONCAT` / `TEXTJOIN`.
 4. Date output is a serial or a span, not a rendered phrase.
 5. Aggregates over query-backed inverses are display values, not filter or sort
-   keys — and a field left to lag says so in a comment.
+   keys — and a field left to lag says so in a comment. The inverse holds a
+   bounded page (500 by default), so an aggregate over one that can exceed it is
+   short unless the field declares a bigger page; a count reads
+   `totalMatchCount` instead of aggregating.
 6. Output shaped as an object or an array of objects for a `FieldDef`-typed field
    has `{ as: … }`.
 7. Every function name is spelled the way the catalog spells it — a typo indexes

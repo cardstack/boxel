@@ -372,6 +372,54 @@ async function waitForRoutePathSuffix(
       expectedNonce: string | null,
     ) => {
       if (window.location.pathname.endsWith(targetSuffix)) {
+        // The suffix names the sub-route (`/html/isolated/0`, `/icon`, …) and
+        // nothing else, so every card's render route ends the same way. A
+        // pooled page still sitting at the *previous* render therefore
+        // satisfies it the moment this wait first evaluates, while this
+        // render's transition is still in flight — and Ember keeps the old
+        // URL up during a loading substate, so the page can be showing the
+        // loading screen with none of this render's DOM on it. The waits that
+        // follow do not catch it either: the settle hook a previous render
+        // left behind resolves at once, and an absent `data-screenshot-pending`
+        // reads as ready. So the route is only reached when the path carries
+        // this render's own identity, which is what the id and nonce are for.
+        // The render route is `/render/:id/:nonce/:options/…`, so the id and
+        // nonce are the two segments right after the `render` route keyword.
+        // Locate them by that keyword rather than by absolute position, so a
+        // non-root `rootURL` (a path prefix ahead of `render`) can't shift the
+        // slots out from under this check — the multi-status route wait below
+        // finds them the same way. The card id is a single URL-encoded segment,
+        // so only the route keyword itself reads as `render` here.
+        let segments = window.location.pathname.split('/').filter(Boolean);
+        let renderIdx = segments.indexOf('render');
+        let idSegment = renderIdx === -1 ? undefined : segments[renderIdx + 1];
+        let nonceSegment =
+          renderIdx === -1 ? undefined : segments[renderIdx + 2];
+        let decodeSegment = (value: string | undefined) => {
+          if (value == null) {
+            return '';
+          }
+          try {
+            return decodeURIComponent(value);
+          } catch {
+            return value;
+          }
+        };
+        // `expectedId` is the normalized card id (a card render strips the
+        // `.json` before comparing it against `data-prerender-id`), while the
+        // route segment is the raw url the transition was given — which for an
+        // index visit still carries `.json`. Normalize both ends or every
+        // visit would wait out its timeout here.
+        let withoutJson = (value: string) => value.replace(/\.json$/i, '');
+        if (
+          expectedId &&
+          withoutJson(decodeSegment(idSegment)) !== withoutJson(expectedId)
+        ) {
+          return false;
+        }
+        if (expectedNonce && decodeSegment(nonceSegment) !== expectedNonce) {
+          return false;
+        }
         return true;
       }
 
@@ -1535,6 +1583,36 @@ async function waitForEnvelopeBox(
   );
 }
 
+// Prove this slot's own render is on the page before a pdf capture. The raster
+// path gets this ordering from waitForEnvelopeBox (it matches the slot's named
+// envelope at its declared size); a pdf slot declares no box, so its template
+// carries a boxless `display: contents` marker (`data-render-screenshot` named
+// for the slot) that this waits on instead. Without it, a fully settled
+// *previous* render already satisfies every other wait on this path — the route
+// path suffix and prerender settle stay ready across a same-card sub-route
+// transition, and the pending-clear wait reads a prior render's absent
+// `data-screenshot-pending` as ready on its first evaluation — so `page.pdf()`
+// could paginate the wrong document (the prior pdf slot, or a preceding format
+// group's display-format DOM) into this slot's manifest entry.
+async function waitForRenderSlotMarker(
+  page: Page,
+  slotName: string,
+  opts?: CaptureOptions,
+): Promise<void> {
+  await page.waitForFunction(
+    (name: string) => {
+      for (let el of document.querySelectorAll('[data-render-screenshot]')) {
+        if (el.getAttribute('data-render-screenshot') === name) {
+          return true;
+        }
+      }
+      return false;
+    },
+    { timeout: effectiveRouteWaitTimeoutMs(opts) },
+    slotName,
+  );
+}
+
 // Let a viewport change reflow + paint without re-running the full settle hook
 // (two animation frames). Batch captures share one settle; only the viewport
 // resize between entries needs to flush.
@@ -2164,46 +2242,85 @@ async function waitForScreenshotPendingClear(
 
 // Capture one render-based declared entry through the dedicated
 // render.screenshot route (format-based entries batch through
-// captureScreenshot instead). The route's template renders the capture-only
-// component into a fixed box sized to the declaration, so the viewport is
-// set to that box and the plain viewport screenshot captures it whole.
+// captureScreenshot instead). Two output shapes share this route because the
+// component owns the same readiness contract (clearing `data-screenshot-pending`
+// once painted) either way:
+//   - raster: the route's template renders the capture-only component into a
+//     fixed box sized to the declaration, so the viewport is set to that box
+//     and the plain viewport screenshot captures it whole.
+//   - pdf: the component renders the full document flow itself (multi-page via
+//     print `break-*`/`@page` rules), so there is no capture box — the render
+//     settles under emulated print media and `page.pdf()` paginates it onto
+//     paper. The media emulation is restored in a `finally` so the pooled page
+//     carries no print state into the next capture.
 async function captureRenderBasedEntry(
   page: Page,
   resolved: ResolvedDeclaredEntry,
   opts?: CaptureOptions,
 ): Promise<ScreenshotCaptureItem | RenderError> {
   let { name, payload, deviceScaleFactor } = resolved;
-  // A render-based slot is always raster (validation refuses render for pdf),
-  // so it always declares a capture box.
-  let box = { width: payload.width!, height: payload.height! };
-  await page.setViewport({ ...box, deviceScaleFactor });
-  await transitionTo(page, 'render.screenshot', name);
-  await waitForRoutePathSuffix(page, `/screenshot/${name}`, opts);
-  await waitForPrerenderSettle(page);
-  await waitForEnvelopeBox(page, box, opts, name);
-  let terminal = await detectTerminalPrerenderError(page);
-  if (terminal) {
-    return renderCaptureToError(
+  let isPdf = resolved.outputType === 'pdf';
+  // A raster render-based slot always declares a capture box; a pdf one never
+  // does (validation refuses raster geometry there).
+  let box = isPdf
+    ? undefined
+    : { width: payload.width!, height: payload.height! };
+  if (box) {
+    await page.setViewport({ ...box, deviceScaleFactor });
+  } else {
+    // Emulate print media BEFORE the transition so the component settles — and
+    // the image-paint wait probes resources — under it, matching how
+    // captureScreenshot emulates a batch's media.
+    await page.emulateMediaType('print');
+  }
+  try {
+    await transitionTo(page, 'render.screenshot', name);
+    await waitForRoutePathSuffix(page, `/screenshot/${name}`, opts);
+    await waitForPrerenderSettle(page);
+    if (box) {
+      await waitForEnvelopeBox(page, box, opts, name);
+    } else {
+      // pdf: no envelope box to size-match — wait on the slot's boxless marker
+      // so a prior render's still-mounted DOM can't be paginated into this slot.
+      await waitForRenderSlotMarker(page, name, opts);
+    }
+    let terminal = await detectTerminalPrerenderError(page);
+    if (terminal) {
+      return renderCaptureToError(
+        page,
+        { status: terminal.status, value: terminal.raw },
+        'render.screenshot',
+      );
+    }
+    await waitForImagePaint(page);
+    let pendingError = await waitForScreenshotPendingClear(page, name);
+    if (pendingError) {
+      return pendingError;
+    }
+    return await captureOneEntry(
       page,
-      { status: terminal.status, value: terminal.raw },
-      'render.screenshot',
+      isPdf
+        ? { name, type: 'pdf', media: 'print' }
+        : { name, viewport: box, deviceScaleFactor },
+      deviceScaleFactor,
+      // A raster slot's output is an image type; a pdf slot carries its output
+      // on the capture entry itself, so it needs no per-entry output override.
+      isPdf
+        ? undefined
+        : {
+            type: resolved.outputType as ScreenshotImageType,
+            background: resolved.background,
+          },
     );
+  } finally {
+    if (isPdf) {
+      try {
+        await page.emulateMediaType();
+      } catch {
+        // Page may be closing/evicted; a best-effort restore is enough.
+      }
+    }
   }
-  await waitForImagePaint(page);
-  let pendingError = await waitForScreenshotPendingClear(page, name);
-  if (pendingError) {
-    return pendingError;
-  }
-  return await captureOneEntry(
-    page,
-    { name, viewport: box, deviceScaleFactor },
-    deviceScaleFactor,
-    // A render-based slot is always raster, so its output is an image type.
-    {
-      type: resolved.outputType as ScreenshotImageType,
-      background: resolved.background,
-    },
-  );
 }
 
 // Capture the current rendering's declared screenshots (`static
@@ -2434,32 +2551,68 @@ export async function captureDeclaredScreenshots(
   }
 
   // Each pdf slot renders and paginates on its own — pdf output is
-  // singular-only, so it can't share a batch render — under print media, from
-  // the slot's own viewport-filling format (isolated/embedded). A per-slot
+  // singular-only, so it can't share a batch render — under print media. Its
+  // source is either a viewport-filling format (batched through
+  // captureScreenshot, one entry) or a capture-only component (driven through
+  // the render.screenshot route, which emulates print media itself). A per-slot
   // failure never fails the visit; it records under the broken-links model.
-  for (let resolved of pdfEntries) {
-    let entry: ScreenshotCaptureEntry = {
-      name: resolved.name,
-      type: 'pdf',
-      media: 'print',
-    };
-    let entryStart = Date.now();
-    let shot = await captureScreenshot(page, resolved.payload.format!, 0, {
-      ...opts,
-      captureSpec: { captures: [entry] },
-    });
-    let captureMs = Date.now() - entryStart;
-    if ('type' in shot) {
-      errors.push({
-        name: resolved.name,
-        message: renderErrorMessage(shot),
-        captureMs,
-      });
-      continue;
-    }
-    let item = shot.captures.find((c) => c.name === resolved.name);
-    if (item) {
-      finish(resolved, item, captureMs);
+  if (pdfEntries.length > 0) {
+    let originalViewport = page.viewport();
+    try {
+      for (let resolved of pdfEntries) {
+        let entryStart = Date.now();
+        try {
+          let outcome: ScreenshotCaptureItem | RenderError;
+          if (resolved.payload.render) {
+            outcome = await captureRenderBasedEntry(page, resolved, opts);
+          } else {
+            let entry: ScreenshotCaptureEntry = {
+              name: resolved.name,
+              type: 'pdf',
+              media: 'print',
+            };
+            let shot = await captureScreenshot(
+              page,
+              resolved.payload.format!,
+              0,
+              { ...opts, captureSpec: { captures: [entry] } },
+            );
+            outcome =
+              'type' in shot
+                ? shot
+                : (shot.captures.find((c) => c.name === resolved.name) ??
+                  buildInvalidRenderResponseError(
+                    page,
+                    `pdf capture "${resolved.name}" produced no document`,
+                    { title: 'PDF capture produced no document' },
+                  ));
+          }
+          if ('type' in outcome) {
+            errors.push({
+              name: resolved.name,
+              message: renderErrorMessage(outcome),
+              captureMs: Date.now() - entryStart,
+            });
+          } else {
+            finish(resolved, outcome, Date.now() - entryStart);
+          }
+        } catch (e: any) {
+          errors.push({
+            name: resolved.name,
+            message: e?.message ?? String(e),
+            captureMs: Date.now() - entryStart,
+          });
+        }
+      }
+    } finally {
+      // A format-based pdf leaves captureScreenshot's own restore in place; a
+      // render-based one never overrode the viewport. Restore anyway so this
+      // loop is self-contained regardless of which path ran.
+      try {
+        await page.setViewport(originalViewport ?? DEFAULT_SCREENSHOT_VIEWPORT);
+      } catch {
+        // Page may be closing/evicted; a best-effort restore is enough.
+      }
     }
   }
 

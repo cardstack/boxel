@@ -81,8 +81,11 @@ Boxel UI helpers:
 import {
   add,
   and,
+  bool,
   cn,
+  cssVar,
   divide,
+  element,
   eq,
   formatCurrency,
   formatDateTime,
@@ -90,17 +93,72 @@ import {
   formatFileSize,
   formatNumber,
   formatRelativeTime,
+  getContrastColor,
   gt,
   gte,
   lt,
   lte,
+  markdownEscape,
   multiply,
   not,
   optional,
   or,
   pick,
+  sanitizeHtml,
+  sanitizeHtmlSafe,
   subtract,
 } from '@cardstack/boxel-ui/helpers';
+```
+
+Never write a `style` attribute by hand: a literal or concatenated `style='…'` fails
+lint (`no-inline-styles`, `style-concatenation`), and Glimmer warns in development
+whenever a non-`SafeString` is bound to `style`. Static values belong in
+`<style scoped>`; dynamic values go through the safe helper for the job (`cssVar`,
+`setBackgroundImage`, `sanitizeHtmlSafe`) or an `htmlSafe` getter. See
+`styling-design.md` "Dynamic inline styles".
+
+`cssVar` sets custom properties inline from a hash; each key becomes `--key`, and
+empty or `undefined` values are skipped. `getContrastColor` takes a hex color and
+returns a dark or light ink for it (`undefined` for anything else, which `cssVar`
+then skips so the CSS fallback applies), so text stays readable over a color the
+model supplies. When the fill is a theme token rather than a model value, skip the
+helper: use the token's own `--*-foreground` on its fill, or `--*-ink` for the hue
+as text on a neutral surface (see `theme-token-contract.md`).
+
+```hbs
+<header
+  class='hero'
+  style={{cssVar hero-bg=@model.brandColor hero-fg=(getContrastColor @model.brandColor)}}
+>
+  <h1><@fields.cardTitle /></h1>
+</header>
+```
+
+```css
+.hero {
+  background-color: var(--hero-bg, var(--primary));
+  color: var(--hero-fg, var(--primary-foreground));
+}
+```
+
+`sanitizeHtmlSafe` runs a string through DOMPurify and returns a `SafeString`, so
+model-supplied or hand-built HTML can be rendered without escaping. It accepts
+`undefined` and renders nothing. `sanitizeHtml` is the plain-string form for
+attributes such as `href`:
+
+```hbs
+<p class='summary'>{{sanitizeHtmlSafe @model.summaryHtml}}</p>
+<a href={{sanitizeHtml @model.externalUrl}}>Visit</a>
+```
+
+Base helpers (default exports):
+
+```gts
+import setBackgroundImage from '@cardstack/base/helpers/set-background-image';
+```
+
+```hbs
+<div class='cover' style={{setBackgroundImage @model.cardThumbnailURL}} />
 ```
 
 Async tasks and click handlers:
@@ -123,19 +181,45 @@ startSave = () => {
 ```
 
 ```hbs
-<button {{on 'click' this.startSave}}>Save</button>
+<Button {{on 'click' this.startSave}}>Save</Button>
 ```
 
 Boxel UI components:
 
 ```gts
 import {
+  Accordion,
   Avatar,
+  BoxelContainer,
+  BoxelInput,
+  BoxelMultiSelect,
   BoxelSelect,
   Button,
-  CardContainer,
+  CircleSpinner,
+  ColorPicker,
+  ContextButton,
+  CopyButton,
+  BoxelDropdown,
+  EmailInput,
   FieldContainer,
+  FilterList,
+  FittedCard,
+  FittedCardContainer,
+  GridContainer,
+  IconButton,
+  LoadingIndicator,
+  Menu,
+  PhoneInput,
   Pill,
+  ProgressBar,
+  ProgressRadial,
+  RadioInput,
+  SkeletonPlaceholder,
+  SortDropdown,
+  Swatch,
+  Switch,
+  TabbedHeader,
+  Tooltip,
   ViewSelector,
 } from '@cardstack/boxel-ui/components';
 ```

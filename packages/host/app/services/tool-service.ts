@@ -278,7 +278,12 @@ export default class ToolService extends Service {
           event &&
           event.eventName === 'index' &&
           event.indexType === 'incremental' &&
-          event.clientRequestId === clientRequestId
+          // A pass shared with other writers is announced once, under one of
+          // their ids, with this one listed among its coalesced writes.
+          (event.clientRequestId === clientRequestId ||
+            event.coalescedWrites?.some(
+              (write) => write.clientRequestId === clientRequestId,
+            ))
         )
       ) {
         return;

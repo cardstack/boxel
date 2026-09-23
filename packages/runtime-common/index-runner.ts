@@ -741,13 +741,19 @@ export class IndexRunner {
 
   // Announce this pass's now-fixed invalidation set, tagged per URL:
   // genuine deletions (the URLs in `deletes`) as 'delete', everything else —
-  // fan-out dependents are always re-renders — as 'update'. Only fires in
-  // split mode; the fused path renders HTML inline and enqueues nothing.
-  async #notifyInvalidationsReady(urls: string[], deletes: Set<string>) {
-    if (!this.#onInvalidationsReady || urls.length === 0) {
+  // fan-out dependents are always re-renders — as 'update'. The HTML job
+  // renders the URLs this pass visits plus the fan-out's render-only
+  // dependents, which this pass does not visit (see
+  // `Batch.renderOnlyInvalidations`). Only fires in split mode; the fused
+  // path renders HTML inline and enqueues nothing.
+  async #notifyInvalidationsReady(visited: string[], deletes: Set<string>) {
+    if (!this.#onInvalidationsReady || !this.batch.splitPrerenderHtml) {
       return;
     }
-    if (!this.batch.splitPrerenderHtml) {
+    let urls = [
+      ...new Set([...visited, ...this.batch.renderOnlyInvalidations]),
+    ];
+    if (urls.length === 0) {
       return;
     }
     this.#onInvalidationsReady({

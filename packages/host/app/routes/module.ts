@@ -47,11 +47,14 @@ import {
 // `@cardstack/bxl`, and the barrel deliberately carries only the lowered
 // shapes so no other package type-checks bxl's sources.
 import { lowerOperationDeclarations } from '@cardstack/runtime-common/card-operations';
+
 import {
   serializableError,
   isCardErrorJSONAPI,
   type SerializedError,
 } from '@cardstack/runtime-common/error';
+
+import { makeDefinitionLookup } from '../lib/definition-lookup.ts';
 
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
 import { registerBoxelTransitionTo } from '../utils/register-boxel-transition';
@@ -496,41 +499,6 @@ async function validateModuleSearchablePaths(
     console.warn(`searchable validation: unexpected failure: ${err.message}`);
   }
   return issues;
-}
-
-// Resolve a CodeRef to its `Definition` through the loader — what
-// `CachingDefinitionLookup` does loaderlessly on the realm server, in the one
-// process that has the classes in hand. Definition build reaches for this
-// whenever a check has to look past the definition it is holding: a dotted
-// field path's next segment, or the type a `create` declares it mints. An
-// unloadable ref resolves to undefined, which makes every path under it
-// unresolvable — recorded by the caller, never raised, since a definition
-// build that fails over one unreachable dependency reports nothing at all.
-function makeDefinitionLookup(
-  api: typeof CardAPI,
-  loader: ModuleModelContext['loaderService']['loader'],
-  label: string,
-): (codeRef: CodeRef) => Promise<Definition | undefined> {
-  return async (codeRef: CodeRef) => {
-    try {
-      let card = await loadCardDef(codeRef, { loader });
-      let { fields, fieldDefs } = getFieldDefinitions(api, card);
-      return {
-        codeRef,
-        fields,
-        fieldDefs,
-        type: definitionKind(card),
-        displayName: definitionDisplayName(card),
-      };
-    } catch (err: any) {
-      console.warn(
-        `${label}: could not resolve definition ${JSON.stringify(codeRef)}: ${
-          err.message
-        }`,
-      );
-      return undefined;
-    }
-  };
 }
 
 // Capture a def's `@operation` declarations into its definition entry,

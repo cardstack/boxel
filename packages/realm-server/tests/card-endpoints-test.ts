@@ -28,7 +28,6 @@ import {
 } from '@cardstack/runtime-common';
 import { parse } from 'qs';
 import {
-  findRealmEvent,
   setupPermissionedRealmCached,
   setupPermissionedRealmsCached,
   setupMatrixRoom,
@@ -44,7 +43,6 @@ import {
 import {
   ABSENT_OR_NULL_CLIENT_REQUEST_ID,
   expectIncrementalIndexEvent,
-  waitForIncrementalIndexEvent,
 } from './helpers/indexing.ts';
 import type { IncrementalIndexEventContent } from '@cardstack/base/matrix-event';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -187,16 +185,12 @@ module(basename(import.meta.filename), function () {
           onRealmSetup,
         });
 
-        // The read path reports no version, and that is a decision rather than
-        // an omission. The served document is assembled from the index while
-        // the hash describes the file, and the two are separate channels a
-        // deferred index pass leaves at different points — so a version read
-        // here would be a statement about the file and not about the document
-        // it shipped with. Adding one would also move none of the `ETag`'s
-        // inputs, so every cached body in the fleet would revalidate against an
-        // unchanged validator and be answered with a document that predates the
-        // key. Pinned so a later reader pays that cost deliberately.
-        test('a card+json GET carries no version', async function (assert) {
+        // The version the read reports is the base a client's next write is
+        // computed against, so it has to name the bytes this document was
+        // assembled from. Asserted against the file rather than against another
+        // response: comparing two responses would hold just as well if both
+        // reported the same wrong value.
+        test('a card+json GET reports the version of the stored bytes', async function (assert) {
           let response = await request
             .get('/person-1')
             .set('Accept', 'application/vnd.card+json');
@@ -206,19 +200,95 @@ module(basename(import.meta.filename), function () {
             200,
             `HTTP 200 status: ${response.text}`,
           );
-          // The positive control comes first. An absence assertion on its own
-          // would also hold for a response carrying no `meta` at all, so it
-          // would pass for a broken read as readily as for a correct one —
-          // establishing that this IS a populated card meta is what makes the
-          // absence below a statement about `version`.
+          assert.strictEqual(
+            response.body.data.meta.version,
+            computeContentHash(
+              readFileSync(
+                join(dir.name, 'realm_server_1', 'test', 'person-1.json'),
+                'utf8',
+              ),
+            ),
+            'the response reports the hash of the bytes on disk',
+          );
+        });
+
+        // The decisive test for where the value comes from. `realm_file_meta`
+        // holds a content hash only for paths written through the realm's own
+        // write API; a fixture copied onto disk — like every seeded base,
+        // catalog or skills realm in a deployment — has a row with a creation
+        // time and nothing else, permanently. Serving the version from there
+        // would report nothing for this card, so finding one here is what says
+        // it was recorded by the pass that indexed the bytes.
+        test('a card the realm never wrote through its write API still reports a version', async function (assert) {
+          let [row] = (await dbAdapter.execute(
+            `SELECT content_hash FROM realm_file_meta
+             WHERE realm_url = $1 AND file_path = $2`,
+            { bind: [realmURL.href, 'person-1.json'] },
+          )) as { content_hash: string | null }[];
+          // A row exists — indexing calls `ensureFileCreatedAt`, which inserts
+          // one carrying `created_at` alone. Asserted separately from the hash
+          // because coalescing the two would let "no row at all" satisfy the
+          // check, and that distinction is what this control rests on: the
+          // claim is that the realm recorded a creation time and no hash, not
+          // that it recorded nothing.
+          assert.ok(
+            row,
+            'indexing recorded a realm_file_meta row for the path',
+          );
+          assert.strictEqual(
+            row.content_hash,
+            null,
+            'the fixture reached disk without the write path, so no hash was recorded for it',
+          );
+
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+          assert.strictEqual(
+            typeof response.body.data.meta.version,
+            'string',
+            'and the read reports a version regardless',
+          );
+        });
+
+        // The value a row without a fingerprint reports, which is every row in a
+        // realm until it is re-indexed. Absent rather than null, so a client
+        // reads "no version" — the same silence it read before the column
+        // existed, which it treats as "I cannot confirm this".
+        test('a card whose row carries no version reports none', async function (assert) {
+          await dbAdapter.execute(
+            `UPDATE boxel_index SET source_content_hash = NULL
+             WHERE realm_url = $1 AND url = $2 AND type = 'instance'`,
+            { bind: [realmURL.href, `${testRealmHref}person-1.json`] },
+          );
+
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
+          // The positive control: an absence assertion alone would also hold
+          // for a response carrying no `meta`, so establishing that this meta
+          // is populated is what makes the absence a statement about `version`.
           assert.ok(
             response.body.data.meta.adoptsFrom,
             'the response carries a populated card meta',
           );
-          assert.strictEqual(
-            response.body.data.meta.version,
-            undefined,
-            'the read path reports no version',
+          assert.false(
+            'version' in response.body.data.meta,
+            `the key is omitted rather than null: ${JSON.stringify(
+              response.body.data.meta,
+            )}`,
           );
         });
 
@@ -246,6 +316,7 @@ module(basename(import.meta.filename), function () {
           delete json.data.meta.lastModified;
           delete json.data.meta.resourceCreatedAt;
           delete json.data.meta.generation;
+          delete json.data.meta.version;
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
             testRealmHref,
@@ -926,8 +997,8 @@ module(basename(import.meta.filename), function () {
           let etag = response.get('etag') ?? '';
           assert.ok(etag, 'response carries an ETag');
           assert.true(
-            /^"\d+(?:-[0-9a-f]+)?:card-rri-lb\d+"$/.test(etag),
-            `ETag matches "<indexed_at>(-<realmInfoHash>)?:card-rri-lb<budget>" pattern (got ${etag})`,
+            /^"\d+(?:-[0-9a-f]+)?:card-srcver-lb\d+"$/.test(etag),
+            `ETag matches "<indexed_at>(-<realmInfoHash>)?:card-srcver-lb<budget>" pattern (got ${etag})`,
           );
           assert.strictEqual(
             response.get('cache-control'),
@@ -1181,6 +1252,7 @@ module(basename(import.meta.filename), function () {
           delete json.data.meta.lastModified;
           delete json.data.meta.resourceCreatedAt;
           delete json.data.meta.generation;
+          delete json.data.meta.version;
 
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
@@ -2751,6 +2823,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -2886,6 +2959,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -2993,6 +3067,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -3034,6 +3109,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -3178,6 +3254,240 @@ module(basename(import.meta.filename), function () {
           }
         });
 
+        test('a create whose side-load is already stored links to the stored card', async function (assert) {
+          let friendType = {
+            module: rri('https://localhost:4202/node-test/friend'),
+            name: 'Friend',
+          };
+          let first = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                lid: 'already-stored-friend',
+                attributes: { firstName: 'Jade' },
+                meta: { adoptsFrom: friendType },
+              },
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(first.status, 201, 'the linked card is created');
+          let storedFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'Friend',
+            'already-stored-friend.json',
+          );
+          let storedBytes = readFileSync(storedFile, 'utf8');
+
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan' },
+                relationships: {
+                  friend: {
+                    data: { lid: 'already-stored-friend', type: 'card' },
+                  },
+                },
+                meta: { adoptsFrom: friendType },
+              },
+              included: [
+                {
+                  lid: 'already-stored-friend',
+                  type: 'card',
+                  attributes: { firstName: 'Resent' },
+                  meta: { adoptsFrom: friendType },
+                },
+              ],
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            201,
+            `the save succeeds: ${JSON.stringify(response.body)}`,
+          );
+          assert.strictEqual(
+            readFileSync(storedFile, 'utf8'),
+            storedBytes,
+            'the stored card is left exactly as it was',
+          );
+          let id = (response.body as SingleCardDocument).data.id!;
+          let card = readJSONSync(
+            join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'Friend',
+              `${id.split('/').pop()}.json`,
+            ),
+          );
+          assert.deepEqual(
+            card.data.relationships,
+            { friend: { links: { self: './already-stored-friend' } } },
+            'the new card links to the stored one',
+          );
+        });
+
+        test('a stored card whose type is spelled relative to its file is the same type as an absolute side-load', async function (assert) {
+          let storedFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'Person',
+            'relative-person.json',
+          );
+          let storedBytes = JSON.stringify(
+            {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Incumbent' },
+                meta: { adoptsFrom: { module: '../person', name: 'Person' } },
+              },
+            },
+            null,
+            2,
+          );
+          fsExtra.outputFileSync(storedFile, storedBytes);
+
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan' },
+                relationships: {
+                  friend: {
+                    data: { lid: 'relative-person', type: 'card' },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('https://localhost:4202/node-test/friend'),
+                    name: 'Friend',
+                  },
+                },
+              },
+              included: [
+                {
+                  lid: 'relative-person',
+                  type: 'card',
+                  attributes: { firstName: 'Resent' },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri(`${testRealmHref}person`),
+                      name: 'Person',
+                    },
+                  },
+                },
+              ],
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            201,
+            `the save succeeds: ${JSON.stringify(response.body)}`,
+          );
+          assert.strictEqual(
+            readFileSync(storedFile, 'utf8'),
+            storedBytes,
+            'the stored card is left exactly as it was',
+          );
+        });
+
+        test('a create whose side-load collides with a card of another type names the side-load', async function (assert) {
+          let friendType = {
+            module: rri('https://localhost:4202/node-test/friend'),
+            name: 'Friend',
+          };
+          let storedFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'Friend',
+            'other-type-friend.json',
+          );
+          let storedBytes = JSON.stringify(
+            {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Incumbent' },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('https://localhost:4202/node-test/person'),
+                    name: 'Friend',
+                  },
+                },
+              },
+            },
+            null,
+            2,
+          );
+          fsExtra.outputFileSync(storedFile, storedBytes);
+
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                lid: 'primary-card',
+                attributes: { firstName: 'Hassan' },
+                relationships: {
+                  friend: {
+                    data: { lid: 'other-type-friend', type: 'card' },
+                  },
+                },
+                meta: { adoptsFrom: friendType },
+              },
+              included: [
+                {
+                  lid: 'other-type-friend',
+                  type: 'card',
+                  attributes: { firstName: 'Resent' },
+                  meta: { adoptsFrom: friendType },
+                },
+              ],
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 409, 'the save is refused');
+          let [error] = response.body.errors;
+          assert.strictEqual(
+            error.id,
+            `${testRealmHref}Friend/other-type-friend`,
+            'the error is about the side-loaded card',
+          );
+          assert.strictEqual(error.meta?.included?.lid, 'other-type-friend');
+          assert.true(
+            error.message.includes('"other-type-friend"'),
+            `the message names the side-load: ${error.message}`,
+          );
+          assert.false(
+            error.message.includes('primary-card'),
+            `and not the card being created: ${error.message}`,
+          );
+          assert.strictEqual(
+            readFileSync(storedFile, 'utf8'),
+            storedBytes,
+            'the stored card is left exactly as it was',
+          );
+          assert.false(
+            existsSync(
+              join(
+                dir.name,
+                'realm_server_1',
+                'test',
+                'Friend',
+                'primary-card.json',
+              ),
+            ),
+            'nothing is written for the card being created',
+          );
+        });
+
         test('creates card instance when it encounters "lid" in the primary resource', async function (assert) {
           let response = await request
             .post('/')
@@ -3245,6 +3555,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -3703,6 +4014,7 @@ module(basename(import.meta.filename), function () {
           delete json.data.meta.lastModified;
           delete json.data.meta.resourceCreatedAt;
           delete json.data.meta.generation;
+          delete json.data.meta.version;
           let cardFile = join(dir.name, 'realm_server_1', 'test', entry);
           assert.ok(existsSync(cardFile), 'card json exists');
           let card = readJSONSync(cardFile);
@@ -3930,7 +4242,7 @@ module(basename(import.meta.filename), function () {
           let patchEtag = patchResponse.get('etag') ?? '';
           assert.ok(patchEtag, 'PATCH response carries an ETag');
           assert.true(
-            /^"\d+(?:-[0-9a-f]+)?:card-rri-write-echo"$/.test(patchEtag),
+            /^"\d+(?:-[0-9a-f]+)?:card-srcver-write-echo"$/.test(patchEtag),
             `PATCH ETag names the write-echo shape (got ${patchEtag})`,
           );
           assert.notStrictEqual(
@@ -3951,7 +4263,7 @@ module(basename(import.meta.filename), function () {
             'old ETag no longer matches → fresh 200',
           );
           assert.true(
-            /^"\d+(?:-[0-9a-f]+)?:card-rri-lb\d+"$/.test(
+            /^"\d+(?:-[0-9a-f]+)?:card-srcver-lb\d+"$/.test(
               staleResponse.get('etag') ?? '',
             ),
             `GET reports a validator for the read shape (got ${staleResponse.get('etag')})`,
@@ -4037,8 +4349,8 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(
             patchResponse.get('etag'),
             (initialEtag ?? '').replace(
-              /:card-rri-lb\d+"$/,
-              ':card-rri-write-echo"',
+              /:card-srcver-lb\d+"$/,
+              ':card-srcver-write-echo"',
             ),
             'no-op PATCH validates the unchanged state under the write-echo shape',
           );
@@ -4340,6 +4652,7 @@ module(basename(import.meta.filename), function () {
           delete json.data.meta.lastModified;
           delete json.data.meta.resourceCreatedAt;
           delete json.data.meta.generation;
+          delete json.data.meta.version;
           {
             let cardFile = join(
               dir.name,
@@ -4485,6 +4798,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -4620,6 +4934,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -4727,6 +5042,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -4768,6 +5084,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -4875,6 +5192,7 @@ module(basename(import.meta.filename), function () {
           delete json.data.meta.lastModified;
           delete json.data.meta.resourceCreatedAt;
           delete json.data.meta.generation;
+          delete json.data.meta.version;
           {
             let cardFile = join(
               dir.name,
@@ -4954,6 +5272,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -5039,6 +5358,7 @@ module(basename(import.meta.filename), function () {
             delete json.data.meta.lastModified;
             delete json.data.meta.resourceCreatedAt;
             delete json.data.meta.generation;
+            delete json.data.meta.version;
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
               testRealmHref,
@@ -5265,14 +5585,123 @@ module(basename(import.meta.filename), function () {
               versions: { [`${testRealmHref}person-1`]: storedHash },
             },
           );
+
+          // The write channel and the read channel have to agree, or a client
+          // cannot chain one onto the other: operation 1 takes its base from a
+          // read and operation 2 from the version the write returned, and both
+          // describe the same file. Read after the event above, so the index
+          // pass the write waited on has landed and the row the GET assembles
+          // from is the one this write produced.
+          let read = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(read.status, 200, `HTTP 200 status: ${read.text}`);
+          assert.strictEqual(
+            read.body.data.meta.version,
+            storedHash,
+            'a read after the write reports the version the write stored',
+          );
         });
 
-        // `jade` links to `hassan`, so patching `hassan` re-indexes `jade` in
-        // the same pass. The realm computed `jade`'s new state, so nobody holds
-        // it and every client wants to re-read it — which is precisely the
-        // difference `versions` exists to draw, and why it names the files the
-        // request wrote rather than everything the pass touched.
+        // `jade` links `hassan` but only renders it, so patching `hassan`
+        // leaves `jade`'s search row alone. Its card+json still carries
+        // `hassan` in `included`, so its validator must move and a cached
+        // body must not be served.
+        test('a card that links an edited card serves the edit under a new validator', async function (assert) {
+          let before = await request
+            .get('/jade')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(before.status, 200, `HTTP 200: ${before.text}`);
+          let etag = before.get('etag') ?? '';
+          assert.ok(etag, 'the first read carries an ETag');
+
+          let patched = await request
+            .patch('/hassan')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Hassan Renamed' },
+                meta: {
+                  adoptsFrom: { module: rri('./friend.gts'), name: 'Friend' },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(patched.status, 200, `HTTP 200: ${patched.text}`);
+
+          let conditional = await request
+            .get('/jade')
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-None-Match', etag);
+          assert.strictEqual(
+            conditional.status,
+            200,
+            'the old validator no longer matches',
+          );
+          let linked = (conditional.body.included ?? []).find(
+            (resource: { id: string }) =>
+              resource.id === `${testRealmHref}hassan`,
+          );
+          assert.strictEqual(
+            linked?.attributes?.firstName,
+            'Hassan Renamed',
+            `the linked card in included is the edited one: ${JSON.stringify(
+              linked?.attributes,
+            )}`,
+          );
+
+          let plain = await request
+            .get('/jade')
+            .set('Accept', 'application/vnd.card+json');
+          let cachedLinked = (plain.body.included ?? []).find(
+            (resource: { id: string }) =>
+              resource.id === `${testRealmHref}hassan`,
+          );
+          assert.strictEqual(
+            cachedLinked?.attributes?.firstName,
+            'Hassan Renamed',
+            'an unconditional read is not served the pre-edit body',
+          );
+        });
+
+        // `hassan-tag` reads `hassan`'s name into a computed field, so patching
+        // `hassan` re-indexes `hassan-tag` in the same pass. The realm computed
+        // `hassan-tag`'s new state, so nobody holds it and every client wants
+        // to re-read it — which is precisely the difference `versions` exists
+        // to draw, and why it names the files the request wrote rather than
+        // everything the pass touched.
         test('a dependent re-indexed by the same pass is invalidated without a version', async function (assert) {
+          await testRealm.write(
+            'friend-tag.gts',
+            `
+              import { contains, field, linksTo, CardDef } from '@cardstack/base/card-api';
+              import StringField from '@cardstack/base/string';
+              import { Friend } from './friend';
+
+              export class FriendTag extends CardDef {
+                @field friend = linksTo(() => Friend);
+                @field friendName = contains(StringField, {
+                  computeVia: function (this: FriendTag) {
+                    return this.friend?.firstName;
+                  },
+                });
+              }
+            `,
+          );
+          await testRealm.write(
+            'hassan-tag.json',
+            JSON.stringify({
+              data: {
+                relationships: { friend: { links: { self: './hassan' } } },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./friend-tag.gts'),
+                    name: 'FriendTag',
+                  },
+                },
+              },
+            }),
+          );
           let realmEventTimestampStart = Date.now();
 
           let response = await request
@@ -5294,16 +5723,31 @@ module(basename(import.meta.filename), function () {
             `HTTP 200 status: ${response.text}`,
           );
 
-          await waitForIncrementalIndexEvent(
-            getMessagesSince,
-            realmEventTimestampStart,
+          // The setup writes above publish their own incremental events, which
+          // can land after the timestamp baseline, so pick the patch's event
+          // by the card it wrote rather than taking the first one.
+          let content: IncrementalIndexEventContent | undefined;
+          await waitUntil(
+            async () => {
+              let messages = await getMessagesSince(realmEventTimestampStart);
+              content = messages
+                .map((m) => m.content as IncrementalIndexEventContent)
+                .find(
+                  (c) =>
+                    c?.eventName === 'index' &&
+                    c.indexType === 'incremental' &&
+                    c.invalidations?.includes(`${testRealmHref}hassan`),
+                );
+              return Boolean(content);
+            },
+            { timeout: 5000 },
           );
-          let messages = await getMessagesSince(realmEventTimestampStart);
-          let content = findRealmEvent(messages, 'index', 'incremental')
-            ?.content as IncrementalIndexEventContent;
+          if (!content) {
+            throw new Error('no incremental index event named hassan');
+          }
 
           assert.true(
-            content.invalidations.includes(`${testRealmHref}jade`),
+            content.invalidations.includes(`${testRealmHref}hassan-tag`),
             `the pass invalidated the dependent: ${JSON.stringify(
               content.invalidations,
             )}`,
@@ -5341,10 +5785,24 @@ module(basename(import.meta.filename), function () {
           );
           let before = readFileSync(cardFile, 'utf8');
           let modifiedBefore = statSync(cardFile).mtimeMs;
-          // Read off the bytes rather than from a warm-up write, so the value
-          // echoed is the one this file actually holds and no write has run
-          // before the one under test.
-          let version = computeContentHash(before);
+          // Taken from a read rather than from a warm-up write, so this is the
+          // value a client that has only looked at the card would echo, and no
+          // write has run before the one under test. A GET is what makes the
+          // round trip real: the strip has to hold for the value the server
+          // actually serves, not only for one the test computed for itself.
+          let read = await request
+            .get('/person-2')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(read.status, 200, `HTTP 200 status: ${read.text}`);
+          let version = read.body.data.meta.version;
+          // Without this the echo below would carry `version: undefined`, which
+          // serializes away — leaving a patch that strips nothing and a test
+          // that passes for the wrong reason.
+          assert.strictEqual(
+            version,
+            computeContentHash(before),
+            'the read reports the version of the bytes on disk',
+          );
 
           let response = await request
             .patch('/person-2')

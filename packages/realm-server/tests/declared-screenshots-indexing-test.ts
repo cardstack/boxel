@@ -155,6 +155,93 @@ function makeFileSystem() {
         };
       }
 
+      // A capture-only component that renders a multi-page document flow
+      // itself — three pages via inline break-before rules. Its page count
+      // differs from the card's single-page isolated template, so the
+      // captured pdf's page count alone proves the content came from the
+      // component and not the template.
+      class InvoiceDocument extends Component<typeof Invoice> {
+        <template>
+          <article>
+            <h1>Invoice: <@fields.name/></h1>
+            <section style='break-before: page;'>Line items</section>
+            <section style='break-before: page;'>Totals</section>
+          </article>
+        </template>
+      }
+
+      export class Invoice extends CardDef {
+        @field name = contains(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1>Invoice (isolated one-pager): <@fields.name/></h1>
+          </template>
+        }
+        static screenshots: Record<string, ScreenshotSpec> = {
+          invoice: { render: InvoiceDocument, type: 'pdf' },
+        };
+      }
+
+      // Two render-based pdf slots on one card, captured back-to-back on the
+      // same pooled page. The alpha slot renders a one-page flow; the beta
+      // slot, a three-page flow. They sort alpha-before-beta, so beta captures
+      // second, while alpha's shorter document is still the mounted DOM. beta's
+      // own page count (three, not alpha's one) is the proof the capture engine
+      // waited for beta's render before paginating — the per-slot guard against
+      // paginating a prior slot's still-mounted DOM into this slot.
+      class AlphaDocument extends Component<typeof MultiPdf> {
+        <template>
+          <article><h1>Alpha: <@fields.name/></h1></article>
+        </template>
+      }
+      class BetaDocument extends Component<typeof MultiPdf> {
+        <template>
+          <article>
+            <h1>Beta: <@fields.name/></h1>
+            <section style='break-before: page;'>Two</section>
+            <section style='break-before: page;'>Three</section>
+          </article>
+        </template>
+      }
+
+      export class MultiPdf extends CardDef {
+        @field name = contains(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1>MultiPdf (isolated one-pager): <@fields.name/></h1>
+          </template>
+        }
+        static screenshots: Record<string, ScreenshotSpec> = {
+          alpha: { render: AlphaDocument, type: 'pdf' },
+          beta: { render: BetaDocument, type: 'pdf' },
+        };
+      }
+
+      // A capture-only pdf component that discovers it can never render and
+      // swaps the pending signal for the definitive-failure signal — the same
+      // contract the raster DoomedShot follows, exercised on the pdf path.
+      class BrokenDocument extends Component<typeof BrokenReport> {
+        markFailed = modifier((el) => {
+          el.removeAttribute('data-screenshot-pending');
+          el.setAttribute('data-screenshot-failed', 'fixture: document cannot render');
+        });
+        <template>
+          <div data-screenshot-pending='true' {{this.markFailed}}>never ready</div>
+        </template>
+      }
+
+      export class BrokenReport extends CardDef {
+        @field name = contains(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1>Broken report: <@fields.name/></h1>
+          </template>
+        }
+        static screenshots: Record<string, ScreenshotSpec> = {
+          doc: { render: BrokenDocument, type: 'pdf' },
+        };
+      }
+
       // Consumes its own declared capture in a display format — pins the
       // render context's declaration-derived meta.screenshots: the durable
       // URL must land in persisted HTML on the instance's very first
@@ -718,6 +805,140 @@ module(basename(import.meta.filename), function (hooks) {
     assert.ok(
       overflow!.message.includes('exceed the pdf capture cap of 3'),
       `the error names the cap it exceeded (got: ${overflow?.message})`,
+    );
+  });
+
+  test('a declared pdf render component paginates its own document flow, not the isolated template', async function (assert) {
+    await writeAndSettle(
+      'invoice.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'INV-1' },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'Invoice' },
+          },
+        },
+      }),
+    );
+
+    let row = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}invoice.json`,
+    );
+    assert.ok(row, 'the instance row exists');
+    let manifest = row!.screenshots as ScreenshotManifest | null;
+    assert.ok(manifest?.invoice, 'the render-based pdf capture landed');
+
+    let invoice = manifest!.invoice;
+    assert.strictEqual(
+      invoice.specHash,
+      await declaredCaptureSpecHash('invoice', { render: true, type: 'pdf' }),
+      'the manifest records the render-based pdf identity',
+    );
+    assert.strictEqual(invoice.contentType, 'application/pdf');
+    assert.strictEqual(
+      invoice.width,
+      undefined,
+      'a render-based pdf carries no raster box either',
+    );
+    assert.strictEqual(
+      invoice.pageCount,
+      3,
+      "the component's three-page flow drove the document, not the one-page isolated template",
+    );
+    assert.ok(
+      startsWith(objectBytes(invoice.objectKey), PDF_MAGIC),
+      'the persisted bytes are a PDF document',
+    );
+
+    let served = await realm.handle(
+      new Request(`${testRealm}_screenshot/invoice?name=invoice`),
+    );
+    assert.strictEqual(served!.status, 200);
+    assert.strictEqual(
+      served!.headers.get('content-type'),
+      'application/pdf',
+      'the ?name= URL serves the component-rendered pdf',
+    );
+  });
+
+  test('back-to-back pdf render slots each paginate their own document, not the prior slot’s DOM', async function (assert) {
+    await writeAndSettle(
+      'multi-pdf.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'MP-1' },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'MultiPdf' },
+          },
+        },
+      }),
+    );
+
+    let row = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}multi-pdf.json`,
+    );
+    assert.ok(row, 'the instance row exists');
+    let manifest = row!.screenshots as ScreenshotManifest | null;
+    assert.ok(manifest?.alpha, 'the first pdf slot captured');
+    assert.ok(manifest?.beta, 'the second pdf slot captured');
+
+    assert.strictEqual(
+      manifest!.alpha.pageCount,
+      1,
+      'the first pdf slot paginates its own one-page flow',
+    );
+    // The regression this pins: without a per-slot flush wait, the second pdf
+    // slot could paginate the first slot's still-mounted one-page DOM into a
+    // valid-looking PDF. A page count of three is only reachable from beta's
+    // own render.
+    assert.strictEqual(
+      manifest!.beta.pageCount,
+      3,
+      "the second pdf slot paginates its own three-page flow, not the first slot's one-page DOM",
+    );
+  });
+
+  test('a failing pdf render component fails its slot under the broken-links model without failing the row', async function (assert) {
+    await writeAndSettle(
+      'broken.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Broken' },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'BrokenReport' },
+          },
+        },
+      }),
+    );
+
+    let row = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}broken.json`,
+    );
+    assert.ok(row, 'the instance row still indexes');
+    let manifest = row!.screenshots as ScreenshotManifest | null;
+    assert.notOk(
+      manifest?.doc,
+      'no manifest entry lands for the failed pdf slot',
+    );
+    assert.deepEqual(
+      await declaredLedgerRows(`${testRealm}broken`),
+      [],
+      'a failed pdf slot persists no ledger row',
+    );
+
+    let errors = (row!.diagnostics as any)?.screenshotErrors as
+      | { name: string; message: string }[]
+      | undefined;
+    let docError = errors?.find((e) => e.name === 'doc');
+    assert.ok(docError, 'the failed pdf slot records a screenshot error');
+    assert.ok(
+      docError!.message.includes(
+        'signaled data-screenshot-failed: fixture: document cannot render',
+      ),
+      `the error carries the component's stated cause (got: ${docError?.message})`,
     );
   });
 

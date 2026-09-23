@@ -8,7 +8,7 @@ validated: source-proven
 
 **When to use:** Any "list of cards as a field grid" UI. Reports, directories, admin views, dashboards. Anywhere you'd otherwise hand-write a `<table>` with `{{#each}}` and column logic.
 
-**The insight:** A field table needs the **live card instances**, not rendered cards — you read each column's value off the instance (`{{get card col}}`). So this is a `getCards` pattern, **not** a search-results / prerendered one: `@context.searchResultsComponent` and `<PrerenderedCardSearch>` render each result as a whole component (`entry.component`), which has no addressable per-field surface. Reach for `getCards` whenever you need cell-level field access; reach for `@context.searchResultsComponent` when you want to drop in whole rendered cards.
+**The insight:** A field table needs the **live card instances**, not rendered cards — you read each column's value off the instance (`{{get card col}}`). So this is a `getCards` pattern, **not** a search-results / prerendered one: `@context.searchResultsComponent` renders each result as a whole component (`entry.component`), which has no addressable per-field surface. Reach for `getCards` whenever you need cell-level field access; reach for `@context.searchResultsComponent` when you want to drop in whole rendered cards.
 
 **Recipe shape:**
 

@@ -3498,6 +3498,324 @@ module(`Integration | realm indexing`, function (hooks) {
     }
   });
 
+  test('a computed linksToMany serializes into the indexed document', async function (assert) {
+    // `serializeCardResource` keeps only the "used" link fields in the mode the
+    // indexer runs, and a computed link never writes to the data bucket that
+    // check reads. A computed relationship reaches the indexed document on the
+    // strength of `includeComputeds`, the same as a computed contained field.
+    class Issue extends CardDef {
+      static displayName = 'Issue';
+      @field title = contains(StringField);
+    }
+    class IssueTracker extends CardDef {
+      static displayName = 'IssueTracker';
+      @field directIssues = linksToMany(() => Issue);
+      @field localCards = linksToMany(() => Issue, {
+        computeVia: function (this: IssueTracker) {
+          return this.directIssues;
+        },
+      });
+    }
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Issue, IssueTracker },
+        'Issue/issue-1.json': {
+          data: {
+            attributes: { title: 'First' },
+            meta: { adoptsFrom: { module: '../test-cards', name: 'Issue' } },
+          },
+        },
+        'Issue/issue-2.json': {
+          data: {
+            attributes: { title: 'Second' },
+            meta: { adoptsFrom: { module: '../test-cards', name: 'Issue' } },
+          },
+        },
+        'Issue/issue-3.json': {
+          data: {
+            attributes: { title: 'Third' },
+            meta: { adoptsFrom: { module: '../test-cards', name: 'Issue' } },
+          },
+        },
+      },
+    });
+
+    let issueIds = [
+      `${testRealmURL}Issue/issue-1`,
+      `${testRealmURL}Issue/issue-2`,
+      `${testRealmURL}Issue/issue-3`,
+    ];
+
+    await realm.write(
+      'board-1.json',
+      JSON.stringify({
+        data: {
+          relationships: {
+            'directIssues.0': { links: { self: './Issue/issue-1' } },
+            'directIssues.1': { links: { self: './Issue/issue-2' } },
+            'directIssues.2': { links: { self: './Issue/issue-3' } },
+          },
+          meta: {
+            adoptsFrom: { module: './test-cards', name: 'IssueTracker' },
+          },
+        },
+      }),
+    );
+
+    let board = await realm.realmIndexQueryEngine.cardDocument(
+      new URL(`${testRealmURL}board-1`),
+      { loadLinks: true },
+    );
+    if (board?.type === 'doc') {
+      let relationships = board.doc.data.relationships ?? {};
+      let linksFor = (prefix: string) =>
+        Object.keys(relationships)
+          .filter((key) => new RegExp(`^${prefix}\\.\\d+$`).test(key))
+          .map((key) => (relationships[key] as Relationship).links?.self)
+          .filter(Boolean)
+          .map((self) => new URL(self as string, `${testRealmURL}board-1`).href)
+          .sort();
+      assert.deepEqual(
+        linksFor('directIssues'),
+        issueIds,
+        'the authored directIssues relationship serializes',
+      );
+      assert.deepEqual(
+        linksFor('localCards'),
+        issueIds,
+        'the computed localCards relationship serializes',
+      );
+    } else {
+      assert.ok(
+        false,
+        `board search entry was an error: ${board?.error.errorDetail.message}`,
+      );
+    }
+  });
+
+  test('a computed link that resolves to nothing is omitted from the indexed document', async function (assert) {
+    // The mirror of the case above: in the used-only serialization the indexer
+    // runs, a computed link resolving to nothing is the absence of a
+    // relationship, not an authored `{ self: null }`, so it contributes no
+    // entry — the shape a never-set link takes. This holds every card's index
+    // row steady: `CardDef.cardTheme` is a computed `linksTo` that is null on a
+    // themeless card, and without this omission every indexed document would
+    // gain a `cardTheme` entry it never carried before. A card whose only links
+    // are empty computeds serializes with no `relationships` key at all.
+    class Tag extends CardDef {
+      static displayName = 'Tag';
+      @field label = contains(StringField);
+    }
+    class Board extends CardDef {
+      static displayName = 'Board';
+      @field tags = linksToMany(() => Tag);
+      @field activeTags = linksToMany(() => Tag, {
+        computeVia: function (this: Board) {
+          return this.tags;
+        },
+      });
+      @field primaryTag = linksTo(() => Tag, {
+        computeVia: function (this: Board) {
+          return this.tags[0];
+        },
+      });
+    }
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Tag, Board },
+      },
+    });
+
+    await realm.write(
+      'board-empty.json',
+      JSON.stringify({
+        data: {
+          meta: {
+            adoptsFrom: { module: './test-cards', name: 'Board' },
+          },
+        },
+      }),
+    );
+
+    let board = await realm.realmIndexQueryEngine.cardDocument(
+      new URL(`${testRealmURL}board-empty`),
+      { loadLinks: true },
+    );
+    if (board?.type === 'doc') {
+      assert.strictEqual(
+        board.doc.data.relationships,
+        undefined,
+        'a card whose only links are empty computeds carries no relationships key (empty computeds omitted, the leftover `{}` stripped)',
+      );
+    } else {
+      assert.ok(
+        false,
+        `board search entry was an error: ${board?.error.errorDetail.message}`,
+      );
+    }
+  });
+
+  test('a computed that reduces over a query-backed relationship is omitted from the indexed document', async function (assert) {
+    // The two-hop shape: a board's `cards` is a computed relationship returning
+    // `this.project?.issues`, where `Project.issues` is query-backed. That value
+    // derives from a live search the index cannot invalidate — the deps reached
+    // through a query context are excluded from the row's own — so storing it
+    // would bake in a result set nothing recomputes. The board's `localCards`,
+    // computed over an authored link on the same card, is unaffected and pins
+    // that the omission follows the query read rather than the computed.
+    const issueRef = {
+      module: rri(`${testRealmURL}test-cards`),
+      name: 'Issue',
+    };
+    class Issue extends CardDef {
+      static displayName = 'Issue';
+      @field title = contains(StringField);
+      @field project = linksTo(() => Project);
+    }
+    class Project extends CardDef {
+      static displayName = 'Project';
+      @field name = contains(StringField);
+      @field issues = linksToMany(() => Issue, {
+        query: {
+          filter: {
+            on: issueRef,
+            eq: { 'project.id': '$this.id' },
+          },
+        },
+      });
+    }
+    class IssueTracker extends CardDef {
+      static displayName = 'IssueTracker';
+      @field project = linksTo(() => Project);
+      @field directIssues = linksToMany(() => Issue);
+      @field localCards = linksToMany(() => Issue, {
+        computeVia: function (this: IssueTracker) {
+          return this.directIssues;
+        },
+      });
+      @field cards = linksToMany(() => Issue, {
+        computeVia: function (this: IssueTracker) {
+          return this.project?.issues;
+        },
+      });
+      @field cardCount = contains(NumberField, {
+        computeVia: function (this: IssueTracker) {
+          return this.cards.length;
+        },
+      });
+    }
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Issue, Project, IssueTracker },
+        'Project/proj-1.json': {
+          data: {
+            attributes: { name: 'Nexus' },
+            meta: { adoptsFrom: { module: '../test-cards', name: 'Project' } },
+          },
+        },
+        'Issue/issue-1.json': {
+          data: {
+            attributes: { title: 'First' },
+            relationships: {
+              project: { links: { self: '../Project/proj-1' } },
+            },
+            meta: { adoptsFrom: { module: '../test-cards', name: 'Issue' } },
+          },
+        },
+        'Issue/issue-2.json': {
+          data: {
+            attributes: { title: 'Second' },
+            relationships: {
+              project: { links: { self: '../Project/proj-1' } },
+            },
+            meta: { adoptsFrom: { module: '../test-cards', name: 'Issue' } },
+          },
+        },
+      },
+    });
+
+    let issueIds = [
+      `${testRealmURL}Issue/issue-1`,
+      `${testRealmURL}Issue/issue-2`,
+    ];
+
+    // The first hop has to resolve before the board is written, or the board's
+    // `cards` reduces over an empty set — which the used-only serialization
+    // omits anyway, leaving the assertion below satisfied without the omission
+    // under test having done anything.
+    let project = await realm.realmIndexQueryEngine.cardDocument(
+      new URL(`${testRealmURL}Project/proj-1`),
+      { loadLinks: true },
+    );
+    assert.deepEqual(
+      project?.type === 'doc'
+        ? (
+            (project.doc.data.relationships?.issues as Relationship)?.data as
+              | { id: string }[]
+              | undefined
+          )
+            ?.map((d) => d.id)
+            .sort()
+        : undefined,
+      issueIds,
+      'the query-backed Project.issues resolves both issues',
+    );
+
+    await realm.write(
+      'board-1.json',
+      JSON.stringify({
+        data: {
+          relationships: {
+            project: { links: { self: './Project/proj-1' } },
+            'directIssues.0': { links: { self: './Issue/issue-1' } },
+            'directIssues.1': { links: { self: './Issue/issue-2' } },
+          },
+          meta: {
+            adoptsFrom: { module: './test-cards', name: 'IssueTracker' },
+          },
+        },
+      }),
+    );
+
+    let board = await realm.realmIndexQueryEngine.cardDocument(
+      new URL(`${testRealmURL}board-1`),
+      { loadLinks: true },
+    );
+    if (board?.type === 'doc') {
+      let relationships = board.doc.data.relationships ?? {};
+      let linksFor = (prefix: string) =>
+        Object.keys(relationships)
+          .filter((key) => new RegExp(`^${prefix}\\.\\d+$`).test(key))
+          .map((key) => (relationships[key] as Relationship).links?.self)
+          .filter(Boolean)
+          .map((self) => new URL(self as string, `${testRealmURL}board-1`).href)
+          .sort();
+      assert.deepEqual(
+        linksFor('localCards'),
+        issueIds,
+        'a computed over an authored link still serializes',
+      );
+      assert.deepEqual(
+        linksFor('cards'),
+        [],
+        'a computed over a query-backed relationship is omitted',
+      );
+      assert.strictEqual(
+        board.doc.data.attributes?.cardCount,
+        undefined,
+        'a contained computed reaching the query field through another computed is omitted',
+      );
+    } else {
+      assert.ok(
+        false,
+        `board search entry was an error: ${board?.error.errorDetail.message}`,
+      );
+    }
+  });
+
   test('a query-backed field resolves references that live in another realm', async function (assert) {
     // A query field with no realm searches only the realm holding the card, so
     // a reference into another realm could never match. Interpolating the

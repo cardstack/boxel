@@ -47,6 +47,11 @@ export interface CardAPIForMatching {
   getQueryableValue(fieldOrCard: any, value: any, stack?: BaseDef[]): any;
   formatQueryValue(field: Field<any>, queryValue: any): any;
   peekAtField(instance: BaseDef, fieldName: string): any;
+  // Whether `fieldName` was computed from a query-backed field — i.e. the value
+  // `peekAtField` just returned derives from a live search the index does not
+  // hold, so it is omitted from the server's search doc. Reads the taint the
+  // preceding `peekAtField` recorded, so it is only meaningful right after one.
+  isQueryTaintedField(instance: BaseDef, fieldName: string): boolean;
   isNonPresentLink(value: any): boolean;
   getCardMeta(
     card: BaseDef,
@@ -300,6 +305,16 @@ function resolvePath(
         continue;
       }
       let raw = api.peekAtField(node, segment);
+      // A computed derived from a query-backed field is omitted from the
+      // server's search doc (the index can't invalidate it), so the server
+      // never matches or orders on it. Resolving a path *through* one here
+      // would let the client inject or reorder a card the server's result set
+      // can't include. Treat the branch as unresolvable and stop descending, so
+      // the three-valued result leaves the server's answer untouched.
+      if (field.computeVia && api.isQueryTaintedField(node, segment)) {
+        sawUnresolvable = true;
+        continue;
+      }
       let isPlural =
         field.fieldType === 'containsMany' || field.fieldType === 'linksToMany';
       let isPrimitiveCard = (api.primitive as any) in field.card;
@@ -341,6 +356,16 @@ function resolvePath(
     }
     leafField = field;
     let raw = api.peekAtField(node, leaf);
+    // Same as the interior segments above: a query-derived computed is absent
+    // from the server's search doc, so contribute no value for it and mark the
+    // resolution unresolvable rather than matching/sorting on a value the
+    // server does not hold. Covers the sort path too — `sortValue` reads these
+    // same `values`, so an omitted leaf sorts as null (NULLS LAST), which is
+    // how the server orders a row missing that key.
+    if (field.computeVia && api.isQueryTaintedField(node, leaf)) {
+      sawUnresolvable = true;
+      continue;
+    }
     let queryable = api.getQueryableValue(field, raw);
     let isPlural =
       field.fieldType === 'containsMany' || field.fieldType === 'linksToMany';

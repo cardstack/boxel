@@ -433,6 +433,8 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         'report-base-stale',
         'report-base-absent',
         'report-base-refused',
+        'report-base-read',
+        'report-base-read-stale',
       ].map((name) => [`${name}.json`, reportFile()]),
     ),
     // The one report that is not open, so an operation asserting that it is
@@ -612,6 +614,44 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     function query(body: string) {
       return post(body).set('X-HTTP-Method-Override', 'QUERY');
     }
+
+    // A browser reaches this endpoint across an origin boundary, and neither
+    // of this project's suites crosses one: the host's integration tests drive
+    // an in-browser realm with no network, and everything here runs on node
+    // `fetch`, which has no CORS. So the request being *deliverable* is pinned
+    // separately from the request being answered correctly.
+    module('cross-origin delivery', function () {
+      test('the preflight allows every header the envelope carries', async function (assert) {
+        let response = await request
+          .options('/_operations')
+          .set('Origin', 'https://localhost:4200')
+          .set('Access-Control-Request-Method', 'POST')
+          .set(
+            'Access-Control-Request-Headers',
+            'accept, authorization, content-type',
+          );
+
+        let allowed = String(
+          response.headers['access-control-allow-headers'] ?? '',
+        )
+          .split(',')
+          .map((header) => header.trim().toLowerCase());
+
+        // `Accept` is the one worth naming. It is normally CORS-safelisted, so
+        // its absence from the allow list looks impossible — but the safelist
+        // covers only values free of `"`, `:` and the rest of the forbidden
+        // set, and this endpoint's media type is
+        // `application/vnd.api+json;ext="…"`, which carries both. So the
+        // request preflights, and without `Accept` allowed the preflight is
+        // refused and no browser can invoke any operation at all.
+        for (let header of ['accept', 'authorization', 'content-type']) {
+          assert.true(
+            allowed.includes(header),
+            `the preflight allows ${header}: ${allowed.join(', ')}`,
+          );
+        }
+      });
+    });
 
     module('validation', function () {
       test('an href outside this realm is refused, naming the entry', async function (assert) {
@@ -2045,6 +2085,99 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             { body: 'Second.', postedBy: TESTER },
           ],
           'both writes landed',
+        );
+      });
+
+      // The base a first operation names cannot come from a write — there has
+      // not been one yet. So the read has to supply it, and these two tests are
+      // the round trip that makes the first operation on a card the client has
+      // only looked at reconcile like every one after it.
+      test('the version a GET reports is accepted as a base', async function (assert) {
+        let read = await request
+          .get('/report-base-read')
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(read.status, 200, `HTTP 200 status: ${read.text}`);
+        let version = read.body.data.meta.version;
+        assert.strictEqual(
+          typeof version,
+          'string',
+          'the read reported a version to name as a base',
+        );
+
+        let response = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-base-read',
+              data: {
+                body: 'On a base taken from a read.',
+                meta: { baseVersion: version },
+              },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let [result] = response.body['atomic:results'];
+        assert.true(
+          result.data.meta.baseMatched,
+          'the realm executed from the bytes the read described',
+        );
+      });
+
+      // The other half of the same claim, and the one that says the version is
+      // bound to a state rather than being a constant the read hands out: a
+      // base taken from a read has to stop matching once someone else writes.
+      test('a version read before someone else’s write no longer matches', async function (assert) {
+        let read = await request
+          .get('/report-base-read-stale')
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(read.status, 200, `HTTP 200 status: ${read.text}`);
+        let stale = read.body.data.meta.version;
+        assert.strictEqual(
+          typeof stale,
+          'string',
+          'the read reported a version to name as a base',
+        );
+
+        let foreign = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-base-read-stale',
+              data: { body: 'Someone else got here first.' },
+            }),
+          ),
+        );
+        assert.strictEqual(foreign.status, 200, 'HTTP 200 status');
+
+        let reread = await request
+          .get('/report-base-read-stale')
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(
+          reread.status,
+          200,
+          `HTTP 200 status: ${reread.text}`,
+        );
+        assert.strictEqual(
+          reread.body.data.meta.version,
+          foreign.body['atomic:results'][0].data.meta.version,
+          'a read after the write reports the version that write stored',
+        );
+
+        let response = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-base-read-stale',
+              data: {
+                body: 'On a base that moved.',
+                meta: { baseVersion: stale },
+              },
+            }),
+          ),
+        );
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.false(
+          response.body['atomic:results'][0].data.meta.baseMatched,
+          'the base read earlier no longer describes the card',
         );
       });
 

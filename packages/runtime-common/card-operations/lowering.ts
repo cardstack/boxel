@@ -1149,6 +1149,10 @@ function actorIsNotACard(path: string): string {
   return `\`${path}\` asks for a card identity, and \`actor()\` is the caller's user id rather than a card — declare the person as a \`params\` member typed \`linkTo(…)\` and write that there`;
 }
 
+function instanceOutOfScope(path: string): string {
+  return `\`${path}\` reads the card's own stored values, and an append never assembles the card's document — declare what the item needs as a \`params\` member, or make it a \`transform\`, which does read the card`;
+}
+
 function notAList(path: string): string {
   return `\`${path}\` addresses a link collection, which holds a list of card identities — write a list, or append to the collection one edge at a time`;
 }
@@ -1424,13 +1428,12 @@ async function lowerCreate(
         );
       }
     }
-    fill[key] = templateOf(
-      value,
-      `fill.${key}`,
+    fill[key] = templateOf(value, {
+      path: `fill.${key}`,
       paramNames,
       sink,
-      fieldDef ? LINK_KINDS.includes(fieldDef.type) : false,
-    );
+      identifies: fieldDef ? LINK_KINDS.includes(fieldDef.type) : false,
+    });
   }
   operation.fill = fill;
 }
@@ -1439,16 +1442,22 @@ async function lowerCreate(
 // declaration wrote them, and everything else is the plain JSON it already
 // is. A raw program has no place in a template — nothing substitutes into a
 // document evaluates BXL — so one is reported rather than silently dropped.
-function templateOf(
-  value: unknown,
-  path: string,
-  paramNames: Set<string>,
-  sink: IssueSink,
+interface TemplateSlot {
+  path: string;
+  paramNames: Set<string>;
+  sink: IssueSink;
   // Whether the slot this fills is a link field, which is the one thing a
   // template's shape does not say for itself: a marker is carried through as
   // data, so what it stands for is decided by the field it lands in.
-  identifies = false,
-): OperationTemplate {
+  identifies?: boolean;
+  // Whether the card's stored document is in scope where this template is
+  // resolved. A `create` reads the card it was invoked from; an append reads
+  // nothing, so an `instance(…)` under one never resolves.
+  reads?: boolean;
+}
+
+function templateOf(value: unknown, slot: TemplateSlot): OperationTemplate {
+  let { path, paramNames, sink, identifies = false, reads = true } = slot;
   if (isMarker(value)) {
     if (value.$ref === 'params') {
       checkParamKey(String(value.key), paramNames, path, sink);
@@ -1456,10 +1465,17 @@ function templateOf(
     if (value.$ref === 'actor' && identifies) {
       sink.add('actor-not-a-card', path, actorIsNotACard(path));
     }
+    if (value.$ref === 'instance' && !reads) {
+      sink.add('instance-out-of-scope', path, instanceOutOfScope(path));
+    }
     if (value.$ref === 'card' && isMarker(value.value)) {
       // Inside `card(…)` every value is a card identity, whatever field the
       // wrapper itself fills.
-      templateOf(value.value, `${path}.value`, paramNames, sink, true);
+      templateOf(value.value, {
+        ...slot,
+        path: `${path}.value`,
+        identifies: true,
+      });
     }
     return value as OperationTemplate;
   }
@@ -1476,14 +1492,18 @@ function templateOf(
     // reading carries into every entry — a list is how a `linksToMany` is
     // filled, not a place where the question changes.
     return value.map((entry, index) =>
-      templateOf(entry, `${path}[${index}]`, paramNames, sink, identifies),
+      templateOf(entry, { ...slot, path: `${path}[${index}]`, identifies }),
     );
   }
   if (isPlainObject(value)) {
     return Object.fromEntries(
       Object.entries(value).map(([key, member]) => [
         key,
-        templateOf(member, `${path}.${key}`, paramNames, sink),
+        templateOf(member, {
+          ...slot,
+          path: `${path}.${key}`,
+          identifies: false,
+        }),
       ]),
     );
   }
@@ -1643,7 +1663,7 @@ function lowerItem(
   sink: IssueSink,
 ): OperationTemplate {
   if (!itemDefinition || isMarker(item) || !isPlainObject(item)) {
-    return templateOf(item, path, paramNames, sink);
+    return templateOf(item, { path, paramNames, sink, reads: false });
   }
   // Each member is lowered against its own field, the way a `fill`'s members
   // are: the item's shape does not say which of them hold a card identity, so
@@ -1668,13 +1688,15 @@ function lowerItem(
         )} is what an appended item holds`,
       );
     }
-    members[key] = templateOf(
-      member,
-      memberPath,
+    members[key] = templateOf(member, {
+      path: memberPath,
       paramNames,
       sink,
-      fieldDef ? LINK_KINDS.includes(fieldDef.type) : false,
-    );
+      identifies: fieldDef ? LINK_KINDS.includes(fieldDef.type) : false,
+      // An append never assembles the card's document, so its own values are
+      // not in scope for the item being built from it.
+      reads: false,
+    });
   }
   return members;
 }

@@ -279,6 +279,7 @@ import type {
   DeferredPrerenderHtml,
   FromScratchResult,
   IncrementalChange,
+  SharedIndexPass,
 } from './tasks/indexer.ts';
 import { isCodeRef } from './code-ref.ts';
 import { merge } from 'lodash-es';
@@ -402,6 +403,7 @@ import type { Utils } from './matrix-backend-authentication.ts';
 import { MatrixBackendAuthentication } from './matrix-backend-authentication.ts';
 
 import type {
+  CoalescedIndexWrite,
   FileWatcherEventContent,
   IncrementalIndexEventContent,
   RealmEventContent,
@@ -765,8 +767,13 @@ const CONDITIONAL_WRITE_INDEX_SETTLE_POLL_MS = 250;
 // `indexed_at` nor the realm-info hash moves on a serialization change, so the
 // variant is the only signal that invalidates already-cached bodies. Bumped to
 // `card-rri` when the server began serving instance ids (`id`/`links.self`/
-// relationship ids) in canonical prefix (RRI) form for mapped realms.
-const CARD_JSON_ETAG_VARIANT = 'card-rri';
+// relationship ids) in canonical prefix (RRI) form for mapped realms, and to
+// `card-srcver` when the GET began reporting `meta.version` — the content hash
+// of the source the document was assembled from. Adding a key to the
+// representation moves none of the inputs above, so without the bump a client
+// holding a cached body would be 304'd back to a document that predates the
+// key and would never see a version for a card it had already read.
+const CARD_JSON_ETAG_VARIANT = 'card-srcver';
 
 // The variant the card+json validator carries, with the assembled-resource
 // budget folded in. The budget decides which cards come back with a clipped
@@ -929,13 +936,92 @@ function withVersionsIfItFits(
     return content;
   }
   let withVersions: IncrementalIndexEventContent = { ...content, versions };
-  // Measure what goes on the wire — the JSON encoding of the whole content,
-  // not the character count of the keys and values inside one member.
-  let encoded = new TextEncoder().encode(JSON.stringify(withVersions)).length;
-  if (encoded > MAX_EVENT_CONTENT_BYTES) {
+  if (encodedSize(withVersions) > MAX_EVENT_CONTENT_BYTES) {
     return content;
   }
   return withVersions;
+}
+
+// Measure what goes on the wire — the JSON encoding of the whole content, not
+// the character count of the keys and values inside one member.
+function encodedSize(content: IncrementalIndexEventContent): number {
+  return new TextEncoder().encode(JSON.stringify(content)).length;
+}
+
+// The versions a shared pass's announcer may report: those of the cards no
+// other writer in the pass changed.
+//
+// A version says which bytes a card holds, and it is only this writer's to say
+// for a card nobody else wrote in the same pass. When a second writer's publish
+// joins the pending pass with its own write to the same card, the index holds
+// whichever bytes that pass read — the later write — while the announcer's
+// version describes its own. A tab holding the announcer's version would match
+// it, skip the re-read, and keep a card the other writer has since changed.
+// A writer whose cards are unknown could have changed any of them, so its
+// presence withholds the whole map.
+function versionsOnlyThisWriterChanged(
+  passes: (SharedIndexPass | undefined)[],
+  versions: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!versions) {
+    return versions;
+  }
+  let own = new Set(passes.map((pass) => pass?.waiterId));
+  let changedByOthers = new Set<string>();
+  for (let pass of passes) {
+    for (let caller of pass?.callers ?? []) {
+      if (own.has(caller.waiterId)) {
+        continue;
+      }
+      if (caller.urls === null) {
+        return undefined;
+      }
+      for (let url of caller.urls) {
+        changedByOthers.add(url);
+      }
+    }
+  }
+  return Object.fromEntries(
+    Object.entries(versions).filter(([url]) => !changedByOthers.has(url)),
+  );
+}
+
+// Every publish the passes behind a broadcast indexed, for the event's
+// `coalescedWrites`. Undefined when no pass was shared, which leaves the event
+// in the single-writer form `clientRequestId` alone describes.
+//
+// Each writer's cards are narrowed to what the event invalidates, the same
+// narrowing `clientAuthored` gets and for the same reason: a name the event
+// does not carry describes a card nobody can match it against. A writer whose
+// cards are unknown keeps `changed: null`, which a subscriber reads as "may
+// have changed any of them".
+function coalescedWritesFor(
+  passes: (SharedIndexPass | undefined)[],
+  invalidations: string[],
+): CoalescedIndexWrite[] | undefined {
+  let callers = new Map<string, SharedIndexPass['callers'][number]>();
+  for (let pass of passes) {
+    for (let caller of pass?.callers ?? []) {
+      callers.set(caller.waiterId, caller);
+    }
+  }
+  if (callers.size === 0) {
+    return undefined;
+  }
+  let invalidated = new Set(invalidations);
+  return [...callers.values()].map(
+    ({ clientRequestId, urls, clientAuthored }) => ({
+      clientRequestId,
+      changed: urls ? urls.filter((url) => invalidated.has(url)) : null,
+      ...(clientAuthored
+        ? {
+            clientAuthored: clientAuthored.filter((url) =>
+              invalidated.has(url),
+            ),
+          }
+        : {}),
+    }),
+  );
 }
 
 // Emit `NOTIFY realm_index_updated, '<realmURL>'`. Called from every
@@ -2798,6 +2884,13 @@ export class Realm {
       // running instead of adding one to the realm's serial lane. See
       // `IncrementalArgs.readsOwnWrite`.
       readsOwnWrite?: boolean;
+      // Recorded on this caller's entry in the job, for whichever caller
+      // announces the pass if it turns out to be shared.
+      clientAuthored?: string[];
+      // Whether the caller broadcasts this pass the moment it lands. True
+      // unless the pass is only a step toward a later one the same write
+      // runs; see `CoalescedCaller.announcesPass`.
+      announcesPass?: boolean;
     },
   ): Promise<
     IndexPassResult & { deferredPrerenderHtml?: DeferredPrerenderHtml }
@@ -2811,10 +2904,13 @@ export class Realm {
     let invalidations = new Set<string>();
     let invalidatedTypes = makeInvalidatedTypeAccumulator();
     let generation: number | undefined;
+    let sharedPass: SharedIndexPass | undefined;
     let deferredPrerenderHtml: DeferredPrerenderHtml | undefined;
     let stageCursor = opts?.stageCursor;
     await this.#realmIndexUpdater.updateChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
+      ...(opts?.clientAuthored ? { clientAuthored: opts.clientAuthored } : {}),
+      announcesPass: opts?.announcesPass !== false,
       initiatedBy: opts?.initiatedBy ?? null,
       ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
       ...(opts?.carriedPrerenderHtmlChanges?.length
@@ -2846,6 +2942,7 @@ export class Realm {
         }
         invalidatedTypes.add(meta);
         generation = meta.generation ?? generation;
+        sharedPass = meta.sharedPass;
       },
     });
 
@@ -2853,6 +2950,7 @@ export class Realm {
       invalidations: [...invalidations],
       generation,
       invalidatedTypes: invalidatedTypes.value,
+      ...(sharedPass ? { sharedPass } : {}),
       ...(deferredPrerenderHtml ? { deferredPrerenderHtml } : {}),
     };
   }
@@ -2875,6 +2973,9 @@ export class Realm {
     changes: IndexChange[],
     opts: {
       clientRequestId?: string | null;
+      // See updateIndexAndCollectInvalidations. This form always announces
+      // the pass as it lands, from `onSettled`.
+      clientAuthored?: string[];
       initiatedBy?: string | null;
       // Invalidation sets earlier passes of this same write deferred, folded
       // into the prerender_html job this pass spawns.
@@ -2895,8 +2996,11 @@ export class Realm {
     let invalidations = new Set<string>();
     let invalidatedTypes = makeInvalidatedTypeAccumulator();
     let generation: number | undefined;
+    let sharedPass: SharedIndexPass | undefined;
     let { settled } = await this.#realmIndexUpdater.enqueueChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
+      ...(opts?.clientAuthored ? { clientAuthored: opts.clientAuthored } : {}),
+      announcesPass: true,
       initiatedBy: opts?.initiatedBy ?? null,
       ...(opts?.carriedPrerenderHtmlChanges?.length
         ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
@@ -2910,12 +3014,14 @@ export class Realm {
         }
         invalidatedTypes.add(meta);
         generation = meta.generation ?? generation;
+        sharedPass = meta.sharedPass;
       },
       onSettled: async () => {
         if (opts.onSettled) {
           await opts.onSettled([...invalidations], {
             generation,
             invalidatedTypes: invalidatedTypes.value,
+            ...(sharedPass ? { sharedPass } : {}),
           });
         }
       },
@@ -2945,8 +3051,32 @@ export class Realm {
       versions?: Record<string, string>;
       generation?: number;
       invalidatedTypes?: string[];
+      // What each index pass behind this broadcast reported about the other
+      // publishes it indexed, one entry per pass. Absent for a broadcast no
+      // pass stands behind.
+      passes?: (SharedIndexPass | undefined)[];
+      // What this broadcaster's own request wrote or removed, spelled as
+      // `invalidations` spells a card. Lets its write stand in the event's
+      // `coalescedWrites` beside the others' when only some of its passes were
+      // shared — the rest name it nowhere else.
+      ownChanges?: string[];
     },
   ): void {
+    // A pass indexed alongside other publishes is announced once, by the
+    // caller its `SharedIndexPass` names, on behalf of every writer it
+    // indexed. This broadcast stands down only when every pass behind it is
+    // announced that way: one pass nobody else speaks for and the event is
+    // still owed, carrying the others' invalidations again along with it.
+    let passes = opts?.passes ?? [];
+    if (
+      passes.length > 0 &&
+      passes.every((pass) => pass?.announcedByPeer === true)
+    ) {
+      this.#log.debug(
+        `not broadcasting index event for ${this.url} (request ${opts?.clientRequestId ?? 'none'}): another caller of the same pass announces it`,
+      );
+      return;
+    }
     // Narrowed to what the pass actually invalidated. A writer names the cards
     // it wrote; whether a given one reached this event depends on what the
     // index did with it, and a name the event does not carry would describe a
@@ -2988,7 +3118,71 @@ export class Realm {
       ...boundedInvalidatedTypes(opts?.invalidatedTypes),
       realmURL: this.url,
     };
-    this.broadcastRealmEvent(withVersionsIfItFits(content, opts?.versions));
+    let coalescedWrites = coalescedWritesFor(passes, invalidations);
+    if (coalescedWrites && passes.some((pass) => pass === undefined)) {
+      // A write whose module flush was shared but whose closing pass was not:
+      // the list holds the flush's writers, which name this request only for
+      // the modules. Its own entry covers the rest, or a tab looking for its
+      // own write would find its instances changed by nobody and re-read them.
+      let invalidated = new Set(invalidations);
+      coalescedWrites.push({
+        clientRequestId: opts?.clientRequestId ?? null,
+        changed: opts?.ownChanges
+          ? opts.ownChanges.filter((url) => invalidated.has(url))
+          : null,
+        ...(clientAuthored ? { clientAuthored } : {}),
+      });
+    }
+    let versions = opts?.versions;
+    if (coalescedWrites) {
+      versions = versionsOnlyThisWriterChanged(passes, versions);
+      content = this.#withCoalescedWrites(content, coalescedWrites);
+    }
+    this.broadcastRealmEvent(withVersionsIfItFits(content, versions));
+  }
+
+  // `coalescedWrites` on a shared pass's event, as much of it as fits.
+  //
+  // Never simply dropped, because the other writers have stood down: this
+  // event is the only one that names them, so without the list their tabs
+  // cannot find their own writes and a waiter keyed on a request id would never
+  // hear its pass land. So it degrades in steps. First it keeps every writer's
+  // id and loses what each one changed — `changed: null` says "may have changed
+  // any of them", so every tab re-reads whatever another writer might have
+  // touched. Only when even the ids will not fit does the list go, and then the
+  // announcer's own `clientRequestId` and `clientAuthored` go with it: the
+  // single-writer rules those feed would otherwise let the announcer's tab keep
+  // a card another writer changed.
+  #withCoalescedWrites(
+    content: IncrementalIndexEventContent,
+    coalescedWrites: CoalescedIndexWrite[],
+  ): IncrementalIndexEventContent {
+    let full = { ...content, coalescedWrites };
+    if (encodedSize(full) <= MAX_EVENT_CONTENT_BYTES) {
+      return full;
+    }
+    let idsOnly = {
+      ...content,
+      coalescedWrites: coalescedWrites.map(({ clientRequestId }) => ({
+        clientRequestId,
+        changed: null,
+      })),
+    };
+    if (encodedSize(idsOnly) <= MAX_EVENT_CONTENT_BYTES) {
+      this.#log.warn(
+        `index event for ${this.url} reports ${coalescedWrites.length} coalesced writer(s) without the cards each changed: the event would not fit with them, so those writers will re-read each other's cards`,
+      );
+      return idsOnly;
+    }
+    this.#log.warn(
+      `index event for ${this.url} dropped coalescedWrites for ${coalescedWrites.length} writer(s): the event would not fit even their ids, so every subscriber re-reads the pass`,
+    );
+    let {
+      clientRequestId: _clientRequestId,
+      clientAuthored: _clientAuthored,
+      ...anonymous
+    } = content;
+    return anonymous;
   }
 
   private async invalidateURLs(
@@ -3049,7 +3243,7 @@ export class Realm {
       }
     }
 
-    let { invalidations, generation, invalidatedTypes } =
+    let { invalidations, generation, invalidatedTypes, sharedPass } =
       await this.updateIndexAndCollectInvalidations(
         urls.map((url) => ({ url, operation: 'update' as const })),
         { initiatedBy: requestContext.authenticatedUser ?? null },
@@ -3057,6 +3251,7 @@ export class Realm {
     this.broadcastIncrementalInvalidationEvent(invalidations, {
       generation,
       invalidatedTypes,
+      passes: [sharedPass],
     });
 
     return createResponse({
@@ -3725,6 +3920,10 @@ export class Realm {
     let deferredPrerenderHtml: DeferredPrerenderHtml | undefined;
     let carriedPrerenderHtmlChanges = () =>
       deferredPrerenderHtml?.changes ?? [];
+    // What each pass this write ran reported about sharing it, in order, so
+    // the broadcast can tell whether any of them is left for this write to
+    // announce.
+    let passes: (SharedIndexPass | undefined)[] = [];
     let performIndex = async (
       changes: IndexChange[],
       opts?: { deferPrerenderHtml?: boolean },
@@ -3734,8 +3933,13 @@ export class Realm {
         generation,
         invalidatedTypes: workingTypes,
         deferredPrerenderHtml: deferred,
+        sharedPass,
       } = await this.updateIndexAndCollectInvalidations(changes, {
         clientRequestId,
+        ...(clientAuthored ? { clientAuthored } : {}),
+        // A deferring pass is the module flush ahead of this write's own
+        // pass, which is the one it announces after.
+        announcesPass: !opts?.deferPrerenderHtml,
         initiatedBy: initiatingUser,
         // The write answers from the index once this lands, so it cannot be
         // settled by a pass that read the file before these bytes did.
@@ -3761,6 +3965,7 @@ export class Realm {
       invalidations = new Set([...invalidations, ...workingInvalidations]);
       invalidatedTypes.add({ invalidatedTypes: workingTypes });
       indexGeneration = generation ?? indexGeneration;
+      passes.push(sharedPass);
     };
 
     // Iterate modules (executable extensions) before everything else so
@@ -4157,6 +4362,12 @@ export class Realm {
       ...asUpdates(urls),
       ...deleteURLs.map((url) => ({ url, operation: 'delete' as const })),
     ];
+    let ownChanges = [
+      ...new Set([
+        ...Object.keys(versions),
+        ...changes.map(({ url }) => url.href.replace(/\.json$/, '')),
+      ]),
+    ];
     if (changes.length > 0) {
       if (waitForIndex) {
         await performIndex(changes);
@@ -4166,6 +4377,8 @@ export class Realm {
           versions,
           generation: indexGeneration,
           invalidatedTypes: invalidatedTypes.value,
+          passes,
+          ownChanges,
         });
         // Announcing what the pass invalidated is the last of the
         // invalidation, so it accumulates into the same stage as the hooks
@@ -4191,6 +4404,7 @@ export class Realm {
         // them — but it's correct for the primitive in general.
         let priorInvalidations = [...invalidations];
         let priorTypes = invalidatedTypes.value;
+        let priorPasses = [...passes];
         let carried = carriedPrerenderHtmlChanges();
         // Handed off: this pass's prerender job renders the deferred set too.
         deferredPrerenderHtml = undefined;
@@ -4198,6 +4412,7 @@ export class Realm {
           changes,
           {
             clientRequestId,
+            ...(clientAuthored ? { clientAuthored } : {}),
             initiatedBy: initiatingUser,
             ...(carried.length ? { carriedPrerenderHtmlChanges: carried } : {}),
             // Route the post-worker broadcast through onSettled so it runs
@@ -4223,6 +4438,8 @@ export class Realm {
                   versions,
                   generation: meta.generation ?? indexGeneration,
                   invalidatedTypes: types.value,
+                  passes: [...priorPasses, meta.sharedPass],
+                  ownChanges,
                 },
               );
             },
@@ -4257,12 +4474,19 @@ export class Realm {
       // whatever a mid-loop flush put there, and usually nothing at all. That
       // is why the member is documented as describing what the request wrote
       // rather than as a companion to the list beside it.
+      //
+      // A module flush that ran ahead of these byte-identical instances is the
+      // only pass behind this broadcast, and when it was shared with a writer
+      // that announces it, that writer's event already carries this one's
+      // invalidations — so `passes` goes along, and this broadcast stands down.
       this.broadcastIncrementalInvalidationEvent([...invalidations], {
         clientRequestId,
         ...(clientAuthored ? { clientAuthored } : {}),
         versions,
         generation: indexGeneration,
         invalidatedTypes: invalidatedTypes.value,
+        passes,
+        ownChanges,
       });
     }
     // A mixed batch whose instances all turned out to be byte-identical
@@ -5254,7 +5478,7 @@ export class Realm {
     await this.removeFileMeta([path]);
     let waitForIndex = options?.waitForIndex !== false;
     if (waitForIndex) {
-      let { invalidations, generation, invalidatedTypes } =
+      let { invalidations, generation, invalidatedTypes, sharedPass } =
         await this.updateIndexAndCollectInvalidations(
           [{ url, operation: 'delete' }],
           { initiatedBy: options?.initiatingUser ?? null },
@@ -5262,6 +5486,7 @@ export class Realm {
       this.broadcastIncrementalInvalidationEvent(invalidations, {
         generation,
         invalidatedTypes,
+        passes: [sharedPass],
       });
     } else {
       // Mirrors the write() waitForIndex:false path: await the durable
@@ -5278,6 +5503,7 @@ export class Realm {
             this.broadcastIncrementalInvalidationEvent(deferredInvalidations, {
               generation: meta.generation,
               invalidatedTypes: meta.invalidatedTypes,
+              passes: [meta.sharedPass],
             });
           },
         },
@@ -5327,13 +5553,14 @@ export class Realm {
     });
     // Remove file meta for all deleted paths
     await this.removeFileMeta(paths);
-    let { invalidations, generation, invalidatedTypes } =
+    let { invalidations, generation, invalidatedTypes, sharedPass } =
       await this.updateIndexAndCollectInvalidations(
         urls.map((url) => ({ url, operation: 'delete' as const })),
       );
     this.broadcastIncrementalInvalidationEvent(invalidations, {
       generation,
       invalidatedTypes,
+      passes: [sharedPass],
     });
   }
 
@@ -9876,6 +10103,20 @@ export class Realm {
         ...identity,
       });
     }
+    // A refusal about a linked card the request side-loaded is about that
+    // card, not the one being written, so it is the side-load's identity the
+    // error carries. Naming the card being written would read as that card
+    // colliding, when it had nothing wrong with it.
+    let included = includedCardOf(err.error.meta);
+    if (included) {
+      let cardError = new CardError(detail, {
+        status,
+        title,
+        ...(included.id ? { id: included.id } : {}),
+      });
+      cardError.meta = { included };
+      throw cardError;
+    }
     // Identity travels on every other branch, so it travels on this one too:
     // a refusal that names no card is harder to act on than one that does, and
     // the 412 a conditional write answers with is precisely a refusal about a
@@ -12993,13 +13234,14 @@ export class Realm {
     this.#updateItems = [];
     for (let { operation, url } of items) {
       this.sendIndexInitiationEvent(url.href);
-      let { invalidations, generation, invalidatedTypes } =
+      let { invalidations, generation, invalidatedTypes, sharedPass } =
         await this.updateIndexAndCollectInvalidations([
           { url, operation: operation === 'removed' ? 'delete' : 'update' },
         ]);
       this.broadcastIncrementalInvalidationEvent(invalidations, {
         generation,
         invalidatedTypes,
+        passes: [sharedPass],
       });
     }
     itemsDrained!();
@@ -13338,4 +13580,20 @@ interface ScreenshotServePerf {
   // even when the capture never runs), the served row's own contentType on
   // the named path.
   contentType: CaptureContentType | null;
+}
+
+// The linked card a batch refusal names, when the card it is about is one the
+// request side-loaded rather than the one it writes.
+function includedCardOf(
+  meta: Record<string, unknown> | undefined,
+): { lid: string; id?: string; adoptsFrom?: unknown } | undefined {
+  let included = meta?.included;
+  if (
+    included &&
+    typeof included === 'object' &&
+    typeof (included as { lid?: unknown }).lid === 'string'
+  ) {
+    return included as { lid: string; id?: string; adoptsFrom?: unknown };
+  }
+  return undefined;
 }

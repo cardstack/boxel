@@ -751,10 +751,13 @@ export class PgAdapter implements DBAdapter {
     return await work;
   }
 
-  // Per-matrix-user serialization barrier for billable upstream proxy calls.
-  // Two concurrent requests from the same matrix user — including across
-  // replicas with no stickiness — must not both kick off an upstream call
-  // before the prior request's cost row has landed in the credits ledger.
+  // Per-matrix-user serialization barrier for a user's credit bookkeeping.
+  // Callers hold it around the steps that read the user's balance and act on
+  // it — gating a billable call on the balance, and debiting a call's cost —
+  // so two such steps for the same matrix user never interleave, including
+  // across replicas with no stickiness. The debit reads each credit bucket
+  // before writing it, so two unserialized debits can both spend the same
+  // credits.
   //
   // Two coordination layers compose:
   //
@@ -765,8 +768,8 @@ export class PgAdapter implements DBAdapter {
   //    matrix user id serializes holders across replicas.
   //
   // Pool-pressure budget: this is the realm-server's main pool (also used
-  // by indexing / federated-search), and the critical section spans the
-  // upstream LLM call (potentially tens of seconds on streaming). Without
+  // by indexing / federated-search), and a burst of one user's calls
+  // arrives at the barrier together. Without
   // the in-process queue, N concurrent same-user requests landing on one
   // replica would each pin a pool client while blocked on the advisory
   // lock — that scales badly against the 40-client default and the
@@ -785,7 +788,7 @@ export class PgAdapter implements DBAdapter {
   //
   // The callback does NOT receive a `txQuerier` — the barrier only needs
   // serialization, not transactional grouping of the work inside it.
-  // Inner DB calls (validateCredits, saveUsageCost) run via the shared
+  // Inner DB calls (validateCredits, spendUsageCost) run via the shared
   // dbAdapter on separate pool connections as today.
   async withUserCostLock<T>(
     matrixUserId: string,
