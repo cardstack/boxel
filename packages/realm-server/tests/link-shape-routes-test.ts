@@ -23,10 +23,10 @@ import {
 } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument, Realm } from '@cardstack/runtime-common';
 import {
-  beginSearchRequest,
+  admitSearchUnconditionally,
   buildLinkShapePolicy,
-  getSearchRequestLoad,
-  getSearchRequestsInFlight,
+  getSearchInFlight,
+  getSearchSustainedInFlight,
   resetSearchAdmissionForTests,
   setSearchAdmissionForTests,
 } from '../search-inflight.ts';
@@ -427,27 +427,25 @@ module(basename(import.meta.filename), function () {
   //
   // The module above shows a response following the level its realm is held
   // at. What it cannot see is anything upstream of that level: whether a
-  // search the server answers puts load on the reading the policy decides on,
-  // and whether the policy is wired to that reading at all. Both fail in the
-  // same direction and neither fails loudly — the ladder simply stays
+  // search the server answers puts load on the gate the policy reads, whether
+  // the policy is wired to that gate at all, and whether the shipped
+  // thresholds sit anywhere a process under load can reach. All three fail in
+  // the same direction and none of them fails loudly — the ladder simply stays
   // at `full` — so a run reporting that nothing degraded reads identically
   // whether the policy declined or could never have engaged.
   //
   // This realm's policy is therefore constructed the way the realm server
-  // constructs its own: over `getSearchRequestLoad`, against the admission
-  // cap, at the thresholds and the dwell the server ships. The load is real
-  // requests counted on the process's own request count. Only the clock is
-  // supplied,
+  // constructs its own: over `getSearchSustainedInFlight`, against the
+  // admission cap, at the thresholds and the dwell the server ships. The load
+  // is real admissions taken on the process gate. Only the clock is supplied,
   // because the reading is a two-minute mean and the dwell a minute — a test
   // that waited either out would not be runnable, and one that shortened them
   // would pin numbers nobody deploys.
   //
   // The thresholds are imported rather than restated, so these assertions
   // follow a retune instead of pinning one. That is deliberate: what they claim
-  // is not that a rung sits at a particular number but that wherever it sits,
-  // the routes follow a real reading across it. Whether the shipped numbers
-  // sit where real load reaches them is a question about deployed traffic, and
-  // is answered where they are defined, not here. The ladder's own behaviour
+  // is not that a rung sits at a particular number but that wherever it sits, a
+  // real reading reaches it and the routes follow. The ladder's own behaviour
   // at a fixed pair of thresholds is `link-shape-policy-test.ts`, which
   // constructs its policy with explicit values and so describes the mechanism
   // rather than the tuning.
@@ -515,9 +513,9 @@ module(basename(import.meta.filename), function () {
       onRealmSetup,
     });
 
-    // Put `count` search requests in flight on the process's request count, the
-    // way the admission middleware counts them, hold them long enough for the
-    // mean to all but catch up, and report where the reading landed — having first pinned it inside the band the
+    // Take `count` slots on the process gate the way an in-render fan-out takes
+    // them, hold them long enough for the mean to all but catch up, and report
+    // where the reading landed — having first pinned it inside the band the
     // caller is aiming at.
     //
     // Every hold states its band, including the ones whose test would fail
@@ -532,10 +530,10 @@ module(basename(import.meta.filename), function () {
       band: { atLeast: number; below?: number },
     ): number {
       for (let i = 0; i < count; i++) {
-        held.push(beginSearchRequest());
+        held.push(admitSearchUnconditionally());
       }
       clock += SETTLE_HALF_LIVES * LINK_SHAPE_LOAD_HALF_LIFE_MS;
-      let reading = getSearchRequestLoad();
+      let reading = getSearchSustainedInFlight();
       assert.ok(
         reading >= band.atLeast,
         `${count} concurrent searches read ${reading.toFixed(2)}, at or above ${band.atLeast}`,
@@ -558,7 +556,7 @@ module(basename(import.meta.filename), function () {
       }
       held = [];
       clock += 10 * LINK_SHAPE_LOAD_HALF_LIFE_MS;
-      return getSearchRequestLoad();
+      return getSearchSustainedInFlight();
     }
 
     function cardRead() {
@@ -588,9 +586,9 @@ module(basename(import.meta.filename), function () {
     // route does not, so the tests that read one go through here.
     //
     // Every call asks a question no earlier call asked. This endpoint carries a
-    // live-search cache, and a repeated query would be answered from it —
-    // so each call here is a search that was actually decided and computed,
-    // rather than one that inherited an earlier call's body.
+    // live-search cache, and a request the cache answers hands its admission
+    // slot back before the handler reports — so a repeated query could not
+    // observe the slot it never held.
     let federatedPage = 10;
     function federatedSearch() {
       return request
@@ -649,15 +647,15 @@ module(basename(import.meta.filename), function () {
     // server answers. Asserting that a quiet realm reads zero would pass just
     // as well against a policy wired to nothing, so the reading has to be
     // moved by a request that went through the router.
-    test('a search the server answers counts as a request on the reading the ladder decides on', async function (assert) {
+    test('a search the server answers holds a slot on the gate the ladder reads', async function (assert) {
       let inFlightWhileServing: number | null = null;
       let shapes: SearchShapeEvent[] = [];
       setSearchShapeSink((event) => {
-        // The handler reports its shape with the response built and not yet
-        // sent, which is the one moment the count can be read from inside a
-        // request.
-        inFlightWhileServing ??= getSearchRequestsInFlight();
-        // The span this request stays in flight across, which is what the
+        // The handler reports its shape with the response built and its slot
+        // still held, which is the one moment the count can be read from
+        // inside a request.
+        inFlightWhileServing ??= getSearchInFlight();
+        // The span this search holds its slot across, which is what the
         // reading integrates.
         clock += LINK_SHAPE_LOAD_HALF_LIFE_MS;
         shapes.push(event);
@@ -668,12 +666,30 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(shapes.length, 1, 'the search reported one shape');
       assert.ok(
         (inFlightWhileServing ?? 0) >= 1,
-        `the search was counted as a request while it was being served, got ${inFlightWhileServing}`,
+        `the search held an admission slot while it was being served, got ${inFlightWhileServing}`,
       );
-      let reading = getSearchRequestLoad();
+      let reading = getSearchSustainedInFlight();
       assert.ok(
         reading > 0.4,
         `and one search held for one half-life moved the reading the policy decides on to ~0.5, got ${reading}`,
+      );
+    });
+
+    // The question a run that never degraded cannot answer about itself. A
+    // reading is a mean over minutes, so a process can sit at its admission
+    // ceiling and still read below a rung placed too high — in which case the
+    // ladder is unreachable and nothing says so.
+    test('a process at its admission ceiling reads above both rungs', function (assert) {
+      let reading = hold(assert, SERVER_MAX_IN_FLIGHT_SEARCHES, {
+        atLeast: LINK_SHAPE_ALL_ENGAGE_THRESHOLD,
+      });
+      assert.ok(
+        reading > LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD,
+        `and above the lower rung at ${LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD}`,
+      );
+      assert.ok(
+        reading <= SERVER_MAX_IN_FLIGHT_SEARCHES,
+        'while never exceeding the count it is a mean of',
       );
     });
 
@@ -823,7 +839,7 @@ module(basename(import.meta.filename), function () {
       policyEvents = [];
 
       clock += LINK_SHAPE_HEARTBEAT_MS;
-      let settled = getSearchRequestLoad();
+      let settled = getSearchSustainedInFlight();
       await multiRowSearch();
       assert.strictEqual(
         policy.levelFor(realmKey),
