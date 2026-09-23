@@ -10,12 +10,14 @@ import cors from '@koa/cors';
 import {
   SearchAdmissionGate,
   getSearchInFlight,
+  getRealmSearchRequestsInFlight,
   getSearchRequestsInFlight,
   getSearchShedCount,
   resetSearchAdmissionForTests,
   setSearchAdmissionForTests,
 } from '../search-inflight.ts';
 import {
+  attributeSearchRequest,
   httpLogging,
   releaseSearchAdmission,
   searchAdmission,
@@ -28,6 +30,11 @@ import {
 // the middleware's own behaviour over HTTP: which requests are gated, what a
 // shed response looks like, and that a slot is handed back however the
 // response ends.
+
+// Realm keys only; nothing here resolves them. Encoded-safe in a query string.
+const REALM_A = 'realm-a';
+const REALM_B = 'realm-b';
+const REALM_C = 'realm-c';
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -186,6 +193,9 @@ module(basename(import.meta.filename), function () {
       let search = async (ctxt: Koa.Context) => {
         if (ctxt.query.releaseEarly) {
           releaseSearchAdmission(ctxt);
+        }
+        if (typeof ctxt.query.realms === 'string') {
+          attributeSearchRequest(ctxt, ctxt.query.realms.split(','));
         }
         if (ctxt.query.hold) {
           await new Promise<void>((resolve) => {
@@ -454,6 +464,39 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(getSearchRequestsInFlight(), 0);
     });
 
+    // The gate counts a request before anything knows its realms; the handler
+    // that learns them attributes it. From then until its response ends it
+    // counts toward each realm it names, and toward no other.
+    test('a search attributed to its realms counts toward them until its response ends', async function (assert) {
+      let app = buildApp();
+      let searching = holdSearch(
+        app,
+        `/_federated-search?realms=${REALM_A},${REALM_B}`,
+      );
+      await searching.held;
+      assert.strictEqual(getRealmSearchRequestsInFlight(REALM_A), 1);
+      assert.strictEqual(
+        getRealmSearchRequestsInFlight(REALM_B),
+        1,
+        'in full toward each realm it names',
+      );
+      assert.strictEqual(
+        getRealmSearchRequestsInFlight(REALM_C),
+        0,
+        'and not toward a realm it does not',
+      );
+      assert.strictEqual(
+        getSearchRequestsInFlight(),
+        1,
+        'while the process counts it once',
+      );
+
+      holds.shift()!();
+      assert.strictEqual((await searching.response).status, 200);
+      assert.strictEqual(getRealmSearchRequestsInFlight(REALM_A), 0);
+      assert.strictEqual(getRealmSearchRequestsInFlight(REALM_B), 0);
+    });
+
     // A client that goes away mid-response never produces a `finish`, so the
     // request has to be counted out on `close` or the reading would ratchet
     // upward with every abandoned tab.
@@ -466,12 +509,17 @@ module(basename(import.meta.filename), function () {
         let client = httpRequest({
           port,
           method: 'POST',
-          path: '/_federated-search?releaseEarly=1&hold=1',
+          path: `/_federated-search?releaseEarly=1&hold=1&realms=${REALM_A}`,
         });
         client.on('error', () => {});
         client.end('{}');
         await held;
         assert.strictEqual(getSearchRequestsInFlight(), 1, 'counted');
+        assert.strictEqual(
+          getRealmSearchRequestsInFlight(REALM_A),
+          1,
+          'toward its realm too',
+        );
 
         client.destroy();
         let deadline = Date.now() + 2000;
@@ -482,6 +530,11 @@ module(basename(import.meta.filename), function () {
           getSearchRequestsInFlight(),
           0,
           'counted out when the connection closed, with the handler still holding',
+        );
+        assert.strictEqual(
+          getRealmSearchRequestsInFlight(REALM_A),
+          0,
+          'and out of its realm with it',
         );
       } finally {
         for (let release of holds) {

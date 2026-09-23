@@ -32,6 +32,7 @@ import {
   getSearchAdmissionLimit,
   getSearchInFlight,
   getSearchShedCount,
+  type SearchRequest,
 } from '../search-inflight.ts';
 
 // Matches the realm-server's search endpoints (`/_search`,
@@ -262,6 +263,23 @@ export function releaseSearchAdmission(ctxt: Koa.Context): void {
   }
 }
 
+// Where `searchAdmission` leaves the request it is counting, so the handler
+// that learns which realms the search names can attribute it to them.
+const SEARCH_REQUEST = 'searchRequest';
+
+// Count a search request toward the realms it names, from now until its
+// response ends — the reading each realm's link-shape level follows. Called by
+// whichever handler first knows the realms: the gate runs before the body is
+// parsed, and a federated search names its realms in the body. Idempotent per
+// realm, and a no-op for requests the gate did not count.
+export function attributeSearchRequest(
+  ctxt: Koa.Context,
+  realms: Iterable<string>,
+): void {
+  let searchRequest = ctxt.state[SEARCH_REQUEST] as SearchRequest | undefined;
+  searchRequest?.attribute(realms);
+}
+
 // Puts a search through the admission gate (`search-inflight.ts`). A search
 // that computes its own result holds its slot for the request's full lifecycle
 // (parse → SQL → serialize → send), which is the window in which it holds heap
@@ -289,7 +307,7 @@ export async function searchAdmission(ctxt: Koa.Context, next: Koa.Next) {
   let arrivedAt = Date.now();
   let closed = false;
   let release: (() => void) | undefined;
-  let endRequest: (() => void) | undefined;
+  let searchRequest: SearchRequest | undefined;
   let releaseSlot = () => {
     release?.();
     release = undefined;
@@ -300,8 +318,8 @@ export async function searchAdmission(ctxt: Koa.Context, next: Koa.Next) {
   // response ends, and that is the count the link-shape policy reads.
   let end = () => {
     releaseSlot();
-    endRequest?.();
-    endRequest = undefined;
+    searchRequest?.end();
+    searchRequest = undefined;
   };
   ctxt.state[SEARCH_ADMISSION_RELEASE] = releaseSlot;
   // `finish` fires on a fully-sent response; `close` covers a connection
@@ -334,7 +352,8 @@ export async function searchAdmission(ctxt: Koa.Context, next: Koa.Next) {
   // its close had already fired would never be ended — and a leaked request,
   // unlike a leaked slot, holds the replica's load reading up until restart.
   if (!closed) {
-    endRequest = beginSearchRequest();
+    searchRequest = beginSearchRequest();
+    ctxt.state[SEARCH_REQUEST] = searchRequest;
   }
   return next();
 }
