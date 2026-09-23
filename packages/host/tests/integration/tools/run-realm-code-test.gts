@@ -2,6 +2,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
+import runRealmCode from '@cardstack/host/lib/realm-runner/runner';
 import RunRealmCodeTool from '@cardstack/host/tools/run-realm-code';
 
 import {
@@ -81,5 +82,25 @@ module('Integration | tools | run-realm-code', function (hooks) {
     let source = await cardService.getSource(new URL(fileUrl));
     assert.strictEqual(source.status, 200);
     assert.strictEqual(source.content, '{\n  "title": "New task"\n}\n');
+  });
+
+  test('a script that never returns is stopped by the sandbox, not by the caller', async function (assert) {
+    // The deadline belongs to QuickJS, which interrupts the script itself. The
+    // caller's timer is only a backstop for a worker that stops answering, so a
+    // runaway script must report the interrupt — a caller timeout here would
+    // mean the budget is being spent on something other than the script.
+    let error: Error | undefined;
+    try {
+      await runRealmCode({
+        code: 'while (true) {}',
+        files: [],
+        timeoutMs: 500,
+      });
+    } catch (e) {
+      error = e as Error;
+    }
+
+    assert.ok(error, 'the run rejected');
+    assert.strictEqual(error?.message, 'interrupted');
   });
 });

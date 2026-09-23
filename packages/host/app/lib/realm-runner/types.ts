@@ -24,7 +24,9 @@ export interface RealmRunnerRequest {
 }
 
 export interface RealmRunnerResponse {
-  type: 'success' | 'error';
+  // `ready` arrives once the worker has loaded QuickJS. It separates the cost
+  // of starting the sandbox from the time the submitted script is allowed.
+  type: 'ready' | 'success' | 'error';
   result?: RealmRunnerResult;
   error?: string;
 }

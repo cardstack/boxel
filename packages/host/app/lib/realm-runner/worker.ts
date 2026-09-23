@@ -11,6 +11,22 @@ const worker = globalThis as unknown as {
   postMessage(message: RealmRunnerResponse): void;
 };
 
+// Load QuickJS as soon as the worker starts rather than when the first request
+// arrives, so the WASM fetch and compile overlap with the message round trip.
+// Announcing `ready` lets the caller time the submitted script alone; startup
+// can take seconds on a cold cache and is not the script's cost to bear.
+const quickJSReady = getQuickJS();
+quickJSReady.then(
+  () => worker.postMessage({ type: 'ready' }),
+  (error: unknown) =>
+    worker.postMessage({
+      type: 'error',
+      error: `Realm runner failed to load QuickJS: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    }),
+);
+
 worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
   let request = event.data;
   if (request.type !== 'run') {
@@ -18,7 +34,7 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
   }
 
   try {
-    let QuickJS = await getQuickJS();
+    let QuickJS = await quickJSReady;
     let runtime = QuickJS.newRuntime();
     runtime.setMemoryLimit(8 * 1024 * 1024);
     runtime.setMaxStackSize(512 * 1024);
