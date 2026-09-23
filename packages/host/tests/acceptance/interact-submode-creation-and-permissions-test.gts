@@ -1000,12 +1000,14 @@ module(
           .containsText('Reddit');
 
         // Verify the filter icon is displayed
-        assert.dom('.content-icon').exists();
+        assert.dom('[data-test-cards-grid-header-icon]').exists();
 
-        // Verify the content header has the border bottom
-        assert
-          .dom('.content-header')
-          .hasStyle({ 'border-bottom': '1px solid rgb(226, 226, 226)' });
+        // The header rules off the content below it. Its color is the theme's
+        // --border, so only the presence of the rule is asserted here.
+        assert.dom('[data-test-cards-grid-header]').hasStyle({
+          'border-bottom-width': '1px',
+          'border-bottom-style': 'solid',
+        });
 
         // Test switching to "All Cards" filter to verify highlights layout is hidden
         await click('[data-test-boxel-filter-list-button="All Cards"]');

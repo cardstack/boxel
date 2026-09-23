@@ -134,9 +134,9 @@ export default class CardsGridLayout extends Component<Signature> {
         tabindex='0'
         aria-label={{@activeFilter.displayName}}
       >
-        <header class='content-header'>
+        <header class='content-header' data-test-cards-grid-header>
           {{#if @activeFilter.icon}}
-            <div class='content-icon'>
+            <div class='content-icon' data-test-cards-grid-header-icon>
               {{#if (this.isIconString @activeFilter.icon)}}
                 {{htmlSafe @activeFilter.icon}}
               {{else}}

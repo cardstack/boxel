@@ -216,10 +216,6 @@ export class ListItem<F extends Filter = Filter> extends Component<
           transform: rotate(0deg);
         }
         .filter-list__button {
-          /* the count or the action slot follows on the right, so the button
-             itself ends close to its content */
-          --boxel-button-padding: var(--boxel-sp-4xs) var(--boxel-sp-5xs)
-            var(--boxel-sp-4xs) var(--boxel-sp-sm);
           flex-grow: 1;
           width: 100%;
           min-width: 0;
@@ -233,6 +229,13 @@ export class ListItem<F extends Filter = Filter> extends Component<
           max-width: 100%;
           overflow: hidden;
           text-align: left;
+        }
+        /* when a control follows the button (the action slot or the group
+           toggle), the button ends close to its content and the control
+           carries the edge */
+        .filter-list__button:has(+ *) {
+          --boxel-button-padding: var(--boxel-sp-4xs) var(--boxel-sp-5xs)
+            var(--boxel-sp-4xs) var(--boxel-sp-sm);
         }
         .filter-list__button:hover,
         .filter-list__button:focus {
