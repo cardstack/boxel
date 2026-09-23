@@ -42,6 +42,24 @@ const personGts = `
   }
 `;
 
+// A type that specializes `read`: a reader is sent only the headline, never
+// the salary the stored file holds.
+const projectedGts = `
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+  import { operation, bxl } from "@cardstack/base/operations";
+
+  export class ProjectedReport extends CardDef {
+    @field headline = contains(StringField);
+    @field salary = contains(StringField);
+
+    @operation static read = {
+      base: 'read',
+      output: bxl\`{data: {type: "card", id: .data.id, attributes: {headline: .data.attributes.headline}, meta: .data.meta}}\`,
+    };
+  }
+`;
+
 // Well past the create's budget, and well short of the read drain's, so a
 // create that waited on the lane — or a read that drained behind it — cannot
 // pass for one that answered from the file.
@@ -64,6 +82,7 @@ module(basename(import.meta.filename), function () {
       },
       fileSystem: {
         'person.gts': personGts,
+        'projected.gts': projectedGts,
       },
       createIndexWaitBudgetMs: CREATE_BUDGET_MS,
       onRealmSetup(args: {
@@ -166,6 +185,11 @@ module(basename(import.meta.filename), function () {
           'Van Gogh',
           'the read returns the card just created',
         );
+        assert.strictEqual(
+          read.body.data.meta?.version,
+          undefined,
+          'with no version, so the reader re-reads the card when its row lands',
+        );
 
         let head = await request
           .head(new URL(id).pathname)
@@ -212,6 +236,52 @@ module(basename(import.meta.filename), function () {
           await release();
           await realm.incrementalIndexing();
         }
+      }
+    });
+
+    test('behind a held lane, a card whose type specializes read is not served from its file', async function (assert) {
+      assert.timeout(60_000);
+      let release = await holdIndexingLane();
+      try {
+        let create = await request
+          .post('/')
+          .set('Accept', 'application/vnd.card+json')
+          .set('Authorization', auth())
+          .send({
+            data: {
+              type: 'card',
+              attributes: { headline: 'Quarterly', salary: 'confidential' },
+              meta: {
+                adoptsFrom: {
+                  module: rri(`${realmURL.href}projected`),
+                  name: 'ProjectedReport',
+                },
+              },
+            },
+          });
+        assert.strictEqual(create.status, 201, `HTTP 201: ${create.text}`);
+        let id = create.body.data.id as string;
+
+        let read = await request
+          .get(new URL(id).pathname)
+          .set('Accept', 'application/vnd.card+json')
+          .set('Authorization', auth());
+        assert.strictEqual(
+          read.status,
+          404,
+          `the read waits for the row the projection is computed from: ${read.text}`,
+        );
+        assert.true(
+          read.body.errors?.[0]?.awaitingIndex,
+          'and says the card is on its way',
+        );
+        assert.false(
+          read.text.includes('confidential'),
+          'nothing the projection withholds is sent',
+        );
+      } finally {
+        await release();
+        await realm.incrementalIndexing();
       }
     });
   });

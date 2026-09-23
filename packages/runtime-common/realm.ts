@@ -143,6 +143,7 @@ import {
 import {
   systemError,
   notFound,
+  notIndexedYet,
   notAcceptable,
   methodNotAllowed,
   badRequest,
@@ -2918,6 +2919,9 @@ export class Realm {
       // Invalidation sets earlier passes of this same write deferred, folded
       // into the prerender_html job this pass spawns.
       carriedPrerenderHtmlChanges?: IncrementalChange[];
+      // Whether the caller reads the index for these urls once the pass
+      // lands. See `updateIndexAndCollectInvalidations`.
+      readsOwnWrite?: boolean;
       onSettled?: (
         invalidations: string[],
         meta: IncrementalIndexMeta,
@@ -2940,6 +2944,7 @@ export class Realm {
       ...(opts?.carriedPrerenderHtmlChanges?.length
         ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
         : {}),
+      ...(opts?.readsOwnWrite ? { readsOwnWrite: true } : {}),
       onInvalidation: async (invalidatedURLs: URL[], meta) => {
         await this.clearRealmIndexCachesAndBroadcast();
         await this.touchSourceRealmUpdatedAt();
@@ -4239,6 +4244,10 @@ export class Realm {
             clientRequestId,
             initiatedBy: initiatingUser,
             ...(carried.length ? { carriedPrerenderHtmlChanges: carried } : {}),
+            // A caller waiting on the pass reads the index for these urls when
+            // it lands, so it cannot be settled by a pass that read the files
+            // before these bytes did.
+            ...(options?.onIndexQueued ? { readsOwnWrite: true } : {}),
             // Route the post-worker broadcast through onSettled so it runs
             // INSIDE the indexing deferred lifecycle. Without this, the
             // broadcast would fire from an outer .then() after the deferred
@@ -8705,19 +8714,27 @@ export class Realm {
       return notFound(request, requestContext);
     }
     let url = this.paths.fileURL(localPath);
-    // The version is the fingerprint the write recorded over the bytes it
-    // stored. Not recomputed here when there is none: this is the decoded
-    // text, not the bytes, and a hash over it can disagree with the one every
-    // other answer for the card reports.
-    let version = this.#dbAdapter
-      ? (await getContentMeta(this.#dbAdapter, this.url, sourcePath))
-          .contentHash
-      : undefined;
+    if (await this.#declaresRead(parsed, url)) {
+      // A type that specializes `read` decides what a reader is sent — an
+      // `output` can project the document by who is asking — and the file is
+      // what that projection is computed from, not what it produces. Serving
+      // the bytes would hand every reader the fields the projection exists to
+      // withhold, so such a card waits for its row like before.
+      return notIndexedYet(request, requestContext);
+    }
+    // No `version`, though the write recorded one. The file was read before
+    // the recorded fingerprint could be, and another write between the two
+    // would pair these bytes with the next write's version — a stale edit
+    // would then pass as based on the current card. It also keeps the reader
+    // re-reading the card when its row lands: the index event reports the
+    // card's version, and a reader already holding that version takes the
+    // event as nothing new, which would leave it without what only the index
+    // supplies.
     let doc = await this.serializedInstanceEcho(
       parsed,
       url.href,
       source.lastModified,
-      version,
+      undefined,
     );
     this.#serveInstanceIdsAsRRI(doc);
     let created = await this.getCreatedTime(sourcePath);
@@ -8739,21 +8756,75 @@ export class Realm {
   }
 
   // Whether a card+json read of `url` should be answered from the card's file
-  // before it waits on anyone's indexing: the realm has a pass in flight and
-  // the index has no row for the card, so there is nothing a wait could make
-  // fresher than the file already is — only a row that does not exist yet.
+  // before the read-your-writes drain: it is a read the drain would hold, the
+  // index has no row for the card, and there is a card source to serve. With
+  // no row there is nothing a wait could make fresher than the file already
+  // is. Every other read reaches the same file-backed answer, if it applies,
+  // on the ordinary path — this only spares the reads the drain would park.
+  //
   // A card whose row exists (clean or errored) waits as it always has, since
   // there the row may be the one the requester's own write is superseding,
   // and so does a path with no card source at all — an uploaded file asked
   // for as card+json is answered with its metadata, not as a card.
-  async #readsPendingCard(url: URL, localPath: LocalPath): Promise<boolean> {
-    if (!this.incrementalIndexing()) {
+  async #readsPendingCard(
+    request: Request,
+    requestContext: RequestContext,
+    url: URL,
+    localPath: LocalPath,
+  ): Promise<boolean> {
+    if (!this.#drainWouldWait(request, requestContext)) {
       return false;
     }
     if (!(await this.#adapter.exists(`${localPath}.json`))) {
       return false;
     }
     return (await this.#realmIndexQueryEngine.instance(url)) === undefined;
+  }
+
+  // Whether `drainRequestersOwnIndexing` would hold this request, by the same
+  // rules it applies.
+  #drainWouldWait(request: Request, requestContext: RequestContext): boolean {
+    if (
+      !this.incrementalIndexing() ||
+      isDuringPrerenderRequest(request) ||
+      requestContext.anonymous
+    ) {
+      return false;
+    }
+    let requester = requestContext.authenticatedUser;
+    return (
+      requester === undefined ||
+      this.#realmIndexUpdater.incrementalIndexingInitiatedBy(requester) !==
+        undefined
+    );
+  }
+
+  // Whether the card's type declares its own `read`. Resolved from the type
+  // the stored file names, because the operation dispatch reads the type off
+  // the index row, and a card being answered from its file has none. A type
+  // that cannot be resolved has declared nothing this can see, which is how
+  // the dispatch treats it too.
+  async #declaresRead(
+    doc: LooseSingleCardDocument,
+    url: URL,
+  ): Promise<boolean> {
+    let definition;
+    try {
+      definition = await this.#definitionLookup.lookupDefinition(
+        codeRefWithAbsoluteIdentifier(
+          doc.data.meta.adoptsFrom,
+          url,
+          undefined,
+          this.#virtualNetwork,
+        ) as ResolvedCodeRef,
+      );
+    } catch {
+      return false;
+    }
+    return Boolean(
+      definition?.operations &&
+      Object.prototype.hasOwnProperty.call(definition.operations, 'read'),
+    );
   }
 
   private async fileMetaDocument(
@@ -9295,28 +9366,8 @@ export class Realm {
         (await timings.time('awaitIndex', () =>
           settledBy(pendingPass, Date.now() + this.#createIndexWaitBudgetMs),
         )));
-    let doc: SingleCardDocument;
-    if (!landed) {
-      // See serializedInstanceEcho: the write indexed deferred, so there is
-      // nothing to read back yet. The document is the one the commit stored,
-      // reported by the batch rather than read back off the file — which has
-      // been open to every other writer since the commit released the lock.
-      let stored = storedCardDocument(result);
-      if (!stored) {
-        return systemError({
-          requestContext,
-          message: `Unable to report newly created card: ${newURL}, the commit reported no stored document`,
-          id: newURL,
-          lid,
-        });
-      }
-      doc = await this.serializedInstanceEcho(
-        stored,
-        newURL,
-        lastModified,
-        version,
-      );
-    } else {
+    let doc: SingleCardDocument | undefined;
+    if (landed) {
       // The readback asks for the written card and nothing around it: no
       // `loadLinks`, so neither the transitive closure of the card's links nor
       // the query a query-backed field would run to name its targets.
@@ -9338,23 +9389,50 @@ export class Realm {
       let entry = await timings.time('readback', () =>
         this.#realmIndexQueryEngine.cardDocument(new URL(newURL)),
       );
-      if (!entry || entry?.type === 'error') {
-        let err = entry
-          ? CardError.fromSerializableError(entry.error)
-          : undefined;
+      if (entry?.type === 'error') {
         return systemError({
           requestContext,
           message: `Unable to index newly created card: ${newURL}, can't find new instance in index`,
-          additionalError: err,
+          additionalError: CardError.fromSerializableError(entry.error),
           id: newURL,
         });
       }
-      doc = merge({}, entry.doc, {
-        data: {
-          links: { self: newURL },
-          meta: { lastModified, ...(version != null ? { version } : {}) },
-        },
-      });
+      if (entry) {
+        doc = merge({}, entry.doc, {
+          data: {
+            links: { self: newURL },
+            meta: { lastModified, ...(version != null ? { version } : {}) },
+          },
+        });
+      } else {
+        // The pass settled without leaving a row — it failed, or it was not
+        // the pass that read these bytes. The card is on disk under its id
+        // either way, so it is answered from what was stored rather than
+        // refused: a refusal here reads as "nothing was created", and a
+        // client that retries creates the card a second time.
+        landed = false;
+      }
+    }
+    if (!doc) {
+      // See serializedInstanceEcho: the write indexed deferred, so there is
+      // nothing to read back yet. The document is the one the commit stored,
+      // reported by the batch rather than read back off the file — which has
+      // been open to every other writer since the commit released the lock.
+      let stored = storedCardDocument(result);
+      if (!stored) {
+        return systemError({
+          requestContext,
+          message: `Unable to report newly created card: ${newURL}, the commit reported no stored document`,
+          id: newURL,
+          lid,
+        });
+      }
+      doc = await this.serializedInstanceEcho(
+        stored,
+        newURL,
+        lastModified,
+        version,
+      );
     }
     this.#serveInstanceIdsAsRRI(doc);
     // The last sequential leg: turning the assembled document into the bytes
@@ -10308,7 +10386,7 @@ export class Realm {
     let url = this.paths.fileURL(localPath);
     // The headers the `GET` would send, which for a card whose row is not
     // there yet are the file-backed answer's.
-    if (await this.#readsPendingCard(url, localPath)) {
+    if (await this.#readsPendingCard(request, requestContext, url, localPath)) {
       return await this.#pendingCardResponse(
         request,
         requestContext,
@@ -10498,7 +10576,7 @@ export class Realm {
       localPath = 'index';
     }
     let url = this.paths.fileURL(localPath);
-    if (await this.#readsPendingCard(url, localPath)) {
+    if (await this.#readsPendingCard(request, requestContext, url, localPath)) {
       return await this.#pendingCardResponse(
         request,
         requestContext,
