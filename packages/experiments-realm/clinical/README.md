@@ -127,8 +127,10 @@ Three things about it are worth knowing before copying the pattern:
 - **A file's class comes from its extension, and nothing in this realm
   configures it.** The platform types every `.log` as `LogFile` and every
   `.jsonl` as `JSONLFile`, which declares the same `record` and appends each
-  entry as one JSON object instead of a line of text. Naming `LogFile` on the
-  field is what gives the batch handle its `record` member.
+  entry as one JSON object instead of a line of text. The linked log is a
+  `LogFile` because of its extension, whatever the field names; naming
+  `LogFile` on the field is what types `record` on the batch handle and keeps
+  the file picker to `.log` files.
 - **`appendLine` creates the file it appends to**, so nothing here has to
   exist first, and a declaration adds a name rather than taking the base
   operations away: `b.on(log).appendLine({ line })` still works on a log.
