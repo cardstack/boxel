@@ -534,15 +534,27 @@ export default class RenderRoute extends Route<Model> {
         });
         this.store.resetCache();
         (globalThis as any).__boxelLoaderEpoch = parsedOptions.loaderEpoch;
-        loaderResetReason = 'loaderEpoch';
+        // Which of the two the row should name is a question about blame,
+        // not about whether the graph was warm — it always is. A pooled tab
+        // boots the host app before it serves anything, so the loader has
+        // evaluated modules by the time any visit arrives, and a reset always
+        // discards something.
+        //
+        // An absent held epoch means this tab had never synchronized to this
+        // realm's epoch series: the discard is the price of where the pool ran
+        // the pass, and the pass did nothing to earn it. A held epoch that
+        // moved means the series advanced, so an executable changed and the
+        // discard follows from that change.
+        loaderResetReason = held === undefined ? 'firstEpoch' : 'loaderEpoch';
       }
     }
     if (parsedOptions.clearCache) {
       // Never overwrites: the two fire together on the first visit of a pass
       // that invalidated an executable, because the condition that mints a
-      // fresh epoch is the condition that arms the flag. The epoch is the
-      // reset that reached every other tab serving that pass, so it is the
-      // one the row should name.
+      // fresh epoch is the condition that arms the flag. The epoch block
+      // above already named the reset that reached every other tab serving
+      // that pass, or named the cold tab that had no graph for any of this
+      // to be about, and either is the more specific reading.
       loaderResetReason ??= 'clearCache';
       this.loaderService.resetLoader({
         clearFetchCache: true,
