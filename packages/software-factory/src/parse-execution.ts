@@ -22,13 +22,15 @@ import {
   symlinkSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve, dirname, sep } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { specRef } from '@cardstack/runtime-common/constants';
 import { PREFIX_REALMS } from '@cardstack/runtime-common/realm-prefixes';
 import {
   REALM_CACHE_DIR,
+  createStagedDiagnosticSink,
+  isSilentSetupFailure,
   stageRealmSources,
 } from '@cardstack/runtime-common/realm-source-staging';
 
@@ -675,7 +677,7 @@ export async function runGlintCheck(
       writeFileSync(resolved, file.content, 'utf8');
     }
 
-    let { realmPaths, shimmedPrefixes, failures } = await stageRealmSources({
+    let { realmPaths, warnings: stagingWarnings } = await stageRealmSources({
       tempDir,
       files,
       prefixes: RESOLVABLE_PREFIXES,
@@ -685,17 +687,7 @@ export async function runGlintCheck(
       onWarn: (message) => log.warn(message),
     });
 
-    let warnings: string[] = [];
-    for (let failure of failures) {
-      warnings.push(
-        `Could not fetch realm module ${failure.specifier} (${failure.reason}) — this check ran against an incomplete copy of that realm's code.`,
-      );
-    }
-    if (shimmedPrefixes.length > 0) {
-      warnings.push(
-        `Realm prefix(es) ${shimmedPrefixes.join(', ')} could not be resolved; their imports were typed as 'any', so card-level adoption from them was not actually type-checked.`,
-      );
-    }
+    let warnings: string[] = [...stagingWarnings];
 
     let tsconfig = {
       compilerOptions: {
@@ -813,9 +805,7 @@ export async function runGlintCheck(
 
     let errors: ParseErrorData[] = [];
     let inputDiagnosticLines = 0;
-    let stagedDiagnosticLines = 0;
-    let stagedDiagnosticSamples: string[] = [];
-    let stagedCacheRoot = join(tempDir, REALM_CACHE_DIR);
+    let stagedDiagnostics = createStagedDiagnosticSink(tempDir);
     let lines = output.split('\n');
 
     // tsc elaborates many diagnostics ("Types of property 'x' are
@@ -847,21 +837,14 @@ export async function runGlintCheck(
       let [, filePath, lineStr, colStr, tsCode, message] = match;
 
       let absolutePath = resolve(tempDir, filePath);
-      // `exclude` only keeps staged realm sources from being *root* files — a
-      // file imported by a checked file still enters the program and still
-      // produces diagnostics. Staged sources are third-party code checked
-      // under a tsconfig not written for them, so their diagnostics are not
-      // the author's errors and are dropped — but partitioned into their own
-      // counter, because folding them into `inputDiagnosticLines` would
-      // disarm the setup-failure fallback below and let a non-zero ember-tsc
-      // exit read as a clean pass.
-      if (absolutePath.startsWith(stagedCacheRoot + sep)) {
-        stagedDiagnosticLines++;
-        if (stagedDiagnosticSamples.length < 3) {
-          stagedDiagnosticSamples.push(
-            `${absolutePath.slice(tempDir.length + 1)}(${lineStr},${colStr}): ${tsCode}: ${message}`,
-          );
-        }
+      if (
+        stagedDiagnostics.trackIfStaged(absolutePath, {
+          line: lineStr,
+          column: colStr,
+          tsCode,
+          message,
+        })
+      ) {
         continue;
       }
 
@@ -890,17 +873,18 @@ export async function runGlintCheck(
       errors.push(current);
     }
 
-    if (stagedDiagnosticLines > 0) {
-      warnings.push(
-        `ember-tsc reported ${stagedDiagnosticLines} diagnostic(s) in fetched realm sources rather than in the checked files (e.g. ${stagedDiagnosticSamples[0]}). These are dropped — staged realm code is not what this run checks. If they name missing modules, the fetch-failure warnings above carry the cause.`,
-      );
+    let stagedWarning = stagedDiagnostics.warning();
+    if (stagedWarning) {
+      warnings.push(stagedWarning);
     }
 
     if (
-      exitedWithError &&
-      errors.length === 0 &&
-      inputDiagnosticLines === 0 &&
-      stagedDiagnosticLines === 0
+      isSilentSetupFailure({
+        exitedWithError,
+        errorCount: errors.length,
+        inputDiagnosticLines,
+        stagedDiagnosticLines: stagedDiagnostics.count(),
+      })
     ) {
       let truncatedOutput = output.slice(0, 500).trim();
       errors.push({
