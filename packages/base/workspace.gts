@@ -558,15 +558,18 @@ class Isolated extends Component<typeof Workspace> {
         {{#if @model.signage}}
           {{! workspace signage; the purpose annotation shows on hover or focus
             and is read after the badge text }}
-          <Tooltip @placement='bottom'>
-            <:trigger>
-              <span class='signage kicker' tabindex={{if @model.purpose '0'}}>
-                {{@model.signage}}{{#if @model.purpose}}<span
-                    class='boxel-sr-only'
-                  >: {{@model.purpose}}</span>{{/if}}</span>
-            </:trigger>
-            <:content>{{@model.purpose}}</:content>
-          </Tooltip>
+          {{#if @model.purpose}}
+            <Tooltip @placement='bottom'>
+              <:trigger>
+                <span class='signage kicker' tabindex='0'>
+                  {{@model.signage}}<span class='boxel-sr-only'>:
+                    {{@model.purpose}}</span></span>
+              </:trigger>
+              <:content>{{@model.purpose}}</:content>
+            </Tooltip>
+          {{else}}
+            <span class='signage kicker'>{{@model.signage}}</span>
+          {{/if}}
         {{/if}}
         <div class='frame-actions' data-test-frame-actions>
           <div

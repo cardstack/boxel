@@ -37,7 +37,9 @@ export default class FilterList<F extends Filter = Filter> extends Component<
 > {
   <template>
     <ul class='filter-list' role='tree' ...attributes>
-      {{#each @filters key='displayName' as |filter|}}
+      {{! keyed by identity: two filters may share a display name (two card
+          types called "Note") and only the caller's objects are unique }}
+      {{#each @filters key='@identity' as |filter|}}
         <ListItem
           @filter={{filter}}
           @onChanged={{@onChanged}}
