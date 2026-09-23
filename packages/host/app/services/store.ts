@@ -1031,6 +1031,7 @@ export default class StoreService extends Service implements StoreInterface {
       getQueryableValue: api.getQueryableValue,
       formatQueryValue: api.formatQueryValue,
       peekAtField: api.peekAtField,
+      isQueryTaintedField: api.isQueryTaintedField,
       isNonPresentLink: api.isNonPresentLink,
       getCardMeta: api.getCardMeta as CardAPIForMatching['getCardMeta'],
       primitive: api.primitive,
