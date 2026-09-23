@@ -12,9 +12,9 @@ import { TextFileDef } from './text-file-def';
 export class LogFile extends TextFileDef {
   static displayName = 'Log File';
   static icon = LogsIcon;
-  // mime-db resolves `.log` to `text/plain`, so the file chooser offers logs
-  // by extension first and by that type second.
-  static acceptTypes = '.log,text/plain';
+  // By extension only: `.log` shares `text/plain` with `.txt`, and a `.txt`
+  // attached here would be a `TextFileDef`, which declares no `record`.
+  static acceptTypes = '.log';
   static textExtensions: readonly string[] = ['.log'];
   static fileKind = 'Log';
 
