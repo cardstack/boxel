@@ -9,11 +9,14 @@
 // depends on concurrency, which the client cannot observe and a fixed choice
 // cannot track.
 //
-// The realm server's existing answer to pressure is to refuse work — a `429`
-// once in-flight searches reach the admission cap. Degrading a response is
-// gentler than rejecting a request, so this sits one rung earlier on the same
-// ladder: under sustained load a read is served a cheaper representation, and
-// the caller fetches the linked cards it actually displays.
+// The realm server's other answer to pressure is to refuse work — a `429` for
+// a request still queued when the admission cap stays full past the admission
+// wait. That is a response to bursts against the instantaneous cap. This one
+// is a response to sustained load: under it a read is served a cheaper
+// representation, and the caller fetches the linked cards it actually
+// displays. The two act on different counts over different spans, so neither
+// is placed relative to the other; a process can shed on a burst while its
+// sustained reading sits below the lower rung.
 //
 // # Three levels, because the two costs scale differently
 //
@@ -176,8 +179,10 @@ export interface LinkShapePolicyEvent {
   // stable operation from flapping, and flapping is the specific failure this
   // design risks given the validator and response-cache coupling.
   dwellMs: number | null;
-  // The reading the decision was taken on, and the cap it is measured
-  // against.
+  // The reading the decision was taken on, and the process's admission cap
+  // beside it. The two are in different units — the reading counts requests,
+  // the cap counts the computations among them — so the reading can exceed
+  // the cap, and does whenever the live-search cache is coalescing.
   load: number;
   limit: number;
   // How many realms this process has served since start, counted at the level
@@ -186,6 +191,15 @@ export interface LinkShapePolicyEvent {
   // unmounted keeps being counted, and one that is mounted but unread is
   // absent. Heartbeat only — on a transition these would describe the moment
   // after the change and invite being read as its cause.
+  //
+  // A count here is a *recorded* level, not a served one. A realm's level is
+  // re-evaluated only when that realm is read, never on a timer, so a realm
+  // whose readers left while it was degraded stays counted at that level for
+  // however long it goes unread — well past the point its reading fell under
+  // the release. Nobody is served that level in the meantime: the first read
+  // to arrive is decided against the current reading, releases the realm, and
+  // is served the shape the release allows. So a realm counted at `multi-row`
+  // after load has ended is idle at a stale level, not sitting degraded.
   realmsAtFull: number | null;
   realmsAtMultiRow: number | null;
   realmsAtAll: number | null;
@@ -227,11 +241,13 @@ interface RealmState {
 }
 
 export interface LinkShapePolicyOptions {
-  // The sustained in-flight reading the policy decides on. A policy built
-  // without one is pinned — see `LinkShapePolicy.pinned`.
+  // The reading the policy decides on: the sustained count of search requests
+  // in flight, joiners included. A policy built without one is pinned — see
+  // `LinkShapePolicy.pinned`.
   readLoad?: () => number;
-  // The admission cap the reading is measured against. Reported alongside every
-  // decision so a threshold is legible next to the ceiling it sits below.
+  // The process's admission cap. Reported alongside every decision for
+  // context; it does not bound the thresholds, since it counts computations
+  // and the reading counts requests.
   limit?: number;
   multiRowEngage?: number;
   multiRowRelease?: number;
@@ -266,7 +282,6 @@ export class LinkShapePolicy {
         opts.multiRowRelease ?? LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD,
         opts.allRelease ?? LINK_SHAPE_ALL_RELEASE_THRESHOLD,
       ],
-      this.#limit,
     );
     this.#engage = engage;
     this.#release = release;
@@ -509,30 +524,36 @@ export function rowClassForPageSize(
 // two-way.
 const MIN_RELEASE = 0.5;
 
-// Keep the ladder monotonic and under the cap it is measured against.
+// Keep the ladder monotonic and every band two-way.
 //
-// Three invariants matter and none is guaranteed by the env overrides that
+// Two invariants matter and neither is guaranteed by the env overrides that
 // feed this: a release at or above its own engage would make a level
 // self-cancelling (it would engage and immediately release, once per dwell
-// interval, forever); an engage at or above the admission cap would put the
-// rung past the point where the process has already started shedding, which is
-// precisely the ordering this policy exists to invert; and a release of zero
-// would make the rung a one-way door, since the reading it is compared against
-// is a decaying exponential mean that reaches exactly zero only by float
-// underflow — about a day and a half of unbroken idleness at the shipped
-// half-life. The env parser floors the release knobs at zero, so that last one
-// is a plausible number an operator can type.
+// interval, forever); and a release of zero would make the rung a one-way
+// door, since the reading it is compared against is a decaying exponential
+// mean that reaches exactly zero only by float underflow — about a day and a
+// half of unbroken idleness at the shipped half-life. The env parser floors the
+// release knobs at zero, so that last one is a plausible number an operator
+// can type.
+//
+// There is deliberately no ceiling from the admission cap. The cap counts
+// slots — computations — and the reading counts requests, which exceed the
+// slots by however much the live-search cache is coalescing, so a request
+// reading well past the cap is ordinary rather than impossible. Nor can the
+// ordering "engage before shedding starts" be expressed as a sustained reading
+// in either unit: sheds are driven by bursts against the instantaneous cap,
+// and they begin at sustained readings ranging from under one (a burst from
+// idle) to the high teens on loads where engaging is measured to help. An
+// engage set too high for the traffic simply never engages, which is visible
+// on the heartbeat.
 function normalizeThresholds(
   engage: [number, number],
   release: [number, number],
-  limit: number,
 ): { engage: [number, number]; release: [number, number] } {
-  // Every engage at least one clear of the release below it, and strictly
-  // below the cap, so both bands have width and both rungs sit under the point
-  // where the process shed.
-  let ceiling = Math.max(MIN_RELEASE + 1, limit - 1);
-  let multiRowEngage = Math.min(Math.max(engage[0], MIN_RELEASE + 1), ceiling);
-  let allEngage = Math.min(Math.max(engage[1], multiRowEngage), ceiling);
+  // Every engage at least one clear of the release below it, so both bands
+  // have width.
+  let multiRowEngage = Math.max(engage[0], MIN_RELEASE + 1);
+  let allEngage = Math.max(engage[1], multiRowEngage);
   // Every release reachable by the reading, and strictly below its own engage.
   let multiRowRelease = Math.min(
     Math.max(release[0], MIN_RELEASE),
