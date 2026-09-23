@@ -52,6 +52,8 @@ Don't copy a catalog definition into this repo, whether as a base module, a test
 
 The order matters, because the deployed catalog is boxel-catalog `main`, not the pin.
 
+**Platform code the definition depends on goes first.** A serializer, a `runtime-common` type or export, or a base module the definition imports must already be on boxel `main` before the catalog PR merges. The deployed catalog runs against the deployed platform, and the catalog repo's own lint and tests check out boxel `main`. Land that platform code in its own boxel PR, keep the definition out of `packages/base`, and until it merges, expect the catalog PR's lint to fail on the missing export.
+
 1. **Open the boxel-catalog PR first, on a branch with the same name as the boxel branch.**
 2. **In the boxel PR**, add or keep the manifest entry and set `revision` to the catalog PR's head sha (a commit on a pushed branch fetches fine). Re-pin whenever you push to the catalog PR.
 3. **Validate the catalog PR against boxel.** boxel-catalog's `Boxel Test Subset` workflow runs the manifest's `tests` consumers whenever a PR touches a subset path. It runs them against the boxel branch of the same name when one exists, otherwise against boxel `main`, so matching branch names are how a catalog change and the boxel change that depends on it are tested together before either merges. A manual run takes any `boxel_ref`.
