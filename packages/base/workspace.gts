@@ -512,7 +512,11 @@ class Isolated extends Component<typeof Workspace> {
             {{@model.signage}}</span>
         {{/if}}
         <div class='frame-actions'>
-          <div class='search-box' {{this.setupSearchHotkey}}>
+          <div
+            class='search-box'
+            {{this.setupSearchHotkey}}
+            {{on 'focusout' this.onSearchFocusOut}}
+          >
             <SearchIcon
               width='13'
               height='13'
@@ -523,7 +527,6 @@ class Isolated extends Component<typeof Workspace> {
               @value={{this.searchTerm}}
               @onInput={{this.onSearchInput}}
               @onFocus={{this.onSearchFocus}}
-              @onBlur={{this.onSearchBlur}}
               @placeholder='Search'
               class='search-input'
               aria-label='Search this space'
@@ -551,17 +554,23 @@ class Isolated extends Component<typeof Workspace> {
               status region above carries the count instead. }}
             {{#if this.searchResults.length}}
               <div class='search-results'>
-                {{#each this.searchResults as |result|}}
-                  <Button
-                    @kind='text-only'
-                    @size='auto'
-                    class='search-result'
-                    {{on 'click' (this.openResult result)}}
-                  >
-                    <span class='search-result-title'>{{result.title}}</span>
-                    <span class='search-result-type'>{{result.type}}</span>
-                  </Button>
-                {{/each}}
+                <ul class='search-result-list'>
+                  {{#each this.searchResults as |result|}}
+                    <li>
+                      <Button
+                        @kind='text-only'
+                        @size='auto'
+                        class='search-result'
+                        {{on 'click' (this.openResult result)}}
+                      >
+                        <span
+                          class='search-result-title'
+                        >{{result.title}}</span>
+                        <span class='search-result-type'>{{result.type}}</span>
+                      </Button>
+                    </li>
+                  {{/each}}
+                </ul>
                 <Button
                   @kind='text-only'
                   @size='auto'
@@ -896,8 +905,7 @@ class Isolated extends Component<typeof Workspace> {
             {{#if this.configInstance}}
               <span class='space-sep'>·</span>
               <Button
-                @kind='text-only'
-                @size='auto'
+                @kind='link-muted'
                 class='space-config'
                 {{on 'click' (this.openCard this.configInstance)}}
               >Configuration</Button>
@@ -1386,36 +1394,51 @@ class Isolated extends Component<typeof Workspace> {
       /* a plain BoxelInput with the card's own small glyph laid over it: the
          component's search variant fixes a 20px primary icon and an inverted
          fill. The plain input also darkens its border on hover by itself. */
-      .search-box .search-icon {
+      /* icon and shortcut hint sit inside the field, over its padding zones;
+         neither takes pointer events */
+      .search-box .search-icon,
+      .search-box .search-kbd {
         position: absolute;
-        left: var(--boxel-sp-xs);
         top: 50%;
         transform: translateY(-50%);
         z-index: 1;
-        color: var(--muted-foreground);
+        display: block;
         pointer-events: none;
       }
-      .search-box .search-input {
-        --boxel-input-height: 0;
-        --boxel-form-control-border-radius: var(--boxel-border-radius);
-        width: var(--grid-search-width);
-        padding: var(--boxel-sp-3xs) var(--boxel-sp-sm) var(--boxel-sp-3xs)
-          var(--boxel-sp-lg);
-        background-color: var(--muted);
-        font-size: var(--boxel-font-size-xs);
-        font-weight: 500;
+      .search-box .search-icon {
+        left: var(--boxel-sp-xs);
+        color: var(--muted-foreground);
       }
-      .search-kbd {
-        margin-left: auto;
+      .search-box .search-kbd {
+        right: var(--boxel-sp-xs);
         font-family: var(--font-mono);
         font-size: var(--boxel-eyebrow-font-size);
         font-weight: 500;
         line-height: var(--boxel-eyebrow-line-height);
         color: var(--subtle-foreground);
       }
+      .search-box .search-input {
+        --boxel-input-height: 0;
+        --boxel-form-control-border-radius: var(--boxel-border-radius-sm);
+        width: var(--grid-search-width);
+        /* right padding clears the widest hint (Ctrl+K) while it shows */
+        padding: var(--boxel-sp-3xs) var(--boxel-sp-3xl) var(--boxel-sp-3xs)
+          var(--boxel-sp-xl);
+        background-color: var(--muted);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
+      }
+      /* the hint is for finding the field; once it has focus it gets out of
+         the way of the text */
+      .search-box:focus-within .search-kbd {
+        display: none;
+      }
+      .search-box:focus-within .search-input {
+        padding-right: var(--boxel-sp-sm);
+      }
       .search-results {
         position: absolute;
-        top: calc(100% + 0.375rem);
+        top: calc(100% + var(--boxel-sp-3xs));
         right: 0;
         z-index: 20;
         width: var(--grid-search-results-size);
@@ -1427,6 +1450,11 @@ class Isolated extends Component<typeof Workspace> {
         border: 1px solid var(--border);
         border-radius: var(--boxel-border-radius);
         box-shadow: var(--shadow-lg);
+      }
+      .search-result-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
       }
       .card-grid .search-result {
         justify-content: flex-start;
@@ -2191,7 +2219,7 @@ class Isolated extends Component<typeof Workspace> {
         flex-shrink: 0;
         font-size: var(--boxel-font-size-xs);
         font-weight: 600;
-        color: var(--primary-ink);
+        color: var(--muted-foreground);
       }
 
       /* ── Activity log: when | what | why ───────────────────── */
@@ -2501,16 +2529,11 @@ class Isolated extends Component<typeof Workspace> {
       .space-sep {
         color: var(--subtle-foreground);
       }
-      .card-grid .space-config {
-        padding: 0;
-        font-family: var(--font-mono);
-        font-size: var(--boxel-font-size-2xs);
-        font-weight: 500;
-        color: var(--muted-foreground);
-        cursor: pointer;
-      }
-      .card-grid .space-config:hover {
-        color: var(--primary-ink);
+      /* the link kinds inherit family and weight; the size is the strip's.
+         A knob cannot say `inherit` (that would inherit the knob itself), so
+         the shorthand is spelled out. */
+      .space-config {
+        --boxel-button-font: var(--boxel-font-size-2xs) var(--font-mono);
       }
       .welcome-actions {
         display: flex;
@@ -2536,12 +2559,11 @@ class Isolated extends Component<typeof Workspace> {
       .welcome-cta:focus-visible,
       .welcome-alt:focus-visible,
       .card-grid .readme-toggle:focus-visible,
-      .card-grid .space-config:focus-visible,
       .card-grid .recent-preview:focus-visible,
       .card-grid .rail-row:focus-visible,
       .card-grid .dock-mini:focus-visible,
       .wait-open:focus-visible {
-        outline: 2px solid var(--ring);
+        outline: 1px solid var(--ring);
         outline-offset: 2px;
       }
 
@@ -2752,8 +2774,15 @@ class Isolated extends Component<typeof Workspace> {
     }
   }
 
-  @action private onSearchBlur() {
-    // delayed so a click on a result lands before the dropdown closes
+  // Dismissal follows focus leaving the whole search box, not the input: Tab
+  // onto a result, or a click on one, keeps focus inside and must not close the
+  // list under the user. The delay covers a click that lands outside.
+  @action private onSearchFocusOut(ev: Event) {
+    let box = ev.currentTarget as HTMLElement;
+    let next = (ev as FocusEvent).relatedTarget as Node | null;
+    if (next && box.contains(next)) {
+      return;
+    }
     this.hideResults.perform();
   }
 
