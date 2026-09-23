@@ -2508,6 +2508,237 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  // Holds back the response to the create of `held` once the realm has stored
+  // it — the window in which the card is on disk but the tab has no id for it
+  // yet — and records every card write the tab sends in the meantime. `fail`
+  // makes the held create report an error instead of its response when it is
+  // released.
+  function holdCreateResponse(held: CardDefType, opts?: { fail?: true }) {
+    let cardService = getService('card-service') as any;
+    let originalFetchJSON = cardService.fetchJSON.bind(cardService);
+    let writes: { method: string; body: LooseSingleCardDocument }[] = [];
+    let stored = new Deferred<void>();
+    let release = new Deferred<void>();
+    cardService.fetchJSON = async (url: string | URL, args?: any) => {
+      if (args?.method !== 'POST' && args?.method !== 'PATCH') {
+        return originalFetchJSON(url, args);
+      }
+      let body = JSON.parse(args.body) as LooseSingleCardDocument;
+      writes.push({ method: args.method, body });
+      if (args.method !== 'POST' || body.data.lid !== held[localId]) {
+        return originalFetchJSON(url, args);
+      }
+      let response = await originalFetchJSON(url, args);
+      stored.fulfill();
+      await release.promise;
+      if (opts?.fail) {
+        throw new Error('the create response never arrived');
+      }
+      return response;
+    };
+    return {
+      writes,
+      stored: stored.promise,
+      release: () => release.fulfill(),
+      restore() {
+        release.fulfill();
+        delete cardService.fetchJSON;
+      },
+    };
+  }
+
+  function includedLids(body: LooseSingleCardDocument) {
+    return (body.included ?? []).flatMap((resource) =>
+      'lid' in resource && resource.lid ? [resource.lid] : [],
+    );
+  }
+
+  test('a save does not send a linked card whose create is still in flight as a card to create', async function (assert) {
+    let friend = new PersonDef({ name: 'Friend' });
+    await storeService.add(friend, { doNotPersist: true });
+    let person = new PersonDef({ name: 'Person' });
+    (person as any).bestFriend = friend;
+    await storeService.add(person, { doNotPersist: true });
+
+    let hold = holdCreateResponse(friend);
+    let personResult: unknown;
+    try {
+      let creatingFriend = (storeService as any).persistAndUpdate(friend);
+      await hold.stored;
+      let savingPerson = (storeService as any).persistAndUpdate(person);
+      let personSettledWhileFriendHeld = await Promise.race([
+        savingPerson.then(() => true),
+        new Promise((r) => setTimeout(() => r(false), 500)),
+      ]);
+      assert.false(
+        personSettledWhileFriendHeld,
+        "the save waits while the linked card's create is unanswered",
+      );
+      assert.deepEqual(
+        hold.writes.map((w) => w.method),
+        ['POST'],
+        "nothing but the linked card's own create went out while it was unanswered",
+      );
+      hold.release();
+      [, personResult] = await Promise.all([creatingFriend, savingPerson]);
+    } finally {
+      hold.restore();
+    }
+    await settled();
+
+    assert.true(
+      isCardInstance(personResult),
+      `the save succeeded (resolved as: ${JSON.stringify(personResult)})`,
+    );
+    let personWrite = hold.writes.find(
+      (w) => w.body.data.lid === person[localId],
+    );
+    assert.ok(personWrite, 'the card linking to it was saved');
+    assert.deepEqual(
+      includedLids(personWrite!.body),
+      [],
+      'the save carried no card to create',
+    );
+    assert.strictEqual(
+      (personWrite!.body.data.relationships as any)?.bestFriend?.links?.self,
+      friend.id,
+      'the save linked to the id the realm assigned the linked card',
+    );
+    let file = await testRealmAdapter.openFile(
+      `${person.id!.substring(testRealmURL.length)}.json`,
+    );
+    assert.ok(file, 'the realm holds the saved card');
+  });
+
+  test("a save started in the same turn as a linked card's create does not send that card again", async function (assert) {
+    let friend = new PersonDef({ name: 'Friend' });
+    await storeService.add(friend, { doNotPersist: true });
+    let person = new PersonDef({ name: 'Person' });
+    (person as any).bestFriend = friend;
+    await storeService.add(person, { doNotPersist: true });
+
+    let hold = holdCreateResponse(friend);
+    let results: unknown[];
+    try {
+      // Neither save has serialized by the time the other starts, so the
+      // linked card's create is not yet on the wire when the second save
+      // begins looking for it.
+      let creatingFriend = (storeService as any).persistAndUpdate(friend);
+      let savingPerson = (storeService as any).persistAndUpdate(person);
+      await hold.stored;
+      hold.release();
+      results = await Promise.all([creatingFriend, savingPerson]);
+    } finally {
+      hold.restore();
+    }
+    await settled();
+
+    assert.true(
+      results.every((r) => isCardInstance(r)),
+      `both saves succeeded (resolved as: ${JSON.stringify(results)})`,
+    );
+    assert.deepEqual(
+      hold.writes.map((w) => includedLids(w.body)),
+      [[], []],
+      'neither request carried a card to create besides its own',
+    );
+  });
+
+  test('a save still creates a linked card that was never saved alongside it', async function (assert) {
+    let friend = new PersonDef({ name: 'Friend' });
+    let person = new PersonDef({ name: 'Person' });
+    (person as any).bestFriend = friend;
+    await storeService.add(person, { doNotPersist: true });
+
+    let hold = holdCreateResponse(friend);
+    let personResult: unknown;
+    try {
+      personResult = await (storeService as any).persistAndUpdate(person);
+    } finally {
+      hold.restore();
+    }
+    await settled();
+
+    assert.true(
+      isCardInstance(personResult),
+      `the save succeeded (resolved as: ${JSON.stringify(personResult)})`,
+    );
+    assert.deepEqual(
+      hold.writes.map((w) => includedLids(w.body)),
+      [[friend[localId]]],
+      'one request carried the unsaved linked card as a card to create',
+    );
+    let personFile = await testRealmAdapter.openFile(
+      `${person.id!.substring(testRealmURL.length)}.json`,
+    );
+    let friendPath = JSON.parse(personFile!.content as string).data
+      .relationships.bestFriend.links.self;
+    assert.ok(
+      await testRealmAdapter.openFile(
+        `${new URL(friendPath, person.id!).href.substring(testRealmURL.length)}.json`,
+      ),
+      'the realm holds the linked card, created with the save',
+    );
+  });
+
+  test('a save waiting on a linked card whose create fails does not hang', async function (assert) {
+    let friend = new PersonDef({ name: 'Friend' });
+    await storeService.add(friend, { doNotPersist: true });
+    let person = new PersonDef({ name: 'Person' });
+    (person as any).bestFriend = friend;
+    await storeService.add(person, { doNotPersist: true });
+
+    let hold = holdCreateResponse(friend, { fail: true });
+    let friendResult: unknown;
+    let personResult: unknown;
+    try {
+      let creatingFriend = (storeService as any).persistAndUpdate(friend);
+      await hold.stored;
+      let savingPerson = (storeService as any).persistAndUpdate(person);
+      let personSettledWhileFriendHeld = await Promise.race([
+        savingPerson.then(() => true),
+        new Promise((r) => setTimeout(() => r(false), 500)),
+      ]);
+      assert.false(
+        personSettledWhileFriendHeld,
+        "the save waits while the linked card's create is unanswered",
+      );
+      assert.deepEqual(
+        hold.writes.map((w) => w.method),
+        ['POST'],
+        "nothing but the linked card's own create went out while it was unanswered",
+      );
+      hold.release();
+      [friendResult, personResult] = await Promise.all([
+        creatingFriend,
+        savingPerson,
+      ]);
+    } finally {
+      hold.restore();
+    }
+    await settled();
+
+    assert.false(
+      isCardInstance(friendResult),
+      "the linked card's create reported its failure",
+    );
+    // The failed create left the card with no id, so the save sends it as a
+    // card to create — and the realm, which did store it, says so. What
+    // matters is that the save answers instead of waiting on a create that
+    // will never deliver an id.
+    assert.false(
+      isCardInstance(personResult),
+      'the save answered with the error the realm gave it',
+    );
+    assert.deepEqual(
+      includedLids(
+        hold.writes.find((w) => w.body.data.lid === person[localId])!.body,
+      ),
+      [friend[localId]],
+      'with no create left on the wire, the save sent the linked card as a card to create',
+    );
+  });
+
   test('loads FileDef links from included resources', async function (assert) {
     await testRealm.writeMany(
       new Map<string, string>([

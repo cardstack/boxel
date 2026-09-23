@@ -240,14 +240,21 @@ export default class OperationsService
     // than posting a second one.
     let adopted = opts?.adopted ?? [];
     return await this.store.withMutationLocks(adopted, async () => {
-      let answer = await this.fetchAnswer(realmURL, headers, envelope);
-      // Held instances take their names from the answer rather than from the
-      // event that follows it: the answer is the first and the certain word,
-      // and the promotion it drives — the identity map, the realm
-      // subscription, autosave, consumers in other realms — is what the store
-      // does for any card it learns a URL for.
-      await this.store.adoptMintedIdentities(mintedIdentities(answer));
-      return answer;
+      // A save of a card linking to one of these waits for the answer rather
+      // than sending the card a second time as one to create.
+      let endCreates = this.store.beginCreates(adopted);
+      try {
+        let answer = await this.fetchAnswer(realmURL, headers, envelope);
+        // Held instances take their names from the answer rather than from
+        // the event that follows it: the answer is the first and the certain
+        // word, and the promotion it drives — the identity map, the realm
+        // subscription, autosave, consumers in other realms — is what the
+        // store does for any card it learns a URL for.
+        await this.store.adoptMintedIdentities(mintedIdentities(answer));
+        return answer;
+      } finally {
+        endCreates();
+      }
     });
   }
 
