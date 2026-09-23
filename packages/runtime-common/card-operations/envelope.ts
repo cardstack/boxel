@@ -984,7 +984,12 @@ export async function stageWriteEntry(
     ...(entry.href ? { id: entry.href } : {}),
   });
   if (definition.base === 'create') {
-    scope = scope.derive({ proposed: entry.data ?? {} });
+    // Read the way `batchEntryFor` stages it: a named create is filled from
+    // its params, which leave out the members the envelope reads for itself,
+    // and a plain create is minted from the whole resource, local id included.
+    scope = scope.derive({
+      proposed: definition.of ? paramsFor(entry) : (entry.data ?? {}),
+    });
   }
   return { ...write, entry, scope };
 }

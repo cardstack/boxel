@@ -606,7 +606,7 @@ module(basename(import.meta.filename), function () {
 
     test('a create’s scope carries the document its stages produced, not the caller’s payload', async function (assert) {
       let core = stub();
-      let sent = { lid: 'draft-1', note: 'from the caller' };
+      let sent = { lid: 'draft-1', meta: { x: 1 }, note: 'from the caller' };
       let staged = await stageWriteEntry(
         {
           entry: createEntry(sent),
@@ -623,8 +623,9 @@ module(basename(import.meta.filename), function () {
       );
       assert.deepEqual(
         staged.scope.proposed,
-        { note: 'from the caller', title: 'Untitled', lid: 'draft-1' },
-        'the proposed document holds the param the input supplied',
+        { note: 'from the caller', title: 'Untitled' },
+        'the proposed document holds the param the input supplied, and ' +
+          'not the envelope members a named create’s params leave out',
       );
       assert.strictEqual(
         (sent as Record<string, unknown>).title,
@@ -635,6 +636,28 @@ module(basename(import.meta.filename), function () {
         staged.scope.caller,
         { kind: 'user', actor: ACTOR },
         'and the batch’s caller travels with it',
+      );
+    });
+
+    test('a plain create’s proposed document is the resource it is minted from', async function (assert) {
+      let resource = {
+        lid: 'draft-1',
+        attributes: { title: 'Q3' },
+        meta: { adoptsFrom: PERSON },
+      };
+      let staged = await stageWriteEntry(
+        {
+          entry: createEntry(resource),
+          target: { kind: 'type', codeRef: PERSON, realm: REALM },
+          definition: { base: 'create', deterministic: true },
+          scope: newOperationScope(stub(), { caller: scopeCallerFor(ACTOR) }),
+        },
+        { name: 'create', params: {}, actor: ACTOR, realmConfig },
+      );
+      assert.deepEqual(
+        staged.scope.proposed,
+        resource,
+        'the whole resource, local id and type included, as it is staged',
       );
     });
 

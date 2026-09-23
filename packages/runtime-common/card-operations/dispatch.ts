@@ -309,7 +309,7 @@ export interface ScopeInvocation {
 
 // The scope caller for a request's actor, which transports carry as a string
 // that is empty when nobody signed in.
-export function scopeCallerFor(actor: string | undefined): ScopeCaller {
+export function scopeCallerFor(actor: string): ScopeCaller {
   return actor ? { kind: 'user', actor } : { kind: 'anonymous' };
 }
 
@@ -688,8 +688,13 @@ async function resolveReadShape(
       { kind: 'instance', url: url.href },
       'read',
       // Unattributed whatever the caller's scope says: this asks what kind of
-      // read the target has, not whether anyone may run it, and the request
-      // that goes on to assemble is resolved again with its caller.
+      // read the target has, not whether anyone may run it. A request that
+      // goes on to assemble is resolved again with its caller, but the two
+      // fast paths this answer opens — the conditional 304 and the shared
+      // response cache — are served without that second resolution, so
+      // nothing that judges the caller runs on them. The cross-request memo in
+      // `readShape` is keyed by URL alone, which is sound only while this
+      // question stays caller-less.
       scope.derive({ caller: { kind: 'unattributed' } }),
     );
   } catch {
