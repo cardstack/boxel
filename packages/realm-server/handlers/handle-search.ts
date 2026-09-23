@@ -31,6 +31,7 @@ import {
   type SearchShapeLinkMode,
 } from '@cardstack/runtime-common';
 import {
+  attributeSearchRequest,
   fetchRequestFromContext,
   releaseSearchAdmission,
   sendResponseForBadRequest,
@@ -120,6 +121,9 @@ export default function handleSearch(opts: {
       loggingCorrelationId !== null ? new RequestTimings() : undefined;
 
     let { realmList } = getMultiRealmAuthorization(ctxt);
+    // The realms this search names are known from here, and each one's
+    // link-shape level follows the requests that name it.
+    attributeSearchRequest(ctxt, realmList);
 
     let parsed;
     let request = await fetchRequestFromContext(ctxt);

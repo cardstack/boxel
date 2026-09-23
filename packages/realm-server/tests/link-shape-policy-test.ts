@@ -13,6 +13,8 @@ import {
   admitSearchUnconditionally,
   beginSearchRequest,
   SearchRequestLoad,
+  getBusiestRealmSearchRequestLoad,
+  getRealmSearchRequestLoad,
   getSearchInFlight,
   getSearchRequestLoad,
   resetSearchAdmissionForTests,
@@ -20,7 +22,7 @@ import {
 } from '../search-inflight.ts';
 
 // How much of a result's link graph a live read carries, chosen from the load
-// the process is under. The tests below drive the policy through a clock and a
+// the realm is under. The tests below drive the policy through a clock and a
 // load reading they control, because the behaviour that matters is what it does
 // over minutes of changing concurrency — which is neither reachable nor
 // repeatable by generating real load.
@@ -43,9 +45,14 @@ const ENGAGE_ALL = 12;
 const RELEASE_ALL = 6;
 const MIN_DWELL_MS = 60_000;
 
-function buildPolicy(opts: { load: () => number; now: () => number }) {
+function buildPolicy(opts: {
+  load: (realm: string) => number;
+  processLoad?: () => number;
+  now: () => number;
+}) {
   return new LinkShapePolicy({
     readLoad: opts.load,
+    readProcessLoad: opts.processLoad ?? (() => opts.load(REALM)),
     now: opts.now,
     limit: 30,
     multiRowEngage: ENGAGE_MULTI_ROW,
@@ -436,6 +443,117 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  // The ladder's reading is per realm: a realm's level follows the requests
+  // that name it, not the process's total. These drive the two apart — one
+  // realm carrying the whole process's load beside one carrying none — which
+  // is the shape of a single tenant saturating a shared replica.
+  module('each realm on its own reading', function (hooks) {
+    let loads: Record<string, number>;
+    let clock = 0;
+    let policy: LinkShapePolicy;
+    let events: LinkShapePolicyEvent[];
+
+    hooks.beforeEach(function () {
+      loads = {};
+      clock = 0;
+      events = [];
+      setLinkShapePolicySink((event) => events.push(event));
+      policy = buildPolicy({
+        load: (realm) => loads[realm] ?? 0,
+        processLoad: () =>
+          Object.values(loads).reduce((sum, value) => sum + value, 0),
+        now: () => clock,
+      });
+    });
+
+    hooks.afterEach(function () {
+      setLinkShapePolicySink(undefined);
+    });
+
+    function read(realm: string) {
+      return policy.decide({ realm, rowClass: 'multi-row', requested: 'full' });
+    }
+
+    test('a busy realm degrades and an idle one beside it does not', function (assert) {
+      loads[REALM] = 20;
+      read(REALM);
+      read(OTHER_REALM);
+      clock += MIN_DWELL_MS;
+      let busy = read(REALM);
+      let idle = read(OTHER_REALM);
+
+      assert.strictEqual(busy.level, 'all', 'the realm carrying the load');
+      assert.strictEqual(busy.mode, 'links-only');
+      assert.strictEqual(
+        idle.level,
+        'full',
+        'the realm carrying none keeps its closure, though the process is past both rungs',
+      );
+      assert.strictEqual(idle.mode, 'full');
+      assert.strictEqual(
+        idle.load,
+        0,
+        'and records the reading it was decided on: its own',
+      );
+      assert.deepEqual(
+        events.filter((e) => e.changed).map((e) => e.realm),
+        [REALM, REALM],
+        'only the busy realm transitioned',
+      );
+    });
+
+    test('a transition records the realm reading and the process reading beside it', function (assert) {
+      loads[REALM] = 10;
+      loads[OTHER_REALM] = 5;
+      read(REALM);
+      let transition = events.find((e) => e.changed)!;
+      assert.strictEqual(transition.realm, REALM);
+      assert.strictEqual(
+        transition.load,
+        10,
+        'the reading the decision was taken on',
+      );
+      assert.strictEqual(
+        transition.processLoad,
+        15,
+        'and the process reading, the gap being what other realms contributed',
+      );
+    });
+
+    test('the heartbeat reports the process reading', function (assert) {
+      loads[REALM] = 1;
+      loads[OTHER_REALM] = 2;
+      read(REALM);
+      clock += 60_000;
+      read(REALM);
+      let heartbeat = events.find((e) => !e.changed)!;
+      assert.strictEqual(heartbeat.realm, null);
+      assert.strictEqual(heartbeat.load, 3, 'the heartbeat names no realm');
+      assert.strictEqual(heartbeat.processLoad, 3);
+    });
+
+    test('a fan-out is decided by the most loaded realm it names', function (assert) {
+      loads[REALM] = 20;
+      let decision = policy.decideAcross({
+        realms: [OTHER_REALM, REALM],
+        rowClass: 'multi-row',
+        requested: 'full',
+      });
+      assert.strictEqual(decision.level, 'multi-row');
+      assert.strictEqual(decision.mode, 'links-only');
+      assert.strictEqual(
+        decision.load,
+        20,
+        'reporting the reading of the realm whose level decided it',
+      );
+      assert.strictEqual(
+        policy.levelFor(OTHER_REALM),
+        'full',
+        'while the idle realm it also named stayed where its own reading puts it',
+      );
+    });
+  });
+
   module('a pinned policy', function () {
     test('answers one shape whatever the load', function (assert) {
       let policy = LinkShapePolicy.pinned('links-only');
@@ -608,13 +726,13 @@ module(basename(import.meta.filename), function () {
           halfLifeMs: 120_000,
           now: () => clock,
         });
-        let ends = [];
+        let requests = [];
         for (let i = 0; i < 30; i++) {
-          ends.push(load.begin());
+          requests.push(load.begin());
         }
         clock += spikeMs;
-        for (let end of ends) {
-          end();
+        for (let request of requests) {
+          request.end();
         }
         clock += totalMs - spikeMs;
         return load.sustained;
@@ -641,13 +759,13 @@ module(basename(import.meta.filename), function () {
         halfLifeMs: 10_000,
         now: () => clock,
       });
-      let end = load.begin();
+      let request = load.begin();
       clock += 100_000;
       // Reading here is what advances the accumulator — there is no timer.
       let loaded = load.sustained;
       assert.ok(loaded > 0.9, `held at 1 for ten half-lives, got ${loaded}`);
 
-      end();
+      request.end();
       clock += 100_000;
       assert.ok(
         load.sustained < 0.01,
@@ -657,14 +775,20 @@ module(basename(import.meta.filename), function () {
 
     test('a request that ends twice is counted out once', function (assert) {
       let load = new SearchRequestLoad();
-      let end = load.begin();
-      load.begin();
-      end();
-      end();
+      let request = load.begin();
+      request.attribute([REALM]);
+      load.begin().attribute([REALM]);
+      request.end();
+      request.end();
       assert.strictEqual(
         load.inFlight,
         1,
         'a response that both finished and closed does not take another request with it',
+      );
+      assert.strictEqual(
+        load.inFlightFor(REALM),
+        1,
+        'from the process or from the realm it named',
       );
     });
 
@@ -680,17 +804,143 @@ module(basename(import.meta.filename), function () {
       });
       assert.strictEqual(getSearchRequestLoad(), 0, 'idle to begin with');
 
-      let end = beginSearchRequest();
+      let request = beginSearchRequest();
+      request.attribute([REALM]);
       clock += 10_000; // one half-life held at 1
       let loaded = getSearchRequestLoad();
       assert.ok(
         Math.abs(loaded - 0.5) < 0.01,
         `the module reading followed the request count, got ${loaded}`,
       );
+      let realmLoaded = getRealmSearchRequestLoad(REALM);
+      assert.ok(
+        Math.abs(realmLoaded - 0.5) < 0.01,
+        `and so did the reading of the realm it named, got ${realmLoaded}`,
+      );
+      assert.strictEqual(
+        getRealmSearchRequestLoad(OTHER_REALM),
+        0,
+        'while a realm it did not name stayed idle',
+      );
+      assert.strictEqual(
+        getBusiestRealmSearchRequestLoad()?.realm,
+        REALM,
+        'the busiest realm is the one the request named',
+      );
 
-      end();
+      request.end();
       clock += 100_000;
       assert.ok(getSearchRequestLoad() < 0.01, 'and follows it back down');
+      assert.ok(
+        getRealmSearchRequestLoad(REALM) < 0.01,
+        'the realm reading too',
+      );
+    });
+
+    test('a realm reads only the requests that name it', function (assert) {
+      let clock = 0;
+      let load = new SearchRequestLoad({
+        halfLifeMs: 10_000,
+        now: () => clock,
+      });
+      for (let i = 0; i < 4; i++) {
+        load.begin().attribute([REALM]);
+      }
+      clock += 100_000; // ten half-lives: every mean has all but caught up
+      assert.ok(
+        load.sustainedFor(REALM) > 3.9,
+        `four requests naming a realm read ~4 there, got ${load.sustainedFor(REALM)}`,
+      );
+      assert.ok(
+        load.sustained > 3.9,
+        `and ~4 on the process, got ${load.sustained}`,
+      );
+      assert.strictEqual(
+        load.sustainedFor(OTHER_REALM),
+        0,
+        'a realm none of them named reads idle, whatever the process is carrying',
+      );
+      assert.strictEqual(load.inFlightFor(OTHER_REALM), 0);
+    });
+
+    test('a request naming several realms counts in full toward each', function (assert) {
+      let clock = 0;
+      let load = new SearchRequestLoad({
+        halfLifeMs: 10_000,
+        now: () => clock,
+      });
+      let request = load.begin();
+      request.attribute([REALM, OTHER_REALM]);
+      clock += 100_000;
+      assert.strictEqual(load.inFlightFor(REALM), 1);
+      assert.strictEqual(
+        load.inFlightFor(OTHER_REALM),
+        1,
+        'a fan-out is waiting on every realm it names, not on a share of each',
+      );
+      assert.strictEqual(load.inFlight, 1, 'while the process counts it once');
+      let realmReading = load.sustainedFor(OTHER_REALM);
+      assert.ok(
+        realmReading > 0.99,
+        `a realm's reading reaches the process's, got ${realmReading} against ${load.sustained}`,
+      );
+      assert.ok(
+        realmReading <= load.sustained,
+        `and never exceeds it, got ${realmReading} against ${load.sustained}`,
+      );
+    });
+
+    test('a realm attributed twice is counted once, and an ended request not at all', function (assert) {
+      let load = new SearchRequestLoad();
+      let request = load.begin();
+      request.attribute([REALM]);
+      request.attribute([REALM, REALM]);
+      assert.strictEqual(load.inFlightFor(REALM), 1);
+      request.end();
+      assert.strictEqual(load.inFlightFor(REALM), 0);
+      request.attribute([OTHER_REALM]);
+      assert.strictEqual(
+        load.inFlightFor(OTHER_REALM),
+        0,
+        'an attribution arriving after the response ended starts no count that nothing would end',
+      );
+    });
+
+    test('a request counts toward a realm only from when it is attributed', function (assert) {
+      let clock = 0;
+      let load = new SearchRequestLoad({
+        halfLifeMs: 10_000,
+        now: () => clock,
+      });
+      let request = load.begin();
+      clock += 100_000; // the process has been carrying it all along
+      request.attribute([REALM]);
+      assert.ok(load.sustained > 0.9, 'the process has been counting it');
+      assert.strictEqual(
+        load.sustainedFor(REALM),
+        0,
+        'the realm has not: it counts from the moment it is attributed',
+      );
+    });
+
+    test('a realm whose reading has decayed away is forgotten', function (assert) {
+      let clock = 0;
+      let load = new SearchRequestLoad({
+        halfLifeMs: 10_000,
+        now: () => clock,
+      });
+      let request = load.begin();
+      request.attribute([REALM]);
+      clock += 100_000;
+      assert.strictEqual(load.busiestRealm?.realm, REALM);
+      request.end();
+      clock += 200_000; // twenty half-lives
+      assert.strictEqual(
+        load.busiestRealm,
+        null,
+        'an idle realm with nothing left of its reading is not carried',
+      );
+      assert.strictEqual(load.sustainedFor(REALM), 0);
     });
 
     // The reading and the admission ceiling count different things, and the

@@ -71,15 +71,20 @@ those cases, but it is a reason not to over-trust a 200 here on its own.
 lag crosses a threshold or a search is in flight:
 
 ```
-eventLoopLagMs(mean/p99/max)=… inFlightSearch=… searchRequests=… searchLoad=… heapMB=…
+eventLoopLagMs(mean/p99/max)=… inFlightSearch=… searchRequests=… searchLoad=… realmSearchLoadMax=… heapMB=…
 ```
 
 `inFlightSearch` counts admission slots — concurrent search _computations_,
 since a request the live-search cache answers from another's computation hands
 its slot back early. `searchRequests` counts every admitted search request until
-its response ends, and `searchLoad` is that count's time-weighted mean, which is
-the reading the link-shape policy's thresholds are compared against. The first
-two differ by the live-search cache's miss rate.
+its response ends, and `searchLoad` is that count's time-weighted mean. The
+first two differ by the live-search cache's miss rate.
+
+The link-shape policy's thresholds are compared against a realm's own share of
+that mean — the requests in flight that name the realm — so a busy realm does
+not degrade its idle neighbours. `realmSearchLoadMax` is the highest of those
+per-realm readings: the number to hold against a rung. It never exceeds
+`searchLoad`, and when load is concentrated on one realm the two are close.
 
 Silent on an idle, healthy server — so its presence in the logs is itself the
 signal. Lag climbing in step with `inFlightSearch` is the fingerprint of the loop

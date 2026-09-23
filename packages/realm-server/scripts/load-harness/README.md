@@ -768,8 +768,11 @@ a request counts as in flight here for as long as its body is crossing the
 network, after the server had already released the slot. So a figure under a
 threshold is evidence this run did not reach it; a figure over one is not
 evidence that it did, and neither accounts for whatever else is reading the
-realm at the time. For the server's own reading, take the
-`boxel:link-shape-policy` heartbeat.
+realm at the time. For the server's own reading, take the target realm's
+`linkShapeLoad` on `boxel:search-shape`, or `realmSearchLoadMax=` on the health
+line — the ladder decides each realm on that realm's own reading. The
+`boxel:link-shape-policy` heartbeat's `load` is the process's, which is an
+upper bound on it.
 
 The realm-server health sampler covers the same window, and two of its numbers
 are what a saturation run is about:

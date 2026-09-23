@@ -6,6 +6,7 @@ import type {
 } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
 import {
+  attributeSearchRequest,
   fetchRequestFromContext,
   setContextResponse,
 } from '../middleware/index.ts';
@@ -46,7 +47,13 @@ export function createServeFromRealm(
       `${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`,
     );
     try {
-      await findOrMountRealm(requestURL, deps);
+      let realm = await findOrMountRealm(requestURL, deps);
+      // A realm's own `_search` names that realm. Attributed here because this
+      // is where the request is first resolved to one; the admission gate
+      // counted it before anything knew which.
+      if (realm) {
+        attributeSearchRequest(ctxt, [realm.url]);
+      }
     } catch (err: any) {
       log.warn(
         `failed to mount realm for request ${requestURL.href}: ${err?.message ?? err}`,

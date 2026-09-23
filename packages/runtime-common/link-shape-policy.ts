@@ -1,5 +1,5 @@
 // How much of a result's link graph a live read carries, chosen from the load
-// the process is under rather than from a fixed setting.
+// the realm is under rather than from a fixed setting.
 //
 // A live card read or search either side-loads the whole transitive link
 // closure into `included[]`, or answers each relationship and carries none of
@@ -69,6 +69,24 @@
 // within a process is that a realm only transitions on a read of its own, so a
 // quiet realm neither changes level nor reports one, and every transition
 // names the realm whose cache entries it fragmented.
+//
+// # Each realm is decided on its own load
+//
+// The reading a realm's level follows is that realm's own: the sustained count
+// of search requests in flight that name it, not the process's. A level is
+// what the realm's readers are served, and the realm's readers are not the
+// ones whose load a busy neighbour generates — deciding every realm on the
+// process's count would degrade an idle tenant's responses, and charge it a
+// validator drop and a response-cache variant twice over, to relieve a load it
+// did not cause. Degrading the realm that is busy is where the relief comes
+// from in any case, since that is where the closures being assembled are.
+//
+// What this gives up is engaging on load spread thinly across many realms,
+// where each realm's reading is a fraction of the process's and none crosses a
+// rung. That case is the admission gate's: it bounds the process's
+// concurrent computations whichever realms they name. The process's reading
+// is still logged beside every decision, so the gap between the two is
+// visible.
 //
 // # The caller states a preference the server may overrule
 //
@@ -179,11 +197,16 @@ export interface LinkShapePolicyEvent {
   // stable operation from flapping, and flapping is the specific failure this
   // design risks given the validator and response-cache coupling.
   dwellMs: number | null;
-  // The reading the decision was taken on, and the process's admission cap
-  // beside it. The two are in different units — the reading counts requests,
-  // the cap counts the computations among them — so the reading can exceed
-  // the cap, and does whenever the live-search cache is coalescing.
+  // The reading the decision was taken on — the realm's own on a transition,
+  // the process's on the heartbeat, which has no realm — and the process's
+  // reading and admission cap beside it. A realm's reading never exceeds the
+  // process's, so the gap between the two on a transition is the load other
+  // realms were generating at the time. The reading and the cap are in
+  // different units — the reading counts requests, the cap counts the
+  // computations among them — so the reading can exceed the cap, and does
+  // whenever the live-search cache is coalescing.
   load: number;
+  processLoad: number;
   limit: number;
   // How many realms this process has served since start, counted at the level
   // each was last left in. Not the realms it currently mounts: a realm is
@@ -241,10 +264,13 @@ interface RealmState {
 }
 
 export interface LinkShapePolicyOptions {
-  // The reading the policy decides on: the sustained count of search requests
-  // in flight, joiners included. A policy built without one is pinned — see
-  // `LinkShapePolicy.pinned`.
-  readLoad?: () => number;
+  // The reading the policy decides a realm's level on: the sustained count of
+  // search requests in flight naming that realm, joiners included. A policy
+  // built without one is pinned — see `LinkShapePolicy.pinned`.
+  readLoad?: (realm: string) => number;
+  // The process's sustained count of search requests in flight, logged beside
+  // each decision. Absent reads as 0.
+  readProcessLoad?: () => number;
   // The process's admission cap. Reported alongside every decision for
   // context; it does not bound the thresholds, since it counts computations
   // and the reading counts requests.
@@ -259,7 +285,8 @@ export interface LinkShapePolicyOptions {
 }
 
 export class LinkShapePolicy {
-  #readLoad: (() => number) | undefined;
+  #readLoad: ((realm: string) => number) | undefined;
+  #readProcessLoad: (() => number) | undefined;
   #pinned: LinkShapeMode | undefined;
   #limit: number;
   #engage: [number, number];
@@ -272,6 +299,7 @@ export class LinkShapePolicy {
 
   constructor(opts: LinkShapePolicyOptions = {}) {
     this.#readLoad = opts.readLoad;
+    this.#readProcessLoad = opts.readProcessLoad;
     this.#limit = opts.limit ?? SERVER_MAX_IN_FLIGHT_SEARCHES;
     let { engage, release } = normalizeThresholds(
       [
@@ -306,11 +334,13 @@ export class LinkShapePolicy {
     return policy;
   }
 
-  // The reading the next decision would be taken on. A decision reads it
-  // itself; this is for the one caller that needs the reading without a realm
-  // to decide for — a fan-out that named none.
-  get load(): number {
-    return this.#readLoad ? this.#readLoad() : 0;
+  // The reading the next decision for `realm` would be taken on.
+  loadFor(realm: string): number {
+    return this.#readLoad ? this.#readLoad(realm) : 0;
+  }
+
+  get #processLoad(): number {
+    return this.#readProcessLoad ? this.#readProcessLoad() : 0;
   }
 
   // The level a realm is currently held at, without advancing it. A realm
@@ -342,7 +372,7 @@ export class LinkShapePolicy {
       };
     }
 
-    let load = this.load;
+    let load = this.loadFor(realm);
     let level = this.#advance(realm, load);
     let policyMode: LinkShapeMode =
       level === 'all' || (level === 'multi-row' && rowClass === 'multi-row')
@@ -352,7 +382,7 @@ export class LinkShapePolicy {
     // policy would impose is taken at its word.
     let mode: LinkShapeMode =
       requested === 'links-only' ? 'links-only' : policyMode;
-    this.#maybeHeartbeat(load);
+    this.#maybeHeartbeat();
     return {
       mode,
       requested,
@@ -447,6 +477,7 @@ export class LinkShapePolicy {
       thresholdKind,
       dwellMs,
       load,
+      processLoad: this.#processLoad,
       limit: this.#limit,
       realmsAtFull: null,
       realmsAtMultiRow: null,
@@ -458,12 +489,13 @@ export class LinkShapePolicy {
   // The sampled no-change record. Driven off decisions rather than a timer: a
   // process serving no live reads is making no decisions, so there is nothing
   // for it to report and nothing its silence could be mistaken for.
-  #maybeHeartbeat(load: number): void {
+  #maybeHeartbeat(): void {
     let now = this.#now();
     if (now - this.#lastHeartbeatAt < this.#heartbeatMs) {
       return;
     }
     this.#lastHeartbeatAt = now;
+    let processLoad = this.#processLoad;
     let counts: Record<LinkShapeLevel, number> = {
       full: 0,
       'multi-row': 0,
@@ -481,7 +513,8 @@ export class LinkShapePolicy {
       threshold: null,
       thresholdKind: null,
       dwellMs: null,
-      load,
+      load: processLoad,
+      processLoad,
       limit: this.#limit,
       realmsAtFull: counts.full,
       realmsAtMultiRow: counts['multi-row'],
