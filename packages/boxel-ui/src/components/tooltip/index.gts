@@ -174,8 +174,15 @@ export default class Tooltip extends Component<Signature> {
     this.deactivate();
   }
 
+  // Only keyboard focus shows the tooltip. A mouse click also focuses a
+  // button, and without this guard the tooltip would stay pinned after the
+  // pointer moved away, until focus landed somewhere else.
   @action
   onFocusIn(event: Event) {
+    let trigger = event.currentTarget as HTMLElement;
+    if (!trigger.matches(':focus-visible, :has(:focus-visible)')) {
+      return;
+    }
     this.isFocusOnTrigger = true;
     this.activate(event);
   }
