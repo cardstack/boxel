@@ -471,6 +471,21 @@ export type IndexRealmEventContent =
   | CopiedIndexEventContent
   | IncrementalIndexInitiationContent;
 
+// One publish an index pass indexed alongside others. See
+// `IncrementalIndexEventContent.coalescedWrites`.
+export interface CoalescedIndexWrite {
+  clientRequestId: string | null;
+  // Which of the event's `invalidations` this publish asked the pass to index
+  // — the cards it wrote or removed, spelled as `invalidations` spells them.
+  // Null when the realm could not say, which a subscriber has to read as "may
+  // have changed any of them".
+  changed: string[] | null;
+  // The publish's own `clientAuthored`, narrowed to the event's invalidations.
+  // Absent when the publish made no such report, in which case everything in
+  // `changed` is what it wrote.
+  clientAuthored?: string[];
+}
+
 export interface IncrementalIndexEventContent {
   eventName: 'index';
   indexType: 'incremental';
@@ -535,6 +550,20 @@ export interface IncrementalIndexEventContent {
   // complete one, so a missing key would read as "this card is not one the
   // request wrote" — the opposite of true.
   versions?: Record<string, string>;
+  // Every publish the pass indexed, when it indexed more than one. The realm
+  // folds publishes that arrive while a pass is still queued into that pass,
+  // and announces the result once, from one of its callers — so
+  // `clientRequestId` and `clientAuthored` name only that caller, and a
+  // subscriber looking for its own write has to look here for it.
+  //
+  // Includes the announcing caller itself, and callers with no request id (a
+  // file-watcher echo, a removal), whose `changed` still says which cards
+  // someone other than a request-id holder moved.
+  //
+  // Absent when the pass indexed one publish, and when the list would not fit
+  // in the event — dropped whole, since a subscriber cannot tell a partial
+  // list from a complete one.
+  coalescedWrites?: CoalescedIndexWrite[];
   // The realm generation the indexing pass committed. Lets a consumer correlate
   // this search-doc update with the prerendered HTML that belongs to it.
   generation?: number;
