@@ -927,7 +927,7 @@ module(
         // Verify the NEW FEATURE section with AI App Generator
         assert
           .dom('[data-test-section-header="new-feature"]')
-          .containsText('NEW FEATURE');
+          .containsText('New feature');
         assert
           .dom('[data-test-highlights-card-container="ai-app-generator"]')
           .exists();
@@ -964,7 +964,7 @@ module(
         // Verify the GETTING STARTED section with Welcome to Boxel
         assert
           .dom('[data-test-section-header="getting-started"]')
-          .containsText('GETTING STARTED');
+          .containsText('Getting started');
         assert
           .dom('[data-test-highlights-card-container="welcome-to-boxel"]')
           .exists();
