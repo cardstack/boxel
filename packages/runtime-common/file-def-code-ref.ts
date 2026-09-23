@@ -1,7 +1,6 @@
 import { baseRealm, baseFileRef } from './constants.ts';
 import { canonicalModuleKey } from './code-ref.ts';
 import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
-import type { FileDefBindings } from './file-def-bindings.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
@@ -19,7 +18,6 @@ function baseModule(name: string): RealmResourceIdentifier {
 export const FILEDEF_CODE_REF_BY_EXTENSION: Readonly<
   Record<string, ResolvedCodeRef>
 > = {
-  // TODO: Replace with realm metadata configuration.
   '.markdown': { module: baseModule('markdown-file-def'), name: 'MarkdownDef' },
   '.md': { module: baseModule('markdown-file-def'), name: 'MarkdownDef' },
   '.html': { module: baseModule('html-file-def'), name: 'HtmlDef' },
@@ -35,13 +33,9 @@ export const FILEDEF_CODE_REF_BY_EXTENSION: Readonly<
   '.gts': { module: baseModule('gts-file-def'), name: 'GtsFileDef' },
   '.txt': { module: baseModule('text-file-def'), name: 'TextFileDef' },
   '.text': { module: baseModule('text-file-def'), name: 'TextFileDef' },
-  // A log is plain text, and mime-db already resolves `.log` to `text/plain`
-  // alongside `.txt`. Without an entry here it falls through to the bare
-  // `FileDef` and gets none of the text family's behavior. `TextFileDef`
-  // guards its own extensions in `extractAttributes`, so `.log` is listed
-  // there too — one without the other turns every log into an error row.
-  '.log': { module: baseModule('text-file-def'), name: 'TextFileDef' },
+  '.log': { module: baseModule('log-file-def'), name: 'LogFile' },
   '.json': { module: baseModule('json-file-def'), name: 'JsonFileDef' },
+  '.jsonl': { module: baseModule('jsonl-file-def'), name: 'JSONLFile' },
   '.csv': { module: baseModule('csv-file-def'), name: 'CsvFileDef' },
   '.pdf': { module: baseModule('pdf-file-def'), name: 'PdfDef' },
   '.docx': { module: baseModule('docx-file-def'), name: 'DocxDef' },
@@ -88,17 +82,6 @@ export const FILEDEF_CODE_REF_BY_EXTENSION: Readonly<
 // server having returned a row to sniff — so an empty-but-complete file-meta
 // search still reconciles locally hydrated FileDefs.
 //
-// The platform table is not the whole set of file types any more: a realm may
-// bind an extension to a `FileDef` subclass of its own (see
-// `file-def-bindings.ts`), and this answers false for such a ref. The limit
-// cannot be lifted here — this is synchronous and holds no realm, and so is
-// its caller, `displayedInstances` in the host's search resource. What it
-// costs is confined to the one case that caller cannot sniff its way out of:
-// a search filtered on a realm-bound class whose results are empty *and*
-// complete takes the card pool rather than the file-meta pool, so a locally
-// hydrated FileDef is not reconciled into it. Server-side results are
-// unaffected.
-//
 // The query carries refs in prefix form (e.g. `@cardstack/base/markdown-file-def`)
 // while `FILEDEF_CODE_REF_BY_EXTENSION` is built in full-URL form, so the module
 // strings are compared by their canonical key rather than verbatim — otherwise
@@ -135,21 +118,6 @@ function extensionOfName(name: string): string {
   return dot <= 0 ? '' : name.slice(dot).toLowerCase();
 }
 
-// An extension as this module's tables key on it: lowercase, with the leading
-// dot. Exported so a realm's hand-written binding is keyed the same way the
-// table it overrides is keyed, rather than matching only when the author
-// happened to spell it the way the lookup does — `.TXT` and `txt` name the
-// same files `.txt` does. Returns undefined for anything that is not one
-// extension, which is what a binding for it is refused on.
-export function normalizeFileExtension(extension: string): string | undefined {
-  let trimmed = extension.trim().toLowerCase();
-  if (!trimmed) {
-    return undefined;
-  }
-  let dotted = trimmed.startsWith('.') ? trimmed : `.${trimmed}`;
-  return /^\.[a-z0-9]+$/.test(dotted) ? dotted : undefined;
-}
-
 function extensionOf(url: URL): string {
   return extensionOfName(url.pathname.split('/').pop() ?? '');
 }
@@ -183,82 +151,10 @@ export function referenceNamesFile(reference: string): boolean {
   return segmentNamesFile(path.slice(path.lastIndexOf('/') + 1));
 }
 
-// The class a realm has bound this file's extension to, if any.
-//
-// Separate from `resolveFileDefCodeRef` because one caller needs to know
-// whether the realm has an answer at all rather than what the answer resolves
-// to: a served file-meta document reads its type off the index row, and a
-// binding has to win over a row that predates it.
-export function boundFileDefCodeRef(
-  fileURL: URL,
-  bindings: FileDefBindings | undefined,
-): ResolvedCodeRef | undefined {
-  if (!bindings) {
-    return undefined;
-  }
-  let extension = extensionOf(fileURL);
-  return extension ? bindings[extension] : undefined;
-}
-
-// The class a served file-meta resource names, in the one order the three
-// answers are allowed to take.
-//
-// A realm's binding wins, because it is the realm's current statement and the
-// row is a record of what some past pass resolved — deferring to a stale row
-// would serve a document naming one class while an operation against the same
-// file resolved another. The row wins over everything else, since it is what
-// the indexer extracted. The platform table is the floor.
-//
-// One function rather than the chain written out at each site: the realm
-// serves a file's own document and the query engine builds the resource for a
-// linked FileDef and for a file-meta search item, and a client that hydrates
-// either has to get the same class. Two copies of this order drift, and the
-// drift is invisible until a realm edits a binding on a populated realm.
-export function servedFileDefCodeRef(
-  fileURL: URL,
-  {
-    bindings,
-    rowAdoptsFrom,
-    resourceAdoptsFrom,
-    fallback,
-  }: {
-    bindings: FileDefBindings | undefined;
-    // The row's first type, already decoded from its internal key by the
-    // caller — `codeRefFromInternalKey` lives in the barrel, and reaching the
-    // barrel from a leaf is a cycle (see `executableExtensions` in
-    // `constants.ts`).
-    rowAdoptsFrom: CodeRef | undefined;
-    resourceAdoptsFrom: CodeRef | undefined;
-    fallback: CodeRef;
-  },
-): CodeRef {
-  return (
-    boundFileDefCodeRef(fileURL, bindings) ??
-    rowAdoptsFrom ??
-    resourceAdoptsFrom ??
-    fallback
-  );
-}
-
-// The `FileDef` subclass a stored file is, from its extension.
-//
-// `bindings` is the realm's own answer for the extensions it has bound (see
-// `file-def-bindings.ts`), consulted ahead of the platform table. A realm binds
-// nothing by default, and then this resolves exactly what it always has.
-//
-// A bound ref is returned verbatim: bindings are resolved once, against the
-// realm's URL, where they are parsed. Resolving one here against the file's URL
-// is what would make a binding mean a different module for a file in a
-// subdirectory than for one at the realm root.
 export function resolveFileDefCodeRef(
   fileURL: URL,
   virtualNetwork: VirtualNetwork,
-  bindings?: FileDefBindings,
 ): ResolvedCodeRef {
-  let bound = boundFileDefCodeRef(fileURL, bindings);
-  if (bound) {
-    return bound;
-  }
   let extension = extensionOf(fileURL);
   let mapping = extension
     ? FILEDEF_CODE_REF_BY_EXTENSION[extension]

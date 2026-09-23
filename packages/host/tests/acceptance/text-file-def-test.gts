@@ -105,8 +105,6 @@ It has multiple lines.
 
 And a blank line too.`,
           'empty.text': '',
-          'startup.log': `boot sequence started
-ready`,
           'readme.md': '# A markdown file\n\nSome content here.',
         },
       }),
@@ -115,31 +113,6 @@ ready`,
 
   hooks.afterEach(function () {
     delete (globalThis as any).__renderModel;
-  });
-
-  // A `.log` is bound to `TextFileDef` by the platform's extension table, and
-  // the class guards its own extension list in `extractAttributes` — so the
-  // table alone does not make one readable. Without this, an extension named
-  // in one place and missing from the other indexes every such file as an
-  // error row, and nothing else in the suites notices.
-  test('extracts title, excerpt, and content from .log file', async function (assert) {
-    let url = makeFileURL('startup.log');
-    await visit(
-      renderPath(url, {
-        fileExtract: true,
-        fileDefCodeRef: textFileDefCodeRef(),
-      }),
-    );
-
-    let result = await captureFileExtractResult('ready');
-    assert.strictEqual(result.status, 'ready', 'the extractor accepted .log');
-    assert.strictEqual(result.searchDoc?.title, 'startup');
-    assert.ok(
-      String(result.searchDoc?.content).includes('boot sequence started'),
-      'content includes the full text',
-    );
-    assert.strictEqual(result.searchDoc?.lineCount, 2);
-    assert.strictEqual(result.searchDoc?.name, 'startup.log');
   });
 
   test('extracts title, excerpt, and content from .txt file', async function (assert) {

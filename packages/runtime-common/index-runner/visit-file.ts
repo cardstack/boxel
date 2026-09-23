@@ -25,7 +25,6 @@ import {
 } from '../index.ts';
 import { CardError, mergeErrorsByGeneration } from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
-import type { FileDefBindings } from '../file-def-bindings.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 
 interface RenderFileForIndexingOptions {
@@ -50,10 +49,6 @@ interface RenderFileForIndexingOptions {
   batchId: string;
   prerenderer: Prerenderer;
   virtualNetwork: VirtualNetwork;
-  // The realm's own binding of file extension to FileDef subclass, resolved
-  // once for the pass. The class named here is the one the extract and render
-  // passes hydrate, and the one the file's row is written with.
-  fileDefBindings?: FileDefBindings;
   consumeClearCacheForRender(): boolean;
   consumeResetStoreForRender(): boolean;
   logDebug(message: string): void;
@@ -146,7 +141,6 @@ export async function renderFileForIndexing({
   batchId,
   prerenderer,
   virtualNetwork,
-  fileDefBindings,
   consumeClearCacheForRender,
   consumeResetStoreForRender,
   logDebug,
@@ -220,11 +214,7 @@ export async function renderFileForIndexing({
   }
 
   let fileURL = url.href;
-  let fileDefCodeRef = resolveFileDefCodeRef(
-    new URL(fileURL),
-    virtualNetwork,
-    fileDefBindings,
-  );
+  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL), virtualNetwork);
 
   let clearCache = consumeClearCacheForRender();
   let resetStore = consumeResetStoreForRender();
@@ -282,9 +272,6 @@ export async function renderFileForIndexing({
   // its visit lands on.
   let indexRenderOptions: RenderRouteOptions = {
     fileDefCodeRef,
-    ...(fileDefBindings && Object.keys(fileDefBindings).length > 0
-      ? { fileDefBindings: { realm: realmURL.href, types: fileDefBindings } }
-      : {}),
     loaderEpoch: batch.loaderEpoch,
     ...(needCardRender ? { cardRender: true } : {}),
     ...(needFileExtract ? { fileExtract: true } : {}),
@@ -344,9 +331,6 @@ export async function renderFileForIndexing({
   ) {
     let htmlRenderOptions: RenderRouteOptions = {
       fileDefCodeRef,
-      ...(fileDefBindings && Object.keys(fileDefBindings).length > 0
-        ? { fileDefBindings: { realm: realmURL.href, types: fileDefBindings } }
-        : {}),
       loaderEpoch: batch.loaderEpoch,
       ...(needCardRender ? { cardRender: true } : {}),
       ...(needFileHtml ? { fileRender: true } : {}),

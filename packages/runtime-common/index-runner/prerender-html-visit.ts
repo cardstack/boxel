@@ -50,10 +50,6 @@ import {
   serializableError,
 } from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
-import {
-  readFileDefBindings,
-  type FileDefBindings,
-} from '../file-def-bindings.ts';
 import { canonicalURL } from './dependency-url.ts';
 
 // Ceiling on holding a prerender-html job's visits for its spawning pass's
@@ -93,10 +89,6 @@ export interface PrerenderHtmlPassArgs {
   // module pre-warm sweep before the format renders begin. False on
   // incremental spawns — the sweep is O(realm module count).
   preWarm: boolean;
-  // The file type bindings the spawning index pass resolved. Absent for a job
-  // enqueued before the payload carried them, or one with no spawning pass —
-  // the pass then reads the realm's config document itself.
-  spawnedFileDefBindings?: FileDefBindings;
   indexWriter: IndexWriter;
   definitionLookup: DefinitionLookup;
   virtualNetwork: VirtualNetwork;
@@ -149,7 +141,6 @@ export async function runPrerenderHtmlPass({
   spawningJobId,
   loaderEpoch,
   preWarm,
-  spawnedFileDefBindings,
   indexWriter,
   definitionLookup,
   virtualNetwork,
@@ -172,19 +163,6 @@ export async function runPrerenderHtmlPass({
   let jobTag = `${jobIdentity(jobInfo)} [realm: ${realmURL.href}] [generation: ${generation}]`;
   let batchId = `${jobInfo.jobId}-${uuidv4().slice(0, 8)}`;
   let realmPaths = new RealmPaths(realmURL, virtualNetwork);
-  // The bindings the index pass that spawned this job resolved, so the pass
-  // that writes a file's `types` and this one — which writes the HTML keyed on
-  // `types[0]` — agree by construction rather than by each reading a document
-  // an author may edit between them. A job enqueued before the payload carried
-  // them, or one spawned outside that path, reads the config itself.
-  let fileDefBindings =
-    spawnedFileDefBindings ??
-    (await readFileDefBindings({
-      reader,
-      realmURL,
-      virtualNetwork,
-      logWarn: (message) => log.warn(`${jobIdentity(jobInfo)} ${message}`),
-    }));
   let stats: Stats = {
     instancesIndexed: 0,
     filesIndexed: 0,
@@ -433,7 +411,6 @@ export async function runPrerenderHtmlPass({
             batch,
             prerenderer,
             virtualNetwork,
-            fileDefBindings,
             auth,
             batchId,
             jobInfo,
@@ -709,7 +686,6 @@ async function visitForPrerenderedHtml({
   batch,
   prerenderer,
   virtualNetwork,
-  fileDefBindings,
   auth,
   batchId,
   jobInfo,
@@ -728,7 +704,6 @@ async function visitForPrerenderedHtml({
   batch: Batch;
   prerenderer: Prerenderer;
   virtualNetwork: VirtualNetwork;
-  fileDefBindings?: FileDefBindings;
   auth: string;
   batchId: string;
   jobInfo: JobInfo;
@@ -779,11 +754,7 @@ async function visitForPrerenderedHtml({
   }
 
   let fileURL = url.href;
-  let fileDefCodeRef = resolveFileDefCodeRef(
-    new URL(fileURL),
-    virtualNetwork,
-    fileDefBindings,
-  );
+  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL), virtualNetwork);
 
   // Floored once and used by both consumers below, so the modified time the
   // render stamps onto the card's document and the one the file's HTML bakes
@@ -810,9 +781,6 @@ async function visitForPrerenderedHtml({
 
   let renderOptions: RenderRouteOptions = {
     fileDefCodeRef,
-    ...(fileDefBindings && Object.keys(fileDefBindings).length > 0
-      ? { fileDefBindings: { realm: realmURL.href, types: fileDefBindings } }
-      : {}),
     ...(parsedCardResource ? { cardRender: true } : {}),
     fileRender: true,
     // The standalone visit resolves the file's resource + types from source
