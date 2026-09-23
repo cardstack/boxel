@@ -25,6 +25,7 @@ import {
 } from './file-meta.ts';
 import {
   type Expression,
+  type Querier,
   param,
   separatedByCommas,
   addExplicitParens,
@@ -384,6 +385,16 @@ interface FanOutWalk {
   visited: Set<string>;
 }
 
+export interface BatchDoneResult {
+  totalIndexEntries: number;
+  // How many times the swap's transaction ran: 1 unless a deadlock or
+  // serialization failure rolled it back and it ran again.
+  swapAttempts: number;
+  // Wall-clock spent on attempts that rolled back, so it can be subtracted
+  // from the swap's total to get the time of the attempt that committed.
+  swapRetryMs: number;
+}
+
 export class Batch {
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
@@ -430,6 +441,10 @@ export class Batch {
   // watermarks. Set there rather than recomputed at stamp time so the two
   // cannot drift.
   #publishedPrerenderedHtml = false;
+  // Set only while `done()`'s transaction runs. `#query` sends every statement
+  // through it then, so the swap's statements share one connection and commit
+  // or roll back together.
+  #txQuerier: Querier | undefined;
   #tombstonedLiveTypes = new Map<string, BoxelIndexTable['type'][]>();
   #prerenderedHtmlTombstonedLiveTypes = new Map<
     string,
@@ -2118,7 +2133,7 @@ export class Batch {
     // row must exist at this generation, because reads join realm_meta to
     // realm_generations.current_generation.
     carryForwardRealmMeta?: true;
-  }): Promise<{ totalIndexEntries: number }> {
+  }): Promise<BatchDoneResult> {
     // Drain any rows the visit loop left buffered before the swap reads the
     // working table. A no-op for a prerenderHtmlOnly batch (which never
     // buffers) and for a pass whose last write already forced a flush.
@@ -2128,38 +2143,77 @@ export class Batch {
       // channel: no realm_meta, no realm_generations bump, no boxel_index
       // swap. The guarded swap makes an out-of-order (lower-generation)
       // zombie job a per-row no-op.
-      await this.#query(['BEGIN']);
-      await this.promotePrerenderedHtmlWorking({ monotonicGuard: true });
-      await this.stampTypeGenerations({
-        // `prerendered_html` carries no adoption chain of its own, so the
-        // types this swap published are read from the `boxel_index` rows the
-        // same URLs hold. That read is the reason these watermarks live in a
-        // table the write side maintains rather than being aggregated per
-        // request: it is one query per batch, not one per search.
-        types: await this.publishedHtmlTypes(),
-        channels: { html: true },
-        monotonicGuard: true,
+      let commit = await this.#commit(async () => {
+        await this.promotePrerenderedHtmlWorking({ monotonicGuard: true });
+        await this.stampTypeGenerations({
+          // `prerendered_html` carries no adoption chain of its own, so the
+          // types this swap published are read from the `boxel_index` rows
+          // the same URLs hold. That read is the reason these watermarks live
+          // in a table the write side maintains rather than being aggregated
+          // per request: it is one query per batch, not one per search.
+          types: await this.publishedHtmlTypes(),
+          channels: { html: true },
+          monotonicGuard: true,
+        });
       });
-      await this.#query(['COMMIT']);
-      return { totalIndexEntries: this.#invalidations.size };
+      return { totalIndexEntries: this.#invalidations.size, ...commit };
     }
-    await this.#query(['BEGIN']);
-    if (opts?.carryForwardRealmMeta) {
-      await this.carryForwardRealmMeta();
-    } else {
-      await this.updateRealmMeta();
-    }
-    await this.applyBatchUpdates();
-    await this.pruneObsoleteEntries();
-    await this.stampTypeGenerations({
-      types: this.touchedTypes,
-      channels: { index: true, html: this.#publishedPrerenderedHtml },
-      bumpAllTypes: !this.typeSetIsComplete,
+    let commit = await this.#commit(async () => {
+      if (opts?.carryForwardRealmMeta) {
+        await this.carryForwardRealmMeta();
+      } else {
+        await this.updateRealmMeta();
+      }
+      await this.applyBatchUpdates();
+      await this.pruneObsoleteEntries();
+      await this.stampTypeGenerations({
+        types: this.touchedTypes,
+        channels: { index: true, html: this.#publishedPrerenderedHtml },
+        bumpAllTypes: !this.typeSetIsComplete,
+      });
     });
-    await this.#query(['COMMIT']);
 
     let totalIndexEntries = await this.numberOfIndexEntries();
-    return { totalIndexEntries };
+    return { totalIndexEntries, ...commit };
+  }
+
+  // Runs `body` as one transaction, with every `#query` it makes sent through
+  // the transaction's pinned querier. Readers therefore see all of a pass's
+  // swap or none of it, and a failure part-way through leaves the realm
+  // exactly as the previous pass published it.
+  //
+  // On Postgres, a deadlock with a concurrent commit rolls the whole body back
+  // and runs it again (see `DBAdapter.withTransaction`). Re-running is safe:
+  // the body reads the working table, which nothing changes while the swap
+  // runs, and the only in-memory state it touches (the minted loader epoch,
+  // `#publishedPrerenderedHtml`) comes out the same on every attempt. The
+  // attempt count and the time spent on attempts that rolled back are
+  // reported so a slow swap can be told apart from a contended one.
+  async #commit(body: () => Promise<void>): Promise<{
+    swapAttempts: number;
+    swapRetryMs: number;
+  }> {
+    let swapAttempts = 0;
+    let swapRetryMs = 0;
+    let attemptStart = 0;
+    await this.#dbAdapter.withTransaction(
+      async (txQuerier) => {
+        let now = Date.now();
+        if (swapAttempts > 0) {
+          swapRetryMs += now - attemptStart;
+        }
+        swapAttempts++;
+        attemptStart = now;
+        this.#txQuerier = txQuerier;
+        try {
+          await body();
+        } finally {
+          this.#txQuerier = undefined;
+        }
+      },
+      { label: `the index swap of ${this.realmURL.href}` },
+    );
+    return { swapAttempts, swapRetryMs };
   }
 
   // Re-stamp the current committed generation's realm_meta value at this
@@ -2229,6 +2283,9 @@ export class Batch {
   }
 
   #query(expression: Expression) {
+    if (this.#txQuerier) {
+      return this.#txQuerier(expression, coerceTypes);
+    }
     return query(this.#dbAdapter, expression, coerceTypes);
   }
 
@@ -2708,11 +2765,19 @@ export class Batch {
     // channels the caller omits can be left to the column default on insert:
     // a type no pass has stamped on that channel cannot have moved on it.
     // Every channel column carries this batch's generation.
-    let rows = [...keys].map((typeKey) => [
-      [param(this.realmURL.href)],
-      [param(typeKey)],
-      ...channels.map(() => [param(this.generation)]),
-    ]) as Expression[][];
+    //
+    // Sorted so every commit that stamps this table locks its rows in the
+    // same order. An index swap and a prerender-html swap of one realm run in
+    // separate queue lanes and can commit at the same time; upserting
+    // overlapping keys in different orders inside their transactions would
+    // deadlock them.
+    let rows = [...keys]
+      .sort()
+      .map((typeKey) => [
+        [param(this.realmURL.href)],
+        [param(typeKey)],
+        ...channels.map(() => [param(this.generation)]),
+      ]) as Expression[][];
     // Chunked so a realm with a large type vocabulary stays inside the
     // driver's bound-parameter ceiling.
     for (let offset = 0; offset < rows.length; offset += TYPE_STAMP_CHUNK) {
