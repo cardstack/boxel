@@ -198,6 +198,25 @@ jobs:
           use_cache=true
           while IFS= read -r file; do
             case "$file" in
+              # A spec file cannot change how anything indexes or renders: the
+              # realm servers this stack starts boot from main.ts / worker.ts,
+              # and the host bundle is built from app sources, so nothing under
+              # a package's `tests/` is ever loaded by either. Matched ahead of
+              # the package globs below, which would otherwise catch every one
+              # of them — editing a realm-server test was the single most
+              # common cause of a needless from-scratch index.
+              #
+              # Scoped to spec files, not to `tests/`: `realm-server/tests/
+              # fixtures/realistic` is served as the node-test realm, so it is
+              # realm content and stays gated by the globs. (It holds no spec
+              # files, so the two never overlap.) `case` patterns are not
+              # path-aware — `*` spans `/` — so one pattern per package covers
+              # its nested spec directories too.
+              packages/realm-server/tests/*-test.ts|packages/realm-server/tests/*-test.gts|\
+              packages/runtime-common/tests/*-test.ts|packages/runtime-common/tests/*-test.gts|\
+              packages/boxel-ui/tests/*-test.ts|packages/boxel-ui/tests/*-test.gts|\
+              packages/boxel-ui/docs-app/tests/*-test.ts|packages/boxel-ui/docs-app/tests/*-test.gts)
+                ;;
               packages/realm-server/*|packages/runtime-common/*|packages/postgres/*|packages/boxel-ui/*|package.json|pnpm-lock.yaml|pnpm-workspace.yaml)
                 use_cache=false
                 echo "Index-behavior change detected: $file"
