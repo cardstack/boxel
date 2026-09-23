@@ -15,6 +15,7 @@ import {
   Deferred,
   isFileDefInstance,
   rri,
+  QUERY_FIELD_SEARCH_CONCURRENCY_CAP,
   SEARCH_CONCURRENCY_CAP,
   SearchBoundError,
   type Realm,
@@ -30,6 +31,7 @@ import type NetworkService from '@cardstack/host/services/network';
 import RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
+import type { SearchThrottleLane } from '@cardstack/host/services/store';
 
 import {
   withCachedRealmSetup,
@@ -2964,7 +2966,7 @@ module(`Integration | search resource`, function (hooks) {
     });
 
     // The card `@context` search surface (`getSearchResource`) routes item-leg
-    // searches through the store's concurrency throttle so a card firing many
+    // searches through the store's card concurrency lane so a card firing many
     // at once can't burst concurrent `_federated-search` requests at the
     // realm-server. `enqueue` queues the excess rather than dropping it.
     test('performThrottledSearch caps concurrent card searches at the configured limit', async function (assert) {
@@ -2985,7 +2987,7 @@ module(`Integration | search resource`, function (hooks) {
         };
       };
       let results = Array.from({ length: count }, () =>
-        storeService.performThrottledSearch(makeRun()),
+        storeService.performThrottledSearch(makeRun(), 'card'),
       );
       try {
         await waitUntil(() => started >= SEARCH_CONCURRENCY_CAP);
@@ -3018,25 +3020,13 @@ module(`Integration | search resource`, function (hooks) {
       );
     });
 
-    // The throttle is the tab's ceiling rather than the card `@context`'s. A
-    // caller whose result set must not be reshaped — query-field resolution,
+    // A caller whose result set must not be reshaped — query-field resolution,
     // whose membership a clamped page or realm list would silently truncate —
-    // takes a slot without the other card caps, while the host's own searches
-    // stay outside it entirely.
+    // takes a slot in the query-field lane without the other card caps, while
+    // the host's own searches stay outside every lane.
     test('a throttled search waits for a slot before it reaches the network; a host search does not', async function (assert) {
-      let gates: Deferred<void>[] = [];
-      let occupied = 0;
-      let occupying = Array.from({ length: SEARCH_CONCURRENCY_CAP }, () => {
-        let gate = new Deferred<void>();
-        gates.push(gate);
-        return storeService.performThrottledSearch(async () => {
-          occupied++;
-          await gate.promise;
-        });
-      });
-      await waitUntil(() => occupied >= SEARCH_CONCURRENCY_CAP, {
-        timeout: 5_000,
-      });
+      let cap = fillTheLane('query-field');
+      await waitUntil(cap.started, { timeout: 5_000 });
       fetchCalls = 0;
 
       let throttledDone = false;
@@ -3064,10 +3054,7 @@ module(`Integration | search resource`, function (hooks) {
           'the throttled search is still queued behind the full cap',
         );
       } finally {
-        for (let gate of gates) {
-          gate.fulfill();
-        }
-        await Promise.all(occupying);
+        await cap.release();
       }
       await throttled;
       await host;
@@ -3079,24 +3066,98 @@ module(`Integration | search resource`, function (hooks) {
       );
     });
 
+    // The lanes are separate so the eager query-field fan-out can never hold
+    // the slots a card's own search needs: `enqueue` is one FIFO per lane, and
+    // a shared one would put a card search behind the whole fan-out.
+    test('a card search reaches the network while the query-field lane is full', async function (assert) {
+      let cap = fillTheLane('query-field');
+      await waitUntil(cap.started, { timeout: 5_000 });
+      fetchCalls = 0;
+
+      let queryFieldDone = false;
+      let queryField = storeService
+        .search(abdelRahmanQuery, [testRealmURL], { throttled: true })
+        .then(() => {
+          queryFieldDone = true;
+        });
+      let cardDone = false;
+      let card = storeService
+        .search(abdelRahmanQuery, [testRealmURL], { cardInitiated: true })
+        .then(() => {
+          cardDone = true;
+        });
+
+      try {
+        await waitUntil(() => cardDone, { timeout: 5_000 });
+        assert.strictEqual(
+          fetchCalls,
+          1,
+          'the card search reached the network past the queued fan-out',
+        );
+        assert.false(
+          queryFieldDone,
+          'the query-field search is still queued behind its own full lane',
+        );
+      } finally {
+        await cap.release();
+      }
+      await queryField;
+      await card;
+      assert.strictEqual(
+        fetchCalls,
+        2,
+        'the query-field search ran once its lane freed',
+      );
+    });
+
+    test('a query-field search reaches the network while the card lane is full', async function (assert) {
+      let cap = fillTheLane('card');
+      await waitUntil(cap.started, { timeout: 5_000 });
+      fetchCalls = 0;
+
+      let cardDone = false;
+      let card = storeService
+        .search(abdelRahmanQuery, [testRealmURL], { cardInitiated: true })
+        .then(() => {
+          cardDone = true;
+        });
+      let queryFieldDone = false;
+      let queryField = storeService
+        .search(abdelRahmanQuery, [testRealmURL], { throttled: true })
+        .then(() => {
+          queryFieldDone = true;
+        });
+
+      try {
+        await waitUntil(() => queryFieldDone, { timeout: 5_000 });
+        assert.strictEqual(
+          fetchCalls,
+          1,
+          'the query-field search reached the network past the queued card search',
+        );
+        assert.false(
+          cardDone,
+          'the card search is still queued behind its own full lane',
+        );
+      } finally {
+        await cap.release();
+      }
+      await card;
+      await queryField;
+      assert.strictEqual(
+        fetchCalls,
+        2,
+        'the card search ran once its lane freed',
+      );
+    });
+
     // Queueing introduces a window the unqueued path never had: a search can
     // sit in the queue until the consumer that wanted it is gone. Spending a
     // slot on it then would delay the live searches behind it, so a run that
     // reports itself obsolete when its turn comes never reaches the network.
     test('a queued search whose consumer has gone away gives back its slot instead of fetching', async function (assert) {
-      let gates: Deferred<void>[] = [];
-      let occupied = 0;
-      let occupying = Array.from({ length: SEARCH_CONCURRENCY_CAP }, () => {
-        let gate = new Deferred<void>();
-        gates.push(gate);
-        return storeService.performThrottledSearch(async () => {
-          occupied++;
-          await gate.promise;
-        });
-      });
-      await waitUntil(() => occupied >= SEARCH_CONCURRENCY_CAP, {
-        timeout: 5_000,
-      });
+      let cap = fillTheLane('query-field');
+      await waitUntil(cap.started, { timeout: 5_000 });
       fetchCalls = 0;
 
       let obsolete = false;
@@ -3108,10 +3169,7 @@ module(`Integration | search resource`, function (hooks) {
       // The consumer goes away while the search is still waiting its turn.
       obsolete = true;
 
-      for (let gate of gates) {
-        gate.fulfill();
-      }
-      await Promise.all(occupying);
+      await cap.release();
       let result = await queued;
 
       assert.strictEqual(
@@ -3140,19 +3198,25 @@ module(`Integration | search resource`, function (hooks) {
     // synchronously inside `perform()`, so the stamp moves before any slot can
     // free for the superseded run. If that ever stops holding, the superseded
     // query reaches the network and this test says so.
-    function fillTheCap() {
+    // Take every slot in one lane with work that cannot finish until the test
+    // releases it.
+    function fillTheLane(lane: SearchThrottleLane) {
+      let laneCap =
+        lane === 'card'
+          ? SEARCH_CONCURRENCY_CAP
+          : QUERY_FIELD_SEARCH_CONCURRENCY_CAP;
       let gates: Deferred<void>[] = [];
       let occupied = 0;
-      let occupying = Array.from({ length: SEARCH_CONCURRENCY_CAP }, () => {
+      let occupying = Array.from({ length: laneCap }, () => {
         let gate = new Deferred<void>();
         gates.push(gate);
         return storeService.performThrottledSearch(async () => {
           occupied++;
           await gate.promise;
-        });
+        }, lane);
       });
       return {
-        started: () => occupied >= SEARCH_CONCURRENCY_CAP,
+        started: () => occupied >= laneCap,
         release: async () => {
           for (let gate of gates) {
             try {
@@ -3173,9 +3237,10 @@ module(`Integration | search resource`, function (hooks) {
       let perform = storeService.performThrottledSearch.bind(storeService);
       (storeService as any).performThrottledSearch = (
         run: () => Promise<unknown>,
+        lane: SearchThrottleLane,
       ) => {
         enqueued++;
-        return perform(run);
+        return perform(run, lane);
       };
       return {
         enqueued: () => enqueued,
@@ -3184,7 +3249,7 @@ module(`Integration | search resource`, function (hooks) {
     }
 
     test('a queued search superseded by a query change never sends the superseded query', async function (this: RenderingTestContext, assert) {
-      let cap = fillTheCap();
+      let cap = fillTheLane('query-field');
       await waitUntil(cap.started, { timeout: 5_000 });
       let counter = countThrottledRuns();
       fetchCalls = 0;
@@ -3233,7 +3298,7 @@ module(`Integration | search resource`, function (hooks) {
     });
 
     test('a queued search whose resource is destroyed never reaches the network', async function (this: RenderingTestContext, assert) {
-      let cap = fillTheCap();
+      let cap = fillTheLane('query-field');
       await waitUntil(cap.started, { timeout: 5_000 });
       let counter = countThrottledRuns();
       fetchCalls = 0;

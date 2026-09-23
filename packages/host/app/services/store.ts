@@ -54,6 +54,7 @@ import {
   applySearchPageBound,
   assertRealmsBound,
   isJsonContentType,
+  QUERY_FIELD_SEARCH_CONCURRENCY_CAP,
   SEARCH_CONCURRENCY_CAP,
   SKIP_INDEX_WAIT_HEADER,
   SupportedMimeType,
@@ -235,6 +236,10 @@ const queryFieldSeedFromSearchSymbol = Symbol.for(
 );
 
 type PersistOptions = CreateOptions & { clientRequestId?: string };
+
+// Which of a store service's search concurrency lanes a throttled search takes:
+// the card `@context` surface's, or query-field resolution's.
+export type SearchThrottleLane = 'card' | 'query-field';
 // What an index event said the state of a card would be, carried alongside the
 // reload it scheduled so a second delivery of that event can recognize it as
 // already answered. Both members are optional because both are optional on the
@@ -1349,10 +1354,11 @@ export default class StoreService extends Service implements StoreInterface {
       // page size, realms fan-out, and the concurrency throttle — none of which
       // constrain the host app's own direct search calls.
       cardInitiated?: boolean;
-      // Run under the concurrency throttle without the other card caps, for a
-      // caller whose result set must not be reshaped but whose volume still has
-      // to be bounded — query-field resolution, which fires a search per query
-      // field per deserialized card. Implied by `cardInitiated`.
+      // Run under the query-field concurrency lane without the other card caps,
+      // for a caller whose result set must not be reshaped but whose volume
+      // still has to be bounded — query-field resolution, which fires a search
+      // per query field per deserialized card. Ignored with `cardInitiated`,
+      // which takes the card lane instead.
       throttled?: boolean;
       // Asked once, when a queued search reaches the front of the throttle.
       // Waiting is where a consumer can go away — the resource that wanted this
@@ -1405,15 +1411,19 @@ export default class StoreService extends Service implements StoreInterface {
         opts?.dependencyTrackingContext,
         opts?.scope,
       );
-    let result =
-      opts?.cardInitiated || opts?.throttled
-        ? await this.performThrottledSearch(async () => {
-            if (opts?.isObsolete?.()) {
-              return { instances: [] as T[], meta: { page: { total: 0 } } };
-            }
-            return await run();
-          })
-        : await run();
+    let lane: SearchThrottleLane | undefined = opts?.cardInitiated
+      ? 'card'
+      : opts?.throttled
+        ? 'query-field'
+        : undefined;
+    let result = lane
+      ? await this.performThrottledSearch(async () => {
+          if (opts?.isObsolete?.()) {
+            return { instances: [] as T[], meta: { page: { total: 0 } } };
+          }
+          return await run();
+        }, lane)
+      : await run();
     return opts?.includeMeta ? result : result.instances;
   }
 
@@ -1479,16 +1489,13 @@ export default class StoreService extends Service implements StoreInterface {
       : this.realmServer.availableRealmIdentifiers;
   }
 
-  // This store service's ceiling on concurrent item-leg searches. The task is a
-  // class field, so each store service carries its own — the interactive app's
-  // and a render store's are separate ceilings, not one shared tab-wide number.
-  // Within one it bounds the store and not a single card: every search routed
-  // through it competes for the same slots. Two callers route: the card
-  // `@context` surface (`getCards` and the card-facing store, via
-  // `cardInitiated`), and query-field resolution (via `throttled`), which fires
-  // a search per query field per deserialized card and is the larger fan-out of
-  // the two. The host app's own direct `store.search` / `getSearch` calls do
-  // not, so the trusted host is never throttled.
+  // This store service's ceilings on concurrent item-leg searches, one lane per
+  // caller. The tasks are class fields, so each store service carries its own
+  // pair — the interactive app's and a render store's are separate ceilings,
+  // not one shared tab-wide number. Within one lane the ceiling bounds the
+  // store and not a single card: every search routed into it competes for the
+  // same slots. The host app's own direct `store.search` / `getSearch` calls
+  // take neither lane, so the trusted host is never throttled.
   //
   // `enqueue` + `maxConcurrency` queues excess searches rather than dropping
   // them, so nothing a card asked for goes unanswered — a burst becomes a
@@ -1497,20 +1504,43 @@ export default class StoreService extends Service implements StoreInterface {
   // realm-server's per-request heap all scale with. The server's per-request
   // bounds (page / realms / time) are the un-overridable backstop; this keeps
   // well-behaved cards from tripping them in the first place.
-  private searchThrottle = task(
+  //
+  // The card lane serves the card `@context` surface (`getCards` and the
+  // card-facing store, via `cardInitiated`).
+  private cardSearchThrottle = task(
     { maxConcurrency: SEARCH_CONCURRENCY_CAP, enqueue: true },
     async (run: () => Promise<unknown>): Promise<unknown> => {
       return await run();
     },
   );
 
-  // Run `run` under this store's search concurrency ceiling (`enqueue` +
-  // maxConcurrency), so no more than the cap hit the realm-server at once and
+  // The query-field lane serves query-field resolution (via `throttled`), which
+  // fires a search per query field per deserialized card — the larger fan-out
+  // of the two, and one that feeds itself, since each result it hydrates
+  // resolves its own query fields in turn. `enqueue` is a single FIFO with no
+  // priority, and a slot is held across the hydration as well as the fetch, so
+  // on a shared lane a search a card asks for after a page starts loading
+  // would wait out that whole drain. Its own lane keeps the fan-out from
+  // holding the slots the card lane needs.
+  private queryFieldSearchThrottle = task(
+    { maxConcurrency: QUERY_FIELD_SEARCH_CONCURRENCY_CAP, enqueue: true },
+    async (run: () => Promise<unknown>): Promise<unknown> => {
+      return await run();
+    },
+  );
+
+  // Run `run` in `lane` under that lane's concurrency ceiling (`enqueue` +
+  // maxConcurrency), so no more than its cap hit the realm-server at once and
   // the rest queue. Called from `search` when `cardInitiated` or `throttled`.
   // Typed as a plain Promise since the caller only awaits the result. Public so
   // a test can exercise the throttle with controllable work.
-  performThrottledSearch<R>(run: () => Promise<R>): Promise<R> {
-    return this.searchThrottle.perform(run) as unknown as Promise<R>;
+  performThrottledSearch<R>(
+    run: () => Promise<R>,
+    lane: SearchThrottleLane,
+  ): Promise<R> {
+    let throttle =
+      lane === 'card' ? this.cardSearchThrottle : this.queryFieldSearchThrottle;
+    return throttle.perform(run) as unknown as Promise<R>;
   }
 
   // The store handed to cards as `@context.store`, bound to the realm the
@@ -1939,9 +1969,9 @@ export default class StoreService extends Service implements StoreInterface {
       // `getDefaultRealm`. Left unset by non-`@context` callers (query-field
       // support, the render-store hook), which are not subject to the caps.
       cardInitiated?: boolean;
-      // Set by query-field resolution: take a slot in this store's search
-      // concurrency ceiling, leaving the rest of the card caps off. See
-      // `searchThrottle`. Forced off for a render store, which must not wait on
+      // Set by query-field resolution: take a slot in this store's query-field
+      // search lane, leaving the rest of the card caps off. See
+      // `queryFieldSearchThrottle`. Forced off for a render store, which must not wait on
       // a queue mid-render.
       throttled?: boolean;
       getDefaultRealm?: () => string | undefined;
