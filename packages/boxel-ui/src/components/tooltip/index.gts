@@ -183,6 +183,8 @@ export default class Tooltip extends Component<Signature> {
         {{velcro.hook}}
         {{on 'mouseenter' this.onMouseEnter}}
         {{on 'mouseleave' this.onMouseLeave}}
+        {{on 'focusin' this.onMouseEnter}}
+        {{on 'focusout' this.onMouseLeave}}
         data-tooltip-trigger='true'
         ...attributes
       >
