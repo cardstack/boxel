@@ -265,6 +265,12 @@ export const testRealm = 'http://test-realm/';
 export const localBaseRealm = isEnvironmentMode()
   ? `${serviceURL('realm-server')}/base`
   : 'http://localhost:4201/base';
+// The catalog realm the test stack serves: the pinned catalog test subset
+// (packages/catalog/test-subset.json), at the URL the prerender host bundle
+// resolves `@cardstack/catalog/` to.
+export const localCatalogRealm = isEnvironmentMode()
+  ? `${serviceURL('realm-server')}/catalog/`
+  : 'http://localhost:4201/catalog/';
 export const matrixURL = new URL(
   isEnvironmentMode() ? serviceURL('matrix') : 'http://localhost:8008',
 );
@@ -411,6 +417,9 @@ export function createVirtualNetwork() {
   // @cardstack/base/ realm-prefix mapping so unresolveURL on either
   // form canonicalises to the same RRI.
   virtualNetwork.addRealmMapping('@cardstack/base/', localBaseRealm);
+  // The prerender host registers the catalog prefix too, so this side has to
+  // agree with it for module keys to match across the two processes.
+  virtualNetwork.addRealmMapping('@cardstack/catalog/', localCatalogRealm);
   return virtualNetwork;
 }
 

@@ -1,0 +1,18 @@
+{
+  "repository": "cardstack/boxel-catalog",
+  "revision": "383e8e5369cfd77b9bbbf3c16334851200671635",
+  "files": [
+    {
+      "path": "realm-policy/realm-policy.gts",
+      "reason": "RealmPolicy, PolicyRule and OperationGrant: the policy shapes the realm's operation-permission checks read"
+    },
+    {
+      "path": "fields/policy-predicate/policy-predicate.gts",
+      "reason": "PolicyPredicateField: the BXL `where` condition on an OperationGrant"
+    }
+  ],
+  "tests": {
+    "host": ["Integration | realm policy"],
+    "realmServer": ["catalog-test-subset-test"]
+  }
+}

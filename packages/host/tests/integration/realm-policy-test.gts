@@ -8,6 +8,7 @@ import {
   rri,
   type LooseSingleCardDocument,
   type Permissions,
+  type PolicyPredicate,
   type Realm,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
@@ -22,14 +23,28 @@ import {
   setupIntegrationTestRealm,
 } from '../helpers';
 import { setupBaseRealm } from '../helpers/base-realm';
+import { setupCatalogTestSubset } from '../helpers/catalog-test-subset';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
-import type { RealmPolicy } from '@cardstack/base/realm-policy';
+import type { CardDef, FieldDef } from '@cardstack/base/card-api';
+
+// The policy definitions live in the catalog realm and reach this suite
+// through the catalog test subset, so their shapes are described here rather
+// than imported.
+type OperationGrant = FieldDef & {
+  operation: string;
+  where: PolicyPredicate | null;
+};
+type PolicyRule = FieldDef & {
+  targetType: { module: string; name: string };
+  grants: OperationGrant[];
+};
+type RealmPolicy = CardDef & { rules: PolicyRule[] };
 
 const policyRef = {
-  module: rri('@cardstack/base/realm-policy'),
+  module: rri('@cardstack/catalog/realm-policy/realm-policy'),
   name: 'RealmPolicy',
 };
 
@@ -79,6 +94,7 @@ const educationPolicy = policyDocument([
 module('Integration | realm policy', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
+  setupCatalogTestSubset(hooks);
   setupLocalIndexing(hooks);
 
   let loader: Loader;

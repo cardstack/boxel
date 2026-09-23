@@ -231,7 +231,11 @@ jobs:
     uses: ./.github/workflows/test-web-assets.yaml
     with:
       caller: ci-host
-      skip_catalog: true
+      # The catalog prefix stays in the bundle: host tests load the pinned
+      # catalog test subset through `@cardstack/catalog/`, which host-test
+      # serves as the catalog realm. The test environment still keeps the
+      # catalog out of every test's realm list.
+      skip_catalog: false
       # Both jobs in this workflow (live-test and host-test) run their
       # chrome against the env-mode service stack at
       # `https://*.ci.localhost`, so environment.js needs to bake those
@@ -484,7 +488,8 @@ jobs:
       cancel-in-progress: true
     env:
       BOXEL_ENVIRONMENT: ci
-      SKIP_CATALOG: "true"
+      # Serve only the pinned catalog test subset as the catalog realm.
+      CATALOG_SOURCE: test-subset
       # env-vars.sh sets these only if the cert files exist at sourcing
       # time, but mise-action sources it before `actions/init` runs
       # `mise run infra:ensure-dev-cert` (which provisions the cert), so
@@ -662,6 +667,7 @@ jobs:
           mise run ci:wait-for-realms \
             realm=https://realm-server.ci.localhost/base/ \
             realm=https://realm-server.ci.localhost/skills/ \
+            realm=https://realm-server.ci.localhost/catalog/ \
             icons=https://icons.ci.localhost/@cardstack/boxel-icons/v1/icons/folder-pen.js \
             second-stage=https://realm-test.ci.localhost/test/ \
             stack-pid-file=/tmp/test-services.pid \
