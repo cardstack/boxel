@@ -2817,12 +2817,12 @@ module('Integration | Store', function (hooks) {
       "the linked card's create reported its failure",
     );
     // The failed create left the card with no id, so the save sends it as a
-    // card to create — and the realm, which did store it, says so. What
-    // matters is that the save answers instead of waiting on a create that
-    // will never deliver an id.
-    assert.false(
+    // card to create — and the realm, which did store it, links the saved
+    // card to the stored one. What matters is that the save answers instead
+    // of waiting on a create that will never deliver an id.
+    assert.true(
       isCardInstance(personResult),
-      'the save answered with the error the realm gave it',
+      `the save answered, linked to the already-stored card (resolved as: ${JSON.stringify(personResult)})`,
     );
     assert.deepEqual(
       includedLids(
