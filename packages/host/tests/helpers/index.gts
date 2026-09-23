@@ -345,23 +345,40 @@ function snapshotPrefixForModule(moduleCacheKey: string): string {
   return `snapshot_${simpleHash(trimmedModuleCacheKey)}_`;
 }
 
+// Delays every save the callback triggers by `delayMs` before it reaches the
+// realm, for as long as the callback runs.
+//
+// Of the three holds here, this is the one to reach for when the callback
+// awaits a DOM helper. `withHeldSave` and `withSavesHeldOpen` keep a save in flight, and a
+// save in flight holds a test waiter open, so `click`, `fillIn`, `typeIn` and
+// the rest — all of which settle — would wait on a release the callback has
+// not reached. A slow save still completes, so settling still resolves; it
+// just takes `delayMs` longer. What it buys in exchange is weaker: a window
+// wide enough that a save is unlikely to have landed, rather than one where a
+// save provably cannot have.
+//
+// The original is held in a closure rather than on the store, so nesting works
+// and a callback that throws still restores it.
 export async function withSlowSave(
   delayMs: number,
   cb: () => Promise<void>,
 ): Promise<void> {
   let store = getService('store');
-  (store as any)._originalPersist = (store as any).persistAndUpdate;
+  let originalPersist = (store as any).persistAndUpdate as (
+    instance: CardDef,
+    opts?: unknown,
+  ) => Promise<unknown>;
   (store as any).persistAndUpdate = async (
-    card: CardDef,
-    defaultRealmHref?: string,
+    instance: CardDef,
+    opts?: unknown,
   ) => {
     await delay(delayMs);
-    await (store as any)._originalPersist(card, defaultRealmHref);
+    return await originalPersist.call(store, instance, opts);
   };
   try {
-    return cb();
+    await cb();
   } finally {
-    (store as any).persistAndUpdate = (store as any)._originalPersist;
+    (store as any).persistAndUpdate = originalPersist;
   }
 }
 
@@ -370,6 +387,10 @@ export async function withSlowSave(
 // window where a mutation has been applied locally and no save can have reached
 // the realm, and the caller has the persisted result the moment this helper
 // resolves — neither side times a realm write against a wall clock.
+//
+// A held save holds a test waiter open, so the callback cannot await anything
+// that settles — which is every DOM helper. A callback that clicks or fills
+// belongs on `withSlowSave` instead, and trades the guarantee for a window.
 export async function withHeldSave(cb: () => Promise<void>): Promise<void> {
   let store = getService('store');
   let originalPersist = (store as any).persistAndUpdate as (
@@ -388,6 +409,67 @@ export async function withHeldSave(cb: () => Promise<void>): Promise<void> {
   };
   try {
     await cb();
+  } finally {
+    (store as any).persistAndUpdate = originalPersist;
+    release?.();
+    await Promise.allSettled(heldSaves);
+  }
+}
+
+// Lets every save the callback triggers serialize and reach the realm at the
+// moment it is issued, then holds it open — still in flight — until the
+// callback calls `release`. The autosave queue drains one save at a time and
+// gates the next drain on the one in flight, so every mutation made while a
+// save is held coalesces into the single save that follows it.
+//
+// This is the counterpart to `withHeldSave`, which holds entry into
+// `persistAndUpdate`: holding entry changes what a save observes, because the
+// document is serialized when the save runs rather than when it was issued.
+// Holding the save open leaves that alone, which is what a caller asserting on
+// the document a leading-edge save carries needs.
+//
+// Nothing here consults a clock: the callback releases the hold once the state
+// it wants coalesced is in place, so the size of the coalescing window is the
+// caller's to state rather than the runner's to decide. What a callback may do
+// before it releases is therefore bounded: a held save keeps a test waiter
+// open, so anything that ends in `settled()` blocks until the release. Among
+// the DOM helpers that is nearly all of them — `click`, `fillIn`, `typeIn`,
+// `triggerKeyEvent` and `focus` each settle before they resolve, and `typeIn`
+// also settles inside `__focus__` ahead of its first character when the
+// browser window does not hold focus. `waitUntil` polls on a timer and settles
+// at no point, which is the way through.
+//
+// `onSaveIssued` fires as a save enters `persistAndUpdate`, ahead of the
+// document it serializes. A caller wanting to know what state a save carried
+// reads it there: the store's own `onSave` subscriber fires on the far side of
+// the realm round trip, by which point the state has moved on.
+export async function withSavesHeldOpen(
+  cb: (release: () => void) => Promise<void>,
+  opts: { onSaveIssued?: (instance: CardDef) => void } = {},
+): Promise<void> {
+  let store = getService('store');
+  let originalPersist = (store as any).persistAndUpdate as (
+    instance: CardDef,
+    opts?: unknown,
+  ) => Promise<unknown>;
+  let release: (() => void) | undefined;
+  let released = new Promise<void>((resolve) => (release = resolve));
+  let heldSaves: Promise<unknown>[] = [];
+  (store as any).persistAndUpdate = async (
+    instance: CardDef,
+    persistOpts?: unknown,
+  ) => {
+    opts.onSaveIssued?.(instance);
+    let heldSave = (async () => {
+      let result = await originalPersist.call(store, instance, persistOpts);
+      await released;
+      return result;
+    })();
+    heldSaves.push(heldSave);
+    return await heldSave;
+  };
+  try {
+    await cb(() => release?.());
   } finally {
     (store as any).persistAndUpdate = originalPersist;
     release?.();

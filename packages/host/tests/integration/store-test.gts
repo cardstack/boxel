@@ -1,6 +1,7 @@
 import { service } from '@ember/service';
 import {
   type RenderingTestContext,
+  find,
   waitUntil,
   waitFor,
   click,
@@ -47,6 +48,7 @@ import {
   setupCardLogs,
   setupIntegrationTestRealm,
   type TestContextWithSave,
+  withSavesHeldOpen,
   withSlowSave,
   setupOperatorModeStateCleanup,
 } from '../helpers';
@@ -1676,9 +1678,26 @@ module('Integration | Store', function (hooks) {
       },
     );
 
+    let nameInput = `[data-test-stack-card="${testRealmURL}Person/hassan"] [data-test-field="name"] input`;
+    let typedSoFar = () => (find(nameInput) as HTMLInputElement | null)?.value;
+
+    // Each save records the keystrokes that had landed when it was issued, which
+    // is the reading that names the keystroke a half-typed save caught. Saves
+    // here are serialized one at a time, so the nth issue pairs with the nth
+    // response.
+    let typedWhenIssued: (string | undefined)[] = [];
+    let saveLog: string[] = [];
+    let saveTrace = () => `saves so far: ${saveLog.join(' | ')}`;
+
     let saveCount = 0;
     this.onSave((url, doc) => {
       saveCount++;
+      let savedName = (doc as SingleCardDocument).data?.attributes?.name;
+      saveLog.push(
+        `#${saveCount} issuedAfter=${JSON.stringify(
+          typedWhenIssued[saveCount - 1],
+        )} saved=${JSON.stringify(savedName)}`,
+      );
       assert.strictEqual(
         url.href,
         `${testRealmURL}Person/hassan`,
@@ -1687,34 +1706,109 @@ module('Integration | Store', function (hooks) {
       switch (saveCount) {
         case 1:
           assert.strictEqual(
-            (doc as SingleCardDocument).data?.attributes?.name,
+            savedName,
             'Hassan ',
-            'the initial instance mutation event is saved',
+            `the initial instance mutation event is saved (${saveTrace()})`,
           );
           break;
         case 2:
           assert.strictEqual(
-            (doc as SingleCardDocument).data?.attributes?.name,
+            savedName,
             'Hassan Paper',
-            'the final instance mutation event is saved',
+            `the final instance mutation event is saved (${saveTrace()})`,
           );
           break;
         default:
-          assert.ok(false, `unexpected number of saves: ${saveCount}`);
+          assert.ok(
+            false,
+            `unexpected number of saves: ${saveCount} (${saveTrace()})`,
+          );
       }
     });
 
-    // slow down the save so we can get deterministic results
-    await withSlowSave(1000, async () => {
-      // typeIn will fire an event for each character, which in turn results in multiple instance updated events
-      await typeIn(
-        `[data-test-stack-card="${testRealmURL}Person/hassan"] [data-test-field="name"] input`,
-        ' Paper',
-      );
+    // Hold the leading-edge save open until every keystroke has landed. The
+    // autosave queue gates its next drain on the save in flight, so the
+    // keystrokes typed behind the held save are all still queued when it
+    // releases, and they coalesce into the one save that follows it.
+    await withSavesHeldOpen(
+      async (release) => {
+        // typeIn fires an event per character, each of which is an instance
+        // mutation event, and it settles only around them — before the first
+        // character and after the last. waitUntil settles at no point, so the
+        // keystrokes land while the held save still has the queue closed.
+        let keystrokes = typeIn(nameInput, ' Paper');
+        // The race is what lets typing that fails report its own error: the
+        // keystrokes cannot resolve before the release, so the only way they
+        // win is by rejecting. The bare catch keeps that rejection from also
+        // being reported as an unhandled one when the wait is what settles the
+        // race.
+        keystrokes.catch(() => {});
+        try {
+          await Promise.race([
+            keystrokes,
+            // waitUntil budgets in polls rather than milliseconds — it charges
+            // each poll the interval it asked for, capped at 10ms — so this is
+            // thousands of polls, not seconds. It stays well inside testem's
+            // browser_no_activity_timeout, which would take the whole shard
+            // rather than fail this test with the message below.
+            waitUntil(() => typedSoFar() === 'Hassan Paper', {
+              timeout: 3_000,
+            }),
+          ]);
+        } catch (err) {
+          throw new Error(
+            `the keystrokes did not land, input holds ${JSON.stringify(
+              typedSoFar(),
+            )} (${saveTrace()})`,
+            { cause: err },
+          );
+        }
+        release();
+        await keystrokes;
+      },
+      {
+        onSaveIssued: () => typedWhenIssued.push(typedSoFar()),
+      },
+    );
 
-      // the leading edge and trailing edge of the key events are saved and the intermediate events are dropped
-      assert.strictEqual(saveCount, 2, 'the number of auto-saves is correct');
-    });
+    // the leading edge and trailing edge of the key events are saved and the intermediate events are dropped
+    assert.strictEqual(
+      saveCount,
+      2,
+      `the number of auto-saves is correct (${saveTrace()})`,
+    );
+  });
+
+  // The debounce test above pins which mutations coalesce; this pins how long
+  // the save they coalesce behind stays in flight. The two are separable and a
+  // test that rides on both is a test that races the runner: the window is
+  // `max(floor, realm round trip)`, and the round trip is the term a loaded
+  // runner stretches.
+  test<TestContextWithSave>('a non-immediate auto save stays in flight for the save-indicator floor', async function (assert) {
+    let instance = await storeService.get(`${testRealmURL}Person/hassan`);
+    let id = instance.id!;
+
+    // With the round trip stubbed to resolve at once, the floor is the only
+    // thing left that can hold the save — so the reading below measures it
+    // rather than the realm. It is a lower bound, which a loaded runner can
+    // only overshoot.
+    let store = storeService as any;
+    let originalPersist = store.persistAndUpdate;
+    store.persistAndUpdate = async () => instance;
+    try {
+      let startedAt = Date.now();
+      (instance as any).name = 'Paper';
+      await waitUntil(() => storeService.getSaveState(id)?.lastSaved, {
+        timeout: 5_000,
+      });
+      let heldMs = Date.now() - startedAt;
+      assert.ok(
+        heldMs >= 500,
+        `the save is held in flight for the floor (held ${heldMs}ms)`,
+      );
+    } finally {
+      store.persistAndUpdate = originalPersist;
+    }
   });
 
   test<TestContextWithSave>('getSaveState works for initially unsaved instance', async function (assert) {
