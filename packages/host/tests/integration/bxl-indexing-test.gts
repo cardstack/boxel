@@ -25,11 +25,14 @@ import { setupRenderingTest } from '../helpers/setup';
 // A BXL `computeVia` runs whenever the field is read, and indexing is the
 // read that persists: the search doc is what queries filter and sort on,
 // and it is regenerated on every pass that touches the card. This suite
-// covers that indexing dimension — BXL computeds land in the search doc in
-// a shape the query engine can match on, and they recompute whenever an
-// edit invalidates the card, whether the edit lands on the card itself, on
-// a card it reaches through a link, or on the module that declares the
-// formula.
+// covers that indexing dimension — a BXL computed that reads only the card's
+// own fields or a `linksTo` target lands in the search doc in a shape the
+// query engine can match on, and recomputes whenever an edit invalidates the
+// card, whether the edit lands on the card itself, on a card it reaches
+// through a link, or on the module that declares the formula. A computed that
+// reads the query-backed `claims` inverse (directly or transitively) is
+// omitted instead: the index has no invalidation edge to that inverse, so a
+// stored value would go stale — those cases assert absence.
 //
 // Recomputation is the part with real teeth. `expression()` memoizes each
 // compute per card instance, so a memo that outlived its cycle would show
@@ -145,43 +148,38 @@ module('Integration | bxl indexing', function (hooks) {
       [`${testRealmURL}Claim/clm-1`],
       'a number computed matches by range, so it indexed as a number',
     );
-    // POL-200 has no claims, so its loss ratio is 0 and it stays out.
-    assert.deepEqual(
-      await matchingIds({
-        filter: { on: policyRef, range: { lossRatio: { gt: 0.4 } } },
-      }),
-      [`${testRealmURL}Policy/pol-100`],
-      'a computed chained off other computeds is matchable too',
-    );
+    // `severityBand` and `incurredAmount` read only the claim's own fields.
+    // Computeds that read the query-backed claims inverse (`lossRatio` and the
+    // rest) are omitted from the index, so they match nothing — see the
+    // dedicated omission tests below.
   });
 
-  test('{ as: FieldDef } computeds are matchable on their nested paths', async function (assert) {
-    // The materialized field instance has to survive serialization into the
-    // search doc as a nested object, not as an opaque blob, or the dotted
-    // path has nothing to match against. Both policies band as Low — POL-200
-    // has no claims at all, so its loss ratio is 0 — and the score field
-    // separates them.
+  test('{ as: FieldDef } computeds that read the query inverse are not matchable', async function (assert) {
+    // `riskBand` and `claimBands` materialize into structured field instances,
+    // but both derive from the query-backed `claims` inverse, so they are
+    // omitted from the search doc. A nested-path filter then has nothing to
+    // match against — the alternative would be matching on a stale materialized
+    // value the index can never invalidate.
     assert.deepEqual(
       await matchingIds({
         filter: { on: policyRef, eq: { 'riskBand.label': 'Low' } },
-        sort: [{ on: policyRef, by: 'policyId', direction: 'asc' }],
       }),
-      [`${testRealmURL}Policy/pol-100`, `${testRealmURL}Policy/pol-200`],
-      'the nested label of a single materialized instance',
+      [],
+      'the single materialized instance is not in the index',
     );
     assert.deepEqual(
       await matchingIds({
         filter: { on: policyRef, range: { 'riskBand.score': { gt: 1 } } },
       }),
-      [`${testRealmURL}Policy/pol-100`],
-      'a nested number keeps its type through materialization',
+      [],
+      'nor is its nested number',
     );
     assert.deepEqual(
       await matchingIds({
         filter: { on: policyRef, eq: { 'claimBands.label': 'Minor' } },
       }),
-      [`${testRealmURL}Policy/pol-100`],
-      'an element of a materialized array',
+      [],
+      'nor an element of the materialized array',
     );
   });
 
@@ -274,7 +272,7 @@ module('Integration | bxl indexing', function (hooks) {
     );
   });
 
-  test("an edit to a claim converges into the aggregate on the policy's next visit", async function (assert) {
+  test('a query-backed aggregate stays out of the index across a claim edit and revisit', async function (assert) {
     await writeClaim('Claim/clm-2.json', {
       claimId: 'CLM-2',
       claimStatus: 'Open',
@@ -282,48 +280,33 @@ module('Integration | bxl indexing', function (hooks) {
       reserveAmount: 500,
     });
 
-    // The only stored edge runs claim → policy; the policy's `claims` side
-    // is a query resolved against the live index when the policy is
-    // visited. A dependency read through a query context is not recorded as
-    // an invalidation edge, so writing the claim reindexes the claim alone
-    // and the policy keeps the aggregate from its last visit. These two
-    // assert that staleness deliberately — they are the contract as it
-    // stands, not the behavior anyone would want.
+    // The only stored edge runs claim → policy; the policy's `claims` side is
+    // a query resolved against the live index. A dependency read through a
+    // query context is not recorded as an invalidation edge, so a stored
+    // aggregate over it could never be kept current — which is why it is
+    // omitted rather than persisted. The claim edit reindexes the claim and
+    // does not reach the policy, and the aggregate is absent either way.
     let searchDoc = await indexedSearchDoc(`${testRealmURL}Policy/pol-100`);
-    assert.strictEqual(
-      searchDoc.paidClaimsTotal,
-      3980.75,
-      'the claim edit does not reach the policy through the query inverse',
-    );
-    assert.strictEqual(
-      searchDoc.openClaimCount,
-      1,
-      'nor does the status change it would have counted',
-    );
+    assert.strictEqual(searchDoc.paidClaimsTotal, undefined);
+    assert.strictEqual(searchDoc.openClaimCount, undefined);
 
-    // That next visit recomputes against the now-current claims.
+    // A later revisit recomputes the policy against the now-current claims,
+    // but the aggregate is still derived from the query inverse, so it stays
+    // out of the index rather than converging into it.
     await revisitPolicy();
 
     searchDoc = await indexedSearchDoc(`${testRealmURL}Policy/pol-100`);
-    assert.strictEqual(
-      searchDoc.paidClaimsTotal,
-      4200.5,
-      'the aggregate picks up the edited claim',
-    );
-    assert.strictEqual(searchDoc.reservedClaimsTotal, 2000, 'and its reserve');
-    assert.strictEqual(
-      searchDoc.openClaimCount,
-      2,
-      'the reopened claim counts toward the open tally',
-    );
+    assert.strictEqual(searchDoc.paidClaimsTotal, undefined);
+    assert.strictEqual(searchDoc.reservedClaimsTotal, undefined);
+    assert.strictEqual(searchDoc.openClaimCount, undefined);
     assert.strictEqual(
       searchDoc.lossRatio,
-      0.5167,
-      'the chained computed follows the aggregate it reads',
+      undefined,
+      'the chained computed that reads the aggregate is omitted too',
     );
   });
 
-  test('a claim joining or leaving the realm converges into the aggregate', async function (assert) {
+  test('a claim joining or leaving the realm still adds no query-backed aggregate', async function (assert) {
     await writeClaim('Claim/clm-4.json', {
       claimId: 'CLM-4',
       claimStatus: 'Open',
@@ -334,17 +317,19 @@ module('Integration | bxl indexing', function (hooks) {
 
     let policyId = `${testRealmURL}Policy/pol-100`;
     let searchDoc = await indexedSearchDoc(policyId);
-    assert.strictEqual(searchDoc.paidClaimsTotal, 4000, 'the total grows');
-    assert.strictEqual(searchDoc.openClaimCount, 2, 'and so does the tally');
-    assert.deepEqual(
+    assert.strictEqual(searchDoc.paidClaimsTotal, undefined);
+    assert.strictEqual(searchDoc.openClaimCount, undefined);
+    assert.strictEqual(
       searchDoc.claimPolicyIds,
-      [policyId, policyId, policyId],
-      'the new claim joins the inverse the cycle-walking formula reads',
+      undefined,
+      'the cycle-walking formula reads the query inverse, so it is omitted too',
     );
 
     await realm.delete('Claim/clm-4.json');
     await revisitPolicy();
 
+    // The claim's own index entry still comes and goes with the file; only the
+    // policy's query-derived aggregates over it are what stay out of the index.
     assert.strictEqual(
       await realm.realmIndexQueryEngine.instance(
         new URL(`${testRealmURL}Claim/clm-4`),
@@ -353,13 +338,8 @@ module('Integration | bxl indexing', function (hooks) {
       'the deleted claim leaves the index entirely',
     );
     searchDoc = await indexedSearchDoc(policyId);
-    assert.strictEqual(searchDoc.paidClaimsTotal, 3980.75, 'the total shrinks');
-    assert.strictEqual(searchDoc.openClaimCount, 1, 'and so does the tally');
-    assert.deepEqual(
-      searchDoc.claimPolicyIds,
-      [policyId, policyId],
-      'and the claim leaves the inverse when it is deleted',
-    );
+    assert.strictEqual(searchDoc.paidClaimsTotal, undefined);
+    assert.strictEqual(searchDoc.claimPolicyIds, undefined);
   });
 
   test('editing the formula in the module recomputes every instance', async function (assert) {
@@ -438,14 +418,16 @@ module('Integration | bxl indexing', function (hooks) {
       'the blank premium reads as 0 under Excel blank semantics',
     );
 
-    // The degraded card also leaves the result sets it used to match, so a
-    // query never serves the values it computed before the edit.
+    // `riskBand` reads the query-backed claims inverse (through `lossRatio`),
+    // so it is omitted from the index regardless of the card's inputs — a
+    // nested-path query over it matches nothing here, as it does before the
+    // edit.
     assert.deepEqual(
       await matchingIds({
         filter: { on: policyRef, range: { 'riskBand.score': { gt: 1 } } },
       }),
       [],
-      'the pre-edit risk score is out of the index',
+      'the query-derived risk score is not in the index',
     );
   });
 });

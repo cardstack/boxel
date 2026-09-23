@@ -82,23 +82,24 @@ module('Integration | bxl platform module', function (hooks) {
     // on the very first pass
     assert.strictEqual(searchDoc.customerName, 'Acme Freight');
 
-    // Query-backed inverses resolve against the LIVE index at visit time,
-    // and a realm's first-ever index pass runs with an empty live index —
-    // so the claims aggregations bake in their empty-set values…
-    assert.strictEqual(searchDoc.paidClaimsTotal, 0);
-    assert.strictEqual(searchDoc.openClaimCount, 0);
+    // Computeds that read the query-backed `claims` inverse are omitted from
+    // the search doc: the index cannot invalidate that inverse, so a stored
+    // aggregate would go stale.
+    assert.strictEqual(searchDoc.paidClaimsTotal, undefined);
+    assert.strictEqual(searchDoc.openClaimCount, undefined);
 
-    // …and the next visit of the policy converges them, now that the
-    // claims are live.
+    // A later visit recomputes the policy against the now-live claims, but the
+    // aggregates still read the query inverse, so they stay out of the index
+    // rather than converging into it.
     await realm.write(
       'Policy/pol-100.json',
       JSON.stringify(bxlTrackingPol100Renewal),
     );
     searchDoc = await indexedSearchDoc(`${testRealmURL}Policy/pol-100`);
-    assert.strictEqual(searchDoc.paidClaimsTotal, 3980.75);
-    assert.strictEqual(searchDoc.openClaimCount, 1);
-    // chained computeds
-    assert.strictEqual(searchDoc.lossRatio, 0.4567);
+    assert.strictEqual(searchDoc.paidClaimsTotal, undefined);
+    assert.strictEqual(searchDoc.openClaimCount, undefined);
+    // the fx computed chained off those aggregates is omitted on the same terms
+    assert.strictEqual(searchDoc.lossRatio, undefined);
   });
 
   test('every lazy formula chunk loads and dispatches through the platform module', async function (assert) {
