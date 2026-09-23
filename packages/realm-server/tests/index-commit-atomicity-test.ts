@@ -2,7 +2,11 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 
-import { rri, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  mintRealmLoaderEpoch,
+  rri,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 import type { DBAdapter, Realm } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
@@ -32,11 +36,11 @@ function makeFileSystem() {
   };
 }
 
-// The index swap writes `realm_type_generations` last, after it has already
-// promoted `boxel_index`, advanced `realm_generations` and replaced
-// `realm_meta`. A trigger that raises there is a real database failure at the
-// latest point of the swap, so it separates a swap that is one transaction
-// from one whose earlier statements have already committed.
+// The index swap writes `realm_type_generations` near its end, after it has
+// already promoted `boxel_index` and replaced `realm_meta`. A trigger that
+// raises there is a real database failure late in the swap, so it separates a
+// swap that is one transaction from one whose earlier statements have
+// already committed.
 const FAIL_FUNCTION = 'index_commit_atomicity_test_fail';
 const FAIL_TRIGGER = 'index_commit_atomicity_test_fail_trigger';
 
@@ -54,6 +58,33 @@ async function installSwapFailure(dbAdapter: DBAdapter, realmURL: string) {
     CREATE TRIGGER ${FAIL_TRIGGER}
     BEFORE INSERT OR UPDATE ON realm_type_generations
     FOR EACH ROW WHEN (NEW.realm_url = '${realmURL}')
+    EXECUTE FUNCTION ${FAIL_FUNCTION}();
+  `);
+}
+
+// Holds the swap inside its `realm_type_generations` statement for
+// `seconds`, with every earlier statement of the transaction already run. A
+// statement-level trigger fires once per statement, so each stamp chunk
+// sleeps once. Before sleeping it takes a transaction-scoped advisory lock,
+// which is how the test sees that the swap has arrived: the test database
+// runs with activity tracking off, so `pg_stat_activity` shows no queries,
+// but `pg_locks` always lists a granted lock.
+const SLOW_SWAP_LOCK_KEY = 1305301;
+
+async function installSlowSwap(dbAdapter: DBAdapter, seconds: number) {
+  await dbAdapter.execute(`
+    CREATE OR REPLACE FUNCTION ${FAIL_FUNCTION}() RETURNS trigger AS $$
+    BEGIN
+      PERFORM pg_advisory_xact_lock(${SLOW_SWAP_LOCK_KEY});
+      PERFORM pg_sleep(${seconds});
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+  `);
+  await dbAdapter.execute(`
+    CREATE TRIGGER ${FAIL_TRIGGER}
+    BEFORE INSERT OR UPDATE ON realm_type_generations
+    FOR EACH STATEMENT
     EXECUTE FUNCTION ${FAIL_FUNCTION}();
   `);
 }
@@ -218,24 +249,28 @@ module(basename(import.meta.filename), function (hooks) {
     );
 
     // The failed swap's connection went back to the pool with its transaction
-    // rolled back, not left open. A backend that has sat idle inside a
-    // transaction since before the failure is one the swap abandoned; a
-    // transaction some other caller opened since then can be mid-flight.
-    let [{ at: failureObservedAt }] = (await dbAdapter.execute(
-      `SELECT now()::text AS at`,
-    )) as { at: string }[];
+    // rolled back, not left open. Every open transaction holds a lock on its
+    // own virtual transaction id, so a (backend, virtualxid) pair present in
+    // two samples taken well apart is a transaction that stayed open between
+    // them; the short transactions the queue and the realm run come and go.
+    // `pg_locks` is read rather than `pg_stat_activity` because the test
+    // database runs with activity tracking off.
+    let openTransactions = async () =>
+      new Set(
+        (
+          (await dbAdapter.execute(
+            `SELECT pid, virtualxid FROM pg_locks
+               WHERE locktype = 'virtualxid' AND pid <> pg_backend_pid()`,
+          )) as { pid: number; virtualxid: string }[]
+        ).map((row) => `${row.pid}:${row.virtualxid}`),
+      );
+    let before = await openTransactions();
     await new Promise((resolve) => setTimeout(resolve, 1500));
-    let [abandoned] = (await dbAdapter.execute(
-      `SELECT count(*)::int AS n FROM pg_stat_activity
-         WHERE datname = current_database()
-           AND state = 'idle in transaction'
-           AND state_change < $1::timestamptz`,
-      { bind: [failureObservedAt] },
-    )) as { n: number }[];
-    assert.strictEqual(
-      abandoned.n,
-      0,
-      'no pooled connection was left idle inside an open transaction',
+    let after = await openTransactions();
+    assert.deepEqual(
+      [...before].filter((key) => after.has(key)),
+      [],
+      'no pooled connection was left inside an open transaction',
     );
 
     await removeSwapFailure(dbAdapter);
@@ -268,5 +303,46 @@ module(basename(import.meta.filename), function (hooks) {
       0,
       'an uncontended swap spends no time on rolled-back attempts',
     );
+  });
+  test("a user's module write does not wait on an index swap in progress", async function (assert) {
+    // A module save mints a loader epoch by writing the realm's
+    // `realm_generations` row. The swap writes that row too, and a row a
+    // transaction has written stays locked until it commits, so the swap
+    // must leave that write to its end: otherwise the save waits out the
+    // rest of whatever swap happens to be running.
+    // The pass renders the new card before it reaches its swap.
+    assert.timeout(240_000);
+    let sleepSeconds = 4;
+    let jobBaseline = await latestIndexJobId();
+    await installSlowSwap(dbAdapter, sleepSeconds);
+    await writePerson('add', 'person-2.json', 'Paper');
+
+    await waitUntil(
+      async () => {
+        let [row] = (await dbAdapter.execute(
+          `SELECT count(*)::int AS n FROM pg_locks
+             WHERE locktype = 'advisory' AND granted
+               AND objid = $1`,
+          { bind: [SLOW_SWAP_LOCK_KEY] },
+        )) as { n: number }[];
+        return (row?.n ?? 0) > 0;
+      },
+      {
+        timeout: 180_000,
+        interval: 50,
+        timeoutMessage: 'the swap never reached its type-watermark stamps',
+      },
+    );
+
+    let mintStart = Date.now();
+    await mintRealmLoaderEpoch(dbAdapter, realm.url);
+    let mintMs = Date.now() - mintStart;
+    assert.ok(
+      mintMs < (sleepSeconds * 1000) / 2,
+      `the loader-epoch write returned in ${mintMs} ms instead of waiting for the swap to commit`,
+    );
+
+    let job = await settledIndexJobAfter(jobBaseline);
+    assert.strictEqual(job.status, 'resolved', 'the slowed swap still commits');
   });
 });
