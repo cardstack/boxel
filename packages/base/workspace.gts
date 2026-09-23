@@ -1615,6 +1615,7 @@ class Isolated extends Component<typeof Workspace> {
         margin: 0 calc(-1 * var(--boxel-sp-xl)); /* counter the stage side padding: flush edges */
         padding: var(--boxel-sp) var(--boxel-sp-xl) var(--boxel-sp);
         background-color: var(--grid-attention-surface);
+        color: var(--attention-ink);
         border-bottom: 1px solid var(--grid-attention-border);
         /* no overflow: hidden here — an overflow-hidden grid item's
            content contributes zero to its auto row, collapsing the panel
@@ -1651,13 +1652,9 @@ class Isolated extends Component<typeof Workspace> {
         background-color: var(--attention);
         animation: softpulse 2s ease-in-out infinite;
       }
-      .dock-title {
-        color: var(--attention-ink);
-      }
       .dock-hint {
         font-size: var(--boxel-font-size-xs);
         font-weight: 400;
-        color: var(--attention-ink);
       }
       .card-grid .dock-mini {
         justify-content: flex-start;
@@ -1672,6 +1669,7 @@ class Isolated extends Component<typeof Workspace> {
         padding: var(--boxel-sp-xs) var(--boxel-sp-xl) var(--boxel-sp-sm);
         border-bottom: 1px solid var(--grid-attention-border);
         background-color: var(--grid-attention-surface);
+        color: var(--attention-ink);
         box-shadow: var(--shadow-sm);
         text-align: start;
         cursor: pointer;
@@ -1691,7 +1689,6 @@ class Isolated extends Component<typeof Workspace> {
         flex-shrink: 0;
         font-size: var(--boxel-font-size-xs);
         font-weight: 600;
-        color: var(--attention-ink);
       }
       .dock-mini-summary {
         flex: 1;
@@ -1702,7 +1699,6 @@ class Isolated extends Component<typeof Workspace> {
         font-size: var(--boxel-font-size-xs);
         font-weight: 400;
         font-variant-numeric: tabular-nums;
-        color: var(--attention-ink);
       }
       .dock-mini-track {
         position: absolute;
@@ -1759,6 +1755,7 @@ class Isolated extends Component<typeof Workspace> {
         border-radius: var(--boxel-border-radius-lg);
         padding: var(--boxel-sp-sm) var(--boxel-sp);
         background-color: var(--grid-attention-surface);
+        color: var(--attention-ink);
         cursor: pointer;
         transition:
           border-color var(--grid-quick) ease,
@@ -1832,7 +1829,6 @@ class Isolated extends Component<typeof Workspace> {
       .setup-name {
         font-size: var(--boxel-font-size-sm);
         font-weight: 400;
-        color: var(--attention-ink);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -1844,7 +1840,6 @@ class Isolated extends Component<typeof Workspace> {
         font-family: var(--font-mono);
         font-size: var(--boxel-font-size-2xs);
         font-weight: 500;
-        color: var(--attention-ink);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -1873,14 +1868,12 @@ class Isolated extends Component<typeof Workspace> {
         font-family: var(--font-mono);
         font-size: var(--boxel-font-size-2xs);
         font-weight: 600;
-        color: var(--attention-ink);
         font-variant-numeric: tabular-nums;
       }
       .setup-action {
         flex-shrink: 0;
         font-size: var(--boxel-font-size-xs);
         font-weight: 600;
-        color: var(--primary-ink);
       }
       .card-grid .setup-tease {
         display: flex;
@@ -2297,7 +2290,6 @@ class Isolated extends Component<typeof Workspace> {
         line-height: var(--boxel-eyebrow-line-height);
         letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
-        color: var(--attention-ink);
       }
       .dock-pane-head {
         display: flex;
@@ -2313,7 +2305,6 @@ class Isolated extends Component<typeof Workspace> {
         line-height: var(--boxel-eyebrow-line-height);
         letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
-        color: var(--attention-ink);
         cursor: pointer;
       }
       .card-grid .dock-pane-open:hover {
@@ -2662,6 +2653,9 @@ class Isolated extends Component<typeof Workspace> {
   @action private onSearchKeydown(ev: Event) {
     let ke = ev as KeyboardEvent;
     if (ke.key === 'Escape') {
+      // Escape dismisses the search only; left to bubble, the operator mode
+      // reads it as "close this card" and the whole workspace goes away.
+      ke.stopPropagation();
       this.searchTerm = '';
       this.searchResults.splice(0, this.searchResults.length);
       this.searchAnnouncement = ''; // dismissed, not "no matches"
