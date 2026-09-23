@@ -185,6 +185,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       permissions: {
         owner: ['read', 'write', 'realm-owner'],
         reader: ['read'],
+        '@node-test_realm:localhost': ['read', 'realm-owner'],
       },
       onRealmSetup(args) {
         testRealm = args.testRealm;
