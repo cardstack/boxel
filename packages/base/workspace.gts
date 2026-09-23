@@ -7,8 +7,8 @@ import { restartableTask, timeout } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 import { TrackedArray, TrackedObject, TrackedSet } from 'tracked-built-ins';
 
-import { BoxelInput, Button } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { BoxelInput, Button, IconButton } from '@cardstack/boxel-ui/components';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import BooleanField from './boolean';
 // host-mode mutation: publish and unpublish are registered host tools
 // (tools/index.ts shims them onto the loader's virtual network, so these
@@ -32,6 +32,10 @@ import LayoutGridIcon from '@cardstack/boxel-icons/layout-grid';
 import ActivityIcon from '@cardstack/boxel-icons/activity';
 import DoorOpenIcon from '@cardstack/boxel-icons/door-open';
 import SearchIcon from '@cardstack/boxel-icons/search';
+import XIcon from '@cardstack/boxel-icons/x';
+import PlusIcon from '@cardstack/boxel-icons/plus';
+import ArrowUpIcon from '@cardstack/boxel-icons/arrow-up';
+import ArrowDownIcon from '@cardstack/boxel-icons/arrow-down';
 
 import type { CardErrorJSONAPI } from '@cardstack/runtime-common';
 import {
@@ -444,30 +448,63 @@ class Isolated extends Component<typeof Workspace> {
       >{{this.progressAnnouncement}}</span>
       <header class='frame'>
         <nav class='tabs' aria-label='Sections'>
-          <button
-            type='button'
-            class='tab {{if (eq this.segment "home") "active"}}'
-            data-test-workspace-tab='home'
-            {{on 'click' (this.setSegment 'home')}}
-          ><HouseIcon width='14' height='14' class='tab-icon' /> Home</button>
-          <button
-            type='button'
-            class='tab {{if (eq this.segment "library") "active"}}'
-            data-test-workspace-tab='library'
-            {{on 'click' (this.setSegment 'library')}}
-          ><LayoutGridIcon width='14' height='14' class='tab-icon' />
-            Library</button>
-          <button
-            type='button'
-            class='tab {{if (eq this.segment "activity") "active"}}'
-            data-test-workspace-tab='activity'
-            {{on 'click' (this.setSegment 'activity')}}
-          ><ActivityIcon width='14' height='14' class='tab-icon' />
-            Activity{{#if this.runningJobs.length}}<span
-                class='attention-dot'
+          {{#let (eq this.segment 'home') as |isActive|}}
+            <Button
+              @kind={{if isActive 'default' 'muted'}}
+              @size='extra-small'
+              @rectangular={{true}}
+              class={{cn 'nav-tab' nav-tab--active=isActive}}
+              aria-current={{if isActive 'true'}}
+              {{on 'click' (this.setSegment 'home')}}
+              data-test-workspace-tab='home'
+            ><HouseIcon
+                width='14'
+                height='14'
+                class='tab-icon'
                 aria-hidden='true'
-              /><span class='boxel-sr-only'>({{this.runningJobs.length}}
-                in progress)</span>{{/if}}</button>
+              />
+              Home</Button>
+          {{/let}}
+          {{#let (eq this.segment 'library') as |isActive|}}
+            <Button
+              @kind={{if isActive 'default' 'muted'}}
+              @size='extra-small'
+              @rectangular={{true}}
+              class={{cn 'nav-tab' nav-tab--active=isActive}}
+              aria-current={{if isActive 'true'}}
+              {{on 'click' (this.setSegment 'library')}}
+              data-test-workspace-tab='library'
+            ><LayoutGridIcon
+                width='14'
+                height='14'
+                class='tab-icon'
+                aria-hidden='true'
+              />
+              Library</Button>
+          {{/let}}
+          {{#let (eq this.segment 'activity') as |isActive|}}
+            <Button
+              @kind={{if isActive 'default' 'muted'}}
+              @size='extra-small'
+              @rectangular={{true}}
+              class={{cn 'nav-tab' nav-tab--active=isActive}}
+              aria-current={{if isActive 'true'}}
+              {{on 'click' (this.setSegment 'activity')}}
+              data-test-workspace-tab='activity'
+            ><ActivityIcon
+                width='14'
+                height='14'
+                class='tab-icon'
+                aria-hidden='true'
+              />
+              Activity
+              {{#if this.runningJobs.length}}<span
+                  class='attention-dot'
+                  aria-hidden='true'
+                /><span class='boxel-sr-only'>({{this.runningJobs.length}}
+                  in progress)</span>{{/if}}</Button>
+          {{/let}}
+
         </nav>
         {{#if @model.signage}}
           {{! workspace signage — hover reveals the purpose annotation }}
@@ -476,18 +513,22 @@ class Isolated extends Component<typeof Workspace> {
         {{/if}}
         <div class='frame-actions'>
           <div class='search-box' {{this.setupSearchHotkey}}>
-            <SearchIcon width='13' height='13' class='search-icon' />
-            <input
+            <SearchIcon
+              width='13'
+              height='13'
+              class='search-icon'
+              aria-hidden='true'
+            />
+            <BoxelInput
+              @value={{this.searchTerm}}
+              @onInput={{this.onSearchInput}}
+              @onFocus={{this.onSearchFocus}}
+              @onBlur={{this.onSearchBlur}}
+              @placeholder='Search'
               class='search-input'
-              type='text'
-              placeholder='Search'
               aria-label='Search this space'
               aria-keyshortcuts='Meta+K Control+K'
-              value={{this.searchTerm}}
-              {{on 'input' this.onSearchInput}}
               {{on 'keydown' this.onSearchKeydown}}
-              {{on 'focus' this.onSearchFocus}}
-              {{on 'focusout' this.onSearchBlur}}
             />
             {{! the visible hint is decorative — aria-keyshortcuts above carries
               the same thing to assistive tech, in both spellings }}
@@ -511,17 +552,19 @@ class Isolated extends Component<typeof Workspace> {
             {{#if this.searchResults.length}}
               <div class='search-results'>
                 {{#each this.searchResults as |result|}}
-                  <button
-                    type='button'
+                  <Button
+                    @kind='text-only'
+                    @size='auto'
                     class='search-result'
                     {{on 'click' (this.openResult result)}}
                   >
                     <span class='search-result-title'>{{result.title}}</span>
                     <span class='search-result-type'>{{result.type}}</span>
-                  </button>
+                  </Button>
                 {{/each}}
-                <button
-                  type='button'
+                <Button
+                  @kind='text-only'
+                  @size='auto'
                   class='search-see-all'
                   {{on 'click' this.seeAllResults}}
                 >
@@ -529,7 +572,7 @@ class Isolated extends Component<typeof Workspace> {
                   {{this.searchTotal}}
                   results
                   <span class='search-scope-note'>Cards only</span>
-                </button>
+                </Button>
               </div>
             {{/if}}
           </div>
@@ -549,8 +592,9 @@ class Isolated extends Component<typeof Workspace> {
               two lines, gradient meter, green Activity link, and the
               survey teaser attached below }}
             <div class='setup-strip'>
-              <button
-                type='button'
+              <Button
+                @kind='text-only'
+                @size='auto'
                 class='setup-bar'
                 {{on 'click' (this.setSegment 'activity')}}
               >
@@ -577,10 +621,11 @@ class Isolated extends Component<typeof Workspace> {
                   /></span>
                 <span class='setup-pct'>{{this.jobPct job}}%</span>
                 <span class='setup-action'>View in Activity ›</span>
-              </button>
+              </Button>
               {{#if (this.surveyRemaining job)}}
-                <button
-                  type='button'
+                <Button
+                  @kind='text-only'
+                  @size='auto'
                   class='setup-tease'
                   {{on 'click' (this.openCard job.card.setupSurvey)}}
                 >
@@ -589,7 +634,7 @@ class Isolated extends Component<typeof Workspace> {
                   <span class='setup-tease-link'>Answer
                     {{this.surveyRemaining job}}
                     quick questions ›</span>
-                </button>
+                </Button>
               {{/if}}
             </div>
           {{/each}}
@@ -610,13 +655,17 @@ class Isolated extends Component<typeof Workspace> {
                         <div class='door-kicker'>
                           <span class='door-kind'>{{this.doorKind index}}</span>
                           {{#if @canEdit}}
-                            <button
-                              type='button'
+                            <IconButton
+                              @icon={{XIcon}}
+                              @variant='text-only'
+                              @size='extra-small'
+                              @width='12'
+                              @height='12'
                               class='door-unpin'
                               aria-label='Unpin'
                               title='Unpin'
                               {{on 'click' (this.unpinDoor index)}}
-                            >×</button>
+                            />
                           {{/if}}
                         </div>
                         <div class='door-face'>
@@ -625,13 +674,14 @@ class Isolated extends Component<typeof Workspace> {
                             @displayContainer={{false}}
                             class='door-card'
                           />
-                          <button
-                            type='button'
+                          <Button
+                            @kind='text-only'
+                            @size='auto'
                             class='tile-open'
                             aria-label='Open {{this.doorTitle index}}'
                             title='Open in stack'
                             {{on 'click' (this.openDoor index)}}
-                          ></button>
+                          />
                           {{! Match Library fitted tiles: the read-only preview opens through viewCard }}
                         </div>
                         <div class='door-footer'>
@@ -650,14 +700,15 @@ class Isolated extends Component<typeof Workspace> {
                     {{/each}}
                     {{#if @canEdit}}
                       {{! the pin affordance: a ghost tile ending the row }}
-                      <button
-                        type='button'
+                      <Button
+                        @kind='text-only'
+                        @size='auto'
                         class='door-add'
                         {{on 'click' this.pinCard}}
                       >
                         <span class='door-add-mark'>＋</span>
                         <span class='door-add-label'>Pin a card…</span>
-                      </button>
+                      </Button>
                     {{/if}}
                   </div>
                 </section>
@@ -718,11 +769,12 @@ class Isolated extends Component<typeof Workspace> {
                         />
                       </div>
                     </div>
-                    <button
-                      type='button'
+                    <Button
+                      @kind='text-only'
+                      @size='auto'
                       class='readme-toggle'
                       {{on 'click' this.toggleReadme}}
-                    >{{if this.readmeExpanded 'Show less' 'Read more'}}</button>
+                    >{{if this.readmeExpanded 'Show less' 'Read more'}}</Button>
                   </section>
                 {{/if}}
               {{/if}}
@@ -739,11 +791,13 @@ class Isolated extends Component<typeof Workspace> {
                         <span class='inventory-label'>Cards</span>
                         <div class='inventory-chips'>
                           {{#each this.contentCardChips as |option|}}
-                            <button
-                              type='button'
+                            <Button
+                              @kind='default'
+                              @size='auto'
+                              @pill={{true}}
                               class='type-chip'
-                              data-test-type-chip={{option.id}}
                               {{on 'click' (this.jumpToFilter option)}}
+                              data-test-type-chip={{option.id}}
                             >
                               {{#if (this.iconHtml option)}}
                                 <span class='type-chip-icon'>{{this.iconHtml
@@ -755,7 +809,7 @@ class Isolated extends Component<typeof Workspace> {
                                 class='type-chip-count'
                                 data-test-type-chip-count
                               >{{this.countFor option}}</span>
-                            </button>
+                            </Button>
                           {{/each}}
                         </div>
                       </div>
@@ -765,11 +819,13 @@ class Isolated extends Component<typeof Workspace> {
                         <span class='inventory-label'>Files</span>
                         <div class='inventory-chips'>
                           {{#each this.fileChips as |option|}}
-                            <button
-                              type='button'
+                            <Button
+                              @kind='default'
+                              @size='auto'
+                              @pill={{true}}
                               class='type-chip'
-                              data-test-type-chip={{option.id}}
                               {{on 'click' (this.jumpToFilter option)}}
+                              data-test-type-chip={{option.id}}
                             >
                               {{#if (this.iconHtml option)}}
                                 <span class='type-chip-icon'>{{this.iconHtml
@@ -781,7 +837,7 @@ class Isolated extends Component<typeof Workspace> {
                                 class='type-chip-count'
                                 data-test-type-chip-count
                               >{{this.countFor option}}</span>
-                            </button>
+                            </Button>
                           {{/each}}
                         </div>
                       </div>
@@ -794,8 +850,9 @@ class Isolated extends Component<typeof Workspace> {
 
           {{#unless this.runningJobs.length}}
             {{#if this.latest}}
-              <button
-                type='button'
+              <Button
+                @kind='text-only'
+                @size='auto'
                 class='recent-preview'
                 {{on 'click' (this.setSegment 'activity')}}
               >
@@ -805,7 +862,7 @@ class Isolated extends Component<typeof Workspace> {
                     ·
                     {{this.latest.when}}{{/if}}</span>
                 <span class='recent-action'>Open Activity</span>
-              </button>
+              </Button>
             {{/if}}
           {{/unless}}
 
@@ -838,11 +895,12 @@ class Isolated extends Component<typeof Workspace> {
             {{/if}}
             {{#if this.configInstance}}
               <span class='space-sep'>·</span>
-              <button
-                type='button'
+              <Button
+                @kind='text-only'
+                @size='auto'
                 class='space-config'
                 {{on 'click' (this.openCard this.configInstance)}}
-              >Configuration</button>
+              >Configuration</Button>
             {{/if}}
           </div>
         </div>
@@ -852,12 +910,13 @@ class Isolated extends Component<typeof Workspace> {
             <div class='rail-group'>
               <h3 class='rail-label'>Library</h3>
               {{#each this.libraryFilters as |option|}}
-                <button
-                  type='button'
+                <Button
+                  @kind='text-only'
+                  @size='auto'
                   class='rail-row
                     {{if (eq option.id this.activeFilter.id) "selected"}}'
-                  data-test-workspace-filter={{option.id}}
                   {{on 'click' (this.selectFilter option)}}
+                  data-test-workspace-filter={{option.id}}
                 >
                   {{#let (this.iconComponent option) as |Icon|}}
                     {{#if Icon}}<Icon
@@ -868,7 +927,7 @@ class Isolated extends Component<typeof Workspace> {
                   {{/let}}
                   <span class='rail-name'>{{option.displayName}}</span>
                   <span class='rail-count'>{{this.countFor option}}</span>
-                </button>
+                </Button>
               {{/each}}
             </div>
             {{#if this.cardTypeFilters.length}}
@@ -878,12 +937,13 @@ class Isolated extends Component<typeof Workspace> {
                   {{! + New moved from the frame into the rail: each card
                     type row grows a hover + that creates one of that type. }}
                   <div class='rail-row-wrap'>
-                    <button
-                      type='button'
+                    <Button
+                      @kind='text-only'
+                      @size='auto'
                       class='rail-row type
                         {{if (eq option.id this.activeFilter.id) "selected"}}'
-                      data-test-workspace-filter={{option.id}}
                       {{on 'click' (this.selectFilter option)}}
+                      data-test-workspace-filter={{option.id}}
                     >
                       {{#if (this.iconHtml option)}}
                         <span class='rail-type-icon'>{{this.iconHtml
@@ -902,15 +962,19 @@ class Isolated extends Component<typeof Workspace> {
                       {{/if}}
                       <span class='rail-name'>{{option.displayName}}</span>
                       <span class='rail-count'>{{this.countFor option}}</span>
-                    </button>
+                    </Button>
                     {{#if @canEdit}}
-                      <button
-                        type='button'
+                      <IconButton
+                        @icon={{PlusIcon}}
+                        @variant='text-only'
+                        @size='extra-small'
+                        @width='12'
+                        @height='12'
                         class='rail-add'
                         aria-label='New {{option.displayName}}'
                         title='New {{option.displayName}}'
                         {{on 'click' (this.createOfType option)}}
-                      >+</button>
+                      />
                     {{/if}}
                   </div>
                 {{/each}}
@@ -920,12 +984,13 @@ class Isolated extends Component<typeof Workspace> {
               <div class='rail-group'>
                 <h3 class='rail-label'>File types</h3>
                 {{#each this.fileTypeFilters as |option|}}
-                  <button
-                    type='button'
+                  <Button
+                    @kind='text-only'
+                    @size='auto'
                     class='rail-row type
                       {{if (eq option.id this.activeFilter.id) "selected"}}'
-                    data-test-workspace-filter={{option.id}}
                     {{on 'click' (this.selectFilter option)}}
+                    data-test-workspace-filter={{option.id}}
                   >
                     {{#if (this.iconHtml option)}}
                       <span class='rail-type-icon'>{{this.iconHtml
@@ -944,13 +1009,14 @@ class Isolated extends Component<typeof Workspace> {
                     {{/if}}
                     <span class='rail-name'>{{option.displayName}}</span>
                     <span class='rail-count'>{{this.countFor option}}</span>
-                  </button>
+                  </Button>
                 {{/each}}
               </div>
             {{/if}}
           </nav>
           <CardsGridLayout
             @format='fitted'
+            @displaySidebar={{false}}
             @context={{@context}}
             @query={{this.query}}
             @realms={{this.realms}}
@@ -975,10 +1041,11 @@ class Isolated extends Component<typeof Workspace> {
               its accessible name, and that text is the live summary of what is
               being set up. The action is appended instead, so the name carries
               both. }}
-            <button
-              type='button'
+            <Button
+              @kind='text-only'
+              @size='auto'
+              @disabled={{if this.dockCondensed false true}}
               class='dock-mini {{if this.dockCondensed "shown"}}'
-              disabled={{if this.dockCondensed false true}}
               {{on 'click' this.revealDock}}
             >
               <span class='dock-dot' aria-hidden='true' />
@@ -991,7 +1058,7 @@ class Isolated extends Component<typeof Workspace> {
                 />
               </span>
               <span class='boxel-sr-only'>Show progress details</span>
-            </button>
+            </Button>
           {{/if}}
           <div
             class='stage scroll-container
@@ -1023,12 +1090,13 @@ class Isolated extends Component<typeof Workspace> {
                               @displayContainer={{false}}
                               class='job-face'
                             />
-                            <button
-                              type='button'
+                            <Button
+                              @kind='text-only'
+                              @size='auto'
                               class='tile-open'
                               aria-label='Open progress details'
                               {{on 'click' (this.openCard job.card)}}
-                            ></button>
+                            />
                           </div>
                         </div>
                         <div class='dock-pane invite'>
@@ -1038,15 +1106,16 @@ class Isolated extends Component<typeof Workspace> {
                           <div class='dock-pane-head'>
                             <span class='dock-pane-label'>While you wait ·
                               Optional</span>
-                            <button
-                              type='button'
+                            <Button
+                              @kind='text-only'
+                              @size='auto'
                               class='dock-pane-open'
                               title='Open as a card'
                               {{on
                                 'click'
                                 (this.openCard job.card.setupSurvey)
                               }}
-                            >Open ↗</button>
+                            >Open ↗</Button>
                           </div>
                           <div class='job-cell wizard'>
                             <SurveyComp @format='embedded' />
@@ -1060,12 +1129,13 @@ class Isolated extends Component<typeof Workspace> {
                           @displayContainer={{false}}
                           class='job-face'
                         />
-                        <button
-                          type='button'
+                        <Button
+                          @kind='text-only'
+                          @size='auto'
                           class='tile-open'
                           aria-label='Open progress details'
                           {{on 'click' (this.openCard job.card)}}
-                        ></button>
+                        />
                       </div>
                     {{/if}}
                   {{/let}}
@@ -1094,12 +1164,13 @@ class Isolated extends Component<typeof Workspace> {
                       }}</span>
                     <div class='feed-card'>
                       <item.component @format='embedded' class='feed-face' />
-                      <button
-                        type='button'
+                      <Button
+                        @kind='text-only'
+                        @size='auto'
                         class='tile-open'
                         aria-label='Open {{if item.title item.title "card"}}'
                         {{on 'click' (this.openFeedItem item)}}
-                      ></button>
+                      />
                     </div>
                     <div class='feed-note'>
                       {{! Rich event entry: verb + type (icon) meta row,
@@ -1195,7 +1266,6 @@ class Isolated extends Component<typeof Workspace> {
         /* fixed geometry the layout is built around */
         --grid-rail-width: 13.375rem;
         --grid-search-width: 10.625rem;
-        --grid-search-input-width: 6.875rem;
         --grid-search-results-size: 20rem;
         --grid-frame-height: 3.375rem;
         --grid-bar-height: 2.875rem;
@@ -1211,8 +1281,29 @@ class Isolated extends Component<typeof Workspace> {
         flex-direction: column;
         width: 100%;
         height: 100%;
-        max-height: 100vh;
         overflow: hidden;
+      }
+
+      /* the chrome's buttons are Buttons; the component's own type and
+         letter-spacing yield to the surrounding text register */
+      .card-grid .search-result,
+      .card-grid .search-see-all,
+      .card-grid .setup-bar,
+      .card-grid .setup-tease,
+      .card-grid .door-unpin,
+      .card-grid .tile-open,
+      .card-grid .door-add,
+      .card-grid .readme-toggle,
+      .card-grid .type-chip,
+      .card-grid .recent-preview,
+      .card-grid .space-config,
+      .card-grid .rail-row,
+      .card-grid .rail-add,
+      .card-grid .dock-mini,
+      .card-grid .dock-pane-open {
+        font-family: inherit;
+        line-height: inherit;
+        letter-spacing: inherit;
       }
 
       /* ── Frame ─────────────────────────────────────────────── */
@@ -1229,31 +1320,21 @@ class Isolated extends Component<typeof Workspace> {
       }
       .tabs {
         display: flex;
-        gap: var(--boxel-sp-6xs);
-        padding: var(--boxel-sp-6xs);
+        gap: var(--boxel-sp-4xs);
+        padding: var(--boxel-sp-4xs);
         background-color: var(--muted);
-        border: 1px solid var(--border);
+        border: 1px solid var(--grid-chip-border);
+        /* outer radius = the tabs' radius + the strip padding */
         border-radius: var(--boxel-border-radius);
       }
-      .tab {
+      .nav-tab {
+        --boxel-button-border: none;
         position: relative;
-        display: inline-flex;
-        align-items: center;
         gap: var(--boxel-sp-3xs);
-        border: none;
-        background: none;
-        padding: var(--boxel-sp-3xs) var(--boxel-sp-sm);
-        border-radius: var(--boxel-border-radius-sm);
-        font-size: var(--boxel-font-size-xs);
-        font-weight: 500;
-        color: var(--muted-foreground);
-        cursor: pointer;
+        transition: none;
       }
-      .tab.active {
-        background-color: var(--card);
-        color: var(--card-foreground);
-        box-shadow: var(--shadow-xs);
-        font-weight: 600;
+      .nav-tab--active {
+        --boxel-button-box-shadow: var(--shadow-sm);
       }
       .tab-icon {
         flex-shrink: 0;
@@ -1301,32 +1382,28 @@ class Isolated extends Component<typeof Workspace> {
         display: inline-flex;
         align-items: center;
         gap: var(--boxel-sp-2xs);
-        min-width: var(--grid-search-width);
-        border: 1px solid var(--border);
-        border-radius: var(--boxel-border-radius);
-        padding: var(--boxel-sp-3xs) var(--boxel-sp-sm);
-        background-color: var(--muted);
       }
-      .search-box:focus-within {
-        border-color: var(--ring);
-        background-color: var(--card);
-      }
-      .search-icon {
-        flex-shrink: 0;
+      /* a plain BoxelInput with the card's own small glyph laid over it: the
+         component's search variant fixes a 20px primary icon and an inverted
+         fill. The plain input also darkens its border on hover by itself. */
+      .search-box .search-icon {
+        position: absolute;
+        left: var(--boxel-sp-xs);
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 1;
         color: var(--muted-foreground);
+        pointer-events: none;
       }
-      .search-input {
-        border: none;
-        background: none;
-        outline: none;
-        padding: 0;
-        width: var(--grid-search-input-width);
+      .search-box .search-input {
+        --boxel-input-height: 0;
+        --boxel-form-control-border-radius: var(--boxel-border-radius);
+        width: var(--grid-search-width);
+        padding: var(--boxel-sp-3xs) var(--boxel-sp-sm) var(--boxel-sp-3xs)
+          var(--boxel-sp-lg);
+        background-color: var(--muted);
         font-size: var(--boxel-font-size-xs);
         font-weight: 500;
-        color: var(--foreground);
-      }
-      .search-input::placeholder {
-        color: var(--muted-foreground);
       }
       .search-kbd {
         margin-left: auto;
@@ -1351,19 +1428,18 @@ class Isolated extends Component<typeof Workspace> {
         border-radius: var(--boxel-border-radius);
         box-shadow: var(--shadow-lg);
       }
-      .search-result {
+      .card-grid .search-result {
+        justify-content: flex-start;
         display: flex;
         align-items: baseline;
         gap: var(--boxel-sp-xs);
         width: 100%;
-        border: none;
-        background: none;
         text-align: left;
         padding: var(--boxel-sp-2xs) var(--boxel-sp-xs);
         border-radius: var(--boxel-border-radius-sm);
         cursor: pointer;
       }
-      .search-result:hover {
+      .card-grid .search-result:hover {
         background-color: var(--hover);
       }
       .search-result-title {
@@ -1386,23 +1462,21 @@ class Isolated extends Component<typeof Workspace> {
         text-transform: uppercase;
         color: var(--subtle-foreground);
       }
-      .search-see-all {
+      .card-grid .search-see-all {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: var(--boxel-sp-xs);
         width: 100%;
-        border: 0;
         border-top: 1px solid var(--border);
         padding: var(--boxel-sp-2xs) var(--boxel-sp-sm);
-        background: transparent;
         font-size: var(--boxel-font-size-xs);
         font-weight: 600;
         color: var(--primary-ink);
         text-align: left;
         cursor: pointer;
       }
-      .search-see-all:hover {
+      .card-grid .search-see-all:hover {
         background-color: var(--hover);
       }
       .search-scope-note {
@@ -1467,12 +1541,11 @@ class Isolated extends Component<typeof Workspace> {
         text-transform: uppercase;
         color: var(--subtle-foreground);
       }
-      .rail-row {
+      .card-grid .rail-row {
+        justify-content: flex-start;
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-2xs);
-        border: none;
-        background: none;
         text-align: left;
         padding: var(--boxel-sp-3xs) var(--boxel-sp-xs);
         border-radius: var(--boxel-border-radius-sm);
@@ -1487,10 +1560,10 @@ class Isolated extends Component<typeof Workspace> {
            narrower than its content. */
         min-width: 0;
       }
-      .rail-row:hover {
+      .card-grid .rail-row:hover {
         background-color: var(--hover);
       }
-      .rail-row.selected {
+      .card-grid .rail-row.selected {
         color: var(--foreground);
         background-color: var(--selected);
         box-shadow: inset 0 0 0 1px var(--grid-interactive-edge);
@@ -1515,10 +1588,10 @@ class Isolated extends Component<typeof Workspace> {
         position: relative;
         display: grid;
       }
-      .rail-row-wrap .rail-row {
+      .card-grid .rail-row-wrap .rail-row {
         padding-right: var(--boxel-sp-xl);
       }
-      .rail-add {
+      .card-grid .rail-add {
         position: absolute;
         right: var(--boxel-sp-3xs);
         top: 50%;
@@ -1527,23 +1600,19 @@ class Isolated extends Component<typeof Workspace> {
         height: 1.25rem;
         display: grid;
         place-items: center;
-        border: 0;
         border-radius: var(--boxel-border-radius-sm);
         background-color: var(--muted);
         color: var(--muted-foreground);
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 600;
-        line-height: 1;
         cursor: pointer;
         /* quietly present at rest — hover-only proved undiscoverable */
         opacity: 0.45;
         transition: opacity var(--grid-quick) ease;
       }
       .rail-row-wrap:hover .rail-add,
-      .rail-add:focus-visible {
+      .card-grid .rail-add:focus-visible {
         opacity: 1;
       }
-      .rail-add:hover {
+      .card-grid .rail-add:hover {
         opacity: 1;
         background-color: var(--primary);
         color: var(--primary-foreground);
@@ -1578,9 +1647,6 @@ class Isolated extends Component<typeof Workspace> {
       }
       .rail-row.selected .rail-count {
         color: var(--primary-ink);
-      }
-      .library :deep(.boxel-cards-grid-layout .sidebar) {
-        display: none;
       }
       .zone {
         display: grid;
@@ -1652,7 +1718,8 @@ class Isolated extends Component<typeof Workspace> {
         font-weight: 400;
         color: var(--attention-ink);
       }
-      .dock-mini {
+      .card-grid .dock-mini {
+        justify-content: flex-start;
         position: absolute;
         top: 0;
         left: 0;
@@ -1662,7 +1729,6 @@ class Isolated extends Component<typeof Workspace> {
         align-items: center;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs) var(--boxel-sp-xl) var(--boxel-sp-sm);
-        border: 0;
         border-bottom: 1px solid var(--grid-attention-border);
         background-color: var(--grid-attention-surface);
         box-shadow: var(--shadow-sm);
@@ -1675,7 +1741,7 @@ class Isolated extends Component<typeof Workspace> {
           opacity var(--grid-soft) ease,
           transform var(--grid-soft) ease;
       }
-      .dock-mini.shown {
+      .card-grid .dock-mini.shown {
         opacity: 1;
         transform: translateY(0);
         pointer-events: auto;
@@ -1738,7 +1804,8 @@ class Isolated extends Component<typeof Workspace> {
       }
 
       /* ── Setup status bar (passive; one click target → Activity) ── */
-      .setup-bar {
+      .card-grid .setup-bar {
+        justify-content: flex-start;
         position: relative;
         overflow: hidden;
         display: flex;
@@ -1756,7 +1823,7 @@ class Isolated extends Component<typeof Workspace> {
           border-color var(--grid-quick) ease,
           box-shadow var(--grid-quick) ease;
       }
-      .setup-bar:hover {
+      .card-grid .setup-bar:hover {
         border-color: var(--grid-attention-rule);
         box-shadow: var(--shadow-sm);
       }
@@ -1791,14 +1858,14 @@ class Isolated extends Component<typeof Workspace> {
         border: 1px solid var(--grid-attention-border);
         border-radius: var(--boxel-border-radius-lg);
       }
-      .setup-strip .setup-bar {
-        border: 0;
+      .card-grid .setup-strip .setup-bar {
         border-radius: var(--boxel-border-radius);
       }
-      .setup-strip .setup-bar:not(:last-child) {
+      .card-grid .setup-strip .setup-bar:not(:last-child) {
         border-radius: var(--boxel-border-radius) var(--boxel-border-radius) 0 0;
       }
-      .setup-tease {
+      .card-grid .setup-tease {
+        justify-content: flex-start;
         border-radius: 0 0 var(--boxel-border-radius) var(--boxel-border-radius);
       }
       .setup-ring {
@@ -1874,13 +1941,12 @@ class Isolated extends Component<typeof Workspace> {
         font-weight: 600;
         color: var(--primary-ink);
       }
-      .setup-tease {
+      .card-grid .setup-tease {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-2xs);
         width: 100%;
         padding: var(--boxel-sp-xs) var(--boxel-sp);
-        border: 0;
         border-top: 1px dashed var(--grid-attention-border);
         background-color: var(--card);
         text-align: left;
@@ -1899,7 +1965,7 @@ class Isolated extends Component<typeof Workspace> {
       .setup-tease:hover .setup-tease-link {
         text-decoration: underline;
       }
-      .setup-tease:focus-visible {
+      .card-grid .setup-tease:focus-visible {
         outline: 2px solid var(--ring);
         outline-offset: -2px;
       }
@@ -1930,46 +1996,40 @@ class Isolated extends Component<typeof Workspace> {
         padding: 0 var(--boxel-sp-6xs) var(--boxel-sp-2xs);
       }
       /* pin management affordances */
-      .door-unpin {
+      .card-grid .door-unpin {
         margin-left: auto;
         width: 1.125rem;
         height: 1.125rem;
         display: grid;
         place-items: center;
-        border: 0;
         border-radius: var(--boxel-border-radius-sm);
-        background: transparent;
         color: var(--subtle-foreground);
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 500;
-        line-height: 1;
         cursor: pointer;
         opacity: 0;
         transition: opacity var(--grid-quick) ease;
       }
       .door:hover .door-unpin,
-      .door-unpin:focus-visible {
+      .card-grid .door-unpin:focus-visible {
         opacity: 1;
       }
-      .door-unpin:hover {
+      .card-grid .door-unpin:hover {
         background-color: var(--hover);
         color: var(--foreground);
       }
-      .door-add {
+      .card-grid .door-add {
         display: grid;
         place-content: center;
         gap: var(--boxel-sp-3xs);
         justify-items: center;
         border: 1.5px dashed var(--border);
         border-radius: var(--boxel-border-radius-lg);
-        background: transparent;
         color: var(--muted-foreground);
         cursor: pointer;
         transition:
           border-color var(--grid-quick) ease,
           color var(--grid-quick) ease;
       }
-      .door-add:hover {
+      .card-grid .door-add:hover {
         border-color: var(--primary-ink);
         color: var(--primary-ink);
       }
@@ -2064,21 +2124,18 @@ class Isolated extends Component<typeof Workspace> {
         flex-wrap: wrap;
         gap: var(--boxel-sp-2xs);
       }
-      .type-chip {
+      .card-grid .type-chip {
+        --boxel-button-default-border: var(--grid-chip-border);
         display: inline-flex;
         align-items: center;
         gap: var(--boxel-sp-2xs);
-        border: 1px solid var(--grid-chip-border);
-        border-radius: var(--grid-pill);
         padding: var(--boxel-sp-3xs) var(--boxel-sp-sm) var(--boxel-sp-3xs)
           var(--boxel-sp-xs);
-        background-color: var(--card);
-        color: var(--card-foreground);
         font-size: var(--boxel-font-size-xs);
         font-weight: 500;
         cursor: pointer;
       }
-      .type-chip:hover {
+      .card-grid .type-chip:hover {
         border-color: var(--border-strong);
         box-shadow: var(--shadow-sm);
       }
@@ -2102,7 +2159,8 @@ class Isolated extends Component<typeof Workspace> {
         color: var(--subtle-foreground);
       }
       /* ── Recent preview (passive, one row → Activity) ──────── */
-      .recent-preview {
+      .card-grid .recent-preview {
+        justify-content: flex-start;
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-sm);
@@ -2115,7 +2173,7 @@ class Isolated extends Component<typeof Workspace> {
         cursor: pointer;
         transition: border-color var(--grid-quick) ease;
       }
-      .recent-preview:hover {
+      .card-grid .recent-preview:hover {
         border-color: var(--border-strong);
       }
       .recent-text {
@@ -2317,9 +2375,7 @@ class Isolated extends Component<typeof Workspace> {
         justify-content: space-between;
         gap: var(--boxel-sp-xs);
       }
-      .dock-pane-open {
-        border: 0;
-        background: none;
+      .card-grid .dock-pane-open {
         padding: 0;
         font-family: var(--font-mono);
         font-size: var(--boxel-eyebrow-font-size);
@@ -2330,10 +2386,10 @@ class Isolated extends Component<typeof Workspace> {
         color: var(--attention-ink);
         cursor: pointer;
       }
-      .dock-pane-open:hover {
+      .card-grid .dock-pane-open:hover {
         color: var(--foreground);
       }
-      .dock-pane-open:focus-visible {
+      .card-grid .dock-pane-open:focus-visible {
         outline: 2px solid var(--ring);
         outline-offset: 2px;
       }
@@ -2348,17 +2404,16 @@ class Isolated extends Component<typeof Workspace> {
       .feed-card {
         position: relative;
       }
-      .tile-open {
+      .card-grid .tile-open {
+        height: auto;
         position: absolute;
         inset: 0;
         z-index: 2;
-        border: 0;
         padding: 0;
-        background: transparent;
         cursor: pointer;
         border-radius: var(--boxel-border-radius);
       }
-      .tile-open:focus-visible {
+      .card-grid .tile-open:focus-visible {
         outline: 2px solid var(--ring);
         outline-offset: -2px;
       }
@@ -2416,10 +2471,8 @@ class Isolated extends Component<typeof Workspace> {
         -webkit-mask-image: linear-gradient(to bottom, black 72%, transparent);
         mask-image: linear-gradient(to bottom, black 72%, transparent);
       }
-      .readme-toggle {
+      .card-grid .readme-toggle {
         justify-self: start;
-        border: 0;
-        background: none;
         padding: var(--boxel-sp-6xs) 0;
         font-size: var(--boxel-font-size-xs);
         font-weight: 600;
@@ -2448,9 +2501,7 @@ class Isolated extends Component<typeof Workspace> {
       .space-sep {
         color: var(--subtle-foreground);
       }
-      .space-config {
-        border: 0;
-        background: none;
+      .card-grid .space-config {
         padding: 0;
         font-family: var(--font-mono);
         font-size: var(--boxel-font-size-2xs);
@@ -2458,7 +2509,7 @@ class Isolated extends Component<typeof Workspace> {
         color: var(--muted-foreground);
         cursor: pointer;
       }
-      .space-config:hover {
+      .card-grid .space-config:hover {
         color: var(--primary-ink);
       }
       .welcome-actions {
@@ -2475,40 +2526,23 @@ class Isolated extends Component<typeof Workspace> {
 
       /* one focus language across the chrome: every
          interactive chrome element earns the same ring */
-      .tab:focus-visible,
-      .search-result:focus-visible,
-      .search-see-all:focus-visible,
-      .setup-bar:focus-visible,
-      .type-chip:focus-visible,
+      .card-grid .search-result:focus-visible,
+      .card-grid .search-see-all:focus-visible,
+      .card-grid .setup-bar:focus-visible,
+      .card-grid .type-chip:focus-visible,
       .door-open:focus-visible,
-      .door-unpin:focus-visible,
-      .door-add:focus-visible,
+      .card-grid .door-unpin:focus-visible,
+      .card-grid .door-add:focus-visible,
       .welcome-cta:focus-visible,
       .welcome-alt:focus-visible,
-      .readme-toggle:focus-visible,
-      .space-config:focus-visible,
-      .recent-preview:focus-visible,
-      .rail-row:focus-visible,
-      .dock-mini:focus-visible,
+      .card-grid .readme-toggle:focus-visible,
+      .card-grid .space-config:focus-visible,
+      .card-grid .recent-preview:focus-visible,
+      .card-grid .rail-row:focus-visible,
+      .card-grid .dock-mini:focus-visible,
       .wait-open:focus-visible {
         outline: 2px solid var(--ring);
         outline-offset: 2px;
-      }
-      .search-input:focus-visible {
-        outline: none;
-      }
-
-      /* P1-4: the stock Library content header joins the
-         chrome's type ramp (typography only; structure stays stock) */
-      .library :deep(.boxel-cards-grid-layout .content-title) {
-        font-size: var(--boxel-section-heading-font-size);
-        font-weight: 600;
-        color: var(--foreground);
-      }
-      .library :deep(.boxel-cards-grid-layout .content-icon) {
-        width: 1rem;
-        height: 1rem;
-        color: var(--muted-foreground);
       }
 
       /* A buried card sits behind another in the stack, so it must not keep
@@ -2534,7 +2568,7 @@ class Isolated extends Component<typeof Workspace> {
           animation: none;
           background-position: 50% 0;
         }
-        .dock-mini,
+        .card-grid .dock-mini,
         .dock-mini-fill {
           transition: none;
         }
@@ -2692,8 +2726,8 @@ class Isolated extends Component<typeof Workspace> {
     return () => window.removeEventListener('keydown', onKeydown);
   });
 
-  @action private onSearchInput(ev: Event) {
-    this.searchTerm = (ev.target as HTMLInputElement).value;
+  @action private onSearchInput(value: string) {
+    this.searchTerm = value;
     this.runSearch.perform();
   }
 
@@ -4041,18 +4075,20 @@ export class Workspace extends CardDef {
               </div>
               <div class='setting-control'>
                 <div class='choice'>
-                  <button
-                    type='button'
+                  <Button
+                    @kind='text-only'
+                    @size='auto'
                     class='choice-opt
                       {{if (eq this.activePinnedSize "regular") "selected"}}'
                     {{on 'click' (this.setPinnedSize 'regular')}}
-                  >Regular</button>
-                  <button
-                    type='button'
+                  >Regular</Button>
+                  <Button
+                    @kind='text-only'
+                    @size='auto'
                     class='choice-opt
                       {{if (eq this.activePinnedSize "compact") "selected"}}'
                     {{on 'click' (this.setPinnedSize 'compact')}}
-                  >Compact</button>
+                  >Compact</Button>
                 </div>
               </div>
             </div>
@@ -4102,18 +4138,26 @@ export class Workspace extends CardDef {
                     <div class='order-row'>
                       <span class='order-pos'>{{this.orderPos index}}</span>
                       <span class='order-name'>{{this.moduleLabel mod}}</span>
-                      <button
-                        type='button'
+                      <IconButton
+                        @icon={{ArrowUpIcon}}
+                        @variant='default'
+                        @size='extra-small'
+                        @width='14'
+                        @height='14'
                         class='order-move'
                         aria-label='Move {{this.moduleLabel mod}} up'
                         {{on 'click' (this.moveModule mod -1)}}
-                      >↑</button>
-                      <button
-                        type='button'
+                      />
+                      <IconButton
+                        @icon={{ArrowDownIcon}}
+                        @variant='default'
+                        @size='extra-small'
+                        @width='14'
+                        @height='14'
                         class='order-move'
                         aria-label='Move {{this.moduleLabel mod}} down'
                         {{on 'click' (this.moveModule mod 1)}}
-                      >↓</button>
+                      />
                     </div>
                   {{/each}}
                 </div>
@@ -4155,18 +4199,20 @@ export class Workspace extends CardDef {
               </div>
               <div class='setting-control'>
                 <div class='choice'>
-                  <button
-                    type='button'
+                  <Button
+                    @kind='text-only'
+                    @size='auto'
                     class='choice-opt
                       {{if (eq this.activeView "grid") "selected"}}'
                     {{on 'click' (this.setView 'grid')}}
-                  >Grid</button>
-                  <button
-                    type='button'
+                  >Grid</Button>
+                  <Button
+                    @kind='text-only'
+                    @size='auto'
                     class='choice-opt
                       {{if (eq this.activeView "strip") "selected"}}'
                     {{on 'click' (this.setView 'strip')}}
-                  >Strip</button>
+                  >Strip</Button>
                 </div>
               </div>
             </div>
@@ -4292,17 +4338,19 @@ export class Workspace extends CardDef {
                     {{#if site.when}}
                       <span class='site-when'>{{site.when}}</span>
                     {{/if}}
-                    <button
-                      type='button'
+                    <Button
+                      @kind='default'
+                      @size='extra-small'
+                      @rectangular={{true}}
+                      @disabled={{this.hostingBusy}}
                       class='publish-btn unpublish-btn'
-                      disabled={{this.hostingBusy}}
-                      data-test-unpublish-site={{site.url}}
                       {{on 'click' (this.unpublish site.url)}}
+                      data-test-unpublish-site={{site.url}}
                     >{{if
                         (this.isUnpublishing site.url)
                         'Unpublishing…'
                         'Unpublish'
-                      }}</button>
+                      }}</Button>
                   </div>
                 </div>
               {{/each}}
@@ -4313,13 +4361,15 @@ export class Workspace extends CardDef {
                     content.</p>
                 </div>
                 <div class='setting-control'>
-                  <button
-                    type='button'
+                  <Button
+                    @kind='default'
+                    @size='extra-small'
+                    @rectangular={{true}}
+                    @disabled={{this.hostingBusy}}
                     class='publish-btn'
-                    disabled={{this.hostingBusy}}
-                    data-test-republish
                     {{on 'click' this.republish}}
-                  >{{if this.publishBusy 'Publishing…' 'Republish'}}</button>
+                    data-test-republish
+                  >{{if this.publishBusy 'Publishing…' 'Republish'}}</Button>
                 </div>
               </div>
             {{else if this.isPublishable}}
@@ -4354,6 +4404,13 @@ export class Workspace extends CardDef {
           display: grid;
           gap: var(--boxel-sp-xl);
           padding: var(--boxel-sp-xl) var(--boxel-sp-lg) var(--boxel-sp-2xl);
+        }
+        .settings .choice-opt,
+        .settings .order-move,
+        .settings .publish-btn {
+          font-family: inherit;
+          line-height: inherit;
+          letter-spacing: inherit;
         }
         .settings-head {
           display: grid;
@@ -4452,17 +4509,15 @@ export class Workspace extends CardDef {
           border-radius: var(--boxel-border-radius);
           background-color: var(--muted);
         }
-        .choice-opt {
-          border: 0;
+        .settings .choice-opt {
           border-radius: var(--boxel-border-radius-sm);
           padding: var(--boxel-sp-3xs) var(--boxel-sp-sm);
-          background: transparent;
           font-size: var(--boxel-font-size-xs);
           font-weight: 500;
           color: var(--muted-foreground);
           cursor: pointer;
         }
-        .choice-opt.selected {
+        .settings .choice-opt.selected {
           background-color: var(--card);
           color: var(--card-foreground);
           box-shadow: var(--shadow-xs);
@@ -4492,57 +4547,45 @@ export class Workspace extends CardDef {
           font-size: var(--boxel-font-size-sm);
           font-weight: 500;
         }
-        .order-move {
+        .settings .order-move {
           width: 1.5rem;
           height: 1.5rem;
           display: grid;
           place-items: center;
-          border: 1px solid var(--border);
           border-radius: var(--boxel-border-radius-sm);
-          background: none;
-          color: var(--muted-foreground);
           cursor: pointer;
         }
-        .order-move:hover {
+        .settings .order-move:hover {
           border-color: var(--border-strong);
           color: var(--foreground);
         }
-        .publish-btn {
-          padding: var(--boxel-sp-2xs) var(--boxel-sp);
-          border: 1px solid var(--border);
-          border-radius: var(--boxel-border-radius);
-          background-color: var(--card);
-          color: var(--card-foreground);
-          font-size: var(--boxel-font-size-xs);
-          font-weight: 600;
+        .settings .publish-btn {
           cursor: pointer;
         }
-        .publish-btn:hover {
+        .settings .publish-btn:hover {
           border-color: var(--primary-ink);
           color: var(--primary-ink);
         }
-        .publish-btn:disabled {
+        .settings .publish-btn:disabled {
           opacity: 0.6;
           cursor: default;
         }
         /* Sits at the end of the site row, and reads as the destructive
           counterpart to Republish rather than a second primary action. */
-        .unpublish-btn {
+        .settings .unpublish-btn {
           margin-left: auto;
-          padding: var(--boxel-sp-3xs) var(--boxel-sp-xs);
-          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
-        .unpublish-btn:hover:not(:disabled) {
+        .settings .unpublish-btn:hover:not(:disabled) {
           border-color: var(--destructive-ink);
           color: var(--destructive-ink);
         }
         .hosting-error {
           color: var(--destructive-ink);
         }
-        .choice-opt:focus-visible,
-        .order-move:focus-visible,
-        .publish-btn:focus-visible {
+        .settings .choice-opt:focus-visible,
+        .settings .order-move:focus-visible,
+        .settings .publish-btn:focus-visible {
           outline: 2px solid var(--ring);
           outline-offset: 2px;
         }

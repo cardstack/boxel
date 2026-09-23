@@ -106,6 +106,7 @@ interface Signature {
     onChangeFilter: (filter: FilterOption) => void;
     onChangeSort: (sort: SortOption) => void;
     onChangeView: (viewId: ViewOption['id']) => void;
+    displaySidebar?: boolean;
   };
   Blocks: { content: []; contentHeader: []; sidebar: [] };
   Element: HTMLElement;
@@ -114,14 +115,16 @@ interface Signature {
 export default class CardsGridLayout extends Component<Signature> {
   <template>
     <section class='boxel-cards-grid-layout' ...attributes>
-      <aside class='sidebar scroll-container' tabindex='0'>
-        <FilterList
-          @filters={{@filterOptions}}
-          @activeFilter={{@activeFilter}}
-          @onChanged={{@onChangeFilter}}
-        />
-        {{yield to='sidebar'}}
-      </aside>
+      {{#unless (eq @displaySidebar false)}}
+        <aside class='sidebar scroll-container' tabindex='0'>
+          <FilterList
+            @filters={{@filterOptions}}
+            @activeFilter={{@activeFilter}}
+            @onChanged={{@onChangeFilter}}
+          />
+          {{yield to='sidebar'}}
+        </aside>
+      {{/unless}}
       <section class='content scroll-container' tabindex='0'>
         <header class='content-header' aria-label={{@activeFilter.displayName}}>
           {{#if @activeFilter.icon}}
