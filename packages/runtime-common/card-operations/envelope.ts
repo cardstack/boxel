@@ -13,6 +13,8 @@ import {
   type OperationTarget,
 } from './types.ts';
 import type { BatchEntryResult, BatchNode } from './coordinator.ts';
+import { assertParamsSupplied, type OperationScope } from './dispatch.ts';
+import { runInputTransform, type TransformContext } from './transforms.ts';
 import type { BatchEntry } from './executors.ts';
 import { isCodeRef } from '../card-document-shape.ts';
 import type { CardResource } from '../resource-types.ts';
@@ -630,6 +632,10 @@ export interface ResolvedEnvelopeEntry {
   entry: EnvelopeEntry;
   target: OperationTarget;
   definition: OperationDefinition;
+  // This entry's own view of the batch's scope: the batch's caller and row
+  // memo, and — once `stageWriteEntry` has run — the document a create would
+  // write.
+  scope: OperationScope;
 }
 
 // The two behaviors that are reached somewhere other than here.
@@ -945,6 +951,42 @@ export function entryWithPayload(
     }
   }
   return { ...entry, data: { ...payload, ...carried } };
+}
+
+// A write entry's two steps before it is staged, in the order `runOperation`
+// runs them for a read: the `input` stage over the payload, then the `params`
+// check against what it produced. A value an `input` supplies is what the
+// check then sees, which is most of what an `input` is for.
+//
+// The check belongs here and not in the executors: a declared param with no
+// value is the caller's mistake, and the behaviors read the payload
+// differently enough that some would never notice — a `delete` reads no
+// payload at all, so a declaration requiring one would be carried out over a
+// card the caller had not said enough to remove.
+//
+// A create's scope comes back carrying the payload as these two steps left it,
+// since that — not what the caller sent — is what the card would be minted
+// from. The transformed entry keeps its `position` and the envelope's own
+// members; only the payload moves.
+export async function stageWriteEntry(
+  write: ResolvedEnvelopeEntry,
+  ctx: TransformContext,
+): Promise<ResolvedEnvelopeEntry> {
+  let { entry, definition, scope } = write;
+  if (definition.input) {
+    entry = entryWithPayload(
+      entry,
+      await runInputTransform(definition, paramsFor(entry), ctx),
+    );
+  }
+  assertParamsSupplied(definition, paramsFor(entry), {
+    name: entry.name,
+    ...(entry.href ? { id: entry.href } : {}),
+  });
+  if (definition.base === 'create') {
+    scope = scope.derive({ proposed: entry.data ?? {} });
+  }
+  return { ...write, entry, scope };
 }
 
 function own(

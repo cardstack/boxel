@@ -213,16 +213,15 @@ import {
   type FileMetaResource,
 } from './index.ts';
 import {
-  assertParamsSupplied,
   canonicalizeTarget,
   newOperationScope,
   readShape,
   resolveOperation,
   runOperation,
+  scopeCallerFor,
 } from './card-operations/dispatch.ts';
 import type { ReadShape } from './card-operations/dispatch.ts';
 import {
-  runInputTransform,
   runOutputTransform,
   type TransformContext,
 } from './card-operations/transforms.ts';
@@ -238,7 +237,6 @@ import {
   atEntry,
   batchEntryFor,
   carriesOperationsExt,
-  entryWithPayload,
   errorsDocument,
   invocationsIn,
   needsActor,
@@ -248,6 +246,7 @@ import {
   readResult,
   resultsTree,
   stagedTree,
+  stageWriteEntry,
   targetFor,
   writeResult,
   type EnvelopeEntry,
@@ -5038,7 +5037,10 @@ export class Realm {
     // One row peek per target for the whole request: entries often name the
     // same card, and which behavior a name resolves to is read off the
     // target's stored type.
-    let scope = newOperationScope(this.operationCore);
+    let caller = this.#callerOf(request, requestContext);
+    let scope = newOperationScope(this.operationCore, {
+      caller: scopeCallerFor(caller.actor),
+    });
     // An entry may describe the card it runs against with a query instead of
     // naming one, and this is where such a query becomes cards — against the
     // index as it stands now, which is the pre-batch state every other part of
@@ -5053,7 +5055,6 @@ export class Realm {
       envelopeOptions,
     );
     let entries = invocationsIn(tree);
-    let caller = this.#callerOf(request, requestContext);
     // Settled rather than raced, so the entry a refusal names is the earliest
     // one the caller got wrong rather than whichever index read came back
     // first. A batch with two bad entries would otherwise report a different
@@ -5159,39 +5160,18 @@ export class Realm {
 
     let writes = resolved.filter(({ definition }) => isWrite(definition.base));
     if (writes.length > 0) {
-      // Each entry's own two steps before it is staged, in the order
-      // `runOperation` runs them for a read: the `input` stage over the
-      // payload, then the `params` check against what it produced. A value an
-      // `input` supplies is what the check then sees, which is most of what an
-      // `input` is for.
-      //
-      // The check belongs here and not in the executors: a declared param with
-      // no value is the caller's mistake, and the behaviors read the payload
-      // differently enough that some would never notice — a `delete` reads no
-      // payload at all, so a declaration requiring one would be carried out
-      // over a card the caller had not said enough to remove.
-      //
-      // The transformed entry keeps its `position`, which is the key both the
-      // staging schedule and the results are looked up by, and the envelope's
-      // own members. Only the payload moves.
+      // Each entry's `input` stage and `params` check, which `stageWriteEntry`
+      // runs in the order `runOperation` runs them for a read. The transformed
+      // entry keeps its `position`, which is the key both the staging schedule
+      // and the results are looked up by.
       let staged = new Map<EntryPosition, BatchEntry>();
-      for (let write of writes) {
+      for (let [index, write] of writes.entries()) {
         try {
-          if (write.definition.input) {
-            write.entry = entryWithPayload(
-              write.entry,
-              await runInputTransform(
-                write.definition,
-                paramsFor(write.entry),
-                this.#transformContext(write.entry, caller),
-              ),
-            );
-          }
-          let { entry, definition } = write;
-          assertParamsSupplied(definition, paramsFor(entry), {
-            name: entry.name,
-            ...(entry.href ? { id: entry.href } : {}),
-          });
+          writes[index] = await stageWriteEntry(
+            write,
+            this.#transformContext(write.entry, caller),
+          );
+          let { entry, definition } = writes[index];
           staged.set(entry.position, batchEntryFor(entry, definition));
         } catch (err: unknown) {
           throw atEntry(err, write.entry.position);
@@ -5320,7 +5300,7 @@ export class Realm {
       );
       assertTravelsInEnvelope(canonical, definition);
       assertVersionableEntry(canonical, definition);
-      return { entry: canonical, target, definition };
+      return { entry: canonical, target, definition, scope };
     } catch (err: unknown) {
       throw atEntry(err, entry.position);
     }

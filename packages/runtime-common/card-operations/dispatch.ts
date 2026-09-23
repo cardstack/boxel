@@ -263,25 +263,85 @@ export interface RunOperationOptions {
 // read of a row rather than one per reader, and so every reader sees the same
 // snapshot of it. The memo lives for the invocation and no longer: a core is
 // long-lived and must never hold a card's row across requests.
+//
+// A scope also says who the invocation is for and, for a create, what it would
+// write — the two facts a policy predicate reads that the target does not
+// carry. Both travel here rather than as parameters of `resolveOperation`
+// because the scope already reaches every place an operation is resolved.
 export interface OperationScope {
   peekInstance(url: URL): Promise<InstanceOrError | undefined>;
+  readonly caller: ScopeCaller;
+  // The payload a `create` entry is staged from, as its `input` stage and its
+  // `params` check left it — what the operation would actually write, not the
+  // bytes the caller sent. For a plain create that is the resource the card is
+  // minted from; for a named one, the params its template is filled with.
+  // Absent for every other invocation, and for a create until those two
+  // stages have run.
+  readonly proposed: Record<string, unknown> | undefined;
+  // A scope for another invocation in the same request, sharing this one's row
+  // memo so the invocations of one request still cost one read of each row
+  // between them. The caller carries over unless one is named; a proposed
+  // document belongs to one invocation and never does.
+  derive(invocation: ScopeInvocation): OperationScope;
 }
 
-export function newOperationScope(core: OperationCore): OperationScope {
+// Who an operation is being resolved for.
+//
+// `anonymous` is a request that authenticated nobody, and is kept apart from
+// a user whose id happens to be empty: absence is what makes a predicate that
+// reads the actor refuse rather than match, so it cannot be spelled as a value
+// a predicate could compare against.
+//
+// `unattributed` is a resolution made with no request's caller in hand at all
+// — the read-shape question, which asks what kind of read a target has so a
+// handler can decide whether to answer from its validator, and says nothing
+// about who may run it. It is also what a scope built without saying is, so
+// that a caller has to name the caller to have one.
+export type ScopeCaller =
+  | { kind: 'user'; actor: string }
+  | { kind: 'anonymous' }
+  | { kind: 'unattributed' };
+
+export interface ScopeInvocation {
+  caller?: ScopeCaller;
+  proposed?: Record<string, unknown>;
+}
+
+// The scope caller for a request's actor, which transports carry as a string
+// that is empty when nobody signed in.
+export function scopeCallerFor(actor: string | undefined): ScopeCaller {
+  return actor ? { kind: 'user', actor } : { kind: 'anonymous' };
+}
+
+export function newOperationScope(
+  core: OperationCore,
+  invocation: ScopeInvocation = {},
+): OperationScope {
   let rows = new Map<string, Promise<InstanceOrError | undefined>>();
-  return {
-    peekInstance(url: URL) {
-      let cached = rows.get(url.href);
-      if (!cached) {
-        // Always with errors: an errored row is still a row, and the readers
-        // that care about the difference check `type` themselves. Asking one
-        // way keeps the memo to a single entry per URL.
-        cached = core.indexQueryEngine.instance(url, { includeErrors: true });
-        rows.set(url.href, cached);
-      }
-      return cached;
-    },
+  let peekInstance = (url: URL) => {
+    let cached = rows.get(url.href);
+    if (!cached) {
+      // Always with errors: an errored row is still a row, and the readers
+      // that care about the difference check `type` themselves. Asking one
+      // way keeps the memo to a single entry per URL.
+      cached = core.indexQueryEngine.instance(url, { includeErrors: true });
+      rows.set(url.href, cached);
+    }
+    return cached;
   };
+  let scopeFor = (
+    caller: ScopeCaller,
+    proposed: Record<string, unknown> | undefined,
+  ): OperationScope => ({
+    peekInstance,
+    caller,
+    proposed,
+    derive: (next) => scopeFor(next.caller ?? caller, next.proposed),
+  });
+  return scopeFor(
+    invocation.caller ?? { kind: 'unattributed' },
+    invocation.proposed,
+  );
 }
 
 // The def types, as the operation core distinguishes them.
@@ -627,7 +687,10 @@ async function resolveReadShape(
       core,
       { kind: 'instance', url: url.href },
       'read',
-      scope,
+      // Unattributed whatever the caller's scope says: this asks what kind of
+      // read the target has, not whether anyone may run it, and the request
+      // that goes on to assemble is resolved again with its caller.
+      scope.derive({ caller: { kind: 'unattributed' } }),
     );
   } catch {
     return 'unresolved';
@@ -651,7 +714,9 @@ export async function runOperation(
   });
   let canonical: OperationRequest =
     target === request.target ? request : { ...request, target };
-  let scope = newOperationScope(core);
+  let scope = newOperationScope(core, {
+    caller: scopeCallerFor(canonical.actor),
+  });
   let definition = await resolveOperation(core, target, canonical.name, scope);
   // The four stages of an invocation, in the one order they run: the `input`
   // transform over the payload, the `params` check against what it produced,
