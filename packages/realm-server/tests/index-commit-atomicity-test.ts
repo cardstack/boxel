@@ -339,7 +339,7 @@ module(basename(import.meta.filename), function (hooks) {
     let mintMs = Date.now() - mintStart;
     assert.ok(
       mintMs < (sleepSeconds * 1000) / 2,
-      `the loader-epoch write returned in ${mintMs} ms instead of waiting for the swap to commit`,
+      `a loader-epoch write during the swap took ${mintMs} ms; it must not wait for the swap to commit`,
     );
 
     let job = await settledIndexJobAfter(jobBaseline);
