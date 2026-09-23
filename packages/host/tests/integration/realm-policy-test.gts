@@ -203,7 +203,10 @@ module('Integration | realm policy', function (hooks) {
       ]),
     });
 
-    for (let path of ['policies/typo', 'policies/number']) {
+    for (let [path, reason] of [
+      ['policies/typo', "accepts only 'bxl' and 'snapshot'"],
+      ['policies/number', 'must be a string of BXL source'],
+    ]) {
       let entry = await realm.realmIndexQueryEngine.instance(
         new URL(`${testRealmURL}${path}`),
       );
@@ -211,6 +214,13 @@ module('Integration | realm policy', function (hooks) {
         entry?.type,
         'instance-error',
         `${path} is an index error rather than a policy with an unconditional grant`,
+      );
+      let error = entry?.type === 'instance-error' ? entry.error : undefined;
+      assert.true(
+        JSON.stringify(error ?? null).includes(reason),
+        `${path} fails because its predicate is malformed: ${JSON.stringify(
+          error?.message,
+        )}`,
       );
     }
   });
