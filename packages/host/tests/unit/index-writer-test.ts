@@ -39,6 +39,8 @@ import {
   createPrerenderAuth,
 } from '../helpers';
 
+import type { TestIndexRow } from '../helpers';
+
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 const testRealmURL2 = ri(`http://test-realm/test2/`);
@@ -1137,6 +1139,138 @@ module('Unit | index-writer', function (hooks) {
     assert.true(
       indexRow.is_deleted,
       'boxel_index row is tombstoned in lockstep',
+    );
+  });
+
+  // `tombstoneEntries` and `tombstonePrerenderedHtmlEntries` each build ONE
+  // multi-row upsert covering every invalidated URL. Every driver caps the
+  // bind parameters a single statement may carry — Postgres at 65,535,
+  // sqlite-wasm at 32,766 — so past a few thousand URLs the delete pass
+  // throws, the whole job is rejected, and the rows stay live with nothing
+  // scheduled to repair them. `#upsertIndexRows` already chunks against the
+  // adapter's budget; these two sites have to do the same.
+
+  // The budget the writer applies on sqlite. A tombstone row binds 10
+  // columns, so a chunked upsert never carries more than 90 rows * 10.
+  const SQLITE_BIND_BUDGET = 900;
+
+  const seedRenderedRows = (count: number): TestIndexRow[] => {
+    let rows: TestIndexRow[] = [];
+    for (let i = 1; i <= count; i++) {
+      rows.push({
+        url: `${testRealmURL}${i}.json`,
+        generation: 1,
+        realm_url: testRealmURL,
+        type: 'instance',
+        isolated_html: `<div class="isolated">${i}</div>`,
+      });
+    }
+    return rows;
+  };
+
+  const seededUrls = (rows: TestIndexRow[]) =>
+    rows.map((row) => new URL((row as { url: string }).url));
+
+  test('tombstone upserts stay within the adapter bind budget', async function (assert) {
+    // 120 URLs * 10 columns = 1,200 binds in one statement: over the budget,
+    // but still under sqlite's hard ceiling, so this reports the invariant
+    // rather than dying on a driver error.
+    const URL_COUNT = 120;
+    let indexRows = seedRenderedRows(URL_COUNT);
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      indexRows,
+    );
+
+    let oversized: { table: string; binds: number }[] = [];
+    type Executor = typeof adapter.execute;
+    let originalExecute: Executor = adapter.execute.bind(adapter);
+    let spy: Executor = async (sql, opts) => {
+      let table =
+        /INSERT INTO (boxel_index_working|prerendered_html_working)/.exec(
+          sql,
+        )?.[1];
+      let binds = opts?.bind?.length ?? 0;
+      if (table && binds > SQLITE_BIND_BUDGET) {
+        oversized.push({ table, binds });
+      }
+      return originalExecute(sql, opts);
+    };
+    adapter.execute = spy;
+    try {
+      let batch = await indexWriter.createBatch(
+        new URL(testRealmURL),
+        virtualNetwork,
+      );
+      await batch.invalidate(seededUrls(indexRows));
+      await batch.done();
+    } finally {
+      adapter.execute = originalExecute;
+    }
+
+    assert.deepEqual(
+      oversized,
+      [],
+      'every tombstone upsert is chunked within the adapter bind budget',
+    );
+  });
+
+  test('a delete pass past the driver bind ceiling still tombstones every row', async function (assert) {
+    // 3,500 URLs * 10 columns = 35,000 binds, past sqlite-wasm's 32,766
+    // ceiling. Unchunked the upsert throws and takes the batch with it, so
+    // nothing is tombstoned at all. This is the staging failure — `bind
+    // message has ... parameter formats but 0 parameters` against Postgres —
+    // in the shape a unit test can reach.
+    const URL_COUNT = 3500;
+    let indexRows = seedRenderedRows(URL_COUNT);
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      indexRows,
+    );
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.invalidate(seededUrls(indexRows));
+    await batch.done();
+
+    let indexed = (await adapter.execute(
+      `SELECT is_deleted FROM boxel_index WHERE realm_url = $1`,
+      {
+        bind: [testRealmURL],
+        coerceTypes: { is_deleted: 'BOOLEAN' },
+      },
+    )) as unknown as Pick<BoxelIndexTable, 'is_deleted'>[];
+    assert.strictEqual(
+      indexed.length,
+      URL_COUNT,
+      'every seeded boxel_index row survives the delete pass',
+    );
+    assert.strictEqual(
+      indexed.filter((row) => row.is_deleted).length,
+      URL_COUNT,
+      'every boxel_index row is tombstoned',
+    );
+
+    let rendered = (await adapter.execute(
+      `SELECT is_deleted FROM prerendered_html WHERE realm_url = $1`,
+      {
+        bind: [testRealmURL],
+        coerceTypes: { is_deleted: 'BOOLEAN' },
+      },
+    )) as unknown as Pick<PrerenderedHtmlTable, 'is_deleted'>[];
+    assert.strictEqual(
+      rendered.length,
+      URL_COUNT,
+      'every seeded prerendered_html row survives the delete pass',
+    );
+    assert.strictEqual(
+      rendered.filter((row) => row.is_deleted).length,
+      URL_COUNT,
+      'every prerendered_html row is tombstoned',
     );
   });
 
