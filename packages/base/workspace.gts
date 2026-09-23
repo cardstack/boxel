@@ -527,7 +527,7 @@ class Isolated extends Component<typeof Workspace> {
             <:content>{{@model.purpose}}</:content>
           </Tooltip>
         {{/if}}
-        <div class='frame-actions'>
+        <div class='frame-actions' data-test-frame-actions>
           <div
             class='search-box'
             {{this.setupSearchHotkey}}
@@ -548,12 +548,14 @@ class Isolated extends Component<typeof Workspace> {
               aria-label='Search this space'
               aria-keyshortcuts='Meta+K Control+K'
               {{on 'keydown' this.onSearchKeydown}}
+              data-test-workspace-search
             />
             {{! the visible hint is decorative — aria-keyshortcuts above carries
               the same thing to assistive tech, in both spellings }}
             <span
               class='search-kbd'
               aria-hidden='true'
+              data-test-search-hotkey
             >{{SEARCH_HOTKEY_LABEL}}</span>
             {{! Results appear and refresh without any focus change, so nothing
               would reach a screen reader on its own. Announced as a count
@@ -744,8 +746,8 @@ class Isolated extends Component<typeof Workspace> {
                 while the space has no pins — the landing content for a
                 realm that just got cloned or remixed. }}
                   {{#if @model.readme}}
-                    <div class='readme-embed'>
-                      <div class='readme-body'>
+                    <div class='readme-embed' data-test-readme>
+                      <div class='readme-body' data-test-readme-body>
                         <MarkdownPreview
                           @model={{@model.readme}}
                           @format='isolated'
@@ -770,6 +772,7 @@ class Isolated extends Component<typeof Workspace> {
                         @kind='secondary'
                         class='welcome-alt'
                         {{on 'click' this.createNew}}
+                        data-test-welcome-new-card
                       >New card</Button>
                     {{/if}}
                   </div>
@@ -786,8 +789,14 @@ class Isolated extends Component<typeof Workspace> {
                     <div
                       class='readme-embed
                         {{unless this.readmeExpanded "collapsed"}}'
+                      data-test-readme
+                      data-test-readme-state={{if
+                        this.readmeExpanded
+                        'expanded'
+                        'collapsed'
+                      }}
                     >
-                      <div class='readme-body'>
+                      <div class='readme-body' data-test-readme-body>
                         <MarkdownPreview
                           @model={{@model.readme}}
                           @format='isolated'
@@ -800,6 +809,7 @@ class Isolated extends Component<typeof Workspace> {
                       @size='auto'
                       class='readme-toggle'
                       {{on 'click' this.toggleReadme}}
+                      data-test-readme-toggle
                     >{{if this.readmeExpanded 'Show less' 'Read more'}}</Button>
                   </section>
                 {{/if}}
@@ -934,9 +944,9 @@ class Isolated extends Component<typeof Workspace> {
           </div>
         </div>
       {{else if (eq this.segment 'library')}}
-        <div class='library'>
+        <div class='library' data-test-library>
           <nav class='rail scroll-container' aria-label='Library filters'>
-            <div class='rail-group'>
+            <div class='rail-group' data-test-rail-group>
               <h3 class='rail-label'>Library</h3>
               <FilterList
                 @filters={{this.libraryFilters}}
@@ -946,7 +956,7 @@ class Isolated extends Component<typeof Workspace> {
               />
             </div>
             {{#if this.cardTypeFilters.length}}
-              <div class='rail-group'>
+              <div class='rail-group' data-test-rail-group>
                 <h3 class='rail-label'>Card types</h3>
                 <FilterList
                   @filters={{this.cardTypeFilters}}
@@ -977,7 +987,7 @@ class Isolated extends Component<typeof Workspace> {
               </div>
             {{/if}}
             {{#if this.fileTypeFilters.length}}
-              <div class='rail-group'>
+              <div class='rail-group' data-test-rail-group>
                 <h3 class='rail-label'>File types</h3>
                 <FilterList
                   @filters={{this.fileTypeFilters}}
@@ -1007,7 +1017,7 @@ class Isolated extends Component<typeof Workspace> {
           />
         </div>
       {{else}}
-        <div class='activity-pane'>
+        <div class='activity-pane' data-test-activity>
           {{! Collapsing dock: the full panel scrolls away with the log;
             a one-line summary pins under the frame while it is off-screen. }}
           {{#if this.runningJobs.length}}
@@ -1131,8 +1141,12 @@ class Isolated extends Component<typeof Workspace> {
                       <span class='feed-day-rule' />
                     </div>
                   {{/if}}
-                  <div class='feed-row'>
-                    <time class='feed-when' datetime={{item.absoluteIso}}>
+                  <div class='feed-row' data-test-feed-row>
+                    <time
+                      class='feed-when'
+                      datetime={{item.absoluteIso}}
+                      data-test-feed-when
+                    >
                       {{if item.when item.when '—'}}
                       {{#if item.absolute}}<span
                           class='boxel-sr-only'
@@ -1157,6 +1171,7 @@ class Isolated extends Component<typeof Workspace> {
                           class='feed-verb
                             {{if (eq item.verb "Created") "created"}}
                             {{if (eq item.verb "Remixed") "remixed"}}'
+                          data-test-feed-verb={{item.verb}}
                         >{{item.verb}}</span>
                         <span class='feed-type'>
                           <item.typeIcon
@@ -1167,11 +1182,17 @@ class Isolated extends Component<typeof Workspace> {
                           {{item.typeName}}</span>
                       </div>
                       {{#if item.title}}
-                        <p class='feed-title'>{{item.title}}</p>
+                        <p
+                          class='feed-title'
+                          data-test-feed-title
+                        >{{item.title}}</p>
                       {{/if}}
                       {{#let (this.remixSourceTitle item) as |source|}}
                         {{#if source}}
-                          <p class='feed-remix-source'>from {{source}}</p>
+                          <p
+                            class='feed-remix-source'
+                            data-test-feed-remix-source
+                          >from {{source}}</p>
                         {{/if}}
                       {{/let}}
                       {{#if item.note}}
@@ -3961,7 +3982,7 @@ export class Workspace extends CardDef {
     <template>
       <div class='settings'>
         <header class='settings-head'>
-          <h2 class='settings-title'>Workspace settings</h2>
+          <h2 class='settings-title' data-test-settings-title>Workspace settings</h2>
           <p class='settings-lede'>Everything the Home, Library, and Activity
             tabs do — and the identity of the workspace behind them.</p>
         </header>

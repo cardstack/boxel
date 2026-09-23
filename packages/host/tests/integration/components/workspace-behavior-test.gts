@@ -16,9 +16,9 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 import type * as MarkdownFileDefModule from '@cardstack/base/markdown-file-def';
 
-const HOME = 'nav.tabs .tab:nth-child(1)';
-const LIBRARY = 'nav.tabs .tab:nth-child(2)';
-const ACTIVITY = 'nav.tabs .tab:nth-child(3)';
+const HOME = '[data-test-workspace-tab="home"]';
+const LIBRARY = '[data-test-workspace-tab="library"]';
+const ACTIVITY = '[data-test-workspace-tab="activity"]';
 
 module('Integration | Card | workspace | segments', function (hooks) {
   setupRenderingTest(hooks);
@@ -33,21 +33,25 @@ module('Integration | Card | workspace | segments', function (hooks) {
 
   test('clicking a tab moves the active segment', async function (assert) {
     await renderCard(loader, new Workspace({}), 'isolated');
-    assert.dom('nav.tabs .tab.active').hasText('Home', 'Home is active first');
+    assert
+      .dom('nav.tabs [aria-current="true"]')
+      .hasText('Home', 'Home is active first');
 
     await click(LIBRARY);
-    assert.dom('nav.tabs .tab.active').hasText('Library');
+    assert.dom('nav.tabs [aria-current="true"]').hasText('Library');
 
     await click(ACTIVITY);
-    assert.dom('nav.tabs .tab.active').hasText('Activity');
+    assert.dom('nav.tabs [aria-current="true"]').hasText('Activity');
 
     await click(HOME);
-    assert.dom('nav.tabs .tab.active').hasText('Home');
+    assert.dom('nav.tabs [aria-current="true"]').hasText('Home');
   });
 
   test('the Frame search input is present and editable', async function (assert) {
     await renderCard(loader, new Workspace({}), 'isolated');
-    assert.dom('.search-box .search-input').exists('Cmd+K frame search input');
+    assert
+      .dom('[data-test-workspace-search]')
+      .exists('Cmd+K frame search input');
   });
 
   // The Library rail opens on "Everything", which lists a card twice — once as
@@ -122,13 +126,13 @@ module('Integration | Card | workspace | README', function (hooks) {
     );
 
     assert
-      .dom('.readme-embed [data-test-markdown-preview]')
+      .dom('[data-test-readme] [data-test-markdown-preview]')
       .exists('the README renders through the content-only markdown preview');
-    assert.dom('.readme-embed').containsText('Welcome aboard.');
+    assert.dom('[data-test-readme]').containsText('Welcome aboard.');
     // The file shell would wrap the document in a file bar (icon, name, size,
     // extension pill) over a fixed-height scroll box.
     assert
-      .dom('.readme-embed [data-test-file-embedded]')
+      .dom('[data-test-readme] [data-test-file-embedded]')
       .doesNotExist('no file shell chrome around the README');
   });
 
@@ -142,17 +146,23 @@ module('Integration | Card | workspace | README', function (hooks) {
       'isolated',
     );
 
-    assert.dom('.readme-embed').hasClass('collapsed');
-    assert.dom('.readme-body').exists('the card owns the clamped README body');
-    let body = () => find('.readme-body') as HTMLElement;
+    assert
+      .dom('[data-test-readme]')
+      .hasAttribute('data-test-readme-state', 'collapsed');
+    assert
+      .dom('[data-test-readme-body]')
+      .exists('the card owns the clamped README body');
+    let body = () => find('[data-test-readme-body]') as HTMLElement;
     assert.ok(
       body().scrollHeight > body().clientHeight,
       'the collapsed README clips the rest of the document',
     );
 
-    await click('.readme-toggle');
+    await click('[data-test-readme-toggle]');
 
-    assert.dom('.readme-embed').doesNotHaveClass('collapsed');
+    assert
+      .dom('[data-test-readme]')
+      .hasAttribute('data-test-readme-state', 'expanded');
     assert.strictEqual(
       body().scrollHeight,
       body().clientHeight,
