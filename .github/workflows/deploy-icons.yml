@@ -1,0 +1,90 @@
+name: Deploy boxel-icons
+
+# Publishes packages/boxel-icons to the icon CDN that cards' `static icon`
+# imports resolve against.
+#
+# The CDN is a single global bucket, not one per environment: the host
+# hardcodes `boxel-icons.boxel.ai` (runtime-common/virtual-network.ts,
+# runtime-common/realm.ts), so staging and production read the same objects.
+# That is why this runs off a merge to main rather than hanging on either
+# environment's deploy — an icon has to be on the CDN before any environment
+# renders a card that imports it, and a per-environment trigger would leave
+# whichever environment deploys second serving 403s in the meantime.
+#
+# The sync is additive. `aws s3 sync` without `--delete` only ever adds or
+# overwrites, so an icon dropped from the package does not vanish from under
+# cards that still import it; stale objects are cheap, a missing one errors
+# the whole card at index time. Pruning is a deliberate, separate act.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/boxel-icons/**"
+  # Re-run by hand to backfill the bucket after it has drifted, or to republish
+  # without an icon change.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    # Serialize: two merges landing together would otherwise race the same
+    # bucket, and the later sync is the one that should win.
+    concurrency: deploy-icons
+    env:
+      AWS_REGION: us-east-1
+      AWS_ROLE_ARN: arn:aws:iam::120317779495:role/boxel-icons
+      AWS_CLOUDFRONT_DISTRIBUTION: E3RWB9TW185XFG
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Init
+        uses: ./.github/actions/init
+
+      - name: Restore boxel-icons build cache
+        id: icons-cache
+        uses: ./.github/actions/restore-icons-cache
+
+      # The full build, not just `build:js`, even though only `dist` is
+      # synced: the cache key covers `dist` and `declarations` together, and a
+      # js-only build on a cache miss would save a cache that later jobs
+      # restore expecting declarations to be there too.
+      - name: Build boxel-icons
+        if: steps.icons-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @cardstack/boxel-icons build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Sync to S3
+        run: pnpm --filter @cardstack/boxel-icons deploy:s3
+
+      # A miss on an icon that did not exist yet is served — and cached — as a
+      # 403, so newly added objects stay unreachable behind that negative
+      # response until it ages out. Invalidating is what makes the sync take
+      # effect for the cards that were already asking for the icon.
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "$AWS_CLOUDFRONT_DISTRIBUTION" \
+            --paths '/@cardstack/boxel-icons/*'
+
+      - name: Send notification to Discord
+        # A flaky webhook should not fail a deploy that has already happened.
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: cardstack/gh-actions/discord-notification-deploy@main
+        with:
+          app: "boxel-icons"
+          status: ${{ job.status }}
+          environment: production
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
