@@ -54,20 +54,21 @@ module('Integration | Card | workspace | segments', function (hooks) {
   // the instance and once as the file-meta row for its `.json` — and both rows
   // carry the same extension-stripped `data-test-cards-grid-item`. Callers that
   // need one element per card (notably the matrix `showAllCards` helper, which
-  // drives realm indexes end to end) select "Cards" instead, so these filter ids
-  // are a contract rather than an implementation detail.
+  // drives realm indexes end to end) select "Cards" instead, so these filter
+  // names, exposed through FilterList's hooks, are a contract rather than an
+  // implementation detail.
   test('the Library rail exposes stable filter hooks', async function (assert) {
     await renderCard(loader, new Workspace({}), 'isolated');
     await click(LIBRARY);
 
-    for (let id of ['everything', 'cards', 'files']) {
+    for (let name of ['Everything', 'Cards', 'Files']) {
       assert
-        .dom(`[data-test-workspace-filter="${id}"]`)
-        .exists(`the "${id}" rail filter is addressable`);
+        .dom(`[data-test-boxel-filter-list-button="${name}"]`)
+        .exists(`the "${name}" rail filter is addressable`);
     }
     assert
-      .dom('[data-test-workspace-filter="everything"]')
-      .hasClass('selected', 'the Library opens on Everything');
+      .dom('[data-test-selected-filter="Everything"]')
+      .exists('the Library opens on Everything');
   });
 });
 

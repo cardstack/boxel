@@ -173,23 +173,19 @@ module('Acceptance | workspace card', function (hooks) {
     await waitFor(`${STACK} [data-test-browse]`);
 
     let noteChip = findTypeChip(assert, 'Note');
-    let noteTypeId = noteChip.getAttribute('data-test-type-chip');
-    // Without this the filter selector below interpolates to
-    // `[data-test-workspace-filter="null"]` and reports a missing element
-    // rather than a pill that carries no type id.
-    assert.ok(noteTypeId, 'the Note pill carries the type id it filters on');
+    assert.ok(
+      noteChip.getAttribute('data-test-type-chip'),
+      'the Note pill carries the type id it filters on',
+    );
 
     await click(noteChip);
 
     assert
-      .dom(`${STACK} nav.tabs .tab.active`)
+      .dom(`${STACK} nav.tabs [aria-current="true"]`)
       .hasText('Library', 'the pill switches to the Library segment');
     assert
-      .dom(`${STACK} [data-test-workspace-filter="${noteTypeId}"]`)
-      .hasClass(
-        'selected',
-        'the Library opens with the clicked type pre-selected',
-      );
+      .dom(`${STACK} [data-test-selected-filter="Note"]`)
+      .exists('the Library opens with the clicked type pre-selected');
   });
 
   // The Library rail lists a row per realm card type (sourced from the same
@@ -200,15 +196,13 @@ module('Acceptance | workspace card', function (hooks) {
     await click('[data-test-workspace-button="Unnamed Workspace"]');
     await waitFor(`${STACK} nav.tabs`);
 
-    await click(`${STACK} nav.tabs .tab:nth-child(2)`); // Library
+    await click(`${STACK} [data-test-workspace-tab="library"]`);
     await waitFor(`${STACK} .rail-group`);
 
-    let noteRow = [
-      ...document.querySelectorAll(`${STACK} .rail-row.type`),
-    ].find((el) => el.textContent?.includes('Note')) as HTMLElement | undefined;
-    assert.ok(noteRow, 'the Library rail lists a Note card-type row');
     assert
-      .dom(noteRow!.querySelector('.rail-count'))
+      .dom(
+        `${STACK} [data-test-boxel-filter-list-button="Note"] [data-test-filter-list-count]`,
+      )
       .hasText('1', 'the Note rail row shows its single-instance count');
   });
 

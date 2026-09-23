@@ -7,7 +7,13 @@ import { restartableTask, timeout } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 import { TrackedArray, TrackedObject, TrackedSet } from 'tracked-built-ins';
 
-import { BoxelInput, Button, IconButton } from '@cardstack/boxel-ui/components';
+import {
+  BoxelInput,
+  Button,
+  FilterList,
+  IconButton,
+  Tooltip,
+} from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import BooleanField from './boolean';
 // host-mode mutation: publish and unpublish are registered host tools
@@ -917,108 +923,53 @@ class Isolated extends Component<typeof Workspace> {
           <nav class='rail scroll-container' aria-label='Library filters'>
             <div class='rail-group'>
               <h3 class='rail-label'>Library</h3>
-              {{#each this.libraryFilters as |option|}}
-                <Button
-                  @kind='text-only'
-                  @size='auto'
-                  class='rail-row
-                    {{if (eq option.id this.activeFilter.id) "selected"}}'
-                  {{on 'click' (this.selectFilter option)}}
-                  data-test-workspace-filter={{option.id}}
-                >
-                  {{#let (this.iconComponent option) as |Icon|}}
-                    {{#if Icon}}<Icon
-                        width='14'
-                        height='14'
-                        class='rail-icon'
-                      />{{/if}}
-                  {{/let}}
-                  <span class='rail-name'>{{option.displayName}}</span>
-                  <span class='rail-count'>{{this.countFor option}}</span>
-                </Button>
-              {{/each}}
+              <FilterList
+                @filters={{this.libraryFilters}}
+                @activeFilter={{this.activeFilter}}
+                @onChanged={{this.onChangeFilter}}
+                class='rail-list'
+              />
             </div>
             {{#if this.cardTypeFilters.length}}
               <div class='rail-group'>
                 <h3 class='rail-label'>Card types</h3>
-                {{#each this.cardTypeFilters as |option|}}
-                  {{! + New moved from the frame into the rail: each card
-                    type row grows a hover + that creates one of that type. }}
-                  <div class='rail-row-wrap'>
-                    <Button
-                      @kind='text-only'
-                      @size='auto'
-                      class='rail-row type
-                        {{if (eq option.id this.activeFilter.id) "selected"}}'
-                      {{on 'click' (this.selectFilter option)}}
-                      data-test-workspace-filter={{option.id}}
-                    >
-                      {{#if (this.iconHtml option)}}
-                        <span class='rail-type-icon'>{{this.iconHtml
-                            option
-                          }}</span>
-                      {{else if (this.iconComponent option)}}
-                        {{#let (this.iconComponent option) as |Icon|}}
-                          {{#if Icon}}<Icon
-                              width='14'
-                              height='14'
-                              class='rail-icon'
-                            />{{/if}}
-                        {{/let}}
-                      {{else}}
-                        <span class='rail-swatch' />
-                      {{/if}}
-                      <span class='rail-name'>{{option.displayName}}</span>
-                      <span class='rail-count'>{{this.countFor option}}</span>
-                    </Button>
+                <FilterList
+                  @filters={{this.cardTypeFilters}}
+                  @activeFilter={{this.activeFilter}}
+                  @onChanged={{this.onChangeFilter}}
+                  class='rail-list'
+                >
+                  <:action as |option|>
                     {{#if @canEdit}}
-                      <IconButton
-                        @icon={{PlusIcon}}
-                        @variant='text-only'
-                        @size='extra-small'
-                        @width='12'
-                        @height='12'
-                        class='rail-add'
-                        aria-label='New {{option.displayName}}'
-                        title='New {{option.displayName}}'
-                        {{on 'click' (this.createOfType option)}}
-                      />
+                      <Tooltip @placement='right'>
+                        <:trigger>
+                          <IconButton
+                            @icon={{PlusIcon}}
+                            @variant='text-only'
+                            @size='small'
+                            @width='12'
+                            @height='12'
+                            class='rail-add'
+                            aria-label='New {{option.displayName}}'
+                            {{on 'click' (this.createOfType option)}}
+                          />
+                        </:trigger>
+                        <:content>New {{option.displayName}}</:content>
+                      </Tooltip>
                     {{/if}}
-                  </div>
-                {{/each}}
+                  </:action>
+                </FilterList>
               </div>
             {{/if}}
             {{#if this.fileTypeFilters.length}}
               <div class='rail-group'>
                 <h3 class='rail-label'>File types</h3>
-                {{#each this.fileTypeFilters as |option|}}
-                  <Button
-                    @kind='text-only'
-                    @size='auto'
-                    class='rail-row type
-                      {{if (eq option.id this.activeFilter.id) "selected"}}'
-                    {{on 'click' (this.selectFilter option)}}
-                    data-test-workspace-filter={{option.id}}
-                  >
-                    {{#if (this.iconHtml option)}}
-                      <span class='rail-type-icon'>{{this.iconHtml
-                          option
-                        }}</span>
-                    {{else if (this.iconComponent option)}}
-                      {{#let (this.iconComponent option) as |Icon|}}
-                        {{#if Icon}}<Icon
-                            width='14'
-                            height='14'
-                            class='rail-icon'
-                          />{{/if}}
-                      {{/let}}
-                    {{else}}
-                      <span class='rail-swatch' />
-                    {{/if}}
-                    <span class='rail-name'>{{option.displayName}}</span>
-                    <span class='rail-count'>{{this.countFor option}}</span>
-                  </Button>
-                {{/each}}
+                <FilterList
+                  @filters={{this.fileTypeFilters}}
+                  @activeFilter={{this.activeFilter}}
+                  @onChanged={{this.onChangeFilter}}
+                  class='rail-list'
+                />
               </div>
             {{/if}}
           </nav>
@@ -1238,11 +1189,6 @@ class Isolated extends Component<typeof Workspace> {
         /* Derived values only; everything else reads the theme contract
            directly. Attention tints are mixes of --attention over --card so
            the register moves with the theme as one. */
-        --grid-interactive-edge: color-mix(
-          in oklch,
-          var(--primary) 40%,
-          transparent
-        );
         --grid-attention-soft: color-mix(
           in oklch,
           var(--attention) 60%,
@@ -1305,8 +1251,6 @@ class Isolated extends Component<typeof Workspace> {
       .card-grid .type-chip,
       .card-grid .recent-preview,
       .card-grid .space-config,
-      .card-grid .rail-row,
-      .card-grid .rail-add,
       .card-grid .dock-mini,
       .card-grid .dock-pane-open {
         font-family: inherit;
@@ -1547,6 +1491,7 @@ class Isolated extends Component<typeof Workspace> {
         width: var(--grid-rail-width);
         flex-shrink: 0;
         overflow-y: auto;
+        overflow-x: hidden;
         background-color: var(--muted);
         border-right: 1px solid var(--border);
         padding: var(--boxel-sp) var(--boxel-sp-xs);
@@ -1569,112 +1514,27 @@ class Isolated extends Component<typeof Workspace> {
         text-transform: uppercase;
         color: var(--subtle-foreground);
       }
-      .card-grid .rail-row {
-        justify-content: flex-start;
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-2xs);
-        text-align: left;
-        padding: var(--boxel-sp-3xs) var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius-sm);
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 500;
-        color: var(--foreground);
-        cursor: pointer;
-        /* Without this the row keeps its max-content width instead of the
-           rail's, so a long type name pushes the count and the + past the
-           rail's right edge rather than ellipsizing. The ellipsis on
-           .rail-name only engages once the row itself is allowed to be
-           narrower than its content. */
+      /* FilterList paints its own rows; the selected and hover surfaces follow
+         the card's neutral tier through the component's knobs */
+      .rail-list {
+        --boxel-filter-hover-background: var(--hover);
+        --boxel-filter-hover-foreground: var(--foreground);
+        --boxel-filter-selected-background: var(--selected);
+        --boxel-filter-selected-foreground: var(--foreground);
+        --boxel-filter-selected-hover-background: var(--selected);
+        --boxel-filter-selected-hover-foreground: var(--foreground);
         min-width: 0;
       }
-      .card-grid .rail-row:hover {
-        background-color: var(--hover);
-      }
-      .card-grid .rail-row.selected {
-        color: var(--foreground);
-        background-color: var(--selected);
-        box-shadow: inset 0 0 0 1px var(--grid-interactive-edge);
-      }
-      .rail-icon {
+      /* quiet ink at rest, full ink when pointed at or focused; always at full
+         opacity so it clears the non-text contrast floor */
+      .rail-add {
+        --boxel-icon-button-color: var(--subtle-foreground);
         flex-shrink: 0;
-        color: var(--muted-foreground);
+        margin-inline-end: var(--boxel-sp-4xs);
       }
-      .rail-row.selected .rail-icon {
-        color: var(--primary-ink);
-      }
-      .rail-swatch {
-        width: 0.5rem;
-        height: 0.5rem;
-        border-radius: var(--boxel-border-radius-xs);
-        background-color: var(--subtle-foreground);
-        flex-shrink: 0;
-        margin: 0 var(--boxel-sp-5xs);
-      }
-      /* hover + on card-type rows (the relocated New button) */
-      .rail-row-wrap {
-        position: relative;
-        display: grid;
-      }
-      .card-grid .rail-row-wrap .rail-row {
-        padding-right: var(--boxel-sp-xl);
-      }
-      .card-grid .rail-add {
-        position: absolute;
-        right: var(--boxel-sp-3xs);
-        top: 50%;
-        transform: translateY(-50%);
-        width: 1.25rem;
-        height: 1.25rem;
-        display: grid;
-        place-items: center;
-        border-radius: var(--boxel-border-radius-sm);
-        background-color: var(--muted);
-        color: var(--muted-foreground);
-        cursor: pointer;
-        /* quietly present at rest — hover-only proved undiscoverable */
-        opacity: 0.45;
-        transition: opacity var(--grid-quick) ease;
-      }
-      .rail-row-wrap:hover .rail-add,
-      .card-grid .rail-add:focus-visible {
-        opacity: 1;
-      }
-      .card-grid .rail-add:hover {
-        opacity: 1;
-        background-color: var(--primary);
-        color: var(--primary-foreground);
-      }
-      .rail-type-icon {
-        display: grid;
-        place-items: center;
-        width: 0.875rem;
-        height: 0.875rem;
-        flex-shrink: 0;
-        color: var(--muted-foreground);
-      }
-      .rail-type-icon :deep(svg) {
-        width: 0.875rem;
-        height: 0.875rem;
-        display: block;
-      }
-      .rail-row.selected .rail-type-icon {
-        color: var(--primary-ink);
-      }
-      .rail-name {
-        overflow: hidden;
-        white-space: nowrap;
-        text-overflow: ellipsis;
-      }
-      .rail-count {
-        margin-left: auto;
-        font-family: var(--font-mono);
-        font-size: var(--boxel-font-size-2xs);
-        font-weight: 500;
-        color: var(--subtle-foreground);
-      }
-      .rail-row.selected .rail-count {
-        color: var(--primary-ink);
+      .rail-add:hover,
+      .rail-add:focus-visible {
+        --boxel-icon-button-color: var(--foreground);
       }
       .zone {
         display: grid;
@@ -2560,7 +2420,6 @@ class Isolated extends Component<typeof Workspace> {
       .welcome-alt:focus-visible,
       .card-grid .readme-toggle:focus-visible,
       .card-grid .recent-preview:focus-visible,
-      .card-grid .rail-row:focus-visible,
       .card-grid .dock-mini:focus-visible,
       .wait-open:focus-visible {
         outline: 1px solid var(--ring);
@@ -3197,22 +3056,9 @@ class Isolated extends Component<typeof Workspace> {
     return typeof option.icon === 'string' ? htmlSafe(option.icon) : undefined;
   };
 
-  // Component form of `icon` (undefined when the icon is an HTML string, which
-  // `iconHtml` renders instead) — lets the template invoke `<Icon />` safely.
-  iconComponent = (option: RailOption): typeof SearchIcon | undefined =>
-    typeof option.icon === 'string' ? undefined : option.icon;
-
   @action private createNew() {
     this.createCard.perform();
   }
-
-  createOfType = (option: RailOption) => () => {
-    // rail hover +: create an instance of exactly this row's type
-    let filter = option.query?.filter;
-    if (filter && 'type' in filter) {
-      this.createCard.perform(filter.type as CodeRef); // Glint narrows query unions at the command boundary
-    }
-  };
 
   private get query(): Query | undefined {
     if (!this.activeFilter?.query) {
@@ -3289,10 +3135,14 @@ class Isolated extends Component<typeof Workspace> {
   // already-loaded links) instead of a query.
   @cached
   private get everythingFilter(): RailOption {
+    let self = this;
     return {
       id: 'everything',
       displayName: 'Everything',
       icon: LayoutGridIcon,
+      get count() {
+        return self.cardTotal + self.fileTotal;
+      },
       query: {
         filter: {
           every: [...excludeSelfReferentialCards()],
@@ -3311,6 +3161,9 @@ class Isolated extends Component<typeof Workspace> {
       id: 'entry-points',
       displayName: 'Entry points',
       icon: DoorOpenIcon,
+      get count() {
+        return model.entryPoints?.length ?? 0;
+      },
       get cards() {
         return (model.entryPoints ?? [])
           .filter(Boolean)
@@ -3323,10 +3176,14 @@ class Isolated extends Component<typeof Workspace> {
 
   @cached
   private get cardsFilter(): RailOption {
+    let self = this;
     return {
       id: 'cards',
       displayName: 'Cards',
       icon: Captions,
+      get count() {
+        return self.cardTotal;
+      },
       query: {
         filter: {
           every: [
@@ -3340,10 +3197,14 @@ class Isolated extends Component<typeof Workspace> {
 
   @cached
   private get filesFilter(): RailOption {
+    let self = this;
     return {
       id: 'files',
       displayName: 'Files',
       icon: FileIcon,
+      get count() {
+        return self.fileTotal;
+      },
       query: {
         filter: {
           type: this.fileDefRef,
@@ -3379,18 +3240,13 @@ class Isolated extends Component<typeof Workspace> {
     ];
   }
 
-  countFor = (option: RailOption) => {
-    switch (option.id) {
-      case 'everything':
-        return this.cardTotal + this.fileTotal;
-      case 'entry-points':
-        return this.args.model.entryPoints?.length ?? 0;
-      case 'cards':
-        return this.cardTotal;
-      case 'files':
-        return this.fileTotal;
-      default:
-        return option.count ?? 0;
+  countFor = (option: RailOption) => option.count ?? 0;
+
+  createOfType = (option: FilterOption) => () => {
+    // rail +: create an instance of exactly this row's type
+    let filter = option.query?.filter;
+    if (filter && 'type' in filter) {
+      this.createCard.perform(filter.type as CodeRef); // Glint narrows query unions at the command boundary
     }
   };
 
