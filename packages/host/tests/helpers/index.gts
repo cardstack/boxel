@@ -409,11 +409,22 @@ export async function withHeldSave(cb: () => Promise<void>): Promise<void> {
 //
 // Nothing here consults a clock: the callback releases the hold once the state
 // it wants coalesced is in place, so the size of the coalescing window is the
-// caller's to state rather than the runner's to decide. Note that `settled()`
-// waits on the held save, so a callback must reach its release without waiting
-// for settled — `waitUntil` polls without it and is the usual way through.
+// caller's to state rather than the runner's to decide. What a callback may do
+// before it releases is therefore bounded: a held save keeps a test waiter
+// open, so anything that ends in `settled()` blocks until the release. Among
+// the DOM helpers that is nearly all of them — `click`, `fillIn`, `typeIn`,
+// `triggerKeyEvent` and `focus` each settle before they resolve, and `typeIn`
+// also settles inside `__focus__` ahead of its first character when the
+// browser window does not hold focus. `waitUntil` polls on a timer and settles
+// at no point, which is the way through.
+//
+// `onSaveIssued` fires as a save enters `persistAndUpdate`, ahead of the
+// document it serializes. A caller wanting to know what state a save carried
+// reads it there: the store's own `onSave` subscriber fires on the far side of
+// the realm round trip, by which point the state has moved on.
 export async function withSavesHeldOpen(
   cb: (release: () => void) => Promise<void>,
+  opts: { onSaveIssued?: (instance: CardDef) => void } = {},
 ): Promise<void> {
   let store = getService('store');
   let originalPersist = (store as any).persistAndUpdate as (
@@ -425,10 +436,11 @@ export async function withSavesHeldOpen(
   let heldSaves: Promise<unknown>[] = [];
   (store as any).persistAndUpdate = async (
     instance: CardDef,
-    opts?: unknown,
+    persistOpts?: unknown,
   ) => {
+    opts.onSaveIssued?.(instance);
     let heldSave = (async () => {
-      let result = await originalPersist.call(store, instance, opts);
+      let result = await originalPersist.call(store, instance, persistOpts);
       await released;
       return result;
     })();
