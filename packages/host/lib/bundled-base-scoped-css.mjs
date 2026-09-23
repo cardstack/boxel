@@ -31,6 +31,22 @@ const SCOPED_CSS_IMPORT = /["']([^"']*\.glimmer-scoped\.css)["']/g;
 // Stylesheet specifiers are relative too and are collected separately.
 const RELATIVE_IMPORT = /["'](\.\.?\/[^"']*)["']/g;
 
+// Both patterns below match a quoted string anywhere in the module, and a
+// module's own comments are full of prose that looks like one — a code ref
+// written out in a doc comment reads as an import of a module that need not
+// even exist. Scan the code with its comments blanked so a specifier has to be
+// something the module actually evaluates.
+//
+// Blanked rather than removed, so every offset in the scanned text still lines
+// up with the real source. Line comments are recognized only at the start of a
+// line or after whitespace, which is what keeps the `//` of a `https://` URL —
+// always preceded by `:` — out of it.
+function withoutComments(code) {
+  return code
+    .replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, ' '))
+    .replace(/(^|\s)\/\/[^\n]*/g, (match) => match.replace(/[^\n]/g, ' '));
+}
+
 function isBaseModule(id) {
   return (
     id.includes(`${sep}packages${sep}base${sep}`) && /\.(gts|ts)(\?|$)/.test(id)
@@ -76,10 +92,11 @@ export function bundledBaseScopedCSS() {
         return null;
       }
       let name = baseModuleName(id);
-      let css = [...code.matchAll(SCOPED_CSS_IMPORT)].map((m) => m[1]);
+      let scannable = withoutComments(code);
+      let css = [...scannable.matchAll(SCOPED_CSS_IMPORT)].map((m) => m[1]);
       let imports = [
         ...new Set(
-          [...code.matchAll(RELATIVE_IMPORT)]
+          [...scannable.matchAll(RELATIVE_IMPORT)]
             .map((m) => m[1])
             .filter((specifier) => !specifier.endsWith('.glimmer-scoped.css'))
             .map((specifier) => resolveSibling(name, specifier)),
