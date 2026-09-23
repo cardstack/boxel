@@ -83,6 +83,12 @@ const REPORT_MODULE = `
 
     @operation static escalate = {
       base: 'transform',
+      // Opted out so this stays a write whose content the client does not
+      // author. An eligible transform runs its program locally and the realm
+      // confirms the base, which leaves the client holding the result and
+      // nothing to re-read — a different case, covered in the optimistic
+      // suite. What the test below guards is the other one.
+      optimistic: false,
       set: { status: 'escalated' },
     };
 
@@ -457,11 +463,11 @@ module('Integration | operations store reconciliation', function (hooks) {
   });
 
   test('a write that authored nothing re-reads everything it touched', async function (assert) {
-    // The case the per-card rule exists to protect, from the other side. A
-    // transform's new state is computed on the server, so this client holds
-    // none of it and the event is the only word it gets — and the write is
-    // still its own, under its own request id. Recognizing the echo has to
-    // stop short of skipping it.
+    // The case the per-card rule exists to protect, from the other side. This
+    // transform's new state is computed on the server — it opts out of the
+    // optimistic path, so the client applies nothing and the event is the only
+    // word it gets — and the write is still its own, under its own request id.
+    // Recognizing the echo has to stop short of skipping it.
     let reportURL = `${testRealmURL}report-transformed`;
     let report = await cardAt('report-transformed');
 

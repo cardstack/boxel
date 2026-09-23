@@ -16,7 +16,7 @@ boxel:
 ## Don't use for
 
 - Writing brand-new files where the schema is still undecided. Decide the schema with `boxel` first.
-- Surgical field updates on an existing instance — `patch-fields` is often better than rewriting the `.json`.
+- Nothing about instances is out of scope: an instance is its `.json` file, and a field fix, a removed key, or a repair after a failed check is a SEARCH/REPLACE block against that file. Do not reach for `patch-fields` to repair a file you just wrote — the card may not be indexed yet, and the tool applies to nothing.
 
 When you infer that the user wants to make changes to the attached files, which is usually a card definition, or create new files, you must use a SEARCH/REPLACE block — for .gts and .json files alike; never use write-text-file. SEARCH/REPLACE blocks stream as visible text (the user sees progress), while tool calls like write-text-file do NOT stream (the UI appears frozen with "Thinking" / "Preparing tool call" while generating the full file content).
 
@@ -92,7 +92,7 @@ export class NewFileExample extends CardDef {
 ```
 
 Every *SEARCH/REPLACE block* must use this format:
-1. The opening fence and code language, eg: ```gts
+1. The opening fence and code language, eg: ```gts — on a line of its own. Never end a sentence with the fence: `Let's write the block!```gts` is not a code block, the whole patch renders as plain text, and nothing is applied. Finish the sentence, start a new line, then open the fence.
 2. File url. If you are creating a new file, add '(new)', for example: https://example.com/file.gts (new). If you are editing an existing file, output just the url, without '(new') 
 4. In a new line, the start of search block: ╔═══ SEARCH ════╗
 3. A contiguous chunk of lines to search for in the existing source code
@@ -108,7 +108,9 @@ If the file contains code or other data wrapped/escaped in json/xml/quotes or ot
 
 *SEARCH/REPLACE* blocks will *only* replace the first match occurrence.
 
-**Put every file a piece of work needs in one reply.** Building three cards means three blocks in the same answer, not one card per turn. They are applied together, and the correctness check then runs once over the finished result.
+**When a block was not applied**, the next user message names the block, the file, and the reason. "Search pattern not found" means the SEARCH section does not match the file as it is now, and the message names the first SEARCH line that occurs nowhere in the file. Recover in one step: re-read the file, then send a new block whose SEARCH lines are copied from that fresh content — including trailing commas, closing brackets, and lines you did not write yourself (the realm adds `realmURL` under `meta`, for example). Never resend a block unchanged: the file did not change, so it fails again. Check also that the sections are in the right order — SEARCH holds the current file content, REPLACE holds the new content; a block whose SEARCH holds the code you intend to write fails with this same message.
+
+**Put every file a piece of work needs in one reply.** Building three cards means three blocks in the same answer, not one card per turn. The grouped apply runs every block of the reply in order, and the correctness check then runs once over the finished result. The user can also preview or apply any single block on its own, so each block must also stand alone against the attached file (see below).
 
 Handing back after each file is what breaks a multi-file build. Each file you finish ends your turn, and what happens next is decided by the events that turn produced — so a plan you described earlier is not resumed for you. A build announced as three files and delivered one file at a time routinely stops after the first.
 
@@ -119,7 +121,12 @@ Break large *SEARCH/REPLACE* blocks into a series of smaller blocks that each ch
 Include just the changing lines, and a few surrounding lines if needed for uniqueness.
 Do not include long runs of unchanging lines in *SEARCH/REPLACE* blocks.
 
-To move code within a file, use 2 *SEARCH/REPLACE* blocks: 1 to delete it from its current location, 1 to insert it in the new location.
+To move code within a file, use 2 *SEARCH/REPLACE* blocks: 1 to delete it from its current location, 1 to insert it in the new location. This works only when the two regions do not touch in the attached file. When the old and new locations are adjacent or overlap, use one block that covers both and rewrites them in a single replacement.
+
+**Every block must match the attached file on its own.** When a reply carries several blocks for one file, the grouped apply runs them in order, but each block is also previewed on its own, and the user can apply a single block alone. A block whose SEARCH only exists after another block of the same reply has run shows a broken diff and fails with "search pattern not found" when applied alone. So:
+- Never write a block that depends on another block of the same reply. For an edit block, the SEARCH must be lines that exist in the attached file as it is now. A `(new)` block's SEARCH stays empty.
+- Blocks for one file must not overlap. Two edits to different lines of the same import list or template section are fine as two small blocks. Two blocks that touch the same lines are not: do not add a line in one block and remove or rewrite it in a later block. Decide the final content of a spot first, then write one block for it.
+- If you change your mind about an edit while writing, rewrite the earlier block instead of adding a correcting block after it.
 
 Pay attention to which filenames the user wants you to edit, especially if they are asking you to create a new file. 
 
@@ -127,7 +134,7 @@ Avoid detailed description of the SEARCH/REPLACE blocks. For every SEARCH/REPLAC
 
 If you propose a search/replace block for file edits, it must be for the currently attached file(s), and not for those attached before the most recent one (unless you ask and get the user's approval). 
 
-Your new SEARCH/REPLACE blocks must target ONLY the content of currently attached files - the search portion must not target any of your previous suggestions since it is not guaranteed that your previous SEARCH/REPLACE blocks were applied. If you do not have the contents of the gts file you want to update, you must first use the tool read-file-for-ai-assistant_[hash] tool to get the files contents, and only after that is complete, attempt to generate a SEARCH?REPLACe change.
+Your new SEARCH/REPLACE blocks must target ONLY the content of currently attached files - the search portion must not target any of your previous suggestions, from this reply or an earlier one, since it is not guaranteed that those blocks were applied. If you do not have the contents of the gts file you want to update, you must first use the tool read-file-for-ai-assistant_[hash] tool to get the files contents, and only after that is complete, attempt to generate a SEARCH?REPLACe change.
 
 If you recognize the user wants to edit a template, do a visual change to a card, or describe a certain implementation or style, then you must use a SEARCH/REPLACE block to perform an edit to the attached gts file, by default in the isolated template. Do not default to using the patchCardInstance tool function, unless the user asks you to change the supporting data of the card. 
 

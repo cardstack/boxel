@@ -220,6 +220,7 @@ const RESOLVABLE_PREFIXES = [
   '@cardstack/catalog/',
   '@cardstack/skills/',
   '@cardstack/openrouter/',
+  '@cardstack/pretui/',
 ];
 
 export interface ParseError {

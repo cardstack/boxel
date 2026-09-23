@@ -244,14 +244,14 @@ For wide containers at h40/h65/h105, switch to 2-column layout with thumbnail:
 ```css
 @container fitted-card (width > 260px) and (50px < height <= 80px) {
   .fit:has(.r-hero) {
-    grid-template-columns: 50px 1fr;
+    grid-template-columns: 3.125rem 1fr;
     grid-template-rows: 1fr auto;
     grid-template-areas: "hero head" "hero meta";
-    gap: 2px 10px;
+    gap: 0.125rem 0.625rem;
   }
   .fit:has(.r-hero) .r-hero {
     display: block;
-    width: 50px;
+    width: 3.125rem;
     align-self: stretch;
   }
 }
@@ -290,7 +290,7 @@ Cards progress through layout modes as width increases. Each mode has a minimum 
 /* ✅ Thumbnail sidebar at >260px — fixed image column */
 @container fitted-card (width > 260px) and (50px < height <= 80px) {
   .fit:has(.r-hero) {
-    grid-template-columns: 55px 1fr;
+    grid-template-columns: 3.4375rem 1fr;
   }
 }
 
@@ -389,7 +389,7 @@ The body region should use flex column layout for internal spacing:
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;  /* breathing room between subhead and excerpt */
+  gap: 0.125rem;  /* breathing room between subhead and excerpt */
 }
 ```
 
@@ -504,31 +504,31 @@ This replaces both (a) the original 18-block stepped `@container` font-size grid
   /* Base: the anchor for the whole hierarchy. Scales continuously with the
      container (width weighted higher than height because width affects
      wrapping more), dampened at extreme aspect ratios. */
-  --type-base: clamp(10px, calc(3px + 2.2cqi + 1cqb - 0.6 * var(--ar)), 18px);
+  --type-base: clamp(0.625rem, calc(0.1875rem + 2.2cqi + 1cqb - 0.6 * var(--ar)), 1.125rem);
 
   /* Roles derived from the base via pow() — hierarchical and proportional.
      Each role floors at its minimum so tiny containers stay readable. */
-  --fit-pill-size:     max(7px,  calc(var(--type-base) / pow(var(--type-ratio), 2)));    /* 2 steps down */
-  --fit-tag-size:      max(7px,  calc(var(--type-base) / pow(var(--type-ratio), 1.5)));  /* 1.5 steps down */
-  --fit-meta-size:     max(8px,  calc(var(--type-base) / var(--type-ratio)));            /* 1 step down */
-  --fit-body-size:     max(9px,  var(--type-base));                                       /* base */
-  --fit-subhead-size:  max(9px,  var(--type-base));                                       /* base */
-  --fit-keyinfo-size:  max(10px, calc(var(--type-base) * pow(var(--type-ratio), 1.5)));  /* 1.5 steps up */
-  --fit-headline-size: max(11px, calc(var(--type-base) * pow(var(--type-ratio), 2)));    /* 2 steps up */
+  --fit-pill-size:     max(0.4375rem, calc(var(--type-base) / pow(var(--type-ratio), 2)));    /* 2 steps down */
+  --fit-tag-size:      max(0.4375rem, calc(var(--type-base) / pow(var(--type-ratio), 1.5)));  /* 1.5 steps down */
+  --fit-meta-size:     max(0.5rem,    calc(var(--type-base) / var(--type-ratio)));            /* 1 step down */
+  --fit-body-size:     max(0.5625rem, var(--type-base));                                       /* base */
+  --fit-subhead-size:  max(0.5625rem, var(--type-base));                                       /* base */
+  --fit-keyinfo-size:  max(0.625rem,  calc(var(--type-base) * pow(var(--type-ratio), 1.5)));  /* 1.5 steps up */
+  --fit-headline-size: max(0.6875rem, calc(var(--type-base) * pow(var(--type-ratio), 2)));    /* 2 steps up */
 
   --fit-headline-lh: 1.18;
   --fit-body-lh:     1.4;
 
   /* Spacing scales with width only (no height component) */
-  --fit-pad: clamp(5px, calc(2px + 1.8cqi), 14px);
-  --fit-gap: clamp(2px, calc(0.5px + 1.2cqi), 8px);
+  --fit-pad: clamp(0.3125rem, calc(0.125rem + 1.8cqi), 0.875rem);
+  --fit-gap: clamp(0.125rem, calc(0.5px + 1.2cqi), 0.5rem);
 }
 ```
 
 **How it works:**
 
 - `cqi` = 1% of container inline size (width). `cqb` = 1% of container block size (height).
-- The base scales continuously: `clamp(10px, calc(3px + 2.2cqi + 1cqb − 0.6·AR), 18px)`. Width is weighted higher than height because width affects wrapping more directly.
+- The base scales continuously: `clamp(0.625rem, calc(0.1875rem + 2.2cqi + 1cqb − 0.6·AR), 1.125rem)` — 10px to 18px at the default root size, in `rem` so it follows the user's font-size preference. Width is weighted higher than height because width affects wrapping more directly.
 - Every role is `base × pow(ratio, steps)` — positive steps grow the size (headline, keyinfo), negative steps shrink it (meta, tag, pill). The hierarchy stays harmonic across all container sizes.
 - `max(<floor>, …)` per role guarantees a per-role minimum — even if the base shrinks to 10px, meta won't fall below 8px or pills below 7px.
 - The aspect-ratio penalty `--ar` is subtracted from the base, so extreme-aspect containers (a 400×65 strip, a 170×445 column) get a more conservative base, and the whole hierarchy follows.
@@ -546,8 +546,8 @@ This replaces both (a) the original 18-block stepped `@container` font-size grid
 | Knob | Effect |
 |---|---|
 | `--type-ratio` | Steepness of the hierarchy. 1.2 = subtle, 1.25 = balanced (default), 1.333 = punchy, 1.414 = display-heavy. |
-| `--type-base` clamp min | Floor for the whole system at tiny containers (default 10px). |
-| `--type-base` clamp max | Ceiling at large containers (default 18px). |
+| `--type-base` clamp min | Floor for the whole system at tiny containers (default 0.625rem = 10px). |
+| `--type-base` clamp max | Ceiling at large containers (default 1.125rem = 18px). |
 | Base coefficients (`2.2cqi + 1cqb`) | How fast the base grows. Bigger = more dramatic scaling. |
 | AR coefficient (`0.6 * var(--ar)`) | How much to shrink in stretched containers. Bigger = more conservative on strips/columns. |
 | Per-role `max()` floor | Per-role minimum, independent of base. |
@@ -624,7 +624,7 @@ Some "metadata" is actually **key info** — price, status, availability — tha
 .price {
   font-size: var(--fit-keyinfo-size);
   font-weight: 800;
-  color: var(--primary);
+  color: var(--primary-ink);
 }
 
 /* Regular meta: small, muted, subordinate */
@@ -734,7 +734,7 @@ No modifiers. No `data-line-*` attributes. No `{{this.fitGrid}}`. No local conta
 Add the `pow()`-based block on `.fit` (copy from "Comfort-Scored Typography" above). Adjust:
 - `--type-ratio` if you want a tighter (1.2) or punchier (1.333) hierarchy
 - The base `clamp(min, …, max)` if your card's typography differs from the standard set
-- Per-role `max()` floors if a particular role needs a higher minimum (e.g. a price card might want `--fit-keyinfo-size: max(14px, …)`)
+- Per-role `max()` floors if a particular role needs a higher minimum (e.g. a price card might want `--fit-keyinfo-size: max(0.875rem, …)`)
 
 ### Step 5: Add Container Queries for Structure
 
@@ -862,21 +862,15 @@ A card looks art-directed when these six moves are all present. Missing any one 
 One serif (the body voice: headline, dek, lede, stat values) and one sans-serif (the micro-labels: eyebrows, stat labels, byline meta, review counts). Never mix three families. Never set the eyebrow in the serif. Never set a stat value in the sans.
 
 ```css
-/* Declare the pairing ONCE on the composition root — --font-serif has no
-   default value, so this local declaration is where its one fallback lives */
-.masthead {
-  --serif: var(--font-serif, Georgia, serif);
-  --sans: var(--font-sans, system-ui, sans-serif);
-}
-.headline   { font-family: var(--serif); }
-.dek        { font-family: var(--serif); font-style: italic; }
-.stat-val   { font-family: var(--serif); }
-.eyebrow,
-.stat-lbl,
-.review-count { font-family: var(--sans); }
+/* Only the serif needs declaring: --font-sans is the theme's default body
+   font, inherited from CardContainer. Both stacks are contract tokens with
+   theme.css defaults, so they are read bare — no fallbacks */
+.headline   { font-family: var(--font-serif); }
+.dek        { font-family: var(--font-serif); font-style: italic; }
+.stat-val   { font-family: var(--font-serif); }
 ```
 
-The theme card supplies `--font-serif` and `--font-sans`. Always reference them. `--font-serif` has no default, so it needs a safe fallback (`Georgia, serif`) — given once, in the composition root's local-variable declaration, never inline per selector.
+The theme card supplies `--font-serif`, `--font-sans`, and `--font-mono`. Always reference them, never a literal family. `--font-sans` is already the default `font-family` on every card, so micro-labels (eyebrow, stat labels, review counts) get it by inheritance and need no `font-family` rule; only the serif elements are set explicitly.
 
 #### 2. Weight rhythm — pair a large, light serif with tiny, bold sans
 

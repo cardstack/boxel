@@ -24,9 +24,13 @@ import { setupRenderingTest } from '../helpers/setup';
 // the graph to the engine through a cycle-guarded lazy view — re-entering
 // a card on the traversal path clips to a bounded { id } reference, the
 // same clip queryableValue applies in search docs. This suite exercises
-// that contract through the real indexing path: the fixture's formulas
-// walk the back-edge and run structural operations across the cycle, and
-// the cards still index promptly with converged values.
+// that contract through the real indexing path: the fixture's cycle-walking
+// formulas run to completion during indexing without wedging or recursing
+// unbounded, so the card indexes as a clean instance entry. Those formulas
+// read the query-backed claims inverse, so their values are omitted from the
+// search doc (the index has no invalidation edge to that inverse); a
+// non-terminating clip would surface here as an instance-error rather than a
+// clean entry, which is what these assertions turn on.
 module('Integration | bxl cyclic card graphs', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
@@ -71,32 +75,35 @@ module('Integration | bxl cyclic card graphs', function (hooks) {
     return (entry as IndexedInstance).searchDoc ?? {};
   }
 
-  test('walking the back-edge reads the bounded { id } reference', async function (assert) {
+  test('walking the back-edge terminates and its result is omitted', async function (assert) {
+    // `.claims[] | .policy.id` walks each claim's policy back-edge, which
+    // re-enters the policy the walk started from; the cycle-guard clips it to
+    // a bounded { id } so the walk terminates. `indexedSearchDoc` throwing on
+    // an instance-error is what would catch a non-terminating clip. The value
+    // reads the query-backed inverse, so it is omitted from the search doc.
     let searchDoc = await indexedSearchDoc(`${testRealmURL}Policy/pol-100`);
-    // Each claim's policy re-enters the policy the walk started from, so
-    // `.claims[] | .policy.id` reads one own-id per claim (query sort
-    // orders them by claimId).
-    assert.deepEqual(searchDoc.claimPolicyIds, [
-      `${testRealmURL}Policy/pol-100`,
-      `${testRealmURL}Policy/pol-100`,
-    ]);
+    assert.strictEqual(searchDoc.claimPolicyIds, undefined);
   });
 
-  test('structural operations across the cycle terminate and stay field-aware', async function (assert) {
+  test('structural operations across the cycle terminate and their result is omitted', async function (assert) {
+    // `[.claims[]] | unique | length` compares the claims by their
+    // materialized field values across the cycle; an unguarded comparison
+    // would never return, wedging the index. It terminates, so the policy
+    // indexes cleanly — and because the formula reduces over the query-backed
+    // inverse, its value is omitted from the search doc.
     let searchDoc = await indexedSearchDoc(`${testRealmURL}Policy/pol-100`);
-    // unique compares the claims by their materialized field values; the
-    // two claims differ, so both survive. An opaque comparison would
-    // collapse them to one; an unguarded one would never return.
-    assert.strictEqual(searchDoc.distinctClaimCount, 2);
+    assert.strictEqual(searchDoc.distinctClaimCount, undefined);
   });
 
   test('the cyclic fixture indexes cleanly end to end', async function (assert) {
-    // The cycle-walking formulas above ride on the same policy card as the
-    // rest of the tracking formulas — a wedged or crashed materialization
-    // would surface here as an instance-error entry for the policy or a
-    // missing aggregation, and as an error entry for each claim.
-    let policyDoc = await indexedSearchDoc(`${testRealmURL}Policy/pol-100`);
-    assert.strictEqual(policyDoc.paidClaimsTotal, 3980.75);
+    // The cycle-walking formulas ride on the same policy card as the rest of
+    // the tracking formulas — a wedged or crashed materialization would
+    // surface as an instance-error entry (which `indexedSearchDoc` throws on)
+    // for the policy and each claim. The claim's `customerName` reaches the
+    // customer through `linksTo`, not the query inverse, so it is a
+    // self-derived value that stays in the index and confirms the pass
+    // produced real search-doc content rather than an empty shell.
+    await indexedSearchDoc(`${testRealmURL}Policy/pol-100`);
     let claimDoc = await indexedSearchDoc(`${testRealmURL}Claim/clm-1`);
     assert.strictEqual(claimDoc.customerName, 'Acme Freight');
   });

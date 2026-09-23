@@ -940,7 +940,7 @@ It is **not** persisted in `boxel_index.diagnostics` (that's the client side). S
 ```
 corr=<id> job=<jobId> handler=Nms parse=… resolveRealms=… sql=… stringify=… coalescedWait=… | results=…    (realm:search-timing)
 --> QUERY <accept> <url>: 200 [job: <jobId>] corr=<id> dur=Nms                                                                                            (realm:requests)
-eventLoopLagMs(mean/p99/max)=…/…/… inFlightSearch=… heapMB=…                                                                                              (realm:health)
+eventLoopLagMs(mean/p99/max)=…/…/… inFlightSearch=… searchRequests=… searchLoad=… heapMB=…                                                                                              (realm:health)
 ```
 
 The `|`-section is the **sequential wall-clock timeline** (these sum to ≈ `handler`).

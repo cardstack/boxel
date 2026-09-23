@@ -13,7 +13,7 @@ Key facts:
 
 - **The slot accessor never exposes a sentinel.** A broken or pending link reads as plain `undefined` — there is no special placeholder object to detect in JavaScript.
 - **`linksToMany` keeps the slot.** `arr.length` and iteration count are unchanged; broken/pending elements are `undefined` *holes*, not removed entries. So `arr[2]` may be `undefined` while `arr[3]` is a real card.
-- **`undefined` is ambiguous on its own.** It means "no renderable card right now" — could be still-loading, could be terminally broken. When you must tell those apart, use `getRelationship` (below).
+- **`undefined` is ambiguous on its own.** It means "no renderable card right now" — could be still-loading, could be terminally broken. When you must tell those apart, use `getRelationshipMembershipState` (below).
 
 ## Why you must guard *every* traversal
 
@@ -161,27 +161,25 @@ get loadedMembers() {
 
 Never feed a possibly-`undefined` slot straight into a helper that dereferences it (`{{capitalize @model.manager.name}}`) — guard in a getter first.
 
-## Reading structured failure state — `getRelationship`
+## Reading structured failure state — `getRelationshipMembershipState`
 
-Plain reads collapse every non-present state to `undefined`. When you genuinely need to distinguish *still loading* from *not-found* from *errored* — e.g. to show a tailored message — use `getRelationship` from `@cardstack/runtime-common` / card-api. It is a pure read (it never re-triggers the loader) and reports each slot's true state:
+Plain reads collapse every non-present state to `undefined`. When you genuinely need to distinguish *still loading* from *not-found* from *errored* — e.g. to show a tailored message — use `getRelationshipMembershipState` from `@cardstack/base/card-api`. It is a pure read (it never re-triggers the loader) and reports each slot's true state:
 
 ```ts
-import { getRelationship } from '@cardstack/base/card-api';
+import { getRelationshipMembershipState } from '@cardstack/base/card-api';
 
 // singular linksTo → one RelationshipState
-let state = getRelationship(this, 'manager');
+let state = getRelationshipMembershipState(this, 'manager');
 
 // linksToMany → one RelationshipState per element (broken slots included)
-let states = getRelationship(this, 'members');
+let states = getRelationshipMembershipState(this, 'members');
 ```
 
 Each `RelationshipState` carries:
 
 | Field | Meaning |
 | --- | --- |
-| `kind` | `'present'` \| `'not-loaded'` \| `'error'` \| `'not-found'` \| `'not-set'` |
-| `isLoaded` | `true` only for `'present'` |
-| `isError` | `true` for `'error'` and `'not-found'` |
+| `kind` | `'present'` \| `'not-loaded'` \| `'error'` \| `'not-found'` \| `'not-set'` — the single discriminator; branch on it |
 | `value` | the `Card` when `'present'`, else `undefined` |
 | `reference` | the target URL/id (absent for `'not-set'`) |
 | `errorDoc` | the upstream error, present on `'error'` / `'not-found'` |
@@ -189,9 +187,9 @@ Each `RelationshipState` carries:
 Use it to branch on intent rather than guessing from `undefined`:
 
 ```ts
-let s = getRelationship(this, 'manager');
+let s = getRelationshipMembershipState(this, 'manager');
 if (s.kind === 'not-loaded') return 'Loading…';
-if (s.isError) return 'Manager link is broken';
+if (s.kind === 'error' || s.kind === 'not-found') return 'Manager link is broken';
 return s.value?.name ?? 'Unassigned';
 ```
 
@@ -203,4 +201,4 @@ For **fixing** a broken link (recognising the DOM placeholder, following the URL
 - Guard during the lazy-load window, not just for "broken data": **every prerender** reads links as `undefined` first.
 - Optional-chain every hop (`a?.b?.c`), provide a fallback (`?? default`), `?.` inside `.map`, `== null` skip in loops, `.filter(Boolean)` before counting or rendering.
 - Never assume `arr[i]` is renderable, and never assume `arr.length` equals the number of present cards.
-- Reach for `getRelationship` only when you must distinguish loading vs not-found vs error; for the common case, optional chaining is enough.
+- Reach for `getRelationshipMembershipState` only when you must distinguish loading vs not-found vs error; for the common case, optional chaining is enough.

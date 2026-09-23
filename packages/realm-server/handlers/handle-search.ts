@@ -560,7 +560,9 @@ async function respondWithJobScopedSearchCache(
       // A joiner or a hit holds no result document of its own, so it stops
       // counting toward the search admission ceiling here rather than when
       // its response ends; the ceiling is then a bound on concurrent
-      // computations, which is what holds the heap.
+      // computations, which is what holds the heap. The request itself stays
+      // counted toward the link-shape policy's reading until its response
+      // ends, because it goes on waiting for the computation it joined.
       onOutcome: (decided) => {
         recordCacheOutcome(decided);
         if (decided !== 'miss') {

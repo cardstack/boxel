@@ -35,7 +35,7 @@ export default class MyInstallCommand extends Command<typeof Input, typeof Outpu
     }
 
     log.info(`Installing ${plan.size} ops to ${input.targetRealm}`);
-    const result = await new ExecuteAtomicOperationsCommand(this.commandContext)
+    const result = await new ExecuteAtomicOperationsCommand(this.toolContext)
       .execute(plan.build());
 
     return new Output(/* … */);

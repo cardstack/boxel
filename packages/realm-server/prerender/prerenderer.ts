@@ -90,7 +90,11 @@ export class Prerenderer {
   // finally block.
   #affinitySnapshotSampler!: AffinitySnapshotSampler;
 
-  constructor(options: { serverURL: string; maxPages?: number }) {
+  constructor(options: {
+    serverURL: string;
+    maxPages?: number;
+    registerWithManager?: boolean;
+  }) {
     let maxPages = options.maxPages ?? 5;
     this.#semaphore = new AsyncSemaphore(maxPages);
     this.#browserManager = new BrowserManager();
@@ -106,6 +110,7 @@ export class Prerenderer {
     this.#pagePool = new PagePool({
       maxPages,
       serverURL: options.serverURL,
+      registerWithManager: options.registerWithManager,
       browserManager: this.#browserManager,
       boxelHostURL,
       renderSemaphore: this.#semaphore,
@@ -732,6 +737,7 @@ export class Prerenderer {
       jobId,
       screenshots,
       renderScope,
+      cardSource,
     } = this.#gateClearCache(rawArgs);
     let signal = (rawArgs as { signal?: AbortSignal }).signal;
     let testOnTabAcquired = (
@@ -794,6 +800,7 @@ export class Prerenderer {
             jobId,
             screenshots,
             renderScope,
+            cardSource,
             signal,
             onTabAcquired,
           });
@@ -831,6 +838,7 @@ export class Prerenderer {
               jobId,
               screenshots,
               renderScope,
+              cardSource,
               signal,
               onTabAcquired,
             });

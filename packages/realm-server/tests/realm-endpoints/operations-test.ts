@@ -8,7 +8,11 @@ import type { DirResult } from 'tmp';
 import type { PgAdapter } from '@cardstack/postgres';
 
 import {
+  baseFileRef,
+  baseRealmRRI,
+  baseRef,
   BOXEL_OPERATIONS_EXT,
+  codeRefFromInternalKey,
   rri,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
@@ -262,12 +266,45 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         }
       }
     `,
+    // A FileDef subclass of the realm's own, carrying a named operation built
+    // on `appendLine`. `appendLine` takes no clause and refuses a
+    // `transformations` program — it appends to stored bytes rather than
+    // running a program over a document — so the line the realm stamps is
+    // composed by the `input` stage, which runs over the payload before the
+    // `params` check and can therefore supply the `line` the caller never
+    // sent. The stage adds to the payload rather than replacing it, because
+    // what it produces is what the `params` check then reads: a program
+    // answering `{ line: … }` alone would drop the declared `what` and be
+    // refused for not supplying it.
+    'audit-log.gts': `
+      import { TextFileDef } from "@cardstack/base/text-file-def";
+      import StringField from "@cardstack/base/string";
+      import { operation, bxl } from "@cardstack/base/operations";
+
+      export class AuditLog extends TextFileDef {
+        @operation static record = {
+          base: 'appendLine',
+          params: { what: StringField },
+          input: bxl\`. + { line: (realmConfig("auditPrefix") + " " + actor() + " " + params("what")) }\`,
+        };
+      }
+    `,
     // The realm's own config document, carrying the settings a transform reads
-    // with `realmConfig(…)`.
+    // with `realmConfig(…)` and the binding that makes a stored `.txt` an
+    // `AuditLog` rather than the platform's `TextFileDef`.
     'realm.json': realmConfigCardJSON({
       name: 'Card Operations Envelope Test Realm',
-      config: { timezone: 'UTC' },
+      config: { timezone: 'UTC', auditPrefix: '[audit]' },
+      fileTypes: {
+        '.txt': { module: './audit-log', name: 'AuditLog' },
+      },
     }),
+    'audit.txt': 'opened\n',
+    // Unbound, and a `.log` on purpose: the platform types it `TextFileDef`,
+    // whose `extractAttributes` refuses any extension outside its own list.
+    // A `.log` in the code-ref table but not in that list indexes as a
+    // file-error rather than as text, and this is the file that says so.
+    'startup.log': 'ready\n',
     'staged.gts': `
       import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
       import StringField from "@cardstack/base/string";
@@ -391,6 +428,13 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         'report-nested-3',
         'report-shape',
         'report-tree-write',
+        // One per base-version test, for the same reason.
+        'report-base-fresh',
+        'report-base-stale',
+        'report-base-absent',
+        'report-base-refused',
+        'report-base-read',
+        'report-base-read-stale',
       ].map((name) => [`${name}.json`, reportFile()]),
     ),
     // The one report that is not open, so an operation asserting that it is
@@ -570,6 +614,44 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     function query(body: string) {
       return post(body).set('X-HTTP-Method-Override', 'QUERY');
     }
+
+    // A browser reaches this endpoint across an origin boundary, and neither
+    // of this project's suites crosses one: the host's integration tests drive
+    // an in-browser realm with no network, and everything here runs on node
+    // `fetch`, which has no CORS. So the request being *deliverable* is pinned
+    // separately from the request being answered correctly.
+    module('cross-origin delivery', function () {
+      test('the preflight allows every header the envelope carries', async function (assert) {
+        let response = await request
+          .options('/_operations')
+          .set('Origin', 'https://localhost:4200')
+          .set('Access-Control-Request-Method', 'POST')
+          .set(
+            'Access-Control-Request-Headers',
+            'accept, authorization, content-type',
+          );
+
+        let allowed = String(
+          response.headers['access-control-allow-headers'] ?? '',
+        )
+          .split(',')
+          .map((header) => header.trim().toLowerCase());
+
+        // `Accept` is the one worth naming. It is normally CORS-safelisted, so
+        // its absence from the allow list looks impossible — but the safelist
+        // covers only values free of `"`, `:` and the rest of the forbidden
+        // set, and this endpoint's media type is
+        // `application/vnd.api+json;ext="…"`, which carries both. So the
+        // request preflights, and without `Accept` allowed the preflight is
+        // refused and no browser can invoke any operation at all.
+        for (let header of ['accept', 'authorization', 'content-type']) {
+          assert.true(
+            allowed.includes(header),
+            `the preflight allows ${header}: ${allowed.join(', ')}`,
+          );
+        }
+      });
+    });
 
     module('validation', function () {
       test('an href outside this realm is refused, naming the entry', async function (assert) {
@@ -1951,6 +2033,341 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       });
     });
 
+    // A caller that holds a card names the version it computed its write on top
+    // of, and the result says whether the realm executed from the same one.
+    //
+    // The comparison is the coordinator's and is made inside the write lock
+    // against the bytes it read there; what these are about is the wire — the
+    // spelling a caller sends a base version with, and that nothing reaches the
+    // stored file on the way through. A mismatch is reported and not refused:
+    // refusing a write on a stale base is what `If-Match` is for, on the card
+    // verbs, and a batch entry saying so would make the two mean the same
+    // thing.
+    module('base versions', function () {
+      // The version a write reports is the token the next write names as its
+      // base, so this reads one out of a result and sends it straight back.
+      test('an entry naming the version the card holds reports the base matched', async function (assert) {
+        let first = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-base-fresh',
+              data: { body: 'First.' },
+            }),
+          ),
+        );
+        assert.strictEqual(first.status, 200, 'HTTP 200 status');
+        let version = first.body['atomic:results'][0].data.meta.version;
+        assert.strictEqual(
+          typeof version,
+          'string',
+          'the first write reported a version to name as a base',
+        );
+
+        let second = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-base-fresh',
+              data: { body: 'Second.', meta: { baseVersion: version } },
+            }),
+          ),
+        );
+
+        assert.strictEqual(second.status, 200, 'HTTP 200 status');
+        let [result] = second.body['atomic:results'];
+        assert.true(
+          result.data.meta.baseMatched,
+          'the realm executed from the version the caller named',
+        );
+        assert.deepEqual(
+          storedCard('report-base-fresh.json').data.attributes?.comments,
+          [
+            { body: 'First.', postedBy: TESTER },
+            { body: 'Second.', postedBy: TESTER },
+          ],
+          'both writes landed',
+        );
+      });
+
+      // The base a first operation names cannot come from a write — there has
+      // not been one yet. So the read has to supply it, and these two tests are
+      // the round trip that makes the first operation on a card the client has
+      // only looked at reconcile like every one after it.
+      test('the version a GET reports is accepted as a base', async function (assert) {
+        let read = await request
+          .get('/report-base-read')
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(read.status, 200, `HTTP 200 status: ${read.text}`);
+        let version = read.body.data.meta.version;
+        assert.strictEqual(
+          typeof version,
+          'string',
+          'the read reported a version to name as a base',
+        );
+
+        let response = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-base-read',
+              data: {
+                body: 'On a base taken from a read.',
+                meta: { baseVersion: version },
+              },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let [result] = response.body['atomic:results'];
+        assert.true(
+          result.data.meta.baseMatched,
+          'the realm executed from the bytes the read described',
+        );
+      });
+
+      // The other half of the same claim, and the one that says the version is
+      // bound to a state rather than being a constant the read hands out: a
+      // base taken from a read has to stop matching once someone else writes.
+      test('a version read before someone else’s write no longer matches', async function (assert) {
+        let read = await request
+          .get('/report-base-read-stale')
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(read.status, 200, `HTTP 200 status: ${read.text}`);
+        let stale = read.body.data.meta.version;
+        assert.strictEqual(
+          typeof stale,
+          'string',
+          'the read reported a version to name as a base',
+        );
+
+        let foreign = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-base-read-stale',
+              data: { body: 'Someone else got here first.' },
+            }),
+          ),
+        );
+        assert.strictEqual(foreign.status, 200, 'HTTP 200 status');
+
+        let reread = await request
+          .get('/report-base-read-stale')
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(
+          reread.status,
+          200,
+          `HTTP 200 status: ${reread.text}`,
+        );
+        assert.strictEqual(
+          reread.body.data.meta.version,
+          foreign.body['atomic:results'][0].data.meta.version,
+          'a read after the write reports the version that write stored',
+        );
+
+        let response = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-base-read-stale',
+              data: {
+                body: 'On a base that moved.',
+                meta: { baseVersion: stale },
+              },
+            }),
+          ),
+        );
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.false(
+          response.body['atomic:results'][0].data.meta.baseMatched,
+          'the base read earlier no longer describes the card',
+        );
+      });
+
+      test('an entry naming a version the card has moved past applies anyway and reports the mismatch', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-base-stale',
+              data: {
+                body: 'Sent against a base that moved.',
+                meta: { baseVersion: 'a-version-this-card-never-held' },
+              },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let [result] = response.body['atomic:results'];
+        assert.false(
+          result.data.meta.baseMatched,
+          'the realm reports that it executed from a different base',
+        );
+        assert.deepEqual(
+          storedCard('report-base-stale.json').data.attributes?.comments,
+          [{ body: 'Sent against a base that moved.', postedBy: TESTER }],
+          'the write still applied — a moved base is reported, not refused',
+        );
+      });
+
+      // Absent rather than `false`. A caller that named no base asked nothing,
+      // and answering `false` would tell it its base did not match — a claim
+      // about a base it never stated.
+      test('an entry naming no base version has no baseMatched key', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('addComment', {
+              href: '/report-base-absent',
+              data: { body: 'No base named.' },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let [result] = response.body['atomic:results'];
+        // The positive control, for the reason absence assertions need one: a
+        // result carrying no meta at all would satisfy the check below just as
+        // well as one deliberately withholding the key. A write always reports
+        // a version, so finding one establishes that this meta is populated and
+        // the absence is about `baseMatched`.
+        assert.strictEqual(
+          typeof result.data.meta.version,
+          'string',
+          'the result carries a populated write meta',
+        );
+        assert.false(
+          'baseMatched' in result.data.meta,
+          `the result reports nothing about a base: ${JSON.stringify(
+            result.data.meta,
+          )}`,
+        );
+      });
+
+      // The base version is the envelope's to read, so it must not reach the
+      // patch the entry stages. `meta` legitimately carries `adoptsFrom` and
+      // `fields`, so it cannot be dropped wholesale — the member is lifted out
+      // of it, and this is what says so.
+      test('a base version is not written into the card it names', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('update', {
+              href: '/report-base-refused',
+              data: {
+                type: 'card',
+                attributes: { status: 'escalated' },
+                meta: {
+                  adoptsFrom: EXTERNAL_REPORT,
+                  baseVersion: 'a-version-this-card-never-held',
+                },
+              },
+            }),
+          ),
+        );
+
+        assert.strictEqual(
+          response.status,
+          200,
+          `HTTP 200 status: ${response.text}`,
+        );
+        let stored = storedCard('report-base-refused.json');
+        assert.strictEqual(
+          stored.data.attributes?.status,
+          'escalated',
+          'the patch landed',
+        );
+        assert.false(
+          'baseVersion' in (stored.data.meta as unknown as object),
+          `the stored card carries no base version: ${JSON.stringify(
+            stored.data.meta,
+          )}`,
+        );
+      });
+
+      test('a base version that is not a non-empty string is refused, naming the entry', async function (assert) {
+        for (let [label, baseVersion] of [
+          ['a number', 7],
+          ['an empty string', ''],
+        ] as const) {
+          let response = await post(
+            envelope(
+              invoke('addComment', {
+                href: '/report-base-absent',
+                data: { body: 'Refused.', meta: { baseVersion } },
+              }),
+            ),
+          );
+
+          assert.strictEqual(response.status, 400, `HTTP 400 status: ${label}`);
+          let [error] = response.body.errors;
+          assert.strictEqual(
+            error.meta.entry,
+            0,
+            `the entry is named: ${label}`,
+          );
+          assert.true(
+            error.detail.includes('baseVersion'),
+            `the refusal names the member: ${error.detail}`,
+          );
+        }
+      });
+
+      // A read never reaches the coordinator — it is answered before the batch
+      // is staged — so the refusal for an entry that cannot use a base version
+      // has to be made where every entry's definition is known. Without it a
+      // well-formed base version on a read is silently dropped, which is the
+      // same answer as a realm that does not report on bases at all, while a
+      // malformed one on the same read is a refusal.
+      test('a base version on an entry that writes nothing is refused, naming the entry', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('read', {
+              href: '/report-base-absent',
+              data: { meta: { baseVersion: 'a-version-a-read-cannot-use' } },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.meta.entry, 0, 'the entry is named');
+        assert.true(
+          error.detail.includes('base version'),
+          `the refusal says a read has no base version: ${error.detail}`,
+        );
+        assert.strictEqual(
+          response.body['atomic:results'],
+          undefined,
+          'the batch answered nothing',
+        );
+      });
+
+      // A create has no prior state for a base version to describe and a delete
+      // has none left to report a match on, so naming one is a caller that
+      // believes it is writing conditionally when nothing is comparing
+      // anything. Refused rather than ignored, for that reason.
+      test('a base version on a create is refused, naming the entry', async function (assert) {
+        let response = await post(
+          envelope(
+            invoke('create', {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Mango' },
+                meta: {
+                  adoptsFrom: PERSON,
+                  baseVersion: 'a-version-no-new-card-has',
+                },
+              },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.meta.entry, 0, 'the entry is named');
+        assert.true(
+          error.detail.includes('base version'),
+          `the refusal says a create has no base version: ${error.detail}`,
+        );
+      });
+    });
+
     // The two stages around an operation, end to end: what a declaration's
     // `input` and `output` do to a real batch, and what a projected default
     // `read` does to the card+json `GET` of the cards that carry it. The
@@ -2208,6 +2625,219 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           304,
           'and its conditional fast path is untouched',
         );
+      });
+    });
+
+    // ========================================================================
+    // A file bound to one of the realm's own FileDef subclasses.
+    //
+    // The realm's `realm.json` binds `.txt` to its `AuditLog`, so `audit.txt`
+    // is an `AuditLog` rather than the platform's `TextFileDef` — and the
+    // operations `AuditLog` declares are reachable against it. Every assertion
+    // here is about the binding being the *same* answer in two places that
+    // resolve it independently: the pass that wrote the file's row, and the
+    // dispatch that resolves an operation's definition when one is invoked. A
+    // disagreement between them is the failure this binding is designed
+    // against, and it is not one either half reports on its own — the row wins
+    // when a document is served, so a dispatch honouring a binding the index
+    // ignored is silently inert.
+    // ========================================================================
+    module('realm file type bindings', function () {
+      function auditLines(): string[] {
+        return readFileSync(realmFile('audit.txt'), 'utf8')
+          .split('\n')
+          .filter((line) => line.length > 0);
+      }
+
+      test('the file is indexed as the class the realm bound', async function (assert) {
+        let rows = (await testDbAdapter.execute(
+          `select types from boxel_index where url = $1 and type = 'file'`,
+          { bind: [`${testRealmHref}audit.txt`] },
+        )) as { types: string[] | null }[];
+
+        assert.strictEqual(rows.length, 1, 'the file has an index row');
+        // The row's `types` are the extractor's walk of the real prototype
+        // chain, not the synthetic fallback assembled beside
+        // `resolveFileDefCodeRef` — so the platform classes `AuditLog` extends
+        // sit between it and the terminator. Asserted as head, membership and
+        // tail rather than as one literal chain, because inserting a class
+        // between `TextFileDef` and `FileDef` would be a change to the file
+        // family and not to this binding.
+        let types = (rows[0].types ?? []).map((key) =>
+          codeRefFromInternalKey(key),
+        );
+        assert.deepEqual(
+          types[0],
+          { module: rri(`${testRealmHref}audit-log`), name: 'AuditLog' },
+          'the row is typed by the binding — and this is the entry that ' +
+            'decides, since a served document reads its type off the first one',
+        );
+        assert.deepEqual(
+          types.slice(-2),
+          [baseFileRef, baseRef],
+          'with the chain the platform puts behind every file still intact, ' +
+            'so a search for files finds this one',
+        );
+        assert.true(
+          types.some(
+            (ref) =>
+              ref?.name === 'TextFileDef' &&
+              ref.module === rri(`${baseRealmRRI}text-file-def`),
+          ),
+          'and the platform class the binding extends is on the chain',
+        );
+      });
+
+      test('the document the realm serves names the same class', async function (assert) {
+        let response = await request
+          .get('/audit.txt')
+          .set('Accept', SupportedMimeType.CardJson)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(realm, TESTER, ['read', 'write'])}`,
+          );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          response.body.data.meta.adoptsFrom,
+          { module: rri(`${testRealmHref}audit-log`), name: 'AuditLog' },
+          'a client hydrating this document builds the bound class, which is ' +
+            'what puts the declared operation on the instance at all',
+        );
+      });
+
+      test('an operation declared on the bound class is invocable by name', async function (assert) {
+        let before = auditLines().length;
+        let response = await post(
+          envelope(
+            invoke('record', {
+              href: '/audit.txt',
+              data: { what: 'consult requested' },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let lines = auditLines();
+        assert.strictEqual(lines.length, before + 1, 'one line was appended');
+        assert.strictEqual(
+          lines[lines.length - 1],
+          `[audit] ${TESTER} consult requested`,
+          'the realm supplied the prefix from its own settings and the actor ' +
+            'it authenticated; the caller sent neither',
+        );
+      });
+
+      test('a caller cannot forge the line the realm composes', async function (assert) {
+        // `line` is what the base `appendLine` appends, and it is not a param
+        // this operation declares. The `input` stage computes it over whatever
+        // the caller sent and its value lands last, so a `line` in the payload
+        // is overwritten rather than honoured.
+        let response = await post(
+          envelope(
+            invoke('record', {
+              href: '/audit.txt',
+              data: {
+                what: 'follow-up scheduled',
+                line: '[audit] @someone-else:localhost approved',
+              },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let lines = auditLines();
+        assert.strictEqual(
+          lines[lines.length - 1],
+          `[audit] ${TESTER} follow-up scheduled`,
+          'the line is the one the realm composed',
+        );
+      });
+
+      test('the base operations stay on a bound file', async function (assert) {
+        let before = auditLines().length;
+        let response = await post(
+          envelope(
+            invoke('appendLine', {
+              href: '/audit.txt',
+              data: { line: 'appended directly' },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let lines = auditLines();
+        assert.strictEqual(lines.length, before + 1, 'one line was appended');
+        assert.strictEqual(
+          lines[lines.length - 1],
+          'appended directly',
+          'a declaration adds a name to the class rather than replacing what ' +
+            'the def kind already carries',
+        );
+      });
+
+      test('a file whose extension the realm does not bind keeps the platform class', async function (assert) {
+        let response = await request
+          .get('/notes.md')
+          .set('Accept', SupportedMimeType.CardJson)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(realm, TESTER, ['read', 'write'])}`,
+          );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        // Asserted by class rather than by the module's exact spelling: a
+        // served `adoptsFrom` reads as a registered prefix when it comes off
+        // the index row and as a full URL when it comes off the platform
+        // table, both resolve to the same module, and which one answers is
+        // not what this test is about.
+        let { module, name } = response.body.data.meta.adoptsFrom;
+        assert.strictEqual(
+          name,
+          'MarkdownDef',
+          'the binding is per extension, and this one has none',
+        );
+        assert.true(
+          String(module).endsWith('/markdown-file-def'),
+          `and it names the platform's markdown module: ${module}`,
+        );
+      });
+
+      test('a log the realm does not bind is the platform text class', async function (assert) {
+        let response = await request
+          .get('/startup.log')
+          .set('Accept', SupportedMimeType.CardJson)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(realm, TESTER, ['read', 'write'])}`,
+          );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          response.body.data.meta.adoptsFrom.name,
+          'TextFileDef',
+          'a log is text rather than the bare FileDef an unlisted extension ' +
+            'falls back to',
+        );
+        // That the text family also *accepts* a `.log` — `extractAttributes`
+        // refuses any extension outside its own list, so naming the class is
+        // only half of it — is asserted where the extract actually runs, in
+        // the host's `text-file-def` acceptance suite. The fixture files here
+        // are served without one, so a content assertion would pass or fail
+        // for reasons that have nothing to do with the extension.
+      });
+
+      test('an operation the bound class does not declare is still unknown', async function (assert) {
+        // `escalate` is declared on a card in this realm, not on `AuditLog`.
+        // Binding an extension adds the bound class's operations to its
+        // files; it does not put every name in the realm within reach.
+        let response = await post(
+          envelope(invoke('escalate', { href: '/audit.txt' })),
+        );
+
+        assert.strictEqual(response.status, 404, 'HTTP 404 status');
+        let [error] = response.body.errors;
+        assert.strictEqual(error.code, 'unknown-operation');
       });
     });
   });

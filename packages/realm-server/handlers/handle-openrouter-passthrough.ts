@@ -10,6 +10,7 @@ import {
   isClientDisconnectError,
   upstreamCallSignal,
 } from '../lib/proxy-forward.ts';
+import { withBillableCall } from '../lib/billable-call.ts';
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
@@ -49,9 +50,10 @@ export default function handleOpenRouterPassthrough({
   dbAdapter: DBAdapter;
 }) {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    // Shares the per-user cost lock with `_request-forward`, so an abandoned
-    // call here stalls that user's next call on either endpoint until the
-    // upstream one finishes. Cancelling it is what releases the lock.
+    // Shares the user's in-flight slots with `_request-forward`, so an
+    // abandoned call here keeps one of them from that user's calls on either
+    // endpoint until the upstream one finishes. Cancelling it is what gives
+    // the slot back.
     let clientGone = clientDisconnectSignal(ctxt);
 
     try {
@@ -109,73 +111,59 @@ export default function handleOpenRouterPassthrough({
         return;
       }
 
-      // Serialize concurrent requests from the same matrix user across
-      // replicas: the next request can't kick off another billable upstream
-      // call before the previous request's cost row has landed in the
-      // credits ledger. The lock is held through validate-credits → upstream
-      // call → save-cost; on streaming, save-cost happens inside
-      // handleStreamingRequest after the `[DONE]` marker.
-      await dbAdapter.withUserCostLock(matrixUserId, async () => {
-        const creditValidation =
-          await destinationConfig.creditStrategy.validateCredits(
-            dbAdapter,
-            matrixUserId,
-          );
-        if (!creditValidation.hasEnoughCredits) {
-          await sendResponseForForbiddenRequest(
-            ctxt,
-            creditValidation.errorMessage || 'Insufficient credits',
-          );
-          return;
-        }
-
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${destinationConfig.apiKey}`,
-        };
-        const finalBody = JSON.stringify(openAIBody);
-
-        if (isStreaming) {
-          await handleStreamingRequest(
-            ctxt,
-            OPENROUTER_CHAT_URL,
-            'POST',
-            headers,
-            finalBody,
-            destinationConfig,
-            dbAdapter,
-            matrixUserId,
-            clientGone,
-          );
-          return;
-        }
-
-        // Released once the response exists: cancelling after that would
-        // discard the charge for tokens the provider has already generated
-        // and billed us for, rather than saving anything.
-        const upstreamCall = upstreamCallSignal(clientGone);
-        const externalResponse = await globalThis.fetch(OPENROUTER_CHAT_URL, {
-          method: 'POST',
-          headers,
-          body: finalBody,
-          signal: upstreamCall.signal,
-        });
-        upstreamCall.release();
-        const responseData = await externalResponse.json();
-
-        await destinationConfig.creditStrategy.saveUsageCost(
+      // Admit the call against the user's credits, forward it, and charge
+      // for what it cost. See withBillableCall for how one user's concurrent
+      // calls are bounded.
+      await withBillableCall(
+        {
           dbAdapter,
           matrixUserId,
-          responseData,
-        );
+          creditStrategy: destinationConfig.creditStrategy,
+          signal: clientGone,
+          destination: destinationConfig.url,
+        },
+        (errorMessage) => sendResponseForForbiddenRequest(ctxt, errorMessage),
+        async () => {
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${destinationConfig.apiKey}`,
+          };
+          const finalBody = JSON.stringify(openAIBody);
 
-        const response = new Response(JSON.stringify(responseData), {
-          status: externalResponse.status,
-          statusText: externalResponse.statusText,
-          headers: { 'content-type': SupportedMimeType.JSON },
-        });
-        await setContextResponse(ctxt, response);
-      });
+          if (isStreaming) {
+            return await handleStreamingRequest(
+              ctxt,
+              OPENROUTER_CHAT_URL,
+              'POST',
+              headers,
+              finalBody,
+              matrixUserId,
+              clientGone,
+            );
+          }
+
+          // Released once the response exists: cancelling after that would
+          // discard the charge for tokens the provider has already generated
+          // and billed us for, rather than saving anything.
+          const upstreamCall = upstreamCallSignal(clientGone);
+          const externalResponse = await globalThis.fetch(OPENROUTER_CHAT_URL, {
+            method: 'POST',
+            headers,
+            body: finalBody,
+            signal: upstreamCall.signal,
+          });
+          upstreamCall.release();
+          const responseData = await externalResponse.json();
+
+          const response = new Response(JSON.stringify(responseData), {
+            status: externalResponse.status,
+            statusText: externalResponse.statusText,
+            headers: { 'content-type': SupportedMimeType.JSON },
+          });
+          await setContextResponse(ctxt, response);
+          return responseData;
+        },
+      );
     } catch (error) {
       if (isClientDisconnectError(error, clientGone)) {
         // Cancelling on purpose is not a fault: there is no one left to

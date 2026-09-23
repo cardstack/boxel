@@ -16,7 +16,7 @@ validated: source-proven
 import OneShotLlmRequestCommand from '@cardstack/boxel-host/tools/one-shot-llm-request';
 
 // Inside a component method or Command.run:
-const llm = new OneShotLlmRequestCommand(this.commandContext);
+const llm = new OneShotLlmRequestCommand(this.toolContext);
 const result = await llm.execute({
   systemPrompt: 'You are a JSON extractor. Output only JSON.',
   userPrompt: rawText,

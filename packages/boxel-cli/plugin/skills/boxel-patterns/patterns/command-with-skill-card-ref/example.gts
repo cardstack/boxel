@@ -19,21 +19,21 @@ export class TopicCard extends CardDef {
 
   static isolated = class extends Component<typeof TopicCard> {
     askAssistant = async () => {
-      let { commandContext } = this.args.context!;
+      let { toolContext } = this.args.context!;
 
       // (1) Skill card URL — sibling folder in this realm.
       // @ts-expect-error import.meta is supported by the Boxel host
       let skillCardId = new URL('../Skill/topic-explainer', import.meta.url).href;
 
       // (2) Open the AI room with this card attached as context.
-      await new UseAiAssistantCommand(commandContext).execute({
+      await new UseAiAssistantCommand(toolContext).execute({
         skillCardId,
         attachedCards: [this.args.model],
         llmMode: 'ask', // or 'act' if the skill mutates cards
       });
 
       // (3) Optional: pin the LLM mode for this conversation.
-      await new SetActiveLLMCommand(commandContext).execute({
+      await new SetActiveLLMCommand(toolContext).execute({
         mode: 'anthropic/claude-sonnet-4.6',
       });
     };

@@ -45,6 +45,7 @@ import * as GetUserSystemCardToolModule from './get-user-system-card';
 import * as InstantiateCardToolModule from './instantiate-card';
 import * as InvalidateRealmIdentifiersToolModule from './invalidate-realm-identifiers';
 import * as InviteUserToRoomToolModule from './invite-user-to-room';
+import * as InvokeCardOperationToolModule from './invoke-card-operation';
 import * as LintAndFixToolModule from './lint-and-fix';
 import * as ListingBuildToolModule from './listing-action-build';
 import * as MigrateSkillToolModule from './migrate-skill';
@@ -225,6 +226,11 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     virtualNetwork,
     'invalidate-realm-identifiers',
     InvalidateRealmIdentifiersToolModule,
+  );
+  shimHostToolModule(
+    virtualNetwork,
+    'invoke-card-operation',
+    InvokeCardOperationToolModule,
   );
   shimHostToolModule(virtualNetwork, 'lint-and-fix', LintAndFixToolModule);
   shimHostToolModule(
@@ -511,6 +517,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   GetPublishedRealmsToolModule.default,
   InviteUserToRoomToolModule.default,
   InvalidateRealmIdentifiersToolModule.default,
+  InvokeCardOperationToolModule.default,
   LintAndFixToolModule.default,
   ListingBuildToolModule.default,
   CreateListingPRRequestToolModule.default,

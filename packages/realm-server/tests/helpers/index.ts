@@ -196,6 +196,9 @@ export type RealmRequest = {
   patch(path: string): Test;
   delete(path: string): Test;
   head(path: string): Test;
+  // A CORS preflight, which a browser sends before any cross-origin request
+  // carrying a header outside the safelist.
+  options(path: string): Test;
 };
 
 export function withRealmPath(
@@ -222,6 +225,7 @@ export function withRealmPath(
     patch: (path: string) => request.patch(prefixPath(path)),
     delete: (path: string) => request.delete(prefixPath(path)),
     head: (path: string) => request.head(prefixPath(path)),
+    options: (path: string) => request.options(prefixPath(path)),
   };
 }
 
@@ -1059,6 +1063,11 @@ async function startTestPrerenderServer(): Promise<string> {
   let server = createPrerenderHttpServer({
     maxPages: 1,
     fatalExitOnUncaught: false, // tests share the qunit process; see CS-10813
+    // The suite reaches this server directly through
+    // createRemotePrerenderer(url). Registering it would let a machine-wide
+    // prerender manager route other stacks' index passes to it, rendering
+    // them with this process's host bundle and sharing its single page.
+    registerWithManager: false,
   });
   prerenderServer = server;
   trackServer(server);
@@ -3191,6 +3200,8 @@ export function realmConfigCardJSON(
     // The realm's own settings, which a card operation reads with
     // `realmConfig("key")`.
     config?: Record<string, unknown>;
+    // Which FileDef subclass each file extension in this realm binds to.
+    fileTypes?: Record<string, { module: string; name: string }>;
   } = {},
 ): string {
   let attrs: Record<string, unknown> = {};
@@ -3212,6 +3223,9 @@ export function realmConfigCardJSON(
   }
   if (config.config !== undefined) {
     attrs.config = config.config;
+  }
+  if (config.fileTypes !== undefined) {
+    attrs.fileTypes = config.fileTypes;
   }
   return JSON.stringify({
     data: {

@@ -727,13 +727,32 @@ export async function stageUpdate(
   //
   // Realm-managed keys never come from a patch: `realmInfo` and `realmURL` are
   // stamped by the realm serving the card, `screenshots` is joined from the
-  // prerendered manifest at serve time, and `type` is fixed by the document
-  // shape. A client echoing back what it was served must not persist any of
-  // them into the source file.
+  // prerendered manifest at serve time, `version` / `lastModified` /
+  // `resourceCreatedAt` describe the stored file and are reported on a write
+  // response, and `type` is fixed by the document shape. A client echoing back
+  // what it was served must not persist any of them into the source file.
+  //
+  // Dropped here and not only where the bytes are serialized, because these run
+  // ahead of the unchanged-patch comparison below, and a key that survives the
+  // merge sends an otherwise no-op patch down the re-serializing arm.
+  //
+  // What that costs depends on the card. Where the stored bytes already are
+  // what re-serialization produces, nothing observable follows: the serializer
+  // drops these keys before it stringifies, so the arm produces the bytes the
+  // file already holds and the commit's own content comparison leaves the file,
+  // its modification time and `changed` alone. Where the stored bytes are *not*
+  // canonical — a hand-authored fixture, or bytes an older serializer wrote —
+  // the arm canonicalizes them, which rewrites the file and moves its
+  // modification time for a request that changed nothing. It also spends a
+  // serialization that resolves the card's definition, and that can fail
+  // outright on a card the realm cannot currently type.
   delete (patch as { type?: unknown }).type;
   delete patch.meta.realmInfo;
   delete patch.meta.realmURL;
   delete patch.meta.screenshots;
+  delete patch.meta.version;
+  delete patch.meta.lastModified;
+  delete patch.meta.resourceCreatedAt;
 
   promoteStagedLinks(patch, ctx);
 
@@ -2381,7 +2400,9 @@ function identityOf(value: unknown, path: string): string {
 }
 
 interface TemplateScope {
-  entry: CreateEntry;
+  // Typed by what a template reads off an entry rather than by one entry kind:
+  // a named create and a declared append both resolve their templates here.
+  entry: EntryCommon & { href?: string };
   definition: OperationDefinition;
   ctx: StagingContext;
   anchor: { id: string; resource: CardResource } | undefined;
@@ -2688,7 +2709,11 @@ export async function stageAppendContainsMany(
   let url = targetURL(entry.href);
   let sourcePath = `${localPathIn(url, ctx)}.json` as LocalPath;
   let target: AppendTarget = { url, file: ctx.paths.fileURL(sourcePath) };
-  let requested = requestedItems(entry, url);
+  // A declared append writes what its declaration says; an ad-hoc one writes
+  // what the entry carries.
+  let requested = entry.definition?.items
+    ? await declaredItems(entry, entry.definition, ctx, url)
+    : requestedItems(entry, url);
   let bytes = await ctx.openSourceBytes(sourcePath);
   if (!bytes) {
     throw new OperationFailure({
@@ -2897,6 +2922,73 @@ export async function stageAppendContainsMany(
     id: url.href,
     primaryPath: sourcePath,
   };
+}
+
+// The items a *declared* append writes.
+//
+// A declaration carries its item as a template, the same shape a `create`'s
+// `fill` does, so the values an invocation supplies are substituted here
+// rather than sent: what a declared append writes is the declaration's to say,
+// and the wire members an ad-hoc append names (`field`, `items`, `fields`) are
+// not read for one.
+//
+// Each field gets exactly one item, because a declaration describes one thing
+// to append. Link members inside the item are not resolved here — the executor
+// splits an item against the *stored card's* definition further down, which is
+// where a subclass's own field types are known.
+async function declaredItems(
+  entry: AppendContainsManyEntry,
+  definition: OperationDefinition,
+  ctx: StagingContext,
+  url: URL,
+): Promise<Map<string, unknown[]>> {
+  for (let key of Object.keys(definition.params ?? {})) {
+    if (own(entry.params, key) === undefined) {
+      throw new OperationFailure({
+        id: url.href,
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid params',
+        detail: `this append requires a value for params("${key}")`,
+      });
+    }
+  }
+  let templates = definition.items ?? {};
+  // No anchor: an append edits the card's stored bytes without ever loading
+  // the document, which is the whole reason the behavior exists. Offering
+  // `instance()` here would mean reading the very thing the operation avoids
+  // reading, so an item that needs the card's own values belongs on a
+  // `transform` instead.
+  let anchor = undefined;
+  // Only a declaration that names a setting waits for one.
+  let realmConfig = templateNamesRealmConfig(templates)
+    ? await ctx.realmConfig()
+    : {};
+  let requested = new Map<string, unknown[]>();
+  for (let [field, template] of Object.entries(templates)) {
+    let resolved = resolveTemplate(template, {
+      entry,
+      definition,
+      ctx,
+      anchor,
+      field,
+      realmConfig,
+    });
+    if (resolved.value === undefined) {
+      continue;
+    }
+    requested.set(field, [resolved.value]);
+  }
+  if (requested.size === 0) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 400,
+      code: 'invalid-params',
+      title: 'Invalid append',
+      detail: `this append resolved to no item to append`,
+    });
+  }
+  return requested;
 }
 
 // The fields an append names and the items bound for each, from either

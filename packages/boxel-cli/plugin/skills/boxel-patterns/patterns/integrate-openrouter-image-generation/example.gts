@@ -129,7 +129,7 @@ export default class GenerateOpenRouterImageCommand extends Command<
       if (input.imageSize) requestBody.image_config.image_size = input.imageSize;
     }
 
-    let result = await new SendRequestViaProxyCommand(this.commandContext).execute({
+    let result = await new SendRequestViaProxyCommand(this.toolContext).execute({
       url: 'https://openrouter.ai/api/v1/chat/completions',
       method: 'POST',
       headers: {
@@ -145,7 +145,7 @@ export default class GenerateOpenRouterImageCommand extends Command<
     let image = parseDataImageUrl(imageUrl);
     let path = `GeneratedImages/${safeFileStem(input.prompt)}-${Date.now()}.${image.extension}`;
 
-    let written = await new WriteBinaryFileCommand(this.commandContext).execute({
+    let written = await new WriteBinaryFileCommand(this.toolContext).execute({
       path,
       realm: input.targetRealmUrl,
       base64Content: image.base64Content,
