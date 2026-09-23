@@ -119,6 +119,8 @@
         "secondaryForeground": "var(--boxel-dark, #000000)",
         "destructiveForeground": "var(--boxel-light, #FFFFFF)",
         "success": "var(--boxel-success, #00AC3D)",
+        "attention": "var(--boxel-amber, #D97706)",
+        "attentionForeground": "var(--boxel-dark, #000000)",
         "sidebarAccentForeground": "var(--boxel-dark, #000000)",
         "sidebarPrimaryForeground": "var(--boxel-light, #FFFFFF)"
       },
@@ -221,6 +223,8 @@
         "secondaryForeground": "var(--boxel-dark, #000000)",
         "destructiveForeground": "var(--boxel-light, #FFFFFF)",
         "success": "var(--boxel-success, #00AC3D)",
+        "attention": "var(--boxel-amber, #D97706)",
+        "attentionForeground": "var(--boxel-dark, #000000)",
         "sidebarAccentForeground": "var(--boxel-dark, #000000)",
         "sidebarPrimaryForeground": "var(--boxel-dark, #000000)"
       },
