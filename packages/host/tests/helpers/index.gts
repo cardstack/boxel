@@ -395,6 +395,55 @@ export async function withHeldSave(cb: () => Promise<void>): Promise<void> {
   }
 }
 
+// Lets every save the callback triggers serialize and reach the realm at the
+// moment it is issued, then holds it open — still in flight — until the
+// callback calls `release`. The autosave queue drains one save at a time and
+// gates the next drain on the one in flight, so every mutation made while a
+// save is held coalesces into the single save that follows it.
+//
+// This is the counterpart to `withHeldSave`, which holds entry into
+// `persistAndUpdate`: holding entry changes what a save observes, because the
+// document is serialized when the save runs rather than when it was issued.
+// Holding the save open leaves that alone, which is what a caller asserting on
+// the document a leading-edge save carries needs.
+//
+// Nothing here consults a clock: the callback releases the hold once the state
+// it wants coalesced is in place, so the size of the coalescing window is the
+// caller's to state rather than the runner's to decide. Note that `settled()`
+// waits on the held save, so a callback must reach its release without waiting
+// for settled — `waitUntil` polls without it and is the usual way through.
+export async function withSavesHeldOpen(
+  cb: (release: () => void) => Promise<void>,
+): Promise<void> {
+  let store = getService('store');
+  let originalPersist = (store as any).persistAndUpdate as (
+    instance: CardDef,
+    opts?: unknown,
+  ) => Promise<unknown>;
+  let release: (() => void) | undefined;
+  let released = new Promise<void>((resolve) => (release = resolve));
+  let heldSaves: Promise<unknown>[] = [];
+  (store as any).persistAndUpdate = async (
+    instance: CardDef,
+    opts?: unknown,
+  ) => {
+    let heldSave = (async () => {
+      let result = await originalPersist.call(store, instance, opts);
+      await released;
+      return result;
+    })();
+    heldSaves.push(heldSave);
+    return await heldSave;
+  };
+  try {
+    await cb(() => release?.());
+  } finally {
+    (store as any).persistAndUpdate = originalPersist;
+    release?.();
+    await Promise.allSettled(heldSaves);
+  }
+}
+
 export async function waitForSyntaxHighlighting(
   textContent: string,
   color: string,
