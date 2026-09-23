@@ -59,7 +59,7 @@
   --tooltip: var(--boxel-dark-80);
   --tooltip-foreground: var(--boxel-light);
   /* third ink step, fainter than --muted-foreground */
-  --subtle-foreground: var(--boxel-400);
+  --subtle-foreground: var(--boxel-450);
 
   /* roles */
   --primary: var(--boxel-highlight);

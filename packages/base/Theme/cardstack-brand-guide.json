@@ -111,6 +111,7 @@
         "sidebarPrimary": "var(--boxel-dark, #000000)",
         "trackingNormal": "0.01em",
         "mutedForeground": "var(--boxel-550, #525252)",
+        "subtleForeground": "var(--boxel-450, #919191)",
         "accentForeground": "var(--boxel-dark, #000000)",
         "popoverForeground": "var(--boxel-dark, #000000)",
         "primaryForeground": "var(--boxel-dark, #000000)",
