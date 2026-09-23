@@ -712,6 +712,20 @@ const ARCHIVED_SEAL_EXEMPT_PATHS = new Set(['_readiness-check', '_session']);
 // the realm's fallback rather than router routes and consume it too; no other
 // route does.
 const CONSUMES_COARSE_OUTCOME = { consumesCoarseOutcome: true } as const;
+// The methods for which the fallback file and module serve consumes the
+// ACL's outcome — the reads it answers.
+const FALLBACK_CONSUMING_METHODS: ReadonlySet<string> = new Set([
+  'GET',
+  'HEAD',
+]);
+const ROUTER_METHODS: Method[] = [
+  'GET',
+  'QUERY',
+  'POST',
+  'PATCH',
+  'DELETE',
+  'HEAD',
+];
 // How long one `_readiness-check` request holds while the gates it clears
 // settle, before answering not-ready instead. Shared across those gates rather
 // than granted per gate: the hold is a courtesy to the poller, `Retry-After`
@@ -1892,6 +1906,23 @@ interface RequestDispatch {
   handle: () => Promise<ResponseWithNodeStream>;
 }
 
+// A route as `Realm.routeDescriptions` lists it: a router route, or the
+// fallback file and module serve for one method, which answers whatever
+// path and media type no router route claimed.
+export type DispatchDescription =
+  | RouteDescription
+  | {
+      method: Method;
+      mimeType: '*';
+      path: '*';
+      consumesCoarseOutcome: boolean;
+    };
+
+type CoarseAdmission = (
+  request: Request,
+  requestContext: RequestContext,
+) => boolean | Promise<boolean>;
+
 export class Realm {
   #startedUp = new Deferred<void>();
   #matrixClient: MatrixClient;
@@ -1903,6 +1934,7 @@ export class Realm {
   #batchCore: BatchCore | undefined;
   #adapter: RealmAdapter;
   #router: Router;
+  #testOnlyCoarseAdmission: CoarseAdmission | undefined;
   #log = logger('realm');
   // Anchors the render-hold cap across back-to-back bulk commits; see
   // `_commitBatchUnlocked`. Undefined whenever no commit holds the lane.
@@ -6060,19 +6092,16 @@ export class Realm {
           await this.#assertNotArchived(localPath);
         }
       }
-      if (!this.#realmIndexQueryEngine) {
-        return systemError({
-          requestContext,
-          message: 'search index is not available',
-        });
-      }
       let dispatch = this.#routeRequest(request, localPath, requestContext);
       // The terminal assertion: nothing reaches a handler with the ACL's
       // refusal on it unless its route consumes that outcome, so a route that
-      // says nothing is refused exactly as the ACL would have refused it.
+      // says nothing is refused exactly as the ACL would have refused it. A
+      // refusal of realm-owner authority is never consumed, whichever route
+      // the request lands on: owner authority is the ACL's alone to grant.
       if (requestContext.coarseAllowed === false) {
         if (
           !dispatch.consumesCoarseOutcome ||
+          requiredPermission === 'realm-owner' ||
           !(await this.#admitsDespiteCoarseRefusal(request, requestContext))
         ) {
           throw (
@@ -6083,6 +6112,12 @@ export class Realm {
           );
         }
         await this.#assertNotArchived(localPath);
+      }
+      if (!this.#realmIndexQueryEngine) {
+        return systemError({
+          requestContext,
+          message: 'search index is not available',
+        });
       }
       return await dispatch.handle();
     } catch (e) {
@@ -6223,9 +6258,11 @@ export class Realm {
       };
     }
     // The raw file serve and the transpiled module serve, both of which read
-    // the stored bytes through the `readSource` operation.
+    // the stored bytes through the `readSource` operation. Those are reads, so
+    // only a read reaching here consumes the ACL's outcome; any other method
+    // is a request no route claimed, and is refused as the ACL refused it.
     return {
-      consumesCoarseOutcome: true,
+      consumesCoarseOutcome: FALLBACK_CONSUMING_METHODS.has(request.method),
       handle: () => this.fallbackHandle(request, requestContext),
     };
   }
@@ -6257,10 +6294,20 @@ export class Realm {
   // declined could be admitted, and anything admitted here still meets the
   // archived seal.
   async #admitsDespiteCoarseRefusal(
-    _request: Request,
-    _requestContext: RequestContext,
+    request: Request,
+    requestContext: RequestContext,
   ): Promise<boolean> {
+    if (this.#testOnlyCoarseAdmission) {
+      return await this.#testOnlyCoarseAdmission(request, requestContext);
+    }
     return false;
+  }
+
+  // Stands in for the admission decision so a test can show which requests
+  // an admission would reach and which the terminal assertion refuses
+  // regardless. Pass `undefined` to restore the real decision.
+  __testOnlySetCoarseAdmission(admit: CoarseAdmission | undefined): void {
+    this.#testOnlyCoarseAdmission = admit;
   }
 
   // Read fresh (no memoization) for the same reason createRequestContext
@@ -6275,10 +6322,20 @@ export class Realm {
     }
   }
 
-  // Every router route with whether it consumes the realm ACL's recorded
-  // outcome, for checking that set without reaching each route.
-  routeDescriptions(): RouteDescription[] {
-    return this.#router.routes();
+  // Every route with whether it consumes the realm ACL's recorded outcome,
+  // for checking that set without reaching each route: the router's routes,
+  // then the fallback file and module serve per method. The path-prefix
+  // dispatches in `#routeRequest` consume nothing and are not listed.
+  routeDescriptions(): DispatchDescription[] {
+    return [
+      ...this.#router.routes(),
+      ...ROUTER_METHODS.map((method) => ({
+        method,
+        mimeType: '*' as const,
+        path: '*' as const,
+        consumesCoarseOutcome: FALLBACK_CONSUMING_METHODS.has(method),
+      })),
+    ];
   }
 
   // Requests for the root of the realm without a trailing slash aren't

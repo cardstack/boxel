@@ -25,6 +25,8 @@ const INSUFFICIENT = 'Insufficient permissions to perform this action';
 // than as the ACL's answer.
 interface Probe {
   label: string;
+  // Whether the route this probe lands on consumes the ACL's outcome.
+  consumes: boolean;
   send: (request: SuperTest<Test>) => Test;
 }
 
@@ -32,14 +34,17 @@ const readProbes: Probe[] = [
   // Routes that do not consume the ACL's outcome.
   {
     label: 'GET /_info',
+    consumes: false,
     send: (r) => r.get('/_info').set('Accept', SupportedMimeType.RealmInfo),
   },
   {
     label: 'GET /_mtimes',
+    consumes: false,
     send: (r) => r.get('/_mtimes').set('Accept', SupportedMimeType.Mtimes),
   },
   {
     label: 'QUERY /_search',
+    consumes: false,
     send: (r) =>
       r
         .post('/_search')
@@ -49,37 +54,45 @@ const readProbes: Probe[] = [
   },
   {
     label: 'GET /_screenshot/',
+    consumes: false,
     send: (r) => r.get('/_screenshot/person-1').set('Accept', 'image/png'),
   },
   {
     label: 'GET a directory listing',
+    consumes: false,
     send: (r) => r.get('/').set('Accept', SupportedMimeType.DirectoryListing),
   },
   // Routes that consume it.
   {
     label: 'GET card+json',
+    consumes: true,
     send: (r) => r.get('/person-1').set('Accept', SupportedMimeType.CardJson),
   },
   {
     label: 'GET card+json of a .json path',
+    consumes: true,
     send: (r) =>
       r.get('/person-1.json').set('Accept', SupportedMimeType.CardJson),
   },
   {
     label: 'GET card+source',
+    consumes: true,
     send: (r) =>
       r.get('/person.gts').set('Accept', SupportedMimeType.CardSource),
   },
   {
     label: 'GET raw file',
+    consumes: true,
     send: (r) => r.get('/sample.md'),
   },
   {
     label: 'GET transpiled module',
+    consumes: true,
     send: (r) => r.get('/person'),
   },
   {
     label: 'QUERY /_operations',
+    consumes: true,
     send: (r) =>
       r
         .post('/_operations')
@@ -94,6 +107,7 @@ const writeProbes: Probe[] = [
   // Routes that do not consume the ACL's outcome.
   {
     label: 'POST /_reindex',
+    consumes: false,
     send: (r) =>
       r
         .post('/_reindex')
@@ -102,11 +116,13 @@ const writeProbes: Probe[] = [
   },
   {
     label: 'POST /_atomic',
+    consumes: false,
     send: (r) =>
       r.post('/_atomic').set('Accept', SupportedMimeType.JSONAPI).send('{}'),
   },
   {
     label: 'POST into the reserved _screenshot/ subtree',
+    consumes: false,
     send: (r) =>
       r
         .post('/_screenshot/foo.gts')
@@ -116,11 +132,13 @@ const writeProbes: Probe[] = [
   // Routes that consume it.
   {
     label: 'POST card+json',
+    consumes: true,
     send: (r) =>
       r.post('/').set('Accept', SupportedMimeType.CardJson).send('not json'),
   },
   {
     label: 'PATCH card+json',
+    consumes: true,
     send: (r) =>
       r
         .patch('/person-1')
@@ -129,11 +147,13 @@ const writeProbes: Probe[] = [
   },
   {
     label: 'DELETE card+json',
+    consumes: true,
     send: (r) =>
       r.delete('/person-1').set('Accept', SupportedMimeType.CardJson),
   },
   {
     label: 'POST card+source',
+    consumes: true,
     send: (r) =>
       r
         .post('/new-file.gts')
@@ -142,6 +162,7 @@ const writeProbes: Probe[] = [
   },
   {
     label: 'POST octet-stream',
+    consumes: true,
     send: (r) =>
       r
         .post('/new-file.bin')
@@ -150,11 +171,13 @@ const writeProbes: Probe[] = [
   },
   {
     label: 'DELETE card+source',
+    consumes: true,
     send: (r) =>
       r.delete('/person.gts').set('Accept', SupportedMimeType.CardSource),
   },
   {
     label: 'POST /_operations',
+    consumes: true,
     send: (r) =>
       r
         .post('/_operations')
@@ -316,8 +339,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `POST ${SupportedMimeType.OctetStream} /.*`,
           `QUERY ${SupportedMimeType.BoxelOperations} /_operations`,
           `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
+          'GET * *',
+          'HEAD * *',
         ].sort(),
-        'the consumer set is the card+json verbs, the card+source routes and the operations envelope',
+        'the consumer set is the card+json verbs, the card+source routes, the operations envelope, and the fallback file and module serve for reads',
       );
       let nonConsumers = testRealm
         .routeDescriptions()
@@ -334,6 +359,98 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         ),
         'the card+json search routes, registered ahead of the card+json catch-alls, do not consume it',
       );
+      assert.deepEqual(
+        nonConsumers
+          .filter((route) => route.path === '*')
+          .map((route) => route.method)
+          .sort(),
+        ['DELETE', 'PATCH', 'POST', 'QUERY'],
+        'the fallback does not consume it for any method but a read',
+      );
+    });
+
+    test('an admission reaches only consuming routes, and never a refusal of realm-owner authority', async function (assert) {
+      testRealm.__testOnlySetCoarseAdmission(() => true);
+      try {
+        for (let probe of [...readProbes, ...writeProbes]) {
+          if (probe.consumes) {
+            continue;
+          }
+          assertRefusal(
+            assert,
+            await probe.send(request),
+            { status: 401, body: MISSING_AUTH },
+            `admitting: anonymous ${probe.label}`,
+          );
+        }
+        for (let probe of writeProbes) {
+          if (probe.consumes) {
+            continue;
+          }
+          assertRefusal(
+            assert,
+            await probe.send(request).set('Authorization', readerAuth()),
+            { status: 403, body: INSUFFICIENT },
+            `admitting: reader ${probe.label}`,
+          );
+        }
+        assertRefusal(
+          assert,
+          await request
+            .post('/sample.md')
+            .set('Accept', 'text/plain')
+            .set('Content-Type', 'text/plain')
+            .set('Authorization', readerAuth())
+            .send('overwritten'),
+          { status: 403, body: INSUFFICIENT },
+          'admitting: a write no route claims falls to the fallback and is refused',
+        );
+        assertRefusal(
+          assert,
+          await request
+            .get('/_permissions')
+            .set('Accept', SupportedMimeType.CardJson)
+            .set('Authorization', readerAuth()),
+          { status: 403, body: INSUFFICIENT },
+          'admitting: _permissions reached through the card+json catch-all is refused',
+        );
+
+        let card = await request
+          .get('/person-1')
+          .set('Accept', SupportedMimeType.CardJson);
+        assert.strictEqual(
+          card.status,
+          200,
+          'admitting: an anonymous card+json read reaches its handler',
+        );
+        let raw = await request.get('/sample.md');
+        assert.strictEqual(
+          raw.status,
+          200,
+          'admitting: an anonymous raw file read reaches the fallback',
+        );
+
+        await archiveRealm(dbAdapter, new URL(testRealm.url));
+        try {
+          let sealed = await request
+            .get('/person-1')
+            .set('Accept', SupportedMimeType.CardJson);
+          assert.strictEqual(
+            sealed.status,
+            403,
+            'admitting: an admitted read of an archived realm is refused',
+          );
+          assert.strictEqual(
+            sealed.get('X-Boxel-Realm-Archived'),
+            'true',
+            'admitting: the refusal is the archived seal',
+          );
+        } finally {
+          await unarchiveRealm(dbAdapter, new URL(testRealm.url));
+        }
+      } finally {
+        testRealm.__testOnlySetCoarseAdmission(undefined);
+      }
     });
   });
 });
