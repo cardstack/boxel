@@ -35,6 +35,7 @@ import { initSharedState } from './shared-state';
 import {
   bumpFieldLoadingSignal,
   getDataBucket,
+  markQueryFieldRead,
   type LinkErrorValue,
   type LinkNotFoundValue,
 } from './field-support';
@@ -129,6 +130,11 @@ export function ensureQueryFieldSearchResource(
     log.info(`field ${field.name} is not a query field, skipping`);
     return undefined;
   }
+  // Every read of a query-backed field arrives here — the `linksTo` and
+  // `linksToMany` getters and the relationship probe alike — so this is where a
+  // compute reading one is marked. Outside a `computeVia` (the eager resolution
+  // at deserialize) the stack is empty and this is a no-op.
+  markQueryFieldRead();
   let fieldDefinition = buildFieldDefinition(field);
   if (!fieldDefinition) {
     log.warn(`field ${field.name} missing fieldDefinition, skipping`);

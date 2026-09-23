@@ -290,14 +290,28 @@ export interface BuildModelDiagnostics {
   // earlier card in the same job rather than not happening.
   moduleEvaluationCount?: number;
   moduleEvaluationTotalMs?: number;
-  // Present only when this visit dropped the tab's loader before building
-  // the model, naming which of the two synchronizations did it. A drop
-  // makes a nonzero `moduleEvaluationCount` expected rather than
-  // surprising: the graph was warm and this visit threw it away, so the
-  // re-fetch and re-evaluation it pays for is the drop's price and not a
-  // property of the card. Its absence alongside a large count is the
-  // reading that says the tab had never evaluated the graph at all.
-  loaderResetReason?: 'clearCache' | 'loaderEpoch';
+  // Present only when this visit cleared the tab's loader before building
+  // the model, naming what cleared it. Each makes a nonzero
+  // `moduleEvaluationCount` expected rather than surprising, and each says
+  // something different about who is answerable for it:
+  //
+  //   - `clearCache` and `loaderEpoch` follow from an executable changing.
+  //     The epoch moved, or the flag was armed, because the pass invalidated
+  //     a module, so the re-fetch and re-evaluation is that change's price
+  //     and not a property of the card.
+  //   - `firstEpoch` does not. The tab had recorded no epoch of this realm's
+  //     series, so this is its first epoch-carrying visit, and the discard is
+  //     the price of where the pool ran the pass rather than of anything the
+  //     pass did. It reaches a warm loader either way — a pooled tab boots
+  //     the host app before serving anything, so a reset always discards
+  //     something; what varies is whether the pass caused the reset.
+  //
+  // So a count attributable to the pass is `clearCache` or `loaderEpoch`, and
+  // a fleet showing mostly `firstEpoch` is a pool-routing finding rather than
+  // an indexing one. Absence alongside a large count is none of the three,
+  // and is worth a look: a warm tab that nothing cleared has no accounted
+  // reason to evaluate a graph.
+  loaderResetReason?: 'clearCache' | 'loaderEpoch' | 'firstEpoch';
   // Where the card branch got the instance's stored bytes: 'stash' when the
   // visit carried them (`PrerenderVisitArgs.cardSource`) and the model was
   // built without a `card+source` GET, 'fetch' when the render read them
