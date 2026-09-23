@@ -5,14 +5,18 @@ import {
   executableExtensions,
 } from './constants.ts';
 import type { ResolvedCodeRef } from './code-ref.ts';
-import { FILEDEF_CODE_REF_BY_EXTENSION } from './file-def-code-ref.ts';
+import {
+  FILEDEF_CODE_REF_BY_EXTENSION,
+  extensionOfName,
+} from './file-def-code-ref.ts';
 
 // The `FileDef` subclass a policy rule's `targetType` is matched against for a
 // stored non-card file, keyed by extension the way `inferContentType` keys its
 // MIME types: lowercase, with the leading dot.
 //
-// It is the indexer's own extension table, so the type a rule is judged
-// against is the type the file is indexed as. A rule naming an intermediate
+// It is the platform's extension table, the one the indexer types a file by
+// when no realm-level binding says otherwise, so a rule is judged against the
+// platform's type for the file and no realm binding is consulted. A rule naming an intermediate
 // class covers every extension beneath it through the `FileDef` hierarchy: a
 // `.png` resolves to `PngDef`, which a rule naming `ImageDef` matches.
 //
@@ -71,12 +75,12 @@ export const POLICY_FILE_DEF_CODE_REF_BY_EXTENSION: Readonly<
 export function policyFileDefCodeRef(
   filename: string,
 ): ResolvedCodeRef | undefined {
-  let name = filename.slice(filename.lastIndexOf('/') + 1);
-  let dot = name.lastIndexOf('.');
-  if (dot <= 0) {
+  let extension = extensionOfName(
+    filename.slice(filename.lastIndexOf('/') + 1),
+  );
+  if (!extension) {
     return baseFileRef;
   }
-  let extension = name.slice(dot).toLowerCase();
   if (executableExtensions.includes(extension)) {
     return undefined;
   }
