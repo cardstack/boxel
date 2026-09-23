@@ -184,18 +184,23 @@ test.describe('Concurrent saves to one card — read-your-writes', () => {
     ).toEqual([]);
 
     // How much of the burst actually overlapped, reported rather than
-    // asserted. Saves settled one at a time would each be answered by a pass of
-    // its own, one more mark than the last; two saves answered with the same
-    // marks were settled by one pass, which only happens when they were in
-    // flight together. Asserting a floor here would be asserting that this
+    // asserted. A save whose answer holds another save's mark, while that
+    // save's answer holds its mark in turn, was answered after the other
+    // committed and vice versa, so neither was settled before the other
+    // reached the realm: the two were in flight together. Saves settled one
+    // at a time never pair up this way, since the earlier answer cannot hold
+    // the later mark. This says nothing about how many index passes answered
+    // them. It reads marks only, so it holds wherever it runs relative to the
+    // assertion above. Asserting a floor here would be asserting that this
     // machine was busy enough, which is a different claim and a flaky one.
-    let seenKeys = answered.map((r) => r.seen.join(','));
-    let coalesced = seenKeys.filter(
-      (key) => seenKeys.indexOf(key) !== seenKeys.lastIndexOf(key),
+    let coalesced = answered.filter((r) =>
+      answered.some(
+        (o) => o !== r && r.seen.includes(o.sent) && o.seen.includes(r.sent),
+      ),
     ).length;
     test.info().annotations.push({
       type: 'overlap',
-      description: `${coalesced} of ${SAVES} saves shared their answering pass with another save — answered ${JSON.stringify(answered)}`,
+      description: `${coalesced} of ${SAVES} saves were answered with another save's mark while that save was answered with theirs — answered ${JSON.stringify(answered)}`,
     });
 
     // The realm ends holding every save, not whichever pass landed last.
