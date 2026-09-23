@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
 # ci-apply-preview.sh — one environment's half of the PR preview.
 #
-# Called by observability-preview.yml for staging and by
-# observability-preview-production.yml for production. The production
-# caller runs the default branch's copy of this file, never the pull
-# request's — see that workflow's header for why.
+# Called once per environment by observability-preview.yml.
 #
 # Fetches the apply-time secrets for $ENV_NAME from SSM, pushes the per-PR
 # preview with apply-preview.sh, and reports the result back to the workflow
@@ -43,10 +40,12 @@ esac
 
 cd "$(dirname "$0")/.."
 
-# Subset of what observability-apply-<env>.yml fetches. The preview only
-# touches dashboards + folders, so we don't need the LOKI_URL / BOXEL_DB_* /
-# WORKER_LOG_* set — those are read by apply-datasources / apply-alerting,
-# which apply-preview.sh never invokes.
+# These two parameters are the whole grant of the boxel-observability-preview
+# role, and the list is deliberately short: this script runs from the pull
+# request's own checkout, so whatever it can read, a pull request can read.
+# Adding an SSM read here means widening that role and handing the new value
+# to unreviewed code — GRAFANA_SECRET and the Grafana database password are
+# excluded for exactly that reason.
 #
 # GRAFANA_TOKEN is re-fetched by grafanactl-env.sh inside apply-preview.sh;
 # fetching it here too is what registers the `::add-mask::`, so the value is
@@ -59,12 +58,9 @@ ssm() {
 GRAFANA_TOKEN="$(ssm "/${ENV_NAME}/grafana/grafanactl_token" --with-decryption)"
 echo "::add-mask::$GRAFANA_TOKEN"
 
-GRAFANA_SECRET="$(ssm "/${ENV_NAME}/boxel/GRAFANA_SECRET" --with-decryption)"
-echo "::add-mask::$GRAFANA_SECRET"
-
 REALM_SERVER_URL="$(ssm "/${ENV_NAME}/boxel-grafana/realm_server_url")"
 
-export GRAFANA_TOKEN GRAFANA_SECRET REALM_SERVER_URL
+export GRAFANA_TOKEN REALM_SERVER_URL
 
 out_file="$(mktemp)"
 echo "out_file=$out_file" >> "$GITHUB_OUTPUT"

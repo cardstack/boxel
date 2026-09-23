@@ -461,17 +461,34 @@ both previews are deleted when the PR closes.
 `.github/workflows/observability-preview-sweep.yml` sweeps both environments
 daily for any the close hook missed.
 
-The preview is split across two workflows, and **the split is a security
-boundary**. `observability-preview.yml` runs on `pull_request`, so GitHub
-loads it — and every script it calls — from the PR, where a contributor
-controls both; it therefore holds **staging credentials only**.
-`observability-preview-production.yml` runs on `workflow_run`, which GitHub
-always loads from the default branch, out of a PR's reach. It restores every
-script from the default branch and takes only `grafanactl/resources` from the
-PR, as data, with `render-preview.sh` rewriting every UID it emits so a
-crafted manifest cannot address a canonical dashboard. Never move a production
-role, a production SSM read, or a production Grafana push into the
-`pull_request` workflow.
+**The preview runs pull-request-controlled code, so it holds a deliberately
+weak credential.** It runs on `pull_request`, and GitHub loads that workflow —
+and every script it calls — from the PR itself. Whatever the assumed role can
+read, a contributor can read. So the preview uses its own IAM role,
+`boxel-observability-preview` (cardstack/infra,
+`configs/boxel-observability-preview/`), which grants exactly two parameters
+per environment:
+
+```
+/<env>/grafana/grafanactl_token        authenticate grafanactl
+/<env>/boxel-grafana/realm_server_url  fill the realm_server template variable
+```
+
+Not `boxel-observability-apply`. That role also grants the Grafana database
+password and `GRAFANA_SECRET` — and `GRAFANA_SECRET` is the shared bearer token
+guarding the realm-server's operator endpoints (`_grafana-reindex`,
+`_grafana-add-credit`, `_grafana-upsert-realm-user-permission`,
+`_grafana-revoke-user-sessions`). Never point the preview at it.
+
+Two things keep that grant list short, so keep them true:
+
+- **Previews carry no operator secret.** `render-preview.sh` stamps an inert
+  placeholder into the `grafana_secret` constant unconditionally, so operator
+  buttons on a preview dashboard return 401. Review an operator-button change
+  against the canonical dashboards after merge.
+- **Previews cannot address a canonical dashboard.** `render-preview.sh`
+  rewrites every UID it emits and then fails closed if any manifest lacks the
+  `pr<n>-` prefix, so a bug there costs a preview rather than a live dashboard.
 
 ## Operator actions
 

@@ -15,8 +15,8 @@
 #   ./scripts/render-preview.sh --pr <n> --base-ref <ref> [--env <name>]
 #
 # --env defaults to staging and only affects the apply-style template
-# substitutions (REALM_SERVER_URL, GRAFANA_SECRET, __ENV__) — the preview
-# rewrites are env-independent.
+# substitutions (REALM_SERVER_URL, __ENV__) — the preview rewrites are
+# env-independent.
 #
 # Scope: dashboards + folders only. Data sources, alert rules, and the home-
 # dashboard preference are file-provisioned at Grafana startup and can't be
@@ -94,24 +94,30 @@ if [[ -z "$changed_paths" ]]; then
   exit 0
 fi
 
-# Per-env substitution defaults mirror apply.sh exactly so the rendered
-# preview matches what `apply.sh --env <env>` would push.
+# A preview never carries the real operator secret. The canonical
+# dashboards get it from apply.sh; here the `grafana_secret` constant is
+# stamped with an inert placeholder, so the operator buttons on a preview
+# dashboard (Reindex, Add Credit, Grant Permission, Delete Job) get a 401
+# instead of acting on the environment.
+#
+# This is what lets the preview workflow run under an IAM role that cannot
+# read GRAFANA_SECRET at all — which matters because that workflow runs
+# pull-request-controlled code. Assigning unconditionally (rather than
+# honouring an exported GRAFANA_SECRET) keeps it true even if a caller is
+# handed broader credentials later. Review an operator-button change
+# against the canonical dashboards after merge.
+grafana_secret="preview-operator-actions-disabled"
+
+# REALM_SERVER_URL still mirrors apply.sh, so a previewed panel resolves
+# the same endpoint the canonical copy would.
 case "$env_name" in
   local)
     realm_server_url="${REALM_SERVER_URL:-http://localhost:4201/}"
-    if [[ -n "${GRAFANA_SECRET:-}" ]]; then
-      grafana_secret="$GRAFANA_SECRET"
-    else
-      grafana_secret="shhh! it's a secret"
-    fi
     ;;
   staging | production)
     [[ -n "${REALM_SERVER_URL:-}" ]] \
       || { echo "error: REALM_SERVER_URL not set; required for --env=$env_name (CI fetches it from /${env_name}/boxel-grafana/realm_server_url)" >&2; exit 1; }
-    [[ -n "${GRAFANA_SECRET:-}" ]] \
-      || { echo "error: GRAFANA_SECRET not set; required for --env=$env_name" >&2; exit 1; }
     realm_server_url="$REALM_SERVER_URL"
-    grafana_secret="$GRAFANA_SECRET"
     ;;
   *)
     usage_error "unknown env: $env_name (expected local|staging|production)" ;;

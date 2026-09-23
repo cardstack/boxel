@@ -54,10 +54,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # The dedicated preview role — it grants the grafanactl token the
+          # sweep needs to list and delete `pr<n>-` resources, and nothing
+          # else. See observability-preview.yml for why the apply role is
+          # the wrong one to reach for here.
           - env: staging
-            role_arn: arn:aws:iam::680542703984:role/boxel-observability-apply
+            role_arn: arn:aws:iam::680542703984:role/boxel-observability-preview
           - env: production
-            role_arn: arn:aws:iam::120317779495:role/boxel-observability-apply
+            role_arn: arn:aws:iam::120317779495:role/boxel-observability-preview
 
     steps:
       - name: Refuse to sweep production from a non-main ref
