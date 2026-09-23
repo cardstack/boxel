@@ -38,9 +38,9 @@ const log = logger('search-bounds');
 //     ceiling. The card `@context` surface takes SEARCH_CONCURRENCY_CAP slots
 //     and query-field resolution takes QUERY_FIELD_SEARCH_CONCURRENCY_CAP of
 //     its own, so a store service has at most the sum in flight. The lanes are
-//     separate so the eager query-field fan-out, which can run to a hundred or
-//     more searches on one page load, never holds the slots a search the card
-//     asked for is waiting on. Within each lane a page's fan-out is bounded
+//     separate so the eager query-field fan-out, which grows with every card a
+//     page deserializes, never holds the slots a search the card asked for is
+//     waiting on. Within each lane a page's fan-out is bounded
 //     however it is spread across cards. Each store service holds its own
 //     pair, so neither is a single number across a tab. The host runs its own
 //     searches freely.

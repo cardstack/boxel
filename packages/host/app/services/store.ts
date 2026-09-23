@@ -240,6 +240,7 @@ type PersistOptions = CreateOptions & { clientRequestId?: string };
 // Which of a store service's search concurrency lanes a throttled search takes:
 // the card `@context` surface's, or query-field resolution's.
 export type SearchThrottleLane = 'card' | 'query-field';
+
 // What an index event said the state of a card would be, carried alongside the
 // reload it scheduled so a second delivery of that event can recognize it as
 // already answered. Both members are optional because both are optional on the
@@ -1971,8 +1972,8 @@ export default class StoreService extends Service implements StoreInterface {
       cardInitiated?: boolean;
       // Set by query-field resolution: take a slot in this store's query-field
       // search lane, leaving the rest of the card caps off. See
-      // `queryFieldSearchThrottle`. Forced off for a render store, which must not wait on
-      // a queue mid-render.
+      // `queryFieldSearchThrottle`. Forced off for a render store, which must
+      // not wait on a queue mid-render.
       throttled?: boolean;
       getDefaultRealm?: () => string | undefined;
       seed?: {

@@ -1251,10 +1251,9 @@ export class SearchResource<
           // realms, and concurrency caps inside `store.search`. `realmsToSearch`
           // has already resolved a no-realm card search to the current realm
           // (see modify). A query-field search takes only a concurrency slot, in
-          // a lane of its own,
-          // since clamping its page or its realms would change which cards the
-          // field reports as members. Host-internal searches pass neither flag
-          // and are unbounded.
+          // a lane of its own, since clamping its page or its realms would
+          // change which cards the field reports as members. Host-internal
+          // searches pass neither flag and are unbounded.
           let { instances, meta } = await this.runtimeStore.search<T>(
             query,
             this.realmsToSearch,
