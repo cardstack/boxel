@@ -1,8 +1,6 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { createServer, request as httpRequest, type Server } from 'http';
-import type { AddressInfo } from 'net';
 import Koa from 'koa';
 import Router from '@koa/router';
 import supertest from 'supertest';
@@ -10,7 +8,6 @@ import cors from '@koa/cors';
 import {
   SearchAdmissionGate,
   getSearchInFlight,
-  getSearchRequestsInFlight,
   getSearchShedCount,
   resetSearchAdmissionForTests,
   setSearchAdmissionForTests,
@@ -396,160 +393,6 @@ module(basename(import.meta.filename), function () {
       }
       await Promise.all(held);
       assert_inFlight(0);
-    });
-
-    // The slot and the request are two counts. The slot bounds computations,
-    // so a request served from another's computation hands it back early; the
-    // request is what the link-shape policy reads, and it is still waiting on
-    // that computation until its own response ends.
-    test('a search that hands its slot back early is still a request in flight until its response ends', async function (assert) {
-      let app = buildApp();
-      let releasing = holdSearch(app, '/_federated-search?releaseEarly=1');
-      await releasing.held;
-      assert_inFlight(0, 'the slot is back');
-      assert.strictEqual(
-        getSearchRequestsInFlight(),
-        1,
-        'while the request goes on counting',
-      );
-
-      holds.shift()!();
-      assert.strictEqual((await releasing.response).status, 200);
-      assert.strictEqual(
-        getSearchRequestsInFlight(),
-        0,
-        'and stops when its response ends',
-      );
-    });
-
-    test('a shed search is never counted as a request', async function (assert) {
-      let app = buildApp();
-      let held = await fillGate(app);
-      assert.strictEqual(getSearchRequestsInFlight(), 2);
-
-      let shed = await send(app, '/_federated-search');
-      assert.strictEqual(shed.status, 429);
-      assert.strictEqual(
-        getSearchRequestsInFlight(),
-        2,
-        'only the two admitted searches are in flight',
-      );
-
-      for (let release of holds) {
-        release();
-      }
-      await Promise.all(held);
-      assert.strictEqual(getSearchRequestsInFlight(), 0);
-    });
-
-    test('indexing traffic is counted as requests too', async function (assert) {
-      let app = buildApp();
-      let indexing = holdSearch(app, '/_federated-search', {
-        'x-boxel-job-id': '42.7',
-      });
-      await indexing.held;
-      assert.strictEqual(getSearchRequestsInFlight(), 1);
-      holds.shift()!();
-      await indexing.response;
-      assert.strictEqual(getSearchRequestsInFlight(), 0);
-    });
-
-    // A client that goes away mid-response never produces a `finish`, so the
-    // request has to be counted out on `close` or the reading would ratchet
-    // upward with every abandoned tab.
-    test('a request whose connection is torn down stops counting', async function (assert) {
-      let server: Server = createServer(buildApp());
-      await new Promise<void>((resolve) => server.listen(0, resolve));
-      try {
-        let { port } = server.address() as AddressInfo;
-        let held = new Promise<void>((resolve) => (onHeld = resolve));
-        let client = httpRequest({
-          port,
-          method: 'POST',
-          path: '/_federated-search?releaseEarly=1&hold=1',
-        });
-        client.on('error', () => {});
-        client.end('{}');
-        await held;
-        assert.strictEqual(getSearchRequestsInFlight(), 1, 'counted');
-
-        client.destroy();
-        let deadline = Date.now() + 2000;
-        while (getSearchRequestsInFlight() !== 0 && Date.now() < deadline) {
-          await wait(10);
-        }
-        assert.strictEqual(
-          getSearchRequestsInFlight(),
-          0,
-          'counted out when the connection closed, with the handler still holding',
-        );
-      } finally {
-        for (let release of holds) {
-          release();
-        }
-        holds = [];
-        await new Promise<void>((resolve) => server.close(() => resolve()));
-      }
-    });
-
-    // The close listener is what ends both counts, so a request that goes away
-    // while it is still queued for a slot has to be kept from starting either
-    // one when the slot finally comes; otherwise the count it starts after its
-    // close would never be ended.
-    test('a search whose client leaves while queued is counted in neither', async function (assert) {
-      setSearchAdmissionForTests({ limit: 2, waitMs: 2000 });
-      let server: Server = createServer(buildApp());
-      await new Promise<void>((resolve) => server.listen(0, resolve));
-      try {
-        let { port } = server.address() as AddressInfo;
-        let hold = (): Promise<void> => {
-          let held = new Promise<void>((resolve) => (onHeld = resolve));
-          let client = httpRequest({
-            port,
-            method: 'POST',
-            path: '/_federated-search?hold=1',
-          });
-          client.on('error', () => {});
-          client.end('{}');
-          return held;
-        };
-        await hold();
-        await hold();
-        assert_inFlight(2);
-
-        let queued = httpRequest({
-          port,
-          method: 'POST',
-          path: '/_federated-search',
-        });
-        queued.on('error', () => {});
-        queued.end('{}');
-        // Long enough to reach the gate and queue, well short of its wait.
-        await wait(100);
-        queued.destroy();
-        await wait(50);
-
-        // Free a slot: the queued arrival is admitted into it, finds its
-        // client gone, and must hand everything straight back.
-        holds.shift()!();
-        let deadline = Date.now() + 2000;
-        while (getSearchInFlight() !== 1 && Date.now() < deadline) {
-          await wait(10);
-        }
-        assert_inFlight(1, 'only the search still held keeps a slot');
-        assert.strictEqual(
-          getSearchRequestsInFlight(),
-          1,
-          'and only it is counted as a request',
-        );
-      } finally {
-        for (let release of holds) {
-          release();
-        }
-        holds = [];
-        server.closeAllConnections();
-        await new Promise<void>((resolve) => server.close(() => resolve()));
-      }
     });
 
     test('a non-search request is not counted', async function (assert) {

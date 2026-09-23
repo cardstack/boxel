@@ -1,13 +1,10 @@
 // The concurrency this driver holds against the realm, in the form the realm
 // server's own thresholds are expressed in.
 //
-// Two of the server's mechanisms decide on concurrency: the admission gate
-// bounds the instantaneous count of search *computations* at a cap, and the
+// Two of the server's mechanisms decide on one quantity: the admission gate
+// bounds the instantaneous count of in-flight searches at a cap, and the
 // link-shape policy degrades a live read's link closure once a *time-weighted
-// mean* of search *requests* in flight — every admitted request until its
-// response ends, including one the live-search cache answers from another's
-// computation — crosses one of its rungs. The requests this driver holds open
-// are the policy's quantity more closely than the gate's. Both are per replica, per
+// mean* of that same count crosses one of its rungs. Both are per replica, per
 // process, and neither is visible from outside — so a run that wants to say
 // how close it came to either has to measure the quantity itself.
 //
@@ -28,7 +25,7 @@
 // *this driver*, so it bounds what any one replica's own reading saw of this
 // driver's traffic from above, twice over: a fleet divides these requests
 // across its replicas, and a driver keeps a request in flight while its body
-// crosses the network, after the server has finished writing it. It says nothing
+// crosses the network, after the server had released the slot. It says nothing
 // about whatever else is reading the same realm. So a reading below a
 // threshold is evidence that this run did not cross it; a reading above one is
 // not evidence that it did.

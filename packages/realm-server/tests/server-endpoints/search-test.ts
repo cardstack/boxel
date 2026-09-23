@@ -28,10 +28,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import { LIVE_SEARCH_CACHE_HEADER } from '../../handlers/handle-search.ts';
 import { LiveSearchCache } from '../../live-search-cache.ts';
-import {
-  getSearchInFlight,
-  getSearchRequestsInFlight,
-} from '../../search-inflight.ts';
+import { getSearchInFlight } from '../../search-inflight.ts';
 import {
   closeServer,
   createVirtualNetwork,
@@ -741,7 +738,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       );
     });
 
-    test('a coalesced live search releases its admission slot while the compute is still running, and stays counted as a request', async function (assert) {
+    test('a coalesced live search releases its admission slot while the compute is still running', async function (assert) {
       // A cache whose next compute waits on the test, so a second identical
       // request is guaranteed to arrive while the first is still computing.
       class HoldableLiveSearchCache extends LiveSearchCache {
@@ -806,11 +803,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         1,
         'the joiner handed its slot back while the compute is still running',
       );
-      assert.strictEqual(
-        getSearchRequestsInFlight(),
-        2,
-        'but is still a request in flight, waiting on the computation it joined, which is what the link-shape policy reads',
-      );
 
       releaseCompute();
       let [a, b] = await Promise.all([first, second]);
@@ -823,11 +815,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         getSearchInFlight(),
         0,
         'the computing request released on completion, and only once',
-      );
-      assert.strictEqual(
-        getSearchRequestsInFlight(),
-        0,
-        'and both requests stopped counting when their responses ended',
       );
 
       let third = await postSearch(searchBody);

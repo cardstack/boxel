@@ -71,15 +71,8 @@ those cases, but it is a reason not to over-trust a 200 here on its own.
 lag crosses a threshold or a search is in flight:
 
 ```
-eventLoopLagMs(mean/p99/max)=… inFlightSearch=… searchRequests=… searchLoad=… heapMB=…
+eventLoopLagMs(mean/p99/max)=… inFlightSearch=… heapMB=…
 ```
-
-`inFlightSearch` counts admission slots — concurrent search _computations_,
-since a request the live-search cache answers from another's computation hands
-its slot back early. `searchRequests` counts every admitted search request until
-its response ends, and `searchLoad` is that count's time-weighted mean, which is
-the reading the link-shape policy's thresholds are compared against. The first
-two differ by the live-search cache's miss rate.
 
 Silent on an idle, healthy server — so its presence in the logs is itself the
 signal. Lag climbing in step with `inFlightSearch` is the fingerprint of the loop

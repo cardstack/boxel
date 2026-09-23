@@ -646,14 +646,11 @@ server's own timing rather than inferred.
 
 ## Driving it hard enough to reach a threshold
 
-The realm server has two mechanisms that engage at a level of concurrency, on
-two different counts: the admission gate bounds concurrent search
-_computations_ at a cap, and the link-shape policy degrades a live read's link
-closure once a time-weighted mean of concurrent search _requests_ — joiners
-included, which the gate stops counting at the cache decision — crosses one of
-its rungs (a 120-second half-life by default, `LINK_SHAPE_LOAD_HALF_LIFE_MS`
-per deployment). The two are independent: the rungs are placed against
-sustained request load, not below the point where the gate starts shedding. Both are **per replica**, so a fleet of N tasks needs N times
+The realm server has two mechanisms that engage at a level of concurrency: the
+admission gate bounds in-flight searches at a cap, and the link-shape policy
+degrades a live read's link closure one rung earlier, at a time-weighted mean
+of the same count (a 120-second half-life by default, `LINK_SHAPE_LOAD_HALF_LIFE_MS`
+per deployment). Both are **per replica**, so a fleet of N tasks needs N times
 the load a single process would.
 
 The gate does not answer `429` at the cap. An arrival above it queues and is
@@ -668,26 +665,24 @@ that distinction available from the run itself — see below.
 
 **The credential pool is the ceiling.** Each session authenticates as its own
 user, one per CSV row, so a 20-row file caps a run at 19 readers. Against a
-deployed two-replica realm server at `--derive-page-size 0`, 19 readers held
-the policy's reading — the 120-second mean of search requests in flight, per
-replica — at a p50 of about 14-17 and a peak of about 21-22. Read that against
-the rungs in `packages/runtime-common/search-bounds.ts`: a pool of this size
-clears the lower rung at 14 within a few minutes, and does not reach the upper
-one at 28. Driving a fleet to the upper rung needs a pool well beyond this one,
-and the scaling is only linear while service time holds — service time is
-what rises first as a realm saturates. Growing the pool is what makes a load
-number realistic.
+deployed realm at `--derive-page-size 0`, 19 readers held a peak 120-second
+mean of **6.3** searches in flight. Read that against the rungs and the cap in
+`packages/runtime-common/search-bounds.ts`: this run cost about three readers
+per unit of mean, so the lower rung at 4 wants roughly 13 readers and the upper
+one at 12 roughly 36, **per replica**. A pool of this size therefore already
+clears the lower rung, while driving a fleet to the upper rung or to the
+admission cap still needs one several times larger. Treat those as a floor
+rather than an estimate — the scaling is only linear while service time holds,
+and service time is what rises first as a realm saturates. Growing the pool is
+what makes a load number realistic, and it is what puts the admission queue
+under enough pressure to shed.
 
-The reading is in requests, not in the admission gate's slots: a request the
-live-search cache answers from another's computation hands its slot back
-early and goes on counting here. So the reading is several times the slot
-count on a workload whose readers share their queries, and the admission cap
-of 30 bounds slots, not this.
-
-**Which means a default-sized unbounded run degrades itself partway through,
-and its numbers have to be read accordingly.** At a 120-second half-life the
-reading crosses the lower rung after a couple of half-lives of sustained load,
-so any run longer than a few minutes against a deployment at shipped
+**Which means a default-sized unbounded run now degrades itself partway
+through, and its numbers have to be read accordingly.** Both figures this file
+reports for unbounded runs — the 5.3 concurrency in the derived-run table above
+and the 6.3 peak here — sit above the lower rung of 4. At a 120-second
+half-life the reading crosses it after a couple of half-lives of sustained
+load, so any run longer than a few minutes against a deployment at shipped
 thresholds engages `multi-row` mid-run, and every search it answers after that
 point comes back links-only.
 
