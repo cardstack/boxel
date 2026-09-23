@@ -37,14 +37,59 @@ const RELATIVE_IMPORT = /["'](\.\.?\/[^"']*)["']/g;
 // even exist. Scan the code with its comments blanked so a specifier has to be
 // something the module actually evaluates.
 //
+// Read rather than matched: a comment is not a regular language. `/*` appears
+// inside line comments here (`@cardstack/boxel-host/lib/*` is written in one),
+// and a pattern that takes it for the start of a block comment blanks
+// everything to the next `*/` — thousands of characters away, taking real
+// imports with it. `//` appears inside strings for the same reason. Only a
+// reader that knows which of the three it is in can tell them apart.
+//
 // Blanked rather than removed, so every offset in the scanned text still lines
-// up with the real source. Line comments are recognized only at the start of a
-// line or after whitespace, which is what keeps the `//` of a `https://` URL —
-// always preceded by `:` — out of it.
+// up with the real source.
 function withoutComments(code) {
-  return code
-    .replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, ' '))
-    .replace(/(^|\s)\/\/[^\n]*/g, (match) => match.replace(/[^\n]/g, ' '));
+  let out = '';
+  let i = 0;
+  while (i < code.length) {
+    let c = code[i];
+    let next = code[i + 1];
+    if (c === '/' && next === '/') {
+      while (i < code.length && code[i] !== '\n') {
+        out += ' ';
+        i++;
+      }
+      continue;
+    }
+    if (c === '/' && next === '*') {
+      let close = code.indexOf('*/', i + 2);
+      let stop = close === -1 ? code.length : close + 2;
+      for (; i < stop; i++) {
+        out += code[i] === '\n' ? '\n' : ' ';
+      }
+      continue;
+    }
+    if (c === '"' || c === "'" || c === '`') {
+      let quote = c;
+      out += c;
+      i++;
+      while (i < code.length) {
+        if (code[i] === '\\') {
+          out += code.slice(i, i + 2);
+          i += 2;
+          continue;
+        }
+        out += code[i];
+        if (code[i] === quote) {
+          i++;
+          break;
+        }
+        i++;
+      }
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
 }
 
 function isBaseModule(id) {
