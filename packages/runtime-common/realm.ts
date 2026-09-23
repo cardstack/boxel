@@ -10103,6 +10103,20 @@ export class Realm {
         ...identity,
       });
     }
+    // A refusal about a linked card the request side-loaded is about that
+    // card, not the one being written, so it is the side-load's identity the
+    // error carries. Naming the card being written would read as that card
+    // colliding, when it had nothing wrong with it.
+    let included = includedCardOf(err.error.meta);
+    if (included) {
+      let cardError = new CardError(detail, {
+        status,
+        title,
+        ...(included.id ? { id: included.id } : {}),
+      });
+      cardError.meta = { included };
+      throw cardError;
+    }
     // Identity travels on every other branch, so it travels on this one too:
     // a refusal that names no card is harder to act on than one that does, and
     // the 412 a conditional write answers with is precisely a refusal about a
@@ -13566,4 +13580,20 @@ interface ScreenshotServePerf {
   // even when the capture never runs), the served row's own contentType on
   // the named path.
   contentType: CaptureContentType | null;
+}
+
+// The linked card a batch refusal names, when the card it is about is one the
+// request side-loaded rather than the one it writes.
+function includedCardOf(
+  meta: Record<string, unknown> | undefined,
+): { lid: string; id?: string; adoptsFrom?: unknown } | undefined {
+  let included = meta?.included;
+  if (
+    included &&
+    typeof included === 'object' &&
+    typeof (included as { lid?: unknown }).lid === 'string'
+  ) {
+    return included as { lid: string; id?: string; adoptsFrom?: unknown };
+  }
+  return undefined;
 }
