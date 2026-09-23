@@ -345,23 +345,40 @@ function snapshotPrefixForModule(moduleCacheKey: string): string {
   return `snapshot_${simpleHash(trimmedModuleCacheKey)}_`;
 }
 
+// Delays every save the callback triggers by `delayMs` before it reaches the
+// realm, for as long as the callback runs.
+//
+// Of the three holds here, this is the one to reach for when the callback
+// awaits a DOM helper. `withHeldSave` and `withSavesHeldOpen` keep a save in flight, and a
+// save in flight holds a test waiter open, so `click`, `fillIn`, `typeIn` and
+// the rest — all of which settle — would wait on a release the callback has
+// not reached. A slow save still completes, so settling still resolves; it
+// just takes `delayMs` longer. What it buys in exchange is weaker: a window
+// wide enough that a save is unlikely to have landed, rather than one where a
+// save provably cannot have.
+//
+// The original is held in a closure rather than on the store, so nesting works
+// and a callback that throws still restores it.
 export async function withSlowSave(
   delayMs: number,
   cb: () => Promise<void>,
 ): Promise<void> {
   let store = getService('store');
-  (store as any)._originalPersist = (store as any).persistAndUpdate;
+  let originalPersist = (store as any).persistAndUpdate as (
+    instance: CardDef,
+    opts?: unknown,
+  ) => Promise<unknown>;
   (store as any).persistAndUpdate = async (
-    card: CardDef,
-    defaultRealmHref?: string,
+    instance: CardDef,
+    opts?: unknown,
   ) => {
     await delay(delayMs);
-    await (store as any)._originalPersist(card, defaultRealmHref);
+    return await originalPersist.call(store, instance, opts);
   };
   try {
-    return cb();
+    await cb();
   } finally {
-    (store as any).persistAndUpdate = (store as any)._originalPersist;
+    (store as any).persistAndUpdate = originalPersist;
   }
 }
 
@@ -370,6 +387,10 @@ export async function withSlowSave(
 // window where a mutation has been applied locally and no save can have reached
 // the realm, and the caller has the persisted result the moment this helper
 // resolves — neither side times a realm write against a wall clock.
+//
+// A held save holds a test waiter open, so the callback cannot await anything
+// that settles — which is every DOM helper. A callback that clicks or fills
+// belongs on `withSlowSave` instead, and trades the guarantee for a window.
 export async function withHeldSave(cb: () => Promise<void>): Promise<void> {
   let store = getService('store');
   let originalPersist = (store as any).persistAndUpdate as (
