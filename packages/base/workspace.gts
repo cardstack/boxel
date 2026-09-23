@@ -1484,10 +1484,9 @@ class Isolated extends Component<typeof Workspace> {
         text-transform: uppercase;
         color: var(--muted-foreground);
       }
-      /* the footer row shares the result rows' corner and carries no border of
-         its own beyond the rule above it */
+      /* a flat footer row: a corner here would round the rule above it */
       .card-grid .search-see-all {
-        --boxel-button-border-radius: var(--boxel-border-radius-sm);
+        --boxel-button-border-radius: 0;
         --boxel-button-border: none;
         display: flex;
         align-items: center;
