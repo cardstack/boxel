@@ -2,8 +2,9 @@
 #MISE description="Provision a local dev TLS cert so realm-server can speak HTTP/2"
 #
 # Generates ~/.local/share/boxel/dev-certs/{localhost.pem, localhost-key.pem}
-# using mkcert. Idempotent — re-runs are a no-op if the cert already exists
-# and isn't near expiry.
+# using mkcert. Idempotent — re-runs are a no-op if the cert already exists,
+# isn't near expiry, covers every required SAN, and chains to the current
+# mkcert root CA.
 #
 # Why this exists
 # ---------------
@@ -230,8 +231,12 @@ if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
     # lib/env-vars.sh), so the realm-server's startup fetch of the host
     # app fails with UNABLE_TO_VERIFY_LEAF_SIGNATURE. The root is
     # resolved again here because trust-dev-cert may have just created it.
+    # `-trusted` makes this root the only trust anchor. `-CAfile` would
+    # still consult the system CA directory, where `mkcert -install`
+    # leaves every root it ever installed, so a leaf from an old root
+    # with a different subject (mkcert puts user@host in it) would pass.
     CURRENT_ROOT_CA="$(mkcert -CAROOT 2>/dev/null || true)/rootCA.pem"
-    if ! openssl verify -CAfile "$CURRENT_ROOT_CA" "$CERT_FILE" >/dev/null 2>&1; then
+    if ! openssl verify -trusted "$CURRENT_ROOT_CA" "$CERT_FILE" >/dev/null 2>&1; then
       needs_regen=1
       regen_reason="is not signed by the current mkcert root CA ($CURRENT_ROOT_CA)"
     fi
