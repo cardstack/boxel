@@ -264,22 +264,52 @@ function gitPath(name: string) {
   );
 }
 
-function readAdded(): string[] {
-  let path = gitPath(ADDED_LIST);
-  return existsSync(path)
-    ? readFileSync(path, 'utf8').split('\n').filter(Boolean)
-    : [];
+function sha256(text: string) {
+  return createHash('sha256').update(text).digest('hex');
+}
+
+// One line per file --into-clone added: its path and the hash of what was
+// written, so a later removal can tell an untouched copy from an edited one.
+function readAdded(): { path: string; hash: string }[] {
+  let file = gitPath(ADDED_LIST);
+  if (!existsSync(file)) {
+    return [];
+  }
+  return readFileSync(file, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      let [path, hash] = line.split('\t');
+      return { path, hash };
+    });
+}
+
+function readExclude() {
+  let path = gitPath('info/exclude');
+  return { path, text: existsSync(path) ? readFileSync(path, 'utf8') : '' };
 }
 
 // Takes back out of the clone every file an earlier --into-clone added, so a
 // pull that brings the same path in from upstream is never blocked by it.
+// A copy someone has edited since it was added is kept, and stops being
+// excluded from git, so it shows up as an ordinary untracked file that
+// catalog-update.sh's autostash preserves instead of losing.
 function removeFromClone() {
   if (!existsSync(join(cloneDir, '.git'))) {
     return;
   }
-  for (let path of readAdded()) {
-    rmSync(join(cloneDir, path), { force: true });
-    let dir = dirname(join(cloneDir, path));
+  let kept: string[] = [];
+  for (let { path, hash } of readAdded()) {
+    let file = join(cloneDir, path);
+    if (!existsSync(file)) {
+      continue;
+    }
+    if (sha256(readFileSync(file, 'utf8')) !== hash) {
+      kept.push(path);
+      continue;
+    }
+    rmSync(file);
+    let dir = dirname(file);
     while (
       dir !== cloneDir &&
       existsSync(dir) &&
@@ -290,6 +320,21 @@ function removeFromClone() {
     }
   }
   rmSync(gitPath(ADDED_LIST), { force: true });
+  // The marker describes files that are no longer merged in; a guard reading
+  // it would otherwise report a subset the clone no longer serves.
+  rmSync(join(cloneDir, MARKER_FILE), { force: true });
+
+  let exclude = readExclude();
+  let keptLines = new Set(kept.map((p) => `/${p}`));
+  let remaining = exclude.text
+    .split('\n')
+    .filter((line) => !keptLines.has(line));
+  if (keptLines.size) {
+    writeFileSync(exclude.path, remaining.join('\n'));
+    console.warn(
+      `catalog test subset: kept ${kept.join(', ')} in the catalog clone because it was edited after being merged in; it is now an ordinary untracked file.`,
+    );
+  }
 }
 
 function mergeIntoClone(
@@ -313,7 +358,10 @@ function mergeIntoClone(
       divergent.push(path);
     }
   }
-  writeFileSync(gitPath(ADDED_LIST), added.map((p) => `${p}\n`).join(''));
+  writeFileSync(
+    gitPath(ADDED_LIST),
+    added.map((p) => `${p}\t${sha256(contents.get(p)!)}\n`).join(''),
+  );
 
   // Neither the added files nor the marker belong to the clone's history.
   let excludePath = gitPath('info/exclude');
