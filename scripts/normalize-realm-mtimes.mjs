@@ -41,31 +41,13 @@ import { join } from 'node:path';
 // bytes than the realm itself and hashing it would dominate the run.
 const SKIP_DIRS = new Set(['.git', 'node_modules']);
 
-// The window derived timestamps land in: a twelve-hour span ending six hours
-// below the instant the host suite pins its clock to
-// (`packages/host/tests/helpers/test-clock.ts`). Every normalized file is
-// therefore between six and eighteen hours old as the suite measures age.
-//
-// Narrow on purpose. These timestamps are hashes, not dates — same content,
-// same number, and nothing more — but a file card renders `lastModified` as an
-// age, so whatever bucket the hash lands in is displayed as though it meant
-// something. Across a wide window an ordinary content edit moves a file's hash
-// from one bucket to another and a visual snapshot of it changes, reporting a
-// rendering difference where only the bytes differ. Inside a span shorter than
-// a day every file reads `today`, and there is no boundary left to cross.
-//
-// Below the pin because a timestamp above it is in the future, which renders
-// as an absolute date rather than an age. Six hours of margin, rather than
-// ending exactly at the pin, so the arithmetic does not depend on the two
-// constants staying in lockstep.
-//
-// Collisions are expected at this width — a few hundred files in 43,200
-// seconds — and are harmless. What reads these values compares a file against
-// its own index row (`discover-invalidations.ts`), so two files sharing a
-// timestamp never meet. Nothing orders normalized realms by mtime.
-const WINDOW_END = 1_789_452_000; // 2026-09-15T06:00:00Z
-const WINDOW_SIZE = 12 * 60 * 60;
-const WINDOW_START = WINDOW_END - WINDOW_SIZE;
+// The window derived timestamps land in: epoch seconds 1e9 (2001-09-09)
+// through 2e9 (2033-05-18). Comfortably inside what every filesystem and
+// Postgres `bigint` column round-trips, and far enough from now that a
+// normalized mtime is recognizable as synthetic when someone is staring at
+// one wondering why a base card claims to have been saved in 2014.
+const WINDOW_START = 1_000_000_000;
+const WINDOW_SIZE = 1_000_000_000;
 
 // Whole seconds, because that is all the realm's reader preserves:
 // `NodeAdapter` reports mtimes through `unixTime()`, which floors to
