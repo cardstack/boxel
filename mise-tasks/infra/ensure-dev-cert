@@ -221,7 +221,21 @@ if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
       printf '%s\n' "$CERT_TEXT" | grep -q -- "$1"
     }
     needs_regen=
-    if ! { cert_has_san 'DNS:localhost' \
+    regen_reason="is missing one or more required SANs"
+    # The leaf must also chain to the root CA mkcert holds now. If that
+    # root is ever recreated (e.g. its CAROOT directory was deleted and
+    # `infra:trust-dev-cert` minted a fresh one), an existing leaf keeps
+    # the same issuer name but is signed by a key nothing trusts any
+    # more. Node trusts only this root (via NODE_EXTRA_CA_CERTS, see
+    # lib/env-vars.sh), so the realm-server's startup fetch of the host
+    # app fails with UNABLE_TO_VERIFY_LEAF_SIGNATURE. The root is
+    # resolved again here because trust-dev-cert may have just created it.
+    CURRENT_ROOT_CA="$(mkcert -CAROOT 2>/dev/null || true)/rootCA.pem"
+    if ! openssl verify -CAfile "$CURRENT_ROOT_CA" "$CERT_FILE" >/dev/null 2>&1; then
+      needs_regen=1
+      regen_reason="is not signed by the current mkcert root CA ($CURRENT_ROOT_CA)"
+    fi
+    if [ -z "$needs_regen" ] && ! { cert_has_san 'DNS:localhost' \
       && cert_has_san 'DNS:user\.localhost' \
       && cert_has_san 'DNS:\*\.boxel-dev\.localhost' \
       && cert_has_san 'DNS:published\.realm' \
@@ -247,7 +261,7 @@ if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
     if [ -z "$needs_regen" ]; then
       exit 0
     fi
-    echo "[ensure-dev-cert] Existing cert at $CERT_FILE is missing one or more required SANs; regenerating."
+    echo "[ensure-dev-cert] Existing cert at $CERT_FILE $regen_reason; regenerating."
   else
     echo "[ensure-dev-cert] Existing cert at $CERT_FILE is near expiry; regenerating."
   fi
