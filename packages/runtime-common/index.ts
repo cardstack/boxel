@@ -1860,6 +1860,7 @@ export * from './render-route-options.ts';
 export * from './publishability.ts';
 export * from './pr-manifest.ts';
 export * from './file-def-code-ref.ts';
+export * from './policy-file-def.ts';
 export * from './file-def-bindings.ts';
 
 // Extensions covered by the realm-wide pre-warm sweep that primes the
