@@ -217,8 +217,6 @@ export const BUNDLED_BASE_MODULES: Record<
   'date/year': () => import('@cardstack/base/date/year'),
   'date/week': () => import('@cardstack/base/date/week'),
   'date/quarter': () => import('@cardstack/base/date/quarter'),
-  time: () => import('@cardstack/base/time'),
-  'time/time-range': () => import('@cardstack/base/time/time-range'),
   'time/duration': () => import('@cardstack/base/time/duration'),
   'time/relative-time': () => import('@cardstack/base/time/relative-time'),
   number: () => import('@cardstack/base/number'),
@@ -301,8 +299,6 @@ export const BUNDLED_BASE_MODULES: Record<
   skill: () => import('@cardstack/base/skill'),
   spec: () => import('@cardstack/base/spec'),
   'tool-field': () => import('@cardstack/base/tool-field'),
-  'brand-functional-palette': () =>
-    import('@cardstack/base/brand-functional-palette'),
   'components/age': () => import('@cardstack/base/components/age'),
   'components/business-days': () =>
     import('@cardstack/base/components/business-days'),
@@ -312,9 +308,6 @@ export const BUNDLED_BASE_MODULES: Record<
     import('@cardstack/base/components/expiration-warning'),
   'components/time-ago': () => import('@cardstack/base/components/time-ago'),
   'components/timeline': () => import('@cardstack/base/components/timeline'),
-  coordinate: () => import('@cardstack/base/coordinate'),
-  'css-value': () => import('@cardstack/base/css-value'),
-  currency: () => import('@cardstack/base/currency'),
   'frontmatter-field': () => import('@cardstack/base/frontmatter-field'),
   'helpers/country': () => import('@cardstack/base/helpers/country'),
   'join-the-community': () => import('@cardstack/base/join-the-community'),
@@ -333,32 +326,13 @@ export const BUNDLED_BASE_MODULES: Record<
   'video-metadata': () => import('@cardstack/base/video-metadata'),
   'welcome-to-boxel': () => import('@cardstack/base/welcome-to-boxel'),
   'zip-archive': () => import('@cardstack/base/zip-archive'),
-  'amount-with-currency': () => import('@cardstack/base/amount-with-currency'),
-  'brand-logo': () => import('@cardstack/base/brand-logo'),
   'components/cards-grid-layout': () =>
     import('@cardstack/base/components/cards-grid-layout'),
-  country: () => import('@cardstack/base/country'),
-  date: () => import('@cardstack/base/date'),
   datetime: () => import('@cardstack/base/datetime'),
   image: () => import('@cardstack/base/image'),
-  'positioned-card': () => import('@cardstack/base/positioned-card'),
-  typography: () => import('@cardstack/base/typography'),
   website: () => import('@cardstack/base/website'),
-  address: () => import('@cardstack/base/address'),
   'cards-grid': () => import('@cardstack/base/cards-grid'),
-  'date-range-field': () => import('@cardstack/base/date-range-field'),
   'datetime-stamp': () => import('@cardstack/base/datetime-stamp'),
-  'process-card': () => import('@cardstack/base/process-card'),
-  'structured-theme-variables': () =>
-    import('@cardstack/base/structured-theme-variables'),
-  'default-templates/theme-dashboard': () =>
-    import('@cardstack/base/default-templates/theme-dashboard'),
-  'remix-card': () => import('@cardstack/base/remix-card'),
-  'structured-theme': () => import('@cardstack/base/structured-theme'),
-  'style-reference': () => import('@cardstack/base/style-reference'),
-  'detailed-style-reference': () =>
-    import('@cardstack/base/detailed-style-reference'),
-  'brand-guide': () => import('@cardstack/base/brand-guide'),
 };
 
 // Registers on the virtual network, so every loader that shares it serves the
