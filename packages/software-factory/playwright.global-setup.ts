@@ -34,13 +34,15 @@ const realmDir = existsSync(configuredRealmDir)
 const SETUP_COMMAND_TIMEOUT_MS = Number(
   process.env.TEST_HARNESS_SETUP_COMMAND_TIMEOUT_MS ?? 900_000,
 );
-// Backstop for serve:support as a whole. Each bring-up step inside it carries
-// its own bound (host preview 180s, `/_standby` render 240s, Postgres 30s) and
-// a step that exceeds its bound makes the child exit, which the wait below
-// reports immediately with the child's own error. This outer bound therefore
-// has to sit above the sum of those inner bounds plus the unbounded one-time
-// work (seed-tar build with its image pull, boxel-ui build); otherwise a
-// healthy-but-slow bring-up is killed here before any inner step has failed.
+// Backstop for serve:support as a whole. When a bring-up step inside it fails
+// or exceeds its own bound (host preview 180s, `/_standby` render 240s,
+// Postgres and icons 30s each), serve:support exits and the wait below reports
+// that immediately with the child's own error. This outer bound covers the
+// case where the child is still making progress: the bounded steps can add
+// up to roughly 510s, and the one-time work with no bound of its own (the
+// seed-tar build with its image pull and migrations, the boxel-ui build) needs
+// room on top of that. A healthy-but-slow bring-up that exceeds this is
+// reported with the timeout error and the child's buffered output.
 const SUPPORT_METADATA_TIMEOUT_MS = Number(
   process.env.TEST_HARNESS_SUPPORT_METADATA_TIMEOUT_MS ?? 600_000,
 );
