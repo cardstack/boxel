@@ -769,7 +769,7 @@ class Isolated extends Component<typeof Workspace> {
                     >Open Library</Button>
                     {{#if @canEdit}}
                       <Button
-                        @kind='secondary'
+                        @kind='default'
                         class='welcome-alt'
                         {{on 'click' this.createNew}}
                         data-test-welcome-new-card
@@ -1301,7 +1301,6 @@ class Isolated extends Component<typeof Workspace> {
       .card-grid .space-config,
       .card-grid .dock-mini,
       .card-grid .dock-pane-open {
-        font-family: inherit;
         line-height: inherit;
         letter-spacing: inherit;
       }
@@ -1374,7 +1373,6 @@ class Isolated extends Component<typeof Workspace> {
         cursor: default;
       }
       .space-desc {
-        margin: 0;
         font-size: var(--boxel-font-size-sm);
         font-weight: 400;
         color: var(--muted-foreground);
@@ -1459,7 +1457,6 @@ class Isolated extends Component<typeof Workspace> {
         text-align: start;
         padding: var(--boxel-sp-2xs) var(--boxel-sp-xs);
         border-radius: var(--boxel-border-radius-sm);
-        cursor: pointer;
       }
       .card-grid .search-result:hover {
         background-color: var(--hover);
@@ -1489,7 +1486,6 @@ class Isolated extends Component<typeof Workspace> {
         --boxel-button-border-radius: 0;
         --boxel-button-border: none;
         display: flex;
-        align-items: center;
         justify-content: space-between;
         gap: var(--boxel-sp-xs);
         width: 100%;
@@ -1499,7 +1495,6 @@ class Isolated extends Component<typeof Workspace> {
         font-weight: 600;
         color: var(--primary-ink);
         text-align: start;
-        cursor: pointer;
       }
       .card-grid .search-see-all:hover {
         background-color: var(--hover);
@@ -1557,7 +1552,6 @@ class Isolated extends Component<typeof Workspace> {
         gap: 1px;
       }
       .rail-label {
-        margin: 0;
         padding: var(--boxel-sp-4xs) var(--boxel-sp-xs) var(--boxel-sp-3xs);
         font-family: var(--font-mono);
         font-size: var(--boxel-eyebrow-font-size);
@@ -1664,7 +1658,6 @@ class Isolated extends Component<typeof Workspace> {
         right: 0;
         z-index: 4;
         display: flex;
-        align-items: center;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs) var(--boxel-sp-xl) var(--boxel-sp-sm);
         border-bottom: 1px solid var(--grid-attention-border);
@@ -1672,7 +1665,6 @@ class Isolated extends Component<typeof Workspace> {
         color: var(--attention-ink);
         box-shadow: var(--shadow-sm);
         text-align: start;
-        cursor: pointer;
         opacity: 0;
         transform: translateY(-6px);
         pointer-events: none;
@@ -1731,13 +1723,9 @@ class Isolated extends Component<typeof Workspace> {
         gap: var(--boxel-sp-6xs);
       }
       .section-hint {
-        margin: 0;
         font-size: var(--boxel-font-size-xs);
         font-weight: 400;
         color: var(--muted-foreground);
-      }
-      .notice .section-hint {
-        color: var(--attention-ink);
       }
 
       /* ── Setup status bar (passive; one click target → Activity) ── */
@@ -1746,7 +1734,6 @@ class Isolated extends Component<typeof Workspace> {
         position: relative;
         overflow: hidden;
         display: flex;
-        align-items: center;
         gap: var(--boxel-sp-sm);
         width: 100%;
         min-height: var(--grid-bar-height);
@@ -1756,7 +1743,6 @@ class Isolated extends Component<typeof Workspace> {
         padding: var(--boxel-sp-sm) var(--boxel-sp);
         background-color: var(--grid-attention-surface);
         color: var(--attention-ink);
-        cursor: pointer;
         transition:
           border-color var(--grid-quick) ease,
           box-shadow var(--grid-quick) ease;
@@ -1877,7 +1863,6 @@ class Isolated extends Component<typeof Workspace> {
       }
       .card-grid .setup-tease {
         display: flex;
-        align-items: center;
         gap: var(--boxel-sp-2xs);
         width: 100%;
         padding: var(--boxel-sp-xs) var(--boxel-sp);
@@ -1887,7 +1872,6 @@ class Isolated extends Component<typeof Workspace> {
         font-size: var(--boxel-font-size-xs);
         font-weight: 400;
         color: var(--muted-foreground);
-        cursor: pointer;
       }
       .setup-tease-mark {
         color: var(--attention);
@@ -1947,7 +1931,6 @@ class Isolated extends Component<typeof Workspace> {
         border: 1.5px dashed var(--border);
         border-radius: var(--boxel-border-radius-lg);
         color: var(--muted-foreground);
-        cursor: pointer;
         transition:
           border-color var(--grid-quick) ease,
           color var(--grid-quick) ease;
@@ -2049,14 +2032,13 @@ class Isolated extends Component<typeof Workspace> {
       }
       .card-grid .type-chip {
         --boxel-button-default-border: var(--grid-chip-border);
-        display: inline-flex;
-        align-items: center;
+        --boxel-button-default-background: var(--card);
+        --boxel-button-default-foreground: var(--card-foreground);
         gap: var(--boxel-sp-2xs);
         padding: var(--boxel-sp-3xs) var(--boxel-sp-sm) var(--boxel-sp-3xs)
           var(--boxel-sp-xs);
         font-size: var(--boxel-font-size-xs);
         font-weight: 500;
-        cursor: pointer;
       }
       .card-grid .type-chip:hover {
         border-color: var(--border-strong);
@@ -2068,7 +2050,7 @@ class Isolated extends Component<typeof Workspace> {
         width: 0.875rem;
         height: 0.875rem;
         flex-shrink: 0;
-        color: var(--muted-foreground);
+        color: var(--foreground);
       }
       .type-chip-icon :deep(svg) {
         width: 0.875rem;
@@ -2079,13 +2061,12 @@ class Isolated extends Component<typeof Workspace> {
         font-family: var(--font-mono);
         font-size: var(--boxel-font-size-2xs);
         font-weight: 500;
-        color: var(--muted-foreground);
+        color: var(--foreground);
       }
       /* ── Recent preview (passive, one row → Activity) ──────── */
       .card-grid .recent-preview {
         justify-content: flex-start;
         display: flex;
-        align-items: center;
         gap: var(--boxel-sp-sm);
         width: 100%;
         text-align: start;
@@ -2093,7 +2074,6 @@ class Isolated extends Component<typeof Workspace> {
         border-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp-xs) var(--boxel-sp);
         background-color: var(--muted);
-        cursor: pointer;
         transition: border-color var(--grid-quick) ease;
       }
       .card-grid .recent-preview:hover {
@@ -2218,7 +2198,6 @@ class Isolated extends Component<typeof Workspace> {
         flex-shrink: 0;
       }
       .feed-title {
-        margin: 0;
         font-size: var(--boxel-font-size-xs);
         font-weight: 600;
         color: var(--foreground);
@@ -2227,7 +2206,6 @@ class Isolated extends Component<typeof Workspace> {
         text-overflow: ellipsis;
       }
       .feed-remix-source {
-        margin: 0;
         font-size: var(--boxel-font-size-xs);
         font-weight: 500;
         color: var(--muted-foreground);
@@ -2243,7 +2221,6 @@ class Isolated extends Component<typeof Workspace> {
       }
       .feed-more-note,
       .feed-end-note {
-        margin: 0;
         font-family: var(--font-mono);
         font-size: var(--boxel-font-size-2xs);
         font-weight: 500;
@@ -2255,7 +2232,6 @@ class Isolated extends Component<typeof Workspace> {
         padding: var(--boxel-sp-xs) 0 var(--boxel-sp-4xs);
       }
       .feed-note-text {
-        margin: 0;
         font-size: var(--boxel-font-size-xs);
         font-weight: 400;
         color: var(--muted-foreground);
@@ -2305,14 +2281,9 @@ class Isolated extends Component<typeof Workspace> {
         line-height: var(--boxel-eyebrow-line-height);
         letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
-        cursor: pointer;
       }
       .card-grid .dock-pane-open:hover {
         color: var(--foreground);
-      }
-      .card-grid .dock-pane-open:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
       }
       /* the wizard pane accepts input — never dim or intercept it */
       .job-cell.wizard {
@@ -2330,8 +2301,6 @@ class Isolated extends Component<typeof Workspace> {
         position: absolute;
         inset: 0;
         z-index: 2;
-        padding: 0;
-        cursor: pointer;
         border-radius: var(--boxel-border-radius);
       }
       .card-grid .tile-open:focus-visible {
@@ -2358,7 +2327,6 @@ class Isolated extends Component<typeof Workspace> {
         max-width: 44rem;
       }
       .welcome-copy {
-        margin: 0;
         font-size: var(--boxel-font-size-sm);
         font-weight: 400;
         line-height: var(--grid-prose-leading);
@@ -2398,7 +2366,6 @@ class Isolated extends Component<typeof Workspace> {
         font-size: var(--boxel-font-size-xs);
         font-weight: 600;
         color: var(--primary-ink);
-        cursor: pointer;
       }
       /* space details strip */
       .space-details {
@@ -2439,29 +2406,9 @@ class Isolated extends Component<typeof Workspace> {
         gap: var(--boxel-sp-xs);
       }
       .empty-note {
-        margin: 0;
         font-size: var(--boxel-font-size-sm);
         font-weight: 400;
         color: var(--muted-foreground);
-      }
-
-      /* one focus language across the chrome: every
-         interactive chrome element earns the same ring */
-      .card-grid .search-result:focus-visible,
-      .card-grid .search-see-all:focus-visible,
-      .card-grid .setup-bar:focus-visible,
-      .card-grid .type-chip:focus-visible,
-      .door-open:focus-visible,
-      .card-grid .door-unpin:focus-visible,
-      .card-grid .door-add:focus-visible,
-      .welcome-cta:focus-visible,
-      .welcome-alt:focus-visible,
-      .card-grid .readme-toggle:focus-visible,
-      .card-grid .recent-preview:focus-visible,
-      .card-grid .dock-mini:focus-visible,
-      .wait-open:focus-visible {
-        outline: 1px solid var(--ring);
-        outline-offset: 2px;
       }
 
       /* A buried card sits behind another in the stack, so it must not keep
@@ -4360,7 +4307,6 @@ export class Workspace extends CardDef {
         .settings .choice-opt,
         .settings .order-move,
         .settings .publish-btn {
-          font-family: inherit;
           line-height: inherit;
           letter-spacing: inherit;
         }
@@ -4369,7 +4315,6 @@ export class Workspace extends CardDef {
           gap: var(--boxel-sp-4xs);
         }
         .settings-lede {
-          margin: 0;
           font-size: var(--boxel-font-size-sm);
           font-weight: 400;
           color: var(--muted-foreground);
@@ -4392,7 +4337,6 @@ export class Workspace extends CardDef {
           padding-top: var(--boxel-sp-4xs);
         }
         .group-desc {
-          margin: 0;
           font-size: var(--boxel-font-size-xs);
           font-weight: 400;
           color: var(--muted-foreground);
@@ -4429,7 +4373,6 @@ export class Workspace extends CardDef {
           color: var(--foreground);
         }
         .setting-help {
-          margin: 0;
           font-size: var(--boxel-font-size-xs);
           font-weight: 400;
           color: var(--muted-foreground);
@@ -4467,7 +4410,6 @@ export class Workspace extends CardDef {
           font-size: var(--boxel-font-size-xs);
           font-weight: 500;
           color: var(--muted-foreground);
-          cursor: pointer;
         }
         .settings .choice-opt.selected {
           background-color: var(--card);
@@ -4505,14 +4447,12 @@ export class Workspace extends CardDef {
           display: grid;
           place-items: center;
           border-radius: var(--boxel-border-radius-sm);
-          cursor: pointer;
         }
         .settings .order-move:hover {
           border-color: var(--border-strong);
           color: var(--foreground);
         }
         .settings .publish-btn {
-          cursor: pointer;
         }
         .settings .publish-btn:hover {
           border-color: var(--primary-ink);
@@ -4534,12 +4474,6 @@ export class Workspace extends CardDef {
         }
         .hosting-error {
           color: var(--destructive-ink);
-        }
-        .settings .choice-opt:focus-visible,
-        .settings .order-move:focus-visible,
-        .settings .publish-btn:focus-visible {
-          outline: 2px solid var(--ring);
-          outline-offset: 2px;
         }
       </style>
     </template>
