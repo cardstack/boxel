@@ -7,7 +7,7 @@ import {
 } from '@cardstack/boxel-host/lib/signed-capture';
 
 import Camera from '@cardstack/boxel-icons/camera';
-import Code from '@cardstack/boxel-icons/code-2';
+import Code from '@cardstack/boxel-icons/code';
 import FilePdf from '@cardstack/boxel-icons/file-type-pdf';
 import Wand from '@cardstack/boxel-icons/wand';
 import Link from '@cardstack/boxel-icons/link';
