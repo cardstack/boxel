@@ -4,6 +4,7 @@ import { concat } from '@ember/helper';
 import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
 import { htmlSafe, type SafeString } from '@ember/template';
+import GlimmerComponent from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { restartableTask, timeout } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
@@ -16,7 +17,7 @@ import {
   IconButton,
   Tooltip,
 } from '@cardstack/boxel-ui/components';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { and, bool, cn, eq } from '@cardstack/boxel-ui/helpers';
 import BooleanField from './boolean';
 // host-mode mutation: publish and unpublish are registered host tools
 // (tools/index.ts shims them onto the loader's virtual network, so these
@@ -110,6 +111,13 @@ const here: string = (import.meta as any).url;
 const [, StripView, GridView] = VIEW_OPTIONS;
 
 type Segment = 'home' | 'library' | 'activity';
+
+// The frame's three sections, in tab order.
+const SEGMENTS: { id: Segment; label: string; icon: typeof HouseIcon }[] = [
+  { id: 'home', label: 'Home', icon: HouseIcon },
+  { id: 'library', label: 'Library', icon: LayoutGridIcon },
+  { id: 'activity', label: 'Activity', icon: ActivityIcon },
+];
 
 // A rail row is a stock FilterOption plus the count shown right-aligned in
 // the sidebar; library-group counts are computed live via `countFor`.
@@ -437,6 +445,70 @@ function relativeTime(value: unknown): string | undefined {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+// One Browse pill: a card type or file kind with its instance count, opening
+// the Library filtered to it.
+class TypeChip extends GlimmerComponent<{
+  Args: { option: RailOption; count: number; onSelect: () => void };
+}> {
+  private get iconHtml(): SafeString | undefined {
+    return typeof this.args.option.icon === 'string'
+      ? htmlSafe(this.args.option.icon)
+      : undefined;
+  }
+
+  <template>
+    <Button
+      @kind='default'
+      @size='extra-small'
+      @pill={{true}}
+      class='type-chip'
+      {{on 'click' @onSelect}}
+      data-test-type-chip={{@option.id}}
+    >
+      {{#if this.iconHtml}}
+        <span class='type-chip-icon'>{{this.iconHtml}}</span>
+      {{/if}}
+      {{@option.displayName}}
+      <span class='type-chip-count' data-test-type-chip-count>{{@count}}</span>
+    </Button>
+    <style scoped>
+      .type-chip {
+        --boxel-button-default-border: var(
+          --grid-chip-border,
+          color-mix(in oklch, var(--border) 50%, transparent)
+        );
+        --boxel-button-default-background: var(--card);
+        --boxel-button-default-foreground: var(--card-foreground);
+        gap: var(--boxel-sp-2xs);
+      }
+      .type-chip:hover {
+        border-color: var(--border-strong);
+        box-shadow: var(--shadow-sm);
+      }
+      .type-chip-icon {
+        display: grid;
+        place-items: center;
+        width: 0.875rem;
+        height: 0.875rem;
+        flex-shrink: 0;
+        color: var(--muted-foreground);
+      }
+      .type-chip-icon :deep(svg) {
+        width: 0.875rem;
+        height: 0.875rem;
+        display: block;
+      }
+      .type-chip-count {
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-2xs);
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted-foreground);
+      }
+    </style>
+  </template>
+}
+
 class Isolated extends Component<typeof Workspace> {
   <template>
     <section
@@ -456,70 +528,39 @@ class Isolated extends Component<typeof Workspace> {
       >{{this.progressAnnouncement}}</span>
       <header class='frame'>
         <nav class='tabs' aria-label='Sections'>
-          {{#let (eq this.segment 'home') as |isActive|}}
-            <Button
-              @kind={{if isActive 'default' 'muted'}}
-              @size='extra-small'
-              @rectangular={{true}}
-              class={{cn 'nav-tab' nav-tab--active=isActive}}
-              aria-current={{if isActive 'true'}}
-              {{on 'click' (this.setSegment 'home')}}
-              data-test-workspace-tab='home'
-            ><HouseIcon
-                width='14'
-                height='14'
-                class='tab-icon'
-                aria-hidden='true'
-              />
-              Home</Button>
-          {{/let}}
-          {{#let (eq this.segment 'library') as |isActive|}}
-            <Button
-              @kind={{if isActive 'default' 'muted'}}
-              @size='extra-small'
-              @rectangular={{true}}
-              class={{cn 'nav-tab' nav-tab--active=isActive}}
-              aria-current={{if isActive 'true'}}
-              {{on 'click' (this.setSegment 'library')}}
-              data-test-workspace-tab='library'
-            ><LayoutGridIcon
-                width='14'
-                height='14'
-                class='tab-icon'
-                aria-hidden='true'
-              />
-              Library</Button>
-          {{/let}}
-          {{#let (eq this.segment 'activity') as |isActive|}}
-            <Button
-              @kind={{if isActive 'default' 'muted'}}
-              @size='extra-small'
-              @rectangular={{true}}
-              class={{cn 'nav-tab' nav-tab--active=isActive}}
-              aria-current={{if isActive 'true'}}
-              {{on 'click' (this.setSegment 'activity')}}
-              data-test-workspace-tab='activity'
-            ><ActivityIcon
-                width='14'
-                height='14'
-                class='tab-icon'
-                aria-hidden='true'
-              />
-              Activity
-              {{#if this.runningJobs.length}}<span
-                  class='attention-dot'
+          {{#each SEGMENTS as |tab|}}
+            {{#let (eq this.segment tab.id) as |isActive|}}
+              <Button
+                @kind={{if isActive 'default' 'muted'}}
+                @size='extra-small'
+                @rectangular={{true}}
+                class={{cn 'nav-tab' nav-tab--active=isActive}}
+                aria-current={{if isActive 'true'}}
+                {{on 'click' (this.setSegment tab.id)}}
+                data-test-workspace-tab={{tab.id}}
+              ><tab.icon
+                  width='14'
+                  height='14'
+                  class='tab-icon'
                   aria-hidden='true'
-                /><span class='boxel-sr-only'>({{this.runningJobs.length}}
-                  in progress)</span>{{/if}}</Button>
-          {{/let}}
-
+                />
+                {{tab.label}}
+                {{#if
+                  (and (eq tab.id 'activity') (bool this.runningJobs.length))
+                }}
+                  <span class='attention-dot' aria-hidden='true' />
+                  <span class='boxel-sr-only'>({{this.runningJobs.length}}
+                    in progress)</span>
+                {{/if}}</Button>
+            {{/let}}
+          {{/each}}
         </nav>
         {{#if @model.signage}}
           {{! workspace signage; the purpose annotation shows on hover or focus
             and is read after the badge text }}
           <Tooltip @placement='bottom'>
             <:trigger>
-              <span class='signage' tabindex={{if @model.purpose '0'}}>
+              <span class='signage kicker' tabindex={{if @model.purpose '0'}}>
                 {{@model.signage}}{{#if @model.purpose}}<span
                     class='boxel-sr-only'
                   >: {{@model.purpose}}</span>{{/if}}</span>
@@ -553,7 +594,7 @@ class Isolated extends Component<typeof Workspace> {
             {{! the visible hint is decorative — aria-keyshortcuts above carries
               the same thing to assistive tech, in both spellings }}
             <span
-              class='search-kbd'
+              class='search-kbd kicker'
               aria-hidden='true'
               data-test-search-hotkey
             >{{SEARCH_HOTKEY_LABEL}}</span>
@@ -584,7 +625,9 @@ class Isolated extends Component<typeof Workspace> {
                         <span
                           class='search-result-title'
                         >{{result.title}}</span>
-                        <span class='search-result-type'>{{result.type}}</span>
+                        <span
+                          class='search-result-type kicker'
+                        >{{result.type}}</span>
                       </Button>
                     </li>
                   {{/each}}
@@ -598,7 +641,7 @@ class Isolated extends Component<typeof Workspace> {
                   See all
                   {{this.searchTotal}}
                   results
-                  <span class='search-scope-note'>Cards only</span>
+                  <span class='search-scope-note kicker'>Cards only</span>
                 </Button>
               </div>
             {{/if}}
@@ -636,7 +679,7 @@ class Isolated extends Component<typeof Workspace> {
                 <span class='setup-lines'>
                   <span class='setup-name'>Setting up
                     <strong>{{this.jobName job}}</strong></span>
-                  <span class='setup-data'>{{this.jobCount job}}{{#if
+                  <span class='setup-data data'>{{this.jobCount job}}{{#if
                       (this.jobEta job)
                     }}
                       ·
@@ -646,7 +689,7 @@ class Isolated extends Component<typeof Workspace> {
                     class='setup-fill'
                     style={{this.jobFillStyle job}}
                   /></span>
-                <span class='setup-pct'>{{this.jobPct job}}%</span>
+                <span class='setup-pct data'>{{this.jobPct job}}%</span>
                 <span class='setup-action'>View in Activity
                   <span aria-hidden='true'>›</span></span>
               </Button>
@@ -682,7 +725,9 @@ class Isolated extends Component<typeof Workspace> {
                     {{#each @fields.entryPoints as |Door index|}}
                       <article class='door'>
                         <div class='door-kicker'>
-                          <span class='door-kind'>{{this.doorKind index}}</span>
+                          <span class='door-kind kicker'>{{this.doorKind
+                              index
+                            }}</span>
                           {{#if @canEdit}}
                             <IconButton
                               @icon={{XIcon}}
@@ -713,7 +758,7 @@ class Isolated extends Component<typeof Workspace> {
                           {{! Match Library fitted tiles: the read-only preview opens through viewCard }}
                         </div>
                         <div class='door-footer'>
-                          <span class='door-title'>{{this.doorTitle
+                          <span class='door-title data'>{{this.doorTitle
                               index
                             }}</span>
                           <Button
@@ -824,56 +869,28 @@ class Isolated extends Component<typeof Workspace> {
                   <div class='inventory'>
                     {{#if this.contentCardChips.length}}
                       <div class='inventory-group'>
-                        <span class='inventory-label'>Cards</span>
+                        <span class='inventory-label kicker'>Cards</span>
                         <div class='inventory-chips'>
                           {{#each this.contentCardChips as |option|}}
-                            <Button
-                              @kind='default'
-                              @size='auto'
-                              @pill={{true}}
-                              class='type-chip'
-                              {{on 'click' (this.jumpToFilter option)}}
-                              data-test-type-chip={{option.id}}
-                            >
-                              {{#if (this.iconHtml option)}}
-                                <span class='type-chip-icon'>{{this.iconHtml
-                                    option
-                                  }}</span>
-                              {{/if}}
-                              {{option.displayName}}
-                              <span
-                                class='type-chip-count'
-                                data-test-type-chip-count
-                              >{{this.countFor option}}</span>
-                            </Button>
+                            <TypeChip
+                              @option={{option}}
+                              @count={{this.countFor option}}
+                              @onSelect={{this.jumpToFilter option}}
+                            />
                           {{/each}}
                         </div>
                       </div>
                     {{/if}}
                     {{#if this.fileChips.length}}
                       <div class='inventory-group'>
-                        <span class='inventory-label'>Files</span>
+                        <span class='inventory-label kicker'>Files</span>
                         <div class='inventory-chips'>
                           {{#each this.fileChips as |option|}}
-                            <Button
-                              @kind='default'
-                              @size='auto'
-                              @pill={{true}}
-                              class='type-chip'
-                              {{on 'click' (this.jumpToFilter option)}}
-                              data-test-type-chip={{option.id}}
-                            >
-                              {{#if (this.iconHtml option)}}
-                                <span class='type-chip-icon'>{{this.iconHtml
-                                    option
-                                  }}</span>
-                              {{/if}}
-                              {{option.displayName}}
-                              <span
-                                class='type-chip-count'
-                                data-test-type-chip-count
-                              >{{this.countFor option}}</span>
-                            </Button>
+                            <TypeChip
+                              @option={{option}}
+                              @count={{this.countFor option}}
+                              @onSelect={{this.jumpToFilter option}}
+                            />
                           {{/each}}
                         </div>
                       </div>
@@ -892,7 +909,7 @@ class Isolated extends Component<typeof Workspace> {
                 class='recent-preview'
                 {{on 'click' (this.setSegment 'activity')}}
               >
-                <span class='recent-text'>{{this.latest.title}}{{#if
+                <span class='recent-text data'>{{this.latest.title}}{{#if
                     this.latest.when
                   }}
                     ·
@@ -903,7 +920,7 @@ class Isolated extends Component<typeof Workspace> {
           {{/unless}}
 
           {{! Space details: quiet realm facts, data register }}
-          <div class='space-details'>
+          <div class='space-details data'>
             <span
               class='space-live'
               role='img'
@@ -947,7 +964,7 @@ class Isolated extends Component<typeof Workspace> {
         <div class='library' data-test-library>
           <nav class='rail scroll-container' aria-label='Library filters'>
             <div class='rail-group' data-test-rail-group>
-              <h3 class='rail-label'>Library</h3>
+              <h3 class='rail-label kicker'>Library</h3>
               <FilterList
                 @filters={{this.libraryFilters}}
                 @activeFilter={{this.activeFilter}}
@@ -957,7 +974,7 @@ class Isolated extends Component<typeof Workspace> {
             </div>
             {{#if this.cardTypeFilters.length}}
               <div class='rail-group' data-test-rail-group>
-                <h3 class='rail-label'>Card types</h3>
+                <h3 class='rail-label kicker'>Card types</h3>
                 <FilterList
                   @filters={{this.cardTypeFilters}}
                   @activeFilter={{this.activeFilter}}
@@ -988,7 +1005,7 @@ class Isolated extends Component<typeof Workspace> {
             {{/if}}
             {{#if this.fileTypeFilters.length}}
               <div class='rail-group' data-test-rail-group>
-                <h3 class='rail-label'>File types</h3>
+                <h3 class='rail-label kicker'>File types</h3>
                 <FilterList
                   @filters={{this.fileTypeFilters}}
                   @activeFilter={{this.activeFilter}}
@@ -1067,7 +1084,7 @@ class Isolated extends Component<typeof Workspace> {
                     {{#if SurveyComp}}
                       <div class='dock-duo'>
                         <div class='dock-pane build'>
-                          <span class='dock-pane-label'>Building</span>
+                          <span class='dock-pane-label kicker'>Building</span>
                           <div class='job-cell'>
                             <job.component
                               @format='embedded'
@@ -1088,8 +1105,8 @@ class Isolated extends Component<typeof Workspace> {
                             click-through overlay; popping to the stack is
                             this explicit header affordance instead }}
                           <div class='dock-pane-head'>
-                            <span class='dock-pane-label'>While you wait ·
-                              Optional</span>
+                            <span class='dock-pane-label kicker'>While you wait
+                              · Optional</span>
                             <Button
                               @kind='text-only'
                               @size='auto'
@@ -1137,13 +1154,15 @@ class Isolated extends Component<typeof Workspace> {
                 {{#each this.visibleFeed as |item|}}
                   {{#if item.showDay}}
                     <div class='feed-day'>
-                      <span class='feed-day-label'>{{item.dayLabel}}</span>
+                      <span
+                        class='feed-day-label kicker'
+                      >{{item.dayLabel}}</span>
                       <span class='feed-day-rule' />
                     </div>
                   {{/if}}
                   <div class='feed-row' data-test-feed-row>
                     <time
-                      class='feed-when'
+                      class='feed-when data'
                       datetime={{item.absoluteIso}}
                       data-test-feed-when
                     >
@@ -1168,12 +1187,12 @@ class Isolated extends Component<typeof Workspace> {
                         reads as a log line without the embedded card. }}
                       <div class='feed-meta'>
                         <span
-                          class='feed-verb
+                          class='feed-verb kicker
                             {{if (eq item.verb "Created") "created"}}
                             {{if (eq item.verb "Remixed") "remixed"}}'
                           data-test-feed-verb={{item.verb}}
                         >{{item.verb}}</span>
-                        <span class='feed-type'>
+                        <span class='feed-type kicker'>
                           <item.typeIcon
                             width='12'
                             height='12'
@@ -1216,13 +1235,13 @@ class Isolated extends Component<typeof Workspace> {
                 {{#if this.moreFeed}}
                   {{! reveal-on-scroll: the sentinel appends the next chunk }}
                   <div class='feed-more' {{this.watchFeedEnd}}>
-                    <span class='feed-more-note'>Showing
+                    <span class='feed-more-note data'>Showing
                       {{this.visibleFeed.length}}
                       of
                       {{this.feedItems.length}}</span>
                   </div>
                 {{else if this.feedAtCap}}
-                  <p class='feed-end-note'>Showing the last
+                  <p class='feed-end-note data'>Showing the last
                     {{this.activityFeedCap}}
                     changes.</p>
                 {{/if}}
@@ -1242,11 +1261,6 @@ class Isolated extends Component<typeof Workspace> {
           var(--attention) 60%,
           var(--card)
         );
-        --grid-attention-glow: color-mix(
-          in oklch,
-          var(--attention) 7%,
-          transparent
-        );
         --grid-attention-surface: color-mix(
           in oklch,
           var(--attention) 6%,
@@ -1262,7 +1276,7 @@ class Isolated extends Component<typeof Workspace> {
           var(--attention) 30%,
           var(--card)
         );
-        --grid-chip-border: color-mix(in oklch, var(--border) 70%, transparent);
+        --grid-chip-border: color-mix(in oklch, var(--border) 50%, transparent);
         /* looser leading for the welcome prose; no line-height token runs past 1.4 */
         --grid-prose-leading: 1.6;
         /* fixed geometry the layout is built around */
@@ -1303,6 +1317,23 @@ class Isolated extends Component<typeof Workspace> {
       .card-grid .dock-pane-open {
         line-height: inherit;
         letter-spacing: inherit;
+      }
+
+      /* two text registers shared across the chrome: kickers (tracked mono
+         caps) and data (tabular mono) */
+      .kicker {
+        font-family: var(--font-mono);
+        font-size: var(--boxel-eyebrow-font-size);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
+        text-transform: uppercase;
+      }
+      .data {
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-2xs);
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
       }
 
       /* ── Frame ─────────────────────────────────────────────── */
@@ -1362,12 +1393,6 @@ class Isolated extends Component<typeof Workspace> {
         padding: var(--boxel-sp-5xs) var(--boxel-sp-2xs);
         border: 1px solid var(--border);
         border-radius: var(--boxel-border-radius-sm);
-        font-family: var(--font-mono);
-        font-size: var(--boxel-eyebrow-font-size);
-        font-weight: var(--boxel-eyebrow-font-weight);
-        line-height: var(--boxel-eyebrow-line-height);
-        letter-spacing: var(--boxel-eyebrow-letter-spacing);
-        text-transform: uppercase;
         color: var(--muted-foreground);
         white-space: nowrap;
         cursor: default;
@@ -1403,10 +1428,7 @@ class Isolated extends Component<typeof Workspace> {
       }
       .search-box .search-kbd {
         right: var(--boxel-sp-xs);
-        font-family: var(--font-mono);
-        font-size: var(--boxel-eyebrow-font-size);
         font-weight: 500;
-        line-height: var(--boxel-eyebrow-line-height);
         color: var(--subtle-foreground);
       }
       .search-box .search-input {
@@ -1473,12 +1495,6 @@ class Isolated extends Component<typeof Workspace> {
       }
       .search-result-type {
         flex-shrink: 0;
-        font-family: var(--font-mono);
-        font-size: var(--boxel-eyebrow-font-size);
-        font-weight: var(--boxel-eyebrow-font-weight);
-        line-height: var(--boxel-eyebrow-line-height);
-        letter-spacing: var(--boxel-eyebrow-letter-spacing);
-        text-transform: uppercase;
         color: var(--muted-foreground);
       }
       /* a flat footer row: a corner here would round the rule above it */
@@ -1500,12 +1516,7 @@ class Isolated extends Component<typeof Workspace> {
         background-color: var(--hover);
       }
       .search-scope-note {
-        font-family: var(--font-mono);
-        font-size: var(--boxel-eyebrow-font-size);
         font-weight: 500;
-        line-height: var(--boxel-eyebrow-line-height);
-        letter-spacing: var(--boxel-eyebrow-letter-spacing);
-        text-transform: uppercase;
         color: var(--muted-foreground);
       }
       @keyframes softpulse {
@@ -1553,12 +1564,6 @@ class Isolated extends Component<typeof Workspace> {
       }
       .rail-label {
         padding: var(--boxel-sp-4xs) var(--boxel-sp-xs) var(--boxel-sp-3xs);
-        font-family: var(--font-mono);
-        font-size: var(--boxel-eyebrow-font-size);
-        font-weight: var(--boxel-eyebrow-font-weight);
-        line-height: var(--boxel-eyebrow-line-height);
-        letter-spacing: var(--boxel-eyebrow-letter-spacing);
-        text-transform: uppercase;
         color: var(--muted-foreground);
       }
       /* FilterList paints its own rows; the selected and hover surfaces follow
@@ -1614,23 +1619,6 @@ class Isolated extends Component<typeof Workspace> {
         /* no overflow: hidden here — an overflow-hidden grid item's
            content contributes zero to its auto row, collapsing the panel
            to padding height. Nothing here needs clipping anyway. */
-      }
-      .dock::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 2px;
-        background: linear-gradient(
-          90deg,
-          transparent,
-          var(--grid-attention-soft),
-          var(--attention),
-          transparent
-        );
-        background-size: 200% 100%;
-        animation: scan 2.4s linear infinite;
       }
       .dock-head {
         display: flex;
@@ -1707,14 +1695,6 @@ class Isolated extends Component<typeof Workspace> {
         background-color: var(--attention);
         transition: width 0.4s ease;
       }
-      @keyframes scan {
-        from {
-          background-position: 200% 0;
-        }
-        to {
-          background-position: -200% 0;
-        }
-      }
 
       /* Two-register typography: guidance speaks bold sans sentences (the
          Boxel voice), data speaks mono fragments. */
@@ -1750,30 +1730,6 @@ class Isolated extends Component<typeof Workspace> {
       .card-grid .setup-bar:hover {
         border-color: var(--grid-attention-rule);
         box-shadow: var(--shadow-sm);
-      }
-      /* canvas `sweep`: a soft light pass keeps the bar alive */
-      .setup-bar::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(
-          90deg,
-          transparent,
-          var(--grid-attention-glow),
-          transparent
-        );
-        transform: translateX(-100%);
-        animation: sweep 2.2s ease-in-out infinite;
-        pointer-events: none;
-      }
-      @keyframes sweep {
-        0% {
-          transform: translateX(-100%);
-        }
-        60%,
-        100% {
-          transform: translateX(320%);
-        }
       }
       /* the HB strip anatomy. NO overflow:hidden here — an
          overflow-hidden grid item collapses to padding height (see
@@ -1823,13 +1779,9 @@ class Isolated extends Component<typeof Workspace> {
         font-weight: 600;
       }
       .setup-data {
-        font-family: var(--font-mono);
-        font-size: var(--boxel-font-size-2xs);
-        font-weight: 500;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        font-variant-numeric: tabular-nums;
       }
       .setup-track {
         flex: 1;
@@ -1851,10 +1803,7 @@ class Isolated extends Component<typeof Workspace> {
       }
       .setup-pct {
         flex-shrink: 0;
-        font-family: var(--font-mono);
-        font-size: var(--boxel-font-size-2xs);
         font-weight: 600;
-        font-variant-numeric: tabular-nums;
       }
       .setup-action {
         flex-shrink: 0;
@@ -1949,12 +1898,6 @@ class Isolated extends Component<typeof Workspace> {
         font-weight: 600;
       }
       .door-kind {
-        font-family: var(--font-mono);
-        font-size: var(--boxel-eyebrow-font-size);
-        font-weight: var(--boxel-eyebrow-font-weight);
-        line-height: var(--boxel-eyebrow-line-height);
-        letter-spacing: var(--boxel-eyebrow-letter-spacing);
-        text-transform: uppercase;
         color: var(--muted-foreground);
         overflow: hidden;
         white-space: nowrap;
@@ -1990,9 +1933,7 @@ class Isolated extends Component<typeof Workspace> {
       .door-title {
         flex: 1 1 auto; /* The label owns only the space left by Open */
         min-width: 0;
-        font-family: var(--font-mono);
         font-size: var(--boxel-font-size-xs);
-        font-weight: 500;
         color: var(--muted-foreground);
         overflow: hidden;
         white-space: nowrap;
@@ -2017,51 +1958,12 @@ class Isolated extends Component<typeof Workspace> {
       }
       .inventory-label {
         padding-top: var(--boxel-sp-2xs);
-        font-family: var(--font-mono);
-        font-size: var(--boxel-eyebrow-font-size);
-        font-weight: var(--boxel-eyebrow-font-weight);
-        line-height: var(--boxel-eyebrow-line-height);
-        letter-spacing: var(--boxel-eyebrow-letter-spacing);
-        text-transform: uppercase;
         color: var(--muted-foreground);
       }
       .inventory-chips {
         display: flex;
         flex-wrap: wrap;
         gap: var(--boxel-sp-2xs);
-      }
-      .card-grid .type-chip {
-        --boxel-button-default-border: var(--grid-chip-border);
-        --boxel-button-default-background: var(--card);
-        --boxel-button-default-foreground: var(--card-foreground);
-        gap: var(--boxel-sp-2xs);
-        padding: var(--boxel-sp-3xs) var(--boxel-sp-sm) var(--boxel-sp-3xs)
-          var(--boxel-sp-xs);
-        font-size: var(--boxel-font-size-xs);
-        font-weight: 500;
-      }
-      .card-grid .type-chip:hover {
-        border-color: var(--border-strong);
-        box-shadow: var(--shadow-sm);
-      }
-      .type-chip-icon {
-        display: grid;
-        place-items: center;
-        width: 0.875rem;
-        height: 0.875rem;
-        flex-shrink: 0;
-        color: var(--foreground);
-      }
-      .type-chip-icon :deep(svg) {
-        width: 0.875rem;
-        height: 0.875rem;
-        display: block;
-      }
-      .type-chip-count {
-        font-family: var(--font-mono);
-        font-size: var(--boxel-font-size-2xs);
-        font-weight: 500;
-        color: var(--foreground);
       }
       /* ── Recent preview (passive, one row → Activity) ──────── */
       .card-grid .recent-preview {
@@ -2082,9 +1984,6 @@ class Isolated extends Component<typeof Workspace> {
       .recent-text {
         flex: 1;
         min-width: 0;
-        font-family: var(--font-mono);
-        font-size: var(--boxel-font-size-2xs);
-        font-weight: 500;
         color: var(--muted-foreground);
         overflow: hidden;
         white-space: nowrap;
@@ -2099,6 +1998,7 @@ class Isolated extends Component<typeof Workspace> {
 
       /* ── Activity log: when | what | why ───────────────────── */
       .feed {
+        container-type: inline-size;
         display: grid;
         gap: var(--boxel-sp-xs);
       }
@@ -2112,12 +2012,6 @@ class Isolated extends Component<typeof Workspace> {
         margin-top: 0;
       }
       .feed-day-label {
-        font-family: var(--font-mono);
-        font-size: var(--boxel-eyebrow-font-size);
-        font-weight: var(--boxel-eyebrow-font-weight);
-        line-height: var(--boxel-eyebrow-line-height);
-        letter-spacing: var(--boxel-eyebrow-letter-spacing);
-        text-transform: uppercase;
         color: var(--muted-foreground);
         white-space: nowrap;
       }
@@ -2134,13 +2028,10 @@ class Isolated extends Component<typeof Workspace> {
       }
       .feed-when {
         padding-top: var(--boxel-sp-sm);
-        font-family: var(--font-mono);
         font-size: var(--boxel-font-size-xs);
-        font-weight: 500;
         color: var(--muted-foreground);
         text-align: right;
         white-space: nowrap;
-        font-variant-numeric: tabular-nums;
       }
       .feed-card {
         min-width: 0;
@@ -2157,6 +2048,15 @@ class Isolated extends Component<typeof Workspace> {
         display: grid;
         gap: var(--boxel-sp-5xs);
       }
+      @container (width < 40rem) {
+        .feed-row {
+          grid-template-columns: 4.5rem minmax(0, 1fr);
+        }
+        .feed-note {
+          grid-column: 2;
+          padding-top: 0;
+        }
+      }
       .feed-meta {
         display: flex;
         align-items: center;
@@ -2165,12 +2065,6 @@ class Isolated extends Component<typeof Workspace> {
       }
       .feed-verb {
         flex-shrink: 0;
-        font-family: var(--font-mono);
-        font-size: var(--boxel-eyebrow-font-size);
-        font-weight: var(--boxel-eyebrow-font-weight);
-        line-height: var(--boxel-eyebrow-line-height);
-        letter-spacing: var(--boxel-eyebrow-letter-spacing);
-        text-transform: uppercase;
         color: var(--muted-foreground);
       }
       .feed-verb.created {
@@ -2186,12 +2080,7 @@ class Isolated extends Component<typeof Workspace> {
         min-width: 0;
         overflow: hidden;
         white-space: nowrap;
-        font-family: var(--font-mono);
-        font-size: var(--boxel-eyebrow-font-size);
         font-weight: 500;
-        line-height: var(--boxel-eyebrow-line-height);
-        letter-spacing: var(--boxel-eyebrow-letter-spacing);
-        text-transform: uppercase;
         color: var(--muted-foreground);
       }
       .feed-type-icon {
@@ -2221,11 +2110,7 @@ class Isolated extends Component<typeof Workspace> {
       }
       .feed-more-note,
       .feed-end-note {
-        font-family: var(--font-mono);
-        font-size: var(--boxel-font-size-2xs);
-        font-weight: 500;
         color: var(--muted-foreground);
-        font-variant-numeric: tabular-nums;
       }
       .feed-end-note {
         text-align: center;
@@ -2258,14 +2143,6 @@ class Isolated extends Component<typeof Workspace> {
       }
       .dock-pane.invite {
         flex: 1 1 16.25rem;
-      }
-      .dock-pane-label {
-        font-family: var(--font-mono);
-        font-size: var(--boxel-eyebrow-font-size);
-        font-weight: var(--boxel-eyebrow-font-weight);
-        line-height: var(--boxel-eyebrow-line-height);
-        letter-spacing: var(--boxel-eyebrow-letter-spacing);
-        text-transform: uppercase;
       }
       .dock-pane-head {
         display: flex;
@@ -2373,11 +2250,7 @@ class Isolated extends Component<typeof Workspace> {
         align-items: center;
         gap: var(--boxel-sp-2xs);
         padding-top: var(--boxel-sp-3xs);
-        font-family: var(--font-mono);
-        font-size: var(--boxel-font-size-2xs);
-        font-weight: 500;
         color: var(--muted-foreground);
-        font-variant-numeric: tabular-nums;
       }
       .space-live {
         width: 0.375rem;
@@ -2426,13 +2299,8 @@ class Isolated extends Component<typeof Workspace> {
       @media (prefers-reduced-motion: reduce) {
         .attention-dot,
         .setup-ring,
-        .dock-dot,
-        .setup-bar::before {
+        .dock-dot {
           animation: none;
-        }
-        .dock::after {
-          animation: none;
-          background-position: 50% 0;
         }
         .card-grid .dock-mini,
         .dock-mini-fill {
@@ -3954,20 +3822,26 @@ export class Workspace extends CardDef {
               </div>
               <div class='setting-control'>
                 <div class='choice'>
-                  <Button
-                    @kind='text-only'
-                    @size='auto'
-                    class='choice-opt
-                      {{if (eq this.activePinnedSize "regular") "selected"}}'
-                    {{on 'click' (this.setPinnedSize 'regular')}}
-                  >Regular</Button>
-                  <Button
-                    @kind='text-only'
-                    @size='auto'
-                    class='choice-opt
-                      {{if (eq this.activePinnedSize "compact") "selected"}}'
-                    {{on 'click' (this.setPinnedSize 'compact')}}
-                  >Compact</Button>
+                  {{#let (eq this.activePinnedSize 'regular') as |isSelected|}}
+                    <Button
+                      @kind={{if isSelected 'default' 'muted'}}
+                      @size='extra-small'
+                      @rectangular={{true}}
+                      class='choice-opt'
+                      aria-pressed={{if isSelected 'true' 'false'}}
+                      {{on 'click' (this.setPinnedSize 'regular')}}
+                    >Regular</Button>
+                  {{/let}}
+                  {{#let (eq this.activePinnedSize 'compact') as |isSelected|}}
+                    <Button
+                      @kind={{if isSelected 'default' 'muted'}}
+                      @size='extra-small'
+                      @rectangular={{true}}
+                      class='choice-opt'
+                      aria-pressed={{if isSelected 'true' 'false'}}
+                      {{on 'click' (this.setPinnedSize 'compact')}}
+                    >Compact</Button>
+                  {{/let}}
                 </div>
               </div>
             </div>
@@ -4015,7 +3889,9 @@ export class Workspace extends CardDef {
                 <div class='order-list'>
                   {{#each this.moduleList as |mod index|}}
                     <div class='order-row'>
-                      <span class='order-pos'>{{this.orderPos index}}</span>
+                      <span class='order-pos data'>{{this.orderPos
+                          index
+                        }}</span>
                       <span class='order-name'>{{this.moduleLabel mod}}</span>
                       <IconButton
                         @icon={{ArrowUpIcon}}
@@ -4078,20 +3954,26 @@ export class Workspace extends CardDef {
               </div>
               <div class='setting-control'>
                 <div class='choice'>
-                  <Button
-                    @kind='text-only'
-                    @size='auto'
-                    class='choice-opt
-                      {{if (eq this.activeView "grid") "selected"}}'
-                    {{on 'click' (this.setView 'grid')}}
-                  >Grid</Button>
-                  <Button
-                    @kind='text-only'
-                    @size='auto'
-                    class='choice-opt
-                      {{if (eq this.activeView "strip") "selected"}}'
-                    {{on 'click' (this.setView 'strip')}}
-                  >Strip</Button>
+                  {{#let (eq this.activeView 'grid') as |isSelected|}}
+                    <Button
+                      @kind={{if isSelected 'default' 'muted'}}
+                      @size='extra-small'
+                      @rectangular={{true}}
+                      class='choice-opt'
+                      aria-pressed={{if isSelected 'true' 'false'}}
+                      {{on 'click' (this.setView 'grid')}}
+                    >Grid</Button>
+                  {{/let}}
+                  {{#let (eq this.activeView 'strip') as |isSelected|}}
+                    <Button
+                      @kind={{if isSelected 'default' 'muted'}}
+                      @size='extra-small'
+                      @rectangular={{true}}
+                      class='choice-opt'
+                      aria-pressed={{if isSelected 'true' 'false'}}
+                      {{on 'click' (this.setView 'strip')}}
+                    >Strip</Button>
+                  {{/let}}
                 </div>
               </div>
             </div>
@@ -4233,7 +4115,7 @@ export class Workspace extends CardDef {
                     <p class='setting-help'>Live on the web at this address.</p>
                   </div>
                   <div class='setting-control site'>
-                    <span class='site-host'>{{site.host}}</span>
+                    <span class='site-host data'>{{site.host}}</span>
                     {{#if site.when}}
                       <span class='site-when'>{{site.when}}</span>
                     {{/if}}
@@ -4304,11 +4186,16 @@ export class Workspace extends CardDef {
           gap: var(--boxel-sp-xl);
           padding: var(--boxel-sp-xl) var(--boxel-sp-lg) var(--boxel-sp-2xl);
         }
-        .settings .choice-opt,
         .settings .order-move,
         .settings .publish-btn {
           line-height: inherit;
           letter-spacing: inherit;
+        }
+        .data {
+          font-family: var(--font-mono);
+          font-size: var(--boxel-font-size-2xs);
+          font-weight: 500;
+          font-variant-numeric: tabular-nums;
         }
         .settings-head {
           display: grid;
@@ -4386,9 +4273,7 @@ export class Workspace extends CardDef {
           gap: var(--boxel-sp-xs);
         }
         .site-host {
-          font-family: var(--font-mono);
           font-size: var(--boxel-font-size-xs);
-          font-weight: 500;
           color: var(--foreground);
         }
         .site-when {
@@ -4398,23 +4283,15 @@ export class Workspace extends CardDef {
         }
         .choice {
           display: inline-flex;
-          padding: var(--boxel-sp-6xs);
-          gap: var(--boxel-sp-6xs);
+          padding: var(--boxel-sp-4xs);
+          gap: var(--boxel-sp-4xs);
           border: 1px solid var(--border);
+          /* outer radius = the options' radius + the padding */
           border-radius: var(--boxel-border-radius);
           background-color: var(--muted);
         }
-        .settings .choice-opt {
-          border-radius: var(--boxel-border-radius-sm);
-          padding: var(--boxel-sp-3xs) var(--boxel-sp-sm);
-          font-size: var(--boxel-font-size-xs);
-          font-weight: 500;
-          color: var(--muted-foreground);
-        }
-        .settings .choice-opt.selected {
-          background-color: var(--card);
-          color: var(--card-foreground);
-          box-shadow: var(--shadow-xs);
+        .choice-opt {
+          --boxel-button-border: none;
         }
         .order-list {
           display: grid;
@@ -4432,7 +4309,6 @@ export class Workspace extends CardDef {
           color: var(--card-foreground);
         }
         .order-pos {
-          font-family: var(--font-mono);
           font-size: var(--boxel-font-size-xs);
           font-weight: 600;
           color: var(--muted-foreground);
