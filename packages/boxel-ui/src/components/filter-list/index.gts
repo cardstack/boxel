@@ -15,6 +15,9 @@ export type Filter = {
   displayName: string;
   filters?: Filter[];
   icon?: Icon | string;
+  // Stable identity for the row. Required when two filters can share a
+  // display name; the row keeps its DOM node across a rebuild of the array.
+  id?: string;
   isExpanded?: boolean;
 };
 
@@ -35,13 +38,22 @@ interface Signature<F extends Filter = Filter> {
 export default class FilterList<F extends Filter = Filter> extends Component<
   Signature<F>
 > {
+  // Rows are keyed by a stable string, not by object identity: a caller that
+  // rebuilds its filter objects on every refresh would otherwise replace each
+  // row's DOM node under the user, dropping keyboard focus. The id wins; the
+  // display name is the fallback for callers whose names are unique.
+  private get keyedFilters() {
+    return (this.args.filters ?? []).map((filter) => ({
+      key: filter.id ?? filter.displayName,
+      filter,
+    }));
+  }
+
   <template>
     <ul class='filter-list' role='tree' ...attributes>
-      {{! keyed by identity: two filters may share a display name (two card
-          types called "Note") and only the caller's objects are unique }}
-      {{#each @filters key='@identity' as |filter|}}
+      {{#each this.keyedFilters key='key' as |entry|}}
         <ListItem
-          @filter={{filter}}
+          @filter={{entry.filter}}
           @onChanged={{@onChanged}}
           @activeFilter={{@activeFilter}}
         >
