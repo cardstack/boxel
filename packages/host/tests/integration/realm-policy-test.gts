@@ -1,11 +1,13 @@
-import type { RenderingTestContext } from '@ember/test-helpers';
+import { click, fillIn, type RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
+  PermissionsContextName,
   rri,
   type LooseSingleCardDocument,
+  type Permissions,
   type Realm,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
@@ -14,6 +16,7 @@ import type StoreService from '@cardstack/host/services/store';
 
 import {
   testRealmURL,
+  provideConsumeContext,
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
@@ -248,6 +251,13 @@ module('Integration | realm policy', function (hooks) {
     assert
       .dom('[data-test-policy-predicate-source]')
       .exists({ count: 3 }, 'each predicate is shown');
+    assert.deepEqual(
+      [...document.querySelectorAll('[data-test-policy-predicate-source]')].map(
+        (el) => el.textContent,
+      ),
+      [teacherPredicate, rosterPredicate, providerPredicate],
+      'each predicate is shown exactly as written, with no added whitespace',
+    );
     assert
       .dom('[data-test-policy-predicate-snapshot]')
       .exists({ count: 1 }, 'only the annotated predicate is marked snapshot');
@@ -274,5 +284,91 @@ module('Integration | realm policy', function (hooks) {
 
     assert.dom('[data-test-realm-policy-no-rules]').exists();
     assert.dom('[data-test-policy-rule]').doesNotExist();
+  });
+
+  test('an empty predicate and an unannotated object are kept as present predicates', async function (assert) {
+    let realm = await setupPolicyRealm({
+      'policies/edge.json': policyDocument([
+        {
+          targetType: { module: '../classroom', name: 'Classroom' },
+          grants: [
+            { operation: 'read', where: '' },
+            {
+              operation: 'update',
+              where: { bxl: providerPredicate, snapshot: false },
+            },
+            { operation: 'delete', where: { bxl: providerPredicate } },
+          ],
+        },
+      ]),
+    });
+
+    let doc = await realm.realmIndexQueryEngine.cardDocument(
+      new URL(`${testRealmURL}policies/edge`),
+    );
+    let rules = (doc?.type === 'doc' ? doc.doc.data.attributes?.rules : []) as {
+      grants: { where: unknown }[];
+    }[];
+    assert.deepEqual(
+      rules[0]?.grants.map((grant) => grant.where),
+      ['', providerPredicate, providerPredicate],
+      'an empty source stays an empty string, and an object without snapshot: true is stored as the bare string',
+    );
+
+    let policy = await loadPolicy('policies/edge');
+    assert.deepEqual(
+      policy.rules[0].grants.map((grant) => grant.where),
+      [
+        { source: '', snapshot: false },
+        { source: providerPredicate, snapshot: false },
+        { source: providerPredicate, snapshot: false },
+      ],
+      'none of them reads as an unconditional grant',
+    );
+  });
+
+  test('emptying a predicate while editing keeps it, and removing it is explicit', async function (assert) {
+    await setupPolicyRealm({
+      'policies/one.json': policyDocument([
+        {
+          targetType: { module: '../schedule', name: 'Schedule' },
+          grants: [
+            {
+              operation: 'read',
+              where: { bxl: rosterPredicate, snapshot: true },
+            },
+          ],
+        },
+      ]),
+    });
+    let policy = await loadPolicy('policies/one');
+    let grant = policy.rules[0].grants[0];
+    let permissions: Permissions = { canWrite: true, canRead: true };
+    provideConsumeContext(PermissionsContextName, permissions);
+    await renderCard(loader, grant, 'edit');
+
+    await fillIn('[data-test-policy-predicate-input]', '');
+    assert.deepEqual(
+      grant.where,
+      { source: '', snapshot: true },
+      'an emptied predicate is still a predicate, and keeps its snapshot flag',
+    );
+
+    await fillIn('[data-test-policy-predicate-input]', providerPredicate);
+    assert.deepEqual(
+      grant.where,
+      { source: providerPredicate, snapshot: true },
+      'retyping the source keeps the snapshot flag',
+    );
+
+    await click('[data-test-policy-predicate-remove]');
+    assert.strictEqual(
+      grant.where,
+      null,
+      'removing the condition makes the grant unconditional',
+    );
+    assert
+      .dom('[data-test-policy-predicate-remove]')
+      .doesNotExist('an unconditional grant has no condition to remove');
   });
 });
