@@ -20,8 +20,7 @@ import ShieldCheckIcon from '@cardstack/boxel-icons/shield-check';
 // grant for that operation whose `where` predicate, when present, is true.
 // Rule order carries no meaning.
 //
-// These definitions only describe a policy. Linking one to a realm, compiling
-// its predicates, and enforcing it are separate concerns that read this shape.
+// These definitions only describe a policy; nothing in them evaluates one.
 
 export class OperationGrant extends FieldDef {
   static displayName = 'Operation Grant';

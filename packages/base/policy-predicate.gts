@@ -13,8 +13,8 @@ import CodeIcon from '@cardstack/boxel-icons/code';
 // a predicate that deliberately reads a snapshot value. The `policy-predicate`
 // serializer owns both shapes.
 //
-// Nothing here parses, validates or evaluates the source — the policy's
-// lowering pass does that, and records what it finds on the policy card.
+// Nothing here parses, validates or evaluates the source; it is stored and
+// shown exactly as written.
 
 class View extends Component<typeof PolicyPredicateField> {
   <template>

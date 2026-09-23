@@ -14,7 +14,7 @@ import type {
 // to whichever shape its `snapshot` flag calls for.
 //
 // The source is never parsed, trimmed or otherwise canonicalized here; what
-// the author wrote is what the lowering pass reads.
+// the author wrote is what reads back.
 //
 // An unset predicate is `null` — an unconditional grant — so a value that is
 // present but malformed must not collapse to it. Anything other than the two
