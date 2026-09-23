@@ -3198,6 +3198,7 @@ module(`Integration | search resource`, function (hooks) {
     // synchronously inside `perform()`, so the stamp moves before any slot can
     // free for the superseded run. If that ever stops holding, the superseded
     // query reaches the network and this test says so.
+
     // Take every slot in one lane with work that cannot finish until the test
     // releases it.
     function fillTheLane(lane: SearchThrottleLane) {

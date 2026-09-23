@@ -43,7 +43,9 @@ const log = logger('search-bounds');
 //     waiting on. Within each lane a page's fan-out is bounded
 //     however it is spread across cards. Each store service holds its own
 //     pair, so neither is a single number across a tab. The host runs its own
-//     searches freely.
+//     searches freely. Unlike the server-side bounds, neither cap can be tuned
+//     by env: the host bundle has no `process.env`, so both hold their defaults
+//     wherever they are enforced.
 //   - Time budget (SEARCH_TIME_BUDGET_MS) — server-side only: a wall-clock
 //     cutoff of the server's own work can't live anywhere else.
 //   - In-flight ceiling (SERVER_MAX_IN_FLIGHT_SEARCHES, with
@@ -66,7 +68,8 @@ const log = logger('search-bounds');
 //     rather than in hops because distance does not track expense: a card
 //     carrying dozens of relationships is dozens of resources one hop out.
 //
-// All bounds are exported consts, overridable via env for ops tuning.
+// All bounds are exported consts, overridable via env for ops tuning where the
+// enforcing process has an env to read (see the concurrency caps above).
 // ---------------------------------------------------------------------------
 
 const DEFAULT_MAX_SEARCH_PAGE_SIZE = 100;
