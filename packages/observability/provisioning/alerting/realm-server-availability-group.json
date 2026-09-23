@@ -482,7 +482,7 @@
           "title": "Realm Server Search Saturation",
           "condition": "B",
           "annotations": {
-            "summary": "A realm-server process reached 15+ concurrent _search / _federated-search requests at least once in the last 5 minutes (baseline is single digits). Sourced from the periodic health line (inFlightSearch=N, which counts both routes — including the in-render _search round-trips prerender issues). Concurrent search load drives heap growth toward OOM — this is the early-warning signal; find which client/realm is issuing the searches."
+            "summary": "A realm-server process reached 15+ concurrent _search / _federated-search computations at least once in the last 5 minutes (baseline is single digits). Sourced from the periodic health line (inFlightSearch=N: admission slots, which counts both routes — including the in-render _search round-trips prerender issues — but not requests the live-search cache answers from another computation; searchRequests=N counts those too). Concurrent search load drives heap growth toward OOM — this is the early-warning signal; find which client/realm is issuing the searches."
           },
           "data": [
             {
