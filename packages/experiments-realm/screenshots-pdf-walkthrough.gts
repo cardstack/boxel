@@ -17,6 +17,7 @@ import Link from '@cardstack/boxel-icons/link';
 import Gauge from '@cardstack/boxel-icons/gauge';
 import Bolt from '@cardstack/boxel-icons/bolt';
 import Route from '@cardstack/boxel-icons/route';
+import Terminal from '@cardstack/boxel-icons/terminal';
 
 // A presentation-grade walkthrough of the Screenshots & PDF feature — narrative
 // sections that explain each surface, plus a live demo pane that renders a real
@@ -24,7 +25,7 @@ import Route from '@cardstack/boxel-icons/route';
 // sprint-planning walkthrough: link a card, open this in interact mode, and the
 // captures below are the actual served artifacts, not mockups.
 //
-// The three code samples below are plain strings rendered into <pre> blocks, so
+// The four code samples below are plain strings rendered into <pre> blocks, so
 // their `{{…}}` and tags are never parsed as part of this component's template.
 
 const DECLARATIVE_SNIPPET = `// Declarative — captured for free at index time, feeds the thumbnail chain
@@ -55,6 +56,17 @@ const DSL_SNIPPET = `# URL DSL — paste straight into an <img> / <object>, no J
 {realm}_screenshot/{path}?name=hero            # a declared slot (no render work)
 {realm}_screenshot/{path}?type=pdf             # PDF
 {realm}_screenshot/{path}?type=pdf&media=print # PDF under the card's print CSS`;
+
+const CLI_SNIPPET = `# CLI — scriptable captures from a shell or a CI job
+boxel screenshot {card-url}                       # PNG, isolated -> ./<file>.png
+boxel screenshot {card-url} --viewport 1280x800 --dsf 2
+boxel screenshot {card-url} --format fitted --envelope 400x300
+boxel screenshot {card-url} --url-only            # print served URLs, skip bytes
+
+# batch — one request per card, writes screenshot-manifest.json into --out
+boxel screenshot --spec captures.json --out ./shots
+#   spec entries pass captureSpec through verbatim — that is how you
+#   ask for { "type": "pdf" }, which has no flag of its own`;
 
 interface Pillar {
   key: string;
@@ -182,7 +194,7 @@ class Isolated extends Component<typeof ScreenshotsPdfWalkthrough> {
           behind it rotate.
         </p>
         <ul class='badges'>
-          <li>3 entry points</li>
+          <li>4 entry points</li>
           <li>PNG · PDF</li>
           <li>Auto-invalidated</li>
           <li>Content-addressed</li>
@@ -203,7 +215,7 @@ class Isolated extends Component<typeof ScreenshotsPdfWalkthrough> {
 
       <section class='block'>
         <h2><Route width='18' height='18' />
-          Three ways to ask for a capture</h2>
+          Four ways to ask for a capture</h2>
         <div class='pillars entry'>
           <div class='entry-card'>
             <div class='entry-head'><Code width='16' height='16' /><h3
@@ -228,6 +240,15 @@ class Isolated extends Component<typeof ScreenshotsPdfWalkthrough> {
             <p>Compose a URL and drop it into markup. A public realm needs no
               auth; a private one uses the signed-capture affordances.</p>
             <pre class='code'>{{DSL_SNIPPET}}</pre>
+          </div>
+          <div class='entry-card'>
+            <div class='entry-head'><Terminal width='16' height='16' /><h3
+              >CLI</h3></div>
+            <p>Drive the same
+              <code>/_screenshot-card</code>
+              endpoint from a shell. Writes image files plus a per-capture
+              manifest, so a CI job can capture a set of cards and diff them.</p>
+            <pre class='code'>{{CLI_SNIPPET}}</pre>
           </div>
         </div>
       </section>
