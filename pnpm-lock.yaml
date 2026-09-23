@@ -2165,6 +2165,9 @@ importers:
       '@cardstack/local-types':
         specifier: workspace:*
         version: link:../local-types
+      '@cardstack/pretui':
+        specifier: workspace:*
+        version: link:../pretui
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common

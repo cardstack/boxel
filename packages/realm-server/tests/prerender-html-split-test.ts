@@ -538,6 +538,199 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  module('index pass fan-out', function (hooks) {
+    let adapter: PgAdapter;
+    let indexWriter: IndexWriter;
+
+    hooks.beforeEach(async function () {
+      prepareTestDB();
+      adapter = await createTestPgAdapter();
+      indexWriter = new IndexWriter(adapter);
+    });
+
+    hooks.afterEach(async function () {
+      await adapter.close();
+    });
+
+    const url = (name: string) => `${testRealm}${name}.json`;
+    const urls = (...names: string[]) => names.map(url).sort();
+
+    async function indexRow(name: string, deps: string[]) {
+      await adapter.execute(
+        `INSERT INTO boxel_index (url, file_alias, realm_url, type, generation, deps)
+         VALUES ($1, $1, $2, 'instance', 1, $3)`,
+        { bind: [url(name), testRealm, JSON.stringify(deps.map(url))] },
+      );
+    }
+
+    async function htmlRow(name: string, deps: string[]) {
+      await adapter.execute(
+        `INSERT INTO prerendered_html (url, file_alias, realm_url, type, generation, deps)
+         VALUES ($1, $1, $2, 'instance', 1, $3)`,
+        { bind: [url(name), testRealm, JSON.stringify(deps.map(url))] },
+      );
+    }
+
+    // `hub` is the edited card. Index edges (`boxel_index.deps`) record what
+    // a card's search document read; render edges (`prerendered_html.deps`)
+    // record what only its formatted HTML read.
+    async function seedGraph() {
+      await adapter.execute(
+        `INSERT INTO realm_generations (realm_url, current_generation, loader_epoch)
+         VALUES ($1, 1, 'epoch-a')`,
+        { bind: [testRealm] },
+      );
+      await indexRow('hub', []);
+      await htmlRow('hub', []);
+      // Links the hub in its data.
+      await indexRow('linker', ['hub']);
+      await htmlRow('linker', ['hub']);
+      // Links the linker in its data.
+      await indexRow('linker-of-linker', ['linker']);
+      await htmlRow('linker-of-linker', ['linker']);
+      // Shows the hub in its HTML only.
+      await indexRow('renderer', []);
+      await htmlRow('renderer', ['hub']);
+      // Shows the renderer in its HTML only.
+      await indexRow('renderer-of-renderer', []);
+      await htmlRow('renderer-of-renderer', ['renderer']);
+      // Links the renderer in its data, but the renderer's own data never
+      // read the hub, so nothing this card's search document holds moved.
+      await indexRow('linker-of-renderer', ['renderer']);
+      await htmlRow('linker-of-renderer', ['renderer']);
+      await indexRow('unrelated', []);
+      await htmlRow('unrelated', []);
+    }
+
+    async function workingURLs() {
+      let rows = (await adapter.execute(
+        `SELECT url FROM boxel_index_working WHERE realm_url = $1`,
+        { bind: [testRealm] },
+      )) as { url: string }[];
+      return rows.map((row) => row.url).sort();
+    }
+
+    test('a split pass visits index-edge dependents and leaves render-only dependents to the HTML job', async function (assert) {
+      await seedGraph();
+      let batch = await indexWriter.createBatch(
+        new URL(testRealm),
+        new VirtualNetwork(),
+        undefined,
+        { splitPrerenderHtml: true },
+      );
+      await batch.invalidate([new URL(url('hub'))]);
+
+      assert.deepEqual(
+        batch.invalidations.sort(),
+        urls('hub', 'linker', 'linker-of-linker'),
+        'the index pass visits the edited card and what reaches it through index edges',
+      );
+      assert.deepEqual(
+        batch.renderOnlyInvalidations.sort(),
+        urls('linker-of-renderer', 'renderer', 'renderer-of-renderer'),
+        'what reaches the edited card only through a render edge is left to the HTML job',
+      );
+      assert.deepEqual(
+        await workingURLs(),
+        urls('hub', 'linker', 'linker-of-linker'),
+        'the pass tombstones only the rows it will visit',
+      );
+
+      await batch.done();
+      let rows = (await adapter.execute(
+        `SELECT url, generation, indexed_at, is_deleted FROM boxel_index
+          WHERE realm_url = $1 AND url = ANY($2)`,
+        {
+          bind: [
+            testRealm,
+            urls('renderer', 'renderer-of-renderer', 'unrelated'),
+          ],
+        },
+      )) as {
+        url: string;
+        generation: number;
+        indexed_at: string | number | null;
+        is_deleted: boolean | null;
+      }[];
+      let byURL = new Map(rows.map((row) => [row.url, row]));
+      for (let name of ['renderer', 'renderer-of-renderer']) {
+        let row = byURL.get(url(name));
+        assert.strictEqual(
+          row?.generation,
+          batch.currentGeneration,
+          `${name}'s index row carries the pass's generation, so the HTML reconcile sweep can still repair it`,
+        );
+        assert.notEqual(
+          row?.indexed_at,
+          null,
+          `${name}'s index row carries a fresh indexed_at, so card+json validators move`,
+        );
+        assert.notOk(row?.is_deleted, `${name}'s index row stays live`);
+      }
+      assert.strictEqual(
+        byURL.get(url('unrelated'))?.generation,
+        1,
+        'a card outside the fan-out is untouched',
+      );
+      assert.strictEqual(
+        byURL.get(url('unrelated'))?.indexed_at,
+        null,
+        'a card outside the fan-out keeps its indexed_at',
+      );
+    });
+
+    test('a dependent with both an index edge and a render edge is visited', async function (assert) {
+      await seedGraph();
+      await indexRow('both', ['hub']);
+      await htmlRow('both', ['hub', 'renderer']);
+      let batch = await indexWriter.createBatch(
+        new URL(testRealm),
+        new VirtualNetwork(),
+        undefined,
+        { splitPrerenderHtml: true },
+      );
+      await batch.invalidate([new URL(url('hub'))]);
+
+      assert.true(
+        batch.invalidations.includes(url('both')),
+        'the index edge puts the card in the visit set',
+      );
+      assert.false(
+        batch.renderOnlyInvalidations.includes(url('both')),
+        'a visited card is not also handed over as render-only',
+      );
+    });
+
+    test('a fused pass visits every dependent, since its visits render the HTML inline', async function (assert) {
+      await seedGraph();
+      let batch = await indexWriter.createBatch(
+        new URL(testRealm),
+        new VirtualNetwork(),
+        undefined,
+        { splitPrerenderHtml: false },
+      );
+      await batch.invalidate([new URL(url('hub'))]);
+
+      assert.deepEqual(
+        batch.invalidations.sort(),
+        urls(
+          'hub',
+          'linker',
+          'linker-of-linker',
+          'linker-of-renderer',
+          'renderer',
+          'renderer-of-renderer',
+        ),
+        'every card reachable through either edge kind is visited',
+      );
+      assert.deepEqual(
+        batch.renderOnlyInvalidations,
+        [],
+        'nothing is left to a separate HTML job',
+      );
+    });
+  });
+
   module('prerenderHtmlOnly batch', function (hooks) {
     let adapter: PgAdapter;
     let indexWriter: IndexWriter;

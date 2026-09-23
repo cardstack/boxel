@@ -365,9 +365,37 @@ interface ExistingIndexRowType {
   cardTypes: string[] | null;
 }
 
+// One consumer `itemsThatReference` found for a path. `renderEdge` is true
+// when the consumer references the path only from its `prerendered_html.deps`
+// — its HTML used the path, its index visit did not.
+interface ReferencingItem {
+  url: string;
+  alias: string | null;
+  type: BoxelIndexTable['type'];
+  renderEdge: boolean;
+}
+
+// The state of one transitive walk of the reference graph in `invalidate()`.
+interface FanOutWalk {
+  // Reference scans keyed by path, shared between walks so a path the index
+  // walk already scanned costs the full walk nothing.
+  references: Map<string, Promise<ReferencingItem[]>>;
+  followRenderEdges: boolean;
+  visited: Set<string>;
+}
+
 export class Batch {
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
+  // The fan-out's render-only dependents: URLs reachable from the changed
+  // files only through a `prerendered_html.deps` edge somewhere on the path.
+  // Their index rows cannot have moved — anything a card's index visit reads
+  // lands in its `boxel_index.deps` — so a split-mode pass leaves them out of
+  // `#invalidations` (and so out of the visit loop, the tombstones, and the
+  // swap) and hands them to its `prerender_html` job alongside the URLs it
+  // does visit. Always empty on the fused path, whose visits render HTML
+  // inline and therefore must visit every renderer.
+  #renderOnlyInvalidations = new Set<string>();
   // CSS content hashes this batch has already interned into the `scoped_css`
   // table, so a stylesheet shared by many rows in one pass is written once.
   #internedScopedCSSHashes = new Set<string>();
@@ -769,6 +797,12 @@ export class Batch {
 
   get invalidations() {
     return [...this.#invalidations];
+  }
+
+  // See `#renderOnlyInvalidations`: the URLs whose HTML this pass's fan-out
+  // reached but whose index rows it leaves alone.
+  get renderOnlyInvalidations() {
+    return [...this.#renderOnlyInvalidations];
   }
 
   /**
@@ -2542,6 +2576,49 @@ export class Batch {
         this.#publishedPrerenderedHtml = true;
       }
     }
+
+    await this.stampRenderOnlyEntries();
+  }
+
+  // Render-only dependents keep their index row — its search document
+  // cannot have moved — but two things keyed on that row must still see the
+  // change. The card+json validator and response cache key on `indexed_at`,
+  // and a card's `included` resources are assembled from its links at read
+  // time, so a renderer that links the changed card would otherwise keep
+  // serving the old linked resource under an unchanged ETag. And the
+  // prerender-html reconcile sweep finds HTML to repair by
+  // `prerendered_html.generation < boxel_index.generation`, so stamping this
+  // pass's generation keeps a lost `prerender_html` job repairable, exactly
+  // as it is for the rows this pass visits. One UPDATE stands in for the
+  // visit the row no longer gets.
+  private async stampRenderOnlyEntries() {
+    if (this.#renderOnlyInvalidations.size === 0) {
+      return;
+    }
+    let urls = [...this.#renderOnlyInvalidations];
+    let indexedAt = Date.now();
+    for (let offset = 0; offset < urls.length; offset += 5000) {
+      await this.#query([
+        'UPDATE boxel_index SET',
+        ...separatedByCommas([
+          ['indexed_at =', param(indexedAt)],
+          ['generation =', param(this.generation)],
+        ]),
+        'WHERE',
+        ...every([
+          ['realm_url =', param(this.realmURL.href)],
+          [
+            'url IN',
+            ...addExplicitParens(
+              separatedByCommas(
+                urls.slice(offset, offset + 5000).map((url) => [param(url)]),
+              ),
+            ),
+          ],
+          any([['is_deleted = false'], ['is_deleted IS NULL']]) as Expression,
+        ]),
+      ] as Expression);
+    }
   }
 
   // Whether `#touchedTypes` is a complete account of what this pass moved.
@@ -3163,29 +3240,66 @@ export class Batch {
     this.#perfLog.debug(
       `${jobIdentity} starting invalidation of ${urls.map((u) => u.href).join()}`,
     );
-    let visited = new Set<string>();
-    let invalidations: string[] = [];
+    // The index pass visits what the change reaches through index edges
+    // alone. On the split path the full closure — index and render edges
+    // together — is walked as well, and whatever it adds is left to the
+    // `prerender_html` job. The fused path renders inline, so its visits must
+    // cover every renderer: there the index walk follows both edge kinds and
+    // there is no second walk. Both walks share one reference scan per path.
+    let fanOut: FanOutWalk = {
+      references: new Map(),
+      followRenderEdges: !this.#splitPrerenderHtml,
+      visited: new Set(),
+    };
+    let renderFanOut: FanOutWalk | undefined = this.#splitPrerenderHtml
+      ? {
+          references: fanOut.references,
+          followRenderEdges: true,
+          visited: new Set(),
+        }
+      : undefined;
+    let invalidations = new Set<string>();
+    let renderInvalidations = new Set<string>();
     for (let url of urls) {
       for (let seed of await this.invalidationSeeds(url)) {
         let alias = trimExecutableExtension(rri(seed));
-        let workingInvalidations = [
-          ...new Set([
-            ...(!this.nodeResolvedInvalidations.includes(alias) ? [seed] : []),
-            ...(alias ? await this.calculateInvalidations(alias, visited) : []),
-          ]),
-        ];
-        invalidations = [
-          ...new Set([...invalidations, ...workingInvalidations]),
-        ];
+        if (!this.nodeResolvedInvalidations.includes(alias)) {
+          invalidations.add(seed);
+        }
+        if (!alias) {
+          continue;
+        }
+        for (let dependent of await this.calculateInvalidations(
+          alias,
+          fanOut,
+        )) {
+          invalidations.add(dependent);
+        }
+        if (renderFanOut) {
+          for (let dependent of await this.calculateInvalidations(
+            alias,
+            renderFanOut,
+          )) {
+            renderInvalidations.add(dependent);
+          }
+        }
       }
     }
+    for (let url of renderInvalidations) {
+      if (!invalidations.has(url) && !this.#invalidations.has(url)) {
+        this.#renderOnlyInvalidations.add(url);
+      }
+    }
+    for (let url of invalidations) {
+      this.#renderOnlyInvalidations.delete(url);
+    }
 
-    if (invalidations.length === 0) {
+    if (invalidations.size === 0) {
       return;
     }
 
     let insertStart = Date.now();
-    await this.tombstoneEntries(invalidations);
+    await this.tombstoneEntries([...invalidations]);
 
     this.#perfLog.debug(
       `${jobIdentity(this.jobInfo)} inserted invalidated rows for  ${urls.map((u) => u.href).join()} in ${
@@ -3194,7 +3308,7 @@ export class Batch {
     );
 
     this.#perfLog.debug(
-      `${jobIdentity(this.jobInfo)} completed invalidation of ${urls.map((u) => u.href).join()} in ${Date.now() - start} ms`,
+      `${jobIdentity(this.jobInfo)} completed invalidation of ${urls.map((u) => u.href).join()} in ${Date.now() - start} ms (${invalidations.size} to visit, ${this.#renderOnlyInvalidations.size} render-only)`,
     );
 
     this.#invalidations = new Set([...this.#invalidations, ...invalidations]);
@@ -3400,13 +3514,9 @@ export class Batch {
     }));
   }
 
-  private async itemsThatReference(resolvedPath: string): Promise<
-    {
-      url: string;
-      alias: string | null;
-      type: BoxelIndexTable['type'];
-    }[]
-  > {
+  private async itemsThatReference(
+    resolvedPath: string,
+  ): Promise<ReferencingItem[]> {
     let start = Date.now();
     const pageSize = 1000;
     // Also search for the prefix form of the path (e.g. @cardstack/catalog/...)
@@ -3500,7 +3610,9 @@ export class Batch {
     // `prerendered_html.deps` carries edges only the format renders discover
     // — a rendered non-searchable link, the scoped-CSS artifacts of linked
     // instances. Both edge sets must feed the fan-out or a change to a
-    // render-only dependency would never re-render its consumers.
+    // render-only dependency would never re-render its consumers. Each item
+    // says which kind of edge found it, so the caller can keep render-only
+    // consumers out of the index visit (see `calculateInvalidations`).
     //
     // Production `boxel_index` is scanned as well because the working table
     // is a staging area whose coverage is not guaranteed: a row only exists
@@ -3517,20 +3629,20 @@ export class Batch {
       scanTable('boxel_index'),
     ]);
     let seen = new Set<string>();
-    let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: BoxelIndexTable['type'];
-    })[] = [];
-    for (let row of [
-      ...workingScan.results,
-      ...prerenderedScan.results,
-      ...productionScan.results,
-    ]) {
-      let key = `${row.url}|${row.type}`;
-      if (seen.has(key)) {
-        continue;
+    let results: ReferencingItem[] = [];
+    for (let [rows, renderEdge] of [
+      [workingScan.results, false],
+      [productionScan.results, false],
+      [prerenderedScan.results, true],
+    ] as const) {
+      for (let { url, file_alias, type } of rows) {
+        let key = `${url}|${type}`;
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        results.push({ url, alias: file_alias, type, renderEdge });
       }
-      seen.add(key);
-      results.push(row);
     }
     this.#perfLog.debug(
       `${jobIdentity(this.jobInfo)} time to determine items that reference ${resolvedPath} ${
@@ -3541,25 +3653,34 @@ export class Batch {
         productionScan.pageNumber
       })`,
     );
-    return results.map(({ url, file_alias, type }) => ({
-      url,
-      alias: file_alias,
-      type,
-    }));
+    return results;
   }
 
+  // The dependents of `resolvedPath`, transitively, along the edges `walk`
+  // follows. With `followRenderEdges` off, the walk stays on index edges: a
+  // consumer found only through `prerendered_html.deps` is neither returned
+  // nor recursed through, because nothing its index visit reads came from
+  // the change. The reference scans are memoized on `walk.references`, which
+  // the index walk and the full walk share.
   private async calculateInvalidations(
     resolvedPath: string,
-    visited: Set<string>,
+    walk: FanOutWalk,
   ): Promise<string[]> {
     if (
-      visited.has(resolvedPath) ||
+      walk.visited.has(resolvedPath) ||
       this.nodeResolvedInvalidations.includes(rri(resolvedPath))
     ) {
       return [];
     }
-    visited.add(resolvedPath);
-    let items = await this.itemsThatReference(resolvedPath);
+    walk.visited.add(resolvedPath);
+    let scan = walk.references.get(resolvedPath);
+    if (!scan) {
+      scan = this.itemsThatReference(resolvedPath);
+      walk.references.set(resolvedPath, scan);
+    }
+    let items = (await scan).filter(
+      ({ renderEdge }) => walk.followRenderEdges || !renderEdge,
+    );
     let invalidations = items.map(({ url }) => url);
     let aliases = items.map(({ alias, type, url }) =>
       this.invalidationTraversalAlias({ alias, type, url }),
@@ -3570,7 +3691,7 @@ export class Batch {
         await Promise.all(
           aliases
             .filter((a): a is string => Boolean(a))
-            .map((a) => this.calculateInvalidations(a, visited)),
+            .map((a) => this.calculateInvalidations(a, walk)),
         ),
       ),
     ];

@@ -618,6 +618,119 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('the loader-reset reason tells an unsynchronized tab apart from a module change', async function (assert) {
+      // `moduleEvaluationCount` is the cost a reader wants attributed, and
+      // two unrelated things drive it up: a pass that changed a module and
+      // asked every tab to drop its graph, and a tab the pool routed this
+      // pass onto that had never synchronized to the realm's epoch series.
+      // `loaderResetReason` is what separates them, so each of the three
+      // states a visit can leave behind is pinned here.
+      //
+      // The module's `afterEach` disposes the affinity, and the wait below
+      // settles the refill that dispose kicked off. Both are needed: a
+      // `getPage` that finds no standby falls through to the cross-affinity
+      // steal, which hands back another affinity's warm tab and still reports
+      // `reused: false`, so `pool.reused` alone cannot say the page is new and
+      // the first assertion would read a real drop as a cold page.
+      await prerenderer.warmStandbys();
+      const cardURL = `${realmURL}1`;
+      let visit = (loaderEpoch: string) =>
+        prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+          renderOptions: { loaderEpoch },
+        });
+
+      let cold = await visit('epoch-1');
+      assert.false(cold.pool.reused, 'the first visit gets a page of its own');
+      assert.strictEqual(
+        cold.meta?.diagnostics?.loaderResetReason,
+        'firstEpoch',
+        `a tab that has recorded no epoch names the pool's routing rather than a module change, got: ${JSON.stringify(cold.meta?.diagnostics?.loaderResetReason)}`,
+      );
+      assert.ok(
+        (cold.meta?.diagnostics?.moduleEvaluationCount ?? 0) > 0,
+        `and rebuilds the graph the reset discarded, got: ${JSON.stringify(cold.meta?.diagnostics?.moduleEvaluationCount)}`,
+      );
+
+      let warm = await visit('epoch-1');
+      assert.true(warm.pool.reused, 'the second visit reuses that page');
+      assert.strictEqual(
+        warm.meta?.diagnostics?.loaderResetReason,
+        undefined,
+        `an unchanged epoch clears nothing, got: ${JSON.stringify(warm.meta?.diagnostics?.loaderResetReason)}`,
+      );
+      assert.strictEqual(
+        warm.meta?.diagnostics?.moduleEvaluationCount,
+        0,
+        `so the graph the first visit evaluated is still there, got: ${JSON.stringify(warm.meta?.diagnostics?.moduleEvaluationCount)}`,
+      );
+
+      let changed = await visit('epoch-2');
+      assert.true(changed.pool.reused, 'the third visit reuses it too');
+      assert.strictEqual(
+        changed.meta?.diagnostics?.loaderResetReason,
+        'loaderEpoch',
+        `a moved epoch is a drop, and the page that paid for it names the epoch, got: ${JSON.stringify(changed.meta?.diagnostics?.loaderResetReason)}`,
+      );
+      assert.ok(
+        (changed.meta?.diagnostics?.moduleEvaluationCount ?? 0) > 0,
+        `and evaluates the graph again, got: ${JSON.stringify(changed.meta?.diagnostics?.moduleEvaluationCount)}`,
+      );
+    });
+
+    test('a page warmed without an epoch reports a discard the pass did not cause', async function (assert) {
+      // Not every visit carries an epoch. An on-demand render carries none,
+      // and the module route holds its epoch under a key of its own, so both
+      // leave a page with a warm loader and no epoch recorded against this
+      // route. The first epoch-carrying visit onto such a page discards a real
+      // graph without the pass having done anything to deserve it, which is
+      // the case `loaderEpoch` describes wrongly by billing the pass for it.
+      //
+      // Settles the refill for the same reason as the test above: a stolen
+      // tab arrives warm, so the warming visit would find nothing left to
+      // evaluate and the count assertion below would read zero.
+      await prerenderer.warmStandbys();
+      const cardURL = `${realmURL}1`;
+      let base = {
+        affinityType: 'realm' as const,
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardURL,
+      };
+
+      let warming = await prerenderCard(prerenderer, { ...base, auth: auth() });
+      assert.false(warming.pool.reused, 'the warming visit gets a new page');
+      assert.strictEqual(
+        warming.meta?.diagnostics?.loaderResetReason,
+        undefined,
+        `a visit carrying no epoch runs no epoch synchronization, got: ${JSON.stringify(warming.meta?.diagnostics?.loaderResetReason)}`,
+      );
+      assert.ok(
+        (warming.meta?.diagnostics?.moduleEvaluationCount ?? 0) > 0,
+        `and leaves the loader holding the graph it evaluated, got: ${JSON.stringify(warming.meta?.diagnostics?.moduleEvaluationCount)}`,
+      );
+
+      let epochCarrying = await prerenderCard(prerenderer, {
+        ...base,
+        auth: auth(),
+        renderOptions: { loaderEpoch: 'epoch-1' },
+      });
+      assert.true(epochCarrying.pool.reused, 'and the next visit reuses it');
+      assert.strictEqual(
+        epochCarrying.meta?.diagnostics?.loaderResetReason,
+        'firstEpoch',
+        `the first epoch onto a warm page discards a graph the pass did not cause, got: ${JSON.stringify(epochCarrying.meta?.diagnostics?.loaderResetReason)}`,
+      );
+      assert.ok(
+        (epochCarrying.meta?.diagnostics?.moduleEvaluationCount ?? 0) > 0,
+        `and pays to rebuild it, got: ${JSON.stringify(epochCarrying.meta?.diagnostics?.moduleEvaluationCount)}`,
+      );
+    });
+
     test("a module's lowered operations report whether they read the actor", async function (assert) {
       // Lowering runs in the prerender host, and this is where the realm
       // server sees what it produced: the visit hands back the definitions it
@@ -1624,6 +1737,44 @@ module(basename(import.meta.filename), function () {
       assert.ok(
         isA4,
         `paper size is A4, not the Letter fallback (got ${box?.width}×${box?.height}pt)`,
+      );
+    });
+
+    test('a pdf capture paginates its own card, not the one the pooled page was already showing', async function (assert) {
+      // The pooled page keeps the previous capture's render route up while the
+      // next transition is in flight, and Ember holds the old URL through a
+      // loading substate. The route-arrival wait matches on the path suffix,
+      // which every card's render route shares (`/html/isolated/0`), so
+      // without an identity check it returns on the *previous* render and
+      // `page.pdf()` paginates the host's loading screen as valid-looking
+      // bytes: one Letter page, no card.
+      //
+      // So: leave the page on one card's render, then capture a different one.
+      let first = await screenshot(`${realmURL}1`, { type: 'pdf' });
+      assert.strictEqual(first.response.status, 'ready', 'first pdf captured');
+
+      let { response } = await screenshot(`${realmURL}paged-card`, {
+        type: 'pdf',
+        media: 'print',
+      });
+      assert.strictEqual(
+        response.status,
+        'ready',
+        `second pdf captured (got ${response.status}: ${response.error ?? ''})`,
+      );
+      let capture = response.captures?.[0];
+      assert.ok(
+        (capture?.pageCount ?? 0) >= 2,
+        `paginated the paged card's own flow, not a one-page loading screen (got ${capture?.pageCount})`,
+      );
+      let box = firstMediaBox(Buffer.from(response.base64!, 'base64'));
+      let isA4 =
+        box != null &&
+        Math.abs(box.width - 595) <= 3 &&
+        Math.abs(box.height - 842) <= 3;
+      assert.ok(
+        isA4,
+        `paper is the card's own A4 \`@page\`, not the Letter fallback a render without the card would use (got ${box?.width}×${box?.height}pt)`,
       );
     });
 

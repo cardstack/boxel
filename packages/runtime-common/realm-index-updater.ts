@@ -25,6 +25,7 @@ import type {
   FromScratchResult,
   IncrementalChange,
   IncrementalDoneResult,
+  SharedIndexPass,
 } from './tasks/indexer.ts';
 import type { Realm } from './realm.ts';
 import { RealmPaths, isPartialWritePath, realmConfigHrefFor } from './paths.ts';
@@ -47,6 +48,8 @@ export interface IncrementalIndexMeta {
   // couldn't report them (an older worker mid-deploy), which is the signal to
   // subscribers that nothing can be ruled out from types alone.
   invalidatedTypes?: string[];
+  // Present when the pass indexed other publishes alongside this caller's.
+  sharedPass?: SharedIndexPass;
 }
 
 export interface IncrementalIndexOptions {
@@ -79,6 +82,12 @@ export interface IncrementalIndexOptions {
   // job's own rejection still propagates through `settled`.
   onFailed?: (error: unknown) => Promise<void> | void;
   clientRequestId?: string | null;
+  // Recorded on this caller's entry in the job so whichever caller announces
+  // a shared pass can say what each writer authored. See CoalescedCaller.
+  clientAuthored?: string[];
+  // Whether the caller announces the pass the moment it lands, rather than
+  // after later passes of the same write. See CoalescedCaller.
+  announcesPass?: boolean;
   // Matrix user whose HTTP write produced this job, when known. Scopes
   // the read endpoints' read-your-writes drain — see
   // #incrementalIndexingDeferreds.
@@ -443,17 +452,28 @@ export class RealmIndexUpdater {
         ...(opts?.readsOwnWrite ? { readsOwnWrite: true } : {}),
       };
       let clientRequestId = opts?.clientRequestId ?? null;
+      let jobArgs = makeIncrementalArgsWithCallerMetadata(
+        args,
+        clientRequestId,
+        {
+          clientAuthored: opts?.clientAuthored ?? null,
+          announcesPass: opts?.announcesPass === true,
+        },
+      );
       job = await this.#queue.publish<IncrementalDoneResult>({
         jobType: 'incremental-index',
         concurrencyGroup: indexingConcurrencyGroup(this.#realm.url),
         timeout: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
         priority: userInitiatedPriority,
-        args: makeIncrementalArgsWithCallerMetadata(args, clientRequestId),
+        args: jobArgs,
         // Onto the row, so a gate in another replica can see whose pass this
         // is. The in-memory deferred below records the same thing for this
         // replica's own gates, and the two have to agree.
         ...(opts?.initiatedBy ? { initiatedBy: [opts.initiatedBy] } : {}),
-        mapResult: mapIncrementalDoneResult(clientRequestId),
+        mapResult: mapIncrementalDoneResult(
+          clientRequestId,
+          jobArgs.coalescedCallers[0]?.waiterId,
+        ),
       });
     } catch (e: any) {
       indexingDeferred.fulfill();
@@ -474,6 +494,7 @@ export class RealmIndexUpdater {
           stats,
           generation,
           deferredPrerenderHtml,
+          sharedPass,
         } = await job.done;
         this.#stats = stats;
         // Drop the result if a from-scratch index landed since we snapshotted.
@@ -488,6 +509,7 @@ export class RealmIndexUpdater {
             {
               generation,
               ...(invalidatedTypes !== undefined ? { invalidatedTypes } : {}),
+              ...(sharedPass ? { sharedPass } : {}),
             },
           );
         }
@@ -541,6 +563,8 @@ export class RealmIndexUpdater {
       | 'onEnqueued'
       | 'onInvalidation'
       | 'clientRequestId'
+      | 'clientAuthored'
+      | 'announcesPass'
       | 'initiatedBy'
       | 'deferPrerenderHtml'
       | 'carriedPrerenderHtmlChanges'

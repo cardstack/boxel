@@ -5,6 +5,7 @@ import { basename, join } from 'path';
 import { fileURLToPath } from 'url';
 
 import { PREFIX_REALM_PREFIXES } from '@cardstack/runtime-common';
+import { HOST_PACKAGE_NAMES } from '@cardstack/runtime-common/host-package-names';
 
 // The realm-server learns its realm-prefix mappings from `--fromUrl`/`--toUrl`
 // arguments, while the host bakes its own set in from build config. Nothing in
@@ -102,6 +103,23 @@ module(basename(import.meta.filename), function () {
         declaredPrefixes(script),
         [...PREFIX_REALM_PREFIXES].sort(),
         `${script} covers the whole declared set`,
+      );
+    }
+  });
+
+  test('no declared prefix names a Host package, except base', function (assert) {
+    // `addRealmMapping` refuses a prefix whose name is on HOST_PACKAGE_NAMES,
+    // so a realm declared under such a name would throw at host boot. `base`
+    // is the one sanctioned overlap. A realm that is also a workspace package,
+    // such as pretui, stays legal only while its name is absent from that set.
+    for (let prefix of PREFIX_REALM_PREFIXES) {
+      let name = prefix.split('/')[1];
+      if (name === 'base') {
+        continue;
+      }
+      assert.false(
+        HOST_PACKAGE_NAMES.has(name),
+        `${prefix} does not name a Host package`,
       );
     }
   });

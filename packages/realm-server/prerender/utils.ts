@@ -372,6 +372,54 @@ async function waitForRoutePathSuffix(
       expectedNonce: string | null,
     ) => {
       if (window.location.pathname.endsWith(targetSuffix)) {
+        // The suffix names the sub-route (`/html/isolated/0`, `/icon`, …) and
+        // nothing else, so every card's render route ends the same way. A
+        // pooled page still sitting at the *previous* render therefore
+        // satisfies it the moment this wait first evaluates, while this
+        // render's transition is still in flight — and Ember keeps the old
+        // URL up during a loading substate, so the page can be showing the
+        // loading screen with none of this render's DOM on it. The waits that
+        // follow do not catch it either: the settle hook a previous render
+        // left behind resolves at once, and an absent `data-screenshot-pending`
+        // reads as ready. So the route is only reached when the path carries
+        // this render's own identity, which is what the id and nonce are for.
+        // The render route is `/render/:id/:nonce/:options/…`, so the id and
+        // nonce are the two segments right after the `render` route keyword.
+        // Locate them by that keyword rather than by absolute position, so a
+        // non-root `rootURL` (a path prefix ahead of `render`) can't shift the
+        // slots out from under this check — the multi-status route wait below
+        // finds them the same way. The card id is a single URL-encoded segment,
+        // so only the route keyword itself reads as `render` here.
+        let segments = window.location.pathname.split('/').filter(Boolean);
+        let renderIdx = segments.indexOf('render');
+        let idSegment = renderIdx === -1 ? undefined : segments[renderIdx + 1];
+        let nonceSegment =
+          renderIdx === -1 ? undefined : segments[renderIdx + 2];
+        let decodeSegment = (value: string | undefined) => {
+          if (value == null) {
+            return '';
+          }
+          try {
+            return decodeURIComponent(value);
+          } catch {
+            return value;
+          }
+        };
+        // `expectedId` is the normalized card id (a card render strips the
+        // `.json` before comparing it against `data-prerender-id`), while the
+        // route segment is the raw url the transition was given — which for an
+        // index visit still carries `.json`. Normalize both ends or every
+        // visit would wait out its timeout here.
+        let withoutJson = (value: string) => value.replace(/\.json$/i, '');
+        if (
+          expectedId &&
+          withoutJson(decodeSegment(idSegment)) !== withoutJson(expectedId)
+        ) {
+          return false;
+        }
+        if (expectedNonce && decodeSegment(nonceSegment) !== expectedNonce) {
+          return false;
+        }
         return true;
       }
 

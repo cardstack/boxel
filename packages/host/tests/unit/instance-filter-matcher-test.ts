@@ -67,6 +67,7 @@ module('Unit | instance-filter-matcher', function (hooks) {
       getQueryableValue: cardApi.getQueryableValue,
       formatQueryValue: cardApi.formatQueryValue,
       peekAtField: cardApi.peekAtField,
+      isQueryTaintedField: cardApi.isQueryTaintedField,
       isNonPresentLink: cardApi.isNonPresentLink,
       getCardMeta: cardApi.getCardMeta as CardAPIForMatching['getCardMeta'],
       primitive: cardApi.primitive,
@@ -101,6 +102,15 @@ module('Unit | instance-filter-matcher', function (hooks) {
       @field friends = linksToMany(() => Person);
       @field age = contains(NumberField);
       @field isHairy = contains(BooleanField);
+      // An ordinary computed — reads only the card's own field, so it is never
+      // query-tainted. Used to exercise the matcher's query-taint gate against a
+      // stubbed `isQueryTaintedField` (the real taint recording needs a live
+      // query resolution the unit environment has no store for).
+      @field ageDoubled = contains(NumberField, {
+        computeVia: function (this: Person) {
+          return (this.age ?? 0) * 2;
+        },
+      });
     }
     class FancyPerson extends Person {
       @field favoriteColor = contains(StringField);
@@ -406,6 +416,35 @@ module('Unit | instance-filter-matcher', function (hooks) {
         range: { date: { gt: '2024-11-01' } },
       }),
       'no-match',
+    );
+  });
+
+  test('a query-tainted computed resolves as unresolvable, never a client-only match', function (assert) {
+    let { mango } = cards;
+    // With the real taint check, `ageDoubled` reads no query-backed field, so
+    // it resolves and matches like any computed (mango.age is 3).
+    assert.strictEqual(
+      match(mango, { on: personRef, range: { ageDoubled: { gt: 0 } } }),
+      'match',
+      'a computed that reads no query field resolves and matches normally',
+    );
+    // When the same computed is query-derived, the server omits it from the
+    // search doc (the index can't invalidate it), so it never matches or orders
+    // server-side. The matcher must not resolve it either, or the client would
+    // inject a card the server's result set can't include — so it reports
+    // unresolvable, which the reconciler leaves untouched.
+    let taintedApi: CardAPIForMatching = {
+      ...api,
+      isQueryTaintedField: (_instance, fieldName) => fieldName === 'ageDoubled',
+    };
+    assert.strictEqual(
+      matchInstanceAgainstFilter(
+        mango,
+        { on: personRef, range: { ageDoubled: { gt: 0 } } },
+        taintedApi,
+      ),
+      'unresolvable',
+      'a query-derived computed the server omits is not matched client-side',
     );
   });
 

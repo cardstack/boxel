@@ -137,6 +137,7 @@ import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardDef, BaseDef } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
 import type {
+  CoalescedIndexWrite,
   IncrementalIndexEventContent,
   RealmEventContent,
 } from '@cardstack/base/matrix-event';
@@ -203,6 +204,16 @@ export function resolveOutboundJobPriority({
     return valid ?? 0;
   }
   return valid ?? userInitiatedPriority;
+}
+
+// A request id minted for a write whose content this tab sent — a card saved
+// from an open instance — as opposed to a source edit or a bot's patch, whose
+// resulting state this tab does not already hold.
+function isInstanceWriteRequestId(clientRequestId: string): boolean {
+  return (
+    clientRequestId.startsWith('instance:') ||
+    clientRequestId.startsWith('editor-with-instance')
+  );
 }
 
 function jobPriorityHeader(): Record<string, string> {
@@ -300,6 +311,12 @@ export default class StoreService extends Service implements StoreInterface {
     Promise<FileDef | CardErrorJSONAPI>
   > = new Map();
   private inflightCardMutations: Map<string, Promise<void>> = new Map();
+  // The cards whose own create is on the wire — a save creating the card, or a
+  // batch minting cards this store holds — keyed by local id. Distinct from
+  // `inflightCardMutations`: an entry here exists only between the write being
+  // sent and its response being applied, so whoever waits on one is waiting on
+  // a request, never on a lock. See `#serializeForSave`.
+  private inflightCardCreates: Map<string, Promise<void>> = new Map();
   private inflightCardLoads: Map<string, Deferred<void>> = new Map();
   // The index state a reload now in flight will bring a card to, keyed by the
   // instance's local id — the one id that survives the realm assigning a
@@ -450,6 +467,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightGetCards = new Map();
     this.inflightGetFileMeta = new Map();
     this.inflightCardMutations = new Map();
+    this.inflightCardCreates = new Map();
     this.inflightCardLoads = new Map();
     this.#reloadTargets = new Map();
     this.inflightSearch = new Map();
@@ -506,9 +524,10 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightCardLoads = new Map();
     this.#reloadTargets = new Map();
     this.inflightSearch = new Map();
-    // `inflightCardMutations` is deliberately kept: a render context blocks
-    // persistence, so there is nothing of this job's in it, and dropping a
-    // save that somehow were in flight would lose the only handle on it.
+    // `inflightCardMutations` and `inflightCardCreates` are deliberately kept:
+    // a render context blocks persistence, so there is nothing of this job's
+    // in them, and dropping a save that somehow were in flight would lose the
+    // only handle on it.
   }
 
   // Drop every resolved-doc search-cache entry. Used for hard resets
@@ -535,6 +554,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightGetCards = new Map();
     this.inflightGetFileMeta = new Map();
     this.inflightCardMutations = new Map();
+    this.inflightCardCreates = new Map();
     this.inflightCardLoads = new Map();
     this.#reloadTargets = new Map();
     this.inflightSearch = new Map();
@@ -1051,6 +1071,7 @@ export default class StoreService extends Service implements StoreInterface {
       getQueryableValue: api.getQueryableValue,
       formatQueryValue: api.formatQueryValue,
       peekAtField: api.peekAtField,
+      isQueryTaintedField: api.isQueryTaintedField,
       isNonPresentLink: api.isNonPresentLink,
       getCardMeta: api.getCardMeta as CardAPIForMatching['getCardMeta'],
       primitive: api.primitive,
@@ -2341,9 +2362,10 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
     let invalidations = event.invalidations as string[];
-    let ownWrite = event.clientRequestId
-      ? this.cardService.clientRequestIds.has(event.clientRequestId)
-      : false;
+    let ownWrite = [
+      event.clientRequestId,
+      ...(event.coalescedWrites ?? []).map((write) => write.clientRequestId),
+    ].some((id) => !!id && this.cardService.clientRequestIds.has(id));
 
     // The invalidation triggers a rebuild when it touches an already-loaded
     // executable module: the loader must be flushed so the updated code is
@@ -2411,6 +2433,50 @@ export default class StoreService extends Service implements StoreInterface {
     }
   };
 
+  // Whether a card named by a pass that indexed several publishes has to be
+  // re-read. The pass is announced once for all of them, so the event's own
+  // `clientRequestId` names just one writer; the rule the single-writer event
+  // gets from it is asked of every writer that changed this card instead.
+  //
+  // Skipped only when every writer that changed the card is one of ours, of
+  // the kind whose content we sent, and says it wrote this card verbatim —
+  // which is when this tab holds what the card says, or something newer typed
+  // while the write was in flight. A second writer changing the same card in
+  // the same pass means the index holds whichever landed last, which this tab
+  // cannot know it holds. A card no writer changed is a dependent, whose state
+  // the realm computed.
+  #sharedPassNeedsReload(
+    writes: CoalescedIndexWrite[],
+    invalidation: string,
+  ): boolean {
+    let changedBy = writes.filter(
+      (write) => write.changed === null || write.changed.includes(invalidation),
+    );
+    if (changedBy.length === 0) {
+      realmEventsLogger.debug(
+        `reloading card ${invalidation} because no write in its shared pass changed it directly`,
+      );
+      return true;
+    }
+    let stranger = changedBy.find(
+      ({ clientRequestId, changed, clientAuthored }) =>
+        !clientRequestId ||
+        !this.cardService.clientRequestIds.has(clientRequestId) ||
+        !isInstanceWriteRequestId(clientRequestId) ||
+        !(clientAuthored ?? changed ?? []).includes(invalidation),
+    );
+    if (stranger) {
+      realmEventsLogger.debug(
+        `reloading card ${invalidation} because request ${stranger.clientRequestId ?? 'with no id'} in its shared pass changed it and did not carry our content for it`,
+      );
+      return true;
+    }
+    realmEventsLogger.debug(
+      `ignoring invalidation for card ${invalidation} because every write in its shared pass that changed it is ours and carried its content`,
+    );
+    return false;
+  }
+
   // Reload the individual cards / file-meta resources named by an incremental
   // invalidation that did not trigger a full rebuild. Returns the number of
   // reloads kicked off (for realm-event telemetry).
@@ -2464,16 +2530,18 @@ export default class StoreService extends Service implements StoreInterface {
           // the auto save request and the arrival realm event.
           let reloadFile = false;
 
-          if (!clientRequestId) {
+          if (event.coalescedWrites) {
+            reloadFile = this.#sharedPassNeedsReload(
+              event.coalescedWrites,
+              invalidation,
+            );
+          } else if (!clientRequestId) {
             reloadFile = true;
             realmEventsLogger.debug(
               `reloading file resource ${invalidation} because event has no clientRequestId`,
             );
           } else if (this.cardService.clientRequestIds.has(clientRequestId)) {
-            if (
-              clientRequestId.startsWith('instance:') ||
-              clientRequestId.startsWith('editor-with-instance')
-            ) {
+            if (isInstanceWriteRequestId(clientRequestId)) {
               // Our own write, of the kind whose content we sent — so this
               // instance already holds what the card says, and may hold
               // something newer that was typed while the write was in flight.
@@ -3889,18 +3957,8 @@ export default class StoreService extends Service implements StoreInterface {
       return await this.withCardMutationLock(
         instance[localIdSymbol],
         async () => {
+          let endCreate: (() => void) | undefined;
           try {
-            // Every edit stamped up to here is in the document serialized below.
-            let sentSeq = this.#localEditSeq;
-            let doc = await this.cardService.serializeCard(instance, {
-              // for a brand new card that has no id yet, we don't know what we are
-              // relativeTo because its up to the realm server to assign us an ID, so
-              // URL's should be absolute
-              useAbsoluteURL: true,
-              withLocalResourcesIncluded: true,
-              omitQueryFields: true,
-            });
-
             // send doc over the wire with absolute URL's. The realm server will convert
             // to relative URL's as it serializes the cards
             let realmURL = instance[realmURLSymbol];
@@ -3914,6 +3972,10 @@ export default class StoreService extends Service implements StoreInterface {
               }
               realmURL = new URL(defaultRealmHref);
             }
+            let doc: LooseSingleCardDocument;
+            let sentSeq: number;
+            ({ doc, sentSeq, endCreate } =
+              await this.#serializeForSave(instance));
             let json = await this.saveCardDocument(doc, {
               realm: realmURL.href,
               localDir: opts?.localDir,
@@ -3958,10 +4020,94 @@ export default class StoreService extends Service implements StoreInterface {
               this.store.addCardInstanceOrError(remoteId, cardError);
             }
             return cardError;
+          } finally {
+            endCreate?.();
           }
         },
       );
     });
+  }
+
+  // A save sends, as cards to create, the linked cards that have no id yet.
+  // Having no id is also what a card looks like while its own create is on the
+  // wire: the realm may already hold its file, and only the response carrying
+  // the id has yet to arrive. Sending such a card again asks the realm to
+  // create a card it already stores, which it refuses, failing the whole save.
+  //
+  // So the save waits for each of those creates to answer and serializes
+  // again, by which time the card holds its id and goes out as a plain link.
+  // What it waits on is a request, not a lock: an entry in
+  // `inflightCardCreates` exists only once its create has done all of its own
+  // waiting, so two new cards linking to each other cannot end up waiting on
+  // one another. A create that fails still settles its entry, leaving the card
+  // without an id — and a card with no id and no create on the wire is one to
+  // create alongside this save, as any unsaved link is.
+  //
+  // The check and, for a create, the registration of this save's own entry
+  // happen in one synchronous step with nothing awaited between them and the
+  // send. A create that registers in between would otherwise be missed by a
+  // save that checked before it, and both would go out.
+  //
+  // Covers a card's own create — this path, and a batch minting cards it was
+  // handed — and not a linked card created as a side-load of another write.
+  // That card takes its id from the realm's index event rather than from the
+  // write's response, so there is no response here that would hand it one.
+  //
+  // `sentSeq` is the edit sequence sampled before the serialization that is
+  // returned: every edit stamped up to it is in that document.
+  async #serializeForSave(instance: CardDef): Promise<{
+    doc: LooseSingleCardDocument;
+    sentSeq: number;
+    endCreate?: () => void;
+  }> {
+    for (;;) {
+      let sentSeq = this.#localEditSeq;
+      let doc = await this.cardService.serializeCard(instance, {
+        // for a brand new card that has no id yet, we don't know what we are
+        // relativeTo because its up to the realm server to assign us an ID, so
+        // URL's should be absolute
+        useAbsoluteURL: true,
+        withLocalResourcesIncluded: true,
+        omitQueryFields: true,
+      });
+      let pendingCreates = (doc.included ?? []).flatMap((resource) => {
+        let pending =
+          !resource.id && 'lid' in resource && resource.lid
+            ? this.inflightCardCreates.get(resource.lid)
+            : undefined;
+        return pending ? [pending] : [];
+      });
+      if (pendingCreates.length === 0) {
+        return {
+          doc,
+          sentSeq,
+          ...(doc.data.id
+            ? {}
+            : { endCreate: this.beginCreates([instance[localIdSymbol]]) }),
+        };
+      }
+      await Promise.all(pendingCreates);
+    }
+  }
+
+  // Marks the cards named by these local ids as having a create on the wire,
+  // for a save linking to one of them to wait on; the returned function ends
+  // that, and must be called once the write's response has been applied or
+  // has failed. Called only once the write has done all of its own waiting
+  // and is about to be sent — see `#serializeForSave`.
+  beginCreates(localIds: readonly string[]): () => void {
+    let sent = new Deferred<void>();
+    for (let localId of localIds) {
+      this.inflightCardCreates.set(localId, sent.promise);
+    }
+    return () => {
+      for (let localId of localIds) {
+        if (this.inflightCardCreates.get(localId) === sent.promise) {
+          this.inflightCardCreates.delete(localId);
+        }
+      }
+      sent.fulfill();
+    };
   }
 
   // Serializes mutations of one instance, keyed by its local id, so a save
@@ -4208,6 +4354,12 @@ export default class StoreService extends Service implements StoreInterface {
   //   5. the identity map indexes the instance under both ids, so lookups by
   //      either return this same object;
   //   6. autosave takes over subsequent edits.
+  //
+  // Runs while the create that named the instance still holds its entry in
+  // `inflightCardCreates`, and a save of a card linking to this one may be
+  // waiting on that entry while holding its own mutation lock. So nothing here
+  // may wait on another card's save: `updateForeignConsumersOf` starts the
+  // consumers' saves without awaiting them for exactly that reason.
   private async assignRemoteIdentity(
     instance: CardDef,
     remoteId: RealmResourceIdentifier,
@@ -4262,6 +4414,8 @@ export default class StoreService extends Service implements StoreInterface {
     for (let consumer of consumers) {
       let consumerRealm = consumer[realmURLSymbol]?.href;
       if (consumerRealm !== instanceRealm && consumer.id) {
+        // Not awaited: the consumer's save may be waiting on this card's
+        // create, which is still in flight — see `assignRemoteIdentity`.
         this.save(consumer.id);
       }
     }
