@@ -1,7 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename, join } from 'path';
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import type { Test, SuperTest } from 'supertest';
 import { logger, rri } from '@cardstack/runtime-common';
 import type { Realm, VirtualNetwork } from '@cardstack/runtime-common';
@@ -280,6 +280,33 @@ module(basename(import.meta.filename), function () {
         warnings.filter((w) => w.includes('`policy`')),
         [],
         'null is how an owner writes "no policy"',
+      );
+    });
+
+    // A write reaches realm.json on disk before the index pass that re-reads
+    // it, so for that pass the file and the indexed row disagree, and the
+    // realm re-reads its info in that window whenever anything invalidates
+    // it. Written straight to disk here, so the row is left behind for as
+    // long as the test needs.
+    test('the file on disk is authoritative for the pointer while the indexed realm.json still holds an old one', async function (assert) {
+      writeFileSync(
+        join(testRealmPath, 'realm.json'),
+        realmConfigCardJSON({ name: REALM_NAME, config: SETTINGS }),
+      );
+      testRealm.clearRealmIndexCaches();
+
+      let row = await testRealm.realmIndexQueryEngine.instance(
+        new URL('realm', realmURL),
+      );
+      assert.deepEqual(
+        row?.type === 'instance' ? row.instance.attributes?.policy : undefined,
+        { card: POLICY_CARD },
+        'the indexed row still names the policy card',
+      );
+      assert.strictEqual(
+        await testRealm.getRealmPolicy(),
+        undefined,
+        'the realm has the policy the file says it has, which is none',
       );
     });
 

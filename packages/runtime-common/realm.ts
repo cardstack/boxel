@@ -269,6 +269,12 @@ import {
 } from './card-operations/types.ts';
 import { erroredTargetRow } from './card-operations/read.ts';
 import { commitBatch } from './card-operations/coordinator.ts';
+import {
+  noteRealmIndexMoved,
+  RealmPolicyCache,
+  realmPolicyRef,
+  type CompiledRealmPolicy,
+} from './card-operations/policy.ts';
 import type {
   BatchCore,
   BatchEntryResult,
@@ -482,8 +488,9 @@ function assignRealmConfig(
 }
 
 // Which card holds the realm's policy, as the RealmConfig card at `realm.json`
-// names it. Applied by the same two overlays as `config`, and for the same
-// reason called only where the attribute is present.
+// names it. Applied by the file overlay alone, which is authoritative for the
+// pointer (the index overlay says why), and like `config` called only where
+// the attribute is present.
 //
 // A pointer to the realm's authorization is held to a single shape, an object
 // whose `card` names a card on the web, and anything else leaves the realm
@@ -565,7 +572,7 @@ function readRealmPolicyReference(
 }
 
 // A realm's pointer to the card that holds its policy. Only the card's URL is
-// carried; nothing in the realm loads or compiles the card it names.
+// carried. `Realm#getCompiledPolicy()` is what loads and compiles the card.
 export interface RealmPolicyReference {
   card: string;
 }
@@ -606,8 +613,8 @@ export type RealmInfo = {
   // where the operation runtime reads it.
   config?: Record<string, JsonValue>;
   // The card that holds the realm's policy, absent for a realm that has none.
-  // Assigned by the same overlays as `config` and handed back apart from the
-  // served info the same way, for a reason of its own: the realm stamps its
+  // Assigned by the file overlay and handed back apart from the served info
+  // the way `config` is, for a reason of its own: the realm stamps its
   // info on every card response, and the pointer commonly names a card in
   // another realm — one a reader of this realm's cards may have no permission
   // on, and whose existence is not this realm's to announce on each of them.
@@ -2016,6 +2023,7 @@ export class Realm {
   #realmServerURL: string;
   #realmIndexUpdater: RealmIndexUpdater;
   #realmIndexQueryEngine: RealmIndexQueryEngine;
+  #policyCache: RealmPolicyCache;
   #operationCore: OperationCore | undefined;
   #batchCore: BatchCore | undefined;
   #adapter: RealmAdapter;
@@ -2410,6 +2418,7 @@ export class Realm {
       fetch: _fetch,
       definitionLookup: this.#definitionLookup,
     });
+    this.#policyCache = this.#makePolicyCache();
 
     this.#router = new Router(new URL(url))
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
@@ -3490,6 +3499,7 @@ export class Realm {
     // dedup tests do (CS-11029).
     this.#transpileCallCount = 0;
     this.#transpileJoinCount = 0;
+    this.#policyCache.clear();
   }
 
   // CS-11043. Bulk-invalidate this realm's in-process byte caches.
@@ -3568,6 +3578,10 @@ export class Realm {
     this.invalidateCachedRealmInfo();
     this.#cachedHostRoutingMap = null;
     this.#readShapeByURL.clear();
+    // Any realm's compiled policy may read from this one: a policy card here,
+    // or a type its rules name. So the move is announced to all of them, and
+    // not only to this realm's own.
+    noteRealmIndexMoved(this.url);
   }
 
   // Drop local realm-index caches AND broadcast the same wipe to peer
@@ -13002,11 +13016,66 @@ export class Realm {
 
   // The card the realm's `realm.json` names as its policy, or undefined for a
   // realm with none — including one whose pointer was malformed and dropped.
-  // Only the pointer: nothing here loads the card it names. A copy per caller,
-  // for the reason `getRealmConfig()` gives.
+  // Only the pointer: `getCompiledPolicy()` is what loads the card it names. A
+  // copy per caller, for the reason `getRealmConfig()` gives.
   async getRealmPolicy(): Promise<RealmPolicyReference | undefined> {
     let { policy } = await this.#parsedRealmInfo();
     return policy ? { ...policy } : undefined;
+  }
+
+  // The realm's policy, compiled: the card its pointer names, loaded on the
+  // realm server's own authority and compiled once, then answered from memory
+  // until an index moves under the card or under a type its rules name.
+  // Undefined for a realm with no policy. A pointer to a card that is missing,
+  // errored or not a RealmPolicy compiles to a policy that grants nothing, with
+  // the reason recorded in its `issues`.
+  //
+  // Nothing on a request's path calls this, so no realm pays for it until
+  // something needs the policy.
+  async getCompiledPolicy(): Promise<CompiledRealmPolicy | undefined> {
+    return await this.#policyCache.get();
+  }
+
+  __testOnlyPolicyCacheStats(): { compiles: number; revalidations: number } {
+    return { ...this.#policyCache.stats };
+  }
+
+  // The cache reads the policy card straight from the index, not through a
+  // request to the realm that holds it. That realm is commonly one the caller
+  // cannot read, and often one this realm's own user cannot read either. A
+  // request would also pass through that realm's permission checks, and those
+  // are what a policy is consulted to decide, so a gated load of the policy
+  // would need the policy loaded already. The type definitions its rules name
+  // come from this realm's definition lookup, as an operation's do.
+  #makePolicyCache(): RealmPolicyCache {
+    let policyTypeKey: string | undefined;
+    return new RealmPolicyCache({
+      policyCard: async () => (await this.getRealmPolicy())?.card,
+      readCard: (url) => this.#realmIndexQueryEngine.instance(url),
+      resolveCodeRef: (codeRef, relativeTo) => {
+        let absolute = codeRefWithAbsoluteIdentifier(
+          { module: rri(codeRef.module), name: codeRef.name },
+          relativeTo,
+          undefined,
+          this.#virtualNetwork,
+        );
+        return isResolvedCodeRef(absolute) ? absolute : undefined;
+      },
+      lookupDefinition: (codeRef) =>
+        this.#definitionLookup.lookupDefinition(codeRef),
+      toURL: (identifier) => this.#virtualNetwork.toURL(identifier),
+      isPolicyCard: (types) => {
+        // The index records an adoption chain in the same spelling, so the
+        // key is computed the same way. A subtype of RealmPolicy carries it
+        // too.
+        policyTypeKey ??= internalKeyFor(
+          realmPolicyRef,
+          undefined,
+          this.#virtualNetwork,
+        );
+        return types.includes(policyTypeKey);
+      },
+    });
   }
 
   // Every part of one parse, which is why they are read together rather than
@@ -13233,14 +13302,12 @@ export class Realm {
         if ('config' in attrs) {
           assignRealmConfig(realmInfo, attrs.config, this.#log);
         }
-        if ('policy' in attrs) {
-          assignRealmPolicy(
-            realmInfo,
-            attrs.policy,
-            this.#virtualNetwork,
-            this.#log,
-          );
-        }
+        // `policy` is not overlaid from here. The file overlay above is the
+        // only one that reads it, so the file on disk is authoritative for the
+        // pointer. The indexed row lags a write to `realm.json` by an index
+        // pass. If this overlay won, removing a pointer would put the old one
+        // back from the row until that pass lands, and the revoked policy
+        // would keep granting for that long.
       }
     } catch (e) {
       this.#log.warn(`failed to read RealmConfig card from index: ${e}`);
