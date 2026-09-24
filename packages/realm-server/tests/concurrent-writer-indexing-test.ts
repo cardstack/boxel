@@ -6,14 +6,25 @@ import {
   Batch,
   Deferred,
   IndexWriter,
+  SupportedMimeType,
   Worker,
   rri,
   type LooseSingleCardDocument,
+  type ModulePrerenderArgs,
+  type ModuleRenderResponse,
   type Prerenderer,
+  type PrerenderVisitArgs,
   type QueuePublisher,
   type Realm,
+  type ReleaseBatchArgs,
+  type RenderVisitResponse,
+  type RunCommandArgs,
+  type RunCommandResponse,
+  type ScreenshotPrerenderArgs,
+  type ScreenshotPrerenderResponse,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
+import { prerenderHtmlWriterLane } from '@cardstack/runtime-common/jobs/prerender-html';
 import { PgQueueRunner, type PgAdapter } from '@cardstack/postgres';
 import {
   createJWT,
@@ -23,6 +34,7 @@ import {
   setupPermissionedRealmCached,
   testCreatePrerenderAuth,
   testRealmServerMatrixUsername,
+  waitUntil,
   withRealmPath,
   type RealmRequest,
 } from './helpers/index.ts';
@@ -155,6 +167,94 @@ function holdWriterPassesBeforeCommit(
   };
 }
 
+// The test prerenderer, recording the scope each visit carried. A prerender
+// tab reuses what it read under one scope without reading it again, so the
+// scope a visit carries is what decides whether it can read another writer's
+// commit — and a single-page test prerenderer clears its only tab on every
+// scope change, which hides a stale read the scope would have allowed on a
+// larger pool.
+class RecordingPrerenderer implements Prerenderer {
+  visits: {
+    url: string;
+    visitType: string | undefined;
+    jobId: string | undefined;
+    renderScope: string | undefined;
+  }[] = [];
+  #inner: Promise<Prerenderer> | undefined;
+
+  #prerenderer(): Promise<Prerenderer> {
+    return (this.#inner ??= getTestPrerenderer());
+  }
+
+  async prerenderVisit(args: PrerenderVisitArgs): Promise<RenderVisitResponse> {
+    this.visits.push({
+      url: args.url,
+      visitType: args.visitType,
+      jobId: args.jobId,
+      renderScope: args.renderScope,
+    });
+    return await (await this.#prerenderer()).prerenderVisit(args);
+  }
+
+  async prerenderModule(
+    args: ModulePrerenderArgs,
+  ): Promise<ModuleRenderResponse> {
+    return await (await this.#prerenderer()).prerenderModule(args);
+  }
+
+  async runCommand(args: RunCommandArgs): Promise<RunCommandResponse> {
+    return await (await this.#prerenderer()).runCommand(args);
+  }
+
+  async releaseBatch(args: ReleaseBatchArgs): Promise<void> {
+    await (await this.#prerenderer()).releaseBatch?.(args);
+  }
+
+  async prerenderScreenshot(
+    args: ScreenshotPrerenderArgs,
+  ): Promise<ScreenshotPrerenderResponse> {
+    let prerenderer = await this.#prerenderer();
+    if (!prerenderer.prerenderScreenshot) {
+      throw new Error('the test prerenderer does not capture screenshots');
+    }
+    return await prerenderer.prerenderScreenshot(args);
+  }
+
+  // The scopes the visits of one queue job carried, in order.
+  scopesOf(jobId: number, url?: string): (string | undefined)[] {
+    return this.visits
+      .filter(
+        (visit) =>
+          visit.jobId?.startsWith(`${jobId}.`) &&
+          (url === undefined || visit.url === url),
+      )
+      .map((visit) => visit.renderScope);
+  }
+}
+
+async function prerenderJobsInLane(
+  dbAdapter: PgAdapter,
+  lane: string,
+): Promise<number[]> {
+  let rows = (await dbAdapter.execute(
+    `SELECT id FROM jobs WHERE job_type = 'prerender_html' AND concurrency_group = $1 ORDER BY id`,
+    { bind: [lane] },
+  )) as { id: number }[];
+  return rows.map((row) => Number(row.id));
+}
+
+async function liveHoldsOn(
+  dbAdapter: PgAdapter,
+  lane: string,
+): Promise<number> {
+  let [row] = (await dbAdapter.execute(
+    `SELECT count(*)::int AS n FROM job_claim_holds
+      WHERE concurrency_group = $1 AND expires_at > now()`,
+    { bind: [lane] },
+  )) as { n: number }[];
+  return row?.n ?? 0;
+}
+
 async function indexJobsBy(
   dbAdapter: PgAdapter,
   realmURL: URL,
@@ -219,6 +319,7 @@ async function indexRow(
 module(basename(import.meta.filename), function () {
   module('writers in their own index lanes', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4452/concurrent-writers/');
+    let recorder = new RecordingPrerenderer();
     let realm: Realm;
     let request: RealmRequest;
     let dbAdapter: PgAdapter;
@@ -234,6 +335,7 @@ module(basename(import.meta.filename), function () {
         [WRITER_B]: ['read', 'write'],
         '@node-test_realm:localhost': ['read', 'realm-owner'],
       },
+      prerenderer: recorder,
       fileSystem: {
         'student.gts': studentGts,
         'report.gts': reportGts,
@@ -263,7 +365,7 @@ module(basename(import.meta.filename), function () {
       let hold: ReturnType<typeof holdWriterPassesBeforeCommit> | undefined;
 
       hooks.beforeEach(async function () {
-        let prerenderer: Prerenderer = await getTestPrerenderer();
+        recorder.visits = [];
         for (let n of [2, 3]) {
           let runner = new PgQueueRunner({
             adapter: dbAdapter,
@@ -279,7 +381,7 @@ module(basename(import.meta.filename), function () {
             matrixURL: realmServerTestMatrix.url,
             secretSeed: realmSecretSeed,
             realmServerMatrixUsername: testRealmServerMatrixUsername,
-            prerenderer,
+            prerenderer: recorder,
             createPrerenderAuth: testCreatePrerenderAuth,
           });
           await worker.run();
@@ -311,22 +413,32 @@ module(basename(import.meta.filename), function () {
           );
       }
 
-      // Starts writer A's hub edit and waits for its pass to be held before
-      // its commit. The pending response comes back wrapped, since an async
+      // Starts writer A's edit and waits for its pass to be held before its
+      // commit. The pending response comes back wrapped, since an async
       // function returning the promise itself would adopt it, and the caller
       // would wait out the very hold it is about to use.
+      async function startHeldEdit(
+        path: string,
+        doc: LooseSingleCardDocument,
+      ): Promise<{ edit: Promise<{ status: number; text: string }> }> {
+        hold = holdWriterPassesBeforeCommit(dbAdapter, WRITER_A);
+        let edit = saveAs(WRITER_A, 'patch', path, doc).then(
+          (response) => response,
+        );
+        await hold.reached;
+        return { edit };
+      }
+
+      // Writer A's edit of the hub student, whose pass fans out to both
+      // reports.
       async function startHeldHubEdit(): Promise<{
         hubEdit: Promise<{ status: number; text: string }>;
       }> {
-        hold = holdWriterPassesBeforeCommit(dbAdapter, WRITER_A);
-        let hubEdit = saveAs(
-          WRITER_A,
-          'patch',
+        let { edit } = await startHeldEdit(
           '/student-1',
           studentDoc('Mango Abdel-Rahman', realmURL.href),
-        ).then((response) => response);
-        await hold.reached;
-        return { hubEdit };
+        );
+        return { hubEdit: edit };
       }
 
       // Resolves with B's response, or with `undefined` once the budget
@@ -490,6 +602,171 @@ module(basename(import.meta.filename), function () {
           html?.includes('Mango Abdel-Rahman'),
           `report-1's HTML carries writer A's student name: ${html}`,
         );
+      });
+
+      test("a card read before another writer's commit is re-read under a new scope", async function (assert) {
+        // The mirror of the overlap case: writer A edits the report, and
+        // writer B edits the student it reads while A's pass is held. A's
+        // pass rendered the report against the old student, so what it
+        // cached for that render predates B's commit, and must not be what
+        // A's re-visit or A's HTML job reads.
+        assert.timeout(240_000);
+        let report1 = `${realmURL.href}report-1.json`;
+        let { edit: reportEdit } = await startHeldEdit(
+          '/report-1',
+          reportDoc(
+            'Reading log, revised',
+            `${realmURL.href}student-1`,
+            realmURL.href,
+          ),
+        );
+
+        let studentEdit = await leafSaveWithinBudget(
+          saveAs(
+            WRITER_B,
+            'patch',
+            '/student-1',
+            studentDoc('Mango Abdel-Rahman', realmURL.href),
+          ).then((response) => response),
+        );
+        assert.strictEqual(
+          studentEdit?.status,
+          200,
+          `writer B's edit of the student succeeded while writer A was held: ${studentEdit?.text}`,
+        );
+
+        hold!.release();
+        let reportResponse = await reportEdit;
+        assert.strictEqual(
+          reportResponse.status,
+          200,
+          `writer A's save succeeded: ${reportResponse.text}`,
+        );
+        let [reportPass] = await indexJobsBy(dbAdapter, realmURL, WRITER_A);
+        let [studentPass] = await indexJobsBy(dbAdapter, realmURL, WRITER_B);
+        assert.ok(
+          reportPass!.generation! > studentPass!.generation!,
+          `writer A committed after writer B (${reportPass?.generation} > ${studentPass?.generation})`,
+        );
+        assert.ok(
+          (reportPass?.validation_rounds ?? 0) >= 1,
+          `writer A's commit re-visited report-1 for writer B's commit (validationRounds ${reportPass?.validation_rounds})`,
+        );
+
+        let reportScopes = recorder.scopesOf(reportPass!.id, report1);
+        assert.ok(
+          reportScopes.length >= 2,
+          `writer A visited report-1 and then re-visited it (scopes: ${JSON.stringify(reportScopes)})`,
+        );
+        assert.notStrictEqual(
+          reportScopes[reportScopes.length - 1],
+          reportScopes[0],
+          "writer A's re-visit read under a scope other than the one its first visit cached under",
+        );
+
+        await settlePrerenderHtmlJobs(dbAdapter, realmURL, {
+          timeout: 60_000,
+        });
+        let htmlJobs = await prerenderJobsInLane(
+          dbAdapter,
+          prerenderHtmlWriterLane(realmURL.href, WRITER_A).concurrencyGroup,
+        );
+        assert.ok(htmlJobs.length > 0, "writer A's pass spawned its HTML job");
+        for (let htmlJob of htmlJobs) {
+          for (let scope of recorder.scopesOf(htmlJob, report1)) {
+            assert.notStrictEqual(
+              scope,
+              reportScopes[0],
+              `writer A's HTML job ${htmlJob} did not render under the scope writer A's pass cached under before writer B's commit`,
+            );
+          }
+        }
+
+        let row = await indexRow(dbAdapter, report1);
+        assert.strictEqual(
+          row?.pristine_doc?.attributes?.title,
+          'Reading log, revised',
+          "report-1's index row carries writer A's edit",
+        );
+        assert.strictEqual(
+          row?.search_doc?.studentName,
+          'Mango Abdel-Rahman',
+          "report-1's index row carries writer B's edit of the student it reads",
+        );
+        let html = (await prerenderedHtmlRowFor(dbAdapter, report1))
+          ?.isolated_html;
+        assert.true(
+          html?.includes('Reading log, revised'),
+          `report-1's HTML carries writer A's title: ${html}`,
+        );
+        assert.true(
+          html?.includes('Mango Abdel-Rahman'),
+          `report-1's HTML carries writer B's student name: ${html}`,
+        );
+      });
+
+      test("a bulk write's render hold ends with its own writer's indexing, not another writer's", async function (assert) {
+        assert.timeout(240_000);
+        let { hubEdit } = await startHeldHubEdit();
+        let bLane = prerenderHtmlWriterLane(
+          realmURL.href,
+          WRITER_B,
+        ).concurrencyGroup;
+
+        let operations = Array.from({ length: 12 }, (_unused, i) => ({
+          op: 'add',
+          href: `bulk-report-${i}.json`,
+          data: reportDoc(
+            `Bulk report ${i}`,
+            `${realmURL.href}student-1`,
+            realmURL.href,
+          ).data,
+        }));
+        let push = await request
+          .post('/_atomic')
+          .set('Accept', SupportedMimeType.JSONAPI)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(realm, WRITER_B, ['read', 'write'])}`,
+          )
+          .send(JSON.stringify({ 'atomic:operations': operations }));
+        assert.strictEqual(
+          push.status,
+          201,
+          `writer B's bulk write succeeded: ${push.text.slice(0, 500)}`,
+        );
+        assert.strictEqual(
+          await liveHoldsOn(dbAdapter, bLane),
+          1,
+          "writer B's bulk write holds its own render lane past the write",
+        );
+
+        await waitUntil(
+          async () => (await liveHoldsOn(dbAdapter, bLane)) === 0,
+          {
+            timeout: 60_000,
+            interval: 250,
+            timeoutMessage:
+              "writer B's render hold was still live after its own indexing, while writer A's pass was held",
+          },
+        );
+        let [hubPass] = await indexJobsBy(dbAdapter, realmURL, WRITER_A);
+        assert.strictEqual(
+          hubPass?.status,
+          'unfulfilled',
+          "writer B's hold ended while writer A's pass was still in flight",
+        );
+
+        hold!.release();
+        let hubResponse = await hubEdit;
+        assert.strictEqual(
+          hubResponse.status,
+          200,
+          "writer A's save succeeded",
+        );
+        await settlePrerenderHtmlJobs(dbAdapter, realmURL, {
+          timeout: 60_000,
+        });
       });
     });
   });

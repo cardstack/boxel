@@ -46,6 +46,7 @@ import {
   type ScreenshotManifestEntry,
 } from '../capture-spec.ts';
 import type { DBAdapter } from '../db.ts';
+import type { RealmIndexCommitsTable } from '../index-structure.ts';
 import type { IndexingProgressEvent } from '../worker.ts';
 import { progressLaneOf } from '../jobs/queue-claim.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
@@ -360,6 +361,16 @@ export async function runPrerenderHtmlPass({
     ...operations.keys(),
   ]);
   jobTag = `${jobTag} [generation: ${renderGeneration}]`;
+  let renderScope = await renderScopeForJob({
+    dbAdapter,
+    realmURL,
+    spawningJobId,
+    spawningIndexPasses,
+    renderGeneration,
+    jobInfo,
+    onOwnScope: (reason) =>
+      perfLog.debug(`${jobTag} renders under its own scope: ${reason}`),
+  });
   await batch.seedPrerenderedHtmlInvalidations(
     [...operations].map(([url, operation]) => ({ url, operation })),
   );
@@ -400,7 +411,7 @@ export async function runPrerenderHtmlPass({
           await visitForPrerenderedHtml({
             url: new URL(href),
             realmURL,
-            spawningJobId,
+            renderScope,
             realmPaths,
             reader,
             batch,
@@ -654,6 +665,90 @@ async function committedPasses(
   return new Set(rows.map((row) => row.pass_id));
 }
 
+// The render scope this job's visits carry. Sharing the spawning pass's scope
+// lets them reuse what that pass's visits left on a tab — link documents,
+// resident instances, in-render search results — which a tab hands back
+// without reading again. That holds only while it is still the realm's view:
+// the ledger shows the spawning pass committed straight on top of the state it
+// read (its generation is one past its base, so nothing else committed during
+// it), and nothing has committed since (the generation this job adopted is
+// that pass's own). Index passes run one per writer lane, so another writer's
+// commit can land in either window, and then the job keys on its own job and
+// reads everything afresh.
+//
+// A job enqueued without a spawning pass keys on its own job — except when it
+// has no real job either, where the caller's `-1` placeholder would make one
+// bucket shared by every such pass; it carries no scope then and the page
+// falls back to the job id, which is narrower and so never unsound. Same rule
+// as `visit-file.ts`. Without a database there is no ledger to check, and the
+// job shares the spawning pass's scope as it always has.
+async function renderScopeForJob({
+  dbAdapter,
+  realmURL,
+  spawningJobId,
+  spawningIndexPasses,
+  renderGeneration,
+  jobInfo,
+  onOwnScope,
+}: {
+  dbAdapter?: DBAdapter;
+  realmURL: URL;
+  spawningJobId: number | null;
+  spawningIndexPasses: SpawningIndexPass[];
+  renderGeneration: number;
+  jobInfo: JobInfo;
+  onOwnScope: (reason: string) => void;
+}): Promise<string | undefined> {
+  let ownScope =
+    jobInfo.jobId >= 0
+      ? renderScopeFor(realmURL.href, jobInfo.jobId)
+      : undefined;
+  if (spawningJobId == null || spawningJobId < 0) {
+    return ownScope;
+  }
+  let spawnerScope = renderScopeFor(realmURL.href, spawningJobId);
+  if (!dbAdapter) {
+    return spawnerScope;
+  }
+  let passIds = spawningIndexPasses
+    .filter((pass) => pass.jobId === spawningJobId)
+    .map((pass) => pass.passId);
+  if (passIds.length === 0) {
+    onOwnScope(`no spawning pass of job ${spawningJobId} is recorded`);
+    return ownScope;
+  }
+  let rows = (await query(dbAdapter, [
+    'SELECT generation, base_generation FROM realm_index_commits WHERE',
+    ...every([
+      ['realm_url =', param(realmURL.href)],
+      [
+        'pass_id IN',
+        ...addExplicitParens(
+          separatedByCommas(passIds.map((id) => [param(id)])),
+        ),
+      ],
+    ]),
+    'ORDER BY generation DESC LIMIT 1',
+  ] as Expression)) as Pick<
+    RealmIndexCommitsTable,
+    'generation' | 'base_generation'
+  >[];
+  let [commit] = rows;
+  if (!commit) {
+    onOwnScope(`spawning job ${spawningJobId} has no committed pass`);
+    return ownScope;
+  }
+  let generation = Number(commit.generation);
+  let baseGeneration = Number(commit.base_generation);
+  if (generation !== baseGeneration + 1 || renderGeneration !== generation) {
+    onOwnScope(
+      `the realm moved around spawning job ${spawningJobId} (read ${baseGeneration}, committed ${generation}, adopted ${renderGeneration})`,
+    );
+    return ownScope;
+  }
+  return spawnerScope;
+}
+
 // Which of these jobs are still queued or running.
 async function runningJobs(
   dbAdapter: DBAdapter,
@@ -875,7 +970,7 @@ export async function persistDeclaredScreenshots({
 async function visitForPrerenderedHtml({
   url,
   realmURL,
-  spawningJobId,
+  renderScope,
   realmPaths,
   reader,
   batch,
@@ -893,7 +988,9 @@ async function visitForPrerenderedHtml({
 }: {
   url: URL;
   realmURL: URL;
-  spawningJobId: number | null;
+  // See `renderScopeForJob`. Absent when neither this job nor a spawning pass
+  // has a real queue job to key on.
+  renderScope: string | undefined;
   realmPaths: RealmPaths;
   reader: Reader;
   batch: Batch;
@@ -1041,20 +1138,7 @@ async function visitForPrerenderedHtml({
     url: fileURL,
     auth,
     batchId,
-    // The job of the index pass that spawned this one, so both halves of that
-    // pass present a tab with one scope. A job enqueued without a spawning
-    // pass keys on its own — except when it has no real job either, where the
-    // caller's `-1` placeholder would make one bucket shared by every such
-    // pass; carry no scope there and let the page fall back to the job id,
-    // which is narrower and so never unsound. Same rule as `visit-file.ts`.
-    ...((spawningJobId ?? jobInfo.jobId) >= 0
-      ? {
-          renderScope: renderScopeFor(
-            realmURL.href,
-            spawningJobId ?? jobInfo.jobId,
-          ),
-        }
-      : {}),
+    ...(renderScope !== undefined ? { renderScope } : {}),
     visitType: 'prerender-html',
     renderOptions,
     // The bytes this visit already read, so the card's format renders build

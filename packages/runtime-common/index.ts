@@ -1331,13 +1331,13 @@ export type PrerenderVisitArgs = {
   // carry-forward on its own row's prior manifest inside. Only honored by
   // 'prerender-html' visits.
   screenshots?: DeclaredScreenshotVisitArgs;
-  // The realm view this visit renders against — one realm at one generation.
-  // An index pass and the `prerender_html` job it spawns are separate queue
-  // jobs that read the same files, so they carry the same scope, while the
-  // next pass over the realm carries a different one. A prerender tab keys
-  // what it may reuse across visits on this rather than on `jobId`: the two
-  // jobs interleave on a shared tab, and scoping on the job would tear that
-  // tab's state down on every alternation while still holding one view.
+  // The realm view this visit renders against: one realm, with no commit to it
+  // in between. A prerender tab keys what it may reuse across visits on this
+  // rather than on `jobId` — cached link documents, resident instances,
+  // in-render search results — so a scope must change whenever the view
+  // could have. An index pass and the `prerender_html` job it spawns share
+  // one while nothing else committed around the pass; otherwise each takes
+  // its own (see `renderScopeFor`).
   renderScope?: string;
   // The card instance's stored bytes, for a visit whose caller already read
   // them. The card branch of the render route builds its model from these
@@ -1469,6 +1469,16 @@ export interface DeclaredScreenshotVisitResult {
 // job of the index pass — its own for the index visit, the spawning pass's for
 // the prerender-html job that pass enqueued.
 //
+// A scope names a view of the realm that no commit moved, because a prerender
+// tab reuses what it read under one scope without checking it again. Index
+// passes of one realm run side by side, one per writer lane, so another
+// writer's commit can move the view mid-pass. So `round` separates the reads
+// a pass makes after that: a commit-time validation round re-visits under a
+// scope of its own, which every tab it lands on treats as a new view. And a
+// prerender-html job shares its spawning pass's scope only when nothing else
+// committed around that pass (see `runPrerenderHtmlPass`); otherwise it keys
+// on its own job.
+//
 // The pass's *generation* would read more naturally and is not sound: it is
 // `current_generation + 1` computed at batch start and only committed by
 // `done()`, so a pass that dies before finalizing leaves the row untouched and
@@ -1480,8 +1490,14 @@ export interface DeclaredScreenshotVisitResult {
 // the earlier attempt's copies. That write enqueues its own pass, whose
 // invalidation set covers the same rows under a scope of its own, so the window
 // closes on the next pass rather than persisting.
-export function renderScopeFor(realmURL: string, passJobId: number): string {
-  return `${realmURL}@${passJobId}`;
+export function renderScopeFor(
+  realmURL: string,
+  passJobId: number,
+  round = 0,
+): string {
+  return round === 0
+    ? `${realmURL}@${passJobId}`
+    : `${realmURL}@${passJobId}~${round}`;
 }
 
 // Arguments for releasing an indexing batch's ownership of an affinity,

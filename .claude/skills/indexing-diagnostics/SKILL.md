@@ -1990,7 +1990,7 @@ Passes that never waited behind anything have no blocker and drop out of the joi
 
 ### Step 3: score fairness per writer
 
-Fairness asks how much of a writer's index time went to waiting on someone else's pass. With benchmark 6's definition, a pass is **blocked** when another pass of the family was claimed and unfinished when it was enqueued, and the block is **cross-writer** when that pass shares no writer with it. Fairness = 1 − Σ cross-writer wait ÷ Σ (wait + run), per writer and for the family. 1.0 means no writer's time went to another writer's work.
+Fairness asks how much of a writer's index time went to waiting on someone else's pass. A pass is **blocked** when another pass of the family was claimed and unfinished when it was enqueued, and the block is **cross-writer** when that pass shares no writer with it. Fairness = 1 − Σ cross-writer wait ÷ Σ (wait + run), per writer and for the family. 1.0 means no writer's time went to another writer's work.
 
 ```sql
 WITH family_jobs AS (

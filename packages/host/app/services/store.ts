@@ -98,7 +98,11 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 
-import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
+import CardStore, {
+  currentRenderScope,
+  getDeps,
+  type ReferenceCount,
+} from '../lib/gc-card-store';
 
 import {
   consumingRealmHeader,
@@ -369,15 +373,19 @@ export default class StoreService extends Service implements StoreInterface {
   // a prerender. Layered *above* `inflightSearch`: a cache hit skips
   // the network round-trip entirely; a miss falls through to the
   // in-flight Map and the cache is populated on resolve. Keyed by
-  // (jobId, consumingRealm, query) — gated to same-realm-only so a
+  // (render scope, consumingRealm, query) — gated to same-realm-only so a
   // cross-realm read can't freeze a value while a peer realm-server
   // replica swaps mid-job.
   //
-  // Lifetime: the entire indexing job. One job typically spans many
-  // card renders in the same prerender tab (each navigation activates
-  // and deactivates the render route but all those visits share one
-  // `__boxelJobId`); the cache must survive those route bounces so
-  // earlier renders' work is reusable by later ones. Only clear when
+  // Lifetime: the render scope (`currentRenderScope`, falling back to
+  // `__boxelJobId`), which names one view of the realm with no commit in
+  // between. One scope typically spans many card renders in the same
+  // prerender tab (each navigation activates and deactivates the render
+  // route but all those visits share one scope); the cache must survive
+  // those route bounces so earlier renders' work is reusable by later ones.
+  // A scope changes whenever the view could have — another writer's pass
+  // committing to the realm mid-job is the case a job id alone would miss —
+  // so a cached answer never outlives the view it was read from. Only clear when
   // the job actually changes — `fetchSearchDoc` does this at
   // fetch-entry via the jobId-change check, and `resetState` /
   // `resetCache` do it on harder service resets. The render route's
@@ -387,12 +395,11 @@ export default class StoreService extends Service implements StoreInterface {
   // storing resolved docs rather than promises (avoids tail-latency
   // stalls on slow first populate).
   private searchCache: Map<string, SearchEntryResults> = new Map();
-  // The jobId the `searchCache` entries belong to. When a request
-  // arrives carrying a different `__boxelJobId` we drop the cache
-  // before serving — belt-and-braces beside `resetState()` and the
-  // render-route deactivate clear, in case a prerender tab is reused
-  // across jobs without driving either of those paths.
-  private searchCacheJobId: string | undefined = undefined;
+  // The render scope the `searchCache` entries belong to. When a request
+  // arrives under a different scope we drop the cache before serving —
+  // belt-and-braces beside `resetState()`, in case a prerender tab moves to
+  // another scope without driving it.
+  private searchCacheScope: string | undefined = undefined;
   // Monotonic counter bumped on every clear of `searchCache` (every
   // path that empties the map: `clearSearchCache`, `resetState`,
   // `resetCache`, the jobId-change clear at fetch-entry). A
@@ -477,7 +484,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.#reloadTargets = new Map();
     this.inflightSearch = new Map();
     this.searchCache = new Map();
-    this.searchCacheJobId = undefined;
+    this.searchCacheScope = undefined;
     this.searchCacheGeneration++;
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
@@ -538,13 +545,13 @@ export default class StoreService extends Service implements StoreInterface {
   // Drop every resolved-doc search-cache entry. Used for hard resets
   // (`resetState`, `resetCache`) and by tests; NOT called from the
   // render route's per-visit deactivate, because the cache is meant
-  // to survive across renders within a single indexing job. Cross-job
+  // to survive across renders within a single render scope. Cross-scope
   // invalidation is handled by `fetchSearchDoc`'s entry-time
-  // jobId-change clear, which fires the first time a new
-  // `__boxelJobId` is observed.
+  // scope-change clear, which fires the first time a new scope is
+  // observed.
   clearSearchCache(): void {
     this.searchCache.clear();
-    this.searchCacheJobId = undefined;
+    this.searchCacheScope = undefined;
     this.searchCacheGeneration++;
   }
 
@@ -564,7 +571,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.#reloadTargets = new Map();
     this.inflightSearch = new Map();
     this.searchCache = new Map();
-    this.searchCacheJobId = undefined;
+    this.searchCacheScope = undefined;
     this.searchCacheGeneration++;
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
@@ -1639,19 +1646,20 @@ export default class StoreService extends Service implements StoreInterface {
     scope?: SearchEntryScope,
   ): Promise<SearchEntryResults> {
     let inPrerender = Boolean((globalThis as any).__boxelRenderContext);
-    let jobId = inPrerender
-      ? ((globalThis as any).__boxelJobId as string | undefined)
-      : undefined;
+    let renderScope = inPrerender ? currentRenderScope() : undefined;
     let consumingRealm = inPrerender
       ? ((globalThis as any).__boxelConsumingRealm as string | undefined)
       : undefined;
 
-    // Belt-and-braces jobId-change clear at fetch-entry. `resetState`
-    // and the render-route deactivate hook are the primary paths; this
-    // catches a prerender tab reused across jobs without either firing.
-    if (typeof jobId === 'string' && jobId !== this.searchCacheJobId) {
+    // Scope-change clear at fetch-entry: the first request under a new
+    // render scope drops what the previous scope cached, since the realm
+    // view it was read from may since have moved.
+    if (
+      typeof renderScope === 'string' &&
+      renderScope !== this.searchCacheScope
+    ) {
       this.searchCache.clear();
-      this.searchCacheJobId = jobId;
+      this.searchCacheScope = renderScope;
       this.searchCacheGeneration++;
     }
 
@@ -1663,17 +1671,17 @@ export default class StoreService extends Service implements StoreInterface {
     // `scope` would split them and defeat the dedup.
     let wireScope = this.resolveWireScope(query, scope);
 
-    // Resolved-doc cache eligibility: prerender + jobId + same-realm.
+    // Resolved-doc cache eligibility: prerender + render scope + same-realm.
     // Cross-realm reads bypass — see field comment.
     let cacheKey: string | undefined;
     if (
       inPrerender &&
-      typeof jobId === 'string' &&
+      typeof renderScope === 'string' &&
       typeof consumingRealm === 'string' &&
       realms.length === 1 &&
       realms[0] === consumingRealm
     ) {
-      cacheKey = searchCacheKey(jobId, consumingRealm, query, wireScope);
+      cacheKey = searchCacheKey(renderScope, consumingRealm, query, wireScope);
       if (cacheKey !== undefined) {
         let cached = this.searchCache.get(cacheKey);
         if (cached !== undefined) {

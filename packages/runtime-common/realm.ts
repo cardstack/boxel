@@ -4019,14 +4019,18 @@ export class Realm {
     // the end of the commit would free the lane in that gap, so the previous
     // commit's pass — the one the hold was keeping available as a merge
     // target — gets claimed just before the new job arrives, and the two
-    // render the same cards one after the other. Hold until the indexing
-    // settles instead, so both land on a held lane and merge into one pass.
+    // render the same cards one after the other. Hold until this writer's
+    // indexing settles instead, so both land on a held lane and merge into
+    // one pass. Another writer's indexing is not waited on: its passes spawn
+    // their renders into that writer's lane, which this hold never covered.
     //
     // Deliberately not awaited: the caller's write is durable and its
     // response must not wait on indexing. Consecutive bulk commits chain —
     // each one's hold covers the next one's start — which is what collapses a
     // whole import into one render pass.
-    let settled = this.incrementalIndexing();
+    let settled = this.#realmIndexUpdater.incrementalIndexingOfWriter(
+      options?.initiatingUser,
+    );
     if (settled) {
       settled.then(releaseHold, releaseHold);
     } else {

@@ -92,7 +92,7 @@ export interface Lane {
 }
 
 // A family's exclusive lane: the group named for the family itself, published
-// without a family, as every job was before writer lanes existed.
+// without a family.
 export function exclusiveLane(family: string): Lane {
   return { concurrencyGroup: family, laneFamily: null };
 }
