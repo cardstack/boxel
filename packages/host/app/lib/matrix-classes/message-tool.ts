@@ -174,8 +174,6 @@ export default class MessageTool {
     }
     let { id: _id, ...resource } = cardDoc.data;
     let ephemeralDoc: LooseSingleCardDocument = { ...cardDoc, data: resource };
-    return (await this.store.add(ephemeralDoc, {
-      doNotPersist: true,
-    })) as CardDef;
+    return (await this.store.addWithoutPersisting(ephemeralDoc)) as CardDef;
   }
 }

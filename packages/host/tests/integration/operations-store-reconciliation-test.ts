@@ -188,9 +188,9 @@ module('Integration | operations store reconciliation', function (hooks) {
   // makes a card and before anything writes it.
   async function unsavedActivity(headline: string): Promise<CardDefType> {
     let { Activity } = await loader.import<any>(`${testRealmURL}report`);
-    return await getService('store').add<CardDefType>(
+    return await getService('store').addWithoutPersisting<CardDefType>(
       new Activity({ headline }),
-      { doNotPersist: true, realm: testRealmURL },
+      { realm: testRealmURL },
     );
   }
 
@@ -719,8 +719,7 @@ module('Integration | operations store reconciliation', function (hooks) {
     // the first. Only one object can be the card at that URL.
     let taken = `${testRealmURL}Activity/${activity[localIdSymbol]}`;
     let impostor = new Activity({ headline: 'Impostor' });
-    await store.add<CardDefType>(impostor, {
-      doNotPersist: true,
+    await store.addWithoutPersisting<CardDefType>(impostor, {
       realm: testRealmURL,
     });
     (store as any).store.setCard(taken, impostor);

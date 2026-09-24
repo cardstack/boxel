@@ -2367,21 +2367,18 @@ module(`Integration | search resource`, function (hooks) {
       firstName: string,
       lastName: string,
     ): Promise<any> {
-      return await storeService.add(
-        {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}${idPath}`,
-            attributes: {
-              author: { firstName, lastName },
-              editions: 0,
-              pubDate: '2024-01-01',
-            },
-            meta: { adoptsFrom: bookRef },
+      return await storeService.addWithoutPersisting({
+        data: {
+          type: 'card',
+          id: `${testRealmURL}${idPath}`,
+          attributes: {
+            author: { firstName, lastName },
+            editions: 0,
+            pubDate: '2024-01-01',
           },
-        } as LooseSingleCardDocument,
-        { doNotPersist: true },
-      );
+          meta: { adoptsFrom: bookRef },
+        },
+      } as LooseSingleCardDocument);
     }
 
     test(`a locally added matching card appears in an eligible live search without a server round-trip`, async function (assert) {
@@ -2843,22 +2840,19 @@ module(`Integration | search resource`, function (hooks) {
       await settled();
       let serverIds = search.instances.map((i) => i.id);
 
-      await storeService.add(
-        {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}posts/unresolved`,
-            attributes: { cardTitle: 'Lonely Post' },
-            relationships: {
-              article: {
-                links: { self: `${testRealmURL}does/not/exist` },
-              },
+      await storeService.addWithoutPersisting({
+        data: {
+          type: 'card',
+          id: `${testRealmURL}posts/unresolved`,
+          attributes: { cardTitle: 'Lonely Post' },
+          relationships: {
+            article: {
+              links: { self: `${testRealmURL}does/not/exist` },
             },
-            meta: { adoptsFrom: postRef },
           },
-        } as LooseSingleCardDocument,
-        { doNotPersist: true },
-      );
+          meta: { adoptsFrom: postRef },
+        },
+      } as LooseSingleCardDocument);
       await settled();
 
       assert.deepEqual(
@@ -2880,21 +2874,18 @@ module(`Integration | search resource`, function (hooks) {
       // not surface even when it satisfies the filter — that's another
       // realm's data and the local search has no authority over it.
       let otherRealmURL = 'https://other-realm.example/';
-      await storeService.add(
-        {
-          data: {
-            type: 'card',
-            id: `${otherRealmURL}books/foreign`,
-            attributes: {
-              author: { firstName: 'Foreign', lastName: 'Abdel-Rahman' },
-              editions: 0,
-              pubDate: '2024-01-01',
-            },
-            meta: { adoptsFrom: bookRef },
+      await storeService.addWithoutPersisting({
+        data: {
+          type: 'card',
+          id: `${otherRealmURL}books/foreign`,
+          attributes: {
+            author: { firstName: 'Foreign', lastName: 'Abdel-Rahman' },
+            editions: 0,
+            pubDate: '2024-01-01',
           },
-        } as LooseSingleCardDocument,
-        { doNotPersist: true },
-      );
+          meta: { adoptsFrom: bookRef },
+        },
+      } as LooseSingleCardDocument);
 
       let search = getSearchResourceForTest(loaderService, () => ({
         named: {
@@ -3161,11 +3152,14 @@ module(`Integration | search resource`, function (hooks) {
       fetchCalls = 0;
 
       let obsolete = false;
-      let queued = storeService.search(abdelRahmanQuery, [testRealmURL], {
-        includeMeta: true,
-        throttled: true,
-        isObsolete: () => obsolete,
-      });
+      let queued = storeService.searchWithMeta(
+        abdelRahmanQuery,
+        [testRealmURL],
+        {
+          throttled: true,
+          isObsolete: () => obsolete,
+        },
+      );
       // The consumer goes away while the search is still waiting its turn.
       obsolete = true;
 

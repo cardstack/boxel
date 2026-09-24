@@ -234,10 +234,9 @@ export async function createExampleInstanceFromPayload(opts: {
     },
   };
 
-  const creationResult = await opts.store.add(doc, {
+  const creationResult = await opts.store.addWithoutWaiting(doc, {
     realm: opts.realm ?? opts.defaultRealm,
     localDir: opts.localDir ?? undefined,
-    doNotWaitForPersist: true,
   });
   if (!isCardInstance(creationResult)) {
     console.warn('Failed to save generated example card', {

@@ -805,7 +805,7 @@ module('Integration | operator-mode | basics', function (hooks) {
       Person: new (...args: unknown[]) => CardDef;
     };
     let instance = new Person({ firstName: 'Unsaved Person' });
-    await store.add(instance, { doNotPersist: true, realm: testRealmURL });
+    await store.addWithoutPersisting(instance, { realm: testRealmURL });
 
     ctx.operatorModeStateService.restore({
       stacks: [[{ id: instance[localId], format: 'isolated' }]],

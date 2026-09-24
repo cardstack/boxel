@@ -1260,7 +1260,7 @@ export default class ToolService extends Service {
             relationships: relationships ?? {},
           },
         };
-        typedInput = await this.store.add(inputDoc, { doNotPersist: true });
+        typedInput = await this.store.addWithoutPersisting(inputDoc);
       } else {
         // identifyCard can fail in some circumstances where the input type is not exported
         // in that case, we'll fall back to this less reliable method of constructing the input type

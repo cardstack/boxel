@@ -846,12 +846,14 @@ export default class RenderRoute extends Route<Model> {
           };
 
           enterStage('buildModel:hydrating', 'hydrate');
-          let hydratedInstance = await this.store.add(enhancedDoc, {
-            relativeTo: rri(id),
-            realm: realmURL,
-            doNotPersist: true,
-            hydrateFieldsMs,
-          });
+          let hydratedInstance = await this.store.addWithoutPersisting(
+            enhancedDoc,
+            {
+              relativeTo: rri(id),
+              realm: realmURL,
+              hydrateFieldsMs,
+            },
+          );
           // What the settle drains is attributed the same way module
           // evaluations are: the store's completed-load histories are
           // rolling and tab-scoped, so snapshot them at the stage boundary
