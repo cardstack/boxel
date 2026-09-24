@@ -156,10 +156,11 @@ function configuredPoolMax(): number {
   return Number.isInteger(value) && value > 0 ? value : DEFAULT_POOL_MAX;
 }
 
-// How many of the pool's connections one tenant may hold while another tenant
-// has work open (see `ConnectionScheduler`). The tenants are the realms a
-// search names, so this is the share of a replica's database concurrency one
-// realm's searches keep when another realm is searching too.
+// How many of the pool's connections one tenant may hold while the pool is
+// oversubscribed and another tenant has work open (see `ConnectionScheduler`).
+// The tenants are the realms a search names, so this is the share of a
+// replica's database concurrency one realm's searches keep when they want
+// more than the pool has and another realm is searching too.
 //
 // Sized at the concurrency past which the database stops getting faster. On
 // the staging instance (2 vCPU), a single realm's saturating search load drove
