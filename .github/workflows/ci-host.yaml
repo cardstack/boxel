@@ -1490,29 +1490,34 @@ jobs:
           # spent in. A run from a few hours ago is strictly fresher than a
           # file that cannot be rewritten at all, and the generator's drift
           # gate still decides whether the result is worth a commit.
+          # No older than a week, because the point is weights measured on
+          # roughly current code — an ancient run is not an improvement on a
+          # stale file, it is the same problem with a fresher commit date. The
+          # bound applies to the merging PR's own runs too: a PR can sit open
+          # long after its last push, and nothing about being this merge's PR
+          # makes a month-old measurement current.
+          cutoff=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null ||
+                   date -u -v-7d +%Y-%m-%dT%H:%M:%SZ)
+
           candidates=""
           if [ -n "$head_sha" ]; then
-            candidates=$(gh api "repos/$REPO/actions/runs?head_sha=$head_sha&event=pull_request&per_page=50" \
+            candidates=$(CUTOFF="$cutoff" gh api "repos/$REPO/actions/runs?head_sha=$head_sha&event=pull_request&per_page=50" \
               --jq '[.workflow_runs[]
-                     | select(.name == "CI Host" and .conclusion == "success" and .run_attempt == 1)]
+                     | select(.name == "CI Host" and .conclusion == "success"
+                              and .run_attempt == 1 and .created_at > env.CUTOFF)]
                     | sort_by(.created_at) | reverse | .[].id' || true)
             [ -n "$candidates" ] ||
-              echo "PR #$pr has no first-attempt CI Host run that passed outright — widening to recent PRs"
+              echo "PR #$pr has no recent first-attempt CI Host run that passed outright — widening to recent PRs"
           fi
 
-          # Bounded two ways. Newest-first and capped at a handful, so a long
-          # unqualifying streak costs a predictable number of API calls rather
-          # than walking history; and no older than a week, because the point
-          # is weights measured on roughly current code — an ancient run is
-          # not an improvement on a stale file, it is the same problem with a
-          # fresher commit date.
+          # Bounded the other way too: newest-first and capped at a handful, so
+          # a long unqualifying streak costs a predictable number of API calls
+          # rather than walking history.
           #
           # Filtered client-side rather than with `event=`/`status=`: those
           # have been observed serving a cached page, and a stale page is
           # precisely how a long-superseded run would be picked. The age bound
           # makes that harmless either way.
-          cutoff=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null ||
-                   date -u -v-7d +%Y-%m-%dT%H:%M:%SZ)
           candidates="$candidates
           $(CUTOFF="$cutoff" gh api "repos/$REPO/actions/workflows/ci-host.yaml/runs?per_page=100" \
             --jq '[.workflow_runs[]
@@ -1520,18 +1525,26 @@ jobs:
                             and .run_attempt == 1 and .created_at > env.CUTOFF)]
                   | sort_by(.created_at) | reverse | .[0:12] | .[].id' || true)"
 
+          # Downloading is part of qualifying, not a step after it. A run whose
+          # merged report has expired or was never published is no more usable
+          # than one that ran Percy, and treating it as a late failure would
+          # abandon the refresh while untried candidates remained — the same
+          # single-run dependency this search exists to remove.
           run_id=""
           for candidate in $candidates; do
             [ -n "$candidate" ] || continue
-            if qualifies "$candidate"; then
+            qualifies "$candidate" || continue
+            rm -rf merged-junit-report
+            if gh run download -R "$REPO" "$candidate" --name host-test-report-merged -D merged-junit-report; then
               run_id="$candidate"
               break
             fi
+            echo "  run $candidate: no merged report to download"
           done
-          [ -n "$run_id" ] || leave "no recent first-attempt CI Host run was Percy-loaded and cache-imported"
-
-          gh run download -R "$REPO" "$run_id" --name host-test-report-merged -D merged-junit-report \
-            || leave "run $run_id published no merged report"
+          if [ -z "$run_id" ]; then
+            rm -rf merged-junit-report
+            leave "no recent first-attempt CI Host run was Percy-loaded, cache-imported and still holds its merged report"
+          fi
           echo "Shard timings will be regenerated from run $run_id"
 
       - name: Update memory baseline and shard timings
