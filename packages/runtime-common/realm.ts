@@ -481,6 +481,88 @@ function assignRealmConfig(
   realmInfo.config = structuredClone(config) as Record<string, JsonValue>;
 }
 
+// Which card holds the realm's policy, as the RealmConfig card at `realm.json`
+// names it. Applied by the same two overlays as `config`, and for the same
+// reason called only where the attribute is present.
+//
+// The pointer is a string naming a card on the web, and anything else leaves
+// the realm with no policy at all. That is the direction a malformed pointer
+// has to fail in: a realm with no policy is governed by its realm permissions
+// alone, whereas falling back to some default would grant access nobody
+// wrote, and refusing to start would take the realm down over a typo in its
+// settings. A null or blank value is how an owner writes "no policy" — the
+// field's editor stores one when its input is cleared — so it is dropped
+// without a warning; every other value says what it was in the log.
+//
+// Only the pointer is read here. What the card says, and whether it loads at
+// all, is decided by whatever follows it.
+function assignRealmPolicy(
+  realmInfo: RealmInfo,
+  policy: unknown,
+  virtualNetwork: VirtualNetwork,
+  log: { warn: (message: string) => void },
+): void {
+  delete realmInfo.policy;
+  if (policy === null || (typeof policy === 'string' && !policy.trim())) {
+    return;
+  }
+  let reference = readRealmPolicyReference(policy, virtualNetwork);
+  if ('problem' in reference) {
+    log.warn(
+      `ignoring the RealmConfig card's \`policy\`, which is ${reference.problem} rather than the id of a policy card`,
+    );
+    return;
+  }
+  realmInfo.policy = reference;
+}
+
+// The reference a `policy` value makes, or what is wrong with it in words for
+// the log.
+function readRealmPolicyReference(
+  policy: unknown,
+  virtualNetwork: VirtualNetwork,
+): RealmPolicyReference | { problem: string } {
+  if (typeof policy !== 'string') {
+    return {
+      problem: Array.isArray(policy)
+        ? 'an array'
+        : typeof policy === 'object'
+          ? 'an object'
+          : `a ${typeof policy}`,
+    };
+  }
+  // Either spelling a card id is served in: an absolute URL, or the prefix
+  // form a prefix-mapped realm serves its cards' ids in, which the virtual
+  // network resolves to the URL the realm is mounted at. Resolved without a
+  // base, so a relative reference is refused along with one that is not an
+  // identifier at all: there is no base a pointer in the realm's settings
+  // could fairly be resolved against.
+  let url: URL;
+  try {
+    url = virtualNetwork.toURL(policy.trim());
+  } catch {
+    return {
+      problem: 'neither an absolute URL nor a realm-prefixed card id',
+    };
+  }
+  // A card is served over http(s). A `file:`, `data:` or `javascript:` URL
+  // parses as absolute but names nothing a realm could load as a card.
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    return {
+      problem: `a ${url.protocol} URL rather than an http(s) one`,
+    };
+  }
+  // Kept as the resolved URL, so whatever reads the pointer is handed one
+  // spelling of it however the owner wrote it.
+  return { card: url.href };
+}
+
+// A realm's pointer to the card that holds its policy. Only the card's URL is
+// carried; nothing in the realm loads or compiles the card it names.
+export interface RealmPolicyReference {
+  card: string;
+}
+
 export interface RealmSession {
   canRead: boolean;
   canWrite: boolean;
@@ -516,6 +598,14 @@ export type RealmInfo = {
   // card and file-meta documents, and not `/_info`. `getRealmConfig()` is
   // where the operation runtime reads it.
   config?: Record<string, JsonValue>;
+  // The card that holds the realm's policy, absent for a realm that has none.
+  // Assigned by the same overlays as `config` and handed back apart from the
+  // served info the same way, for a reason of its own: the realm stamps its
+  // info on every card response, and the pointer commonly names a card in
+  // another realm — one a reader of this realm's cards may have no permission
+  // on, and whose existence is not this realm's to announce on each of them.
+  // `getRealmPolicy()` is where the realm reads it.
+  policy?: RealmPolicyReference;
   // Opt-in to producing the full prerendered isolated HTML for the
   // realm's default index card (CardsGrid or Workspace). When
   // undefined / null / false the host's render route substitutes a
@@ -2047,6 +2137,11 @@ export class Realm {
   // neither. `null` means "not yet parsed"; an empty map is a realm that
   // carries no settings, which is what an operation naming one is told.
   #cachedRealmConfig: Record<string, JsonValue> | null = null;
+  // The `policy` part, held apart for the reason `RealmInfo.policy` gives.
+  // Written and cleared together with `#cachedRealmConfig`, whose being set is
+  // what says a parse has been memoized: this one is undefined both before a
+  // parse and for a realm with no policy.
+  #cachedRealmPolicy: RealmPolicyReference | undefined;
   // Bumped by every invalidation, and captured by a parse before it starts.
   // A parse that reads the realm's state and then has an index swap land
   // underneath it is holding values the realm has already moved past, so it
@@ -2066,7 +2161,11 @@ export class Realm {
   // cache share one read instead of each running their own. Nulled once it
   // settles (see getRealmInfo).
   #realmInfoPromise:
-    | Promise<{ info: RealmInfo; config: Record<string, JsonValue> }>
+    | Promise<{
+        info: RealmInfo;
+        config: Record<string, JsonValue>;
+        policy: RealmPolicyReference | undefined;
+      }>
     | undefined;
   // Realm lifecycle timestamps, served by `getDetailedRealmInfo` on top of the
   // plain info. Cached separately from `#cachedRealmInfo` rather than folded
@@ -12899,7 +12998,16 @@ export class Realm {
     return structuredClone((await this.#parsedRealmInfo()).config);
   }
 
-  // Both halves of one parse, which is why they are read together rather than
+  // The card the realm's `realm.json` names as its policy, or undefined for a
+  // realm with none — including one whose pointer was malformed and dropped.
+  // Only the pointer: nothing here loads the card it names. A copy per caller,
+  // for the reason `getRealmConfig()` gives.
+  async getRealmPolicy(): Promise<RealmPolicyReference | undefined> {
+    let { policy } = await this.#parsedRealmInfo();
+    return policy ? { ...policy } : undefined;
+  }
+
+  // Every part of one parse, which is why they are read together rather than
   // each through its own accessor: `clearRealmIndexCaches()` nulls the cache
   // on every index swap, so a settings read that primed the cache and then
   // reached for the field would answer an empty map for a realm that has
@@ -12907,31 +13015,38 @@ export class Realm {
   async #parsedRealmInfo(): Promise<{
     info: RealmInfo;
     config: Record<string, JsonValue>;
+    policy: RealmPolicyReference | undefined;
   }> {
     if (this.#cachedRealmInfo && this.#cachedRealmConfig) {
-      return { info: this.#cachedRealmInfo, config: this.#cachedRealmConfig };
+      return {
+        info: this.#cachedRealmInfo,
+        config: this.#cachedRealmConfig,
+        policy: this.#cachedRealmPolicy,
+      };
     }
     if (!this.#realmInfoPromise) {
       let parse = (async () => {
         // Captured before the read begins, so an invalidation that lands while
         // it is in flight is visible when it finishes.
         let generation = this.#realmInfoGeneration;
-        // The parse hands back the two halves already apart; this only
-        // memoizes them. The hash covers the served half alone, which is
-        // exactly the bytes a response carries — so editing a setting does not
-        // invalidate every card's cached representation in the realm.
-        let { info, config } = await this.parseRealmInfo();
+        // The parse hands back its parts already apart; this only memoizes
+        // them. The hash covers the served part alone, which is exactly the
+        // bytes a response carries — so editing a setting or the policy
+        // pointer does not invalidate every card's cached representation in
+        // the realm.
+        let { info, config, policy } = await this.parseRealmInfo();
         let settings = config ?? {};
         if (generation === this.#realmInfoGeneration) {
           this.#cachedRealmInfo = info;
           this.#cachedRealmConfig = settings;
+          this.#cachedRealmPolicy = policy;
           this.#cachedRealmInfoHash = computeContentHash(JSON.stringify(info));
         }
         // Answered either way: this is the realm as the caller asking for it
         // found it, which is what every reader of a memoized parse gets. What
         // the check above prevents is that reading outliving the request, by
         // becoming the answer given to everyone after it.
-        return { info, config: settings };
+        return { info, config: settings, policy };
       })();
       this.#realmInfoPromise = parse;
       // Clears the slot only while this parse still owns it. An invalidation
@@ -12969,6 +13084,7 @@ export class Realm {
     this.#realmInfoGeneration++;
     this.#cachedRealmInfo = null;
     this.#cachedRealmConfig = null;
+    this.#cachedRealmPolicy = undefined;
     this.#cachedRealmInfoHash = null;
     this.#cachedRegistryTimestamps = null;
     this.#cachedIndexCounts = null;
@@ -12983,15 +13099,17 @@ export class Realm {
     this.#realmInfoPromise = undefined;
   }
 
-  // The realm's config document, read as the two things it holds: the info
-  // every realm-info route serves, and the settings only the operation runtime
-  // reads. They are returned apart rather than as one object a caller narrows,
-  // because three of this class's own routes stamp what comes back straight
-  // into a response — so a settings map that arrived inside `info` would be on
-  // the wire by default and stay off it only by each caller remembering.
+  // The realm's config document, read as the three things it holds: the info
+  // every realm-info route serves, the settings only the operation runtime
+  // reads, and the pointer to the realm's policy. They are returned apart
+  // rather than as one object a caller narrows, because three of this class's
+  // own routes stamp what comes back straight into a response — so a value
+  // that arrived inside `info` would be on the wire by default and stay off it
+  // only by each caller remembering.
   private async parseRealmInfo(): Promise<{
     info: RealmInfo;
     config: Record<string, JsonValue> | undefined;
+    policy: RealmPolicyReference | undefined;
   }> {
     let [lastPublishedAt, metadata] = await Promise.all([
       this.getLastPublishedAt(),
@@ -13065,6 +13183,14 @@ export class Realm {
         if ('config' in attrs) {
           assignRealmConfig(realmInfo, attrs.config, this.#log);
         }
+        if ('policy' in attrs) {
+          assignRealmPolicy(
+            realmInfo,
+            attrs.policy,
+            this.#virtualNetwork,
+            this.#log,
+          );
+        }
       }
     } catch (e) {
       this.#log.warn(`failed to read RealmConfig card from disk: ${e}`);
@@ -13105,13 +13231,21 @@ export class Realm {
         if ('config' in attrs) {
           assignRealmConfig(realmInfo, attrs.config, this.#log);
         }
+        if ('policy' in attrs) {
+          assignRealmPolicy(
+            realmInfo,
+            attrs.policy,
+            this.#virtualNetwork,
+            this.#log,
+          );
+        }
       }
     } catch (e) {
       this.#log.warn(`failed to read RealmConfig card from index: ${e}`);
     }
 
-    let { config, ...info } = realmInfo;
-    return { info, config };
+    let { config, policy, ...info } = realmInfo;
+    return { info, config, policy };
   }
 
   // RealmInfo plus the realm-lifecycle timestamps, for the realm server's batch

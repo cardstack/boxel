@@ -39,6 +39,7 @@ module('Integration | realm-config | settings', function (hooks) {
   async function renderRealmConfig(
     config: Record<string, unknown> | undefined,
     format: 'isolated' | 'edit',
+    attributes: Record<string, unknown> = {},
   ) {
     let loader = getService('loader-service').loader;
     let cardsGrid: typeof import('@cardstack/base/cards-grid') =
@@ -58,6 +59,7 @@ module('Integration | realm-config | settings', function (hooks) {
             attributes: {
               cardInfo: { name: 'Settings Workspace' },
               ...(config ? { config } : {}),
+              ...attributes,
             },
             meta: {
               adoptsFrom: {
@@ -238,5 +240,18 @@ module('Integration | realm-config | settings', function (hooks) {
     assert
       .dom('[data-test-realm-settings-empty]')
       .exists('and the table reads as a realm with no settings');
+  });
+
+  // The realm's policy pointer sits beside the settings as the id of the card
+  // that holds the policy, and is edited as that text.
+  test('the policy pointer is edited as text', async function (assert) {
+    let card = 'https://realms.example.test/org/policies/education';
+    await renderRealmConfig({ approver: '@mae:localhost' }, 'edit', {
+      policy: card,
+    });
+
+    assert
+      .dom('[data-test-field="policy"] input')
+      .hasValue(card, 'the pointer is an editable id');
   });
 });
