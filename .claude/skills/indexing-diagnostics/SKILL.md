@@ -1399,7 +1399,7 @@ LIMIT 20;
 ```
 
 - **A long `spawn_gate_ms`** is the job waiting out its spawning pass's remaining runtime, not a slow render. On a from-scratch spawn it can cover most of the index pass.
-- **`spawner_commits` empty for a listed spawner** means that pass never committed: the job rendered against whatever production held, and its log has the `did not commit and is not running` warning.
+- **`spawner_commits` empty for a listed spawner** means that pass never committed: the job rendered against whatever production held, and its log has a `rendering against the committed index: spawning index job <id> stopped running without committing` warning.
 - **A row whose `generation` differs from `stampedFromIndexGeneration`** should not exist; the two are written together.
 
 ### What Mode K can't tell you

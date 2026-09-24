@@ -339,7 +339,7 @@ export async function runPrerenderHtmlPass({
       }
     } else {
       log.warn(
-        `${jobTag} ${gate.uncommitted.join(', ')} did not commit and ${gate.uncommitted.length === 1 ? 'is' : 'are'} not running; rendering against the committed index`,
+        `${jobTag} rendering against the committed index: ${gate.uncommitted.join('; ')}`,
       );
     }
   }
@@ -481,8 +481,8 @@ export async function runPrerenderHtmlPass({
 }
 
 // Waits until the index passes that spawned a prerender-html job have
-// committed, and returns how long that took plus the spawners it stopped
-// waiting on without seeing them commit.
+// committed, and returns how long that took plus, for each spawner it stopped
+// waiting on without seeing it commit, why.
 //
 // A spawning pass allocates its generation only when it commits, so the wait
 // is keyed on its job id and answered by the `realm_index_commits` ledger: a
@@ -544,14 +544,19 @@ async function awaitSpawningPasses({
         for (let id of stopped) {
           pending.delete(id);
           if (!committedLate.has(id)) {
-            uncommitted.push(`spawning index job ${id}`);
+            uncommitted.push(
+              `spawning index job ${id} stopped running without committing`,
+            );
           }
         }
         continue;
       }
       if (Date.now() - start >= SPAWNING_PASS_WAIT_MS) {
         uncommitted.push(
-          ...[...pending].map((id) => `spawning index job ${id}`),
+          ...[...pending].map(
+            (id) =>
+              `spawning index job ${id} had not committed after ${SPAWNING_PASS_WAIT_MS} ms`,
+          ),
         );
         break;
       }
@@ -563,18 +568,21 @@ async function awaitSpawningPasses({
     return { waitMs: 0, uncommitted: [] };
   }
   let committed = false;
+  let stopped = false;
   while (Date.now() - start < SPAWNING_PASS_WAIT_MS) {
     if ((await committedGeneration(dbAdapter, realmURL)) >= generation) {
       committed = true;
       break;
     }
     if (spawningJobId == null) {
+      stopped = true;
       break;
     }
     if (!(await runningJobs(dbAdapter, new Set([spawningJobId]))).size) {
       // The same last read as above, against the watermark.
       committed =
         (await committedGeneration(dbAdapter, realmURL)) >= generation;
+      stopped = true;
       break;
     }
     await waitAndHeartbeat(jobInfo);
@@ -583,7 +591,15 @@ async function awaitSpawningPasses({
     waitMs: Date.now() - start,
     uncommitted: committed
       ? []
-      : [`generation ${generation} (spawning job ${spawningJobId ?? 'none'})`],
+      : [
+          `generation ${generation} is not committed and ${
+            spawningJobId == null
+              ? 'no spawning job is recorded'
+              : stopped
+                ? `spawning job ${spawningJobId} is not running`
+                : `spawning job ${spawningJobId} had not committed it after ${SPAWNING_PASS_WAIT_MS} ms`
+          }`,
+        ],
   };
 }
 
