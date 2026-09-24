@@ -82,6 +82,16 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      # `deploy:s3` stamps each object it uploads with an explicit
+      # Cache-Control. Without one, a browser falls back to heuristic
+      # freshness, a tenth of the object's age when it was fetched, and every
+      # upload resets that age. For days after a publish a returning browser
+      # would revalidate every icon a card imports, on every boot. One day
+      # fresh matches the distribution's default TTL. The stale-while-revalidate
+      # window lets a later boot use its cached copy while it refreshes in the
+      # background. Not `immutable`: an icon-set update can change the bytes
+      # behind an existing path. `aws s3 sync` stamps only what it uploads, so
+      # a new value reaches unchanged objects only through a full re-upload.
       - name: Sync to S3
         run: pnpm --filter @cardstack/boxel-icons deploy:s3
 
