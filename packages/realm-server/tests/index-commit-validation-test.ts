@@ -523,12 +523,13 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a commit whose peers keep committing over it stops after its rounds and enqueues a follow-up in its own lane', async function (assert) {
-    let lane = `indexing:${testRealm}#user:@writer:localhost`;
+    let laneFamily = `indexing:${testRealm}`;
+    let lane = `${laneFamily}#user:@writer:localhost`;
     let [{ id: jobId }] = (await adapter.execute(
-      `INSERT INTO jobs (job_type, concurrency_group, args, status, timeout, priority, initiated_by)
-       VALUES ('incremental-index', $1, '{}'::jsonb, 'unfulfilled', 600, 7, '["@writer:localhost"]'::jsonb)
+      `INSERT INTO jobs (job_type, concurrency_group, lane_family, args, status, timeout, priority, initiated_by)
+       VALUES ('incremental-index', $1, $2, '{}'::jsonb, 'unfulfilled', 600, 7, '["@writer:localhost"]'::jsonb)
        RETURNING id`,
-      { bind: [lane] },
+      { bind: [lane, laneFamily] },
     )) as { id: number }[];
     let a = await createBatch(Number(jobId));
     await stageCard(a, 'x', { label: 'x (a)' });
@@ -585,12 +586,13 @@ module(basename(import.meta.filename), function (hooks) {
       'the result names the follow-up job',
     );
     let [followUp] = (await adapter.execute(
-      `SELECT job_type, concurrency_group, priority, timeout, initiated_by, status, args
+      `SELECT job_type, concurrency_group, lane_family, priority, timeout, initiated_by, status, args
          FROM jobs WHERE id = $1`,
       { bind: [result.followUpJobId ?? null] },
     )) as {
       job_type: string;
       concurrency_group: string;
+      lane_family: string | null;
       priority: number;
       timeout: number;
       initiated_by: string[];
@@ -601,6 +603,7 @@ module(basename(import.meta.filename), function (hooks) {
       {
         jobType: followUp?.job_type,
         concurrencyGroup: followUp?.concurrency_group,
+        laneFamily: followUp?.lane_family,
         priority: Number(followUp?.priority),
         initiatedBy: followUp?.initiated_by,
         status: followUp?.status,
@@ -609,6 +612,7 @@ module(basename(import.meta.filename), function (hooks) {
       {
         jobType: 'incremental-index',
         concurrencyGroup: lane,
+        laneFamily,
         priority: 7,
         initiatedBy: ['@writer:localhost'],
         status: 'unfulfilled',
@@ -739,6 +743,8 @@ module(basename(import.meta.filename), function (hooks) {
           reservationId: 1,
           priority: 0,
           queueWaitMs: null,
+          concurrencyGroup: null,
+          laneFamily: null,
         },
       });
       return {

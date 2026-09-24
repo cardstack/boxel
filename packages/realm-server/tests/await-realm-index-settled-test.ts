@@ -13,6 +13,7 @@ import {
   awaitPublishedHtmlReady,
   prerenderHtmlConcurrencyGroup,
 } from '@cardstack/runtime-common/jobs/prerender-html';
+import { cancelAllJobsInLaneFamily } from '@cardstack/runtime-common';
 import { setupDB } from './helpers/index.ts';
 
 const realmURL = 'http://localhost:4201/test/';
@@ -35,19 +36,25 @@ async function enqueueIndexJob(
     // which is the untagged pass — a row from before the column existed, or one
     // no HTTP write produced.
     initiatedBy?: string[];
+    // Puts the row in a writer lane of the realm's index lane family, named
+    // by this suffix. Omitted leaves it in the family's exclusive lane with no
+    // family recorded, which is how every index job is published today.
+    writerLane?: string;
   } = {},
 ): Promise<number> {
+  let family = indexingConcurrencyGroup(url);
   let [{ id }] = (await dbAdapter.execute(
-    `INSERT INTO jobs (job_type, concurrency_group, timeout, priority, args, status, initiated_by)
-       VALUES ($4, $1, 3600, 10, $2, $3, $5)
+    `INSERT INTO jobs (job_type, concurrency_group, lane_family, timeout, priority, args, status, initiated_by)
+       VALUES ($4, $1, $6, 3600, 10, $2, $3, $5)
        RETURNING id`,
     {
       bind: [
-        indexingConcurrencyGroup(url),
+        opts.writerLane ? `${family}#${opts.writerLane}` : family,
         JSON.stringify({ realmURL: url }),
         status,
         opts.jobType ?? 'from-scratch-index',
         opts.initiatedBy ? JSON.stringify(opts.initiatedBy) : null,
+        opts.writerLane ? family : null,
       ],
     },
   )) as { id: number }[];
@@ -378,6 +385,85 @@ module(basename(import.meta.filename), function (hooks) {
       });
     });
 
+    // A realm's index lane is a family: its exclusive lane and a lane per
+    // writer. The gate reads the family, so a pass in a writer lane holds it
+    // wherever an exclusive one would.
+    module('across the lane family', function () {
+      const writer = '@writer:localhost';
+      const someoneElse = '@someone-else:localhost';
+      const owner = '@owner:localhost';
+
+      test('a pass in a writer lane holds the lane', async function (assert) {
+        await enqueueIndexJob(dbAdapter, realmURL, 'unfulfilled', {
+          jobType: 'incremental-index',
+          writerLane: `user:${writer}`,
+          initiatedBy: [writer],
+        });
+        assert.false(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            pollIntervalMs: 50,
+            jobTypes: INDEX_WRITING_JOB_TYPES,
+          }),
+          'a readiness caller waits for every lane of the family',
+        );
+        assert.true(
+          await awaitRealmIndexSettled(dbAdapter, otherRealmURL, {
+            timeoutMs: 200,
+          }),
+          "and another realm's family is not held by it",
+        );
+      });
+
+      test("a writer waits for its own lane and for exclusive work carrying it, not for another writer's lane", async function (assert) {
+        await enqueueIndexJob(dbAdapter, realmURL, 'unfulfilled', {
+          jobType: 'incremental-index',
+          writerLane: `user:${someoneElse}`,
+          initiatedBy: [someoneElse],
+        });
+        assert.true(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            initiatedBy: { user: writer, realmOwner: owner },
+          }),
+          "another writer's lane does not hold this writer",
+        );
+
+        let exclusive = await enqueueIndexJob(
+          dbAdapter,
+          realmURL,
+          'unfulfilled',
+          { jobType: 'copy-index', initiatedBy: [writer] },
+        );
+        assert.false(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            pollIntervalMs: 50,
+            initiatedBy: { user: writer, realmOwner: owner },
+          }),
+          'exclusive work carrying this writer holds it',
+        );
+        await dbAdapter.execute(
+          `UPDATE jobs SET status = 'resolved' WHERE id = $1`,
+          { bind: [exclusive] },
+        );
+
+        await enqueueIndexJob(dbAdapter, realmURL, 'unfulfilled', {
+          jobType: 'incremental-index',
+          writerLane: `user:${writer}`,
+          initiatedBy: [writer],
+        });
+        assert.false(
+          await awaitRealmIndexSettled(dbAdapter, realmURL, {
+            timeoutMs: 200,
+            pollIntervalMs: 50,
+            initiatedBy: { user: writer, realmOwner: owner },
+          }),
+          "and so does the writer's own lane",
+        );
+      });
+    });
+
     // The prerender-html channel is a separate lane on purpose, gated
     // separately via awaitPrerenderHtml. Index readiness must not wait on it.
     test('the prerender-html lane does not hold the index gate', async function (assert) {
@@ -588,6 +674,21 @@ module(basename(import.meta.filename), function (hooks) {
     // Matches `awaitRealmIndexSettled`, which reports settled without touching
     // `jobs` on an adapter that has no queue. Naming jobs there would mean
     // querying a table that need not exist.
+    test('names the jobs in every lane of the family', async function (assert) {
+      let exclusive = await enqueueIndexJob(dbAdapter, realmURL);
+      let writerPass = await enqueueIndexJob(
+        dbAdapter,
+        realmURL,
+        'unfulfilled',
+        { jobType: 'incremental-index', writerLane: 'user:@writer:localhost' },
+      );
+      assert.deepEqual(
+        (await outstandingIndexJobs(dbAdapter, realmURL)).map(({ id }) => id),
+        [exclusive, writerPass],
+        'the exclusive lane and the writer lane',
+      );
+    });
+
     test('an adapter with no job queue reports nothing', async function (assert) {
       await enqueueIndexJob(dbAdapter, realmURL);
       let queueless = Object.create(dbAdapter, {
@@ -597,6 +698,50 @@ module(basename(import.meta.filename), function (hooks) {
         await outstandingIndexJobs(queueless, realmURL),
         [],
         'no query, so nothing to report',
+      );
+    });
+  });
+
+  // Cancelling a realm's work — the cancel-jobs endpoint, archiving — stops
+  // every lane of its index family, not the exclusive lane alone.
+  module('cancelAllJobsInLaneFamily', function () {
+    test('cancels pending and running jobs in every lane of the family, and nothing else', async function (assert) {
+      let exclusive = await enqueueIndexJob(dbAdapter, realmURL);
+      let runningWriter = await enqueueIndexJob(
+        dbAdapter,
+        realmURL,
+        'unfulfilled',
+        { jobType: 'incremental-index', writerLane: 'user:@writer:localhost' },
+      );
+      await claimJob(dbAdapter, runningWriter);
+      let pendingWriter = await enqueueIndexJob(
+        dbAdapter,
+        realmURL,
+        'unfulfilled',
+        { jobType: 'incremental-index', writerLane: 'user:@other:localhost' },
+      );
+      let otherRealm = await enqueueIndexJob(dbAdapter, otherRealmURL);
+
+      let cancelled = await cancelAllJobsInLaneFamily(
+        dbAdapter,
+        indexingConcurrencyGroup(realmURL),
+      );
+      assert.deepEqual(
+        {
+          running: cancelled.cancelledRunning.map(Number),
+          pending: cancelled.cancelledPending.map(Number).sort((a, b) => a - b),
+        },
+        { running: [runningWriter], pending: [exclusive, pendingWriter] },
+        'every lane of the family is cancelled',
+      );
+      let [{ status }] = (await dbAdapter.execute(
+        `SELECT status FROM jobs WHERE id = $1`,
+        { bind: [otherRealm] },
+      )) as { status: string }[];
+      assert.strictEqual(
+        status,
+        'unfulfilled',
+        "another realm's family is untouched",
       );
     });
   });

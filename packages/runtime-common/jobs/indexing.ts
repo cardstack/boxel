@@ -27,10 +27,10 @@ export const INCREMENTAL_INDEX_JOB_TIMEOUT_SEC = 10 * 60;
 // The name of a realm's index lane, and of the lane family its writer lanes
 // belong to (see `QueuePublishRequest.laneFamily`). A job published to this
 // group is the family's exclusive work: it runs with nothing else of the
-// realm's index, which is what every job here is today. Every job that writes
-// the realm's index joins — from-scratch, incremental, copy — and so does work
-// that must not overlap a running pass without writing the index itself,
-// today `scoped-css-gc` (see `runtime-common/scoped-css-gc.ts`).
+// realm's index. Every job that writes the realm's index is published here —
+// from-scratch, incremental, copy — and so is work that must not overlap a
+// running pass without writing the index itself, today `scoped-css-gc` (see
+// `runtime-common/scoped-css-gc.ts`).
 //
 // Readers ask about the family rather than this group, through
 // `laneFamilyPredicate`, so a job in a writer lane counts wherever an
@@ -69,9 +69,9 @@ export function indexingConcurrencyGroup(realmURL: string): string {
 // lane and never runs a family's exclusive work beside anything else in it —
 // so base's exclusive index work occupies one worker at a time, and its writer
 // lanes, when a publish uses them, at most the queue's cap on concurrent
-// writer lanes per family. And the elevation stops at the index: follow-on prerender-html work
-// derives its tier from `prerenderSpawnedPriority` below rather than from the
-// elevated value, so a realm-wide HTML sweep for base cannot take a second
+// writer lanes per family. And the elevation stops at the index: follow-on
+// prerender-html work derives its tier from `prerenderSpawnedPriority` below
+// rather than from the elevated value, so a realm-wide HTML sweep for base cannot take a second
 // worker out of the same pool. Each further realm elevated would add another
 // index group, and so another worker held off user-initiated work; the other
 // bootstrap realms (catalog, skills, ...) stay at the system tier and get FIFO
@@ -146,9 +146,9 @@ export function prerenderSpawnedPriority({
 //
 // Signal: no `unfulfilled` job in the realm's index lane family — its
 // exclusive lane and every writer lane — which covers both queued and running
-// jobs. A job's status is stamped only after its
-// handler has returned, so its index writes are already committed by the time
-// it stops counting as unfulfilled — a clear lane means every index write
+// jobs. A job's status is stamped only after its handler has returned, so its
+// index writes are already committed by the time it stops counting as
+// unfulfilled — a clear lane means every index write
 // enqueued so far is durable. Resolves true when the lane is clear, false on
 // timeout.
 //
@@ -299,8 +299,9 @@ export function jobTypeFilter(
 // that can disagree with the gate it explains.
 //
 // Capped because it lands in a log line. A realm's lanes each serialize, so
-// they hold a handful in practice; the cap only bounds a pathological backlog, and a lane
-// that deep is diagnosed from the queue, not from one realm's readiness log.
+// they hold a handful in practice; the cap only bounds a pathological backlog,
+// and a lane that deep is diagnosed from the queue, not from one realm's
+// readiness log.
 const OUTSTANDING_INDEX_JOBS_LOG_CAP = 10;
 
 // `claimed` separates the two states a reader of this has to tell apart: a job

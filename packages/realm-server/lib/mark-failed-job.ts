@@ -5,10 +5,7 @@ import {
   separatedByCommas,
   type Expression,
 } from '@cardstack/runtime-common';
-import {
-  acquireLaneLocks,
-  type PgAdapter,
-} from '@cardstack/postgres';
+import { acquireLaneLocks, type PgAdapter } from '@cardstack/postgres';
 
 const log = logger('worker-manager');
 

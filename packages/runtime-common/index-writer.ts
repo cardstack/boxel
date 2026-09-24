@@ -3,6 +3,7 @@ import {
   type CardResource,
   type JobInfo,
   jobIdentity,
+  queueClaimOf,
   trimExecutableExtension,
   hasExecutableExtension,
   passInvalidatesExecutables,
@@ -1823,11 +1824,11 @@ export class Batch {
   }
 
   // The write-side stamps every row this batch writes carries, on both
-  // channels: which pass wrote it, when, and where it sits in that pass's
-  // write order. `seq` comes from the caller rather than from `#writeSeq`
-  // here, so the two rows a fused visit produces — its `boxel_index` half
-  // and its `prerendered_html` half — share one position instead of
-  // consuming two.
+  // channels: which pass wrote it, when, where it sits in that pass's write
+  // order, and how its job was claimed. `seq` comes from the caller rather
+  // than from `#writeSeq` here, so the two rows a fused visit produces — its
+  // `boxel_index` half and its `prerendered_html` half — share one position
+  // instead of consuming two.
   #writeSideStamps(seq: number): Diagnostics {
     return {
       invalidationId: this.#currentInvalidationId,
@@ -1835,7 +1836,14 @@ export class Batch {
       indexedAt: Date.now(),
       writeSeq: seq,
       ...this.#validationRoundStamp(),
+      ...this.#queueClaimStamp(),
     };
+  }
+
+  // `queueClaim`, on a row a queue-claimed job writes.
+  #queueClaimStamp(): Pick<Diagnostics, 'queueClaim'> {
+    let queueClaim = queueClaimOf(this.jobInfo);
+    return queueClaim ? { queueClaim } : {};
   }
 
   // `validationRound`, on a row a validation round writes.
@@ -3082,12 +3090,12 @@ export class Batch {
   }
 
   // Enqueues, inside the commit's transaction, the `incremental-index` job
-  // that re-indexes what the validation rounds left stale. It takes the lane,
-  // priority and initiators of this pass's own job row, so it runs where the
-  // pass would have and waits on behalf of the same writers. Because it is in
-  // the commit's transaction, the job exists exactly when the commit does: a
-  // commit that rolls back enqueues nothing, and one that lands cannot lose
-  // its follow-up to a crash in between. A batch outside a job, or whose job
+  // that re-indexes what the validation rounds left stale. It takes the lane
+  // (group and lane family), priority and initiators of this pass's own job
+  // row, so it runs where the pass would have and waits on behalf of the same
+  // writers. Because it is in the commit's transaction, the job exists exactly
+  // when the commit does: a commit that rolls back enqueues nothing, and one
+  // that lands cannot lose its follow-up to a crash in between. A batch outside a job, or whose job
   // row is gone, takes the realm's index lane at the system tier.
   //
   // There is no job queue under SQLite, so there the commit goes ahead with
@@ -3106,12 +3114,13 @@ export class Batch {
     let rows: { id: number | string }[] = [];
     if (this.jobInfo && this.jobInfo.jobId > 0) {
       rows = (await this.#query([
-        'INSERT INTO jobs (args, job_type, concurrency_group, priority, timeout, initiated_by)',
+        'INSERT INTO jobs (args, job_type, concurrency_group, lane_family, priority, timeout, initiated_by)',
         'SELECT',
         ...separatedByCommas([
           ['CAST(', param(args), 'AS jsonb)'],
           ['CAST(', param('incremental-index'), 'AS varchar)'],
           ['j.concurrency_group'],
+          ['j.lane_family'],
           ['j.priority'],
           ['CAST(', param(INCREMENTAL_INDEX_JOB_TIMEOUT_SEC), 'AS integer)'],
           ['j.initiated_by'],
@@ -4353,6 +4362,7 @@ export class Batch {
       passId: this.#passId,
       indexedAt: Date.now(),
       ...this.#validationRoundStamp(),
+      ...this.#queueClaimStamp(),
     };
     // `diagnostics` is a jsonb column. This helper uses
     // `upsertMultipleRows` which passes each value through `param()`

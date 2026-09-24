@@ -51,7 +51,14 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   function jobInfo(jobId: number, reservationId = 1): JobInfo {
-    return { jobId, reservationId, priority: 0, queueWaitMs: null, concurrencyGroup: null, laneFamily: null };
+    return {
+      jobId,
+      reservationId,
+      priority: 0,
+      queueWaitMs: null,
+      concurrencyGroup: null,
+      laneFamily: null,
+    };
   }
 
   async function createBatch(info?: JobInfo) {
@@ -290,6 +297,66 @@ module(basename(import.meta.filename), function (hooks) {
       promoted.map((row) => row.url),
       [url('holder'), url('superseded')],
       'the attempt holding the job commits, and publishes the row it resumed from the superseded attempt; the refused commits publish nothing of their own',
+    );
+  });
+
+  // A save's index wait is queue wait plus its pass's own run, and which of
+  // the two dominated is what a slow save needs answered. The claim rides on
+  // every row the pass writes, so a row answers it without a join to `jobs`.
+  test('every row a queue-claimed pass writes carries how its job was claimed', async function (assert) {
+    let earlier = await createBatch(jobInfo(await insertJob('unfulfilled')));
+    await stageCard(earlier, 'gone');
+    await earlier.done();
+
+    let queueClaim = {
+      queueWaitMs: 1234,
+      concurrencyGroup: `indexing:${testRealm}#user:@writer:localhost`,
+      laneFamily: `indexing:${testRealm}`,
+    };
+    let batch = await createBatch({
+      ...jobInfo(await insertJob('unfulfilled')),
+      ...queueClaim,
+    });
+    await stageCard(batch, 'a');
+    await batch.invalidate([new URL(url('gone'))]);
+    await batch.done();
+
+    assert.deepEqual(
+      (await productionDiagnostics('a'))?.queueClaim,
+      queueClaim,
+      'the index row names the wait, lane and family of its claim',
+    );
+    let [html] = (await adapter.execute(
+      `SELECT diagnostics FROM prerendered_html WHERE url = $1 AND type = 'instance'`,
+      { bind: [url('a')] },
+    )) as { diagnostics: Record<string, unknown> | null }[];
+    assert.deepEqual(
+      html?.diagnostics?.queueClaim,
+      queueClaim,
+      'and so does the HTML row',
+    );
+    let [tombstone] = (await adapter.execute(
+      `SELECT is_deleted, diagnostics FROM boxel_index WHERE url = $1 AND type = 'instance'`,
+      { bind: [url('gone')] },
+    )) as {
+      is_deleted: boolean | null;
+      diagnostics: Record<string, unknown> | null;
+    }[];
+    assert.deepEqual(
+      {
+        isDeleted: Boolean(tombstone?.is_deleted),
+        queueClaim: tombstone?.diagnostics?.queueClaim,
+      },
+      { isDeleted: true, queueClaim },
+      'and so does the tombstone the pass wrote',
+    );
+
+    let adhoc = await createBatch();
+    await stageCard(adhoc, 'adhoc');
+    await adhoc.done();
+    assert.false(
+      'queueClaim' in ((await productionDiagnostics('adhoc')) ?? {}),
+      'a batch no queue claimed stamps none',
     );
   });
 

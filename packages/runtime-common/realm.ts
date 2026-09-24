@@ -9761,7 +9761,7 @@ export class Realm {
         if (!settled) {
           this.#log.warn(
             `conditional ${request.method} of ${url.href} refused: ` +
-              `${indexingConcurrencyGroup(this.url)} did not settle, so the ` +
+              `the index lane family ${indexingConcurrencyGroup(this.url)} did not settle, so the ` +
               `index cannot be compared against`,
           );
           throw new OperationFailure({

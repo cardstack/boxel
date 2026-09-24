@@ -1701,7 +1701,14 @@ module('Unit | index-writer', function (hooks) {
     let batch = await indexWriter.createBatch(
       new URL(testRealmURL),
       virtualNetwork,
-      { jobId: 42, reservationId: 2, priority: 0, queueWaitMs: null, concurrencyGroup: null, laneFamily: null },
+      {
+        jobId: 42,
+        reservationId: 2,
+        priority: 0,
+        queueWaitMs: null,
+        concurrencyGroup: null,
+        laneFamily: null,
+      },
     );
     await batch.done();
 
@@ -4530,7 +4537,14 @@ module('Unit | index-writer', function (hooks) {
     let peer = await indexWriter.createBatch(
       new URL(testRealmURL),
       virtualNetwork,
-      { jobId: 99, reservationId: 1, priority: 0, queueWaitMs: null, concurrencyGroup: null, laneFamily: null },
+      {
+        jobId: 99,
+        reservationId: 1,
+        priority: 0,
+        queueWaitMs: null,
+        concurrencyGroup: null,
+        laneFamily: null,
+      },
     );
     await stageHub(peer, 'Peer Hub');
     await peer.invalidate([new URL(doomedURL)]);

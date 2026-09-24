@@ -22,8 +22,10 @@ export function laneFamilyOf(alias: JobsAlias): string {
 }
 
 // Whether a row is its family's exclusive work rather than a writer lane's.
+// Always true or false, never null, since the claim query negates it: a row
+// naming a family but no group is a writer lane, not an unknown.
 export function isExclusiveLane(alias: JobsAlias): string {
-  return `(${alias}.lane_family IS NULL OR ${alias}.lane_family = ${alias}.concurrency_group)`;
+  return `(${alias}.lane_family IS NULL OR ${alias}.lane_family IS NOT DISTINCT FROM ${alias}.concurrency_group)`;
 }
 
 // Every job in `family`, whichever lane it runs in: the exclusive work in the

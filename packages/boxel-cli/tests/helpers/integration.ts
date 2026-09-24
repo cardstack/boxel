@@ -300,7 +300,7 @@ async function bootTestRealmServer(
   // Test-only hardening for a leak in runtime-common's enqueueReindexRealmJob:
   // server.createRealm, handle-publish-realm, and full-reindex discard the Job
   // returned by queue.publish(), but publish() still registers a Deferred that
-  // rejects when cancelRunningJobsInLaneFamily fires during a concurrent
+  // rejects when cancelRunningJobsInConcurrencyGroup fires during a concurrent
   // delete-realm (status: 418, "User initiated job cancellation"). A discarded
   // Deferred with no handler surfaces to vitest as an unhandled rejection and
   // fails the suite even though every assertion passes. Other consumers chained

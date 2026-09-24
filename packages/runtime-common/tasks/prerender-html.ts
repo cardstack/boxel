@@ -23,7 +23,7 @@ import {
   maxPriorityAndTimeout,
   type IncrementalChange,
 } from './indexer.ts';
-import type { Stats } from '../worker.ts';
+import { queueClaimOf, type QueueClaim, type Stats } from '../worker.ts';
 
 export { prerenderHtml };
 
@@ -94,6 +94,9 @@ export interface PrerenderHtmlResult extends JSONTypes.Object {
   // members because the result is a `JSONTypes.Object`, whose index signature
   // rejects `undefined`.
   phaseTimings: Record<string, number> | null;
+  // How the queue claimed this job, as on an index job's result (see
+  // `IncrementalResult.queueClaim`); null when no queue claimed it.
+  queueClaim: QueueClaim | null;
 }
 
 // The measured phases only, or null when none was measured.
@@ -462,5 +465,6 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
         janitorRowsCleared: pass.janitorRowsCleared,
         janitorStagingsCleared: pass.janitorStagingsCleared,
       }),
+      queueClaim: queueClaimOf(jobInfo) ?? null,
     };
   };
