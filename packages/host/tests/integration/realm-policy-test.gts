@@ -21,7 +21,7 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
 } from '../helpers';
-import { setupBaseRealm } from '../helpers/base-realm';
+import { serializeCard, setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
@@ -384,5 +384,40 @@ module('Integration | realm policy', function (hooks) {
         'Always allowed',
         'an unconditional grant reads as always allowed',
       );
+  });
+
+  test('a document shape assigned in code is refused rather than read as a predicate', async function (assert) {
+    await setupPolicyRealm({ 'policies/education.json': educationPolicy });
+    let policy = await loadPolicy('policies/education');
+
+    let grant = policy.rules[0].grants[1];
+    (grant as { where: unknown }).where = providerPredicate;
+    assert.throws(
+      () => serializeCard(policy),
+      /a policy predicate in memory must be \{ source, snapshot \}/,
+      'a bare string on the instance fails the save instead of being written',
+    );
+
+    (grant as { where: unknown }).where = {
+      bxl: providerPredicate,
+      snapshot: true,
+    };
+    assert.throws(
+      () => serializeCard(policy),
+      /a policy predicate in memory must be \{ source, snapshot \}/,
+      'so does the annotated document shape',
+    );
+
+    grant.where = { source: providerPredicate, snapshot: true };
+    let serialized = serializeCard(policy);
+    assert.deepEqual(
+      (
+        serialized.data.attributes?.rules as {
+          grants: { where: unknown }[];
+        }[]
+      )[0].grants[1].where,
+      { bxl: providerPredicate, snapshot: true },
+      'an in-memory predicate serializes to its document shape',
+    );
   });
 });
