@@ -42,6 +42,23 @@ jobs:
       AWS_ROLE_ARN: arn:aws:iam::120317779495:role/boxel-icons
       AWS_CLOUDFRONT_DISTRIBUTION: E3RWB9TW185XFG
     steps:
+      - name: Refuse to run from non-main branches
+        # The `push` trigger is already main-only, but `workflow_dispatch` lets
+        # the operator pick any ref. This bucket is the single global CDN both
+        # staging and production read, and the sync never deletes, so a run from
+        # a feature or stale branch would publish unmerged icons or overwrite
+        # main's bytes with older ones, and no later run would fully undo it.
+        # Fail before configuring AWS credentials so no write can happen off-main.
+        run: |
+          set -eo pipefail
+          REF="${{ github.ref }}"
+          if [[ "$REF" != "refs/heads/main" ]]; then
+            echo "::error::This workflow may only run against refs/heads/main." >&2
+            echo "Got ref: $REF" >&2
+            exit 1
+          fi
+          echo "Confirmed run from main."
+
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Init
@@ -68,10 +85,11 @@ jobs:
       - name: Sync to S3
         run: pnpm --filter @cardstack/boxel-icons deploy:s3
 
-      # A miss on an icon that did not exist yet is served — and cached — as a
-      # 403, so newly added objects stay unreachable behind that negative
-      # response until it ages out. Invalidating is what makes the sync take
-      # effect for the cards that were already asking for the icon.
+      # Overwritten icons would otherwise be served from the edge cache for up
+      # to the cache policy's DefaultTTL (a day). A 403 for a not-yet-published
+      # icon is only cached for CloudFront's short default error TTL, so new
+      # icons become reachable without this; the invalidation is for changed
+      # bytes.
       - name: Invalidate CloudFront
         run: |
           aws cloudfront create-invalidation \
