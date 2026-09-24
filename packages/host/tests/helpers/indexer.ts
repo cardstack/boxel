@@ -140,10 +140,10 @@ export interface SetupIndexOptions {
 //
 // Rows given as a plain array are committed rows. The `{ working, production }`
 // form also stages its `working` rows the way an index pass stages them: in the
-// pending tables, under the staging id of the job the row names (`job_id`), or
-// the one it names itself (`staging_id`). A pass reads only its own staging, so
-// a working row naming neither would be staged where no batch reads it, and is
-// refused.
+// pending tables, under the `staging_id` each row names (see `jobStagingId`). A
+// pass reads only its own staging, plus the resumable rows of its job's earlier
+// attempts, so a working row that names no staging is refused rather than
+// staged where no batch would read it.
 export async function setupIndex(client: DBAdapter): Promise<void>;
 export async function setupIndex(
   client: DBAdapter,
@@ -211,19 +211,14 @@ export async function setupIndex(
     }
   }
   let now = Date.now();
-  let normalizedWorkingRows = (await normalizeIndexRows(workingRows, now)).map(
-    (row) => {
-      let stagingId =
-        (row.staging_id as string | undefined) ??
-        (row.job_id != null ? `job:${String(row.job_id)}` : undefined);
-      if (stagingId === undefined) {
-        throw new Error(
-          `working row ${String(row.url)} names neither a job_id nor a staging_id, so no batch would read it`,
-        );
-      }
-      return { ...row, staging_id: stagingId };
-    },
-  );
+  let normalizedWorkingRows = await normalizeIndexRows(workingRows, now);
+  for (let row of normalizedWorkingRows) {
+    if (typeof row.staging_id !== 'string') {
+      throw new Error(
+        `working row ${String(row.url)} names no staging_id, so no batch would read it`,
+      );
+    }
+  }
   let normalizedProductionRows = await normalizeIndexRows(productionRows, now);
   let workingIndexedCardsExpressions = await tableExpressions(
     client,

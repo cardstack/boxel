@@ -13,6 +13,7 @@ import {
   internalKeyFor,
   identifyCard,
   getFieldDefinitions,
+  jobStagingId,
   rri,
   type RealmResourceIdentifier,
   type ResolvedCodeRef,
@@ -1964,7 +1965,7 @@ module('Unit | query', function (hooks) {
 
   test("can perform query against a pass's staged rows", async function (assert) {
     let { mango, vangogh, ringo } = testCards;
-    let stagingId = 'job:1';
+    let stagingId = jobStagingId(1, 1);
     await setupIndex(
       dbAdapter,
       [{ realm_url: testRealmURL, current_generation: 1 }],
@@ -2034,7 +2035,7 @@ module('Unit | query', function (hooks) {
 
   test('can perform query against "production" version of the index', async function (assert) {
     let { mango, vangogh, ringo } = testCards;
-    let stagingId = 'job:1';
+    let stagingId = jobStagingId(1, 1);
     await setupIndex(
       dbAdapter,
       [{ realm_url: testRealmURL, current_generation: 1 }],

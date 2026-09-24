@@ -734,8 +734,8 @@ const LANE_DIAGNOSTIC_BUDGET_MS = 1_000;
 // drain (see `drainRequestersOwnIndexing`) before serving the current index
 // generation anyway. Bounded for the same reason the readiness gates are: an
 // unbounded hold is worse than a slightly stale answer. The index stays
-// consistent throughout — incremental jobs write into the working table and
-// only swap on completion — so a read that outlives the budget serves the
+// consistent throughout — incremental jobs stage their rows in the pending
+// tables and only swap on completion — so a read that outlives the budget serves the
 // previous generation, and the index event that follows the swap refreshes
 // live clients.
 const READ_INDEX_DRAIN_BUDGET_MS = 10_000;
@@ -10413,7 +10413,7 @@ export class Realm {
   // bytes are durable), so a GET that immediately follows the same client's
   // definition rewrite would otherwise read a stale snapshot — e.g. a
   // post-rename instance still serialized under the old schema. Waiting is a freshness courtesy, not a correctness
-  // requirement: incremental jobs write into the working table and the
+  // requirement: incremental jobs stage their rows in the pending tables and the
   // production rows stay live (and mutually consistent) until the completed
   // batch swaps in, so a read during indexing serves the previous
   // generation, never a torn one. That shapes both bounds here:

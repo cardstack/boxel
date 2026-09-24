@@ -2206,31 +2206,54 @@ module(basename(import.meta.filename), function () {
           lastModified: Date.now(),
           resourceCreatedAt: Date.now(),
         };
+        // A committed row that depends on the staged file by its concrete
+        // `.json` URL. The fan-out matches a dependency string exactly, so it
+        // reaches this row only when the alias seed resolved to that URL.
+        let dependentURL = `${testRealm}staged-only-dependent.json`;
+        await testDbAdapter.execute(
+          `INSERT INTO boxel_index (url, file_alias, type, generation, realm_url, deps, is_deleted, has_error)
+           VALUES ($1, $2, 'instance', 1, $3, $4::jsonb, false, false)`,
+          {
+            bind: [
+              dependentURL,
+              dependentURL.replace(/\.json$/, ''),
+              realm.url,
+              JSON.stringify([stagedOnlyURL.href]),
+            ],
+          },
+        );
+
+        let otherBatch = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+          virtualNetwork,
+        );
+        let stagingBatch = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+          virtualNetwork,
+        );
+        // A batch's first `invalidate()` fixes the URLs it treats as already
+        // handled, and a URL it wrote before then is one of them. So the file
+        // each batch reaches through a staged row is one staged after that.
+        for (let batch of [otherBatch, stagingBatch]) {
+          await batch.invalidate([new URL(`${testRealm}unrelated-seed.json`)]);
+        }
 
         let peerBatch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
           virtualNetwork,
         );
         await peerBatch.updateEntry(stagedOnlyURL, stagedFile);
-        let otherBatch = await new IndexWriter(testDbAdapter).createBatch(
-          new URL(realm.url),
-          virtualNetwork,
-        );
         await otherBatch.invalidate([stagedAliasURL]);
         assert.false(
-          otherBatch.invalidations.includes(stagedOnlyURL.href),
-          "a peer pass's staged row does not resolve the seed: it is not part of the index this pass works from",
+          otherBatch.invalidations.includes(dependentURL),
+          "a peer pass's staged row does not resolve the seed, so its dependents are not reached",
         );
 
-        let stagingBatch = await new IndexWriter(testDbAdapter).createBatch(
-          new URL(realm.url),
-          virtualNetwork,
-        );
         await stagingBatch.updateEntry(stagedOnlyURL, stagedFile);
         await stagingBatch.invalidate([stagedAliasURL]);
-        assert.ok(
-          stagingBatch.invalidations.includes(stagedOnlyURL.href),
-          "instance-id style seed resolves via the pass's own staged row before its commit",
+        assert.true(
+          stagingBatch.invalidations.includes(dependentURL),
+          "the pass's own staged row resolves the seed, and the fan-out reaches its dependents",
         );
       });
 

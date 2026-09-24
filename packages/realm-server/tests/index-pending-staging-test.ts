@@ -106,11 +106,29 @@ module(basename(import.meta.filename), function (hooks) {
     return row?.diagnostics ?? undefined;
   }
 
-  test('a retry resumes what an earlier attempt staged, across a peer commit', async function (assert) {
+  // A `job_reservations` row for `jobId`, as the queue writes one when a
+  // worker claims the job: a lease `leaseSec` long from now (negative for one
+  // that has already lapsed), optionally closed.
+  async function insertReservation(
+    jobId: number,
+    opts: { leaseSec?: number; closed?: boolean } = {},
+  ): Promise<number> {
+    let [row] = (await adapter.execute(
+      `INSERT INTO job_reservations (job_id, locked_until, worker_id, completed_at, completion_reason)
+       VALUES ($1, now() + ($2 || ' seconds')::interval, 'test-worker',
+               CASE WHEN $3 THEN now() ELSE NULL END,
+               CASE WHEN $3 THEN 'timeout-expired' ELSE NULL END)
+       RETURNING id`,
+      { bind: [jobId, String(opts.leaseSec ?? 600), opts.closed ?? false] },
+    )) as { id: number }[];
+    return Number(row.id);
+  }
+
+  test('a retry resumes, in its own staging, what an earlier attempt of its job staged', async function (assert) {
     let retried = await insertJob('unfulfilled');
     let peerJob = await insertJob('unfulfilled');
 
-    let attempt1 = await createBatch(jobInfo(retried));
+    let attempt1 = await createBatch(jobInfo(retried, 1));
     await stageCard(attempt1, 'a');
     // No done(): the attempt's reservation lapses before its commit.
 
@@ -148,14 +166,22 @@ module(basename(import.meta.filename), function (hooks) {
     );
 
     let attempt2 = await createBatch(jobInfo(retried, 2));
-    assert.strictEqual(
+    assert.notStrictEqual(
       attempt2.stagingId,
       attempt1.stagingId,
-      "a job's attempts share one staging id",
+      'each attempt of a job stages under its own id',
     );
     assert.true(
       attempt2.resumedRows.has(url('a')),
       'the retry resumes the row the earlier attempt staged',
+    );
+    assert.deepEqual(
+      [
+        ...(await stagedURLs('boxel_index_pending', attempt2.stagingId)),
+        ...(await stagedURLs('prerendered_html_pending', attempt2.stagingId)),
+      ],
+      [url('a'), url('a')],
+      "the resumed row is copied into the retry's own staging, on both channels",
     );
     let result = await attempt2.done();
     assert.strictEqual(
@@ -180,11 +206,94 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(
       await stagedURLs('boxel_index_pending', attempt2.stagingId),
       [],
-      "the retry's commit deletes the job's staged rows",
+      "the retry's commit deletes its own staged rows",
+    );
+    assert.deepEqual(
+      await stagedURLs('boxel_index_pending', attempt1.stagingId),
+      [url('a')],
+      "the earlier attempt's rows stay while its job is still unfulfilled",
+    );
+
+    await adapter.execute(`UPDATE jobs SET status = 'resolved' WHERE id = $1`, {
+      bind: [retried],
+    });
+    let later = await createBatch(jobInfo(peerJob, 2));
+    await stageCard(later, 'c');
+    await later.done();
+    assert.deepEqual(
+      await stagedURLs('boxel_index_pending', attempt1.stagingId),
+      [],
+      "once the job resolves, a later commit's janitor clears what its earlier attempt left",
     );
   });
 
-  test("a commit's janitor clears the rows of jobs that are no longer running, and nothing else", async function (assert) {
+  test('two attempts of one job that overlap do not clear each other’s staged rows', async function (assert) {
+    let job = await insertJob('unfulfilled');
+    // A lease that lapsed while its worker was stalled: the job is claimed
+    // again while the first attempt is still running.
+    let stalled = await createBatch(jobInfo(job, 1));
+    await stageCard(stalled, 'a');
+    let retry = await createBatch(jobInfo(job, 2));
+    await stageCard(retry, 'found-by-retry');
+
+    await stalled.done();
+    assert.deepEqual(
+      await stagedURLs('boxel_index_pending', retry.stagingId),
+      [url('a'), url('found-by-retry')],
+      "the first attempt's cleanup leaves the retry's staged rows alone",
+    );
+
+    await retry.done();
+    let promoted = (await adapter.execute(
+      `SELECT url FROM boxel_index WHERE realm_url = $1 AND type = 'instance' ORDER BY url`,
+      { bind: [testRealm] },
+    )) as { url: string }[];
+    assert.deepEqual(
+      promoted.map((row) => row.url),
+      [url('a'), url('found-by-retry')],
+      "the retry's commit promotes a row only it staged",
+    );
+  });
+
+  test('a commit is refused once its attempt no longer holds its job', async function (assert) {
+    let timedOut = await insertJob('rejected');
+    let timedOutReservation = await insertReservation(timedOut, {
+      closed: true,
+    });
+    let zombie = await createBatch(jobInfo(timedOut, timedOutReservation));
+    await stageCard(zombie, 'zombie');
+    await assert.rejects(
+      zombie.done(),
+      /no longer holds its job/,
+      'an attempt whose job was rejected under it cannot commit',
+    );
+
+    let reclaimed = await insertJob('unfulfilled');
+    let lapsed = await insertReservation(reclaimed, { leaseSec: -60 });
+    let current = await insertReservation(reclaimed);
+    let superseded = await createBatch(jobInfo(reclaimed, lapsed));
+    await stageCard(superseded, 'superseded');
+    await assert.rejects(
+      superseded.done(),
+      /no longer holds its job/,
+      'an attempt whose lease lapsed and was claimed again cannot commit',
+    );
+    let holder = await createBatch(jobInfo(reclaimed, current));
+    await stageCard(holder, 'holder');
+    await holder.done();
+
+    let promoted = (await adapter.execute(
+      `SELECT url FROM boxel_index WHERE realm_url = $1 AND type = 'instance' ORDER BY url`,
+      { bind: [testRealm] },
+    )) as { url: string }[];
+    assert.deepEqual(
+      promoted.map((row) => row.url),
+      [url('holder'), url('superseded')],
+      'the attempt holding the job commits, and publishes the row it resumed from the superseded attempt; the refused commits publish nothing of their own',
+    );
+  });
+
+  test("a commit's janitor clears staging no pass can commit any more, and nothing else", async function (assert) {
     let rejected = await insertJob('rejected');
     let resolved = await insertJob('resolved');
     let running = await insertJob('unfulfilled');
@@ -197,28 +306,44 @@ module(basename(import.meta.filename), function (hooks) {
       ['resolved', jobInfo(resolved)],
       ['running', jobInfo(running)],
       ['unrecorded', jobInfo(unrecorded)],
-      ['adhoc', undefined],
+      ['abandoned-adhoc', undefined],
+      ['recent-adhoc', undefined],
     ] as const) {
       let batch = await createBatch(info);
       await stageCard(batch, name);
       staged.set(name, batch);
     }
+    // An ad-hoc batch that stopped writing two days ago.
+    let longAgo = Date.now() - 2 * 24 * 60 * 60 * 1000;
+    let abandoned = staged.get('abandoned-adhoc')!.stagingId;
+    await adapter.execute(
+      `UPDATE boxel_index_pending SET indexed_at = $1,
+         diagnostics = jsonb_set(diagnostics, '{indexedAt}', to_jsonb($1::bigint))
+       WHERE staging_id = $2`,
+      { bind: [longAgo, abandoned] },
+    );
+    await adapter.execute(
+      `UPDATE prerendered_html_pending SET rendered_at = $1,
+         diagnostics = jsonb_set(diagnostics, '{indexedAt}', to_jsonb($1::bigint))
+       WHERE staging_id = $2`,
+      { bind: [longAgo, abandoned] },
+    );
 
     let committer = await createBatch(jobInfo(committing));
     await stageCard(committer, 'committed');
     let result = await committer.done();
 
     assert.strictEqual(
-      result.janitorJobsCleared,
-      2,
-      'the janitor counts the two finished jobs it cleared',
+      result.janitorStagingsCleared,
+      3,
+      "the janitor counts the stagings it cleared: two finished jobs' and the abandoned ad-hoc one",
     );
     assert.strictEqual(
       result.janitorRowsCleared,
-      4,
-      "each finished job's index and HTML rows are cleared",
+      6,
+      'each cleared staging held an index row and an HTML row',
     );
-    for (let name of ['rejected', 'resolved']) {
+    for (let name of ['rejected', 'resolved', 'abandoned-adhoc']) {
       let { stagingId } = staged.get(name)!;
       assert.deepEqual(
         [
@@ -226,13 +351,13 @@ module(basename(import.meta.filename), function (hooks) {
           ...(await stagedURLs('prerendered_html_pending', stagingId)),
         ],
         [],
-        `the rows a ${name} job left behind are gone`,
+        `the rows the ${name} staging left behind are gone`,
       );
     }
     for (let [name, reason] of [
       ['running', 'its retry resumes from them'],
       ['unrecorded', 'nothing says its job has stopped'],
-      ['adhoc', 'nothing records whether the batch is still running'],
+      ['recent-adhoc', 'it wrote recently enough to still be running'],
     ] as const) {
       let { stagingId } = staged.get(name)!;
       assert.deepEqual(

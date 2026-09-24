@@ -2498,7 +2498,7 @@ function prerenderedTableFromOpts(opts: WIPOptions | undefined) {
 // the table it stands in for. The staging id is spliced into the statement
 // text because the table expression is interpolated into it rather than built
 // from parameters, so only the two shapes a batch mints are accepted.
-const STAGING_ID_PATTERN = /^(job:\d+|adhoc:[0-9a-f-]+)$/;
+const STAGING_ID_PATTERN = /^(job:\d+\.-?\d+|adhoc:[0-9a-f-]+)$/;
 function stagedRows(
   table: 'boxel_index_pending' | 'prerendered_html_pending',
   stagingId: string,

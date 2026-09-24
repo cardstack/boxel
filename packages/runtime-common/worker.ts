@@ -90,12 +90,13 @@ export interface IndexPhaseTimings {
   // The part of `swapMs` after the commit spent deleting the pending rows it
   // promoted and running the janitor. Absent when the swap never committed.
   pendingCleanupMs?: number;
-  // What the janitor removed: this realm's pending rows staged by jobs that
-  // are no longer running, and how many jobs they belonged to. Nonzero means
-  // a job left rows behind — it died before its commit and did not retry, or
-  // its cleanup failed. Absent when the cleanup failed before the janitor ran.
+  // What the janitor removed: this realm's pending rows no pass can commit any
+  // more — those of jobs that have finished, and ad-hoc stagings idle past
+  // the abandonment window — and how many stagings they belonged to. Nonzero
+  // means some pass left rows behind: it died before its commit, or its own
+  // cleanup failed. Absent when the cleanup failed before the janitor ran.
   janitorRowsCleared?: number;
-  janitorJobsCleared?: number;
+  janitorStagingsCleared?: number;
   // Present only when a peer pass of the realm committed while this one ran,
   // so its commit checked what the peer's commit made stale. `validationMs`
   // is the wall of those checks plus every round that rolled the commit back
