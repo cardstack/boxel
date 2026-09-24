@@ -125,15 +125,12 @@ export interface OperationCore {
   ): ResolvedCodeRef | undefined;
   // The type of the file at this URL. A file names its type by its extension
   // rather than in stored JSON, and the mapping resolves module specifiers, so
-  // the realm supplies it bound for the same reason `resolveCodeRef` is. The
-  // answer is an extension lookup against the realm's own file type bindings
-  // and then the platform table — the same resolution that stamps `adoptsFrom`
-  // on the document a file read serves, which is what keeps the class an
-  // operation dispatches against and the class the realm serves the same one.
-  // Asynchronous because the realm's bindings come from its config document;
-  // they are parsed once and memoized until the next index swap. The type it
-  // names is then looked up in the definition cache like any other.
-  fileDefCodeRef(url: URL): CodeRef | Promise<CodeRef>;
+  // the realm supplies it bound for the same reason `resolveCodeRef` is. It
+  // reads nothing — the answer is a table lookup on the extension, the same one
+  // that stamps `adoptsFrom` on the document a file read serves. The type it
+  // names is then looked up in the definition cache like any other, so a file
+  // read does cost a definition lookup even though this function costs none.
+  fileDefCodeRef(url: URL): CodeRef;
   // Rewrite a document's instance ids into canonical prefix form, in place.
   // The mapping lives in the realm's fetch layer, so this arrives as a bound
   // function for the same reason `resolveCodeRef` does.
@@ -1061,7 +1058,7 @@ async function definitionFor(
     // the declarations, so a `read` declared on a file def subclass resolves
     // the same as one declared on a card.
     codeRef = urlNamesFile(url)
-      ? await core.fileDefCodeRef(url)
+      ? core.fileDefCodeRef(url)
       : await adoptsFromOf(scope, url);
   }
   if (!codeRef) {
