@@ -322,7 +322,11 @@ export type QueryOptions = WIPOptions & {
 export type SearchProjection = { kind: 'dataOnly' } | { kind: 'renderSet' };
 
 export interface WIPOptions {
-  useWorkInProgressIndex?: boolean;
+  // Read one index pass's staged rows — its `boxel_index_pending` rows, with
+  // its own `prerendered_html_pending` rows joined — instead of the committed
+  // index. Takes the pass's `Batch.stagingId`, so a read sees that pass's
+  // uncommitted work and no other pass's.
+  pendingStagingId?: string;
 }
 
 export interface QueryResultsMeta {
@@ -2476,16 +2480,33 @@ function assertIndexEntry<T>(obj: T): Omit<
 }
 
 function tableFromOpts(opts: WIPOptions | undefined) {
-  return opts?.useWorkInProgressIndex ? 'boxel_index_working' : 'boxel_index';
+  return opts?.pendingStagingId === undefined
+    ? 'boxel_index'
+    : stagedRows('boxel_index_pending', opts.pendingStagingId);
 }
 
-// The prerendered_html table paired with the boxel_index table `tableFromOpts`
-// selects: the working table mirrors boxel_index_working during an in-progress
-// pass, the production table mirrors boxel_index.
+// The prerendered_html rows paired with the boxel_index rows `tableFromOpts`
+// selects: the same pass's staged HTML rows for a staged read, the production
+// table otherwise.
 function prerenderedTableFromOpts(opts: WIPOptions | undefined) {
-  return opts?.useWorkInProgressIndex
-    ? 'prerendered_html_working'
-    : 'prerendered_html';
+  return opts?.pendingStagingId === undefined
+    ? 'prerendered_html'
+    : stagedRows('prerendered_html_pending', opts.pendingStagingId);
+}
+
+// A pass's rows of a pending table, as a derived table the callers alias like
+// the table it stands in for. The staging id is spliced into the statement
+// text because the table expression is interpolated into it rather than built
+// from parameters, so only the two shapes a batch mints are accepted.
+const STAGING_ID_PATTERN = /^(job:\d+\.-?\d+|adhoc:[0-9a-f-]+)$/;
+function stagedRows(
+  table: 'boxel_index_pending' | 'prerendered_html_pending',
+  stagingId: string,
+) {
+  if (!STAGING_ID_PATTERN.test(stagingId)) {
+    throw new Error(`not a staging id: ${JSON.stringify(stagingId)}`);
+  }
+  return `(SELECT * FROM ${table} WHERE staging_id = '${stagingId}')`;
 }
 
 // HTML-channel LEFT JOIN: attaches the prerendered_html row (aliased `ph`) for

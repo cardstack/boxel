@@ -61,7 +61,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
   }
 
   async function insertIndexEntry(args: {
-    table: 'boxel_index' | 'boxel_index_working';
+    table: 'boxel_index' | 'boxel_index_pending';
     realmURL: string;
     url: string;
   }) {
@@ -71,6 +71,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
       type: 'instance',
       generation: 1,
       realm_url: args.realmURL,
+      ...(args.table === 'boxel_index_pending'
+        ? { staging_id: `adhoc:${uuidv4()}` }
+        : {}),
     });
     await query(
       context.dbAdapter,
@@ -171,9 +174,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     let sourceIndexURL = `${realmURL}cleanup-${uuidv4()}.json`;
     let publishedIndexURL = `${publishedRealmURL}cleanup-${uuidv4()}.json`;
     let unrelatedIndexURL = `${unrelatedRealmURL}cleanup-${uuidv4()}.json`;
-    let sourceWorkingIndexURL = `${realmURL}working-${uuidv4()}.json`;
-    let publishedWorkingIndexURL = `${publishedRealmURL}working-${uuidv4()}.json`;
-    let unrelatedWorkingIndexURL = `${unrelatedRealmURL}working-${uuidv4()}.json`;
+    let sourcePendingIndexURL = `${realmURL}pending-${uuidv4()}.json`;
+    let publishedPendingIndexURL = `${publishedRealmURL}pending-${uuidv4()}.json`;
+    let unrelatedPendingIndexURL = `${unrelatedRealmURL}pending-${uuidv4()}.json`;
     let sourceModuleURL = `${realmURL}person`;
     let publishedModuleURL = `${publishedRealmURL}person`;
     let unrelatedModuleURL = `${unrelatedRealmURL}person`;
@@ -198,19 +201,19 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     });
 
     await insertIndexEntry({
-      table: 'boxel_index_working',
+      table: 'boxel_index_pending',
       realmURL,
-      url: sourceWorkingIndexURL,
+      url: sourcePendingIndexURL,
     });
     await insertIndexEntry({
-      table: 'boxel_index_working',
+      table: 'boxel_index_pending',
       realmURL: publishedRealmURL,
-      url: publishedWorkingIndexURL,
+      url: publishedPendingIndexURL,
     });
     await insertIndexEntry({
-      table: 'boxel_index_working',
+      table: 'boxel_index_pending',
       realmURL: unrelatedRealmURL,
-      url: unrelatedWorkingIndexURL,
+      url: unrelatedPendingIndexURL,
     });
 
     await insertModuleEntry(realmURL, sourceModuleURL);
@@ -420,28 +423,28 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
       'unrelated realm rows remain in boxel_index',
     );
 
-    let sourceWorkingRows = await context.dbAdapter.execute(
-      `SELECT * FROM boxel_index_working WHERE realm_url = '${realmURL}'`,
+    let sourcePendingRows = await context.dbAdapter.execute(
+      `SELECT * FROM boxel_index_pending WHERE realm_url = '${realmURL}'`,
     );
-    let publishedWorkingRows = await context.dbAdapter.execute(
-      `SELECT * FROM boxel_index_working WHERE realm_url = '${publishedRealmURL}'`,
+    let publishedPendingRows = await context.dbAdapter.execute(
+      `SELECT * FROM boxel_index_pending WHERE realm_url = '${publishedRealmURL}'`,
     );
-    let unrelatedWorkingRows = await context.dbAdapter.execute(
-      `SELECT * FROM boxel_index_working WHERE realm_url = '${unrelatedRealmURL}'`,
-    );
-    assert.strictEqual(
-      sourceWorkingRows.length,
-      0,
-      'source realm rows are removed from boxel_index_working',
+    let unrelatedPendingRows = await context.dbAdapter.execute(
+      `SELECT * FROM boxel_index_pending WHERE realm_url = '${unrelatedRealmURL}'`,
     );
     assert.strictEqual(
-      publishedWorkingRows.length,
+      sourcePendingRows.length,
       0,
-      'published realm rows are removed from boxel_index_working',
+      'source realm rows are removed from boxel_index_pending',
+    );
+    assert.strictEqual(
+      publishedPendingRows.length,
+      0,
+      'published realm rows are removed from boxel_index_pending',
     );
     assert.ok(
-      unrelatedWorkingRows.length > 0,
-      'unrelated realm rows remain in boxel_index_working',
+      unrelatedPendingRows.length > 0,
+      'unrelated realm rows remain in boxel_index_pending',
     );
 
     let sourceModuleRows = await context.dbAdapter.execute(

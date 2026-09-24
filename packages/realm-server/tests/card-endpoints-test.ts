@@ -1401,16 +1401,14 @@ module(basename(import.meta.filename), function () {
             // The instance row is keyed by `url` with the `.json` suffix;
             // the bare card URL is the `file_alias`. Match either so the
             // error flag lands on the row the GET read resolves.
-            for (let table of ['boxel_index', 'boxel_index_working']) {
-              await dbAdapter.execute(
-                `UPDATE ${table}
-                 SET has_error = TRUE, error_doc = $1::jsonb
-                 WHERE (url = $2 OR file_alias = $2) AND type = 'instance'`,
-                {
-                  bind: [JSON.stringify(errorDoc), cardURL],
-                },
-              );
-            }
+            await dbAdapter.execute(
+              `UPDATE boxel_index
+               SET has_error = TRUE, error_doc = $1::jsonb
+               WHERE (url = $2 OR file_alias = $2) AND type = 'instance'`,
+              {
+                bind: [JSON.stringify(errorDoc), cardURL],
+              },
+            );
 
             let response = await request
               .get('/person-1')
@@ -1442,14 +1440,12 @@ module(basename(import.meta.filename), function () {
             status: 500,
             additionalErrors: null,
           };
-          for (let table of ['boxel_index', 'boxel_index_working']) {
-            await dbAdapter.execute(
-              `UPDATE ${table}
-                 SET has_error = TRUE, error_doc = $1::jsonb
-                 WHERE (url = $2 OR file_alias = $2) AND type = 'instance'`,
-              { bind: [JSON.stringify(errorDoc), cardURL] },
-            );
-          }
+          await dbAdapter.execute(
+            `UPDATE boxel_index
+               SET has_error = TRUE, error_doc = $1::jsonb
+               WHERE (url = $2 OR file_alias = $2) AND type = 'instance'`,
+            { bind: [JSON.stringify(errorDoc), cardURL] },
+          );
 
           let response = await request
             .get('/person-1')
@@ -4369,16 +4365,14 @@ module(basename(import.meta.filename), function () {
             additionalErrors: null,
           };
 
-          for (let table of ['boxel_index', 'boxel_index_working']) {
-            await dbAdapter.execute(
-              `UPDATE ${table}
-               SET has_error = TRUE, error_doc = $1::jsonb
-               WHERE url = $2`,
-              {
-                bind: [JSON.stringify(errorDoc), cardURL],
-              },
-            );
-          }
+          await dbAdapter.execute(
+            `UPDATE boxel_index
+             SET has_error = TRUE, error_doc = $1::jsonb
+             WHERE url = $2`,
+            {
+              bind: [JSON.stringify(errorDoc), cardURL],
+            },
+          );
 
           let response = await request
             .patch('/person-1')
@@ -4486,16 +4480,14 @@ module(basename(import.meta.filename), function () {
             additionalErrors: null,
           };
 
-          for (let table of ['boxel_index', 'boxel_index_working']) {
-            await dbAdapter.execute(
-              `UPDATE ${table}
-               SET has_error = TRUE, error_doc = $1::jsonb, pristine_doc = NULL
-               WHERE url = $2`,
-              {
-                bind: [JSON.stringify(errorDoc), cardURL],
-              },
-            );
-          }
+          await dbAdapter.execute(
+            `UPDATE boxel_index
+             SET has_error = TRUE, error_doc = $1::jsonb, pristine_doc = NULL
+             WHERE url = $2`,
+            {
+              bind: [JSON.stringify(errorDoc), cardURL],
+            },
+          );
 
           let response = await request
             .patch('/person-1')

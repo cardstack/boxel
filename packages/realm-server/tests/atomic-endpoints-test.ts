@@ -55,7 +55,7 @@ function formatDiskSnapshot(snapshot: DiskSnapshot): string {
   }
 }
 
-// Read the raw rows for a URL from boxel_index + boxel_index_working,
+// Read the raw rows for a URL from boxel_index + boxel_index_pending,
 // plus realm_generations, so we can tell whether a stale GET is the index
 // being out of date or the GET path picking up the wrong row.
 async function readIndexSnapshot(
@@ -66,7 +66,7 @@ async function readIndexSnapshot(
 ): Promise<{
   generation: unknown;
   stable: unknown[];
-  working: unknown[];
+  pending: unknown[];
 }> {
   let [versionRow] = (await dbAdapter.execute(
     `SELECT current_generation FROM realm_generations WHERE realm_url = $1`,
@@ -81,10 +81,10 @@ async function readIndexSnapshot(
     { bind: [realmHref, cardURL, fileURL] },
   )) as unknown[];
 
-  let working = (await dbAdapter.execute(
+  let pending = (await dbAdapter.execute(
     `SELECT url, file_alias, type, generation, is_deleted,
             pristine_doc, last_modified
-       FROM boxel_index_working
+       FROM boxel_index_pending
       WHERE realm_url = $1 AND (url = $2 OR url = $3 OR file_alias = $2 OR file_alias = $3)`,
     { bind: [realmHref, cardURL, fileURL] },
   )) as unknown[];
@@ -92,7 +92,7 @@ async function readIndexSnapshot(
   return {
     generation: versionRow?.current_generation ?? null,
     stable,
-    working,
+    pending,
   };
 }
 
@@ -1221,7 +1221,7 @@ module(basename(import.meta.filename), function () {
             testRealmAdapter,
             'update-person.json',
           );
-          // Snapshot boxel_index/boxel_index_working too. With the disk
+          // Snapshot boxel_index/boxel_index_pending too. With the disk
           // diagnostic from #4530 we know the file write lands; if the
           // index rows here have firstName="Initial" it's an indexer/
           // promotion bug, if they have "Updated" it's a GET-path bug.
