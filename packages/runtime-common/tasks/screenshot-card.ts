@@ -9,6 +9,7 @@ import {
   isCaptureFormat,
   jobIdentity,
   putMedia,
+  readRealmLoaderEpoch,
   updateMediaCacheDiagnostics,
   emitScreenshotPerf,
   type MediaCacheLane,
@@ -198,6 +199,20 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
       let auth = createPrerenderAuth(runAsUserId, allUserPermissions);
       permissionsMs = Date.now() - permissionsStart;
 
+      // A capture reuses a pooled prerender page that may still hold a module
+      // graph a later pass superseded, so the render route must be told which
+      // module timeline this capture belongs to. Threading the realm's loader
+      // epoch makes it reset that tab's loader when the epoch differs from the
+      // one the tab last cleared for — the same synchronization indexing
+      // renders (index-runner) and the write-path definition render
+      // (definition-lookup) already do. Without it a capture taken right after
+      // a module edit can render the old module and persist it under the new
+      // generation's ledger key, serving the pre-edit layout until the page is
+      // recycled.
+      let loaderEpoch = await readRealmLoaderEpoch(
+        dbAdapter,
+        normalizedRealmURL,
+      );
       prerenderStart = Date.now();
       let result = await prerenderer.prerenderScreenshot({
         realm: normalizedRealmURL,
@@ -206,6 +221,7 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
         format,
         ...(captureSpec ? { captureSpec } : {}),
         priority: jobInfo?.priority,
+        renderOptions: { loaderEpoch },
         // Joins the prerender server's and manager's logs for this render
         // back to the worker job (forwarded as the x-boxel-job-id header by
         // the remote prerenderer; in-process prerenderers ignore it).

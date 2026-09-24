@@ -11,12 +11,25 @@ import { screenshotCard } from '../tasks/screenshot-card.ts';
 const REALM_URL = 'http://localhost:4201/experiments/';
 const CARD_ID = `${REALM_URL}Person/fadhlan`;
 
-function makeDBAdapter(rows: Record<string, unknown>[]): DBAdapter {
+function makeDBAdapter(
+  rows: Record<string, unknown>[],
+  loaderEpoch?: string,
+): DBAdapter {
+  // `readRealmLoaderEpoch` reads `realm_generations`; every other query the
+  // task runs (permission fetches) wants the permission `rows`. Branch on the
+  // SQL so the epoch read doesn't get handed a permission row (whose
+  // `loader_epoch` would be undefined → the '0' sentinel).
+  let execute = async (sql: string, _opts?: ExecuteOptions) =>
+    (/realm_generations/i.test(sql)
+      ? loaderEpoch !== undefined
+        ? [{ loader_epoch: loaderEpoch }]
+        : []
+      : rows) as any;
   return {
     kind: 'pg',
     notify: async () => {},
     isClosed: false,
-    execute: async (_sql: string, _opts?: ExecuteOptions) => rows as any,
+    execute,
     close: async () => {},
     getColumnNames: async () => [],
     withWriteLock: async (_url, fn) => fn(undefined),
@@ -28,13 +41,17 @@ function makeDBAdapter(rows: Record<string, unknown>[]): DBAdapter {
 
 function makeTaskArgs({
   dbRows,
+  loaderEpoch,
   onCreatePrerenderAuth,
+  onPrerenderScreenshot,
 }: {
   dbRows: Record<string, unknown>[];
+  loaderEpoch?: string;
   onCreatePrerenderAuth?: (
     userId: string,
     permissions: Record<string, any>,
   ) => void;
+  onPrerenderScreenshot?: (args: any) => void;
 }): TaskArgs {
   let prerenderer: Prerenderer = {
     prerenderModule: async () => {
@@ -46,17 +63,20 @@ function makeTaskArgs({
     runCommand: async () => {
       throw new Error('not used');
     },
-    prerenderScreenshot: async () => ({
-      status: 'ready',
-      base64: 'c3R1Yg==',
-      width: 800,
-      height: 600,
-      contentType: 'image/png',
-    }),
+    prerenderScreenshot: async (args: any) => {
+      onPrerenderScreenshot?.(args);
+      return {
+        status: 'ready',
+        base64: 'c3R1Yg==',
+        width: 800,
+        height: 600,
+        contentType: 'image/png',
+      };
+    },
   } as unknown as Prerenderer;
 
   return {
-    dbAdapter: makeDBAdapter(dbRows),
+    dbAdapter: makeDBAdapter(dbRows, loaderEpoch),
     queuePublisher: {} as QueuePublisher,
     indexWriter: {} as any,
     prerenderer,
@@ -227,6 +247,43 @@ const tests = Object.freeze({
       userId: '@alice:localhost',
       permissions: { [REALM_URL]: ['read'] },
     });
+  },
+
+  // A capture reuses a pooled prerender page, so it must tell the render route
+  // which module timeline it belongs to or a page holding a superseded module
+  // graph renders the old module and persists it under the new generation's
+  // ledger key. The task threads the realm's committed `loader_epoch`; the
+  // route resets the tab's loader when it differs.
+  'threads the realm loader epoch into the capture render options': async (
+    assert,
+  ) => {
+    assert.expect(2);
+    let renderArgs: any;
+
+    let result = await capture(
+      makeTaskArgs({
+        dbRows: [
+          {
+            username: '*',
+            realm_url: REALM_URL,
+            read: true,
+            write: false,
+            realm_owner: false,
+          },
+        ],
+        loaderEpoch: 'epoch-2',
+        onPrerenderScreenshot: (args) => {
+          renderArgs = args;
+        },
+      }),
+    );
+
+    assert.strictEqual(result.status, 'ready');
+    assert.deepEqual(
+      renderArgs?.renderOptions,
+      { loaderEpoch: 'epoch-2' },
+      'the capture carries the realm’s current loader epoch',
+    );
   },
 
   'refuses a runner with no access to the realm': async (assert) => {

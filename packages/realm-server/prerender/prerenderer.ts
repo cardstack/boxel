@@ -638,6 +638,7 @@ export class Prerenderer {
     auth,
     format,
     captureSpec,
+    renderOptions,
     priority,
     opts,
     signal,
@@ -647,6 +648,7 @@ export class Prerenderer {
     auth: string;
     format: ScreenshotFormat;
     captureSpec?: ScreenshotCaptureSpec;
+    renderOptions?: RenderRouteOptions;
     priority?: number;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     signal?: AbortSignal;
@@ -672,6 +674,7 @@ export class Prerenderer {
         auth,
         format,
         ...(captureSpec ? { captureSpec } : {}),
+        ...(renderOptions ? { renderOptions } : {}),
         priority,
         opts,
         signal,

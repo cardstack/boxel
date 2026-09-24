@@ -526,6 +526,7 @@ export class RenderRunner {
     auth,
     format,
     captureSpec,
+    renderOptions: callerRenderOptions,
     opts,
     priority,
     signal,
@@ -537,6 +538,7 @@ export class RenderRunner {
     auth: string;
     format: ScreenshotFormat;
     captureSpec?: ScreenshotCaptureSpec;
+    renderOptions?: RenderRouteOptions;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     priority?: number;
     signal?: AbortSignal;
@@ -596,7 +598,15 @@ export class RenderRunner {
 
       let renderStart = Date.now();
       let nonce = String(this.#nonce);
-      let renderOptions: RenderRouteOptions = { cardRender: true };
+      // A capture is always a card render; `cardRender` stays authoritative
+      // over anything the caller passed. The caller's options carry the
+      // realm's `loaderEpoch`, so a pooled tab holding a superseded module
+      // graph resets its loader before this render (see the render route's
+      // loader-epoch synchronization) rather than capturing the old module.
+      let renderOptions: RenderRouteOptions = {
+        ...(callerRenderOptions ?? {}),
+        cardRender: true,
+      };
       let serializedOptions = serializeRenderRouteOptions(renderOptions);
       const captureOptions: CaptureOptions = {
         expectedId: url.replace(/\.json$/i, ''),
