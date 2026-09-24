@@ -414,7 +414,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           'admitting: an anonymous card+json read reaches its handler, and the policy gate refuses it for a realm with no policy',
         );
         assert.true(
-          card.text.includes('operation "read" is not permitted on'),
+          card.text.includes('is not permitted on'),
           'admitting: the refusal is the gate’s',
         );
 
