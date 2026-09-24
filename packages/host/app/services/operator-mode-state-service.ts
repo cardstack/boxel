@@ -35,7 +35,7 @@ import type { Submode } from '@cardstack/host/components/submode-switcher';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import {
   StackItem,
-  detectStackItemTypeForTarget,
+  takesFileDeleteRoute,
   type StackItemType,
 } from '@cardstack/host/lib/stack-item';
 
@@ -403,11 +403,11 @@ export default class OperatorModeStateService extends Service {
   }
 
   // Deletes a card instance, or a file when the id names one (a FileDef row
-  // in a cards grid routes its delete here too).
+  // in a cards grid routes its delete here too). A caller that already knows
+  // which it holds calls `deleteFile` directly; this classifies for the ones
+  // that don't, such as the stack-item bulk delete.
   async deleteCard(cardId: string) {
-    if (
-      detectStackItemTypeForTarget(undefined, cardId, this.store) === 'file'
-    ) {
+    if (takesFileDeleteRoute(undefined, cardId, this.store)) {
       await this.deleteFile(cardId);
       return;
     }
@@ -438,7 +438,7 @@ export default class OperatorModeStateService extends Service {
     this.recentCardsService.remove(cardId);
   }
 
-  private async deleteFile(fileId: string) {
+  async deleteFile(fileId: string) {
     // Prefer the realm registry: the header lookup below GETs the file's
     // bytes, which can be large for media.
     let fileRealm: string | null | undefined = this.realm.realmOf(rri(fileId));

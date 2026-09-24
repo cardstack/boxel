@@ -1169,6 +1169,8 @@ export default class StoreService extends Service implements StoreInterface {
     return api.serializeFileDef(fileDef, {}) as SingleFileMetaDocument;
   }
 
+  // `opts.type` is host-only: the card-facing `Store` interface declares
+  // `delete(id)` alone, so card code reaches the card route and nothing else.
   async delete(id: string, opts?: { type?: StoreReadType }): Promise<void> {
     id = asURL(id, this.network.virtualNetwork);
     if (!id) {

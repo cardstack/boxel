@@ -58,6 +58,7 @@ import {
 
 import {
   detectStackItemTypeForTarget,
+  takesFileDeleteRoute,
   StackItem,
   type StackItemType,
 } from '@cardstack/host/lib/stack-item';
@@ -448,6 +449,7 @@ export default class InteractSubmode extends Component {
       return;
     }
     let cardId = this.cardToDelete.id;
+    let isFile = this.cardToDelete.isFile ?? false;
 
     for (let stack of this.stacks) {
       // remove all selections for the deleted card
@@ -460,7 +462,11 @@ export default class InteractSubmode extends Component {
       }
     }
     await this.withTestWaiters(async () => {
-      await this.operatorModeStateService.deleteCard(cardId);
+      // The dialog already classified this target; `deleteCard` would have to
+      // re-derive it from store residency, which can have moved on since.
+      await (isFile
+        ? this.operatorModeStateService.deleteFile(cardId)
+        : this.operatorModeStateService.deleteCard(cardId));
       await timeout(500); // task running message can be displayed long enough for the user to read it
     });
 
@@ -561,7 +567,7 @@ export default class InteractSubmode extends Component {
       typeof card === 'string' || card instanceof URL
         ? new URL(card).href
         : card.id;
-    if (detectStackItemTypeForTarget(card, id, this.store) === 'file') {
+    if (takesFileDeleteRoute(card, id, this.store)) {
       let fileDef = isFileDefInstance<FileDef>(card)
         ? card
         : await this.store.get<FileDef>(id, { type: 'file-meta' });
