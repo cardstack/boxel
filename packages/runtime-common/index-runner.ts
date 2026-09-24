@@ -15,6 +15,10 @@ import {
   type IndexWriter,
   type Batch,
   type BatchDoneResult,
+  type CommitValidation,
+  type CommitValidationRound,
+  type IncrementalArgs,
+  type IncrementalChange,
   type LooseCardResource,
   type InstanceEntry,
   type InstanceErrorIndexEntry,
@@ -198,6 +202,17 @@ export class IndexRunner {
     // commits under; see `PrerenderHtmlArgs.generation` for its one reader.
     provisionalGeneration: number;
   }) => void;
+  // Builds the `incremental-index` job a commit enqueues when peer commits
+  // keep leaving this pass's rows stale past the validation rounds (see
+  // `CommitValidation.followUpJobArgs`).
+  #followUpJobArgs?: (
+    changes: IncrementalChange[],
+    ignoreData: Record<string, string>,
+  ) => IncrementalArgs;
+  // URLs this pass's commit validation added to its invalidation set, in the
+  // order the rounds added them. Reported with the pass's invalidations, so
+  // the event announcing the pass names them too.
+  #validationAddedURLs: string[] = [];
   readonly stats: Stats = {
     instancesIndexed: 0,
     filesIndexed: 0,
@@ -241,6 +256,7 @@ export class IndexRunner {
     reportStatus,
     onProgress,
     onInvalidationsReady,
+    followUpJobArgs,
     prerenderer,
     auth,
     fetch,
@@ -277,6 +293,10 @@ export class IndexRunner {
       passId: string;
       provisionalGeneration: number;
     }): void;
+    followUpJobArgs?(
+      changes: IncrementalChange[],
+      ignoreData: Record<string, string>,
+    ): IncrementalArgs;
   }) {
     this.#indexWriter = indexWriter;
     this.#realmPaths = new RealmPaths(realmURL, virtualNetwork);
@@ -295,6 +315,7 @@ export class IndexRunner {
     this.#reportStatus = reportStatus;
     this.#onProgress = onProgress;
     this.#onInvalidationsReady = onInvalidationsReady;
+    this.#followUpJobArgs = followUpJobArgs;
     this.#prerenderer = prerenderer;
     this.#auth = auth;
     this.#fetch = fetch;
@@ -465,8 +486,28 @@ export class IndexRunner {
       let finalizeStart = Date.now();
       let { totalIndexEntries, ...commit } = await current.batch.done({
         fullRealm: true,
+        validation: current.#commitValidation(
+          new Set(discoverResult.deletedUrls),
+          {
+            grow: (count) => {
+              totalFiles += count;
+            },
+            onVisited: (url) => {
+              filesCompleted++;
+              current.#onProgress?.({
+                type: 'file-visited',
+                realmURL: current.realmURL.href,
+                jobId: current.#jobInfo.jobId,
+                reservationId: current.#jobInfo.reservationId,
+                url: url.href,
+                filesCompleted,
+                totalFiles,
+              });
+            },
+          },
+        ),
       });
-      swapMs = Date.now() - finalizeStart;
+      swapMs = Date.now() - finalizeStart - (commit.validationMs ?? 0);
       swapCommit = commit;
       current.#perfLog.debug(
         `${jobIdentity(current.#jobInfo)} completed index finalization in ${swapMs} ms`,
@@ -503,7 +544,10 @@ export class IndexRunner {
       } in ${Date.now() - start} ms`,
     );
     return {
-      invalidations: [...invalidations].map((url) => url.href),
+      invalidations: [
+        ...invalidations.map((url) => url.href),
+        ...current.#validationAddedURLs,
+      ],
       ignoreData: current.#ignoreData,
       stats: current.stats,
       generation: current.batch.committedGeneration,
@@ -694,8 +738,33 @@ export class IndexRunner {
       visitLoopMs = Date.now() - loopStart;
 
       let finalizeStart = Date.now();
-      let { totalIndexEntries, ...commit } = await current.batch.done();
-      swapMs = Date.now() - finalizeStart;
+      let { totalIndexEntries, ...commit } = await current.batch.done({
+        validation: current.#commitValidation(
+          new Set(
+            [...operations]
+              .filter(([, operation]) => operation === 'delete')
+              .map(([href]) => href),
+          ),
+          {
+            grow: (count) => {
+              totalFiles += count;
+            },
+            onVisited: (url) => {
+              filesCompleted++;
+              current.#onProgress?.({
+                type: 'file-visited',
+                realmURL: current.realmURL.href,
+                jobId: current.#jobInfo.jobId,
+                reservationId: current.#jobInfo.reservationId,
+                url: url.href,
+                filesCompleted,
+                totalFiles,
+              });
+            },
+          },
+        ),
+      });
+      swapMs = Date.now() - finalizeStart - (commit.validationMs ?? 0);
       swapCommit = commit;
       current.stats.totalIndexEntries = totalIndexEntries;
     } finally {
@@ -727,7 +796,10 @@ export class IndexRunner {
       }ms`,
     );
     return {
-      invalidations: [...invalidations].map((url) => url.href),
+      invalidations: [
+        ...invalidations.map((url) => url.href),
+        ...current.#validationAddedURLs,
+      ],
       invalidatedTypes: current.batch.touchedTypes,
       ignoreData: current.#ignoreData,
       stats: current.stats,
@@ -754,13 +826,18 @@ export class IndexRunner {
   // `Batch.renderOnlyInvalidations`). Only fires in split mode; the fused
   // path renders HTML inline and enqueues nothing.
   #notifyInvalidationsReady(visited: string[], deletes: Set<string>) {
-    if (!this.#onInvalidationsReady || !this.batch.splitPrerenderHtml) {
-      return;
-    }
-    let urls = [
-      ...new Set([...visited, ...this.batch.renderOnlyInvalidations]),
-    ];
-    if (urls.length === 0) {
+    this.#announceToPrerenderHtml(
+      [...new Set([...visited, ...this.batch.renderOnlyInvalidations])],
+      deletes,
+    );
+  }
+
+  #announceToPrerenderHtml(urls: string[], deletes: Set<string>) {
+    if (
+      !this.#onInvalidationsReady ||
+      !this.batch.splitPrerenderHtml ||
+      urls.length === 0
+    ) {
       return;
     }
     this.#onInvalidationsReady({
@@ -772,6 +849,82 @@ export class IndexRunner {
       passId: this.batch.passId,
       provisionalGeneration: this.batch.provisionalGeneration,
     });
+  }
+
+  // How this pass's commit handles peer passes of the realm that committed
+  // while it ran (see `CommitValidation`). `deletes` are the job's own
+  // deletions, for tagging a re-announcement. `progress` keeps the dashboard's
+  // count honest as rounds add visits.
+  #commitValidation(
+    deletes: Set<string>,
+    progress: { grow(count: number): void; onVisited(url: URL): void },
+  ): CommitValidation {
+    let followUpJobArgs = this.#followUpJobArgs;
+    return {
+      revisit: async (round) =>
+        await this.#revisitForPeers(round, deletes, progress),
+      ...(followUpJobArgs
+        ? {
+            followUpJobArgs: (urls: string[]) =>
+              followUpJobArgs(
+                urls.map((url) => ({ url, operation: 'update' as const })),
+                this.#ignoreData,
+              ),
+          }
+        : {}),
+    };
+  }
+
+  // One validation round: re-visits the URLs a peer's commit left stale, the
+  // way the pass's own visit loop did, then tells the HTML job what it does
+  // not know yet. Everything a visit caches for the pass is dropped first,
+  // since a peer has since changed what it read: the per-instance visit
+  // guard, the dependency-row caches, the store on the prerender tab, and —
+  // when the round touches a module or the loader epoch moved — the tab's
+  // loader.
+  async #revisitForPeers(
+    round: CommitValidationRound,
+    deletes: Set<string>,
+    progress: { grow(count: number): void; onVisited(url: URL): void },
+  ): Promise<void> {
+    this.#indexingInstances.clear();
+    this.#dependencyResolver.reset();
+    this.#shouldResetStoreForNextRender = true;
+    if (round.loaderEpochChanged || passInvalidatesExecutables(round.urls)) {
+      this.#scheduleClearCacheForNextRender();
+    }
+    let urls = sortInvalidations(
+      round.urls.map((href) => new URL(href)),
+      this.realmURL,
+    );
+    urls =
+      await this.#dependencyResolver.orderInvalidationsByDependencies(urls);
+    // The prefetch reads the files' current content hashes, which a peer's
+    // write has moved for any file it rewrote.
+    await this.batch.prefetchFileMeta(this.#visitLocalPaths(urls));
+    this.#validationAddedURLs.push(...round.addedURLs);
+    progress.grow(urls.length);
+    await this.#runVisitLoop(urls, {
+      // Nothing is skipped: a resumed row is exactly what a round replaces,
+      // and a URL the job deleted is read again in case a peer has written
+      // it back since.
+      skipReason: () => undefined,
+      onSkip: () => {},
+      onVisited: progress.onVisited,
+    });
+    // The HTML job renders only after this pass commits, so what it already
+    // holds is rendered against the state the round re-visited. It needs the
+    // URLs the round added. When the loader epoch moved it needs everything
+    // again, because it would otherwise render under the superseded epoch
+    // and a warm tab could keep modules older than the ones on disk.
+    if (round.loaderEpochChanged) {
+      this.#notifyInvalidationsReady(this.batch.invalidations, deletes);
+    } else {
+      this.#announceToPrerenderHtml(
+        [...round.addedURLs, ...round.addedRenderOnlyURLs],
+        new Set(),
+      );
+    }
   }
 
   // Local paths for the URLs this pass will visit, keyed the same way the

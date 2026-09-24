@@ -1045,6 +1045,13 @@ export interface Diagnostics
   //
   // Absent on a tombstoned row and on rows written before the stamp existed.
   writeSeq?: number;
+  // On a row a commit's validation round wrote: the round, 1 for the first.
+  // The pass's commit found that a peer pass of the realm had committed
+  // something this row was read against, rolled back, and re-visited the row
+  // (or reached it by extending to the peer's rows that depend on the pass).
+  // Tombstones a round writes carry it too. Absent on every row a pass wrote
+  // outside a round, which is every row of a pass no peer overlapped.
+  validationRound?: number;
   // On a `prerendered_html` row written by the `prerender_html` job: the
   // generation of the live `boxel_index` row (same URL and type) that the
   // row's own generation was read from once the job's spawning index passes

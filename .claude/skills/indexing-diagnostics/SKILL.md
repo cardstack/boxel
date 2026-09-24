@@ -1,6 +1,6 @@
 ---
 name: indexing-diagnostics
-description: Investigate slow or failing indexing using the per-row diagnostics persisted split by visit — the index visit's breakdown on `boxel_index.diagnostics`, the prerender-html visit's render breakdown (launch/wait/render timings, per-format render timings) on `prerendered_html.diagnostics`, each mirrored onto its table's `error_doc.diagnostics` for error rows, joinable per row via url + the two request ids — plus the matching prerender-server / manager logs. Covers (1) a render inside indexing timed out — classify which part of the prerender pipeline stalled, (2) an incremental or full reindex was slow but didn't fail — attribute time across the invalidation fan-out and find the rows that cost the most, (3) enumerating cards with broken `linksTo` / `linksToMany` targets via `diagnostics.brokenLinks` (those cards index cleanly, so this is the only indexed signal), (4) verifying the module pre-warm phase populates the definition cache under a key the indexer / on-demand prerender reads actually hit — i.e. it isn't a silent no-op — via the `definition-cache-key` hit/miss log channel, and (5) attributing a slow in-render `_search` round-trip to the realm-server's own request→response stages (parse / SQL / loadLinks / serialize / queue) via the `realm:search-timing`, `realm:requests` (`dur=`), and `realm:health` log channels keyed by the `x-boxel-logging-correlation-id` correlation id, and (6) capturing full CPU profiles / CDP traces / heap-allocation profiles to the prerender S3 artifact bucket (`boxel-prerender-artifacts-<env>`) when the summary signals name a hot function but you need the whole call tree, a JS-vs-GC-vs-layout breakdown, or a heap-growth story — the streaming trace is the only capture that survives a fully-wedged renderer; gated behind `PRERENDER_PROFILE_AFFINITY` + per-mode SSM flags and pulled with the `boxel-claude-readonly` S3 read grant, and (7) attributing a slow search-doc build to specific fields and link loads — the settle loop's per-target load timings (`searchDocSettleMs` / `searchDocLinkLoads`) vs the field walk's per-dotted-path evaluation timings (`searchDocMs` / `searchDocFieldsMs`), both on `boxel_index.diagnostics`, and (8) decomposing the between-visit / non-render slice of an index job's wall — the once-per-job phases (invalidation discovery, dependency ordering, module pre-warm, aggregate row writes, the final swap) on `jobs.result.phaseTimings` plus the per-row client overhead (file read / render round-trip transport / post-render bookkeeping) on `boxel_index.diagnostics.indexVisitClientMs` — the wall that runs serially between the server renders and is invisible in the per-row `totalElapsedMs`, and (9) decomposing a trivial card's fixed per-visit floor — the route machinery (the meta / icon / file-extract route transitions, instantiation, and per-visit request plumbing) around the search-doc work — into per-route wall-clock buckets on `boxel_index.diagnostics.indexRoutesMs` (the index-half sibling of the render channel's `renderFormatsMs`), so a floor that isn't the search doc reads as measured route steps rather than an inference from `renderElapsedMs`, and (10) recognizing a batch-level setup-phase failure of an incremental job — N error docs sharing one `error_doc.message` and `job_id`, carrying no visit diagnostics, from a rejected job whose whole batch failed before its visit loop — vs per-row render failures, and the re-push recovery those error docs enable, and (11) explaining a missing declared screenshot / thumbnail via `prerendered_html.diagnostics.screenshotErrors` (the row publishes normally — this is the only indexed signal, with per-slot `consecutiveFailures` reporting and the row-level `screenshotCaptureFailureRenders` counter the reconcile sweep's retry cap is enforced against) and attributing slow captures per slot via `screenshotTimingsMs`, the per-name decomposition of `renderFormatsMs.card.screenshots`, and (12) attributing a card-instance visit's dominant cost — the parent `render` route's model build, which runs inside whichever route step triggered the parent transition and so sits unbroken-down inside `indexRoutesMs.card.meta` — across `diagnostics.buildModelMs` (`fetchSource` / `deriveType` / `hydrate` / `storeSettle`) with per-module (`moduleEvaluationsMs`), per-field (`hydrateFieldsMs`) and per-load (`storeSettleWaits`) detail under the dominant stage, plus the explicitly measured plumbing residual `unattributedMs`, and (13) reconstructing the order a pass wrote its rows in — `diagnostics.writeSeq` (a per-batch 0-based write counter on both channels; `indexedAt` is millisecond-resolution and a buffered multi-row upsert stamps a whole flush identically, so it cannot order rows within a pass), which separates the URLs a write actually named from the dependents its fan-out discovered (an incremental index pass writes its targets first) and says how far into its plan a stalled job got. Use when indexing fails with "Render timeout", when a user sees a 504, when a reindex took much longer than expected, when an `.gts` edit triggers a surprising amount of re-render work, when investigating prerender-saturation incidents, when a render stalls in `waiting-stability` on a `_search` whose SQL is fast but whose response is slow to come back, when a row's index visit is slow and you need to know which field or link load inside the search doc ate the time, when a trivial-search-doc card still costs far more per visit than its doc justifies and you need to attribute the per-visit floor to a route step, when a card-instance visit's `meta` route bucket dwarfs the search-doc work inside it and you need to know whether the module graph, the hydration, or the link loads carry it, when you need to know what order a pass indexed its rows in or which of them the triggering write actually named, or when asked to list / count cards with broken links in a realm. For staging/prod investigations this skill layers on top of `aws-access`, which provides the AWS session and the SSM port-forward path into the in-VPC database (authenticated as `claude_readonly_user`) — read that skill first when the question is about a deployed environment.
+description: Investigate slow or failing indexing using the per-row diagnostics persisted split by visit — the index visit's breakdown on `boxel_index.diagnostics`, the prerender-html visit's render breakdown (launch/wait/render timings, per-format render timings) on `prerendered_html.diagnostics`, each mirrored onto its table's `error_doc.diagnostics` for error rows, joinable per row via url + the two request ids — plus the matching prerender-server / manager logs. Covers (1) a render inside indexing timed out — classify which part of the prerender pipeline stalled, (2) an incremental or full reindex was slow but didn't fail — attribute time across the invalidation fan-out and find the rows that cost the most, (3) enumerating cards with broken `linksTo` / `linksToMany` targets via `diagnostics.brokenLinks` (those cards index cleanly, so this is the only indexed signal), (4) verifying the module pre-warm phase populates the definition cache under a key the indexer / on-demand prerender reads actually hit — i.e. it isn't a silent no-op — via the `definition-cache-key` hit/miss log channel, and (5) attributing a slow in-render `_search` round-trip to the realm-server's own request→response stages (parse / SQL / loadLinks / serialize / queue) via the `realm:search-timing`, `realm:requests` (`dur=`), and `realm:health` log channels keyed by the `x-boxel-logging-correlation-id` correlation id, and (6) capturing full CPU profiles / CDP traces / heap-allocation profiles to the prerender S3 artifact bucket (`boxel-prerender-artifacts-<env>`) when the summary signals name a hot function but you need the whole call tree, a JS-vs-GC-vs-layout breakdown, or a heap-growth story — the streaming trace is the only capture that survives a fully-wedged renderer; gated behind `PRERENDER_PROFILE_AFFINITY` + per-mode SSM flags and pulled with the `boxel-claude-readonly` S3 read grant, and (7) attributing a slow search-doc build to specific fields and link loads — the settle loop's per-target load timings (`searchDocSettleMs` / `searchDocLinkLoads`) vs the field walk's per-dotted-path evaluation timings (`searchDocMs` / `searchDocFieldsMs`), both on `boxel_index.diagnostics`, and (8) decomposing the between-visit / non-render slice of an index job's wall — the once-per-job phases (invalidation discovery, dependency ordering, module pre-warm, aggregate row writes, the final swap) on `jobs.result.phaseTimings` plus the per-row client overhead (file read / render round-trip transport / post-render bookkeeping) on `boxel_index.diagnostics.indexVisitClientMs` — the wall that runs serially between the server renders and is invisible in the per-row `totalElapsedMs`, and (9) decomposing a trivial card's fixed per-visit floor — the route machinery (the meta / icon / file-extract route transitions, instantiation, and per-visit request plumbing) around the search-doc work — into per-route wall-clock buckets on `boxel_index.diagnostics.indexRoutesMs` (the index-half sibling of the render channel's `renderFormatsMs`), so a floor that isn't the search doc reads as measured route steps rather than an inference from `renderElapsedMs`, and (10) recognizing a batch-level setup-phase failure of an incremental job — N error docs sharing one `error_doc.message` and `job_id`, carrying no visit diagnostics, from a rejected job whose whole batch failed before its visit loop — vs per-row render failures, and the re-push recovery those error docs enable, and (11) explaining a missing declared screenshot / thumbnail via `prerendered_html.diagnostics.screenshotErrors` (the row publishes normally — this is the only indexed signal, with per-slot `consecutiveFailures` reporting and the row-level `screenshotCaptureFailureRenders` counter the reconcile sweep's retry cap is enforced against) and attributing slow captures per slot via `screenshotTimingsMs`, the per-name decomposition of `renderFormatsMs.card.screenshots`, and (12) attributing a card-instance visit's dominant cost — the parent `render` route's model build, which runs inside whichever route step triggered the parent transition and so sits unbroken-down inside `indexRoutesMs.card.meta` — across `diagnostics.buildModelMs` (`fetchSource` / `deriveType` / `hydrate` / `storeSettle`) with per-module (`moduleEvaluationsMs`), per-field (`hydrateFieldsMs`) and per-load (`storeSettleWaits`) detail under the dominant stage, plus the explicitly measured plumbing residual `unattributedMs`, and (13) reconstructing the order a pass wrote its rows in — `diagnostics.writeSeq` (a per-batch 0-based write counter on both channels; `indexedAt` is millisecond-resolution and a buffered multi-row upsert stamps a whole flush identically, so it cannot order rows within a pass), which separates the URLs a write actually named from the dependents its fan-out discovered (an incremental index pass writes its targets first) and says how far into its plan a stalled job got, and (14) explaining why an index pass re-visited cards at commit because a peer pass of the same realm committed while it ran — the commit-time validation against the `realm_index_commits` ledger, read from `phaseTimings.validationMs` / `validationRounds` / `revisitCount` / `extendCount` / `followUpJobId` and `boxel_index.diagnostics.validationRound` — and finding the follow-up `incremental-index` job a commit enqueues when its peers kept leaving rows stale. Use when indexing fails with "Render timeout", when a user sees a 504, when a reindex took much longer than expected, when an `.gts` edit triggers a surprising amount of re-render work, when investigating prerender-saturation incidents, when a render stalls in `waiting-stability` on a `_search` whose SQL is fast but whose response is slow to come back, when a row's index visit is slow and you need to know which field or link load inside the search doc ate the time, when a trivial-search-doc card still costs far more per visit than its doc justifies and you need to attribute the per-visit floor to a route step, when a card-instance visit's `meta` route bucket dwarfs the search-doc work inside it and you need to know whether the module graph, the hydration, or the link loads carry it, when you need to know what order a pass indexed its rows in or which of them the triggering write actually named, when a pass re-visited cards at commit or an `incremental-index` job appeared that no write published, or when asked to list / count cards with broken links in a realm. For staging/prod investigations this skill layers on top of `aws-access`, which provides the AWS session and the SSM port-forward path into the in-VPC database (authenticated as `claude_readonly_user`) — read that skill first when the question is about a deployed environment.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -1285,7 +1285,7 @@ ORDER BY id DESC
 LIMIT 5;
 ```
 
-`phase_timings` is `{ totalMs, setupMs, mtimesMs, discoverMs, orderMs, preWarmMs, visitLoopMs, writeMs, swapMs, swapAttempts, swapRetryMs, commitLockWaitMs, pendingCleanupMs, janitorRowsCleared, janitorJobsCleared }` (ms, except `swapAttempts` and the two janitor fields, which are counts). `generation` is the generation the job's swap committed; `base_generation` is the committed generation the job was set up against, so a gap wider than one means another pass of the realm committed while this one ran. Read it against `wall_ms`: `totalMs` should land close to the job's wall; the gap between `visitLoopMs` and the visit render sum (step 2) is the per-visit client overhead + `writeMs`.
+`phase_timings` is `{ totalMs, setupMs, mtimesMs, discoverMs, orderMs, preWarmMs, visitLoopMs, writeMs, swapMs, swapAttempts, swapRetryMs, commitLockWaitMs, pendingCleanupMs, janitorRowsCleared, janitorJobsCleared }` (ms, except `swapAttempts` and the two janitor fields, which are counts). A pass whose commit checked peer commits adds `validationMs`, `validationRounds`, `revisitCount`, `extendCount` and, when its rounds ran out, `followUpJobId`. `swapMs` excludes `validationMs`, which also counts toward `totalMs` (see [Mode O](#mode-o--a-pass-re-visited-cards-because-a-peer-committed)). `generation` is the generation the job's swap committed; `base_generation` is the committed generation the job was set up against, so a gap wider than one means another pass of the realm committed while this one ran. Read it against `wall_ms`: `totalMs` should land close to the job's wall; the gap between `visitLoopMs` and the visit render sum (step 2) is the per-visit client overhead + `writeMs`.
 
 ### Step 2 — sum the per-row halves for the same job
 
@@ -1366,7 +1366,7 @@ LIMIT 20;
 ```
 
 - **Which pass published a row.** A row's `boxel_index.generation` is the generation of the commit that last promoted or restamped it; join it to the ledger on `(realm_url, generation)` to get the job, and find the row in `urls` (visited) or `render_only_urls` (restamped only).
-- **What committed while a pass ran.** The rows with `generation` above a pass's `base_generation` and below its own `generation` are the peers that committed between its setup and its commit. Their `urls` and `render_only_urls` are what that pass's fan-out could not have seen. When such a peer wrote a URL this pass also wrote, the commit re-reads that URL's adoption chain under the commit lock, so the type the peer moved it into is recomputed in the summary and its watermark moves.
+- **What committed while a pass ran.** The rows with `generation` above a pass's `base_generation` and below its own `generation` are the peers that committed between its setup and its commit. Their `urls` and `render_only_urls` are what that pass's fan-out could not have seen. When such a peer wrote a URL this pass also wrote, the commit re-reads that URL's adoption chain under the commit lock, so the type the peer moved it into is recomputed in the summary and its watermark moves. An index pass also checks those peers before committing and re-visits what they made stale (see [Mode O](#mode-o--a-pass-re-visited-cards-because-a-peer-committed)).
 - **Gaps.** Generations are contiguous per realm, so a missing number inside the retention window means a ledger row was deleted, not a commit skipped.
 
 ### A prerender_html job's wait on its spawning passes
@@ -1750,6 +1750,100 @@ A few large values at the top decaying to near-zero is a warming graph (healthy)
 ### The same module cost shows up in the live app
 
 `deriveType` is the module graph load, and an interactive card load pays for the same graph in the browser. When a realm is slow to index **and** its cards are slow to open, that is one cause with two symptoms, not two problems: the `client-perf-diagnosis` skill reads the browser half (`card-load` settle time and the `server-request` / `deserialize` events under it) from the same modules. Chase the module once — a fix to a heavy `.gts` in the realm's common ancestry moves both numbers.
+
+## Mode O — a pass re-visited cards because a peer committed
+
+**When to use this mode.** An index job's `phaseTimings` carry `validationRounds`, its rows carry `diagnostics.validationRound`, an `incremental-index` job appeared that no write published, or you want to know what two overlapping index passes of one realm did about each other.
+
+**What happens at commit.** A pass computes its fan-out from the committed state it was set up against. A peer pass of the same realm that commits while it runs can leave it stale, so every from-scratch and incremental pass checks its peers before it commits. Under the realm's commit lock, when `realm_generations.current_generation` is past the generation the pass last validated against (its base, at first), it reads the peers' `realm_index_commits` rows since then. Their `urls` are the set the check compares against. A `NULL` list, or a generation with no ledger row inside the range, reads as every URL in the realm.
+
+- **Revisit** is the pass's own URLs that a peer committed, plus the ones whose staged `deps` name something a peer committed. The pass read those against what the peer has since replaced.
+- **Extend** is the peer-committed URLs outside the pass whose production `boxel_index.deps` name one of the pass's URLs. The peer rendered them against the pass's pre-commit state. A row that already depended on the pass when it began is in its fan-out already, so what this finds is a dependency the peer's commit introduced.
+
+If either set is non-empty and fewer than 3 rounds have run, the transaction rolls back having written nothing, and the round does four things:
+
+1. It extends the pass to Extend and their dependents, through the same fan-out `invalidate()` runs.
+2. It puts every URL it will re-visit back to a tombstone over the row production holds now, so a file a peer deleted stays deleted if the re-visit reads nothing.
+3. It picks up any loader epoch minted since the pass read one. A pass that minted its own takes a fresh one instead.
+4. It re-visits, then tells the pass's `prerender_html` job about the URLs the round added (every URL of the pass, when the loader epoch moved).
+
+Then the commit runs again and checks the peers that committed during the round. After 3 rounds that still find something stale, the commit goes ahead anyway. In the same transaction it inserts a follow-up `incremental-index` job for the URLs still stale, taking the lane (`concurrency_group`), `priority` and `initiated_by` of the pass's own job row. The follow-up carries no `coalescedCallers`, so no write waits on it, and it announces its own pass when it lands: an incremental index event through the worker's event bridge, and `NOTIFY realm_index_updated`.
+
+Batches that cannot re-visit never check: the setup-phase error recording, the worker's failed-entry marking, a copy, and `prerender_html` jobs. While a realm's index passes run one at a time no peer commits during a pass, so the check never runs and the validation fields are absent from `phaseTimings`.
+
+**Where it is recorded.**
+
+- `jobs.result.phaseTimings`, present only when a check ran:
+  - `validationMs`: the checks plus every round's extension and re-visit. `swapMs` excludes it.
+  - `validationRounds`: how many times the commit rolled back. `0` means peers committed during the pass but touched nothing it read.
+  - `revisitCount`: URLs re-visited, summed across rounds.
+  - `extendCount`: peer-committed URLs extended to, summed across rounds.
+  - `followUpJobId`: present when the rounds ran out.
+- `boxel_index.diagnostics.validationRound` on every row a round wrote, tombstones included, alongside the pass's `passId`.
+- The ledger row the pass commits lists the extended URLs in `urls`. `base_generation` stays the generation it was set up against.
+- The `index-writer` logger writes one `info` line per round (`commit of <realm> rolled back for N peer commit(s) through generation G: re-visiting …`) and a `warn` when the rounds run out (`… enqueued follow-up job <id> to re-index them`, or `… no follow-up job to re-index them` under SQLite).
+
+```sql
+-- Index jobs whose commit checked peer commits, newest first.
+SELECT id,
+       job_type,
+       (result->>'baseGeneration')::int                      AS base_generation,
+       (result->>'generation')::int                          AS generation,
+       (result->'phaseTimings'->>'validationRounds')::int    AS rounds,
+       (result->'phaseTimings'->>'revisitCount')::int        AS revisits,
+       (result->'phaseTimings'->>'extendCount')::int         AS extends,
+       (result->'phaseTimings'->>'validationMs')::int        AS validation_ms,
+       (result->'phaseTimings'->>'followUpJobId')::int       AS follow_up_job
+FROM jobs
+WHERE concurrency_group = 'indexing:<realm-url>'
+  AND job_type IN ('incremental-index', 'from-scratch-index')
+  AND result->'phaseTimings' ? 'validationRounds'
+ORDER BY id DESC
+LIMIT 20;
+
+-- The peers one pass checked against: every commit between its base and its
+-- own generation.
+SELECT c.generation, c.job_id, c.full_realm, c.urls
+FROM realm_index_commits me
+JOIN realm_index_commits c
+  ON c.realm_url = me.realm_url
+ AND c.generation > me.base_generation
+ AND c.generation < me.generation
+WHERE me.realm_url = '<realm-url>'
+  AND me.job_id = <job-id>
+ORDER BY c.generation;
+
+-- The rows that pass re-visited, by round. The pass id is on its ledger row.
+SELECT url, type, (diagnostics->>'validationRound')::int AS round, is_deleted
+FROM boxel_index
+WHERE realm_url = '<realm-url>'
+  AND diagnostics->>'passId' = '<pass-id>'
+  AND diagnostics ? 'validationRound'
+ORDER BY round, url;
+
+-- Follow-up jobs: incremental passes that no write published.
+SELECT id, status, concurrency_group, args->'changes' AS changes, created_at
+FROM jobs
+WHERE job_type = 'incremental-index'
+  AND concurrency_group = 'indexing:<realm-url>'
+  AND jsonb_array_length(args->'coalescedCallers') = 0
+ORDER BY id DESC
+LIMIT 20;
+```
+
+**Reading it.**
+
+- **`rounds = 0` with a `validation_ms`**: peers committed during the pass but nothing they committed was read by it. The cost is the check alone, a few queries under the commit lock.
+- **`rounds ≥ 1`**: compare `revisits` against the pass's size. A round re-visits only what the peers touched, so a round as large as the pass means a peer's commit listed no URLs (a full-realm pass, or one too wide to list), and the pass read that as touching everything.
+- **`rounds = 3` with a follow-up job**: peers kept committing over the same cards for the whole pass. If a follow-up itself reaches the cap and enqueues another, something is rewriting those cards faster than a pass completes.
+- **Two `prerender_html` jobs naming the same pass id in `spawningIndexPasses`**: the pass re-announced after a round. That happens for the URLs a round added, and for all of them when the loader epoch moved.
+
+### What Mode O can't tell you
+
+- **Query-backed fields.** A query's matches are not recorded in `deps`, so a row whose query results a peer's commit moved is neither re-visited nor extended to. The next pass that reaches the row corrects it.
+- **Render-only edges.** Extend reads `boxel_index.deps`, not `prerendered_html.deps`. A peer row whose HTML, but not its index row, came to depend on the pass is left to the HTML jobs, which render only after their passes commit.
+- **Which peer caused which re-visit.** A check reads every peer commit since the last one together. Join the re-visited URLs against the peers' `urls` (the second query) to attribute them.
+- **The wall of one round.** `validationMs` is the total across checks and rounds, and the per-round `info` line carries the round's size, not its duration.
 
 ## Field-by-field reading
 
