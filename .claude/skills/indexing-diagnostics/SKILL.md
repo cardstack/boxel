@@ -519,7 +519,7 @@ Two-hop fan-out: rerun with the first hop's `(url, file_alias, type)` plugged in
 
 The indexer writes there continuously (`Batch.bufferEntry` / `updateEntry`). `Batch.done()` copies the pass's rows into `boxel_index`, restamped with the generation it commits under, and then deletes them (`pendingCleanupMs` on the job result). So a row here is always uncommitted work: a live pass's progress, or what a failed attempt left for its job's retry. `prerendered_html_pending` is the render channel's twin — the `prerender_html` job's staged HTML rows (and the fused path's), under the same staging-id scheme. Once a job resolves or rejects, the rows it left are orphans, and the next commit to the realm removes them (`janitorRowsCleared` / `janitorJobsCleared`). Rows whose job has no `jobs` row, and `adhoc:` rows, are never removed that way — see [step 9](#9-what-this-mode-cant-tell-you).
 
-The shared `boxel_index_working` / `prerendered_html_working` tables no longer receive rows. Anything still in them predates the pending tables and says nothing about a current pass.
+No pass writes the shared `boxel_index_working` / `prerendered_html_working` tables. Anything in them was staged by a release that used them, and says nothing about a current pass.
 
 What is staged in a realm right now, one row per pass:
 

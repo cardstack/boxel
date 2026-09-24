@@ -73,7 +73,7 @@ export interface BoxelIndexTable {
   // and enumerate cards with broken links. See `Diagnostics` in `index.ts`.
   diagnostics: Record<string, unknown> | null;
   // Originating worker job id. Only present on the staging tables
-  // (`boxel_index_pending`, and `boxel_index_working` until it is dropped) —
+  // (`boxel_index_pending`, and the unused `boxel_index_working`) —
   // the production `boxel_index` does not carry this column, hence the field
   // is optional.
   job_id?: number | null;
@@ -129,8 +129,8 @@ export interface PrerenderedHtmlTable {
   // simply absent (see `diagnostics.screenshotErrors`).
   screenshots: Record<string, unknown> | null;
   // Originating worker job id. Only present on the staging tables
-  // (`prerendered_html_pending`, and `prerendered_html_working` until it is
-  // dropped); the production `prerendered_html` does not carry this column,
+  // (`prerendered_html_pending`, and the unused
+  // `prerendered_html_working`); the production `prerendered_html` does not carry this column,
   // hence the field is optional.
   job_id?: number | null;
   // See `BoxelIndexTable.staging_id`. Only present on

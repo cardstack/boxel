@@ -76,14 +76,12 @@ when authoring a destructive change.
 - **Each production index table has a pending twin that must stay
   column-compatible with it**: `boxel_index` ↔ `boxel_index_pending` and
   `prerendered_html` ↔ `prerendered_html_pending`. A pass stages its rows in the
-  pending table and its commit copies every production column out of it
-  (`INSERT INTO boxel_index SELECT <production columns> FROM
-boxel_index_pending`), so a column added to a production table must be added
-  to its pending twin in the same migration. Changing only one breaks the commit
+  pending table and its commit copies every production column out of the
+  pending row, so a column added to a production table must be added to its
+  pending twin in the same migration. Changing only one breaks the commit
   with `column "..." does not exist`. The pending tables carry two extra columns
-  (`job_id`, `staging_id`) that production does not. The shared
-  `boxel_index_working` / `prerendered_html_working` tables are no longer
-  written.
+  (`job_id`, `staging_id`) that production does not. No pass writes the shared
+  `boxel_index_working` / `prerendered_html_working` tables.
 - **Moving an already-applied migration between directories re-runs it** under
   the new tracking table. Only safe if its `up()` is idempotent (`IF EXISTS` /
   `ifNotExists`). Moving a not-yet-applied file is always clean.

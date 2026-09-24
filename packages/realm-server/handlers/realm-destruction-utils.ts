@@ -120,8 +120,8 @@ export async function removeRealmDatabaseArtifacts(args: {
     param(realmURL),
   ]);
   await q([`DELETE FROM prerendered_html WHERE realm_url =`, param(realmURL)]);
-  // The shared working tables no longer receive rows, but they still hold
-  // whatever was staged in them before the pending tables replaced them.
+  // No pass writes the shared working tables, but they can still hold a
+  // realm's rows from a release that staged there.
   await q([
     `DELETE FROM boxel_index_working WHERE realm_url =`,
     param(realmURL),
