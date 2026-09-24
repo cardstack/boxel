@@ -76,18 +76,18 @@ const readProbes: Probe[] = [
   },
   {
     label: 'GET card+source',
-    consumes: true,
+    consumes: false,
     send: (r) =>
       r.get('/person.gts').set('Accept', SupportedMimeType.CardSource),
   },
   {
     label: 'GET raw file',
-    consumes: true,
+    consumes: false,
     send: (r) => r.get('/sample.md'),
   },
   {
     label: 'GET transpiled module',
-    consumes: true,
+    consumes: false,
     send: (r) => r.get('/person'),
   },
   {
@@ -132,13 +132,13 @@ const writeProbes: Probe[] = [
   // Routes that consume it.
   {
     label: 'POST card+json',
-    consumes: true,
+    consumes: false,
     send: (r) =>
       r.post('/').set('Accept', SupportedMimeType.CardJson).send('not json'),
   },
   {
     label: 'PATCH card+json',
-    consumes: true,
+    consumes: false,
     send: (r) =>
       r
         .patch('/person-1')
@@ -147,13 +147,13 @@ const writeProbes: Probe[] = [
   },
   {
     label: 'DELETE card+json',
-    consumes: true,
+    consumes: false,
     send: (r) =>
       r.delete('/person-1').set('Accept', SupportedMimeType.CardJson),
   },
   {
     label: 'POST card+source',
-    consumes: true,
+    consumes: false,
     send: (r) =>
       r
         .post('/new-file.gts')
@@ -162,7 +162,7 @@ const writeProbes: Probe[] = [
   },
   {
     label: 'POST octet-stream',
-    consumes: true,
+    consumes: false,
     send: (r) =>
       r
         .post('/new-file.bin')
@@ -171,7 +171,7 @@ const writeProbes: Probe[] = [
   },
   {
     label: 'DELETE card+source',
-    consumes: true,
+    consumes: false,
     send: (r) =>
       r.delete('/person.gts').set('Accept', SupportedMimeType.CardSource),
   },
@@ -316,7 +316,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       await unarchiveRealm(dbAdapter, new URL(testRealm.url));
     });
 
-    test('exactly the operation routes consume the recorded outcome', async function (assert) {
+    test('exactly the routes that hand the outcome to the policy gate consume it', async function (assert) {
       let consumers = testRealm
         .routeDescriptions()
         .filter((route) => route.consumesCoarseOutcome)
@@ -325,24 +325,14 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       assert.deepEqual(
         consumers,
         [
-          `DELETE ${SupportedMimeType.CardJson} /|/.+(?<!.json)`,
-          `DELETE ${SupportedMimeType.CardSource} /.+`,
           `GET ${SupportedMimeType.CardJson} /.*`,
-          `GET ${SupportedMimeType.CardSource} /.*`,
           `HEAD ${SupportedMimeType.CardJson} /.*`,
-          `HEAD ${SupportedMimeType.CardSource} /.*`,
-          `PATCH ${SupportedMimeType.CardJson} /.+(?<!.json)`,
           `POST ${SupportedMimeType.BoxelOperations} /_operations`,
-          `POST ${SupportedMimeType.CardJson} (/|/.+/)`,
-          `POST ${SupportedMimeType.CardSource} /.*`,
           `POST ${SupportedMimeType.JSONAPI} /_operations`,
-          `POST ${SupportedMimeType.OctetStream} /.*`,
           `QUERY ${SupportedMimeType.BoxelOperations} /_operations`,
           `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
-          'GET * *',
-          'HEAD * *',
         ].sort(),
-        'the consumer set is the card+json verbs, the card+source routes, the operations envelope, and the fallback file and module serve for reads',
+        'the consumer set is the card+json read and the operations envelope',
       );
       let nonConsumers = testRealm
         .routeDescriptions()
@@ -364,8 +354,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           .filter((route) => route.path === '*')
           .map((route) => route.method)
           .sort(),
-        ['DELETE', 'PATCH', 'POST', 'QUERY'],
-        'the fallback does not consume it for any method but a read',
+        ['DELETE', 'GET', 'HEAD', 'PATCH', 'POST', 'QUERY'],
+        'the fallback file and module serve does not consume it for any method',
       );
     });
 
@@ -420,14 +410,12 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           .set('Accept', SupportedMimeType.CardJson);
         assert.strictEqual(
           card.status,
-          200,
-          'admitting: an anonymous card+json read reaches its handler',
+          403,
+          'admitting: an anonymous card+json read reaches its handler, and the policy gate refuses it for a realm with no policy',
         );
-        let raw = await request.get('/sample.md');
-        assert.strictEqual(
-          raw.status,
-          200,
-          'admitting: an anonymous raw file read reaches the fallback',
+        assert.true(
+          card.text.includes('operation "read" is not permitted on'),
+          'admitting: the refusal is the gate’s',
         );
 
         await archiveRealm(dbAdapter, new URL(testRealm.url));

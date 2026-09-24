@@ -13,6 +13,10 @@
   ],
   "tests": {
     "host": ["Integration | realm policy"],
-    "realmServer": ["catalog-test-subset-test", "realm-policy-compile-test"]
+    "realmServer": [
+      "catalog-test-subset-test",
+      "realm-policy-compile-test",
+      "realm-policy-gate-test"
+    ]
   }
 }

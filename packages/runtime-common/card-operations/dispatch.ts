@@ -10,6 +10,12 @@ import {
   type TransformContext,
 } from './transforms.ts';
 import {
+  gateOperation,
+  notPermitted,
+  type GateDecision,
+  type OperationPolicyAccess,
+} from './gate.ts';
+import {
   DEFINITION_FREE_BASE_OPERATIONS,
   OperationFailure,
   isDocumentResult,
@@ -138,6 +144,9 @@ export interface OperationCore {
     data: LooseCardResource | FileMetaResource;
     included?: (LooseCardResource | FileMetaResource)[];
   }): void;
+  // What the policy gate reads for a caller the realm ACL declined. A core
+  // without it admits no such caller.
+  policy?: OperationPolicyAccess;
 }
 
 // The realm's own `FileRef`, narrowed to what a stored-bytes read uses. Stated
@@ -261,13 +270,19 @@ export interface RunOperationOptions {
 // snapshot of it. The memo lives for the invocation and no longer: a core is
 // long-lived and must never hold a card's row across requests.
 //
-// A scope also says who the invocation is for and, for a create, what it would
-// write — the two facts a policy predicate reads that the target does not
-// carry. Both travel here rather than as parameters of `resolveOperation`
-// because the scope already reaches every place an operation is resolved.
+// A scope also says who the invocation is for, whether the realm ACL declined
+// them, and, for a create, what it would write. Those are the facts the policy
+// gate reads that the target does not carry. They travel here rather than as
+// parameters of `resolveOperation` because the scope already reaches every
+// place an operation is resolved.
 export interface OperationScope {
   peekInstance(url: URL): Promise<InstanceOrError | undefined>;
   readonly caller: ScopeCaller;
+  // Whether the realm ACL declined the request this invocation belongs to.
+  // When it did, the policy gate decides whether the invocation runs. False
+  // for a caller the ACL allowed and for a request it never judged, and the
+  // gate then does nothing at all.
+  readonly coarseDeclined: boolean;
   // The payload a `create` entry is staged from, as its `input` stage and its
   // `params` check left it — what the operation would actually write, not the
   // bytes the caller sent. For a plain create that is the resource the card is
@@ -277,8 +292,8 @@ export interface OperationScope {
   readonly proposed: Record<string, unknown> | undefined;
   // A scope for another invocation in the same request, sharing this one's row
   // memo so the invocations of one request still cost one read of each row
-  // between them. The caller carries over unless one is named; a proposed
-  // document belongs to one invocation and never does.
+  // between them. The caller and the ACL's verdict carry over unless named; a
+  // proposed document belongs to one invocation and never does.
   derive(invocation: ScopeInvocation): OperationScope;
 }
 
@@ -301,6 +316,7 @@ export type ScopeCaller =
 
 export interface ScopeInvocation {
   caller?: ScopeCaller;
+  coarseDeclined?: boolean;
   proposed?: Record<string, unknown>;
 }
 
@@ -328,15 +344,23 @@ export function newOperationScope(
   };
   let scopeFor = (
     caller: ScopeCaller,
+    coarseDeclined: boolean,
     proposed: Record<string, unknown> | undefined,
   ): OperationScope => ({
     peekInstance,
     caller,
+    coarseDeclined,
     proposed,
-    derive: (next) => scopeFor(next.caller ?? caller, next.proposed),
+    derive: (next) =>
+      scopeFor(
+        next.caller ?? caller,
+        next.coarseDeclined ?? coarseDeclined,
+        next.proposed,
+      ),
   });
   return scopeFor(
     invocation.caller ?? { kind: 'unattributed' },
+    invocation.coarseDeclined ?? false,
     invocation.proposed,
   );
 }
@@ -517,7 +541,7 @@ function own<T>(
 }
 
 // Which built-in behavior `name` means for `target`, as the definition the
-// executor works from.
+// executor works from, once the policy gate has admitted the invocation.
 //
 // A declaration wins over the built-in of the same name — that is how an
 // author specializes `read` or rebinds `delete` onto `transform` — so the
@@ -525,12 +549,74 @@ function own<T>(
 // be read is not fatal for a base name against an instance target: the card
 // is in the index, the built-in behavior does not consult its definition, and
 // refusing here would make a broken module's cards unreadable.
+//
+// A write the gate could only admit on a predicate is refused here. Its
+// predicate has to be evaluated under the write lock, and a caller resolving
+// through here holds no lock and carries no pending decision to one. A caller
+// that does takes the decision from `resolveGatedOperation` instead.
 export async function resolveOperation(
   core: OperationCore,
   target: OperationTarget,
   name: string,
   scope: OperationScope = newOperationScope(core),
 ): Promise<OperationDefinition> {
+  let { definition, decision } = await resolveGatedOperation(
+    core,
+    target,
+    name,
+    scope,
+  );
+  if (decision.kind === 'pending') {
+    throw notPermitted(target, name);
+  }
+  return definition;
+}
+
+// An operation resolved for a target, with what the policy gate decided about
+// invoking it.
+export interface GatedOperation {
+  definition: OperationDefinition;
+  decision: GateDecision;
+}
+
+// `resolveOperation`, answering the gate's decision rather than acting on it.
+//
+// The gate is the last stage, after the operation is known to exist and to be
+// carried by the target. It matches rules against the adoption chain the index
+// recorded for the target, never against a type the caller named.
+export async function resolveGatedOperation(
+  core: OperationCore,
+  target: OperationTarget,
+  name: string,
+  scope: OperationScope = newOperationScope(core),
+): Promise<GatedOperation> {
+  let { definition, typeDefinition } = await resolveUngated(
+    core,
+    target,
+    name,
+    scope,
+  );
+  let decision = await gateOperation(
+    core,
+    target,
+    name,
+    definition.base,
+    typeDefinition,
+    scope,
+  );
+  return { definition, decision };
+}
+
+async function resolveUngated(
+  core: OperationCore,
+  target: OperationTarget,
+  name: string,
+  scope: OperationScope,
+): Promise<{
+  definition: OperationDefinition;
+  // The target type's own entry, where one resolved.
+  typeDefinition?: Definition;
+}> {
   assertInRealm(core, target);
   if (isDefinitionFreeOperation(name)) {
     // Before the lookup, not merely without it — see
@@ -542,7 +628,7 @@ export async function resolveOperation(
     if (!kind || !own(ALLOWED_BASE_OPERATIONS[kind], name)) {
       throw notAllowed(target, name, kind, name);
     }
-    return { base: name, deterministic: true };
+    return { definition: { base: name, deterministic: true } };
   }
   let definition = await definitionFor(core, target, scope);
   if (target.kind === 'type' && !definition) {
@@ -594,7 +680,7 @@ export async function resolveOperation(
     if (!carries(target, kind, declared.base)) {
       throw notAllowed(target, name, kind, declared.base);
     }
-    return declared;
+    return { definition: declared, typeDefinition: definition };
   }
   if (!isBaseOperation(name)) {
     throw new OperationFailure({
@@ -611,7 +697,10 @@ export async function resolveOperation(
   // The built-in behavior, undeclared. It has no program and no params, and
   // its result is fixed by the behavior itself, so it is deterministic by
   // construction.
-  return { base: name, deterministic: true };
+  return {
+    definition: { base: name, deterministic: true },
+    ...(definition ? { typeDefinition: definition } : {}),
+  };
 }
 
 // Whether a `read` of this target may be answered without running it, asked
@@ -691,8 +780,13 @@ async function resolveReadShape(
       // response cache — are served without that second resolution, so
       // nothing that judges the caller runs on them. The cross-request memo in
       // `readShape` is keyed by URL alone, which is sound only while this
-      // question stays caller-less.
-      scope.derive({ caller: { kind: 'unattributed' } }),
+      // question stays caller-less. For the same reason the policy gate never
+      // runs here, and a caller the realm ACL declined is kept off both fast
+      // paths by the handler.
+      scope.derive({
+        caller: { kind: 'unattributed' },
+        coarseDeclined: false,
+      }),
     );
   } catch {
     return 'unresolved';
@@ -718,6 +812,7 @@ export async function runOperation(
     target === request.target ? request : { ...request, target };
   let scope = newOperationScope(core, {
     caller: scopeCallerFor(canonical.actor),
+    ...(canonical.coarseDeclined ? { coarseDeclined: true } : {}),
   });
   let definition = await resolveOperation(core, target, canonical.name, scope);
   // The four stages of an invocation, in the one order they run: the `input`
