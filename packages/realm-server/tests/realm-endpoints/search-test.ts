@@ -10,6 +10,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
+  connectionTenantsDuring,
   setupPermissionedRealmCached,
   testRealmURLFor,
 } from '../helpers/index.ts';
@@ -129,6 +130,20 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           .replace(/\s+/g, ' ')
           .includes('Fitted Card Person: John'),
       );
+    });
+
+    test('the database work a realm’s own search does is charged to that realm', async function (assert) {
+      let { result: response, tenants } = await connectionTenantsDuring(
+        dbAdapter,
+        () => postSearch({ filter: personFilter() }),
+      );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let tagged = tenants.filter((tenant) => tenant !== undefined);
+      assert.true(
+        tagged.length > 0,
+        'the search ran statements under a connection tenant',
+      );
+      assert.deepEqual([...new Set(tagged)], [realmHref], 'the realm itself');
     });
 
     test('a disjunctive htmlQuery returns several renderings per entry', async function (assert) {

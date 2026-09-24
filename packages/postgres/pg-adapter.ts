@@ -168,9 +168,9 @@ function configuredPoolMax(): number {
 // the fleet's two replicas, about eight concurrent sessions is what saturates
 // it, and everything above that queued inside Postgres. Four per replica is
 // the smallest share that still lets one realm drive the database to that
-// point on its own, so a heavy realm keeps its throughput while contending,
-// and what it no longer does is multiply every other realm's query time by
-// the session count. It scales with the database the fleet shares and with
+// point on its own, so a heavy realm keeps most of its throughput while
+// contending without multiplying every other realm's query time by its
+// session count. It scales with the database the fleet shares and with
 // the number of replicas sharing it, so an environment with more cores per
 // replica wants a proportionally larger value.
 const DEFAULT_POOL_TENANT_SHARE = 4;
@@ -309,7 +309,7 @@ export class PgAdapter implements DBAdapter {
     return this.#isClosed;
   }
 
-  // What the connection scheduler is doing right now, for the health sampler:
+  // The connection scheduler's state when read, for the health sampler:
   // connections checked out against the pool's max, acquisitions waiting,
   // and how many of those wait only because their tenant is at its share.
   get connectionStats(): {

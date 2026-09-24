@@ -34,6 +34,7 @@ import {
 } from '../../search-inflight.ts';
 import {
   closeServer,
+  connectionTenantsDuring,
   createVirtualNetwork,
   setupDB,
   matrixURL,
@@ -318,6 +319,28 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       for (let { id } of janeHtml.relationships.styles.data) {
         assert.true(cssIds.has(id), `referenced stylesheet ${id} is included`);
       }
+    });
+
+    test('the database work a federated search does is charged to the set of realms it names', async function (assert) {
+      let { result: response, tenants } = await connectionTenantsDuring(
+        dbAdapter,
+        () =>
+          postSearch({
+            filter: personFilter(),
+            realms: [secondaryRealm.url, testRealm.url],
+          }),
+      );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let tagged = tenants.filter((tenant) => tenant !== undefined);
+      assert.true(
+        tagged.length > 0,
+        'the search ran statements under a connection tenant',
+      );
+      assert.deepEqual(
+        [...new Set(tagged)],
+        [[testRealm.url, secondaryRealm.url].sort().join(' ')],
+        'one tenant, the realm set, whatever order the request named it in',
+      );
     });
 
     // A federated search payload that names an archived realm must not

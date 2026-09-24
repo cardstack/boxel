@@ -68,6 +68,7 @@ import {
 import { upsertPublishedRealmInRegistry } from '../../lib/realm-registry-writes.ts';
 
 import {
+  currentConnectionTenant,
   PgAdapter,
   PgQueuePublisher,
   PgQueueRunner,
@@ -259,6 +260,28 @@ export async function waitUntil<T>(
   throw new Error(
     'Timeout waiting for condition' + (message ? `: ${message}` : ''),
   );
+}
+
+// Run `fn` and report the connection tenant (see `withConnectionTenant` in
+// `@cardstack/postgres`) that each database statement issued while it ran was
+// charged to — `undefined` for untagged work. The statements are still run by
+// the real adapter; this only reads the async context each one is issued in,
+// which is the context the adapter's connection scheduler reads too.
+export async function connectionTenantsDuring<T>(
+  dbAdapter: PgAdapter,
+  fn: () => Promise<T>,
+): Promise<{ result: T; tenants: (string | undefined)[] }> {
+  let tenants: (string | undefined)[] = [];
+  let execute = dbAdapter.execute;
+  dbAdapter.execute = function (this: PgAdapter, ...args) {
+    tenants.push(currentConnectionTenant());
+    return execute.apply(this, args);
+  };
+  try {
+    return { result: await fn(), tenants };
+  } finally {
+    dbAdapter.execute = execute;
+  }
 }
 
 export const testRealm = 'http://test-realm/';
