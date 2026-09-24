@@ -419,6 +419,8 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
         reservationId: -1,
         priority: 0,
         queueWaitMs: null,
+        concurrencyGroup: null,
+        laneFamily: null,
       },
       jobPriority: jobInfo?.priority,
       onProgress: reportProgress,

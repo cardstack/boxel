@@ -1,12 +1,14 @@
 // Does a write wait on somebody else's indexing?
 //
-// Indexing runs one lane per realm: `indexingConcurrencyGroup(realmURL)`
-// returns a group keyed on the realm alone, and the queue will not claim a job
-// whose group already holds a live reservation. So two people editing
-// unrelated cards in one realm serialize, and the second one's write pays the
-// first one's fan-out. Whether that is worth splitting per writer turns on one
-// number: of the index passes that waited, how many waited behind a *different*
-// person's pass rather than their own.
+// A realm's indexing runs in one lane family, named by
+// `indexingConcurrencyGroup(realmURL)`. Work published to the family's
+// exclusive lane runs with nothing else in the family, and the queue runs one
+// job per lane, so while a realm's index passes all publish there, two people
+// editing unrelated cards in one realm serialize, and the second one's write
+// pays the first one's fan-out. Passes in per-writer lanes of the family run
+// side by side instead. Whether that split pays turns on one number: of the
+// index passes that waited, how many waited behind a *different* person's pass
+// rather than their own.
 //
 // WHERE THIS READING COMES FROM, because it bounds what it can be quoted for.
 // The number lives in `jobs` rows, which means an AWS session and a SQL

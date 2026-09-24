@@ -530,7 +530,7 @@ module(basename(import.meta.filename), function () {
       let batch = await new IndexWriter(dbAdapter).createBatch(
         realm(),
         virtualNetwork,
-        { jobId, reservationId: 1, priority: 0, queueWaitMs: null },
+        { jobId, reservationId: 1, priority: 0, queueWaitMs: null, concurrencyGroup: null, laneFamily: null },
         { prerenderHtmlOnly: true },
       );
       await batch.adoptIndexGenerations([`${realmA}pet-1.json`]);

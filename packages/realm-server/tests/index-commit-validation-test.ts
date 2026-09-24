@@ -52,6 +52,8 @@ module(basename(import.meta.filename), function (hooks) {
       reservationId: 1,
       priority: 0,
       queueWaitMs: null,
+      concurrencyGroup: null,
+      laneFamily: null,
     };
     return await indexWriter.createBatch(
       new URL(testRealm),

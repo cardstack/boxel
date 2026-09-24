@@ -6,7 +6,7 @@ import {
   type Expression,
 } from '@cardstack/runtime-common';
 import {
-  acquireConcurrencyGroupLock,
+  acquireLaneLocks,
   type PgAdapter,
 } from '@cardstack/postgres';
 
@@ -81,14 +81,17 @@ export async function markFailedJob(
     id = String(rows[0].id);
   }
 
-  // The lock below is keyed on the concurrency group, so it has to be read
-  // first. Safe to read outside the lock: a job's group is fixed when the row is
-  // inserted and nothing updates it (coalescing rewrites priority, timeout and
-  // args only).
+  // The locks below are keyed on the job's lane — its concurrency group and
+  // lane family — so those have to be read first. Safe to read outside the
+  // locks: a job's lane is fixed when the row is inserted and nothing updates
+  // it (coalescing rewrites priority, timeout and args only).
   let jobRows = (await runQuery(dbAdapter, [
-    `SELECT concurrency_group FROM jobs WHERE id =`,
+    `SELECT concurrency_group, lane_family FROM jobs WHERE id =`,
     param(jobId),
-  ] as Expression)) as { concurrency_group: string | null }[];
+  ] as Expression)) as {
+    concurrency_group: string | null;
+    lane_family: string | null;
+  }[];
   if (jobRows.length === 0) {
     log.info(
       `not failing job ${jobId} for worker ${workerId}: the job row is gone. Closing stale reservation ${id}`,
@@ -100,15 +103,18 @@ export async function markFailedJob(
   return await dbAdapter.withConnection(async (query) => {
     await query(['BEGIN']);
     try {
-      // Hold the lock the claim path holds. Without it, deciding this job is a
+      // Hold the locks the claim path holds. Without them, deciding this job is a
       // check-then-write against a snapshot a claim can invalidate: the
       // `NOT EXISTS` below reads `job_reservations` as of statement start, and
       // blocking on the claim's row lock does not re-evaluate it, so a job
-      // claimed microseconds earlier would still be rejected. Under the lock the
+      // claimed microseconds earlier would still be rejected. Under the locks the
       // two are exclusive in both orders — claim first and this write sees the
       // new reservation, or this write first and the claim's own
       // still-unfulfilled check fails.
-      await acquireConcurrencyGroupLock(query, jobRows[0].concurrency_group);
+      await acquireLaneLocks(query, {
+        concurrencyGroup: jobRows[0].concurrency_group,
+        laneFamily: jobRows[0].lane_family,
+      });
 
       let rejected = (await query([
         `UPDATE jobs SET `,

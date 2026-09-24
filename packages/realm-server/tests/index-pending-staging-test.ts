@@ -51,7 +51,7 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   function jobInfo(jobId: number, reservationId = 1): JobInfo {
-    return { jobId, reservationId, priority: 0, queueWaitMs: null };
+    return { jobId, reservationId, priority: 0, queueWaitMs: null, concurrencyGroup: null, laneFamily: null };
   }
 
   async function createBatch(info?: JobInfo) {

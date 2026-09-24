@@ -432,8 +432,8 @@ import {
   type ResourceIndexEntry,
 } from './publishability.ts';
 import {
-  cancelAllJobsInConcurrencyGroup,
-  cancelRunningJobsInConcurrencyGroup,
+  cancelAllJobsInLaneFamily,
+  cancelRunningJobsInLaneFamily,
 } from './job-utils.ts';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
@@ -2868,12 +2868,12 @@ export class Realm {
     }
 
     if (cancelPending) {
-      await cancelAllJobsInConcurrencyGroup(
+      await cancelAllJobsInLaneFamily(
         this.#dbAdapter,
         indexingConcurrencyGroup(this.url),
       );
     } else {
-      await cancelRunningJobsInConcurrencyGroup(
+      await cancelRunningJobsInLaneFamily(
         this.#dbAdapter,
         indexingConcurrencyGroup(this.url),
       );

@@ -18,23 +18,30 @@ import { baseRealm, baseRealmRRI } from '../constants.ts';
 import { systemInitiatedPriority, userInitiatedPriority } from '../queue.ts';
 import { Deferred } from '../deferred.ts';
 import { parseSpawningIndexPasses } from './prerender-html.ts';
+import { laneFamilyPredicate } from './lane-family.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
 import { isObjectLike } from 'lodash-es';
 
 export const INCREMENTAL_INDEX_JOB_TIMEOUT_SEC = 10 * 60;
 
-// The name of a realm's index lane. Membership in it means one thing only:
-// serialize against everything else in it. Every job that writes the realm's
-// index joins — from-scratch, incremental, copy — and so does work that must
-// not overlap a running pass without writing the index itself, today
-// `scoped-css-gc` (see `runtime-common/scoped-css-gc.ts`).
+// The name of a realm's index lane, and of the lane family its writer lanes
+// belong to (see `QueuePublishRequest.laneFamily`). A job published to this
+// group is the family's exclusive work: it runs with nothing else of the
+// realm's index, which is what every job here is today. Every job that writes
+// the realm's index joins — from-scratch, incremental, copy — and so does work
+// that must not overlap a running pass without writing the index itself,
+// today `scoped-css-gc` (see `runtime-common/scoped-css-gc.ts`).
 //
-// So the lane's membership does not answer "is this realm's index behind its
-// source". A reader asking that must narrow to `INDEX_WRITING_JOB_TYPES`;
-// reading the bare lane reports a realm as mid-index for as long as a GC sweep
-// sits queued behind an unrelated backlog. A caller that wants the lane itself
-// — cancelling a realm's outstanding work on teardown — wants every member and
-// should not narrow.
+// Readers ask about the family rather than this group, through
+// `laneFamilyPredicate`, so a job in a writer lane counts wherever an
+// exclusive one does.
+//
+// So the family's membership does not answer "is this realm's index behind
+// its source". A reader asking that must narrow to `INDEX_WRITING_JOB_TYPES`;
+// reading the bare family reports a realm as mid-index for as long as a GC
+// sweep sits queued behind an unrelated backlog. A caller that wants the
+// family itself — cancelling a realm's outstanding work on teardown — wants
+// every member and should not narrow.
 export function indexingConcurrencyGroup(realmURL: string): string {
   return `indexing:${realmURL}`;
 }
@@ -57,10 +64,12 @@ export function indexingConcurrencyGroup(realmURL: string): string {
 // sweep occupies the all-priority pool.
 //
 // Base is the only realm elevated this way, and two things bound what that
-// costs. Every job that writes a realm's index shares
-// `indexingConcurrencyGroup(realmURL)`, and the claim query skips any group
-// already holding a live reservation — so base's index occupies one worker at
-// a time. And the elevation stops at the index: follow-on prerender-html work
+// costs. Every job that writes a realm's index is in the lane family
+// `indexingConcurrencyGroup(realmURL)`, and the claim query runs one job per
+// lane and never runs a family's exclusive work beside anything else in it —
+// so base's exclusive index work occupies one worker at a time, and its writer
+// lanes, when a publish uses them, at most the queue's cap on concurrent
+// writer lanes per family. And the elevation stops at the index: follow-on prerender-html work
 // derives its tier from `prerenderSpawnedPriority` below rather than from the
 // elevated value, so a realm-wide HTML sweep for base cannot take a second
 // worker out of the same pool. Each further realm elevated would add another
@@ -135,8 +144,9 @@ export function prerenderSpawnedPriority({
 // published, so with several realm-server replicas behind one load balancer
 // they answer per-replica; the `jobs` rows are the same for every replica.
 //
-// Signal: no `unfulfilled` job in the realm's index concurrency group, which
-// covers both queued and running jobs. A job's status is stamped only after its
+// Signal: no `unfulfilled` job in the realm's index lane family — its
+// exclusive lane and every writer lane — which covers both queued and running
+// jobs. A job's status is stamped only after its
 // handler has returned, so its index writes are already committed by the time
 // it stops counting as unfulfilled — a clear lane means every index write
 // enqueued so far is durable. Resolves true when the lane is clear, false on
@@ -201,8 +211,8 @@ export async function unbuiltIndexFailure(
     return undefined;
   }
   let [job] = (await query(dbAdapter, [
-    `SELECT status, result FROM jobs WHERE job_type = 'from-scratch-index' AND concurrency_group =`,
-    param(indexingConcurrencyGroup(realmURL)),
+    `SELECT status, result FROM jobs WHERE job_type = 'from-scratch-index' AND`,
+    ...laneFamilyPredicate(indexingConcurrencyGroup(realmURL)),
     'ORDER BY id DESC LIMIT 1',
   ])) as { status: string; result: unknown }[];
   if (!job || job.status !== 'rejected') {
@@ -288,8 +298,8 @@ export function jobTypeFilter(
 // ask `awaitRealmIndexSettled`, whose answer is one query rather than a read
 // that can disagree with the gate it explains.
 //
-// Capped because it lands in a log line. A realm's lane serializes, so it holds
-// a handful in practice; the cap only bounds a pathological backlog, and a lane
+// Capped because it lands in a log line. A realm's lanes each serialize, so
+// they hold a handful in practice; the cap only bounds a pathological backlog, and a lane
 // that deep is diagnosed from the queue, not from one realm's readiness log.
 const OUTSTANDING_INDEX_JOBS_LOG_CAP = 10;
 
@@ -321,8 +331,8 @@ export async function outstandingIndexJobs(
     `SELECT id, job_type,`,
     `EXISTS (SELECT 1 FROM job_reservations jr WHERE jr.job_id = jobs.id`,
     `AND jr.completed_at IS NULL AND jr.locked_until > NOW()) AS claimed`,
-    `FROM jobs WHERE status = 'unfulfilled' AND concurrency_group =`,
-    param(indexingConcurrencyGroup(realmURL)),
+    `FROM jobs WHERE status = 'unfulfilled' AND`,
+    ...laneFamilyPredicate(indexingConcurrencyGroup(realmURL)),
     ...jobTypeFilter(jobTypes),
     `ORDER BY id LIMIT ${OUTSTANDING_INDEX_JOBS_LOG_CAP}`,
   ])) as { id: number | string; job_type: string; claimed: boolean }[];
@@ -400,6 +410,13 @@ export async function awaitRealmIndexSettled(
     // by, where one naming nobody waits for the lane — which is what a
     // readiness probe or a publish means.
     //
+    // Across the family that is the writer's own lane plus the exclusive work
+    // that carries it. A writer lane's jobs carry that one writer, since
+    // coalescing never merges across lanes, so the recorded set is what picks
+    // out the lane; and an exclusive job counts when it carries the writer
+    // too. Another writer's lane never does, and neither does exclusive work
+    // that carries only other writers.
+    //
     // A pass no HTTP write produced records no user, and reads as the realm
     // owner rather than as nobody: a row written before the column existed, a
     // file-watcher echo, a GC sweep still gate somebody, and the owner is the
@@ -437,8 +454,8 @@ export async function awaitRealmIndexSettled(
       return true;
     }
     let expression: Expression = [
-      `SELECT 1 FROM jobs WHERE status = 'unfulfilled' AND concurrency_group =`,
-      param(indexingConcurrencyGroup(realmURL)),
+      `SELECT 1 FROM jobs WHERE status = 'unfulfilled' AND`,
+      ...laneFamilyPredicate(indexingConcurrencyGroup(realmURL)),
     ];
     if (initiatedBy) {
       // Containment over the recorded set, since a coalesced pass carries

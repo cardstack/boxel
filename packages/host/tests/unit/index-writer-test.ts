@@ -1701,7 +1701,7 @@ module('Unit | index-writer', function (hooks) {
     let batch = await indexWriter.createBatch(
       new URL(testRealmURL),
       virtualNetwork,
-      { jobId: 42, reservationId: 2, priority: 0, queueWaitMs: null },
+      { jobId: 42, reservationId: 2, priority: 0, queueWaitMs: null, concurrencyGroup: null, laneFamily: null },
     );
     await batch.done();
 
@@ -4352,6 +4352,8 @@ module('Unit | index-writer', function (hooks) {
         reservationId: 2,
         priority: 0,
         queueWaitMs: null,
+        concurrencyGroup: null,
+        laneFamily: null,
       },
     );
     assert.strictEqual(
@@ -4409,6 +4411,8 @@ module('Unit | index-writer', function (hooks) {
         reservationId: 2,
         priority: 0,
         queueWaitMs: null,
+        concurrencyGroup: null,
+        laneFamily: null,
       },
     );
     assert.strictEqual(
@@ -4454,6 +4458,8 @@ module('Unit | index-writer', function (hooks) {
         reservationId: 2,
         priority: 0,
         queueWaitMs: null,
+        concurrencyGroup: null,
+        laneFamily: null,
       },
     );
     assert.strictEqual(
@@ -4524,7 +4530,7 @@ module('Unit | index-writer', function (hooks) {
     let peer = await indexWriter.createBatch(
       new URL(testRealmURL),
       virtualNetwork,
-      { jobId: 99, reservationId: 1, priority: 0, queueWaitMs: null },
+      { jobId: 99, reservationId: 1, priority: 0, queueWaitMs: null, concurrencyGroup: null, laneFamily: null },
     );
     await stageHub(peer, 'Peer Hub');
     await peer.invalidate([new URL(doomedURL)]);
@@ -4759,6 +4765,8 @@ module('Unit | index-writer', function (hooks) {
         reservationId: 2,
         priority: 0,
         queueWaitMs: null,
+        concurrencyGroup: null,
+        laneFamily: null,
       },
     );
     assert.true(
@@ -4819,6 +4827,8 @@ module('Unit | index-writer', function (hooks) {
         reservationId: 2,
         priority: 0,
         queueWaitMs: null,
+        concurrencyGroup: null,
+        laneFamily: null,
       },
     );
     // Note: no updateEntry / invalidate call — simulating a retry that
@@ -4852,6 +4862,8 @@ module('Unit | index-writer', function (hooks) {
       reservationId: 1,
       priority: 0,
       queueWaitMs: null,
+      concurrencyGroup: null,
+      laneFamily: null,
     };
     test('returns production row when URL exists only in boxel_index', async function (assert) {
       let url = `${testRealmURL}prod-only.json`;
