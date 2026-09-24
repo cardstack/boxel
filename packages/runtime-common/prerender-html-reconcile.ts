@@ -1,6 +1,7 @@
 import type { DBAdapter } from './db.ts';
 import {
   addExplicitParens,
+  every,
   param,
   query,
   separatedByCommas,
@@ -8,8 +9,9 @@ import {
 } from './expression.ts';
 import type { IncrementalChange } from './tasks/indexer.ts';
 import {
-  parseSpawningIndexJobIds,
+  parseSpawningIndexPasses,
   prerenderHtmlConcurrencyGroup,
+  type SpawningIndexPass,
 } from './jobs/prerender-html.ts';
 
 // The catch-up sweep's read side. It reconciles two independently-advancing
@@ -228,14 +230,15 @@ export async function findStalePrerenderedHtmlRows(
 // consecutive-failure cap. The per-row generation gate means an older job
 // never masks residue the index has moved past.
 //
-// A job spawned by index passes carries no generation: it stamps each row
-// from the live index once its spawning passes have committed. It covers a URL
-// at the newest generation those passes committed, read from the
-// `realm_index_commits` ledger — or at every generation while one of them has
-// yet to commit, since the job has not read its stamps yet and will read them
-// from a commit newer than any row the sweep sees now. A job enqueued from
-// committed state (a reconcile repair, or a legacy job) covers at the
-// generation it carries.
+// A job spawned by index passes stamps each row from the live index once its
+// spawning passes have committed, so the generation it carries does not say
+// what it covers. It covers a URL at the newest generation those passes
+// committed, read from the `realm_index_commits` ledger — or at every
+// generation while one of them has yet to commit, since the job has not read
+// its stamps yet and will read them from a commit newer than any row the sweep
+// sees now. A job enqueued from committed state (a reconcile repair, or a job
+// from a worker predating `spawningIndexPasses`) covers at the generation it
+// carries.
 export async function findActivePrerenderHtmlJobCoverage(
   dbAdapter: DBAdapter,
 ): Promise<Map<string, Map<string, number>>> {
@@ -248,14 +251,11 @@ export async function findActivePrerenderHtmlJobCoverage(
   let jobs = rows
     .map((row) => parseCoverageArgs(row.args))
     .filter((parsed) => parsed !== undefined);
-  let committedBySpawner = await committedGenerationsBySpawner(dbAdapter, jobs);
+  let committedByPass = await committedGenerationsByPass(dbAdapter, jobs);
   let byRealm = new Map<string, Map<string, number>>();
   for (let parsed of jobs) {
     let { realmURL, changes } = parsed;
-    let generation = coverageGeneration(parsed, committedBySpawner);
-    if (generation === undefined) {
-      continue;
-    }
+    let generation = coverageGeneration(parsed, committedByPass);
     let urls = byRealm.get(realmURL);
     if (!urls) {
       urls = new Map<string, number>();
@@ -276,58 +276,59 @@ export async function findActivePrerenderHtmlJobCoverage(
 
 interface CoverageArgs {
   realmURL: string;
-  generation: number | null;
-  spawningIndexJobIds: number[];
+  generation: number;
+  spawningIndexPasses: SpawningIndexPass[];
   changes: IncrementalChange[];
 }
 
-// The newest generation each spawning index job committed, keyed
-// `realm url` + job id, for the spawners the given jobs wait on.
-async function committedGenerationsBySpawner(
+// The generation each spawning index pass committed, keyed by pass id, for
+// the passes the given jobs wait on. One query per realm, so each is served by
+// the ledger's `(realm_url, pass_id)` index.
+async function committedGenerationsByPass(
   dbAdapter: DBAdapter,
   jobs: CoverageArgs[],
 ): Promise<Map<string, number>> {
-  let spawnerIds = [...new Set(jobs.flatMap((job) => job.spawningIndexJobIds))];
-  let committed = new Map<string, number>();
-  if (spawnerIds.length === 0) {
-    return committed;
+  let passIdsByRealm = new Map<string, Set<string>>();
+  for (let job of jobs) {
+    for (let pass of job.spawningIndexPasses) {
+      let passIds = passIdsByRealm.get(job.realmURL) ?? new Set<string>();
+      passIds.add(pass.passId);
+      passIdsByRealm.set(job.realmURL, passIds);
+    }
   }
-  let rows = (await query(dbAdapter, [
-    'SELECT realm_url, job_id, MAX(generation) AS generation FROM realm_index_commits WHERE job_id IN',
-    ...addExplicitParens(
-      separatedByCommas(spawnerIds.map((id) => [param(id)])),
-    ),
-    'GROUP BY realm_url, job_id',
-  ] as Expression)) as {
-    realm_url: string;
-    job_id: number | string;
-    generation: number | string;
-  }[];
-  for (let row of rows) {
-    committed.set(
-      spawnerKey(row.realm_url, Number(row.job_id)),
-      Number(row.generation),
-    );
+  let committed = new Map<string, number>();
+  for (let [realmURL, passIds] of passIdsByRealm) {
+    let rows = (await query(dbAdapter, [
+      'SELECT pass_id, generation FROM realm_index_commits WHERE',
+      ...every([
+        ['realm_url =', param(realmURL)],
+        [
+          'pass_id IN',
+          ...addExplicitParens(
+            separatedByCommas([...passIds].map((id) => [param(id)])),
+          ),
+        ],
+      ]),
+    ] as Expression)) as { pass_id: string; generation: number | string }[];
+    for (let row of rows) {
+      committed.set(row.pass_id, Number(row.generation));
+    }
   }
   return committed;
 }
 
-function spawnerKey(realmURL: string, jobId: number): string {
-  return `${realmURL} ${jobId}`;
-}
-
-// The generation a pending job is on track to render its URLs at, or
-// undefined when it names none (see `findActivePrerenderHtmlJobCoverage`).
+// The generation a pending job is on track to render its URLs at (see
+// `findActivePrerenderHtmlJobCoverage`).
 function coverageGeneration(
   job: CoverageArgs,
-  committedBySpawner: Map<string, number>,
-): number | undefined {
-  if (job.spawningIndexJobIds.length === 0) {
-    return job.generation ?? undefined;
+  committedByPass: Map<string, number>,
+): number {
+  if (job.spawningIndexPasses.length === 0) {
+    return job.generation;
   }
-  let newest = job.generation ?? -1;
-  for (let id of job.spawningIndexJobIds) {
-    let committed = committedBySpawner.get(spawnerKey(job.realmURL, id));
+  let newest = -1;
+  for (let { passId } of job.spawningIndexPasses) {
+    let committed = committedByPass.get(passId);
     if (committed === undefined) {
       return Number.POSITIVE_INFINITY;
     }
@@ -348,8 +349,12 @@ function parseCoverageArgs(args: unknown): CoverageArgs | undefined {
   if (!isObjectLike(obj)) {
     return undefined;
   }
-  let { realmURL, generation, spawningIndexJobIds, changes } = obj;
-  if (typeof realmURL !== 'string' || !Array.isArray(changes)) {
+  let { realmURL, generation, spawningIndexPasses, changes } = obj;
+  if (
+    typeof realmURL !== 'string' ||
+    typeof generation !== 'number' ||
+    !Array.isArray(changes)
+  ) {
     return undefined;
   }
   let normalized: IncrementalChange[] = [];
@@ -363,8 +368,8 @@ function parseCoverageArgs(args: unknown): CoverageArgs | undefined {
   }
   return {
     realmURL,
-    generation: typeof generation === 'number' ? generation : null,
-    spawningIndexJobIds: parseSpawningIndexJobIds(spawningIndexJobIds),
+    generation,
+    spawningIndexPasses: parseSpawningIndexPasses(spawningIndexPasses) ?? [],
     changes: normalized,
   };
 }

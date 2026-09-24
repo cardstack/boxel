@@ -8,6 +8,7 @@ import {
 import { param, query, type PgPrimitive } from '../expression.ts';
 import type { DBAdapter } from '../db.ts';
 import { Deferred } from '../deferred.ts';
+import type * as JSONTypes from 'json-typescript';
 import type { IncrementalChange } from '../tasks/indexer.ts';
 import type { PrerenderHtmlArgs } from '../tasks/prerender-html.ts';
 
@@ -35,12 +36,33 @@ export function mergePrerenderHtmlChanges(
   return [...byUrl.values()];
 }
 
-// A prerender-html job's `spawningIndexJobIds`, read loosely: args written by
-// a worker predating the field carry none.
-export function parseSpawningIndexJobIds(value: unknown): number[] {
-  return Array.isArray(value)
-    ? value.filter((id): id is number => typeof id === 'number')
-    : [];
+// One index pass a prerender-html job waits on: the queue job that ran it, and
+// the pass id its batch minted, which its `realm_index_commits` row carries. A
+// job id alone cannot name the pass — a job whose reservation expires, or whose
+// worker dies between its commit and its resolve, runs again under the same id
+// and commits a second time — so the wait is on the pass id, and the job id
+// answers only whether the pass can still commit.
+export interface SpawningIndexPass extends JSONTypes.Object {
+  jobId: number;
+  passId: string;
+}
+
+// A prerender-html job's `spawningIndexPasses`, or undefined when its args
+// carry no such field — a job enqueued by a worker predating it, which names
+// its spawning pass only by the generation that pass anticipated.
+export function parseSpawningIndexPasses(
+  value: unknown,
+): SpawningIndexPass[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  return value.filter(
+    (pass): pass is SpawningIndexPass =>
+      !!pass &&
+      typeof pass === 'object' &&
+      typeof (pass as SpawningIndexPass).jobId === 'number' &&
+      typeof (pass as SpawningIndexPass).passId === 'string',
+  );
 }
 
 // A prerender-html job normally floors one tier below the index pass that
@@ -75,8 +97,8 @@ export interface PrerenderHtmlEnqueueArgs {
   realmUsername: string;
   changes: IncrementalChange[];
   // See PrerenderHtmlArgs for both.
-  spawningIndexJobIds: number[];
-  generation: number | null;
+  spawningIndexPasses: SpawningIndexPass[];
+  generation: number;
   loaderEpoch: string;
   spawningJobId: number | null;
   spawningPriority: number;
@@ -274,7 +296,7 @@ export async function enqueuePrerenderHtmlJob(
     realmURL,
     realmUsername,
     changes,
-    spawningIndexJobIds,
+    spawningIndexPasses,
     generation,
     loaderEpoch,
     spawningJobId,
@@ -288,7 +310,7 @@ export async function enqueuePrerenderHtmlJob(
     realmURL,
     realmUsername,
     changes,
-    spawningIndexJobIds,
+    spawningIndexPasses,
     generation,
     loaderEpoch,
     spawningJobId,

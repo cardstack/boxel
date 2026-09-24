@@ -191,6 +191,11 @@ export class IndexRunner {
   #onInvalidationsReady?: (args: {
     changes: PrerenderedHtmlChange[];
     loaderEpoch: string;
+    // The pass's own id, which its `realm_index_commits` row will carry.
+    passId: string;
+    // The generation the pass anticipated at setup. Only a guess at the one it
+    // commits under; see `PrerenderHtmlArgs.generation` for its one reader.
+    provisionalGeneration: number;
   }) => void;
   readonly stats: Stats = {
     instancesIndexed: 0,
@@ -268,6 +273,8 @@ export class IndexRunner {
     onInvalidationsReady?(args: {
       changes: PrerenderedHtmlChange[];
       loaderEpoch: string;
+      passId: string;
+      provisionalGeneration: number;
     }): void;
   }) {
     this.#indexWriter = indexWriter;
@@ -765,6 +772,8 @@ export class IndexRunner {
         operation: deletes.has(url) ? 'delete' : 'update',
       })),
       loaderEpoch: this.batch.loaderEpoch,
+      passId: this.batch.passId,
+      provisionalGeneration: this.batch.provisionalGeneration,
     });
   }
 

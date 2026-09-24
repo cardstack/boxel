@@ -17,6 +17,7 @@ import type { DBAdapter } from '../db.ts';
 import { baseRealm, baseRealmRRI } from '../constants.ts';
 import { systemInitiatedPriority, userInitiatedPriority } from '../queue.ts';
 import { Deferred } from '../deferred.ts';
+import { parseSpawningIndexPasses } from './prerender-html.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
 import { isObjectLike } from 'lodash-es';
 
@@ -651,14 +652,12 @@ function parseDeferredPrerenderHtml(
   if (!isObjectLike(value) || Array.isArray(value)) {
     return undefined;
   }
-  let { changes, spawningIndexJobId, generation, loaderEpoch } =
+  let { changes, spawningIndexPass, generation, loaderEpoch } =
     value as Record<string, PgPrimitive>;
-  // A set from a worker predating `spawningIndexJobId` names its pass by the
-  // generation it anticipated instead; one naming neither is dropped.
   if (
     !Array.isArray(changes) ||
-    typeof loaderEpoch !== 'string' ||
-    (typeof spawningIndexJobId !== 'number' && typeof generation !== 'number')
+    typeof generation !== 'number' ||
+    typeof loaderEpoch !== 'string'
   ) {
     return undefined;
   }
@@ -676,15 +675,14 @@ function parseDeferredPrerenderHtml(
     }
     parsedChanges.push({ url, operation });
   }
+  // A set from a worker predating `spawningIndexPass` carries none, and
+  // its enqueued job waits on the generation instead.
+  let [pass] = parseSpawningIndexPasses([spawningIndexPass]) ?? [];
   return {
     changes: parsedChanges,
     loaderEpoch,
-    spawningIndexJobId:
-      typeof spawningIndexJobId === 'number' ? spawningIndexJobId : null,
-    generation:
-      typeof spawningIndexJobId !== 'number' && typeof generation === 'number'
-        ? generation
-        : null,
+    spawningIndexPass: pass ?? null,
+    generation,
   };
 }
 

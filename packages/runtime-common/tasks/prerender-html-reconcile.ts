@@ -181,7 +181,7 @@ const prerenderHtmlReconcile: Task<
           realmUsername: owner,
           changes: urls.map((url) => ({ url, operation: 'update' as const })),
           // Spawned from committed state: no index pass to wait on.
-          spawningIndexJobIds: [],
+          spawningIndexPasses: [],
           generation: realmGeneration.generation,
           loaderEpoch: realmGeneration.loaderEpoch,
           spawningJobId: jobInfo?.jobId ?? null,

@@ -4589,10 +4589,9 @@ export class Realm {
         changes: deferred.changes,
         // The deferring pass has finished by now, so the job's wait on it
         // ends on its first probe.
-        spawningIndexJobIds:
-          deferred.spawningIndexJobId != null
-            ? [deferred.spawningIndexJobId]
-            : [],
+        spawningIndexPasses: deferred.spawningIndexPass
+          ? [deferred.spawningIndexPass]
+          : [],
         generation: deferred.generation,
         loaderEpoch: deferred.loaderEpoch,
         spawningJobId: null,
