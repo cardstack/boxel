@@ -510,14 +510,42 @@ WHERE i.realm_url = '<realm-url>'
 
 Two-hop fan-out: rerun with the first hop's `(url, file_alias, type)` plugged in via `invalidationTraversalAlias` (instance → use `url`; executable file → use `file_alias`; non-executable file → use `url`). In practice the runtime walk converges in 2-4 hops for typical realms; if you're still discovering new URLs after 5-6 hops, you've hit a tightly-cycled module graph and reconstruction by hand isn't going to be cheap.
 
-### 6. Reading partial progress from `boxel_index_working`
+### 6. Reading partial progress from `boxel_index_pending`
 
-`boxel_index_working` carries the batch's in-progress writes, keyed by `(url, realm_url)`. The indexer writes here continuously via `Batch.updateEntry` (line 310). On `Batch.done()` (line 476), rows are copied into `boxel_index` with the new `generation` and the working table is **left in place** — it's not truncated (each invalidation is keyed by realm version inside the table). For a stuck job, the rows already written carry the same `invalidationId` and bracket the freeze point.
+`boxel_index_pending` holds the rows index passes have staged but not committed, keyed by `(realm_url, staging_id, url, type)`. Every staging read and write a pass makes is scoped to its own `staging_id`, so a pass sees committed state plus its own rows and never another pass's:
+
+- **`job:<job-id>`** for a pass that runs as a queue job. Every attempt of the job shares it — that is how a retry resumes what an earlier attempt staged.
+- **`adhoc:<pass id>`** for a batch that runs outside a job (the worker-manager's error-marking batch, tests). Nothing else shares it.
+
+The indexer writes there continuously (`Batch.bufferEntry` / `updateEntry`). `Batch.done()` copies the pass's rows into `boxel_index`, restamped with the generation it commits under, and then deletes them (`pendingCleanupMs` on the job result). So a row here is always uncommitted work: a live pass's progress, or what a failed attempt left for its job's retry. `prerendered_html_pending` is the render channel's twin — the `prerender_html` job's staged HTML rows (and the fused path's), under the same staging-id scheme. Once a job resolves or rejects, the rows it left are orphans, and the next commit to the realm removes them (`janitorRowsCleared` / `janitorJobsCleared`). Rows whose job has no `jobs` row, and `adhoc:` rows, are never removed that way — see [step 9](#9-what-this-mode-cant-tell-you).
+
+The shared `boxel_index_working` / `prerendered_html_working` tables no longer receive rows. Anything still in them predates the pending tables and says nothing about a current pass.
+
+What is staged in a realm right now, one row per pass:
 
 ```sql
--- Partial progress for a stuck batch: rows the in-progress job has
--- already written, ordered by writeSeq so the bottom row is the file
--- that was being worked on when things froze.
+SELECT p.staging_id,
+       p.job_id,
+       j.status                                        AS job_status,
+       count(*)                                        AS rows_staged,
+       count(*) FILTER (WHERE p.is_deleted)             AS tombstones,
+       max((p.diagnostics->>'writeSeq')::int)           AS rows_deep,
+       to_timestamp(max((p.diagnostics->>'indexedAt')::bigint) / 1000)
+                                                        AS last_write
+FROM boxel_index_pending p
+LEFT JOIN jobs j ON j.id = p.job_id
+WHERE p.realm_url = '<realm-url>'
+GROUP BY 1, 2, 3
+ORDER BY last_write DESC;
+```
+
+A `job_status` of `unfulfilled` is a pass in flight or awaiting its retry. `resolved` / `rejected` means the job ended without its rows being cleared — its commit's cleanup failed, or it died and was not retried — and the next commit to the realm will clear them.
+
+Partial progress for one stuck job:
+
+```sql
+-- Rows the in-progress job has already staged, ordered by writeSeq so the
+-- bottom row is the file that was being worked on when things froze.
 --
 -- Order by writeSeq, NOT indexedAt: rows drain through a write-behind
 -- buffer that stamps a whole flush with one identical millisecond, so
@@ -533,10 +561,12 @@ SELECT
   url,
   type,
   has_error,
+  is_deleted,
   generation,
   to_timestamp((diagnostics->>'indexedAt')::bigint / 1000)
                                                        AS indexed_at,
   diagnostics->>'invalidationId'                AS invalidation_id,
+  diagnostics->>'passId'                        AS pass_id,
   diagnostics->>'renderStage'                   AS render_stage,
   diagnostics->>'currentlyEvaluatingModule'     AS evaluating_module,
   diagnostics->'recentModuleEvaluations'->0->>'url'
@@ -547,82 +577,45 @@ SELECT
   jsonb_array_length(
     COALESCE(diagnostics->'queryLoadsInFlight', '[]'::jsonb)
   )                                                    AS queries_in_flight
-FROM boxel_index_working
+FROM boxel_index_pending
 WHERE realm_url = '<realm-url>'
-  AND diagnostics->>'invalidationId' = '<invalidation-id>'
-ORDER BY seq ASC;
-```
-
-If you don't already have an `invalidationId`, find the most recent batch's ID against the working table (the last `updateEntry` for the realm wins):
-
-```sql
-SELECT
-  diagnostics->>'invalidationId'                AS invalidation_id,
-  generation,
-  count(*)                                             AS rows_written,
-  to_timestamp(
-    min((diagnostics->>'indexedAt')::bigint) / 1000
-  )                                                    AS first_write,
-  to_timestamp(
-    max((diagnostics->>'indexedAt')::bigint) / 1000
-  )                                                    AS last_write,
-  max((diagnostics->>'writeSeq')::int)                 AS rows_deep
-FROM boxel_index_working
-WHERE realm_url = '<realm-url>'
-  AND diagnostics->>'invalidationId' IS NOT NULL
-GROUP BY 1, 2
-ORDER BY last_write DESC
-LIMIT 10;
-```
-
-`rows_deep` is how far into its write order the batch got. A URL contributes two rows, so it is roughly twice the number of files visited; for the planned total and a files-completed count, read the job's `job_progress` row (`total_files` / `files_completed` — an UNLOGGED table the manager's `IndexingEventSink` upserts from the worker's progress events, debounced, so it can lag the last write by a tick).
-
-**A retried job holds two batches' worth of rows.** When an expired reservation is retried, `loadResumedRows` keeps the previous attempt's working rows exactly as they are and promotes them alongside the new attempt's — so the promoted generation mixes two `invalidationId`s, each numbered from 0. Grouping by the newest id shows only what this attempt re-visited and silently omits every URL the earlier attempt already finished, which for a stuck-job investigation is precisely the wrong half. Find every id at the generation first, then union them:
-
-```sql
-SELECT diagnostics->>'invalidationId'          AS invalidation_id,
-       count(*)                               AS rows_written,
-       min((diagnostics->>'writeSeq')::int)    AS first_seq,
-       max((diagnostics->>'writeSeq')::int)    AS last_seq
-FROM boxel_index_working
-WHERE realm_url = '<realm-url>'
-  AND job_id = <job-id>
+  AND staging_id = 'job:<job-id>'
   AND diagnostics->>'writeSeq' IS NOT NULL
-GROUP BY 1
-ORDER BY min((diagnostics->>'indexedAt')::bigint);
+ORDER BY pass_id, seq ASC;
 ```
 
-Sequences are only comparable within one id, so order each attempt's rows separately — `indexedAt` is what puts the attempts in order relative to each other.
+`rows_deep` / the bottom `seq` is how far into its write order the pass got. A URL contributes two rows, so it is roughly twice the number of files visited; for the planned total and a files-completed count, read the job's `job_progress` row (`total_files` / `files_completed` — an UNLOGGED table the manager's `IndexingEventSink` upserts from the worker's progress events, debounced, so it can lag the last write by a tick).
 
-The bottom row of the per-`invalidationId` query (max `writeSeq`) is **the most recently completed file**; the file the worker stalled on is most likely the _next_ one in the planned visit order. That order is: `index-runner.ts::sortInvalidations` (realm config first, then non-`.json` files before the `.json` ones that depend on them, otherwise lexical by href), then `prioritizeWrittenURLs` hoists the URLs the triggering write named ahead of the dependents the fan-out found, then `orderInvalidationsByDependencies` topologically orders the result — treating the position it was handed as a priority, so a dependency edge wins and everything else keeps the order above. Combine three signals to pin it down:
+**A retried job's staging holds more than one attempt's rows.** Each attempt is its own pass, with its own `passId` and `invalidationId`, each numbered from 0, and a retry resumes the earlier attempt's rows exactly as they were staged. Group by `pass_id` (the query above sorts by it) and order each attempt's rows separately — sequences are only comparable within one pass, and `indexedAt` is what puts the attempts in order relative to each other. The resumed rows keep naming the earlier attempt after the retry commits them, so a committed row whose `diagnostics.passId` has no `realm_index_commits` row is one a retry promoted; the ledger row with the same `job_id` is the commit that did.
+
+The bottom row of an attempt (max `writeSeq`) is **the most recently completed file**; the file the worker stalled on is most likely the _next_ one in the planned visit order. That order is: `index-runner.ts::sortInvalidations` (realm config first, then non-`.json` files before the `.json` ones that depend on them, otherwise lexical by href), then `prioritizeWrittenURLs` hoists the URLs the triggering write named ahead of the dependents the fan-out found, then `orderInvalidationsByDependencies` topologically orders the result — treating the position it was handed as a priority, so a dependency edge wins and everything else keeps the order above. Combine three signals to pin it down:
 
 1. The bottom row's `url` (max `writeSeq`) is the last-completed file.
-2. The worker log's last `begin fused visit of file <url>` line for the job (visit-file.ts line 108, `index-runner` logger, debug level) names the file the visit _started_ on. If there's no matching `completed fused visit of file <url>` line, that's where the worker froze.
+2. The worker log's last `begin fused visit of file <url>` line for the job (visit-file.ts, `index-runner` logger, debug level) names the file the visit _started_ on. If there's no matching `completed fused visit of file <url>` line, that's where the worker froze.
 3. The bottom row's `currentlyEvaluatingModule` / `recentModuleEvaluations[0].url` / `inFlightModuleImports[]` say _which_ module inside that visit was the stall point — same field semantics as Mode A.
 
-To read which row would have been visited next from the working table (rows already invalidated but not yet written-with-content — these are the tombstones inserted by `Batch.invalidate`):
+To read which rows would have been visited next (rows already invalidated but not yet written with content — the tombstones `Batch.invalidate` staged):
 
 ```sql
--- Tombstones the batch inserted but hasn't yet rewritten with content.
--- Filtered to the batch's generation so older tombstones don't leak
--- in. A tombstone is written by `invalidate()` before the pass visits
--- anything, so it carries that pass's invalidationId and indexedAt but
--- no writeSeq — it took no position in the write order, and a visited
--- URL's row overwrites it. So a NULL writeSeq is exactly what
--- identifies an un-visited URL here. Sort lexically: it is only an
--- approximation of the planned order (see the three ordering steps
--- above), but the URLs the write named are the ones already gone from
--- this list, so what remains is dep closure.
+-- Tombstones the job staged but hasn't yet rewritten with content. A
+-- tombstone is staged by `invalidate()` before the pass visits anything,
+-- so it carries that pass's invalidationId, passId and indexedAt but no
+-- writeSeq — it took no position in the write order, and a visited URL's
+-- row overwrites it. So a NULL writeSeq is exactly what identifies an
+-- un-visited URL here. Sort lexically: it is only an approximation of the
+-- planned order (see the three ordering steps above), but the URLs the
+-- write named are the ones already gone from this list, so what remains
+-- is dep closure.
 SELECT url, type, file_alias, is_deleted
-FROM boxel_index_working
+FROM boxel_index_pending
 WHERE realm_url = '<realm-url>'
-  AND generation = <generation>
+  AND staging_id = 'job:<job-id>'
   AND is_deleted = TRUE
   AND diagnostics->>'writeSeq' IS NULL
 ORDER BY url ASC;
 ```
 
-If `boxel_index_working` has **zero rows** for this batch's `invalidationId`, the worker died before any DB write — see [step 9](#9-what-this-mode-cant-tell-you).
+If the job has **zero rows** under its staging id, either the worker died before any DB write — see [step 9](#9-what-this-mode-cant-tell-you) — or the job's pass already committed and cleared them: check `realm_index_commits` for a row with the job's `job_id` before concluding it stalled.
 
 ### 7. Cross-referencing with worker logs
 
@@ -689,9 +682,9 @@ cw --profile claude-staging --region us-east-1 tail -b 2h \
 
 A short rubric for the most common shapes:
 
-- **High confidence the stall is at file X**: the bottom row of `boxel_index_working` (max `writeSeq` for the batch's `invalidationId` — not max `indexedAt`, which a single buffered upsert gives a whole flush of rows identically) is X **AND** the worker's last `begin fused visit of file X` line has no matching `completed fused visit of file X` line **AND** the bottom row's `recentModuleEvaluations[0].url` (or `currentlyEvaluatingModule` / `inFlightModuleImports[0]`) is a module under X. Treat the row's `diagnostics` as a Mode A capture and walk the [Classify in one pass](#classify-in-one-pass) table.
+- **High confidence the stall is at file X**: the bottom row the job staged in `boxel_index_pending` (max `writeSeq` for the attempt's `passId` — not max `indexedAt`, which a single buffered upsert gives a whole flush of rows identically) is X **AND** the worker's last `begin fused visit of file X` line has no matching `completed fused visit of file X` line **AND** the bottom row's `recentModuleEvaluations[0].url` (or `currentlyEvaluatingModule` / `inFlightModuleImports[0]`) is a module under X. Treat the row's `diagnostics` as a Mode A capture and walk the [Classify in one pass](#classify-in-one-pass) table.
 - **Medium confidence**: only two of the three signals agree. Most often the worker log is the dropout — debug-level logging wasn't on. Promote `index-runner` to debug and trigger a follow-up reindex to validate.
-- **Low confidence — the runner stalled before any per-file work**: `boxel_index_working` has no rows for this batch's `invalidationId` (no row stamped with the batch UUID, no `is_deleted = TRUE` tombstones at the batch's `generation`). The worker is still in **invalidation discovery** — either the mtime walk (no `discovering invalidations in dir` line yet) or the consumer fan-out (the `discovering` line is there but no per-file visit-start lines). Look at the worker's `index-perf` `time to get file system mtimes` / `time to invalidate` lines — if those are missing too, you're stuck in the realm-server fetch (`reader.mtimes()` → `_mtimes` HTTP call) or in `Batch.invalidate`'s own jsonb-containment SQL (`itemsThatReference`). Then go look at what _should_ have been in the seed but wasn't — cross-check the EFS file listing against the realm's `boxel_index.last_modified` per step 3.
+- **Low confidence — the runner stalled before any per-file work**: `boxel_index_pending` has no rows under the job's `staging_id` (no row stamped with the attempt's `passId`, no `is_deleted = TRUE` tombstones), and `realm_index_commits` has no row for the job either. The worker is still in **invalidation discovery** — either the mtime walk (no `discovering invalidations in dir` line yet) or the consumer fan-out (the `discovering` line is there but no per-file visit-start lines). Look at the worker's `index-perf` `time to get file system mtimes` / `time to invalidate` lines — if those are missing too, you're stuck in the realm-server fetch (`reader.mtimes()` → `_mtimes` HTTP call) or in `Batch.invalidate`'s own jsonb-containment SQL (`itemsThatReference`). Then go look at what _should_ have been in the seed but wasn't — cross-check the EFS file listing against the realm's `boxel_index.last_modified` per step 3.
 - **Confirm a "rejected" job actually failed cleanly**: `jobs.status = 'rejected'` should pair with the matching reservation's `completed_at IS NOT NULL`. If `completed_at IS NULL`, the worker bailed before its finalize transaction (see `attemptJobFinalize` in `packages/postgres/job-finalize.ts`); the reservation's `locked_until` will eventually expire and another worker can claim it.
 
   The actual error is in **`jobs.result`** (jsonb). When the worker's `await job.run(...)` throws, `pg-queue.ts` does `result = flattenErrorForJsonb(err); newStatus = 'rejected';` and the finalize UPDATE writes both into the row. Read it directly:
@@ -710,9 +703,10 @@ A short rubric for the most common shapes:
 
 ### 9. What this mode can't tell you
 
-- If the worker died _before_ any DB write — crashed during `discoverInvalidations`, OOM-killed during the mtime walk, or threw inside `Batch.invalidate`'s own SQL — `boxel_index_working` will have no rows for this batch's `invalidationId`. The `Batch` object mints the `invalidationId` in its constructor, but it only lands on disk when the first `updateEntry` or `tombstoneEntries` call runs. Until then the only diagnostic signals are the worker log and the EFS state. Mode C cannot reconstruct _which_ file the worker was processing in that case — you need either `index-runner=debug` log output or a Sentry trace.
-- The `diagnostics` for partial-progress rows is the **per-render** capture for that row's prerender call. It won't tell you why the _next_ render froze. If the bottom-row's diagnostic is clean (low `renderElapsedMs`, no in-flight loads), the stall is between renders — usually `Batch.invalidate` recursion against a tightly-cycled module graph, or DB contention on the `boxel_index_working` upsert. The `index-perf` `time to determine items that reference …` lines are the only fingerprints of that loop.
-- A `boxel_index` row's `diagnostics` reflects the **last successful** indexing pass, not the in-flight one. Don't confuse a stale `boxel_index` `indexedAt` with the stuck job — always cross-reference against the matching `boxel_index_working` row (same `(url, realm_url)`) before drawing conclusions.
+- If the worker died _before_ any DB write — crashed during `discoverInvalidations`, OOM-killed during the mtime walk, or threw inside `Batch.invalidate`'s own SQL — `boxel_index_pending` will have no rows under the job's staging id. The `Batch` object mints its `invalidationId` and `passId` in its constructor, but they only land on disk when the first `updateEntry` or `tombstoneEntries` call runs. Until then the only diagnostic signals are the worker log and the EFS state. Mode C cannot reconstruct _which_ file the worker was processing in that case — you need either `index-runner=debug` log output or a Sentry trace.
+- The `diagnostics` for partial-progress rows is the **per-render** capture for that row's prerender call. It won't tell you why the _next_ render froze. If the bottom-row's diagnostic is clean (low `renderElapsedMs`, no in-flight loads), the stall is between renders — usually `Batch.invalidate` recursion against a tightly-cycled module graph, or DB contention on the `boxel_index_pending` upsert. The `index-perf` `time to determine items that reference …` lines are the only fingerprints of that loop.
+- A `boxel_index` row's `diagnostics` reflects the **last successful** indexing pass, not the in-flight one. Don't confuse a stale `boxel_index` `indexedAt` with the stuck job — always cross-reference against the row the job staged in `boxel_index_pending` (same `(url, type)` under the job's `staging_id`) before drawing conclusions.
+- Rows staged by a job whose `jobs` row is gone, and `adhoc:` rows, are never removed by the janitor: nothing records whether the pass that staged them has stopped. An `adhoc:` row belongs to a batch that ran outside a job and never reached its commit (its process died mid-batch). Neither is read by any other pass, so they cost only space; delete them by `staging_id` if they accumulate.
 
 ## Mode D — a module render was slow or hung
 
@@ -772,7 +766,7 @@ WHERE diagnostics->>'requestId' = '<request-id>';
 
 ### What Mode D can't tell you
 
-- **No partial-progress equivalent.** `modules` has no working-table sibling; the row only lands on `persistModuleCacheEntry` after the prerender returns. If a `prerenderModule` call hangs forever and the worker is killed, no row is written and Mode D has nothing to query. Cross-reference against the prerender server logs for `requestId=…` directly, same as a hung card render before the host's withTimeout fires.
+- **No partial-progress equivalent.** `modules` has no staging-table sibling; the row only lands on `persistModuleCacheEntry` after the prerender returns. If a `prerenderModule` call hangs forever and the worker is killed, no row is written and Mode D has nothing to query. Cross-reference against the prerender server logs for `requestId=…` directly, same as a hung card render before the host's withTimeout fires.
 - **No invalidationId, so no Mode B fan-out.** Module renders are independent units; they don't belong to a "batch" that you can group by. If you need to attribute a slow `getDefinition` storm across many concurrent searches, you're stuck doing it via `created_at` time windows + the `#inFlight` dedupe behavior in `CachingDefinitionLookup` — i.e. one slow row may have been the bottleneck for many in-flight callers, but the `modules` table doesn't record those waiters.
 
 ## Mode E — enumerate cards with broken links
@@ -827,7 +821,7 @@ WHERE bl->>'reference' = 'https://realm.example/people/ringo';
 Caveats:
 
 - **Older rows predate the scan.** A row last indexed before this capability shipped has no `brokenLinks` key even if its links are broken — it'll only appear after the next reindex. Don't read "absent" as "no broken links" for stale rows; check `indexedAt` if in doubt.
-- **`boxel_index_working` carries it too**, so you can watch broken-link findings accrue mid-reindex the same way as the timing fields (see [Reading partial progress](#5-reading-partial-progress-from-boxel_index_working)).
+- **`boxel_index_pending` carries it too**, so you can watch broken-link findings accrue mid-reindex the same way as the timing fields (see [Reading partial progress](#6-reading-partial-progress-from-boxel_index_pending)).
 - This is the cheap enumeration path the rendered-HTML / `getRelationship` runtime surfaces were too expensive for — querying the column avoids parsing HTML or re-running `getBrokenLinks` per read.
 
 ## Mode F — module pre-warm and definition-cache hit/miss
@@ -1272,7 +1266,7 @@ The `≈` covers small un-bucketed residue (loop control, progress events, resum
 
 **Per-VISIT vs per-ROW — the sum has to respect this.** A card-instance `.json` produces **two** rows (`type='instance'` + `type='file'`) from one visit, and they **share** the visit's blob: the same `totalElapsedMs`, `read`, and `renderRpc` land on both. So those three are per-VISIT — sum them over **one row per URL** (filter to `type='file'`, which exists exactly once per visited file) or you double-count every card `.json`. `bookkeeping` is the exception: the card indexer and the file indexer each stamp their **own** value (card dependency resolution vs file-row construction — distinct work in the same visit), so `bookkeeping` is per-ROW and is summed across **all** rows. Step 2's query does both.
 
-`swapMs` is the `batch.done()` transaction (realm-meta update + working→main promotion + obsolete-row prune + type-watermark stamps, committed together or not at all), and `discoverMs` is the pre-loop invalidation fan-out; both are serial bookends around the visit loop, so they're the _irreducible_ part — the pipelining lever (overlap the write of row N with the visit of N+1, batch row writes) attacks `writeMs` and `bookkeeping`, not these.
+`swapMs` is the `batch.done()` transaction (realm-meta update + pending→main promotion + obsolete-row prune + type-watermark stamps, committed together or not at all) plus the pending-row cleanup after it (`pendingCleanupMs`), and `discoverMs` is the pre-loop invalidation fan-out; both are serial bookends around the visit loop, so they're the _irreducible_ part — the pipelining lever (overlap the write of row N with the visit of N+1, batch row writes) attacks `writeMs` and `bookkeeping`, not these.
 
 ### Step 1 — pull the job's phase breakdown
 
@@ -1291,7 +1285,7 @@ ORDER BY id DESC
 LIMIT 5;
 ```
 
-`phase_timings` is `{ totalMs, setupMs, mtimesMs, discoverMs, orderMs, preWarmMs, visitLoopMs, writeMs, swapMs, swapAttempts, swapRetryMs, commitLockWaitMs }` (ms, except `swapAttempts`, which is a count). `generation` is the generation the job's swap committed; `base_generation` is the committed generation the job was set up against, so a gap wider than one means another pass of the realm committed while this one ran. Read it against `wall_ms`: `totalMs` should land close to the job's wall; the gap between `visitLoopMs` and the visit render sum (step 2) is the per-visit client overhead + `writeMs`.
+`phase_timings` is `{ totalMs, setupMs, mtimesMs, discoverMs, orderMs, preWarmMs, visitLoopMs, writeMs, swapMs, swapAttempts, swapRetryMs, commitLockWaitMs, pendingCleanupMs, janitorRowsCleared, janitorJobsCleared }` (ms, except `swapAttempts` and the two janitor fields, which are counts). `generation` is the generation the job's swap committed; `base_generation` is the committed generation the job was set up against, so a gap wider than one means another pass of the realm committed while this one ran. Read it against `wall_ms`: `totalMs` should land close to the job's wall; the gap between `visitLoopMs` and the visit render sum (step 2) is the per-visit client overhead + `writeMs`.
 
 ### Step 2 — sum the per-row halves for the same job
 
@@ -1337,14 +1331,17 @@ LIMIT 20;
 - **`read`** — file read + the file-metadata lookups (`ensureFileCreatedAt`, content hash/size). Usually small; a large `read` fleet-wide points at slow EFS / reader, not the render.
 - **`renderRpc`** — the client-observed prerender round-trip minus the server's own `totalElapsedMs`: serialization + the wire hop to the prerender server + any wait the server doesn't count. Large `renderRpc` with small server render means the transport/queue is the cost, not the render. ~0 on the fused / in-browser path (no wire hop).
 - **`bookkeeping`** — dependency resolution + index-entry construction between the render finishing and the write. The per-row cost that varies with a card's dependency shape; the top of step 3 names the heavy cards.
-- **`writeMs`** (job-level) — the Σ of the working-table upserts. This is I/O the render tab doesn't need, so it's the leading pipelining candidate (overlap it with the next visit).
-- **`setupMs`** (job-level) — `createBatch`: reading the committed generation the pass starts from, and the resumable working-row scan, before any visit. Normally small; large `setupMs` is a retry job re-scanning a big working table, or DB slowness.
+- **`writeMs`** (job-level) — the Σ of the pending-table upserts. This is I/O the render tab doesn't need, so it's the leading pipelining candidate (overlap it with the next visit).
+- **`setupMs`** (job-level) — `createBatch`: reading the committed generation the pass starts from, and the scan for rows an earlier attempt of the job staged (the resume), before any visit. Normally small; large `setupMs` is a retry job resuming a large staged set, or DB slowness.
 - **`discoverMs` / `swapMs`** (job-level) — the serial bookends. `discoverMs` runs before the first visit, `swapMs` after the last, so neither can overlap a visit; they're the floor the pipelining can't remove.
 - **`swapAttempts` / `swapRetryMs`** (job-level) — the swap is one database transaction on one pinned connection. It publishes all of the pass or none of it: a failure part-way through rolls back, and the realm stays exactly as the previous pass left it. On Postgres, a deadlock (`40P01`) or serialization failure (`40001`) against a concurrent commit rolls the swap back and runs it again. `swapAttempts` counts the runs, and `swapRetryMs` is the part of `swapMs` spent on runs that rolled back.
   - Normal value: `swapAttempts` is 1 and `swapRetryMs` is 0.
   - More than 1 means a concurrent transaction deadlocked with the swap on the same rows. The usual one is a `prerender_html` job of the same realm stamping `realm_type_generations`: it runs in its own lane, so it can commit alongside an index swap. Each retry also writes a `pg-adapter` `warn` line naming the SQLSTATE and the realm (`transaction for the index swap of <realm> rolled back on SQLSTATE …`).
   - A value of 1 does not rule out contention. Every commit stamps the type watermarks in the same sorted order, so a concurrent commit on those rows usually makes the swap wait rather than deadlock, and a wait is not a retry. That time shows up in `swapMs` alone. To tell a contended swap from a slow one, look for a `prerender_html` job of the same realm whose swap overlapped this one (compare the two jobs' `finished_at` and `swapMs`).
-  - `prerender_html` job results carry the same three fields (`swapMs`, `swapAttempts`, `swapRetryMs`) on their `phaseTimings`, alongside `preWarmMs` and `spawnGateMs` (see [A prerender_html job's wait on its spawning passes](#a-prerender_html-jobs-wait-on-its-spawning-passes)).
+- **`pendingCleanupMs`, `janitorRowsCleared`, `janitorJobsCleared`** (job-level) — after the swap commits, the pass deletes the rows it staged in the pending tables, then the janitor removes this realm's pending rows left by jobs that are no longer `unfulfilled`. It runs outside the swap's transaction, so it never extends the commit lock; it is part of `swapMs`.
+  - Normal value: the janitor counts are 0. A nonzero count means some earlier job ended with staged rows still on the table — it died before its commit and was not retried, or its own cleanup failed (a warning on the `index-writer` logger names it). The rows were never read by another pass either way; this is housekeeping, not a correctness signal.
+  - `pendingCleanupMs` is absent when the swap never committed, and the janitor counts are absent when the cleanup itself failed.
+  - `prerender_html` job results carry the same three swap fields (`swapMs`, `swapAttempts`, `swapRetryMs`) and these three cleanup fields on their `phaseTimings`, alongside `preWarmMs` and `spawnGateMs` (see [A prerender_html job's wait on its spawning passes](#a-prerender_html-jobs-wait-on-its-spawning-passes)).
 - **`commitLockWaitMs`** (job-level) — the part of `swapMs` the committing attempt spent waiting for the realm's commit lock. A pass allocates its generation at commit, one past the realm's `current_generation`, while holding a per-realm lock that serializes commits (not passes); the wait is the time another pass of the same realm spent finishing its own commit. Near 0 while a realm's index passes run one at a time. `prerender_html` jobs take no commit lock and carry no such field.
 
 ### Reading the commit ledger

@@ -1,7 +1,7 @@
 ---
 name: postgres-migrations
 allowed-tools: Read, Grep, Bash
-description: How to author Postgres migrations in packages/postgres under the two-phase (additive vs removal) system — additive changes go in migrations/ and run pre-deploy; destructive changes (DROP COLUMN/TABLE, RENAME) go in migrations-removal/ and run post-deploy so they never break the previous code revision mid-rollout. Use whenever creating, editing, moving, or reviewing a migration in packages/postgres, deciding which directory a migration belongs in, or touching the boxel_index / boxel_index_working index tables. Triggers on adding a DB migration, a DROP/RENAME in a migration, or a review of one.
+description: How to author Postgres migrations in packages/postgres under the two-phase (additive vs removal) system — additive changes go in migrations/ and run pre-deploy; destructive changes (DROP COLUMN/TABLE, RENAME) go in migrations-removal/ and run post-deploy so they never break the previous code revision mid-rollout. Use whenever creating, editing, moving, or reviewing a migration in packages/postgres, deciding which directory a migration belongs in, or touching the boxel_index / boxel_index_pending index tables. Triggers on adding a DB migration, a DROP/RENAME in a migration, or a review of one.
 ---
 
 # Postgres migrations — the two-phase system
@@ -73,12 +73,17 @@ when authoring a destructive change.
 
 ## Gotchas
 
-- **`boxel_index` and `boxel_index_working` are twin tables that must stay
-  schema-identical.** The indexer does `SELECT * FROM boxel_index` and mirrors
-  the row shape into `boxel_index_working`, so any column add/drop must touch
-  **both** (the removal migration uses `TABLES = ['boxel_index',
-'boxel_index_working']`). Changing only one breaks index writes with
-  `column "..." of relation "boxel_index_working" does not exist`.
+- **Each production index table has a pending twin that must stay
+  column-compatible with it**: `boxel_index` ↔ `boxel_index_pending` and
+  `prerendered_html` ↔ `prerendered_html_pending`. A pass stages its rows in the
+  pending table and its commit copies every production column out of it
+  (`INSERT INTO boxel_index SELECT <production columns> FROM
+boxel_index_pending`), so a column added to a production table must be added
+  to its pending twin in the same migration. Changing only one breaks the commit
+  with `column "..." does not exist`. The pending tables carry two extra columns
+  (`job_id`, `staging_id`) that production does not. The shared
+  `boxel_index_working` / `prerendered_html_working` tables are no longer
+  written.
 - **Moving an already-applied migration between directories re-runs it** under
   the new tracking table. Only safe if its `up()` is idempotent (`IF EXISTS` /
   `ifNotExists`). Moving a not-yet-applied file is always clean.
