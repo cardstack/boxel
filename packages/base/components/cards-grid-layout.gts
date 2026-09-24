@@ -142,35 +142,41 @@ export default class CardsGridLayout extends Component<Signature> {
         aria-label={{@activeFilter.displayName}}
       >
         <header class='content-header' data-test-cards-grid-header>
-          {{yield to='contentHeaderStart'}}
-          {{#if @activeFilter.icon}}
-            <div class='content-icon' data-test-cards-grid-header-icon>
-              {{#if (this.isIconString @activeFilter.icon)}}
-                {{htmlSafe @activeFilter.icon}}
-              {{else}}
-                <@activeFilter.icon
-                  class='filter-list__icon'
-                  role='presentation'
-                />
+          <div class='content-header-group content-header-lead'>
+            {{yield to='contentHeaderStart'}}
+            <div class='title-group'>
+              {{#if @activeFilter.icon}}
+                <div class='content-icon' data-test-cards-grid-header-icon>
+                  {{#if (this.isIconString @activeFilter.icon)}}
+                    {{htmlSafe @activeFilter.icon}}
+                  {{else}}
+                    <@activeFilter.icon
+                      class='filter-list__icon'
+                      role='presentation'
+                    />
+                  {{/if}}
+                </div>
               {{/if}}
+              <h2 class='content-title'>
+                {{@activeFilter.displayName}}
+              </h2>
             </div>
-          {{/if}}
-          <h2 class='content-title'>
-            {{@activeFilter.displayName}}
-          </h2>
-          {{#if this.displayActions}}
-            <ViewSelector
-              @items={{@viewOptions}}
-              @onChange={{@onChangeView}}
-              @selectedId={{@activeViewId}}
-            />
-            <SortDropdown
-              @options={{@sortOptions}}
-              @onSelect={{@onChangeSort}}
-              @selectedOption={{@activeSort}}
-            />
-            {{yield to='contentHeader'}}
-          {{/if}}
+          </div>
+          <div class='content-header-group content-header-actions'>
+            {{#if this.displayActions}}
+              <ViewSelector
+                @items={{@viewOptions}}
+                @onChange={{@onChangeView}}
+                @selectedId={{@activeViewId}}
+              />
+              <SortDropdown
+                @options={{@sortOptions}}
+                @onSelect={{@onChangeSort}}
+                @selectedOption={{@activeSort}}
+              />
+              {{yield to='contentHeader'}}
+            {{/if}}
+          </div>
         </header>
         {{#if (eq @activeFilter.displayName 'Highlights')}}
           <div class='highlights-layout' data-test-highlights-layout>
@@ -326,6 +332,7 @@ export default class CardsGridLayout extends Component<Signature> {
       .content-header {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         flex-wrap: wrap;
         column-gap: var(--boxel-sp);
         row-gap: var(--boxel-sp-xs);
@@ -333,12 +340,29 @@ export default class CardsGridLayout extends Component<Signature> {
         margin: 0 var(--padding);
         border-bottom: 1px solid var(--border);
       }
+      .content-header-group {
+        display: flex;
+        gap: var(--boxel-sp-xs) var(--boxel-sp);
+        align-items: center;
+        min-width: 0;
+      }
+      /* the toggle and the title stay on one line; a long title wraps its own
+         text instead of dropping under the toggle */
+      .content-header-actions {
+        flex-wrap: wrap;
+      }
+      .title-group {
+        display: flex;
+        gap: var(--boxel-sp-xs);
+        align-items: center;
+        min-width: 0;
+      }
       .content-icon {
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 1.5rem;
-        height: 1.5rem;
+        width: 1.25rem;
+        height: 1.25rem;
         flex-shrink: 0;
       }
 

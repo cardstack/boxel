@@ -539,50 +539,52 @@ class Isolated extends Component<typeof Workspace> {
         data-test-progress-announcement
       >{{this.progressAnnouncement}}</span>
       <header class='frame'>
-        <nav class='tabs' aria-label='Sections'>
-          {{#each SEGMENTS as |tab|}}
-            {{#let (eq this.segment tab.id) as |isActive|}}
-              <Button
-                @kind={{if isActive 'default' 'muted'}}
-                @size='extra-small'
-                @rectangular={{true}}
-                class={{cn 'nav-tab' nav-tab--active=isActive}}
-                aria-current={{if isActive 'true'}}
-                {{on 'click' (this.setSegment tab.id)}}
-                data-test-workspace-tab={{tab.id}}
-              ><tab.icon
-                  width='14'
-                  height='14'
-                  class='tab-icon'
-                  aria-hidden='true'
-                />
-                {{tab.label}}
-                {{#if
-                  (and (eq tab.id 'activity') (bool this.runningJobs.length))
-                }}
-                  <span class='attention-dot' aria-hidden='true' />
-                  <span class='boxel-sr-only'>({{this.runningJobs.length}}
-                    in progress)</span>
-                {{/if}}</Button>
-            {{/let}}
-          {{/each}}
-        </nav>
-        {{#if @model.signage}}
-          {{! workspace signage; the purpose annotation shows on hover or focus
+        <div class='frame-lead'>
+          <nav class='tabs' aria-label='Sections'>
+            {{#each SEGMENTS as |tab|}}
+              {{#let (eq this.segment tab.id) as |isActive|}}
+                <Button
+                  @kind={{if isActive 'default' 'muted'}}
+                  @size='extra-small'
+                  @rectangular={{true}}
+                  class={{cn 'nav-tab' nav-tab--active=isActive}}
+                  aria-current={{if isActive 'true'}}
+                  {{on 'click' (this.setSegment tab.id)}}
+                  data-test-workspace-tab={{tab.id}}
+                ><tab.icon
+                    width='14'
+                    height='14'
+                    class='tab-icon'
+                    aria-hidden='true'
+                  />
+                  {{tab.label}}
+                  {{#if
+                    (and (eq tab.id 'activity') (bool this.runningJobs.length))
+                  }}
+                    <span class='attention-dot' aria-hidden='true' />
+                    <span class='boxel-sr-only'>({{this.runningJobs.length}}
+                      in progress)</span>
+                  {{/if}}</Button>
+              {{/let}}
+            {{/each}}
+          </nav>
+          {{#if @model.signage}}
+            {{! workspace signage; the purpose annotation shows on hover or focus
             and is read after the badge text }}
-          {{#if @model.purpose}}
-            <Tooltip @placement='bottom'>
-              <:trigger>
-                <span class='signage kicker' tabindex='0'>
-                  {{@model.signage}}<span class='boxel-sr-only'>:
-                    {{@model.purpose}}</span></span>
-              </:trigger>
-              <:content>{{@model.purpose}}</:content>
-            </Tooltip>
-          {{else}}
-            <span class='signage kicker'>{{@model.signage}}</span>
+            {{#if @model.purpose}}
+              <Tooltip @placement='bottom'>
+                <:trigger>
+                  <span class='signage kicker' tabindex='0'>
+                    {{@model.signage}}<span class='boxel-sr-only'>:
+                      {{@model.purpose}}</span></span>
+                </:trigger>
+                <:content>{{@model.purpose}}</:content>
+              </Tooltip>
+            {{else}}
+              <span class='signage kicker'>{{@model.signage}}</span>
+            {{/if}}
           {{/if}}
-        {{/if}}
+        </div>
         <div class='frame-actions' data-test-frame-actions>
           <div
             class='search-box'
@@ -1403,10 +1405,13 @@ class Isolated extends Component<typeof Workspace> {
       }
 
       /* ── Frame ─────────────────────────────────────────────── */
+      /* two groups, like the grid header: when the actions wrap they start
+         their own row at the left edge instead of floating right */
       .frame {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
+        justify-content: space-between;
         gap: var(--boxel-sp-xs) var(--boxel-sp);
         min-height: var(--grid-frame-height);
         padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
@@ -1414,6 +1419,12 @@ class Isolated extends Component<typeof Workspace> {
         color: var(--card-foreground);
         border-bottom: 1px solid var(--border);
         flex-shrink: 0;
+      }
+      .frame-lead {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp);
+        min-width: 0;
       }
       .tabs {
         display: flex;
@@ -1447,7 +1458,6 @@ class Isolated extends Component<typeof Workspace> {
         animation: softpulse 2s ease-in-out infinite;
       }
       .frame-actions {
-        margin-inline-start: auto;
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-2xs);
@@ -1455,7 +1465,6 @@ class Isolated extends Component<typeof Workspace> {
       /* workspace signage & description */
       .signage {
         display: inline-block;
-        margin-inline-start: var(--boxel-sp-xs);
         padding: var(--boxel-sp-5xs) var(--boxel-sp-2xs);
         border: 1px solid var(--border);
         border-radius: var(--boxel-border-radius-sm);
