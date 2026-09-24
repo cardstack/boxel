@@ -366,6 +366,14 @@ const INDEX_COMMIT_LOCK_NAMESPACE = 'index-commit:';
 // its own realm's older rows, so the ledger stays bounded by commit rate.
 const INDEX_COMMIT_LEDGER_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
+// Rows a commit's ledger entry lists before it stops listing them and reads as
+// "every URL in the realm" instead. The widest incremental fan-outs seen in
+// practice are a few hundred rows — a card that hundreds of others render —
+// so ordinary passes are listed exactly. A pass past this is a realm-wide
+// event such as an edit to a widely adopted module, and listing it would put a
+// realm-sized array on the ledger for every such commit.
+const INDEX_COMMIT_LEDGER_MAX_URLS = 2000;
+
 // One `boxel_index` row as `existingIndexTypes` reads it back.
 interface ExistingIndexRowType {
   type: BoxelIndexTable['type'];
@@ -2270,13 +2278,6 @@ export class Batch {
   }
 
   async done(opts?: {
-    // Write the previous generation's realm_meta value at this batch's
-    // generation instead of recomputing it. The setup-phase failure recovery
-    // publishes only error rows for the URLs whose pass failed. Its error rows
-    // don't change the realm's type counts, so the prior summary is the
-    // accurate one — and a row must exist at this generation, because reads
-    // join realm_meta to realm_generations.current_generation.
-    carryForwardRealmMeta?: true;
     // This batch rebuilt the whole realm rather than an incremental fan-out.
     // Recorded on the commit's ledger row.
     fullRealm?: true;
@@ -2331,15 +2332,14 @@ export class Batch {
       // takes, and so the rest of the swap runs with the realm's commits
       // serialized behind it.
       commitLockWaitMs = await this.allocateCommitGeneration();
+      if (this.commitGeneration - 1 > this.#baseGeneration) {
+        await this.recordPeerCommittedTypes();
+      }
       await this.applyBatchUpdates(columns);
       // After the swap, so the summary is computed from the rows this commit
       // published and the realm's other committed rows — never from another
       // pass's rows still staged in the working table.
-      if (opts?.carryForwardRealmMeta) {
-        await this.carryForwardRealmMeta();
-      } else {
-        await this.updateRealmMeta();
-      }
+      await this.updateRealmMeta();
       await this.pruneObsoleteEntries();
       await this.stampTypeGenerations({
         types: this.touchedTypes,
@@ -2403,24 +2403,6 @@ export class Batch {
       { label: `the index swap of ${this.realmURL.href}` },
     );
     return { swapAttempts, swapRetryMs };
-  }
-
-  // Re-stamp the current committed generation's realm_meta value at this
-  // batch's generation. Falls back to a fresh compute when no prior row exists
-  // (a realm that has never completed a pass).
-  //
-  // The value is written through exactly as read, deliberately: a realm still
-  // holding the legacy shape has no `files` arm, and normalizing on the way
-  // through would invent an empty one and stamp it at this generation as
-  // though a pass had established it. Re-stamping what is already there says
-  // nothing new about the realm, which is the whole point of this path.
-  private async carryForwardRealmMeta(): Promise<void> {
-    let value = await this.currentRealmMetaValue();
-    if (value === undefined) {
-      await this.updateRealmMeta();
-      return;
-    }
-    await this.writeRealmMeta(value);
   }
 
   // The realm_meta value at the realm's current committed generation, or
@@ -2746,13 +2728,38 @@ export class Batch {
     return results as unknown as CardTypeSummary[];
   }
 
+  // The adoption chains production holds for this pass's URLs now, as a peer
+  // pass that committed after this one was set up left them. The pre-pass
+  // chains `#touchedTypes` already holds were read before that commit, so a
+  // URL both passes wrote can be leaving a type the peer moved it into, which
+  // nothing this pass read names. Read under the commit lock, before this
+  // pass's rows replace the peer's, so the chains are the ones this commit is
+  // about to write over. Only ever widens the set, so a re-run of the
+  // transaction records the same types again.
+  private async recordPeerCommittedTypes(): Promise<void> {
+    let existingTypes = await this.existingIndexTypes([...this.#invalidations]);
+    for (let entries of existingTypes.values()) {
+      for (let { cardTypes } of entries) {
+        this.#recordTouchedTypes(cardTypes);
+      }
+    }
+  }
+
   // One `realm_index_commits` row per commit: which pass took the generation,
-  // which URLs it promoted, and the committed generation it started from.
-  // A full-realm pass promotes every URL in the realm, so its row names none
-  // rather than carrying the whole realm's URL list. Rows past the retention
+  // which URLs it published, and the committed generation it started from.
+  // `urls` holds the rows the commit promoted and `render_only_urls` the
+  // render-only dependents it restamped; between them they are every row the
+  // commit moved to its generation. A full-realm pass, and a pass that moved
+  // more rows than `INDEX_COMMIT_LEDGER_MAX_URLS`, lists neither — both read
+  // as "every URL in the realm", which is the conservative answer for anyone
+  // asking whether a commit could have touched a row. Rows past the retention
   // window are pruned from the realm's own ledger on the way.
   private async recordCommit(): Promise<void> {
     let now = Date.now();
+    let listed =
+      !this.#fullRealm &&
+      this.#invalidations.size + this.#renderOnlyInvalidations.size <=
+        INDEX_COMMIT_LEDGER_MAX_URLS;
     let { nameExpressions, valueExpressions } = asExpressions(
       {
         realm_url: this.realmURL.href,
@@ -2761,11 +2768,14 @@ export class Batch {
         pass_id: this.#passId,
         job_id:
           this.jobInfo && this.jobInfo.jobId > 0 ? this.jobInfo.jobId : null,
-        urls: this.#fullRealm ? null : [...this.#invalidations].sort(),
+        urls: listed ? [...this.#invalidations].sort() : null,
+        render_only_urls: listed
+          ? [...this.#renderOnlyInvalidations].sort()
+          : null,
         full_realm: this.#fullRealm,
         committed_at: now,
       } as RealmIndexCommitsTable,
-      { jsonFields: ['urls'] },
+      { jsonFields: ['urls', 'render_only_urls'] },
     );
     await this.#query([
       ...upsert(

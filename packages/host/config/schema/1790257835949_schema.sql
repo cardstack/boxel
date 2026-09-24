@@ -192,6 +192,7 @@
    pass_id TEXT NOT NULL,
    job_id INTEGER,
    urls BLOB,
+   render_only_urls BLOB,
    full_realm BOOLEAN DEFAULT false NOT NULL,
    committed_at NOT NULL,
    PRIMARY KEY ( realm_url, generation ) 

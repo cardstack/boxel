@@ -1135,10 +1135,7 @@ export class IndexRunner {
           );
         }
       }
-      // Carry realm_meta forward rather than recomputing it: this batch
-      // publishes only error rows, which don't change the realm's type
-      // counts.
-      await errorBatch.done({ carryForwardRealmMeta: true });
+      await errorBatch.done();
     } catch (recordErr) {
       // Recording is best-effort: if the failure was a DB outage the recovery
       // write fails too. The caller still rethrows the original error, so the

@@ -285,7 +285,7 @@ Mode A and Mode B both assume `boxel_index` has up-to-date `diagnostics` for the
 
 - N error rows sharing **one identical `error_doc.message`** and one `job_id`, at one generation — matching the rejected job's `result` error and its `args.changes` URL set.
 - The error docs carry **no visit diagnostics** (no render or index visit ever ran for these URLs) — a render failure's error doc carries the visit's timing blocks.
-- `realm_meta` at that generation is a carry-forward of the prior generation's summary, not a recompute, so type counts do not move.
+- `realm_meta` at that generation is recomputed from `boxel_index` after the error rows land. An error row keeps the adoption chain of the card it replaces, so type counts do not move for the errored URLs themselves.
 - An incremental invalidation event is broadcast for the attempted URLs even though the job rejected, so subscribers re-fetch and see the error state.
 
 Recovery for the errored URLs is any later write touching them (error rows are excluded from job resume and invalidate like any other row — a re-push replaces them with clean content) or the next full reindex.
@@ -1348,7 +1348,7 @@ LIMIT 20;
 
 ### Reading the commit ledger
 
-`realm_index_commits` has one row per committed index swap, written inside the swap's transaction, so a row exists exactly when its commit landed. Columns: `generation` (the one the commit took), `base_generation` (the `current_generation` the pass was set up against), `pass_id` (minted per batch, so the attempts of a retried job are distinct), `job_id`, `urls` (the sorted URLs the commit promoted; `NULL` when `full_realm` is true — a from-scratch index or a copy promotes every URL in the realm), and `committed_at` (epoch ms). Each commit prunes its own realm's rows older than seven days.
+`realm_index_commits` has one row per committed index swap, written inside the swap's transaction, so a row exists exactly when its commit landed. Columns: `generation` (the one the commit took), `base_generation` (the `current_generation` the pass was set up against), `pass_id` (minted per batch, so the attempts of a retried job are distinct), `job_id`, `urls` (the sorted URLs the commit promoted), `render_only_urls` (the sorted render-only dependents it restamped without promoting — together with `urls`, every row the commit moved to its generation), `full_realm`, and `committed_at` (epoch ms). Both URL columns are `NULL` for a full-realm pass (a from-scratch index or a copy) and for a pass that moved more than 2,000 rows; read `NULL` as "every URL in the realm". `full_realm = false` with `NULL` lists is the too-many-to-list case. Each commit prunes its own realm's rows older than seven days.
 
 ```sql
 -- A realm's recent commits, newest first, with the passes that overlapped a
@@ -1359,6 +1359,7 @@ SELECT generation,
        job_id,
        full_realm,
        jsonb_array_length(urls)                  AS url_count,
+       jsonb_array_length(render_only_urls)      AS render_only_count,
        to_timestamp(committed_at / 1000.0)       AS committed_at
 FROM realm_index_commits
 WHERE realm_url = '<realm-url>'
@@ -1366,8 +1367,8 @@ ORDER BY generation DESC
 LIMIT 20;
 ```
 
-- **Which pass published a row.** A row's `boxel_index.generation` is the generation of the commit that last promoted it; join it to the ledger on `(realm_url, generation)` to get the job and its URL set.
-- **What committed while a pass ran.** The rows with `generation` above a pass's `base_generation` and below its own `generation` are the peers that committed between its setup and its commit. Their `urls` are what that pass's fan-out could not have seen.
+- **Which pass published a row.** A row's `boxel_index.generation` is the generation of the commit that last promoted or restamped it; join it to the ledger on `(realm_url, generation)` to get the job, and find the row in `urls` (visited) or `render_only_urls` (restamped only).
+- **What committed while a pass ran.** The rows with `generation` above a pass's `base_generation` and below its own `generation` are the peers that committed between its setup and its commit. Their `urls` and `render_only_urls` are what that pass's fan-out could not have seen. When such a peer wrote a URL this pass also wrote, the commit re-reads that URL's adoption chain under the commit lock, so the type the peer moved it into is recomputed in the summary and its watermark moves.
 - **Gaps.** Generations are contiguous per realm, so a missing number inside the retention window means a ledger row was deleted, not a commit skipped.
 
 ### A prerender_html job's wait on its spawning passes
