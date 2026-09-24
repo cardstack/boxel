@@ -78,23 +78,31 @@ const reportGts = `
   }
 `;
 
-function studentDoc(name: string): LooseSingleCardDocument {
+// `base` locates the card definitions. A fixture file sits at the realm root,
+// so a relative module resolves there; a saved document spells it absolutely,
+// since a created card lands in a directory named for its type and a relative
+// module would resolve from that directory.
+function studentDoc(name: string, base = './'): LooseSingleCardDocument {
   return {
     data: {
       type: 'card',
       attributes: { name },
-      meta: { adoptsFrom: { module: rri('./student'), name: 'Student' } },
+      meta: { adoptsFrom: { module: rri(`${base}student`), name: 'Student' } },
     },
   };
 }
 
-function reportDoc(title: string, studentId: string): LooseSingleCardDocument {
+function reportDoc(
+  title: string,
+  studentId: string,
+  base = './',
+): LooseSingleCardDocument {
   return {
     data: {
       type: 'card',
       attributes: { title },
       relationships: { student: { links: { self: studentId } } },
-      meta: { adoptsFrom: { module: rri('./report'), name: 'Report' } },
+      meta: { adoptsFrom: { module: rri(`${base}report`), name: 'Report' } },
     },
   };
 }
@@ -151,11 +159,13 @@ async function indexJobsBy(
     concurrency_group: string;
     lane_family: string | null;
     generation: number | null;
+    validation_rounds: number | null;
   }[]
 > {
   return (await dbAdapter.execute(
     `SELECT id, status, concurrency_group, lane_family,
-            (result->>'generation')::int AS generation
+            (result->>'generation')::int AS generation,
+            (result->'phaseTimings'->>'validationRounds')::int AS validation_rounds
        FROM jobs
       WHERE job_type = 'incremental-index'
         AND (concurrency_group = $1 OR lane_family = $1)
@@ -170,6 +180,7 @@ async function indexJobsBy(
     concurrency_group: string;
     lane_family: string | null;
     generation: number | null;
+    validation_rounds: number | null;
   }[];
 }
 
@@ -292,17 +303,21 @@ module(basename(import.meta.filename), function () {
       }
 
       // Starts writer A's hub edit and waits for its pass to be held before
-      // its commit. Returns the pending response.
-      async function startHeldHubEdit() {
+      // its commit. The pending response comes back wrapped, since an async
+      // function returning the promise itself would adopt it, and the caller
+      // would wait out the very hold it is about to use.
+      async function startHeldHubEdit(): Promise<{
+        hubEdit: Promise<{ status: number; text: string }>;
+      }> {
         hold = holdWriterPassesBeforeCommit(dbAdapter, WRITER_A);
         let hubEdit = saveAs(
           WRITER_A,
           'patch',
           '/student-1',
-          studentDoc('Mango Abdel-Rahman'),
+          studentDoc('Mango Abdel-Rahman', realmURL.href),
         ).then((response) => response);
         await hold.reached;
-        return hubEdit;
+        return { hubEdit };
       }
 
       // Resolves with B's response, or with `undefined` once the budget
@@ -323,14 +338,14 @@ module(basename(import.meta.filename), function () {
 
       test("a leaf save commits while another writer's hub pass is in flight", async function (assert) {
         assert.timeout(240_000);
-        let hubEdit = await startHeldHubEdit();
+        let { hubEdit } = await startHeldHubEdit();
 
         let leafSave = leafSaveWithinBudget(
           saveAs(
             WRITER_B,
             'post',
             '/',
-            reportDoc('Math quiz', rri('./student-1')),
+            reportDoc('Math quiz', `${realmURL.href}student-1`, realmURL.href),
           ).then((response) => response),
         );
         let leafResponse = await leafSave;
@@ -385,7 +400,7 @@ module(basename(import.meta.filename), function () {
       test('when the two passes touch the same card, the last to commit leaves it fresh', async function (assert) {
         assert.timeout(240_000);
         let report1 = `${realmURL.href}report-1.json`;
-        let hubEdit = await startHeldHubEdit();
+        let { hubEdit } = await startHeldHubEdit();
 
         // Writer A's pass has already visited report-1, a dependent of the
         // hub, against the bytes it had before this save.
@@ -394,7 +409,11 @@ module(basename(import.meta.filename), function () {
             WRITER_B,
             'patch',
             '/report-1',
-            reportDoc('Reading log, week 2', rri('./student-1')),
+            reportDoc(
+              'Reading log, week 2',
+              `${realmURL.href}student-1`,
+              realmURL.href,
+            ),
           ).then((response) => response),
         );
         assert.ok(
@@ -424,6 +443,10 @@ module(basename(import.meta.filename), function () {
         assert.ok(
           hubPass!.generation! > leafPass!.generation!,
           `writer A committed after writer B, at a higher generation (${hubPass?.generation} > ${leafPass?.generation})`,
+        );
+        assert.ok(
+          (hubPass?.validation_rounds ?? 0) >= 1,
+          `writer A's commit found writer B's commit of report-1 and re-visited for it (validationRounds ${hubPass?.validation_rounds})`,
         );
 
         let row = await indexRow(dbAdapter, report1);
