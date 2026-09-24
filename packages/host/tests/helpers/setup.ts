@@ -16,12 +16,14 @@ import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import * as yaml from 'yaml';
 
-import ENV from '@cardstack/host/config/environment';
 import { clearHtmlComponentCache } from '@cardstack/host/lib/html-component';
 import type SessionService from '@cardstack/host/services/session';
 import { AiAssistantOpen } from '@cardstack/host/utils/local-storage-keys';
 
-import { getTestRealmRegistry } from './test-realm-registry';
+import {
+  getTestRealmRegistry,
+  isInProcessRealmURL,
+} from './test-realm-registry';
 
 import { cleanupMonacoEditorModels } from './index';
 
@@ -77,8 +79,12 @@ const SLOW_FETCH_THRESHOLD_MS = 1_000;
 const SLOW_FETCHES_LIMIT = 20;
 let currentTestEpoch = 0;
 
-// Set once ember-qunit has destroyed the test's owner, so a fetch diagnostic
-// can tell a request the live app issued from one that outlived it.
+// The current test's owner and whether ember-qunit has destroyed it, so a
+// fetch diagnostic can tell a request the live app issued from one made
+// mid-teardown or after the owner is gone. The owner is held here rather than
+// read from getContext(), which ember-qunit unsets before it destroys the
+// owner, and is dropped once destroyed so it isn't pinned past its test.
+let currentOwner: { isDestroying?: boolean; isDestroyed?: boolean } | undefined;
 let ownerDestroyed = false;
 
 // Module/name of the test currently running, captured from QUnit.testStart so a
@@ -272,6 +278,7 @@ function setupFetchDebugging(hooks: NestedHooks): () => void {
   let wrappedFetch: typeof globalThis.fetch | undefined;
 
   hooks.beforeEach(function () {
+    currentOwner = (this as { owner?: typeof currentOwner }).owner;
     inFlightFetches.clear();
     recentFailedFetches.length = 0;
     slowFetches.length = 0;
@@ -318,16 +325,16 @@ function setupFetchDebugging(hooks: NestedHooks): () => void {
         let ownerState = describeOwnerState();
         if (
           !matchedRealm &&
-          isInProcessRealmServerURL(url) &&
-          (ownerState !== 'live' || registry.size === 0)
+          isInProcessRealmURL(url) &&
+          ownerState !== 'live'
         ) {
           // The in-process realm-server origin has no listener on the real
           // network, so this request is about to reject with `Failed to
-          // fetch`. A miss while the owner is live and realms are registered
-          // is routine (host mode's head lookup targets the server root); one
-          // with the owner going away or the registry empty is a request
-          // that outlived its test's realms, and the owner state plus what
-          // the registry held says which teardown step it slipped past.
+          // fetch`. A miss while the owner is live is routine (host mode's
+          // head lookup targets the server root, and some tests register no
+          // realms at all); one with the owner going away is a request that
+          // outlived its test's app, and the owner state plus what the
+          // registry held says which teardown step it slipped past.
           console.warn(
             `[test-fetch] no registered test realm serves ${method} ${url} ` +
               `(owner: ${ownerState}; registered realms: ${
@@ -369,14 +376,6 @@ function setupFetchDebugging(hooks: NestedHooks): () => void {
   };
 }
 
-function isInProcessRealmServerURL(url: string): boolean {
-  try {
-    return new URL(url).origin === new URL(ENV.realmServerURL).origin;
-  } catch {
-    return false;
-  }
-}
-
 // QUnit runs afterEach hooks last-registered-first, and ember-qunit destroys
 // the owner in the afterEach it registers. Until that hook has run the app is
 // still live: teardown's own `settled()` calls re-render, realm index events
@@ -396,6 +395,7 @@ function setupAfterOwnerTeardown(
   });
   hooks.afterEach(function () {
     ownerDestroyed = true;
+    currentOwner = undefined;
     getRestoreFetch()?.();
     getTestRealmRegistry().clear();
   });
@@ -405,17 +405,12 @@ function describeOwnerState(): string {
   if (ownerDestroyed) {
     return 'destroyed';
   }
-  let owner = (
-    getContext() as
-      | { owner?: { isDestroying?: boolean; isDestroyed?: boolean } }
-      | undefined
-  )?.owner;
-  if (!owner) {
+  if (!currentOwner) {
     return 'none';
   }
-  return owner.isDestroyed
+  return currentOwner.isDestroyed
     ? 'destroyed'
-    : owner.isDestroying
+    : currentOwner.isDestroying
       ? 'destroying'
       : 'live';
 }
