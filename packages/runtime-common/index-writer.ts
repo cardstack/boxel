@@ -362,6 +362,9 @@ const TYPE_SUMMARY_ORDER_BY = `ORDER BY display_name ASC NULLS LAST, code_ref AS
 // key cannot coincide with any other advisory lock taken on a realm.
 const INDEX_COMMIT_LOCK_NAMESPACE = 'index-commit:';
 
+// Where index passes stage their rows until their commit promotes them.
+const PENDING_TABLES = ['boxel_index_pending', 'prerendered_html_pending'];
+
 // How long a realm's `realm_index_commits` rows are kept. Each commit prunes
 // its own realm's older rows, so the ledger stays bounded by commit rate.
 const INDEX_COMMIT_LEDGER_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -400,7 +403,7 @@ interface FanOutWalk {
   visited: Set<string>;
 }
 
-export interface BatchDoneResult {
+export interface BatchDoneResult extends PendingCleanupResult {
   totalIndexEntries: number;
   // How many times the swap's transaction ran: 1 unless a deadlock or
   // serialization failure rolled it back and it ran again.
@@ -412,6 +415,19 @@ export interface BatchDoneResult {
   // for another pass of the same realm to finish committing. Absent for a
   // `prerenderHtmlOnly` batch, which takes no commit lock.
   commitLockWaitMs?: number;
+}
+
+// What clearing the pending tables after a commit did (see
+// `Batch.clearPendingRows`).
+export interface PendingCleanupResult {
+  // Wall of the whole cleanup: this batch's own rows, then the janitor.
+  pendingCleanupMs: number;
+  // Rows of this realm the janitor removed because the job that staged them
+  // is no longer running, across both pending tables, and how many jobs they
+  // belonged to. Absent where no janitor runs (SQLite, which has no job
+  // queue) and when the cleanup failed.
+  janitorRowsCleared?: number;
+  janitorJobsCleared?: number;
 }
 
 export class Batch {
@@ -429,8 +445,10 @@ export class Batch {
   // CSS content hashes this batch has already interned into the `scoped_css`
   // table, so a stylesheet shared by many rows in one pass is written once.
   #internedScopedCSSHashes = new Set<string>();
+  // Production column lists, read once per batch (see `#productionColumns`).
+  #productionColumnNames = new Map<string, Promise<string[]>>();
   #nodeResolvedInvalidations: string[] | undefined;
-  // URLs already written to boxel_index_working by an earlier attempt
+  // URLs already staged in `boxel_index_pending` by an earlier attempt
   // of *this same job*, with the last_modified value the previous
   // attempt observed. Populated during `ready`. The visit loop in
   // IndexRunner consults this map to skip work the previous attempt
@@ -516,11 +534,12 @@ export class Batch {
   // whole generation has to union the attempts' ids rather than assume one.
   #writeSeq = 0;
   #writePositions = new Map<string, number>();
-  // Aggregate wall of every physical `boxel_index_working` write in this
+  // Aggregate wall of every physical `boxel_index_pending` write in this
   // batch, surfaced on the job result's `phaseTimings.writeMs`.
   #writeMs = 0;
   #dbAdapter: DBAdapter;
   #perfLog = logger('index-perf');
+  #log = logger('index-writer');
   // The source realm of a copy batch, set by `copyFrom`. `applyBatchUpdates`
   // uses it to fill the destination's prerendered_html channel from the
   // source realm's `prerendered_html` rows.
@@ -529,7 +548,7 @@ export class Batch {
   // `prerender_html` job, so this index batch writes only `boxel_index` and
   // leaves the `prerendered_html` channel to that job. When false (the fused
   // path — the SQLite in-browser/test realm, which has no separate worker), the
-  // batch writes each entry's HTML half into `prerendered_html_working` inline
+  // batch writes each entry's HTML half into `prerendered_html_pending` inline
   // (in `updateEntry`, with tombstones mirrored in `tombstoneEntries`).
   // Defaults to `dbAdapter.kind === 'pg'`; a copy batch fills the channel
   // either way via `copyPrerenderedHtmlFrom` (guarded by
@@ -566,12 +585,12 @@ export class Batch {
       contentSize: number | undefined;
     }
   >();
-  // `current_generation + 1` as read when the batch was set up. Stamped on the
-  // rows the pass stages in the working tables, and used to recognize those
-  // rows as this pass's own while it runs. It is only a guess at the number
-  // the pass will commit under — a peer that commits first takes it — so it is
-  // never compared against committed state; the swap restamps every row it
-  // promotes with the generation allocated at commit.
+  // `current_generation + 1` as read when the batch was set up, and stamped on
+  // the rows the pass stages in the pending tables. It is only a guess at the
+  // number the pass will commit under — a peer that commits first takes it —
+  // so it is never compared against committed state and never used to tell
+  // this pass's rows from a peer's (`#stagingId` does that); the swap
+  // restamps every row it promotes with the generation allocated at commit.
   //
   // A prerenderHtmlOnly batch allocates nothing: this holds the realm's
   // committed generation as `adoptIndexGenerations` read it, and its rows are
@@ -585,8 +604,16 @@ export class Batch {
   // `#committedGeneration` is set only once one of them has committed.
   #commitGenerationInTransaction: number | undefined;
   #committedGeneration: number | undefined;
-  // Identifies this pass on its `realm_index_commits` ledger row.
+  // Identifies this pass on its `realm_index_commits` ledger row, and on the
+  // `diagnostics` of every row it writes.
   #passId = uuidv4();
+  // The `staging_id` this batch's rows carry in the pending tables. Every
+  // staging read and write is scoped to it, so the batch sees committed rows
+  // plus its own staged ones, never a peer pass's. A job's batches share
+  // `job:<id>`, which is what lets a retry resume what an earlier attempt of
+  // the job staged; a batch outside a job stages under `adhoc:<pass id>`,
+  // which nothing else shares.
+  #stagingId: string;
   // Whether this pass rebuilt the whole realm (a from-scratch index or a
   // copy), as opposed to an incremental fan-out; recorded on the ledger row.
   #fullRealm = false;
@@ -611,6 +638,10 @@ export class Batch {
     this.#splitPrerenderHtml =
       opts?.splitPrerenderHtml ?? dbAdapter.kind === 'pg';
     this.#prerenderHtmlOnly = opts?.prerenderHtmlOnly ?? false;
+    this.#stagingId =
+      jobInfo && jobInfo.jobId > 0
+        ? `job:${jobInfo.jobId}`
+        : `adhoc:${this.#passId}`;
     this.#currentInvalidationId = uuidv4();
     this.ready = this.setupBatch();
   }
@@ -651,6 +682,11 @@ export class Batch {
   // job produces.
   get passId(): string {
     return this.#passId;
+  }
+
+  // The `staging_id` this batch's pending rows carry (see `#stagingId`).
+  get stagingId(): string {
+    return this.#stagingId;
   }
 
   private get commitGeneration(): number {
@@ -732,10 +768,10 @@ export class Batch {
     // similarly excluded so the deletion intent flows through to
     // `applyBatchUpdates` instead of being skipped as resumed work.
     let rows = (await this.#query([
-      `SELECT url, last_modified, types FROM boxel_index_working WHERE`,
+      `SELECT url, last_modified, types FROM boxel_index_pending WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
-        ['job_id =', param(this.jobInfo.jobId)],
+        ['staging_id =', param(this.#stagingId)],
         any([['is_deleted = false'], ['is_deleted IS NULL']]),
         any([['has_error = false'], ['has_error IS NULL']]),
       ]),
@@ -758,9 +794,9 @@ export class Batch {
       );
       // Pre-seed the in-memory invalidation set so `applyBatchUpdates`
       // promotes the resumed rows even though no `updateEntry` /
-      // `invalidate` call in this attempt added them. Without this,
-      // resumed work would sit in the working table indefinitely
-      // because the SELECT ... INTO boxel_index keys on
+      // `invalidate` call in this attempt added them. Without this, the
+      // commit would delete resumed work from the pending table without
+      // ever promoting it, because the SELECT ... INTO boxel_index keys on
       // `#invalidations`.
       this.#invalidations.add(url);
     }
@@ -770,7 +806,7 @@ export class Batch {
   }
 
   // The `prerendered_html` analog of `loadResumedRows`, for a
-  // `prerenderHtmlOnly` batch: resume from `prerendered_html_working` rows a
+  // `prerenderHtmlOnly` batch: resume from `prerendered_html_pending` rows a
   // prior attempt of this same job already rendered. Tombstones are excluded
   // so the deletion intent flows through to the swap, and error rows are
   // excluded so a transient render failure gets a second chance (the table
@@ -782,10 +818,10 @@ export class Batch {
       return;
     }
     let rows = (await this.#query([
-      `SELECT url FROM prerendered_html_working WHERE`,
+      `SELECT url FROM prerendered_html_pending WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
-        ['job_id =', param(this.jobInfo.jobId)],
+        ['staging_id =', param(this.#stagingId)],
         any([['is_deleted = false'], ['is_deleted IS NULL']]),
         ['error_doc IS NULL'],
       ]),
@@ -828,13 +864,15 @@ export class Batch {
   // index, WITHOUT tombstoning or computing a fan-out — the same live-type
   // memory `invalidate()` records, but for a batch that never invalidated.
   // The setup-phase failure recovery uses a fresh batch (it must not reuse the
-  // in-flight batch, whose working table holds fan-out tombstones a `done()`
-  // would promote); that fresh batch has no tombstone memory, so without this
-  // it would fall back to re-reading each file to decide "was this a card?".
-  // Any URL it then failed to re-classify (a read blip, non-card on-disk
-  // content) would leave the in-flight batch's `instance` tombstone in the
-  // shared working table to be promoted — silently deleting a previously-good
-  // card. Seeding from the index (the reliable oracle) closes that.
+  // in-flight batch, whose invalidation set covers fan-out tombstones a
+  // `done()` would promote); that fresh batch has no tombstone memory, so
+  // without this it would fall back to re-reading each file to decide "was
+  // this a card?". The two batches run for the same job and so share one
+  // staging id: any URL the fresh batch then failed to re-classify (a read
+  // blip, non-card on-disk content) would leave the in-flight batch's
+  // `instance` tombstone in the job's pending rows to be promoted — silently
+  // deleting a previously-good card. Seeding from the index (the reliable
+  // oracle) closes that.
   async seedLiveTypesFromProduction(urls: URL[]): Promise<void> {
     await this.ready;
     if (urls.length === 0) {
@@ -1021,6 +1059,7 @@ export class Batch {
       entry.realm_url = this.realmURL.href;
       entry.generation = this.#provisionalGeneration;
       entry.job_id = this.jobInfo?.jobId ?? null;
+      entry.staging_id = this.#stagingId;
       entry.file_alias = copyURL(entry.file_alias);
       entry.types = entry.types ? entry.types.map(copyURL) : entry.types;
       entry.deps = entry.deps ? entry.deps.map(copyURL) : entry.deps;
@@ -1061,8 +1100,8 @@ export class Batch {
 
     await this.#query([
       ...upsertMultipleRows(
-        'boxel_index_working',
-        'boxel_index_working_pkey',
+        'boxel_index_pending',
+        'boxel_index_pending_pkey',
         columns,
         values,
       ),
@@ -1075,7 +1114,7 @@ export class Batch {
   }
 
   // Copy the source realm's `prerendered_html` rows onto the destination's
-  // `prerendered_html_working`, so a copied realm keeps its prerendered HTML
+  // `prerendered_html_pending`, so a copied realm keeps its prerendered HTML
   // without re-rendering. Runs from `applyBatchUpdates` just before the
   // channel swap. A destination URL whose source has no `prerendered_html`
   // row gets none — it reads as unrendered and the catch-up sweep enqueues
@@ -1126,6 +1165,7 @@ export class Batch {
       entry.generation = this.commitGeneration;
       entry.rendered_at = now;
       entry.job_id = this.jobInfo?.jobId ?? null;
+      entry.staging_id = this.#stagingId;
       entry.deps = entry.deps ? entry.deps.map(copyURL) : entry.deps;
       entry.last_known_good_deps = entry.last_known_good_deps
         ? entry.last_known_good_deps.map(copyURL)
@@ -1156,8 +1196,8 @@ export class Batch {
 
     await this.#query([
       ...upsertMultipleRows(
-        'prerendered_html_working',
-        'prerendered_html_working_pkey',
+        'prerendered_html_pending',
+        'prerendered_html_pending_pkey',
         columns,
         values,
       ),
@@ -1347,7 +1387,7 @@ export class Batch {
     }
   }
 
-  // Aggregate wall of every physical `boxel_index_working` write in this
+  // Aggregate wall of every physical `boxel_index_pending` write in this
   // batch — the single-row `updateEntry` path plus every `flushWriteBuffer`
   // drain — surfaced on the job result's `phaseTimings.writeMs`.
   get writeMs(): number {
@@ -1408,7 +1448,7 @@ export class Batch {
   }
 
   // Physically write one prepared row. On the fused path the entry's HTML half
-  // lands first: the boxel_index_working row is the resume marker
+  // lands first: the boxel_index_pending row is the resume marker
   // (`loadResumedRows` skips URLs it finds), so writing it last means a crash
   // between the two writes re-visits the URL rather than resuming a row whose
   // rendering never landed. (A split-mode batch writes no HTML — its spawned
@@ -1431,8 +1471,8 @@ export class Batch {
     });
     await this.#query([
       ...upsert(
-        'boxel_index_working',
-        'boxel_index_working_pkey',
+        'boxel_index_pending',
+        'boxel_index_pending_pkey',
         nameExpressions,
         valueExpressions,
       ),
@@ -1468,8 +1508,8 @@ export class Batch {
         );
         await this.#query([
           ...upsert(
-            'boxel_index_working',
-            'boxel_index_working_pkey',
+            'boxel_index_pending',
+            'boxel_index_pending_pkey',
             nameExpressions,
             valueExpressions,
           ),
@@ -1497,8 +1537,8 @@ export class Batch {
         );
         await this.#query([
           ...upsertMultipleRows(
-            'boxel_index_working',
-            'boxel_index_working_pkey',
+            'boxel_index_pending',
+            'boxel_index_pending_pkey',
             nameExpressions,
             valueExpressions,
           ),
@@ -1536,12 +1576,13 @@ export class Batch {
   #writeSideStamps(seq: number): Diagnostics {
     return {
       invalidationId: this.#currentInvalidationId,
+      passId: this.#passId,
       indexedAt: Date.now(),
       writeSeq: seq,
     };
   }
 
-  // Build the sanitized `boxel_index_working` row payload — and the paired
+  // Build the sanitized `boxel_index_pending` row payload — and the paired
   // `prerendered_html` entry the fused path writes — for an entry, without
   // performing the upsert.
   //
@@ -1736,6 +1777,9 @@ export class Batch {
       indexed_at: Date.now(),
       job_id: this.jobInfo?.jobId ?? null,
       ...entryPayload,
+      // Last, so nothing the payload carries can move the row to another
+      // pass's staging.
+      staging_id: this.#stagingId,
     } as Omit<BoxelIndexTable, 'last_modified' | 'indexed_at'> & {
       // we do this because pg automatically casts big ints into strings, so
       // we unwind that to accurately type the structure that we want to pass
@@ -1878,7 +1922,7 @@ export class Batch {
   // Seed a prerenderHtmlOnly batch's invalidation set from the changes the
   // spawning index pass computed — the dependency fan-out already ran there
   // and is not recomputed here — and tombstone the whole set up front in
-  // `prerendered_html_working` (the `prerendered_html` analog of
+  // `prerendered_html_pending` (the `prerendered_html` analog of
   // `tombstoneEntries`). The visit loop then overwrites survivors, exactly
   // as the index visit loop does on its channel: an `'update'` URL whose
   // render succeeds lands a fresh HTML row, a render failure lands an error
@@ -1909,7 +1953,7 @@ export class Batch {
   }
 
   // Upsert one rendered (or render-error) row into
-  // `prerendered_html_working`. The prerenderHtmlOnly counterpart of
+  // `prerendered_html_pending`. The prerenderHtmlOnly counterpart of
   // `updateEntry`: same in-realm guard, same refusal of message-less error
   // entries, same jsonb sanitization — but the payload is only the HTML
   // half, stamped with the batch's carried generation. An error entry
@@ -2149,6 +2193,7 @@ export class Batch {
       rendered_at: Date.now(),
       job_id: this.jobInfo?.jobId ?? null,
       ...payload,
+      staging_id: this.#stagingId,
     };
     // Same write-boundary sanitization as `updateEntry`: a single
     // jsonb-illegal code point anywhere in the row would abort the upsert.
@@ -2162,8 +2207,8 @@ export class Batch {
     );
     await this.#query([
       ...upsert(
-        'prerendered_html_working',
-        'prerendered_html_working_pkey',
+        'prerendered_html_pending',
+        'prerendered_html_pending_pkey',
         nameExpressions,
         valueExpressions,
       ),
@@ -2290,7 +2335,7 @@ export class Batch {
     fullRealm?: true;
   }): Promise<BatchDoneResult> {
     // Drain any rows the visit loop left buffered before the swap reads the
-    // working table. A no-op for a prerenderHtmlOnly batch (which never
+    // pending table. A no-op for a prerenderHtmlOnly batch (which never
     // buffers) and for a pass whose last write already forced a flush.
     await this.flushWriteBuffer();
     // Read outside the transaction: `getColumnNames` runs on the adapter, not
@@ -2311,7 +2356,7 @@ export class Batch {
       this.#adoptedIndexGenerations();
       let commit = await this.#commit(async () => {
         this.#commitGenerationInTransaction = this.#provisionalGeneration;
-        await this.promotePrerenderedHtmlWorking(columns.prerenderedHtml, {
+        await this.promotePrerenderedHtmlPending(columns.prerenderedHtml, {
           monotonicGuard: true,
         });
         await this.stampTypeGenerations({
@@ -2326,7 +2371,11 @@ export class Batch {
         });
       });
       this.#committedGeneration = this.#provisionalGeneration;
-      return { totalIndexEntries: this.#invalidations.size, ...commit };
+      return {
+        totalIndexEntries: this.#invalidations.size,
+        ...commit,
+        ...(await this.clearPendingRows()),
+      };
     }
     if (opts?.fullRealm) {
       this.#fullRealm = true;
@@ -2345,7 +2394,7 @@ export class Batch {
       await this.applyBatchUpdates(columns);
       // After the swap, so the summary is computed from the rows this commit
       // published and the realm's other committed rows — never from another
-      // pass's rows still staged in the working table.
+      // pass's rows still staged in the pending table.
       await this.updateRealmMeta();
       await this.pruneObsoleteEntries();
       await this.stampTypeGenerations({
@@ -2357,9 +2406,76 @@ export class Batch {
       await this.publishGeneration();
     });
     this.#committedGeneration = this.commitGeneration;
+    let cleanup = await this.clearPendingRows();
 
     let totalIndexEntries = await this.numberOfIndexEntries();
-    return { totalIndexEntries, ...commit, commitLockWaitMs };
+    return { totalIndexEntries, ...commit, commitLockWaitMs, ...cleanup };
+  }
+
+  // Deletes the rows this batch staged, now that its commit has promoted
+  // them, and then runs the janitor. Runs after the commit's transaction
+  // rather than inside it, so the deletes add nothing to the time the realm's
+  // commit lock is held — no other pass reads these rows, so there is nothing
+  // for atomicity to protect. Best-effort for the same reason: the commit
+  // already stands, and failing the job here would only rerun published
+  // work. Rows a failure leaves behind are removed by the janitor of a later
+  // commit to the realm, once this job is no longer running.
+  private async clearPendingRows(): Promise<PendingCleanupResult> {
+    let start = Date.now();
+    try {
+      for (let table of PENDING_TABLES) {
+        await this.#query([
+          `DELETE FROM ${table} WHERE`,
+          ...every([
+            ['realm_url =', param(this.realmURL.href)],
+            ['staging_id =', param(this.#stagingId)],
+          ]),
+        ] as Expression);
+      }
+      let janitor =
+        this.#dbAdapter.kind === 'pg'
+          ? await this.clearOrphanedPendingRows()
+          : undefined;
+      return { pendingCleanupMs: Date.now() - start, ...janitor };
+    } catch (e) {
+      this.#log.warn(
+        `${jobIdentity(this.jobInfo)} could not clear pending rows staged under ${this.#stagingId} for ${this.realmURL.href} after its commit: ${(e as Error)?.message}`,
+      );
+      return { pendingCleanupMs: Date.now() - start };
+    }
+  }
+
+  // The janitor: removes this realm's pending rows whose job is no longer
+  // `unfulfilled` — it resolved or rejected — since no pass can commit or
+  // resume them any more. A job still `unfulfilled` keeps its rows even when
+  // no worker holds it, because its retry resumes from them. Rows whose job
+  // has no `jobs` row are left alone, as are rows staged outside a job, which
+  // carry no `job_id`: in neither case is there a record saying the batch
+  // that staged them has stopped.
+  private async clearOrphanedPendingRows(): Promise<{
+    janitorRowsCleared: number;
+    janitorJobsCleared: number;
+  }> {
+    let jobs = new Set<number>();
+    let rows = 0;
+    for (let table of PENDING_TABLES) {
+      let cleared = (await this.#query([
+        `WITH cleared AS (DELETE FROM ${table} AS p WHERE`,
+        ...every([
+          ['p.realm_url =', param(this.realmURL.href)],
+          [
+            `EXISTS (SELECT 1 FROM jobs j WHERE j.id = p.job_id AND j.status <> 'unfulfilled')`,
+          ],
+        ]),
+        'RETURNING p.job_id)',
+        'SELECT job_id, COUNT(*) AS row_count FROM cleared GROUP BY job_id',
+      ] as Expression)) as { job_id: number; row_count: string | number }[];
+      for (let { job_id, row_count } of cleared) {
+        jobs.add(Number(job_id));
+        rows += Number(row_count);
+      }
+    }
+    return { janitorRowsCleared: rows, janitorJobsCleared: jobs.size };
   }
 
   // Runs `body` as one transaction, with every `#query` it makes sent through
@@ -2372,7 +2488,7 @@ export class Batch {
   // because everything the body changes is either undone by the rollback or
   // comes out the same on the next attempt:
   //  - its database writes, including the ones a copy batch makes to
-  //    `prerendered_html_working` and the media-cache ledger, roll back with
+  //    `prerendered_html_pending` and the media-cache ledger, roll back with
   //    the transaction;
   //  - its in-memory changes are idempotent: the copy adds the same URLs to
   //    the invalidation set, the loader-epoch getter returns the token it
@@ -2850,10 +2966,11 @@ export class Batch {
         ...addExplicitParens(separatedByCommas(columnExpressions)),
         'SELECT',
         ...separatedByCommas(this.#restampedColumns(columns.boxelIndex)),
-        'FROM boxel_index_working',
+        'FROM boxel_index_pending',
         'WHERE',
         ...every([
           ['realm_url =', param(this.realmURL.href)],
+          ['staging_id =', param(this.#stagingId)],
           [
             'url in',
             ...addExplicitParens(
@@ -2867,25 +2984,26 @@ export class Batch {
         ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
       ] as Expression);
 
-      // Publish this pass's `prerendered_html_working` rows, UNLESS this is a
+      // Publish this pass's `prerendered_html_pending` rows, UNLESS this is a
       // split-mode index pass — in which case HTML flows only through the
       // `prerender_html` job, this pass wrote nothing to the channel, and the
       // job's own swap publishes it. The fused path (SQLite) lands each
-      // visit's HTML half in `prerendered_html_working` via `updateEntry`
+      // visit's HTML half in `prerendered_html_pending` via `updateEntry`
       // (tombstones via `tombstoneEntries`); a copy fills the channel from
       // the source realm's rows below.
       if (!this.#splitPrerenderHtml || this.#copyFromSourceRealm) {
         // For a copy, overlay the source realm's `prerendered_html` rows onto
-        // the destination's working table. A destination URL whose source has
+        // this batch's pending rows. A destination URL whose source has
         // no `prerendered_html` row gets none either — it reads as unrendered
         // and the catch-up sweep enqueues its render.
         if (this.#copyFromSourceRealm) {
           await this.copyPrerenderedHtmlFrom(this.#copyFromSourceRealm);
         }
 
-        // Swap the working HTML rows into production in the same
-        // transaction, keyed by the same invalidation set and generation.
-        await this.promotePrerenderedHtmlWorking(columns.prerenderedHtml);
+        // Swap the pending HTML rows into production in the same
+        // transaction, keyed by the same staging id, invalidation set and
+        // generation.
+        await this.promotePrerenderedHtmlPending(columns.prerenderedHtml);
         this.#publishedPrerenderedHtml = true;
       }
     }
@@ -2894,7 +3012,7 @@ export class Batch {
   }
 
   // The swap's SELECT list: every column as staged, except `generation`,
-  // which takes this commit's. The working rows carry the provisional
+  // which takes this commit's. The pending rows carry the provisional
   // generation the pass anticipated at setup, which a peer that committed
   // first may have taken.
   #restampedColumns(columns: string[]): Expression[] {
@@ -3076,7 +3194,7 @@ export class Batch {
 
   // The adoption chains behind the rows a `prerenderHtmlOnly` swap published.
   // Read from `boxel_index` because the HTML channel stores no chain of its
-  // own, and from production rather than the working table because the index
+  // own, and from production rather than the pending table because the index
   // half of these URLs landed in an earlier pass.
   //
   // The distinct keys are extracted in SQL rather than by reading each row's
@@ -3114,11 +3232,11 @@ export class Batch {
     return rows.map(({ type_key }) => type_key);
   }
 
-  // Swap `prerendered_html_working` rows into production `prerendered_html`,
-  // keyed by this batch's invalidation set. `prerendered_html` has no
-  // `job_id` column, so its column names (`columns`, read before the swap's
-  // transaction opens) are the production projection and the SELECT drops
-  // `job_id` from prerendered_html_working.
+  // Swap this batch's `prerendered_html_pending` rows into production
+  // `prerendered_html`, keyed by its staging id and invalidation set.
+  // `prerendered_html` has neither `job_id` nor `staging_id`, so its column
+  // names (`columns`, read before the swap's transaction opens) are the
+  // production projection and the SELECT drops both from the pending row.
   //
   // A prerenderHtmlOnly batch passes `monotonicGuard: true`: the trailing
   // `WHERE prerendered_html.generation <= EXCLUDED.generation` makes a stale
@@ -3129,7 +3247,7 @@ export class Batch {
   // Index/copy batches swap unguarded, restamping each row with the
   // generation their commit allocated: that generation is the realm's newest,
   // so the guard would always pass anyway.
-  private async promotePrerenderedHtmlWorking(
+  private async promotePrerenderedHtmlPending(
     columns: string[],
     opts?: {
       monotonicGuard?: boolean;
@@ -3149,10 +3267,11 @@ export class Batch {
           ? prerenderedColumns
           : this.#restampedColumns(prerenderedNames),
       ),
-      'FROM prerendered_html_working',
+      'FROM prerendered_html_pending',
       'WHERE',
       ...every([
         ['realm_url =', param(this.realmURL.href)],
+        ['staging_id =', param(this.#stagingId)],
         [
           'url in',
           ...addExplicitParens(
@@ -3303,13 +3422,14 @@ export class Batch {
     }
     // `has_error` and `error_doc` are listed (with explicit false / null
     // values per row) so the upsert's ON CONFLICT SET clause clears them.
-    // The primary key is `(url, realm_url, type)` — no `generation` —
-    // so a tombstone always collides with the prior row, and any column
-    // NOT in this list keeps its previous value. Without these two,
-    // a row that ever held `has_error = true` would carry that flag
-    // (and whatever `error_doc` it had at the time, including
-    // `jsonb null`) through every subsequent reindex, producing a row
-    // that reads as "errored but with no message" indefinitely.
+    // The primary key is `(realm_url, staging_id, url, type)`, so a
+    // tombstone collides with any row an earlier attempt of the same job
+    // staged for the URL — an error row, which resume leaves behind so the
+    // retry re-attempts it — and any column NOT in this list keeps its
+    // previous value. Without these two, the tombstone would inherit that
+    // attempt's `has_error = true` (and whatever `error_doc` it had,
+    // including `jsonb null`), and a deletion would promote as a row that
+    // reads as "errored but with no message".
     let columns = [
       'url',
       'file_alias',
@@ -3321,9 +3441,11 @@ export class Batch {
       'error_doc',
       'diagnostics',
       'job_id',
+      'staging_id',
     ].map((c) => [c]);
     let tombstoneDiagnostics: Diagnostics = {
       invalidationId: this.#currentInvalidationId,
+      passId: this.#passId,
       indexedAt: Date.now(),
     };
     // `diagnostics` is a jsonb column. This helper uses
@@ -3354,6 +3476,7 @@ export class Batch {
           null, // error_doc — same rationale
           tombstoneDiagnosticsJson,
           jobIdValue,
+          this.#stagingId,
         ].map((v) => [param(v)]),
       );
     });
@@ -3362,9 +3485,10 @@ export class Batch {
       return;
     }
 
+    await this.#stageProductionRows('boxel_index', toTombstone);
     await this.#upsertWithinBindBudget(
-      'boxel_index_working',
-      'boxel_index_working_pkey',
+      'boxel_index_pending',
+      'boxel_index_pending_pkey',
       columns,
       rows,
     );
@@ -3379,7 +3503,7 @@ export class Batch {
   }
 
   // Tombstone the prerendered_html channel for the given URLs — the
-  // `prerendered_html_working` analog of `tombstoneEntries`, written by a
+  // `prerendered_html_pending` analog of `tombstoneEntries`, written by a
   // prerenderHtmlOnly batch's seeding and by a fused batch alongside its
   // boxel_index tombstones. Only URLs with existing prerendered_html rows
   // get one (there is no rendering to hide otherwise), and the tombstone
@@ -3425,9 +3549,10 @@ export class Batch {
       }
     }
     // The HTML columns and the `screenshots` manifest are deliberately NOT
-    // in this list: on an existing working row a tombstone leaves those
-    // artifacts in place (is_deleted hides them), matching how the HTML
-    // columns have always behaved through delete/restore cycles.
+    // in this list: the tombstone lands on the production row
+    // `#stageProductionRows` copied in, so it leaves those artifacts in place
+    // (is_deleted hides them), matching how the HTML columns have always
+    // behaved through delete/restore cycles.
     let columns = [
       'url',
       'file_alias',
@@ -3439,6 +3564,7 @@ export class Batch {
       'diagnostics',
       'rendered_at',
       'job_id',
+      'staging_id',
     ].map((c) => [c]);
     let now = Date.now();
     let jobIdValue = this.jobInfo?.jobId ?? null;
@@ -3462,18 +3588,75 @@ export class Batch {
           null, // diagnostics — likewise cleared; they described the render this tombstone hides
           now,
           jobIdValue,
+          this.#stagingId,
         ].map((v) => [param(v)]),
       );
     });
     if (rows.length === 0) {
       return;
     }
+    await this.#stageProductionRows('prerendered_html', urls);
     await this.#upsertWithinBindBudget(
-      'prerendered_html_working',
-      'prerendered_html_working_pkey',
+      'prerendered_html_pending',
+      'prerendered_html_pending_pkey',
       columns,
       rows,
     );
+  }
+
+  // Copy the production rows of `urls` into this batch's pending table, for
+  // the tombstone upsert that follows to mark deleted. That upsert lists only
+  // the columns a tombstone changes, so the rest of what the tombstone
+  // promotes — the row's document, deps, types, rendered HTML, screenshot
+  // manifest — comes from here: a deleted row keeps its last content, hidden
+  // by `is_deleted`, which is what the last-known-good carry-forwards read if
+  // the file comes back. A row this staging already holds, which an earlier
+  // attempt of the same job staged, is left as it is.
+  async #stageProductionRows(
+    table: 'boxel_index' | 'prerendered_html',
+    urls: string[],
+  ): Promise<void> {
+    if (urls.length === 0) {
+      return;
+    }
+    let pendingTable = `${table}_pending`;
+    let columns = (await this.#productionColumns(table)).map((c) => [c]);
+    // The same budget `#upsertWithinBindBudget` keeps to, less the two
+    // parameters every statement binds besides its URLs.
+    let bindBudget = this.#dbAdapter.kind === 'sqlite' ? 900 : 60000;
+    let urlsPerInsert = bindBudget - 2;
+    for (let offset = 0; offset < urls.length; offset += urlsPerInsert) {
+      let chunk = urls.slice(offset, offset + urlsPerInsert);
+      await this.#query([
+        `INSERT INTO ${pendingTable}`,
+        ...addExplicitParens(separatedByCommas([...columns, ['staging_id']])),
+        'SELECT',
+        ...separatedByCommas([
+          ...columns,
+          ['CAST(', param(this.#stagingId), 'AS VARCHAR)'],
+        ]),
+        `FROM ${table} WHERE`,
+        ...every([
+          ['realm_url =', param(this.realmURL.href)],
+          [
+            'url IN',
+            ...addExplicitParens(
+              separatedByCommas(chunk.map((url) => [param(url)])),
+            ),
+          ],
+        ]),
+        `ON CONFLICT ON CONSTRAINT ${pendingTable}_pkey DO NOTHING`,
+      ] as Expression);
+    }
+  }
+
+  #productionColumns(table: 'boxel_index' | 'prerendered_html') {
+    let columns = this.#productionColumnNames.get(table);
+    if (!columns) {
+      columns = this.#dbAdapter.getColumnNames(table);
+      this.#productionColumnNames.set(table, columns);
+    }
+    return columns;
   }
 
   // Each invalidated URL's rows as the production index still holds them:
@@ -3525,10 +3708,10 @@ export class Batch {
     seedURL: URL,
   ): Promise<string[]> {
     let rows = (await this.#query([
-      `SELECT DISTINCT url FROM boxel_index_working WHERE`,
+      `SELECT DISTINCT url FROM boxel_index_pending WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
-        ['generation =', param(this.#provisionalGeneration)],
+        ['staging_id =', param(this.#stagingId)],
         any([
           ['url =', param(seedURL.href)],
           ['file_alias =', param(seedURL.href)],
@@ -3677,8 +3860,9 @@ export class Batch {
 
   // Returns the minimum projection (url, type, deps) needed to order
   // invalidations by dependency. Server-side selection picks one row per
-  // (url, type) with priority: working-non-deleted > production > working-deleted,
-  // applied via a window function over UNION ALL of both tables. Avoids the
+  // (url, type) with priority: this pass's staged non-deleted row >
+  // production > this pass's staged tombstone, applied via a window function
+  // over UNION ALL of both tables. Avoids the
   // double client-side merge and the dead-weight `error_doc` payload that
   // `getDependencyRows` carries for the error fan-out path.
   async getOrderingDependencyRows(
@@ -3717,9 +3901,10 @@ export class Batch {
       'FROM (',
       'SELECT url, type, deps,',
       'CASE WHEN is_deleted THEN 2 ELSE 0 END AS source_priority',
-      'FROM boxel_index_working WHERE',
+      'FROM boxel_index_pending WHERE',
       ...every([
         ['realm_url =', param(this.realmURL.href)],
+        ['staging_id =', param(this.#stagingId)],
         [
           'url IN',
           ...addExplicitParens(
@@ -3781,30 +3966,30 @@ export class Batch {
     // SQLite has a lower parameter limit than Postgres. Chunk URL lookups to
     // keep IN-clause parameter counts within safe bounds for both adapters.
     let urlBatchSize = this.#dbAdapter.kind === 'sqlite' ? 900 : 5000;
-    let workingRows: DependencyIndexRow[] = [];
+    let pendingRows: DependencyIndexRow[] = [];
     let productionRows: DependencyIndexRow[] = [];
     for (let i = 0; i < uniqueUrls.length; i += urlBatchSize) {
       let urlBatch = uniqueUrls.slice(i, i + urlBatchSize);
-      let [workingBatchRows, productionBatchRows] = await Promise.all([
-        this.queryDependencyRows('boxel_index_working', urlBatch),
+      let [pendingBatchRows, productionBatchRows] = await Promise.all([
+        this.queryDependencyRows('boxel_index_pending', urlBatch),
         this.queryDependencyRows('boxel_index', urlBatch),
       ]);
-      workingRows.push(...workingBatchRows);
+      pendingRows.push(...pendingBatchRows);
       productionRows.push(...productionBatchRows);
     }
 
     let rowsByKey = new Map<
       string,
       {
-        working?: DependencyIndexRow;
+        pending?: DependencyIndexRow;
         production?: DependencyIndexRow;
       }
     >();
 
-    for (let row of workingRows) {
+    for (let row of pendingRows) {
       let key = `${row.url}|${row.type}`;
       let existing = rowsByKey.get(key) ?? {};
-      existing.working = row;
+      existing.pending = row;
       rowsByKey.set(key, existing);
     }
 
@@ -3816,17 +4001,17 @@ export class Batch {
     }
 
     let selectedRows: DependencyIndexRow[] = [];
-    for (let { working, production } of rowsByKey.values()) {
-      if (working && !working.isDeleted) {
-        selectedRows.push(working);
+    for (let { pending, production } of rowsByKey.values()) {
+      if (pending && !pending.isDeleted) {
+        selectedRows.push(pending);
         continue;
       }
-      if (working?.isDeleted && production) {
+      if (pending?.isDeleted && production) {
         selectedRows.push(production);
         continue;
       }
-      if (working) {
-        selectedRows.push(working);
+      if (pending) {
+        selectedRows.push(pending);
         continue;
       }
       if (production) {
@@ -3837,8 +4022,9 @@ export class Batch {
     return selectedRows;
   }
 
+  // `boxel_index_pending` is read only for this pass's own staged rows.
   private async queryDependencyRows(
-    tableName: 'boxel_index' | 'boxel_index_working',
+    tableName: 'boxel_index' | 'boxel_index_pending',
     urls: string[],
   ): Promise<DependencyIndexRow[]> {
     if (urls.length === 0) {
@@ -3849,6 +4035,9 @@ export class Batch {
       `SELECT url, type, deps, has_error, is_deleted, error_doc FROM ${tableName} WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
+        ...(tableName === 'boxel_index_pending'
+          ? [['staging_id =', param(this.#stagingId)] as Expression]
+          : []),
         [
           'url IN',
           ...addExplicitParens(
@@ -3887,7 +4076,7 @@ export class Batch {
       unresolvedPath !== resolvedPath &&
       this.isRegisteredPrefix(unresolvedPath);
     let scanTable = async (
-      tableName: 'boxel_index_working' | 'prerendered_html' | 'boxel_index',
+      tableName: 'boxel_index_pending' | 'prerendered_html' | 'boxel_index',
     ) => {
       let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
         type: BoxelIndexTable['type'];
@@ -3943,11 +4132,15 @@ export class Batch {
             // probably need to reevaluate this condition when we get to cross
             // realm invalidation
             [`i.realm_url =`, param(this.realmURL.href)],
+            ...(tableName === 'boxel_index_pending'
+              ? [['i.staging_id =', param(this.#stagingId)] as Expression]
+              : []),
             // A promoted tombstone is a deleted file — it has nothing to
             // re-render, and pulling it into the fan-out would visit a path
-            // with no backing file. The working/prerendered scans carry
-            // tombstones from in-flight batches whose skip logic handles
-            // them, so only the production scan filters.
+            // with no backing file. The pending and prerendered scans can
+            // carry tombstones too — the pending scan only this pass's own,
+            // for URLs already in its invalidation set — and the visit's
+            // skip logic handles them, so only the production scan filters.
             ...(tableName === 'boxel_index'
               ? [
                   any([
@@ -3966,8 +4159,8 @@ export class Batch {
       } while (rows.length === pageSize);
       return { results, pageNumber };
     };
-    // The reference graph spans both channels: `boxel_index_working.deps`
-    // carries the index visit's edges (the search-doc walk), while
+    // The reference graph spans both channels: `boxel_index.deps` carries
+    // the index visit's edges (the search-doc walk), while
     // `prerendered_html.deps` carries edges only the format renders discover
     // — a rendered non-searchable link, the scoped-CSS artifacts of linked
     // instances. Both edge sets must feed the fan-out or a change to a
@@ -3975,24 +4168,20 @@ export class Batch {
     // says which kind of edge found it, so the caller can keep render-only
     // consumers out of the index visit (see `calculateInvalidations`).
     //
-    // Production `boxel_index` is scanned as well because the working table
-    // is a staging area whose coverage is not guaranteed: a row only exists
-    // there once a visit has written it in this deployment's lifetime, so
-    // promoted rows can lack a working counterpart (an index imported from a
-    // dump that carries only the production tables, or rows staged under a
-    // since-changed schema). Without the production scan, a module edit
-    // never reaches such dependents — their indexed computed values sit
-    // stale until each file is touched individually. Rows present in both
-    // tables collapse in the (url, type) dedup below.
-    let [workingScan, prerenderedScan, productionScan] = await Promise.all([
-      scanTable('boxel_index_working'),
+    // This pass's own staged rows in `boxel_index_pending` are scanned as
+    // well, so an edge the pass has written but not yet committed still
+    // fans out. A peer pass's staged rows are not: until that pass commits,
+    // its edges are not part of the index this pass is working from. Rows
+    // present in both tables collapse in the (url, type) dedup below.
+    let [pendingScan, prerenderedScan, productionScan] = await Promise.all([
+      scanTable('boxel_index_pending'),
       scanTable('prerendered_html'),
       scanTable('boxel_index'),
     ]);
     let seen = new Set<string>();
     let results: ReferencingItem[] = [];
     for (let [rows, renderEdge] of [
-      [workingScan.results, false],
+      [pendingScan.results, false],
       [productionScan.results, false],
       [prerenderedScan.results, true],
     ] as const) {
@@ -4009,7 +4198,7 @@ export class Batch {
       `${jobIdentity(this.jobInfo)} time to determine items that reference ${resolvedPath} ${
         Date.now() - start
       } ms (page count=${
-        workingScan.pageNumber +
+        pendingScan.pageNumber +
         prerenderedScan.pageNumber +
         productionScan.pageNumber
       })`,
@@ -4264,7 +4453,7 @@ function rowType(entry: SearchIndexEntry): BoxelIndexTable['type'] {
   return isErrorEntry(entry) ? baseTypeFromError(entry) : entry.type;
 }
 
-// A `boxel_index_working` row payload built but not yet upserted, plus the
+// A `boxel_index_pending` row payload built but not yet upserted, plus the
 // paired `prerendered_html` entry the fused path writes for it.
 interface PreparedIndexRow {
   preparedEntry: Record<string, unknown>;

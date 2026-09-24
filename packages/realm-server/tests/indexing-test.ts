@@ -1821,7 +1821,7 @@ module(basename(import.meta.filename), function () {
       });
 
       test('a retry reports the adoption chain the attempt it resumes wrote', async function (assert) {
-        // A job that dies before its swap leaves real rows in the working
+        // A job that dies before its swap leaves real rows in the pending
         // table, and the retry resumes them rather than re-visiting — so the
         // write path never sees them a second time. For a card that dead
         // attempt created there is no production row to read a chain from
@@ -2197,29 +2197,40 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test('batch invalidation resolves alias-like seeds from staged working rows', async function (assert) {
+      test("batch invalidation resolves alias-like seeds from the pass's own staged rows, not a peer's", async function (assert) {
         let stagedOnlyURL = new URL(`${testRealm}staged-only.json`);
         let stagedAliasURL = new URL(`${testRealm}staged-only`);
+        let stagedFile = {
+          type: 'file' as const,
+          deps: new Set<string>(),
+          lastModified: Date.now(),
+          resourceCreatedAt: Date.now(),
+        };
+
+        let peerBatch = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+          virtualNetwork,
+        );
+        await peerBatch.updateEntry(stagedOnlyURL, stagedFile);
+        let otherBatch = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+          virtualNetwork,
+        );
+        await otherBatch.invalidate([stagedAliasURL]);
+        assert.false(
+          otherBatch.invalidations.includes(stagedOnlyURL.href),
+          "a peer pass's staged row does not resolve the seed: it is not part of the index this pass works from",
+        );
 
         let stagingBatch = await new IndexWriter(testDbAdapter).createBatch(
           new URL(realm.url),
           virtualNetwork,
         );
-        await stagingBatch.updateEntry(stagedOnlyURL, {
-          type: 'file',
-          deps: new Set<string>(),
-          lastModified: Date.now(),
-          resourceCreatedAt: Date.now(),
-        });
-
-        let invalidationBatch = await new IndexWriter(
-          testDbAdapter,
-        ).createBatch(new URL(realm.url), virtualNetwork);
-        await invalidationBatch.invalidate([stagedAliasURL]);
-
+        await stagingBatch.updateEntry(stagedOnlyURL, stagedFile);
+        await stagingBatch.invalidate([stagedAliasURL]);
         assert.ok(
-          invalidationBatch.invalidations.includes(stagedOnlyURL.href),
-          'instance-id style seed resolves via boxel_index_working row before production commit',
+          stagingBatch.invalidations.includes(stagedOnlyURL.href),
+          "instance-id style seed resolves via the pass's own staged row before its commit",
         );
       });
 
@@ -2328,10 +2339,9 @@ module(basename(import.meta.filename), function () {
       });
 
       test('batch invalidation clears has_error and error_doc when tombstoning a previously-errored row', async function (assert) {
-        // The primary key is `(url, realm_url, type)` — no `generation` —
-        // so a tombstone upsert always collides with the prior row for the
-        // same URL. Any column NOT in the tombstone upsert's SET list keeps
-        // its previous value. Before this guard, `has_error` and `error_doc`
+        // A tombstone is staged over a copy of the URL's production row, so
+        // any column NOT in the tombstone upsert's SET list keeps its
+        // production value. Before this guard, `has_error` and `error_doc`
         // were not in that list, so an errored row stayed errored across
         // every subsequent reindex even after the file was deleted —
         // producing a "has_error = true, error_doc = jsonb null" shape

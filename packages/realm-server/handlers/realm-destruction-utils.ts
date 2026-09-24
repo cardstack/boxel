@@ -111,15 +111,25 @@ export async function removeRealmDatabaseArtifacts(args: {
   }
   await q([`DELETE FROM modules WHERE resolved_realm_url =`, param(realmURL)]);
   await q([
-    `DELETE FROM boxel_index_working WHERE realm_url =`,
+    `DELETE FROM boxel_index_pending WHERE realm_url =`,
     param(realmURL),
   ]);
   await q([`DELETE FROM boxel_index WHERE realm_url =`, param(realmURL)]);
   await q([
-    `DELETE FROM prerendered_html_working WHERE realm_url =`,
+    `DELETE FROM prerendered_html_pending WHERE realm_url =`,
     param(realmURL),
   ]);
   await q([`DELETE FROM prerendered_html WHERE realm_url =`, param(realmURL)]);
+  // The shared working tables no longer receive rows, but they still hold
+  // whatever was staged in them before the pending tables replaced them.
+  await q([
+    `DELETE FROM boxel_index_working WHERE realm_url =`,
+    param(realmURL),
+  ]);
+  await q([
+    `DELETE FROM prerendered_html_working WHERE realm_url =`,
+    param(realmURL),
+  ]);
   // A deleted realm never reindexes, so its interned stylesheets would
   // otherwise never be swept.
   await q([`DELETE FROM scoped_css WHERE realm_url =`, param(realmURL)]);

@@ -967,7 +967,7 @@ export interface IndexVisitClientTimings {
 // (`Batch.copyFrom` / `copyPrerenderedHtmlFrom` clone the source realm's
 // rows rather than rendering them): those keep whatever the source row
 // carried, so they name the source realm's pass, or nothing at all if that
-// row predates these stamps. The three stamps are:
+// row predates these stamps. The stamps are:
 //
 //   - `invalidationId` — one UUID per invalidation fan-out: minted when the
 //     `Batch` is created, so a from-scratch pass (which never calls
@@ -979,14 +979,23 @@ export interface IndexVisitClientTimings {
 //     fan-out. The `prerender_html` job an index pass spawns is its own
 //     batch with its own id: each groups its own channel's fan-out, so join
 //     the two channels on `url` (plus `generation`), never on this.
+//   - `passId` — the id of the batch that wrote the row, which an index
+//     pass's `realm_index_commits` row also carries, so a promoted row joins
+//     to the commit that published it. A `prerender_html` job's batch
+//     records no commit, so on `prerendered_html` the id only groups what
+//     that attempt of the job wrote. A retried job's attempts are separate
+//     passes, and a retry promotes the rows it resumed as the earlier attempt
+//     staged them, so such a row names that attempt — one that never
+//     committed. `boxel_index` has no `job_id` column; the ledger row of the
+//     pass that did commit carries the job id both attempts share.
 //   - `indexedAt` — wall-clock the write happened.
 //   - `writeSeq` — the row's position within that fan-out's write order.
 //
 // A tombstone takes no position in the write order, so `writeSeq` is absent
-// on one. The index channel's tombstones do carry the other two: they are
+// on one. The index channel's tombstones do carry the other three: they are
 // written by `invalidate()` under the id it just minted, and a visited URL's
 // row then overwrites its tombstone. The render channel's tombstones clear
-// `diagnostics` outright and so carry none of the three.
+// `diagnostics` outright and so carry none of them.
 //
 // Every other field is optional because writers populate incrementally:
 // render-side fields come from the Prerenderer's response meta. Any stage
@@ -999,6 +1008,7 @@ export interface IndexVisitClientTimings {
 export interface Diagnostics
   extends RenderTimeoutDiagnostics, PrerenderMetaDiagnostics {
   invalidationId?: string;
+  passId?: string;
   indexedAt?: number;
   // 0-based position of this row among the batch's row writes, stamped when
   // the row enters the write path. `indexedAt` only resolves to the

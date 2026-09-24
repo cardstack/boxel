@@ -54,7 +54,7 @@ export interface IndexPhaseTimings {
   // Whole-job wall, kickoff to return.
   totalMs?: number;
   // Batch setup before any phase below: `IndexWriter.createBatch` (generation
-  // bump + resumable working-row scan). Non-trivial on a retry job or under DB
+  // read + resumable pending-row scan). Non-trivial on a retry job or under DB
   // slowness, so it's bucketed rather than left as residue in `totalMs`.
   setupMs?: number;
   // Reading the index's per-file modified times up front (from-scratch only).
@@ -74,8 +74,9 @@ export interface IndexPhaseTimings {
   // cannot time its own write. This is the I/O the visit's tab does not need,
   // so it is the primary candidate to overlap with the next visit.
   writeMs?: number;
-  // The final atomic swap: `batch.done()` (realm-meta update, working → main
-  // promotion, obsolete-row prune) in one transaction.
+  // The final atomic swap: `batch.done()` (realm-meta update, pending → main
+  // promotion, obsolete-row prune) in one transaction, then the cleanup of
+  // the pending rows it promoted.
   swapMs?: number;
   // How many times the swap's transaction ran. More than 1 means a deadlock
   // or serialization failure against a concurrent commit to the same rows
@@ -86,6 +87,15 @@ export interface IndexPhaseTimings {
   // The part of `swapMs` the committing attempt spent waiting for the realm's
   // commit lock — for another pass of the same realm to finish committing.
   commitLockWaitMs?: number;
+  // The part of `swapMs` after the commit spent deleting the pending rows it
+  // promoted and running the janitor. Absent when the swap never committed.
+  pendingCleanupMs?: number;
+  // What the janitor removed: this realm's pending rows staged by jobs that
+  // are no longer running, and how many jobs they belonged to. Nonzero means
+  // a job left rows behind — it died before its commit and did not retry, or
+  // its cleanup failed. Absent when the cleanup failed before the janitor ran.
+  janitorRowsCleared?: number;
+  janitorJobsCleared?: number;
 }
 
 export interface StreamFileRef {

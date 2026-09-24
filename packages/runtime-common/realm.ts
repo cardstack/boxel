@@ -13017,9 +13017,9 @@ export class Realm {
     // copySync's it from the source realm — and exists before the indexer
     // ever processes it. Reading from disk closes the gap during indexing,
     // when /_info can fire mid-pass via the prerender host's cardRender:
-    // parseRealmInfo's overlay below queries `boxel_index` (without
-    // useWorkInProgressIndex), which can't see entries written to
-    // boxel_index_working until `batch.done()` swaps; without this file
+    // parseRealmInfo's overlay below queries `boxel_index`, which can't see
+    // entries staged in boxel_index_pending until `batch.done()` swaps;
+    // without this file
     // overlay, the very first /_info during a from-scratch pass falls
     // back to "Unnamed Workspace", the prerender host caches that on its
     // RealmResource (`fetchInfo` short-circuits if `info` is set), and

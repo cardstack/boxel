@@ -21,6 +21,7 @@ import {
   renderScopeFor,
   unixTime,
   type Batch,
+  type BatchDoneResult,
   type DeclaredScreenshotError,
   type DeclaredScreenshotVisitArgs,
   type DeclaredScreenshotVisitResult,
@@ -134,11 +135,15 @@ export interface PrerenderHtmlPassResult {
   // spawned pass outside the browser). Surfaces on the job result so
   // dashboards attribute the sweep to the job that pays it.
   preWarmMs?: number;
-  // The swap's wall-clock and its transaction's attempt counts (see
-  // `BatchDoneResult`), present once the pass reached its swap.
+  // The swap's wall-clock, its transaction's attempt counts, and the
+  // post-commit cleanup of the pending tables (see `BatchDoneResult`),
+  // present once the pass reached its swap.
   swapMs?: number;
   swapAttempts?: number;
   swapRetryMs?: number;
+  pendingCleanupMs?: number;
+  janitorRowsCleared?: number;
+  janitorJobsCleared?: number;
 }
 
 // The `prerender_html` job's visit loop — the HTML channel's analog of the
@@ -148,7 +153,7 @@ export interface PrerenderHtmlPassResult {
 // visits each 'update' URL with a standalone
 // 'prerender-html' visit that renders from card+source (it never reads
 // `boxel_index`), writing HTML or render-error rows into
-// `prerendered_html_working`; 'delete' URLs are never visited so their
+// `prerendered_html_pending`; 'delete' URLs are never visited so their
 // tombstones survive. A visit that fails without producing a response
 // document at all (its prerender request aborting/timing out, a reader
 // error) lands error rows too, via the same per-URL isolation the index
@@ -255,7 +260,7 @@ export async function runPrerenderHtmlPass({
   // second attempt's populate calls hit the cache as O(1) reads, no re-renders.
   let preWarmMs: number | undefined;
   let swapMs: number | undefined;
-  let swapCommit: { swapAttempts: number; swapRetryMs: number } | undefined;
+  let swapCommit: Omit<BatchDoneResult, 'totalIndexEntries'> | undefined;
   if (preWarm && !isBrowserTestEnv()) {
     let preWarmStart = Date.now();
     try {

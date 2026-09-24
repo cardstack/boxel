@@ -39,7 +39,7 @@ const DEFAULT_JANITOR_INTERVAL_MS = 30 * 60 * 1000;
 // subsequent job hashes to different keys and never reuses a stale value.
 //
 // Same-realm reads are safe by construction: within an indexing batch the
-// writer touches `boxel_index_working`, not `boxel_index`, so every read of the
+// writer touches `boxel_index_pending`, not `boxel_index`, so every read of the
 // consuming realm's `boxel_index` returns identical bytes until the batch's
 // `applyBatchUpdates` swap fires. Cross-realm reads accept a looser contract —
 // within one jobId, results are pinned to the first observation regardless of
