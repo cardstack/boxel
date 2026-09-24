@@ -3,7 +3,6 @@ import {
   type CardResource,
   type JobInfo,
   jobIdentity,
-  queueClaimOf,
   trimExecutableExtension,
   hasExecutableExtension,
   passInvalidatesExecutables,
@@ -74,6 +73,7 @@ import {
   indexingConcurrencyGroup,
   systemInitiatedIndexPriority,
 } from './jobs/indexing.ts';
+import { queueClaimOf } from './jobs/queue-claim.ts';
 
 export class IndexWriter {
   #dbAdapter: DBAdapter;
@@ -274,6 +274,17 @@ export interface PrerenderedHtmlErrorEntry {
 export interface PrerenderedHtmlChange {
   url: string;
   operation: 'update' | 'delete';
+}
+
+// The copy of a row's diagnostics its `error_doc` carries. That copy is served
+// to whoever reads the broken card — the card error response's
+// `meta.diagnostics`, which the error panel renders and "send error to AI
+// assistant" pastes verbatim — so it leaves out `queueClaim`: a writer lane's
+// group names the user whose pass wrote the row, which the `diagnostics`
+// column keeps for operators and a reader of the card has no need for.
+function errorDocDiagnostics(diagnostics: Diagnostics): Diagnostics {
+  let { queueClaim: _queueClaim, ...rest } = diagnostics;
+  return rest;
 }
 
 // The HTML half of a fused-visit index entry, in the shape the
@@ -1888,7 +1899,10 @@ export class Batch {
               // extra fields for derived / legacy payloads);
               // `Diagnostics` is structurally-compatible
               // but needs an explicit cast across the boundary.
-              diagnostics: diagnostics as Record<string, unknown>,
+              diagnostics: errorDocDiagnostics(diagnostics) as Record<
+                string,
+                unknown
+              >,
             },
             url,
           ),
@@ -2348,7 +2362,10 @@ export class Batch {
             ...entry.error,
             ...(entry.diagnostics
               ? {
-                  diagnostics: entry.diagnostics as Record<string, unknown>,
+                  diagnostics: errorDocDiagnostics(entry.diagnostics) as Record<
+                    string,
+                    unknown
+                  >,
                 }
               : {}),
           },

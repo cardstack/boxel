@@ -38,7 +38,8 @@ async function enqueueIndexJob(
     initiatedBy?: string[];
     // Puts the row in a writer lane of the realm's index lane family, named
     // by this suffix. Omitted leaves it in the family's exclusive lane with no
-    // family recorded, which is how every index job is published today.
+    // family recorded, the way an index job is published without a writer
+    // lane.
     writerLane?: string;
   } = {},
 ): Promise<number> {

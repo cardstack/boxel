@@ -1,9 +1,11 @@
-// The lane family a job's concurrency group belongs to. Until now the group was
-// the queue's only concurrency primitive: the claim query skips a job whose
-// exact group already has a live reservation, and every reader of a realm's
-// lane — readiness, the settle gate, cancel and teardown, publish progress —
-// matches that group string. Splitting a realm's index lane per writer would
-// silently narrow every one of those readers to one writer's lane.
+// The lane family a job's concurrency group belongs to. A group alone names one
+// lane: the claim query runs one job per group, and a group can say nothing
+// about which other groups a job must not run beside. So a group cannot
+// describe a realm's index as several writer lanes plus exclusive work that
+// excludes them all, and a reader matching one group string sees one lane of
+// it. This column records the set a lane belongs to, which lets the claim
+// query exclude across it and lets a reader of a realm's lane — readiness, the
+// settle gate, cancel and teardown, publish progress — ask about all of it.
 //
 // A family groups lanes. Its exclusive work runs in a group named for the
 // family and excludes every other member; its writer lanes are groups of their
@@ -34,7 +36,9 @@ exports.up = (pgm) => {
     },
     { ifNotExists: true },
   );
-  pgm.sql(`DROP INDEX CONCURRENTLY IF EXISTS jobs_unfulfilled_lane_family_idx;`);
+  pgm.sql(
+    `DROP INDEX CONCURRENTLY IF EXISTS jobs_unfulfilled_lane_family_idx;`,
+  );
   pgm.sql(`
     CREATE INDEX CONCURRENTLY jobs_unfulfilled_lane_family_idx
       ON jobs (lane_family)
@@ -44,6 +48,8 @@ exports.up = (pgm) => {
 
 exports.down = (pgm) => {
   pgm.noTransaction();
-  pgm.sql(`DROP INDEX CONCURRENTLY IF EXISTS jobs_unfulfilled_lane_family_idx;`);
+  pgm.sql(
+    `DROP INDEX CONCURRENTLY IF EXISTS jobs_unfulfilled_lane_family_idx;`,
+  );
   pgm.dropColumn('jobs', 'lane_family');
 };

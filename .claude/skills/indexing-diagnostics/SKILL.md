@@ -1886,7 +1886,7 @@ Every lane query here selects the family with `concurrency_group = F OR lane_fam
 
 - **`jobs.result.queueClaim`**: `{ queueWaitMs, concurrencyGroup, laneFamily }` on every index job (`from-scratch-index`, `incremental-index`) and `prerender_html` job the queue claimed. `queueWaitMs` runs from the job's `created_at` to the claim of the attempt that ran, on the database clock. Absent on a job from a worker predating it.
 - **`jobs.result.phaseTimings.totalMs`**: the pass's own run.
-- **`diagnostics.queueClaim`** on every row the pass wrote, in `boxel_index` and `prerendered_html`: the same object, so a card's row names the wait of the pass that last wrote it without a join to `jobs`.
+- **`diagnostics.queueClaim`** on every row the pass wrote, in `boxel_index` and `prerendered_html`: the same object, so a card's row names the wait of the pass that last wrote it without a join to `jobs`. It is on the `diagnostics` column only. An error row's `error_doc.diagnostics` copy leaves it out, because that copy is served to whoever reads the broken card, and a writer lane's group names the user whose pass wrote the row.
 - **The worker's `queue` log line** at `info`: `starting job <id> (type=… priority=… group=… family=…) after <n>ms in queue`.
 - **The `[indexing-progress]` log lines** at `info`: `event=started` and `event=finished` carry `lane=<concurrency_group>`, so a job's progress lines say whose pass it is without a join to `jobs`.
 
