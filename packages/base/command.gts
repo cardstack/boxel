@@ -417,7 +417,6 @@ export class PatchCodeInput extends CardDef {
 
 export class RunRealmCodeInput extends CardDef {
   @field code = contains(StringField);
-  @field fileUrls = containsMany(StringField);
   @field realm = contains(StringField);
   @field roomId = contains(StringField);
 }

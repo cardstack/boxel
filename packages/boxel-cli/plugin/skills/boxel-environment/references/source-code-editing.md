@@ -9,6 +9,6 @@ When you need to edit a `.gts` or `.json` file from inside the Boxel app, load t
 
 Key reminders for the runtime context:
 - ALWAYS use the `run-realm-code` tool for `.gts` and `.json` files alike.
-- For new files, include the URL in `fileUrls` and call `realm.fs.writeText`.
+- For new files, call `realm.fs.writeText`.
 
 For the full script format and recovery from failed edits, read the canonical skill.

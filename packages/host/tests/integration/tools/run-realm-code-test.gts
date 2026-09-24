@@ -49,7 +49,6 @@ module('Integration | tools | run-realm-code', function (hooks) {
     let result = await command.execute({
       realm: testRealmURL,
       roomId: '!room:example.com',
-      fileUrls: [fileUrl],
       code: `await realm.fs.replace(${JSON.stringify(fileUrl)}, '"Old title"', '"New title"');`,
     });
 
@@ -74,7 +73,6 @@ module('Integration | tools | run-realm-code', function (hooks) {
     let result = await command.execute({
       realm: testRealmURL,
       roomId: '!room:example.com',
-      fileUrls: [fileUrl],
       code: `await realm.fs.writeText(${JSON.stringify(fileUrl)}, '{\\n  "title": "New task"\\n}\\n');`,
     });
 
@@ -93,7 +91,6 @@ module('Integration | tools | run-realm-code', function (hooks) {
     let result = await command.execute({
       realm: testRealmURL,
       roomId: '!room:example.com',
-      fileUrls: [fileUrl],
       code: `return await realm.fs.replace('task.json', '"count": 1', '"count": 2');`,
     });
 
@@ -116,7 +113,6 @@ module('Integration | tools | run-realm-code', function (hooks) {
       command.execute({
         realm: testRealmURL,
         roomId: '!room:example.com',
-        fileUrls: [fileUrl],
         code: `await realm.fs.replace('task.json', '"count": 1', '"count": 2');
 await realm.fs.writeText('../elsewhere.json', '{}');`,
       }),
@@ -126,6 +122,65 @@ await realm.fs.writeText('../elsewhere.json', '{}');`,
     assert.true(source.content.includes('"count": 1'));
   });
 
+  test('reads a file inside the script and edits it from what it read', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `const task = JSON.parse(await realm.fs.readText('task.json'));
+await realm.fs.replace('task.json', '"count": ' + task.count, '"count": ' + (task.count + 1));
+return { exists: await realm.fs.exists('task.json'), missing: await realm.fs.exists('nope.json') };`,
+    });
+
+    assert.strictEqual(result.files[0]?.status, 'saved');
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      exists: true,
+      missing: false,
+    });
+    let source = await cardService.getSource(
+      new URL(`${testRealmURL}task.json`),
+    );
+    assert.true(source.content.includes('"count": 2'));
+  });
+
+  test('a failed realm call fails the run even when the script catches it', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.fs.replace('task.json', '"count": 1', '"count": 2');
+try { await realm.fs.replace('task.json', 'not there', 'x'); } catch (e) {}
+return 'done';`,
+      }),
+      /nothing was saved: Search string was not found/,
+    );
+    let source = await cardService.getSource(
+      new URL(`${testRealmURL}task.json`),
+    );
+    assert.true(source.content.includes('"count": 1'));
+  });
+
+  test('a realm call the script does not await fails the run', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `realm.fs.writeText('late.json', '{}');`,
+      }),
+      /await every realm call/,
+    );
+  });
+
   test('a script that never returns is stopped by the sandbox, not by the caller', async function (assert) {
     // The deadline belongs to QuickJS, which interrupts the script itself. The
     // caller's timer is only a backstop for a worker that stops answering, so a
@@ -133,12 +188,14 @@ await realm.fs.writeText('../elsewhere.json', '{}');`,
     // mean the budget is being spent on something other than the script.
     let error: Error | undefined;
     try {
-      await runRealmCode({
-        code: 'while (true) {}',
-        realmURL: testRealmURL,
-        files: [],
-        timeoutMs: 500,
-      });
+      await runRealmCode(
+        {
+          code: 'while (true) {}',
+          realmURL: testRealmURL,
+          timeoutMs: 500,
+        },
+        async () => null,
+      );
     } catch (e) {
       error = e as Error;
     }

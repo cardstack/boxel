@@ -1,10 +1,14 @@
 import { getQuickJS, shouldInterruptAfterDeadline } from 'quickjs-emscripten';
 
 import type {
+  RealmRunnerCallMethod,
   RealmRunnerRequest,
   RealmRunnerResponse,
-  RealmRunnerOperation,
 } from './types';
+import type {
+  QuickJSContext,
+  QuickJSDeferredPromise,
+} from 'quickjs-emscripten';
 
 const worker = globalThis as unknown as {
   onmessage: ((event: MessageEvent<RealmRunnerRequest>) => void) | null;
@@ -27,9 +31,78 @@ quickJSReady.then(
     }),
 );
 
+// The guest sees only `realm`. Each method is a thin wrapper that hands its
+// arguments to the host and parses the host's JSON answer; the host does the
+// work and the checks, so nothing here is trusted.
+const BOOTSTRAP = `
+  (() => {
+    const hostCall = globalThis.__hostCall;
+    delete globalThis.__hostCall;
+    const call = async (method, args) =>
+      JSON.parse(await hostCall(method, JSON.stringify(args)));
+    globalThis.realm = Object.freeze({
+      current: Object.freeze({ url: globalThis.__realmURL }),
+      fs: Object.freeze({
+        readText: (path) => call('fs.readText', [path]),
+        exists: (path) => call('fs.exists', [path]),
+        replace: (path, search, replacement) =>
+          call('fs.replace', [path, search, replacement]),
+        writeText: (path, content) => call('fs.writeText', [path, content]),
+      }),
+    });
+    delete globalThis.__realmURL;
+  })();
+`;
+
+const METHODS = new Set<RealmRunnerCallMethod>([
+  'fs.readText',
+  'fs.exists',
+  'fs.replace',
+  'fs.writeText',
+]);
+
+// A worker runs one script. These hold that run's open host calls so a
+// `callResult` can settle the guest promise that is waiting for it.
+let vm: QuickJSContext | undefined;
+let drain: (() => void) | undefined;
+let pending = new Map<number, QuickJSDeferredPromise>();
+let nextCallId = 1;
+
+function settleCall(
+  request: Extract<RealmRunnerRequest, { type: 'callResult' }>,
+) {
+  let deferred = pending.get(request.id);
+  if (!deferred || !vm) {
+    return;
+  }
+  pending.delete(request.id);
+  if (request.error !== undefined) {
+    let error = vm.newError(request.error);
+    deferred.reject(error);
+    error.dispose();
+  } else {
+    let value = vm.newString(request.value ?? 'null');
+    deferred.resolve(value);
+    value.dispose();
+  }
+  deferred.dispose();
+  drain?.();
+}
+
 worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
   let request = event.data;
-  if (request.type !== 'run') {
+  if (request.type === 'callResult') {
+    try {
+      settleCall(request);
+    } catch (error) {
+      worker.postMessage({
+        type: 'error',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return;
+  }
+  if (request.type !== 'run' || vm) {
     return;
   }
 
@@ -41,101 +114,63 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
     runtime.setInterruptHandler(
       shouldInterruptAfterDeadline(Date.now() + request.timeoutMs),
     );
-    let vm = runtime.newContext();
-    let files = Object.fromEntries(
-      request.files.map((file) => [file.url, file.content]),
-    );
-    let operations: RealmRunnerOperation[] = [];
+    let context = runtime.newContext();
+    vm = context;
+    // `resolvePromise` bridges a guest promise to a native one, but QuickJS
+    // only moves a promise along when its job queue is drained. Drain after
+    // the script starts and after every host answer.
+    drain = () => {
+      while (runtime.hasPendingJob()) {
+        context.unwrapResult(runtime.executePendingJobs());
+      }
+    };
 
-    let filesJSON = JSON.stringify(files);
-    let operationsJSON = JSON.stringify(operations);
-    let bootstrap = `
-      (() => {
-        const files = ${JSON.stringify(filesJSON)};
-        const operations = ${JSON.stringify(operationsJSON)};
-        const contents = JSON.parse(files);
-        const changes = JSON.parse(operations);
-        const realmURL = ${JSON.stringify(request.realmURL)};
-        const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
-        // Paths are relative to the realm root, as in realm-runner. A full URL
-        // inside this realm is accepted too, since that is what the tool's
-        // fileUrls carry.
-        const resolvePath = (name, path) => {
-          if (typeof path !== 'string' || path.length === 0) throw new TypeError(name + ' expects a path string');
-          if (path.startsWith(realmURL)) return path;
-          if (/^[a-z][a-z0-9+.-]*:/i.test(path)) throw new Error('Path is outside this realm: ' + path);
-          if (path.startsWith('/') || path.includes('\\\\') || path.split('/').some((part) => part === '..' || part === '.' || part === '')) {
-            throw new Error('Path must be relative to the realm root: ' + path);
-          }
-          return realmURL + path;
-        };
-        const relative = (url) => url.slice(realmURL.length);
-        const replace = async (path, search, replacement) => {
-          const url = resolvePath('realm.fs.replace', path);
-          if (typeof search !== 'string' || typeof replacement !== 'string') {
-            throw new TypeError('realm.fs.replace expects a path, a search string and a replacement string');
-          }
-          if (!hasOwn(contents, url)) throw new Error('File was not supplied to this run: ' + url);
-          if (search.length === 0) throw new Error('realm.fs.replace requires a non-empty search string');
-          const first = contents[url].indexOf(search);
-          if (first < 0) throw new Error('Search string was not found in ' + url);
-          if (contents[url].indexOf(search, first + search.length) >= 0) throw new Error('Search string matched more than once in ' + url);
-          contents[url] = contents[url].slice(0, first) + replacement + contents[url].slice(first + search.length);
-          changes.push({ type: 'replace', url, search, replacement });
-          return { path: relative(url), matches: 1 };
-        };
-        // Only creates for now: overwriting an existing file is refused, so an
-        // edit to an existing file always goes through realm.fs.replace.
-        const writeText = async (path, content) => {
-          const url = resolvePath('realm.fs.writeText', path);
-          if (typeof content !== 'string') throw new TypeError('realm.fs.writeText expects a path and a content string');
-          if (hasOwn(contents, url)) throw new Error('File already exists; use realm.fs.replace to edit it: ' + url);
-          contents[url] = content;
-          changes.push({ type: 'create', url, content });
-          return { path: relative(url), staged: true };
-        };
-        globalThis.realm = Object.freeze({
-          current: Object.freeze({ url: realmURL }),
-          fs: Object.freeze({ replace, writeText }),
-        });
-        globalThis.__realmOperations = changes;
-      })();
-    `;
-    let bootstrapResult = vm.evalCode(bootstrap);
-    vm.unwrapResult(bootstrapResult).dispose();
-    let code = `(async () => {\n${request.code}\n})()`;
-    let result = vm.evalCode(code);
-    let promise = vm.unwrapResult(result);
-    // `resolvePromise` bridges the guest promise to a native promise, but
-    // QuickJS still needs its microtask queue drained. Without this loop an
-    // async guest function can remain pending forever even when it only awaits
-    // an already-resolved promise.
-    let resolvedPromise = vm.resolvePromise(promise);
-    while (runtime.hasPendingJob()) {
-      vm.unwrapResult(runtime.executePendingJobs());
-    }
+    let hostCall = context.newFunction(
+      '__hostCall',
+      (methodHandle, argsHandle) => {
+        let method = context.getString(methodHandle) as RealmRunnerCallMethod;
+        if (!METHODS.has(method)) {
+          throw new Error(`Unknown realm call: ${method}`);
+        }
+        let args = JSON.parse(context.getString(argsHandle)) as unknown[];
+        let deferred = context.newPromise();
+        let id = nextCallId++;
+        pending.set(id, deferred);
+        worker.postMessage({ type: 'call', id, method, args });
+        return deferred.handle;
+      },
+    );
+    context.setProp(context.global, '__hostCall', hostCall);
+    hostCall.dispose();
+    let realmURL = context.newString(request.realmURL);
+    context.setProp(context.global, '__realmURL', realmURL);
+    realmURL.dispose();
+    context.unwrapResult(context.evalCode(BOOTSTRAP)).dispose();
+
+    let promise = context.unwrapResult(
+      context.evalCode(`(async () => {\n${request.code}\n})()`),
+    );
+    let resolvedPromise = context.resolvePromise(promise);
+    drain();
     let resolved = await resolvedPromise;
     promise.dispose();
-    let value = vm.unwrapResult(resolved);
-    let scriptResult = JSON.stringify(vm.dump(value)) ?? '';
+    let value = context.unwrapResult(resolved);
+    let scriptResult = JSON.stringify(context.dump(value)) ?? '';
     value.dispose();
-    let operationsHandle = vm.getProp(vm.global, '__realmOperations');
-    let output: RealmRunnerResponse = {
-      type: 'success',
-      result: {
-        operations: vm.dump(operationsHandle) as RealmRunnerOperation[],
-        scriptResult,
-      },
-    };
-    operationsHandle.dispose();
-    vm.dispose();
-    runtime.dispose();
-    worker.postMessage(output);
+    if (pending.size > 0) {
+      // A realm call the script did not await would finish after the run is
+      // reported, so its write could never be saved or reported.
+      throw new Error(
+        'The script returned before all realm calls finished; await every realm call',
+      );
+    }
+    worker.postMessage({ type: 'success', result: { scriptResult } });
   } catch (error) {
-    let output: RealmRunnerResponse = {
+    worker.postMessage({
       type: 'error',
       error: error instanceof Error ? error.message : String(error),
-    };
-    worker.postMessage(output);
+    });
   }
+  // The caller terminates the worker once it has an answer, which frees the
+  // runtime with it, so the handles are not disposed one by one here.
 };

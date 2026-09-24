@@ -1,6 +1,7 @@
 import WorkerURL from './worker?worker&url';
 
 import type {
+  RealmRunnerCallHandler,
   RealmRunnerRequest,
   RealmRunnerResponse,
   RealmRunnerResult,
@@ -51,8 +52,11 @@ function makeRealmWorker(absoluteURL: URL): Worker {
   }
 }
 
+// `onCall` does the work of each `realm.*` call the script makes. Its answer,
+// or the message of what it throws, goes back into the sandbox.
 export default function runRealmCode(
-  request: Omit<RealmRunnerRequest, 'type'>,
+  request: Omit<Extract<RealmRunnerRequest, { type: 'run' }>, 'type'>,
+  onCall: RealmRunnerCallHandler,
 ): Promise<RealmRunnerResult> {
   return new Promise((resolve, reject) => {
     let workerURL = resolveWorkerURL(WorkerURL);
@@ -74,8 +78,29 @@ export default function runRealmCode(
       );
     }, BOOT_TIMEOUT_MS);
 
+    let answer = (message: RealmRunnerRequest) => worker.postMessage(message);
+
     worker.onmessage = (event: MessageEvent<RealmRunnerResponse>) => {
-      if (event.data.type === 'ready') {
+      let message = event.data;
+      if (message.type === 'call') {
+        let { id, method, args } = message;
+        onCall(method, args).then(
+          (value) =>
+            answer({
+              type: 'callResult',
+              id,
+              value: JSON.stringify(value ?? null),
+            }),
+          (error: unknown) =>
+            answer({
+              type: 'callResult',
+              id,
+              error: error instanceof Error ? error.message : String(error),
+            }),
+        );
+        return;
+      }
+      if (message.type === 'ready') {
         // The sandbox is up, so the script's own allowance starts here. The
         // extra second covers the message round trip; QuickJS enforces
         // `timeoutMs` on the script itself and reports a clearer error, so
@@ -93,9 +118,8 @@ export default function runRealmCode(
         return;
       }
       settle(() => {
-        if (event.data.type === 'error') reject(new Error(event.data.error));
-        else if (event.data.result) resolve(event.data.result);
-        else reject(new Error('Realm runner returned no result'));
+        if (message.type === 'error') reject(new Error(message.error));
+        else resolve(message.result);
       });
     };
 
@@ -113,6 +137,6 @@ export default function runRealmCode(
       );
     };
 
-    worker.postMessage({ type: 'run', ...request });
+    answer({ type: 'run', ...request });
   });
 }

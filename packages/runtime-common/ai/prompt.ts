@@ -1417,7 +1417,7 @@ type FormattedCorrectnessSummary = {
 // Sent after a correctness check fails. The runner can edit source immediately
 // after a failed check, while instance-oriented tools still cannot reliably
 // address a card that has not been indexed yet.
-const CODE_FIX_INSTRUCTION = `1. Fix the errors above by re-reading the failing file(s), then use the run-realm-code tool. Pass every affected file URL and make awaited realm.fs.replace calls with exact current text.
+const CODE_FIX_INSTRUCTION = `1. Fix the errors above by re-reading the failing file(s), then use the run-realm-code tool. Make awaited realm.fs.replace calls with exact current text.
 2. Keep all fixes in one tool call or one reply, and do not repeat a failed match without re-reading the file.`;
 
 const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
