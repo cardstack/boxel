@@ -34,6 +34,53 @@ function headerParts(underlay?: HTMLElement) {
   });
 }
 
+function viewTransitionPlaying() {
+  return document
+    .getAnimations()
+    .some((animation) =>
+      (animation.effect as KeyframeEffect | null)?.pseudoElement?.startsWith(
+        '::view-transition',
+      ),
+    );
+}
+
+// The browser skips a view transition when its snapshot viewport resizes and
+// cancels the pseudo-element animations without settling motion's `finished`.
+// Waiting on that alone would leave the destination body unmounted. Settle
+// once the browser has dropped the transition, or when the clock has
+// certainly run out.
+function playbackSettled(
+  run: { finished: Promise<void>; complete: () => void },
+  duration: number,
+) {
+  return new Promise<void>((resolve) => {
+    let resizeCheck: ReturnType<typeof setTimeout> | undefined;
+    let settle = () => {
+      clearTimeout(deadline);
+      clearTimeout(resizeCheck);
+      window.removeEventListener('resize', onResize);
+      resolve();
+    };
+    // A resize does not always skip (mobile toolbars change the window size
+    // but not the snapshot viewport), so look before settling.
+    let onResize = () => {
+      clearTimeout(resizeCheck);
+      resizeCheck = setTimeout(() => {
+        if (!viewTransitionPlaying()) settle();
+      }, 100);
+    };
+    let deadline = setTimeout(() => {
+      try {
+        run.complete();
+      } finally {
+        settle();
+      }
+    }, duration + 500);
+    window.addEventListener('resize', onResize);
+    run.finished.then(settle, settle);
+  });
+}
+
 export function supportsBitmapCrossing() {
   return (
     typeof document.startViewTransition === 'function' &&
@@ -262,7 +309,7 @@ export async function crossfadeCardBitmap(
     }>);
     onReady?.(() => run.complete());
     traceMotionPhase('playback-ready');
-    await run.finished;
+    await playbackSettled(run, duration / inspectionSpeed());
   } catch (error) {
     // An unavailable capture must never prevent the requested navigation.
     if (!updated) await update();

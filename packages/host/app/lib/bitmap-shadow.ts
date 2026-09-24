@@ -3,6 +3,21 @@
 // No per-frame shadow, filter, DOM measurement, or second animation clock.
 let nextShadow = 0;
 
+// Removing a direct child of <body> restyles the whole document. Layers come
+// and go inside one persistent, boxless host so each crossing only touches it.
+function shadowHost() {
+  let host = document.body.querySelector<HTMLElement>(
+    ':scope > .bitmap-shadow-host',
+  );
+  if (!host) {
+    host = document.createElement('div');
+    host.className = 'bitmap-shadow-host';
+    host.style.display = 'contents';
+    document.body.append(host);
+  }
+  return host;
+}
+
 export function prepareBitmapShadow(source: HTMLElement) {
   let token = String(++nextShadow);
   let layers: HTMLElement[] = [];
@@ -57,7 +72,7 @@ export function prepareBitmapShadow(source: HTMLElement) {
     layers.push(layer);
   }
   let sourcePainted = place(source);
-  document.body.append(...layers);
+  shadowHost().append(...layers);
   return {
     layers,
     sourcePainted,

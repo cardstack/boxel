@@ -548,6 +548,18 @@ export default class InteractSubmode extends Component {
       return;
     }
 
+    // Removing the focused element makes the browser run focus fixup, which
+    // recalculates style synchronously in the middle of the update. Release
+    // focus while style is still clean; it would end up on <body> anyway.
+    let focused = document.activeElement;
+    if (
+      focused instanceof HTMLElement &&
+      (source.contains(focused) ||
+        focused.closest('.expanded-card-header-pill'))
+    ) {
+      focused.blur();
+    }
+
     let token = ++this.boundarySequence;
     let key = `stack-return-${token}`;
     let destination: HTMLElement | undefined;

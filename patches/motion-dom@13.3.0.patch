@@ -1,13 +1,46 @@
 diff --git a/dist/cjs/index.js b/dist/cjs/index.js
-index 6b8092d8fd1ab2d678b07780bf51281d7d37f55e..e410488c2f56c6ece6d7a2d539a7561f19b4f651 100644
+index 6b8092d8fd1ab2d678b07780bf51281d7d37f55e..a14c173a4fb17cca3be4c7caca5300539c168cdc 100644
 --- a/dist/cjs/index.js
 +++ b/dist/cjs/index.js
-@@ -6537,16 +6537,17 @@ function tagClass(element, className, classed) {
+@@ -6523,8 +6523,30 @@ const isGeneratedName = (name) => name.startsWith("motion-view-");
+ function tagClass(element, className, classed) {
+     if (!className)
+         return;
+-    element.style?.setProperty("view-transition-class", className);
+-    classed.push(element);
++    setLayerClass(element, className, true, classed);
++}
++/**
++ * Add or remove one token of an element's inline `view-transition-class`,
++ * keeping any others. Static view-transition rules select these tokens, so a
++ * layer's crop/clip policy never requires a stylesheet write.
++ */
++function setLayerClass(element, token, on, classed) {
++    const style = element.style;
++    if (!style)
++        return;
++    const tokens = style
++        .getPropertyValue("view-transition-class")
++        .split(/\s+/)
++        .filter((t) => t && t !== "none");
++    if (tokens.includes(token) === on)
++        return;
++    const next = on ? [...tokens, token] : tokens.filter((t) => t !== token);
++    if (next.length)
++        style.setProperty("view-transition-class", next.join(" "));
++    else
++        style.removeProperty("view-transition-class");
++    if (!classed.includes(element))
++        classed.push(element);
+ }
+ /**
+  * Set the element's `view-transition-group` so its layer reconstructs the DOM
+@@ -6537,15 +6559,19 @@ function tagClass(element, className, classed) {
   * Ignored by browsers without nested view-transition groups, where it harmlessly
   * degrades to the flat default.
   */
 -function applyGroup(element, name, group, grouped, clipChildren) {
-+function applyGroup(element, name, group, grouped, clipChildren, readStyles) {
++function applyGroup(element, name, group, grouped, clipChildren, readStyles, classed = []) {
      if (!group)
          return;
      element.style?.setProperty("view-transition-group", group);
@@ -15,17 +48,17 @@ index 6b8092d8fd1ab2d678b07780bf51281d7d37f55e..e410488c2f56c6ece6d7a2d539a7561f
      if (group !== "none" && clipChildren) {
 -        const style = getComputedStyle(element);
 -        if (style.overflowX !== "visible" || style.overflowY !== "visible") {
--            clipChildren.add(name);
--        }
 +        const cached = readStyles?.get(element);
 +        const style = cached ? undefined : getComputedStyle(element);
 +        const clips = cached ? cached.clips :
 +            style.overflowX !== "visible" || style.overflowY !== "visible";
-+        if (clips) clipChildren.add(name);
++        if (clips) {
+             clipChildren.add(name);
++            setLayerClass(element, CLIP_CHILDREN_CLASS, true, classed);
+         }
      }
  }
- /**
-@@ -6562,7 +6563,7 @@ function applyGroup(element, name, group, grouped, clipChildren) {
+@@ -6562,7 +6588,7 @@ function applyGroup(element, name, group, grouped, clipChildren) {
   * across both captures (before and after the update), which is what allows a
   * persistent element to animate as a single `group` layer.
   */
@@ -34,16 +67,16 @@ index 6b8092d8fd1ab2d678b07780bf51281d7d37f55e..e410488c2f56c6ece6d7a2d539a7561f
      const elements = resolveElements(definition);
      /**
       * The new end of a paired morph: give each element the matching name from
-@@ -6583,7 +6584,7 @@ function assignViewTransitionNames(definition, registry, assigned, forcedNames,
+@@ -6583,7 +6609,7 @@ function assignViewTransitionNames(definition, registry, assigned, forcedNames,
              assigned.push(element);
              registry.set(element, name);
              tagClass(element, className, classed);
 -            applyGroup(element, name, group, grouped, clipChildren);
-+            applyGroup(element, name, group, grouped, clipChildren, readStyles);
++            applyGroup(element, name, group, grouped, clipChildren, readStyles, classed);
              return name;
          });
      }
-@@ -6596,7 +6597,8 @@ function assignViewTransitionNames(definition, registry, assigned, forcedNames,
+@@ -6596,7 +6622,8 @@ function assignViewTransitionNames(definition, registry, assigned, forcedNames,
       */
      const currentNames = elements.map((element) => registry.has(element)
          ? undefined
@@ -53,16 +86,129 @@ index 6b8092d8fd1ab2d678b07780bf51281d7d37f55e..e410488c2f56c6ece6d7a2d539a7561f
      return elements.map((element, i) => {
          const existing = registry.get(element);
          if (existing)
-@@ -6624,7 +6626,7 @@ function assignViewTransitionNames(definition, registry, assigned, forcedNames,
+@@ -6624,7 +6651,7 @@ function assignViewTransitionNames(definition, registry, assigned, forcedNames,
          }
          registry.set(element, name);
          tagClass(element, className, classed);
 -        applyGroup(element, name, group, grouped, clipChildren);
-+        applyGroup(element, name, group, grouped, clipChildren, readStyles);
++        applyGroup(element, name, group, grouped, clipChildren, readStyles, classed);
          return name;
      });
  }
-@@ -6799,6 +6801,22 @@ function startViewAnimation(builder) {
+@@ -6654,35 +6681,84 @@ function chooseLayerType(valueName) {
+     return "old";
+ }
+ 
+-let pendingRules = {};
+-let style = null;
+-const css = {
+-    set: (selector, values) => {
+-        pendingRules[selector] = values;
+-    },
+-    commit: () => {
+-        if (!style) {
+-            style = document.createElement("style");
+-            style.id = "motion-view";
+-        }
+-        let cssText = "";
+-        for (const selector in pendingRules) {
+-            const rule = pendingRules[selector];
+-            cssText += `${selector} {\n`;
+-            for (const [property, value] of Object.entries(rule)) {
+-                cssText += `  ${property}: ${value};\n`;
+-            }
+-            cssText += "}\n";
+-        }
+-        style.textContent = cssText;
+-        document.head.appendChild(style);
+-        pendingRules = {};
+-    },
+-    remove: () => {
+-        if (style && style.parentElement) {
+-            style.parentElement.removeChild(style);
++/**
++ * View-transition CSS is one static rule set, installed once. A transition
++ * only toggles a root class, a root inline name and per-element
++ * `view-transition-class` tokens. Inserting, rewriting or removing any
++ * stylesheet invalidates style for the entire document; doing that around each
++ * capture forced a full recalc before the old snapshot, again after the update,
++ * and again at cleanup.
++ */
++const LINEAR_CLASS = "motion-view-linear";
++const CROP_CLASS = "motion-view-crop";
++const CLIP_CHILDREN_CLASS = "motion-view-clip-children";
++const STATIC_RULES = `:root.${LINEAR_CLASS}::view-transition-group(*),
++:root.${LINEAR_CLASS}::view-transition-old(*),
++:root.${LINEAR_CLASS}::view-transition-new(*) {
++  animation-timing-function: linear !important;
++}
++::view-transition-group(*.${CROP_CLASS}) {
++  overflow: clip;
++}
++::view-transition-old(*.${CROP_CLASS}),
++::view-transition-new(*.${CROP_CLASS}) {
++  width: 100%;
++  height: 100%;
++  object-fit: cover;
++}
++::view-transition-group-children(*.${CLIP_CHILDREN_CLASS}) {
++  overflow: clip;
++}
++`;
++let viewCSSInstalled = false;
++const installViewCSS = () => {
++    if (viewCSSInstalled || typeof document === "undefined" || !document.head)
++        return;
++    viewCSSInstalled = true;
++    const style = document.createElement("style");
++    style.id = "motion-view";
++    style.textContent = STATIC_RULES;
++    document.head.appendChild(style);
++};
++// Pay the one stylesheet invalidation at load, before the app has rendered.
++installViewCSS();
++let viewCSSActive = 0;
++let viewCSSSuppressing = 0;
++let viewCSSSavedRootName;
++/**
++ * Enter view-transition mode for one transition. Overlapping transitions share
++ * the root state; the returned release restores it after the last one.
++ */
++const acquireViewCSS = (suppressRoot) => {
++    installViewCSS();
++    const root = document.documentElement;
++    viewCSSActive++;
++    root.classList.add(LINEAR_CLASS);
++    if (suppressRoot) {
++        if (viewCSSSuppressing++ === 0) {
++            viewCSSSavedRootName = [
++                root.style.getPropertyValue("view-transition-name"),
++                root.style.getPropertyPriority("view-transition-name"),
++            ];
++            root.style.setProperty("view-transition-name", "none");
++        }
++    }
++    let released = false;
++    return () => {
++        if (released)
++            return;
++        released = true;
++        if (--viewCSSActive === 0)
++            root.classList.remove(LINEAR_CLASS);
++        if (suppressRoot && --viewCSSSuppressing === 0) {
++            const [value, priority] = viewCSSSavedRootName;
++            if (value)
++                root.style.setProperty("view-transition-name", value, priority);
++            else
++                root.style.removeProperty("view-transition-name");
++            viewCSSSavedRootName = undefined;
+         }
+-    },
++    };
+ };
+ 
+ function getViewAnimationLayerInfo(pseudoElement) {
+@@ -6799,6 +6875,22 @@ function startViewAnimation(builder) {
       */
      const pairFrom = new Map();
      const resolveLayers = (phase) => {
@@ -85,7 +231,7 @@ index 6b8092d8fd1ab2d678b07780bf51281d7d37f55e..e410488c2f56c6ece6d7a2d539a7561f
          targets.forEach((target, definition) => {
              const className = classNames.get(definition);
              /**
-@@ -6825,7 +6843,7 @@ function startViewAnimation(builder) {
+@@ -6825,7 +6917,7 @@ function startViewAnimation(builder) {
                   */
                  if (phase === "old") {
                      pairFrom.set(definition, resolveElements(definition));
@@ -94,7 +240,7 @@ index 6b8092d8fd1ab2d678b07780bf51281d7d37f55e..e410488c2f56c6ece6d7a2d539a7561f
                      pairNames.set(definition, names);
                  }
                  else {
-@@ -6845,11 +6863,11 @@ function startViewAnimation(builder) {
+@@ -6845,11 +6937,11 @@ function startViewAnimation(builder) {
                           */
                          nameRegistry.delete(el);
                      }
@@ -108,15 +254,112 @@ index 6b8092d8fd1ab2d678b07780bf51281d7d37f55e..e410488c2f56c6ece6d7a2d539a7561f
              }
              // Record any explicit `.crop(true | false)` per resolved name; the
              // crop set itself is computed later by `finalizeCrop` (it needs both
-@@ -11852,4 +11870,3 @@ exports.variantProps = variantProps;
+@@ -6979,41 +7071,28 @@ function startViewAnimation(builder) {
+             box.new.width / box.new.height) > ASPECT_TOLERANCE);
+     };
+     /**
+-     * Write the persistent view-transition CSS: suppress root capture when the
+-     * root has no animations of its own; force linear timing (baked into the
+-     * keyframes, so we can retime later via updateTiming); and clip +
+-     * object-fit: cover every cropped morph (the UA default overflows on
+-     * aspect-ratio change).
+-     *
+-     * `css.commit` replaces rather than appends, so we re-set the full rule set
+-     * each call - the crop rules are only known after `finalizeCrop` runs in the
+-     * update callback, so the second call writes them.
++     * Enter view-transition mode: suppress root capture when the root has no
++     * animations of its own, and force linear timing (baked into the
++     * keyframes, so we can retime later via updateTiming). Static rules keyed
++     * on a root class and `view-transition-class` tokens do the styling; no
++     * stylesheet is written, so capture never forces a document-wide recalc.
+      */
+-    const commitViewCSS = () => {
+-        if (!hasTarget("root", targets)) {
+-            css.set(":root", { "view-transition-name": "none" });
+-        }
+-        css.set("::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*)", { "animation-timing-function": "linear !important" });
+-        croppedNames.forEach((name) => {
+-            css.set(`::view-transition-group(${name})`, { overflow: "clip" });
+-            css.set(`::view-transition-old(${name}), ::view-transition-new(${name})`, { width: "100%", height: "100%", "object-fit": "cover" });
+-        });
+-        /**
+-         * Clip the nested children of any layer that clips in the live layout,
+-         * so a wrapper crops its child for the whole morph (mirroring the DOM)
+-         * rather than only at the live-DOM handoff. No-op on browsers without
+-         * nested view-transition groups.
+-         */
+-        clipChildren.forEach((name) => {
+-            css.set(`::view-transition-group-children(${name})`, {
+-                overflow: "clip",
+-            });
+-        });
+-        css.commit(); // Write
+-    };
++    let releaseViewCSS;
++    /**
++     * Clip + object-fit: cover every cropped morph (the UA default overflows on
++     * aspect-ratio change). Before the old capture only an explicit
++     * `.crop(true)` is known; `finalizeCrop` settles the rest in the update
++     * callback, before the new capture reads each element's classes.
++     */
++    const applyCropClasses = (phase) => nameRegistry.forEach((name, element) => {
++        const crop = phase === "old"
++            ? cropForName.get(name) === true
++            : croppedNames.has(name);
++        setLayerClass(element, CROP_CLASS, crop, classed);
++    });
+     const cleanup = () => {
+         releaseViewTransitionNames(assigned, classed, grouped);
+-        css.remove(); // Write
++        releaseViewCSS?.();
+     };
+     const callback = async () => {
+         await update();
+@@ -7025,12 +7104,7 @@ function startViewAnimation(builder) {
+         resolveLayers("new");
+         measureLayers("new");
+         finalizeCrop();
+-        /**
+-         * Re-commit the crop CSS unconditionally: `finalizeCrop` is computed
+-         * here (after both snapshots are measured), so the clip rules must be
+-         * (re)written to match the settled set.
+-         */
+-        commitViewCSS();
++        applyCropClasses("new");
+     };
+     let transition;
+     try {
+@@ -7041,7 +7115,8 @@ function startViewAnimation(builder) {
+          * `finalizeCrop` settles it post-update).
+          */
+         measureLayers("old");
+-        commitViewCSS();
++        applyCropClasses("old");
++        releaseViewCSS = acquireViewCSS(!hasTarget("root", targets));
+         transition = document.startViewTransition(callback);
+     }
+     catch (error) {
+@@ -11852,4 +11927,3 @@ exports.variantProps = variantProps;
  exports.vh = vh;
  exports.visualElementStore = visualElementStore;
  exports.vw = vw;
 -//# sourceMappingURL=index.js.map
 diff --git a/dist/es/view/start.mjs b/dist/es/view/start.mjs
-index 869be6c425d12e11f1a1f2eabc1106762fea2904..1b9c9e6e42e88e8adbb94cb8855ff30e5a598f64 100644
+index 869be6c425d12e11f1a1f2eabc1106762fea2904..c7f8ed8b1fb41e4b3d770e04e4f9fe120791a769 100644
 --- a/dist/es/view/start.mjs
 +++ b/dist/es/view/start.mjs
+@@ -7,9 +7,9 @@ import { mapEasingToNativeEasing } from '../animation/waapi/easing/map-easing.mj
+ import { applyGeneratorOptions } from '../animation/waapi/utils/apply-generator.mjs';
+ import { cornerRadiusProps } from '../utils/border-radius.mjs';
+ import { resolveElements } from '../utils/resolve-elements.mjs';
+-import { assignViewTransitionNames, releaseViewTransitionNames } from './utils/assign-names.mjs';
++import { assignViewTransitionNames, releaseViewTransitionNames, setLayerClass } from './utils/assign-names.mjs';
+ import { chooseLayerType } from './utils/choose-layer-type.mjs';
+-import { css } from './utils/css.mjs';
++import { CROP_CLASS, acquireViewCSS } from './utils/css.mjs';
+ import { getViewAnimationLayerInfo } from './utils/get-layer-info.mjs';
+ import { getViewAnimations } from './utils/get-view-animations.mjs';
+ import { hasTarget } from './utils/has-target.mjs';
 @@ -106,6 +106,22 @@ function startViewAnimation(builder) {
       */
      const pairFrom = new Map();
@@ -163,21 +406,145 @@ index 869be6c425d12e11f1a1f2eabc1106762fea2904..1b9c9e6e42e88e8adbb94cb8855ff30e
              }
              // Record any explicit `.crop(true | false)` per resolved name; the
              // crop set itself is computed later by `finalizeCrop` (it needs both
-@@ -697,4 +713,3 @@ function mergeTransition(base, override) {
+@@ -286,41 +302,28 @@ function startViewAnimation(builder) {
+             box.new.width / box.new.height) > ASPECT_TOLERANCE);
+     };
+     /**
+-     * Write the persistent view-transition CSS: suppress root capture when the
+-     * root has no animations of its own; force linear timing (baked into the
+-     * keyframes, so we can retime later via updateTiming); and clip +
+-     * object-fit: cover every cropped morph (the UA default overflows on
+-     * aspect-ratio change).
+-     *
+-     * `css.commit` replaces rather than appends, so we re-set the full rule set
+-     * each call - the crop rules are only known after `finalizeCrop` runs in the
+-     * update callback, so the second call writes them.
++     * Enter view-transition mode: suppress root capture when the root has no
++     * animations of its own, and force linear timing (baked into the
++     * keyframes, so we can retime later via updateTiming). Static rules keyed
++     * on a root class and `view-transition-class` tokens do the styling; no
++     * stylesheet is written, so capture never forces a document-wide recalc.
+      */
+-    const commitViewCSS = () => {
+-        if (!hasTarget("root", targets)) {
+-            css.set(":root", { "view-transition-name": "none" });
+-        }
+-        css.set("::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*)", { "animation-timing-function": "linear !important" });
+-        croppedNames.forEach((name) => {
+-            css.set(`::view-transition-group(${name})`, { overflow: "clip" });
+-            css.set(`::view-transition-old(${name}), ::view-transition-new(${name})`, { width: "100%", height: "100%", "object-fit": "cover" });
+-        });
+-        /**
+-         * Clip the nested children of any layer that clips in the live layout,
+-         * so a wrapper crops its child for the whole morph (mirroring the DOM)
+-         * rather than only at the live-DOM handoff. No-op on browsers without
+-         * nested view-transition groups.
+-         */
+-        clipChildren.forEach((name) => {
+-            css.set(`::view-transition-group-children(${name})`, {
+-                overflow: "clip",
+-            });
+-        });
+-        css.commit(); // Write
+-    };
++    let releaseViewCSS;
++    /**
++     * Clip + object-fit: cover every cropped morph (the UA default overflows on
++     * aspect-ratio change). Before the old capture only an explicit
++     * `.crop(true)` is known; `finalizeCrop` settles the rest in the update
++     * callback, before the new capture reads each element's classes.
++     */
++    const applyCropClasses = (phase) => nameRegistry.forEach((name, element) => {
++        const crop = phase === "old"
++            ? cropForName.get(name) === true
++            : croppedNames.has(name);
++        setLayerClass(element, CROP_CLASS, crop, classed);
++    });
+     const cleanup = () => {
+         releaseViewTransitionNames(assigned, classed, grouped);
+-        css.remove(); // Write
++        releaseViewCSS?.();
+     };
+     const callback = async () => {
+         await update();
+@@ -332,12 +335,7 @@ function startViewAnimation(builder) {
+         resolveLayers("new");
+         measureLayers("new");
+         finalizeCrop();
+-        /**
+-         * Re-commit the crop CSS unconditionally: `finalizeCrop` is computed
+-         * here (after both snapshots are measured), so the clip rules must be
+-         * (re)written to match the settled set.
+-         */
+-        commitViewCSS();
++        applyCropClasses("new");
+     };
+     let transition;
+     try {
+@@ -348,7 +346,8 @@ function startViewAnimation(builder) {
+          * `finalizeCrop` settles it post-update).
+          */
+         measureLayers("old");
+-        commitViewCSS();
++        applyCropClasses("old");
++        releaseViewCSS = acquireViewCSS(!hasTarget("root", targets));
+         transition = document.startViewTransition(callback);
+     }
+     catch (error) {
+@@ -697,4 +696,3 @@ function mergeTransition(base, override) {
  }
  
  export { startViewAnimation };
 -//# sourceMappingURL=start.mjs.map
 diff --git a/dist/es/view/utils/assign-names.mjs b/dist/es/view/utils/assign-names.mjs
-index c8a17a3507593eba73c00d3caa8a3c1a1d1e7364..477ec7d97745117edbe7bf0a8cadb571e9f6350d 100644
+index c8a17a3507593eba73c00d3caa8a3c1a1d1e7364..7e4842478f5cf4e7c2d825c4ff2fbc05480c1c1b 100644
 --- a/dist/es/view/utils/assign-names.mjs
 +++ b/dist/es/view/utils/assign-names.mjs
-@@ -33,16 +33,17 @@ function tagClass(element, className, classed) {
+@@ -1,4 +1,5 @@
+ import { resolveElements } from '../../utils/resolve-elements.mjs';
++import { CLIP_CHILDREN_CLASS } from './css.mjs';
+ 
+ let nameCount = 0;
+ /**
+@@ -19,8 +20,30 @@ const isGeneratedName = (name) => name.startsWith("motion-view-");
+ function tagClass(element, className, classed) {
+     if (!className)
+         return;
+-    element.style?.setProperty("view-transition-class", className);
+-    classed.push(element);
++    setLayerClass(element, className, true, classed);
++}
++/**
++ * Add or remove one token of an element's inline `view-transition-class`,
++ * keeping any others. Static view-transition rules select these tokens, so a
++ * layer's crop/clip policy never requires a stylesheet write.
++ */
++function setLayerClass(element, token, on, classed) {
++    const style = element.style;
++    if (!style)
++        return;
++    const tokens = style
++        .getPropertyValue("view-transition-class")
++        .split(/\s+/)
++        .filter((t) => t && t !== "none");
++    if (tokens.includes(token) === on)
++        return;
++    const next = on ? [...tokens, token] : tokens.filter((t) => t !== token);
++    if (next.length)
++        style.setProperty("view-transition-class", next.join(" "));
++    else
++        style.removeProperty("view-transition-class");
++    if (!classed.includes(element))
++        classed.push(element);
+ }
+ /**
+  * Set the element's `view-transition-group` so its layer reconstructs the DOM
+@@ -33,15 +56,19 @@ function tagClass(element, className, classed) {
   * Ignored by browsers without nested view-transition groups, where it harmlessly
   * degrades to the flat default.
   */
 -function applyGroup(element, name, group, grouped, clipChildren) {
-+function applyGroup(element, name, group, grouped, clipChildren, readStyles) {
++function applyGroup(element, name, group, grouped, clipChildren, readStyles, classed = []) {
      if (!group)
          return;
      element.style?.setProperty("view-transition-group", group);
@@ -185,17 +552,17 @@ index c8a17a3507593eba73c00d3caa8a3c1a1d1e7364..477ec7d97745117edbe7bf0a8cadb571
      if (group !== "none" && clipChildren) {
 -        const style = getComputedStyle(element);
 -        if (style.overflowX !== "visible" || style.overflowY !== "visible") {
--            clipChildren.add(name);
--        }
 +        const cached = readStyles?.get(element);
 +        const style = cached ? undefined : getComputedStyle(element);
 +        const clips = cached ? cached.clips :
 +            style.overflowX !== "visible" || style.overflowY !== "visible";
-+        if (clips) clipChildren.add(name);
++        if (clips) {
+             clipChildren.add(name);
++            setLayerClass(element, CLIP_CHILDREN_CLASS, true, classed);
+         }
      }
  }
- /**
-@@ -58,7 +59,7 @@ function applyGroup(element, name, group, grouped, clipChildren) {
+@@ -58,7 +85,7 @@ function applyGroup(element, name, group, grouped, clipChildren) {
   * across both captures (before and after the update), which is what allows a
   * persistent element to animate as a single `group` layer.
   */
@@ -204,16 +571,16 @@ index c8a17a3507593eba73c00d3caa8a3c1a1d1e7364..477ec7d97745117edbe7bf0a8cadb571
      const elements = resolveElements(definition);
      /**
       * The new end of a paired morph: give each element the matching name from
-@@ -79,7 +80,7 @@ function assignViewTransitionNames(definition, registry, assigned, forcedNames,
+@@ -79,7 +106,7 @@ function assignViewTransitionNames(definition, registry, assigned, forcedNames,
              assigned.push(element);
              registry.set(element, name);
              tagClass(element, className, classed);
 -            applyGroup(element, name, group, grouped, clipChildren);
-+            applyGroup(element, name, group, grouped, clipChildren, readStyles);
++            applyGroup(element, name, group, grouped, clipChildren, readStyles, classed);
              return name;
          });
      }
-@@ -92,7 +93,8 @@ function assignViewTransitionNames(definition, registry, assigned, forcedNames,
+@@ -92,7 +119,8 @@ function assignViewTransitionNames(definition, registry, assigned, forcedNames,
       */
      const currentNames = elements.map((element) => registry.has(element)
          ? undefined
@@ -223,17 +590,134 @@ index c8a17a3507593eba73c00d3caa8a3c1a1d1e7364..477ec7d97745117edbe7bf0a8cadb571
      return elements.map((element, i) => {
          const existing = registry.get(element);
          if (existing)
-@@ -120,7 +122,7 @@ function assignViewTransitionNames(definition, registry, assigned, forcedNames,
+@@ -120,7 +148,7 @@ function assignViewTransitionNames(definition, registry, assigned, forcedNames,
          }
          registry.set(element, name);
          tagClass(element, className, classed);
 -        applyGroup(element, name, group, grouped, clipChildren);
-+        applyGroup(element, name, group, grouped, clipChildren, readStyles);
++        applyGroup(element, name, group, grouped, clipChildren, readStyles, classed);
          return name;
      });
  }
-@@ -143,4 +145,3 @@ function releaseViewTransitionNames(assigned, classed = [], grouped = []) {
+@@ -142,5 +170,4 @@ function releaseViewTransitionNames(assigned, classed = [], grouped = []) {
+     }
  }
  
- export { assignViewTransitionNames, releaseViewTransitionNames };
+-export { assignViewTransitionNames, releaseViewTransitionNames };
 -//# sourceMappingURL=assign-names.mjs.map
++export { assignViewTransitionNames, releaseViewTransitionNames, setLayerClass };
+diff --git a/dist/es/view/utils/css.mjs b/dist/es/view/utils/css.mjs
+index 24f9b677a335162b6ebf360458ce17937082d468..f47d4ea03d9f3d1a550d72c82eb1bc022e98fe4f 100644
+--- a/dist/es/view/utils/css.mjs
++++ b/dist/es/view/utils/css.mjs
+@@ -1,33 +1,81 @@
+-let pendingRules = {};
+-let style = null;
+-const css = {
+-    set: (selector, values) => {
+-        pendingRules[selector] = values;
+-    },
+-    commit: () => {
+-        if (!style) {
+-            style = document.createElement("style");
+-            style.id = "motion-view";
+-        }
+-        let cssText = "";
+-        for (const selector in pendingRules) {
+-            const rule = pendingRules[selector];
+-            cssText += `${selector} {\n`;
+-            for (const [property, value] of Object.entries(rule)) {
+-                cssText += `  ${property}: ${value};\n`;
+-            }
+-            cssText += "}\n";
++/**
++ * View-transition CSS is one static rule set, installed once. A transition
++ * only toggles a root class, a root inline name and per-element
++ * `view-transition-class` tokens. Inserting, rewriting or removing any
++ * stylesheet invalidates style for the entire document; doing that around each
++ * capture forced a full recalc before the old snapshot, again after the update,
++ * and again at cleanup.
++ */
++const LINEAR_CLASS = "motion-view-linear";
++const CROP_CLASS = "motion-view-crop";
++const CLIP_CHILDREN_CLASS = "motion-view-clip-children";
++const STATIC_RULES = `:root.${LINEAR_CLASS}::view-transition-group(*),
++:root.${LINEAR_CLASS}::view-transition-old(*),
++:root.${LINEAR_CLASS}::view-transition-new(*) {
++  animation-timing-function: linear !important;
++}
++::view-transition-group(*.${CROP_CLASS}) {
++  overflow: clip;
++}
++::view-transition-old(*.${CROP_CLASS}),
++::view-transition-new(*.${CROP_CLASS}) {
++  width: 100%;
++  height: 100%;
++  object-fit: cover;
++}
++::view-transition-group-children(*.${CLIP_CHILDREN_CLASS}) {
++  overflow: clip;
++}
++`;
++let viewCSSInstalled = false;
++const installViewCSS = () => {
++    if (viewCSSInstalled || typeof document === "undefined" || !document.head)
++        return;
++    viewCSSInstalled = true;
++    const style = document.createElement("style");
++    style.id = "motion-view";
++    style.textContent = STATIC_RULES;
++    document.head.appendChild(style);
++};
++// Pay the one stylesheet invalidation at load, before the app has rendered.
++installViewCSS();
++let viewCSSActive = 0;
++let viewCSSSuppressing = 0;
++let viewCSSSavedRootName;
++/**
++ * Enter view-transition mode for one transition. Overlapping transitions share
++ * the root state; the returned release restores it after the last one.
++ */
++const acquireViewCSS = (suppressRoot) => {
++    installViewCSS();
++    const root = document.documentElement;
++    viewCSSActive++;
++    root.classList.add(LINEAR_CLASS);
++    if (suppressRoot) {
++        if (viewCSSSuppressing++ === 0) {
++            viewCSSSavedRootName = [
++                root.style.getPropertyValue("view-transition-name"),
++                root.style.getPropertyPriority("view-transition-name"),
++            ];
++            root.style.setProperty("view-transition-name", "none");
+         }
+-        style.textContent = cssText;
+-        document.head.appendChild(style);
+-        pendingRules = {};
+-    },
+-    remove: () => {
+-        if (style && style.parentElement) {
+-            style.parentElement.removeChild(style);
++    }
++    let released = false;
++    return () => {
++        if (released)
++            return;
++        released = true;
++        if (--viewCSSActive === 0)
++            root.classList.remove(LINEAR_CLASS);
++        if (suppressRoot && --viewCSSSuppressing === 0) {
++            const [value, priority] = viewCSSSavedRootName;
++            if (value)
++                root.style.setProperty("view-transition-name", value, priority);
++            else
++                root.style.removeProperty("view-transition-name");
++            viewCSSSavedRootName = undefined;
+         }
+-    },
++    };
+ };
+ 
+-export { css };
+-//# sourceMappingURL=css.mjs.map
++export { CLIP_CHILDREN_CLASS, CROP_CLASS, acquireViewCSS };
