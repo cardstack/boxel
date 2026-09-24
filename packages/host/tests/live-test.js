@@ -3,7 +3,8 @@ import * as QUnit from 'qunit';
 /**
  * Discovers all *.test.gts module URLs in a realm using the _mtimes endpoint,
  * which returns a flat map of every file URL in the realm in one request.
- * Only modules that export a `runTests` function will actually register tests.
+ * A module declares its QUnit modules either at import time or from an
+ * exported `runTests()` function; both shapes are collected.
  *
  * @param {string} realmURL - The base realm URL (e.g. "http://localhost:4201/catalog/")
  * @returns {Promise<string[]>} Absolute module URLs (without the file extension)
@@ -113,14 +114,19 @@ export async function loadRealmTests(application) {
   const testModules = await discoverTestModules(realmURL);
 
   // Under ESM, `QUnit` is a frozen namespace — we can't monkey-patch
-  // `QUnit.module`. Instead, snapshot `QUnit.config.modules` before/after each
-  // runTests() call and diff to identify newly registered module names.
+  // `QUnit.module`. Instead, snapshot `QUnit.config.modules` before each
+  // module is imported and diff after its runTests() call (if any), so both
+  // import-time and runTests-time declarations are attributed to it. The set
+  // feeds the log line and the empty-realm placeholder only: every test is
+  // queued, and validated, at the moment it is declared, so nothing assigned
+  // to QUnit's config after this loop can exclude one.
   const capturedModules = new Set();
   const moduleList = () =>
     Array.isArray(qunitAny.config?.modules) ? qunitAny.config.modules : [];
 
   try {
     for (const moduleURL of testModules) {
+      const before = new Set(moduleList().map((m) => m.name));
       let mod;
       try {
         mod = await loader.import(moduleURL);
@@ -139,12 +145,11 @@ export async function loadRealmTests(application) {
         continue;
       }
       if (typeof mod.runTests === 'function') {
-        const before = new Set(moduleList().map((m) => m.name));
         mod.runTests();
-        for (const m of moduleList()) {
-          if (!before.has(m.name)) {
-            capturedModules.add(m.name);
-          }
+      }
+      for (const m of moduleList()) {
+        if (!before.has(m.name)) {
+          capturedModules.add(m.name);
         }
       }
     }
@@ -166,8 +171,6 @@ export async function loadRealmTests(application) {
       ...capturedModules,
     ]);
   }
-
-  QUnit.config.testFilter = (testInfo) => capturedModules.has(testInfo.module);
 
   if (!QUnit.config.started) {
     QUnit.start();
