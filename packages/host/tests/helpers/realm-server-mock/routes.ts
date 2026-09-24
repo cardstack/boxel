@@ -21,7 +21,10 @@ import ENV from '@cardstack/host/config/environment';
 
 import { getRoomIdForRealmAndUser } from '../mock-matrix/_utils';
 import { createJWT, testRealmSecretSeed } from '../test-auth';
-import { getTestRealmRegistry } from '../test-realm-registry';
+import {
+  getTestRealmRegistry,
+  isInProcessRealmURL,
+} from '../test-realm-registry';
 
 import type { TestRealmAdapter } from '../adapter';
 
@@ -753,21 +756,4 @@ function resolveRemoteRealmURL(realmURL: string): string {
     return ensureTrailingSlash(ENV.resolvedBaseRealmURL);
   }
   return normalizedRealmURL;
-}
-
-// The realm server is mocked at ENV.realmServerURL (http://test-realm); realms
-// under that origin are served in-process via the test-realm registry and have
-// no listener on the real network. Only realms that resolve to a genuinely
-// served origin — the base and skills realms on localhost:4201 — can be reached
-// with a real fetch. A `globalThis.fetch` against an in-process realm always
-// rejects with `TypeError: Failed to fetch`; besides the noise, that rejection
-// can escape as an uncaught error and red an unrelated sibling test.
-function isInProcessRealmURL(resolvedRealmURL: string): boolean {
-  try {
-    return (
-      new URL(resolvedRealmURL).origin === new URL(ENV.realmServerURL).origin
-    );
-  } catch {
-    return false;
-  }
 }

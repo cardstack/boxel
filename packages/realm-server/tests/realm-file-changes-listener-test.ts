@@ -11,14 +11,16 @@ import {
 
 // Minimal fake `Realm` — the listener calls `.url` (via lookup),
 // `.invalidateCache(path)` plus `.refreshDirectoryView(path)` for per-path
-// payloads, and `.clearLocalSourceCaches()` for wildcard payloads.
-// Stub all three; tests pick whichever they care about.
+// payloads, `.clearLocalSourceCaches()` for wildcard payloads, and
+// `.invalidateCachedRealmInfo()` for `realm.json` and wildcard payloads.
+// Stub all four; tests pick whichever they care about.
 function makeFakeRealm(
   url: string,
   hooks: {
     onInvalidate?: (path: string) => void;
     onRefreshDirectory?: (path: string) => void;
     onClearAll?: () => void;
+    onInvalidateInfo?: () => void;
   },
 ): Realm {
   return {
@@ -31,6 +33,9 @@ function makeFakeRealm(
     },
     clearLocalSourceCaches() {
       hooks.onClearAll?.();
+    },
+    invalidateCachedRealmInfo() {
+      hooks.onInvalidateInfo?.();
     },
   } as unknown as Realm;
 }
@@ -128,6 +133,35 @@ module(basename(import.meta.filename), function () {
         refreshedDirectories,
         ['cards/foo.gts'],
         'the peer re-lists the directory holding the written path',
+      );
+    });
+
+    test("handleNotification drops the realm's memoized info when realm.json changes, and only then", function (assert) {
+      let infoInvalidations: string[] = [];
+      let current = '';
+      const realmA = makeFakeRealm('http://x.test/a/', {
+        onInvalidateInfo: () => infoInvalidations.push(current),
+      });
+      const listener = new RealmFileChangesListener({
+        dbAdapter: {} as unknown as PgAdapter,
+        lookupMountedRealm: (url) =>
+          url === 'http://x.test/a/' ? realmA : undefined,
+      });
+
+      for (let path of [
+        'cards/foo.json',
+        'realm.json',
+        'sub/realm.json',
+        '*',
+      ]) {
+        current = path;
+        listener.handleNotification(`http://x.test/a/:${path}`);
+      }
+
+      assert.deepEqual(
+        infoInvalidations,
+        ['realm.json', '*'],
+        "the realm's own realm.json and a bulk change drop it; any other file does not",
       );
     });
 

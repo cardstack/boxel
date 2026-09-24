@@ -117,6 +117,13 @@ export class RealmFileChangesListener {
           );
         });
       }
+      // The realm reads its info, its settings and its policy pointer from
+      // `realm.json` on disk, and memoizes the parse. A peer's write to the
+      // file has to drop that here too, or this process keeps answering the
+      // old values until the file's index pass lands.
+      if (isWildcard || parsed.path === 'realm.json') {
+        realm.invalidateCachedRealmInfo();
+      }
     } catch (err: unknown) {
       const op = isWildcard ? 'clearLocalSourceCaches' : 'invalidateCache';
       log.warn(`${op} failed for ${parsed.url} ${parsed.path}: ${String(err)}`);

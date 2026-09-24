@@ -1,5 +1,9 @@
 import type { Realm } from '@cardstack/runtime-common';
-import { logger, REALM_INDEX_UPDATED_CHANNEL } from '@cardstack/runtime-common';
+import {
+  logger,
+  noteRealmIndexMoved,
+  REALM_INDEX_UPDATED_CHANNEL,
+} from '@cardstack/runtime-common';
 import type { PgAdapter, NotificationSubscription } from '@cardstack/postgres';
 
 const log = logger('realm-server:index-updated-listener');
@@ -13,8 +17,9 @@ const log = logger('realm-server:index-updated-listener');
 // function; if mounted locally, calls `realm.clearRealmIndexCaches()` so a
 // new caller arriving after the peer's update doesn't coalesce into a
 // pre-update pending promise. If the realm isn't mounted on this
-// instance, the notification is dropped — there's no #inFlightSearch
-// state here to clear.
+// instance there's no #inFlightSearch state here to clear, and the only
+// thing the notification does is tell the process's compiled policies
+// that realm moved (see `noteRealmIndexMoved`).
 //
 // Separate from REALM_FILE_CHANGES_CHANNEL because the two channels
 // signal different lifecycle events:
@@ -96,7 +101,11 @@ export class RealmIndexUpdatedListener {
     }
     const realm = this.#deps.lookupMountedRealm(realmURL);
     if (!realm) {
-      // Not mounted on this instance — nothing to clear.
+      // Not mounted on this instance, so there are no caches of its own to
+      // clear. A compiled policy held by a mounted realm can still read from
+      // it: the policy card may live there, or a type the policy's rules name.
+      // A mounted realm announces its own moves from `clearRealmIndexCaches`.
+      noteRealmIndexMoved(realmURL);
       return;
     }
     try {

@@ -246,6 +246,35 @@ export interface LowerOperationDeclarationsResult {
   issues: OperationLoweringIssue[];
 }
 
+export type PolicyIssueCode =
+  // The realm's `policy` pointer names a card the index does not hold.
+  | 'policy-card-missing'
+  // The pointer names a card the index holds only as an error.
+  | 'policy-card-unloadable'
+  // The pointer names a card that is not a `RealmPolicy`.
+  | 'not-a-policy'
+  // A rule whose `targetType` is not a code ref.
+  | 'invalid-rule'
+  // A rule whose `targetType` resolves to no definition.
+  | 'unresolved-type'
+  // A grant with no operation name, or a `where` that is neither BXL source
+  // nor the annotated `{ bxl, snapshot }` form.
+  | 'invalid-grant'
+  // A `where` that does not parse, or that the `policy` profile refuses.
+  | 'invalid-predicate';
+
+// A problem found while compiling a realm's policy. Recorded, never thrown,
+// for the reason lowering records rather than throws: the edit that caused it
+// is not the request that finds it.
+export interface PolicyIssue {
+  code: PolicyIssueCode;
+  // Where in the policy card, as a path into its attributes —
+  // `rules[0].targetType`, `rules[1].grants[0].where` — or the empty string
+  // for a problem with the card as a whole.
+  path: string;
+  message: string;
+}
+
 // ============================================================================
 // Invoking an operation.
 //

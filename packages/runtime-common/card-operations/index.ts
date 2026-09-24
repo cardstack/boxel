@@ -1,4 +1,17 @@
 export { lowerOperationDeclarations } from './lowering.ts';
+export {
+  noteRealmIndexMoved,
+  RealmPolicyCache,
+  realmPolicyRef,
+} from './policy.ts';
+export type {
+  CompiledOperationGrant,
+  CompiledPolicyPredicate,
+  CompiledPolicyRule,
+  CompiledRealmPolicy,
+  PolicyCompileEnvironment,
+  RealmPolicyCacheEnvironment,
+} from './policy.ts';
 export type { LoweringContext } from './lowering.ts';
 export {
   assertParamsSupplied,
