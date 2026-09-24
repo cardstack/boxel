@@ -2662,9 +2662,17 @@ export class Batch {
     let commit: { swapAttempts: number; swapRetryMs: number } | undefined;
     while (!commit) {
       try {
-        commit = await this.commitAttempt(columns, validation, report, (ms) => {
-          commitLockWaitMs = ms;
-        });
+        let stagedDeps = validation
+          ? await this.#stagedDepsWhenPeersCommitted()
+          : undefined;
+        commit = await this.commitAttempt(
+          columns,
+          validation && { validation, stagedDeps },
+          report,
+          (ms) => {
+            commitLockWaitMs = ms;
+          },
+        );
       } catch (e) {
         if (!(e instanceof PeerCommitConflict) || !validation) {
           throw e;
@@ -2709,10 +2717,17 @@ export class Batch {
   // spent the commit goes ahead and enqueues a follow-up for what is left.
   private async commitAttempt(
     columns: { boxelIndex: string[]; prerenderedHtml: string[] },
-    validation: CommitValidation | undefined,
+    check:
+      | {
+          validation: CommitValidation;
+          // Read ahead of the lock (see `#stagedDepsWhenPeersCommitted`).
+          stagedDeps: Map<string, string[]> | undefined;
+        }
+      | undefined,
     report: ValidationReport,
     onLockHeld: (commitLockWaitMs: number) => void,
   ): Promise<{ swapAttempts: number; swapRetryMs: number }> {
+    let validation = check?.validation;
     return await this.#commit(async () => {
       // First, so every statement below stamps the generation this commit
       // takes, and so the rest of the swap runs with the realm's commits
@@ -2722,7 +2737,10 @@ export class Batch {
       let leftStale: string[] | undefined;
       if (validation && observedGeneration > this.#validatedGeneration) {
         let checkStart = Date.now();
-        let conflicts = await this.#findPeerConflicts(observedGeneration);
+        let conflicts = await this.#findPeerConflicts(
+          observedGeneration,
+          check?.stagedDeps,
+        );
         report.checked = true;
         report.validationMs += Date.now() - checkStart;
         if (conflicts.revisit.length > 0 || conflicts.extend.length > 0) {
@@ -2781,7 +2799,14 @@ export class Batch {
   //
   // Both read `deps`, so neither sees a query-backed field whose results a
   // peer's commit moved: a query's matches are not recorded as dependencies.
-  async #findPeerConflicts(generation: number): Promise<PeerConflicts> {
+  //
+  // `stagedDeps` are this pass's own staged deps, read before the lock was
+  // taken. They are read here instead when a peer committed after that read
+  // and the pre-lock read found nothing to do.
+  async #findPeerConflicts(
+    generation: number,
+    stagedDeps: Map<string, string[]> | undefined,
+  ): Promise<PeerConflicts> {
     let [epochRow] = (await this.#query([
       'SELECT loader_epoch FROM realm_generations WHERE realm_url =',
       param(this.realmURL.href),
@@ -2806,14 +2831,10 @@ export class Batch {
       revisit = new Set(ours);
     } else {
       revisit = new Set(ours.filter((url) => peerURLs.has(url)));
-      let peerForms = this.#dependencyForms(peerURLs);
-      for (let table of this.#splitPrerenderHtml
-        ? (['boxel_index_pending'] as const)
-        : (['boxel_index_pending', 'prerendered_html_pending'] as const)) {
-        for (let url of await this.#urlsWithDepsIn(table, peerForms)) {
-          if (oursSet.has(url)) {
-            revisit.add(url);
-          }
+      let peerForms = new Set(this.#dependencyForms(peerURLs));
+      for (let [url, deps] of stagedDeps ?? (await this.#readStagedDeps())) {
+        if (oursSet.has(url) && deps.some((dep) => peerForms.has(dep))) {
+          revisit.add(url);
         }
       }
     }
@@ -2823,8 +2844,7 @@ export class Batch {
       ? undefined
       : [...peerURLs].filter((url) => !oursSet.has(url));
     if (candidates === undefined || candidates.length > 0) {
-      for (let url of await this.#urlsWithDepsIn(
-        'boxel_index',
+      for (let url of await this.#productionDependents(
         this.#dependencyForms(ours),
         candidates,
       )) {
@@ -2861,11 +2881,54 @@ export class Batch {
     return [...forms];
   }
 
-  // The URLs of this realm's live rows in `table` whose `deps` name any of
-  // `depForms`, narrowed to `urls` when given. A pending table is read for
-  // this batch's own staging only.
-  async #urlsWithDepsIn(
-    table: 'boxel_index' | 'boxel_index_pending' | 'prerendered_html_pending',
+  // This pass's staged `deps` by URL, for a commit whose check will need
+  // them: one run when a peer has committed since the pass last validated,
+  // and nothing otherwise, so a pass no peer overlapped reads nothing more.
+  // Read before the commit lock is taken. The pass writes nothing more before
+  // it commits, so the rows cannot move under the check, and a read the size
+  // of the pass stays out of the time the realm's commits wait on the lock.
+  async #stagedDepsWhenPeersCommitted(): Promise<
+    Map<string, string[]> | undefined
+  > {
+    let [row] = (await this.#query([
+      'SELECT current_generation FROM realm_generations WHERE realm_url =',
+      param(this.realmURL.href),
+    ])) as Pick<RealmGenerationsTable, 'current_generation'>[];
+    if (!row || Number(row.current_generation) <= this.#validatedGeneration) {
+      return undefined;
+    }
+    return await this.#readStagedDeps();
+  }
+
+  // The `deps` of every live row this pass has staged, by URL, across the
+  // channels it writes: the index channel, and on the fused path the HTML
+  // channel too.
+  async #readStagedDeps(): Promise<Map<string, string[]>> {
+    let staged = new Map<string, string[]>();
+    for (let table of this.#splitPrerenderHtml
+      ? ['boxel_index_pending']
+      : PENDING_TABLES) {
+      let rows = (await this.#query([
+        `SELECT url, deps FROM ${table} WHERE`,
+        ...every([
+          ['realm_url =', param(this.realmURL.href)],
+          ['staging_id =', param(this.#stagingId)],
+          any([['is_deleted = false'], ['is_deleted IS NULL']]),
+          ['deps IS NOT NULL'],
+        ]),
+      ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'deps'>[];
+      for (let { url, deps } of rows) {
+        staged.set(url, [...(staged.get(url) ?? []), ...(deps ?? [])]);
+      }
+    }
+    return staged;
+  }
+
+  // The URLs of this realm's live production rows whose `deps` name any of
+  // `depForms`, narrowed to `urls` when given. On Postgres the match is the
+  // `?|` operator, which the GIN index on `boxel_index.deps` serves, so a
+  // check that has to read the whole realm does not unnest every row's deps.
+  async #productionDependents(
     depForms: string[],
     urls?: string[],
   ): Promise<Set<string>> {
@@ -2885,19 +2948,18 @@ export class Batch {
       }
     }
     for (let urlChunk of urlChunks) {
-      let formsPerQuery = bindBudget - (urlChunk?.length ?? 0) - 2;
+      let formsPerQuery = bindBudget - (urlChunk?.length ?? 0) - 1;
       for (let i = 0; i < depForms.length; i += formsPerQuery) {
-        let formChunk = depForms.slice(i, i + formsPerQuery);
+        let formParams = separatedByCommas(
+          depForms.slice(i, i + formsPerQuery).map((form) => [param(form)]),
+        ) as Expression;
         let rows = (await this.#query([
           dbExpression({
-            pg: `SELECT DISTINCT i.url FROM ${table} AS i CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) AS dep_entry(value) WHERE`,
-            sqlite: `SELECT DISTINCT i.url FROM ${table} AS i CROSS JOIN json_each(i.deps) AS dep_entry WHERE`,
+            pg: `SELECT i.url FROM boxel_index AS i WHERE`,
+            sqlite: `SELECT DISTINCT i.url FROM boxel_index AS i CROSS JOIN json_each(i.deps) AS dep_entry WHERE`,
           }),
           ...every([
             ['i.realm_url =', param(this.realmURL.href)],
-            ...(table === 'boxel_index'
-              ? []
-              : [['i.staging_id =', param(this.#stagingId)] as Expression]),
             any([['i.is_deleted = false'], ['i.is_deleted IS NULL']]),
             ...(urlChunk
               ? [
@@ -2910,10 +2972,13 @@ export class Batch {
                 ]
               : []),
             [
-              'dep_entry.value IN',
-              ...addExplicitParens(
-                separatedByCommas(formChunk.map((form) => [param(form)])),
-              ),
+              dbExpression({
+                pg: ['i.deps ?| CAST(ARRAY[', ...formParams, '] AS text[])'],
+                sqlite: [
+                  'dep_entry.value IN',
+                  ...addExplicitParens(formParams),
+                ] as Expression,
+              }),
             ],
           ]),
         ] as Expression)) as Pick<BoxelIndexTable, 'url'>[];

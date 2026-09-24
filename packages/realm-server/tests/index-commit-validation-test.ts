@@ -5,14 +5,25 @@ import { basename } from 'path';
 import {
   COMMIT_VALIDATION_MAX_ROUNDS,
   IndexWriter,
+  REALM_INDEX_UPDATED_CHANNEL,
   VirtualNetwork,
+  incrementalIndex,
+  logger,
   mintRealmLoaderEpoch,
   rri,
   type Batch,
   type CommitValidation,
   type CommitValidationRound,
+  type DBAdapter,
+  type DefinitionLookup,
+  type IncrementalArgs,
   type JobInfo,
+  type Prerenderer,
+  type QueuePublisher,
+  type Reader,
 } from '@cardstack/runtime-common';
+import { validationRoundAnnouncement } from '@cardstack/runtime-common/index-runner';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   createTestPgAdapter,
@@ -100,12 +111,14 @@ module(basename(import.meta.filename), function (hooks) {
 
   // A validation whose re-visits rewrite every URL of the round, labelled
   // with the round and carrying the deps `deps` names for it, and which
-  // records each round it is handed. `beforeRevisit` runs at the start of a
-  // round, while the pass holds no commit lock.
+  // records each round it is handed. A URL named in `missing` reads as a file
+  // that is gone, so its re-visit writes nothing. `beforeRevisit` runs at the
+  // start of a round, while the pass holds no commit lock.
   function recordingValidation(
     batch: Batch,
     opts: {
       deps?: Record<string, string[]>;
+      missing?: string[];
       beforeRevisit?(round: CommitValidationRound): Promise<void>;
       followUp?: true;
     } = {},
@@ -117,6 +130,9 @@ module(basename(import.meta.filename), function (hooks) {
         await opts.beforeRevisit?.(round);
         for (let href of round.urls) {
           let name = nameOf(href);
+          if (opts.missing?.includes(name)) {
+            continue;
+          }
           await writeCard(batch, name, {
             deps: opts.deps?.[name],
             label: `${name} (round ${round.round})`,
@@ -408,6 +424,102 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a card a peer deleted stays deleted when the re-visit finds nothing to read', async function (assert) {
+    let seed = await createBatch();
+    await stageCard(seed, 'x', { label: 'x (seed)' });
+    await seed.done();
+
+    let a = await createBatch();
+    let b = await createBatch();
+    await stageCard(a, 'x', { label: 'x (a)' });
+    // B's change deletes x: the invalidation stages a tombstone and no visit
+    // writes a row over it.
+    await b.invalidate([new URL(url('x'))]);
+    await b.done();
+    assert.true(
+      (await production('x'))?.isDeleted,
+      'precondition: B published the deletion',
+    );
+
+    let { validation, rounds } = recordingValidation(a, { missing: ['x'] });
+    await a.done({ validation });
+
+    assert.deepEqual(
+      rounds.map(({ round, urls }) => ({ round, urls })),
+      [{ round: 1, urls: [url('x')] }],
+      'A re-visits the card B deleted',
+    );
+    let x = await production('x');
+    assert.deepEqual(
+      {
+        isDeleted: x?.isDeleted,
+        passId: x?.passId,
+        validationRound: x?.validationRound,
+        generation: x?.generation,
+      },
+      {
+        isDeleted: true,
+        passId: a.passId,
+        validationRound: 1,
+        generation: 3,
+      },
+      "A publishes a tombstone, not the row it visited before B's deletion",
+    );
+  });
+
+  test('a peer commit that lists no URLs reads as touching every URL of the pass', async function (assert) {
+    let a = await createBatch();
+    let b = await createBatch();
+    await stageCard(a, 'p', { label: 'p (a)' });
+    await stageCard(a, 'q', { label: 'q (a)' });
+    await stageCard(b, 'r', { label: 'r (b)' });
+    // A full-realm commit's ledger row lists no URLs.
+    await b.done({ fullRealm: true });
+
+    let { validation, rounds } = recordingValidation(a);
+    let result = await a.done({ validation });
+
+    assert.deepEqual(
+      rounds.map(({ round, urls }) => ({ round, urls })),
+      [{ round: 1, urls: [url('p'), url('q')] }],
+      'every URL of the pass is re-visited, though B wrote neither',
+    );
+    assert.deepEqual(
+      { revisitCount: result.revisitCount, extendCount: result.extendCount },
+      { revisitCount: 2, extendCount: 0 },
+      'nothing in production depends on the pass, so nothing is extended to',
+    );
+  });
+
+  test('a row that depends on a module the peer changed is re-visited', async function (assert) {
+    let moduleURL = new URL(`${testRealm}person.gts`);
+    // A module dependency is stored without its executable extension.
+    let moduleDep = `${testRealm}person`;
+    let a = await createBatch();
+    let b = await createBatch();
+    await stageCard(a, 'report', { deps: [moduleDep], label: 'report (a)' });
+    await stageCard(a, 'other', { label: 'other (a)' });
+    await b.invalidate([moduleURL]);
+    await b.updateEntry(moduleURL, {
+      type: 'file',
+      lastModified: Date.now(),
+      resourceCreatedAt: Date.now(),
+      deps: new Set(),
+    });
+    await b.done();
+
+    let { validation, rounds } = recordingValidation(a, {
+      deps: { report: [moduleDep] },
+    });
+    await a.done({ validation });
+
+    assert.deepEqual(
+      rounds.map(({ round, urls }) => ({ round, urls })),
+      [{ round: 1, urls: [url('report')] }],
+      'the card whose deps name the module in its stored form is re-visited, and only it',
+    );
+  });
+
   test('a commit whose peers keep committing over it stops after its rounds and enqueues a follow-up in its own lane', async function (assert) {
     let lane = `indexing:${testRealm}#user:@writer:localhost`;
     let [{ id: jobId }] = (await adapter.execute(
@@ -502,5 +614,193 @@ module(basename(import.meta.filename), function (hooks) {
       },
       "the follow-up re-indexes the card still stale, in A's lane, at its priority, for its writer",
     );
+  });
+
+  module('what a round re-announces to the HTML job', function () {
+    test('a URL the pass deleted and a round re-visited is re-announced as an update', function (assert) {
+      let [urls, deletes] = validationRoundAnnouncement({
+        round: {
+          urls: [url('x')],
+          addedRenderOnlyURLs: [],
+          loaderEpochChanged: false,
+        },
+        invalidations: [url('x'), url('y'), url('z')],
+        renderOnlyInvalidations: [],
+        deletes: new Set([url('x'), url('z')]),
+      });
+      assert.deepEqual(urls, [url('x')], 'the re-visited URL is re-announced');
+      assert.deepEqual(
+        [...deletes],
+        [url('z')],
+        'it is no longer a deletion, while a deletion the round did not touch still is',
+      );
+    });
+
+    test('the URLs a round re-visited and the render-only dependents it added are re-announced', function (assert) {
+      let [urls] = validationRoundAnnouncement({
+        round: {
+          urls: [url('report'), url('student')],
+          addedRenderOnlyURLs: [url('card')],
+          loaderEpochChanged: false,
+        },
+        invalidations: [url('report'), url('student'), url('other')],
+        renderOnlyInvalidations: [url('card'), url('older')],
+        deletes: new Set(),
+      });
+      assert.deepEqual(
+        urls,
+        [url('report'), url('student'), url('card')],
+        'nothing the round left alone is re-announced',
+      );
+    });
+
+    test('when the loader epoch moved, every URL of the pass is re-announced', function (assert) {
+      let [urls, deletes] = validationRoundAnnouncement({
+        round: {
+          urls: [url('x')],
+          addedRenderOnlyURLs: [],
+          loaderEpochChanged: true,
+        },
+        invalidations: [url('x'), url('y'), url('gone')],
+        renderOnlyInvalidations: [url('card')],
+        deletes: new Set([url('x'), url('gone')]),
+      });
+      assert.deepEqual(
+        urls,
+        [url('x'), url('y'), url('gone'), url('card')],
+        'the whole pass and its render-only dependents are re-announced',
+      );
+      assert.deepEqual(
+        [...deletes],
+        [url('gone')],
+        'the re-visited URL is re-announced as an update, the untouched deletion as a deletion',
+      );
+    });
+  });
+
+  module('a follow-up job', function () {
+    // Runs the `incremental-index` task over `args` with every collaborator
+    // but the database stubbed, and returns what it announced. The reader
+    // holds no files, so the pass visits nothing and commits what it
+    // invalidated.
+    async function runIncrementalTask(args: IncrementalArgs) {
+      let realmEvents: RealmEventContent[] = [];
+      let notified: { channel: string; payload: string }[] = [];
+      let dbAdapter = new Proxy(adapter, {
+        get(target, property) {
+          if (property === 'notify') {
+            return async (channel: string, payload: string) => {
+              notified.push({ channel, payload });
+            };
+          }
+          let value = Reflect.get(target, property, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      }) as unknown as DBAdapter;
+      let reader: Reader = {
+        readFile: async () => undefined,
+        readStream: async () => undefined,
+        mtimes: async () => ({}),
+      };
+      let task = incrementalIndex({
+        dbAdapter,
+        queuePublisher: {
+          publish: async () => {
+            throw new Error('this pass enqueues nothing');
+          },
+          destroy: async () => {},
+        } as unknown as QueuePublisher,
+        indexWriter: new IndexWriter(dbAdapter),
+        prerenderer: {
+          releaseBatch: async () => {},
+        } as unknown as Prerenderer,
+        definitionLookup: {} as DefinitionLookup,
+        virtualNetwork,
+        log: logger('index-commit-validation-test'),
+        matrixURL: 'http://localhost:8008',
+        getReader: () => reader,
+        getAuthedFetch: async () => {
+          return (async () => {
+            throw new Error('this pass fetches nothing');
+          }) as unknown as typeof globalThis.fetch;
+        },
+        createPrerenderAuth: () => 'auth',
+        reportStatus: () => {},
+        reportRealmEvent: (event) => {
+          realmEvents.push(event);
+        },
+      });
+      let result = await task({
+        ...args,
+        jobInfo: {
+          jobId: jobCounter++,
+          reservationId: 1,
+          priority: 0,
+          queueWaitMs: null,
+        },
+      });
+      return {
+        result,
+        realmEvents,
+        indexUpdates: notified.filter(
+          ({ channel }) => channel === REALM_INDEX_UPDATED_CHANNEL,
+        ),
+      };
+    }
+
+    function incrementalArgs(
+      coalescedCallers: IncrementalArgs['coalescedCallers'],
+    ): IncrementalArgs {
+      return {
+        realmURL: testRealm,
+        realmUsername: 'test_realm',
+        changes: [{ url: url('x'), operation: 'update' }],
+        ignoreData: {},
+        coalescedCallers,
+        deferPrerenderHtml: false,
+        carriedPrerenderHtmlChanges: [],
+        readsOwnWrite: false,
+      };
+    }
+
+    test('which no write waits on, announces its own pass', async function (assert) {
+      let { result, realmEvents, indexUpdates } = await runIncrementalTask(
+        incrementalArgs([]),
+      );
+      assert.deepEqual(
+        realmEvents,
+        [
+          {
+            eventName: 'index',
+            indexType: 'incremental',
+            invalidations: [`${testRealm}x`],
+            generation: result.generation,
+            realmURL: testRealm,
+          },
+        ],
+        'hosts hear which cards the pass moved, at the generation it committed',
+      );
+      assert.deepEqual(
+        indexUpdates,
+        [{ channel: REALM_INDEX_UPDATED_CHANNEL, payload: testRealm }],
+        "every replica is told to drop the realm's index-derived caches",
+      );
+    });
+
+    test('a pass a write waits on leaves the announcement to that write', async function (assert) {
+      let { realmEvents, indexUpdates } = await runIncrementalTask(
+        incrementalArgs([
+          {
+            waiterId: 'waiter',
+            clientRequestId: null,
+            urls: [`${testRealm}x`],
+            clientAuthored: null,
+            announcesPass: true,
+          },
+        ]),
+      );
+      assert.deepEqual(realmEvents, [], 'the task broadcasts nothing');
+      assert.deepEqual(indexUpdates, [], 'and notifies nothing');
+    });
   });
 });

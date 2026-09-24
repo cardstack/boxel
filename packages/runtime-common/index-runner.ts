@@ -912,18 +912,17 @@ export class IndexRunner {
       onSkip: () => {},
       onVisited: progress.onVisited,
     });
-    // The HTML job renders only after this pass commits, so what it already
-    // holds is rendered against the state the round re-visited. It needs the
-    // URLs the round added. When the loader epoch moved it needs everything
-    // again, because it would otherwise render under the superseded epoch
-    // and a warm tab could keep modules older than the ones on disk.
-    if (round.loaderEpochChanged) {
-      this.#notifyInvalidationsReady(this.batch.invalidations, deletes);
-    } else {
-      this.#announceToPrerenderHtml(
-        [...round.addedURLs, ...round.addedRenderOnlyURLs],
-        new Set(),
-      );
+    this.#announceToPrerenderHtml(
+      ...validationRoundAnnouncement({
+        round,
+        invalidations: this.batch.invalidations,
+        renderOnlyInvalidations: this.batch.renderOnlyInvalidations,
+        deletes,
+      }),
+    );
+    // A later round, or a later full re-announcement, tags these the same way.
+    for (let url of round.urls) {
+      deletes.delete(url);
     }
   }
 
@@ -1552,6 +1551,44 @@ export class IndexRunner {
   async #writeEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
     await this.batch.bufferEntry(url, entry);
   }
+}
+
+// What a commit-validation round re-announces to the pass's HTML job: the
+// URLs, and which of them the job deletes. The job renders only after the pass
+// commits, so it needs the URLs the round added, and every URL the round
+// re-visited needs re-announcing as an update. The HTML job may still hold one
+// of those as a deletion: the pass deleted it, a peer wrote it back, and the
+// round's visit published it live. Left as a deletion, the job would tombstone
+// the card's HTML at the generation the card commits under, which the
+// reconcile sweep never revisits. An update for a file that is gone does no
+// harm, because the job keeps the tombstone of a file it cannot read. When two
+// announcements merge, the update wins, so the correction also reaches a job
+// that is still pending. When the loader epoch moved, everything the pass
+// holds is re-announced, so no render runs under the superseded epoch and a
+// warm tab cannot keep modules older than the ones on disk.
+export function validationRoundAnnouncement({
+  round,
+  invalidations,
+  renderOnlyInvalidations,
+  deletes,
+}: {
+  round: Pick<
+    CommitValidationRound,
+    'urls' | 'addedRenderOnlyURLs' | 'loaderEpochChanged'
+  >;
+  invalidations: string[];
+  renderOnlyInvalidations: string[];
+  // The pass's deletions before the round.
+  deletes: ReadonlySet<string>;
+}): [urls: string[], deletes: Set<string>] {
+  let revisited = new Set(round.urls);
+  let urls = round.loaderEpochChanged
+    ? [...invalidations, ...renderOnlyInvalidations]
+    : [...round.urls, ...round.addedRenderOnlyURLs];
+  return [
+    [...new Set(urls)],
+    new Set([...deletes].filter((url) => !revisited.has(url))),
+  ];
 }
 
 function assertURLEndsWithJSON(url: URL): URL {
