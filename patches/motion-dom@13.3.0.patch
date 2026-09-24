@@ -1,0 +1,239 @@
+diff --git a/dist/cjs/index.js b/dist/cjs/index.js
+index 6b8092d8fd1ab2d678b07780bf51281d7d37f55e..e410488c2f56c6ece6d7a2d539a7561f19b4f651 100644
+--- a/dist/cjs/index.js
++++ b/dist/cjs/index.js
+@@ -6537,16 +6537,17 @@ function tagClass(element, className, classed) {
+  * Ignored by browsers without nested view-transition groups, where it harmlessly
+  * degrades to the flat default.
+  */
+-function applyGroup(element, name, group, grouped, clipChildren) {
++function applyGroup(element, name, group, grouped, clipChildren, readStyles) {
+     if (!group)
+         return;
+     element.style?.setProperty("view-transition-group", group);
+     grouped.push(element);
+     if (group !== "none" && clipChildren) {
+-        const style = getComputedStyle(element);
+-        if (style.overflowX !== "visible" || style.overflowY !== "visible") {
+-            clipChildren.add(name);
+-        }
++        const cached = readStyles?.get(element);
++        const style = cached ? undefined : getComputedStyle(element);
++        const clips = cached ? cached.clips :
++            style.overflowX !== "visible" || style.overflowY !== "visible";
++        if (clips) clipChildren.add(name);
+     }
+ }
+ /**
+@@ -6562,7 +6563,7 @@ function applyGroup(element, name, group, grouped, clipChildren) {
+  * across both captures (before and after the update), which is what allows a
+  * persistent element to animate as a single `group` layer.
+  */
+-function assignViewTransitionNames(definition, registry, assigned, forcedNames, className, classed = [], group, grouped = [], clipChildren) {
++function assignViewTransitionNames(definition, registry, assigned, forcedNames, className, classed = [], group, grouped = [], clipChildren, readStyles) {
+     const elements = resolveElements(definition);
+     /**
+      * The new end of a paired morph: give each element the matching name from
+@@ -6583,7 +6584,7 @@ function assignViewTransitionNames(definition, registry, assigned, forcedNames,
+             assigned.push(element);
+             registry.set(element, name);
+             tagClass(element, className, classed);
+-            applyGroup(element, name, group, grouped, clipChildren);
++            applyGroup(element, name, group, grouped, clipChildren, readStyles);
+             return name;
+         });
+     }
+@@ -6596,7 +6597,8 @@ function assignViewTransitionNames(definition, registry, assigned, forcedNames,
+      */
+     const currentNames = elements.map((element) => registry.has(element)
+         ? undefined
+-        : getComputedStyle(element).getPropertyValue("view-transition-name"));
++        : readStyles?.get(element)?.name ??
++            getComputedStyle(element).getPropertyValue("view-transition-name"));
+     return elements.map((element, i) => {
+         const existing = registry.get(element);
+         if (existing)
+@@ -6624,7 +6626,7 @@ function assignViewTransitionNames(definition, registry, assigned, forcedNames,
+         }
+         registry.set(element, name);
+         tagClass(element, className, classed);
+-        applyGroup(element, name, group, grouped, clipChildren);
++        applyGroup(element, name, group, grouped, clipChildren, readStyles);
+         return name;
+     });
+ }
+@@ -6799,6 +6801,22 @@ function startViewAnimation(builder) {
+      */
+     const pairFrom = new Map();
+     const resolveLayers = (phase) => {
++        // Read all subjects before assigning any names/classes/groups. Per-
++        // subject batching still forces a recalc between every shared element.
++        const readStyles = new Map();
++        for (const definition of targets.keys()) {
++            if (definition === "root" || !resolveDefs.has(definition)) continue;
++            const subject = phase === "new" && pairs.has(definition)
++                ? pairs.get(definition) : definition;
++            for (const element of resolveElements(subject)) {
++                if (readStyles.has(element)) continue;
++                const style = getComputedStyle(element);
++                readStyles.set(element, {
++                    name: style.getPropertyValue("view-transition-name"),
++                    clips: style.overflowX !== "visible" || style.overflowY !== "visible",
++                });
++            }
++        }
+         targets.forEach((target, definition) => {
+             const className = classNames.get(definition);
+             /**
+@@ -6825,7 +6843,7 @@ function startViewAnimation(builder) {
+                  */
+                 if (phase === "old") {
+                     pairFrom.set(definition, resolveElements(definition));
+-                    names = assignViewTransitionNames(definition, nameRegistry, assigned, undefined, className, classed, group, grouped, clipChildren);
++                    names = assignViewTransitionNames(definition, nameRegistry, assigned, undefined, className, classed, group, grouped, clipChildren, readStyles);
+                     pairNames.set(definition, names);
+                 }
+                 else {
+@@ -6845,11 +6863,11 @@ function startViewAnimation(builder) {
+                          */
+                         nameRegistry.delete(el);
+                     }
+-                    names = assignViewTransitionNames(pairs.get(definition), nameRegistry, assigned, pairNames.get(definition), className, classed, group, grouped, clipChildren);
++                    names = assignViewTransitionNames(pairs.get(definition), nameRegistry, assigned, pairNames.get(definition), className, classed, group, grouped, clipChildren, readStyles);
+                 }
+             }
+             else {
+-                names = assignViewTransitionNames(definition, nameRegistry, assigned, undefined, className, classed, group, grouped, clipChildren);
++                names = assignViewTransitionNames(definition, nameRegistry, assigned, undefined, className, classed, group, grouped, clipChildren, readStyles);
+             }
+             // Record any explicit `.crop(true | false)` per resolved name; the
+             // crop set itself is computed later by `finalizeCrop` (it needs both
+@@ -11852,4 +11870,3 @@ exports.variantProps = variantProps;
+ exports.vh = vh;
+ exports.visualElementStore = visualElementStore;
+ exports.vw = vw;
+-//# sourceMappingURL=index.js.map
+diff --git a/dist/es/view/start.mjs b/dist/es/view/start.mjs
+index 869be6c425d12e11f1a1f2eabc1106762fea2904..1b9c9e6e42e88e8adbb94cb8855ff30e5a598f64 100644
+--- a/dist/es/view/start.mjs
++++ b/dist/es/view/start.mjs
+@@ -106,6 +106,22 @@ function startViewAnimation(builder) {
+      */
+     const pairFrom = new Map();
+     const resolveLayers = (phase) => {
++        // Read all subjects before assigning any names/classes/groups. Per-
++        // subject batching still forces a recalc between every shared element.
++        const readStyles = new Map();
++        for (const definition of targets.keys()) {
++            if (definition === "root" || !resolveDefs.has(definition)) continue;
++            const subject = phase === "new" && pairs.has(definition)
++                ? pairs.get(definition) : definition;
++            for (const element of resolveElements(subject)) {
++                if (readStyles.has(element)) continue;
++                const style = getComputedStyle(element);
++                readStyles.set(element, {
++                    name: style.getPropertyValue("view-transition-name"),
++                    clips: style.overflowX !== "visible" || style.overflowY !== "visible",
++                });
++            }
++        }
+         targets.forEach((target, definition) => {
+             const className = classNames.get(definition);
+             /**
+@@ -132,7 +148,7 @@ function startViewAnimation(builder) {
+                  */
+                 if (phase === "old") {
+                     pairFrom.set(definition, resolveElements(definition));
+-                    names = assignViewTransitionNames(definition, nameRegistry, assigned, undefined, className, classed, group, grouped, clipChildren);
++                    names = assignViewTransitionNames(definition, nameRegistry, assigned, undefined, className, classed, group, grouped, clipChildren, readStyles);
+                     pairNames.set(definition, names);
+                 }
+                 else {
+@@ -152,11 +168,11 @@ function startViewAnimation(builder) {
+                          */
+                         nameRegistry.delete(el);
+                     }
+-                    names = assignViewTransitionNames(pairs.get(definition), nameRegistry, assigned, pairNames.get(definition), className, classed, group, grouped, clipChildren);
++                    names = assignViewTransitionNames(pairs.get(definition), nameRegistry, assigned, pairNames.get(definition), className, classed, group, grouped, clipChildren, readStyles);
+                 }
+             }
+             else {
+-                names = assignViewTransitionNames(definition, nameRegistry, assigned, undefined, className, classed, group, grouped, clipChildren);
++                names = assignViewTransitionNames(definition, nameRegistry, assigned, undefined, className, classed, group, grouped, clipChildren, readStyles);
+             }
+             // Record any explicit `.crop(true | false)` per resolved name; the
+             // crop set itself is computed later by `finalizeCrop` (it needs both
+@@ -697,4 +713,3 @@ function mergeTransition(base, override) {
+ }
+ 
+ export { startViewAnimation };
+-//# sourceMappingURL=start.mjs.map
+diff --git a/dist/es/view/utils/assign-names.mjs b/dist/es/view/utils/assign-names.mjs
+index c8a17a3507593eba73c00d3caa8a3c1a1d1e7364..477ec7d97745117edbe7bf0a8cadb571e9f6350d 100644
+--- a/dist/es/view/utils/assign-names.mjs
++++ b/dist/es/view/utils/assign-names.mjs
+@@ -33,16 +33,17 @@ function tagClass(element, className, classed) {
+  * Ignored by browsers without nested view-transition groups, where it harmlessly
+  * degrades to the flat default.
+  */
+-function applyGroup(element, name, group, grouped, clipChildren) {
++function applyGroup(element, name, group, grouped, clipChildren, readStyles) {
+     if (!group)
+         return;
+     element.style?.setProperty("view-transition-group", group);
+     grouped.push(element);
+     if (group !== "none" && clipChildren) {
+-        const style = getComputedStyle(element);
+-        if (style.overflowX !== "visible" || style.overflowY !== "visible") {
+-            clipChildren.add(name);
+-        }
++        const cached = readStyles?.get(element);
++        const style = cached ? undefined : getComputedStyle(element);
++        const clips = cached ? cached.clips :
++            style.overflowX !== "visible" || style.overflowY !== "visible";
++        if (clips) clipChildren.add(name);
+     }
+ }
+ /**
+@@ -58,7 +59,7 @@ function applyGroup(element, name, group, grouped, clipChildren) {
+  * across both captures (before and after the update), which is what allows a
+  * persistent element to animate as a single `group` layer.
+  */
+-function assignViewTransitionNames(definition, registry, assigned, forcedNames, className, classed = [], group, grouped = [], clipChildren) {
++function assignViewTransitionNames(definition, registry, assigned, forcedNames, className, classed = [], group, grouped = [], clipChildren, readStyles) {
+     const elements = resolveElements(definition);
+     /**
+      * The new end of a paired morph: give each element the matching name from
+@@ -79,7 +80,7 @@ function assignViewTransitionNames(definition, registry, assigned, forcedNames,
+             assigned.push(element);
+             registry.set(element, name);
+             tagClass(element, className, classed);
+-            applyGroup(element, name, group, grouped, clipChildren);
++            applyGroup(element, name, group, grouped, clipChildren, readStyles);
+             return name;
+         });
+     }
+@@ -92,7 +93,8 @@ function assignViewTransitionNames(definition, registry, assigned, forcedNames,
+      */
+     const currentNames = elements.map((element) => registry.has(element)
+         ? undefined
+-        : getComputedStyle(element).getPropertyValue("view-transition-name"));
++        : readStyles?.get(element)?.name ??
++            getComputedStyle(element).getPropertyValue("view-transition-name"));
+     return elements.map((element, i) => {
+         const existing = registry.get(element);
+         if (existing)
+@@ -120,7 +122,7 @@ function assignViewTransitionNames(definition, registry, assigned, forcedNames,
+         }
+         registry.set(element, name);
+         tagClass(element, className, classed);
+-        applyGroup(element, name, group, grouped, clipChildren);
++        applyGroup(element, name, group, grouped, clipChildren, readStyles);
+         return name;
+     });
+ }
+@@ -143,4 +145,3 @@ function releaseViewTransitionNames(assigned, classed = [], grouped = []) {
+ }
+ 
+ export { assignViewTransitionNames, releaseViewTransitionNames };
+-//# sourceMappingURL=assign-names.mjs.map

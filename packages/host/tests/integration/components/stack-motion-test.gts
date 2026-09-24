@@ -6,6 +6,7 @@ import { tracked } from '@glimmer/tracking';
 import { motion } from 'glimmer-motion';
 import {
   animationsSettled,
+  isMotionIdle,
   orphanCount,
   setupMotion,
   strandedTransforms,
@@ -78,6 +79,7 @@ class MultiCardFixture extends Component {
         covered: !top && this.expanded,
         style: {
           position: 'absolute',
+          zIndex: index + 1,
           marginTop,
           height: `calc(100% - ${marginTop}px)`,
           width: top && this.expanded ? '100%' : `${50 / 1.2 ** depth}rem`,
@@ -111,6 +113,10 @@ class MultiCardFixture extends Component {
         position: relative;
         width: 60rem;
         height: 40rem;
+        display: grid;
+      }
+      .multi-card-stage > div {
+        justify-self: center;
       }
     </style>
   </template>
@@ -146,6 +152,22 @@ module('Integration | stack motion', function (hooks) {
     await waitUntil(() => orphanCount() === 1);
     await click('[data-test-toggle]');
     await click('[data-test-expand]');
+    let card = find('[data-test-motion-card]') as HTMLElement;
+    let deadline = performance.now() + 1500;
+    let proportions: number[][] = [];
+    while (!isMotionIdle() && performance.now() < deadline) {
+      let matrix = new DOMMatrixReadOnly(getComputedStyle(card).transform);
+      proportions.push([matrix.a, matrix.d]);
+      await new Promise<void>((resolve) => {
+        // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- Sample painted glyph proportions.
+        requestAnimationFrame(() => resolve());
+      });
+    }
+    assert.true(proportions.length > 0, 'sampled live reflow');
+    assert.true(
+      proportions.every(([x, y]) => x === 1 && y === 1),
+      'live card and header text never stretch during resizing',
+    );
     await animationsSettled();
 
     assert.dom('[data-test-motion-card]').exists({ count: 1 });
@@ -164,11 +186,15 @@ module('Integration | stack motion', function (hooks) {
     await click('[data-test-toggle]');
     let card = find('[data-test-motion-card]') as HTMLElement;
     await waitUntil(() => {
-      let scale = new DOMMatrixReadOnly(getComputedStyle(card).transform).a;
-      return scale > 0.1 && scale < 0.9;
+      let opacity = Number(getComputedStyle(card).opacity);
+      return opacity > 0 && opacity < 0.9;
     });
 
+    let beforeY = new DOMMatrixReadOnly(getComputedStyle(card).transform).m42;
     await click('[data-test-expand]');
+    let afterY = new DOMMatrixReadOnly(getComputedStyle(card).transform).m42;
+    assert.true(afterY > 0, 'a replacement pass does not snap to rest');
+    assert.true(afterY <= beforeY + 1, 'the entrance continues forward');
     await animationsSettled();
 
     let transform = new DOMMatrixReadOnly(getComputedStyle(card).transform);
@@ -218,13 +244,103 @@ module('Integration | stack motion', function (hooks) {
     assertRest('empty stack');
   });
 
+  test('opening a stack keeps the parent centered and the incoming card above it at natural size', async function (assert) {
+    await renderComponent(MultiCardFixture);
+    await click('[data-test-push]');
+    await animationsSettled();
+    let parent = find('[data-test-motion-card="card-0"]')!;
+    let initial = parent.getBoundingClientRect();
+    let center = initial.x + initial.width / 2;
+    await click('[data-test-push]');
+    let incoming = find('[data-test-motion-card="card-1"]')!;
+    await waitUntil(() =>
+      incoming
+        .getAnimations()
+        .some((animation) =>
+          (animation.effect as KeyframeEffect)
+            .getKeyframes()
+            .some((frame) => frame.transform),
+        ),
+    );
+    assert.true(
+      incoming
+        .getAnimations()
+        .some((animation) =>
+          (animation.effect as KeyframeEffect)
+            .getKeyframes()
+            .some((frame) => frame.transform),
+        ),
+      'the browser owns the incoming transform track',
+    );
+    let samples: {
+      center: number;
+      parentWidth: number;
+      incomingWidth: number;
+      y: number;
+      scaleX: number;
+      scaleY: number;
+    }[] = [];
+    while (!isMotionIdle()) {
+      let a = parent.getBoundingClientRect();
+      let b = incoming.getBoundingClientRect();
+      let transform = new DOMMatrixReadOnly(
+        getComputedStyle(incoming).transform,
+      );
+      samples.push({
+        center: a.x + a.width / 2,
+        parentWidth: a.width,
+        incomingWidth: b.width,
+        y: b.y,
+        scaleX: transform.a,
+        scaleY: transform.d,
+      });
+      await new Promise<void>((resolve) => {
+        // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- Verify every painted stack pose, not application state.
+        requestAnimationFrame(() => resolve());
+      });
+    }
+    await animationsSettled();
+    let finalParent = parent.getBoundingClientRect();
+    let finalIncoming = incoming.getBoundingClientRect();
+    assert.true(samples.length > 2, 'sampled the entrance');
+    assert.true(
+      samples.every((s) => Math.abs(s.center - center) < 1),
+      'parent never slides sideways as its width changes',
+    );
+    assert.true(
+      samples.every(
+        (s) =>
+          Math.abs(s.parentWidth - finalParent.width) < 1 &&
+          Math.abs(s.incomingWidth - finalIncoming.width) < 1,
+      ),
+      'content dimensions resolve once without width playback',
+    );
+    assert.true(
+      samples.every((s) => s.scaleX === 1 && s.scaleY === 1),
+      'incoming typography keeps its proportions',
+    );
+    assert.true(
+      samples.every(
+        (s) => s.y >= finalIncoming.y - 1 && s.y <= finalIncoming.y + 25,
+      ),
+      'entrance is a bounded 24px lift',
+    );
+    assert.true(
+      Number(getComputedStyle(incoming).zIndex) >
+        Number(getComputedStyle(parent).zIndex),
+      'the incoming card owns the front plane',
+    );
+    assert.dom(incoming).hasStyle({ opacity: '1', transform: 'none' });
+    assert.deepEqual(strandedTransforms(), []);
+  });
+
   test('entry and reflow finish after the main thread drops the animation frames', async function (assert) {
     await renderComponent(StackFixture);
     await click('[data-test-toggle]');
     let card = find('[data-test-motion-card]') as HTMLElement;
     await waitUntil(() => {
-      let scale = new DOMMatrixReadOnly(getComputedStyle(card).transform).a;
-      return scale > 0.1 && scale < 0.9;
+      let opacity = Number(getComputedStyle(card).opacity);
+      return opacity > 0 && opacity < 0.9;
     });
 
     // Block rendering longer than the 200ms tween, as heavy card rendering can.

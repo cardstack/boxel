@@ -291,6 +291,7 @@ peerDependencyRules:
     mustache: "3"
     ember-qunit@5.1.2>ember-source: "*"
 patchedDependencies:
+  glimmer-motion@0.0.0: patches/glimmer-motion@0.0.0.patch
   magic-string@0.25.9: patches/magic-string@0.25.9.patch
   style-loader@2.0.0: patches/style-loader@2.0.0.patch
   ember-css-url@1.0.0: patches/ember-css-url@1.0.0.patch
@@ -301,6 +302,7 @@ patchedDependencies:
   matrix-js-sdk@38.3.0: patches/matrix-js-sdk@38.3.0.patch
   ember-source: patches/ember-source.patch
   object-inspect: patches/object-inspect.patch
+  motion-dom@13.3.0: patches/motion-dom@13.3.0.patch
 allowBuilds:
   "@percy/core": true
   "@vscode/vsce-sign": true

@@ -1,6 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat, fn } from '@ember/helper';
 import { action } from '@ember/object';
+import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
@@ -12,6 +13,7 @@ import { dropTask, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
 import { consume } from 'ember-provide-consume-context';
+import { motion } from 'glimmer-motion';
 
 import { get } from 'lodash-es';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
@@ -55,6 +57,24 @@ import {
   type Filter,
 } from '@cardstack/runtime-common';
 
+import { afterMotionPaint } from '@cardstack/host/lib/after-motion-paint';
+import {
+  crossfadeCardBitmap,
+  supportsBitmapCrossing,
+} from '@cardstack/host/lib/bitmap-crossing';
+import {
+  embeddedCardElement,
+  embeddedCardOrigin,
+  forgetCardActionOrigin,
+  type CardOpenOrigin,
+} from '@cardstack/host/lib/card-open-origin';
+import {
+  boundaryEase,
+  boundaryReturnEase,
+  motionDurations,
+} from '@cardstack/host/lib/motion-timing';
+import { traceMotionPhase } from '@cardstack/host/lib/motion-trace';
+
 import {
   detectStackItemTypeForTarget,
   StackItem,
@@ -81,8 +101,9 @@ import NeighborStackTriggerButton, {
 } from './interact-submode/neighbor-stack-trigger';
 import OperatorModeStack from './stack';
 
-import StackMotion from './stack-motion';
 import SubmodeLayout from './submode-layout';
+import WorkspaceScene from './workspace-scene';
+import WorkspaceWallpaper from './workspace-wallpaper';
 
 import type { NewFileOptions } from './new-file-button';
 import type { CardDefOrId } from './stack-item';
@@ -91,6 +112,7 @@ import type { StackItemComponentAPI } from './stack-item';
 
 import type CardService from '../../services/card-service';
 import type FileUploadService from '../../services/file-upload';
+import type HostMotionService from '../../services/host-motion';
 import type LoaderService from '../../services/loader-service';
 import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -149,6 +171,7 @@ export default class InteractSubmode extends Component {
   @consume(CardContextName) declare private cardContext: CardContext;
 
   @service declare private cardService: CardService;
+  @service declare private hostMotion: HostMotionService;
   @service('file-upload') declare private fileUpload: FileUploadService;
   @service declare private toolService: ToolService;
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -160,6 +183,8 @@ export default class InteractSubmode extends Component {
   @service declare private network: NetworkService;
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
+  @tracked private boundaryCrossingToken?: number;
+  private boundarySequence = 0;
   @tracked private cardToDelete: CardToDelete | undefined = undefined;
   @tracked private recentCardCollection:
     | ReturnType<getCardCollection>
@@ -283,19 +308,20 @@ export default class InteractSubmode extends Component {
     return localId;
   };
 
-  private viewCard = (
+  private viewCard = async (
     stackIndex: number,
     cardOrURL: CardDef | URL | string,
     format: Format | Event = 'isolated',
     opts?: {
       type?: StackItemType;
+      openingOrigin?: CardOpenOrigin;
       openCardInRightMostStack?: boolean;
       stackIndex?: number;
       fieldType?: 'linksTo' | 'linksToMany' | 'contains' | 'containsMany';
       fieldName?: string;
       useBaseTemplate?: boolean;
     },
-  ): void => {
+  ): Promise<void> => {
     if (format instanceof Event) {
       // common when invoked from template {{on}} modifier
       format = 'isolated';
@@ -341,6 +367,15 @@ export default class InteractSubmode extends Component {
         return;
       }
     }
+    let sourceItem = this.stacks[stackIndex]?.at(-1);
+    let origin =
+      format === 'isolated' &&
+      !this.hostMotion.dragging &&
+      !opts?.openingOrigin &&
+      sourceItem &&
+      supportsBitmapCrossing()
+        ? stackItemComponentAPI.get(sourceItem)?.cardBoundary(cardId)
+        : undefined;
     if (opts?.openCardInRightMostStack) {
       stackIndex = this.stacks.length;
     } else if (typeof opts?.stackIndex === 'number') {
@@ -359,11 +394,18 @@ export default class InteractSubmode extends Component {
       stackIndex = opts.stackIndex;
     }
     let stackItemType = opts?.type ?? this.getStackItemType(cardOrURL, cardId);
+    let token = ++this.boundarySequence;
+    let bitmapKey = `stack-boundary-${token}`;
+    let { source, ...geometry } = origin ?? {};
     let newItem = new StackItem({
       id: cardId,
       format,
       stackIndex,
       type: stackItemType,
+      deferContent: !!source,
+      openingOrigin: source
+        ? { ...(geometry as CardOpenOrigin), bitmapKey }
+        : opts?.openingOrigin,
       useBaseTemplate: opts?.useBaseTemplate,
       relationshipContext: opts?.fieldName
         ? {
@@ -375,8 +417,53 @@ export default class InteractSubmode extends Component {
           }
         : undefined,
     });
-    this.addToStack(newItem);
-    this.operatorModeStateService.closeWorkspaceChooser();
+    let open = () => {
+      this.addToStack(newItem);
+      this.operatorModeStateService.closeWorkspaceChooser();
+    };
+    if (!source) {
+      open();
+      return;
+    }
+    this.boundaryCrossingToken = token;
+    let budgetToken = this.hostMotion.beginBitmap();
+    try {
+      await crossfadeCardBitmap(
+        source,
+        `[data-bitmap-entry="${bitmapKey}"] > .stack-item-card`,
+        async () => {
+          if (this.isDestroying || token !== this.boundarySequence) return;
+          open();
+          // Capture the fully laid-out destination, not its loading/entry pose.
+          await new Promise<void>((resolve) =>
+            schedule('afterRender', resolve),
+          );
+        },
+        motionDurations.boundary,
+        boundaryEase,
+        (finish) => {
+          this.hostMotion.onBitmapReady(budgetToken, finish);
+        },
+        source.closest<HTMLElement>('.stack-item-card') ?? undefined,
+      );
+    } finally {
+      this.hostMotion.endBitmap(budgetToken);
+      // The match exists for this crossing only. Ordinary card updates must
+      // never replay it or retain a reference to the source DOM.
+      newItem.openingOrigin = undefined;
+      if (this.boundaryCrossingToken === token)
+        this.boundaryCrossingToken = undefined;
+      // A large authored body can block hundreds of milliseconds. Give the
+      // primary crossing its complete paint interval before mounting it.
+      // The same bounded handoff runs after interruption or a skipped capture.
+      await new Promise<void>((resolve) => {
+        afterMotionPaint(() => {
+          traceMotionPhase('content-mount');
+          newItem.deferContent = false;
+          resolve();
+        });
+      });
+    }
   };
 
   private editCard = (
@@ -407,28 +494,92 @@ export default class InteractSubmode extends Component {
 
   stackBackgroundsState = stackBackgroundsResource(this);
 
-  private get backgroundImageStyle() {
+  private get workspaceEntry() {
+    let item = this.stacks.length === 1 ? this.stacks[0]?.[0] : undefined;
+    if (!item?.workspaceOrigin) return undefined;
+    return { id: item.instanceId, origin: item.workspaceOrigin };
+  }
+
+  private get backgroundImageURL() {
     // only return a background image when both stacks originate from the same realm
     // otherwise we delegate to each stack to handle this
     let { hasDifferingBackgroundURLs } = this.stackBackgroundsState;
-    if (this.stackBackgroundsState.backgroundImageURLs.length === 0) {
-      return htmlSafe('');
+    if (this.workspaceEntry) {
+      // The selected realm metadata is already loaded by its dashboard tile.
+      // Do not wait for the index card or show the preceding realm's image.
+      let { origin } = this.workspaceEntry;
+      let info = this.realm.info(origin.realmURL);
+      return info ? (info.backgroundURL ?? undefined) : origin.backgroundURL;
     }
     if (!hasDifferingBackgroundURLs) {
-      return htmlSafe(
-        `background-image: url(${this.stackBackgroundsState.backgroundImageURLs[0]});`,
-      );
+      return this.stackBackgroundsState.backgroundImageURLs[0];
     }
-    return htmlSafe('');
+    return undefined;
   }
 
-  private close = (item: StackItem) => {
-    // close the item first so user doesn't have to wait for the save to complete
-    this.operatorModeStateService.trimItemsFromStack(item);
-    let { request, id } = item;
+  private get workspaceConcealed() {
+    return (
+      this.operatorModeStateService.workspaceChooserOpened &&
+      !this.operatorModeStateService.workspacePortal
+    );
+  }
 
-    if (id && item.format === 'edit') {
-      request?.fulfill(id);
+  private close = async (item: StackItem, animate = true) => {
+    let remove = () => {
+      // Close without waiting for the save to complete.
+      this.operatorModeStateService.trimItemsFromStack(item);
+      if (item.id && item.format === 'edit') item.request?.fulfill(item.id);
+    };
+    let stack = this.stacks[item.stackIndex];
+    let parent = stack?.at(-2);
+    let source = stackItemComponentAPI.get(item)?.element();
+    let underlay = parent && stackItemComponentAPI.get(parent)?.element();
+    if (
+      !animate ||
+      item.format !== 'isolated' ||
+      stack?.at(-1) !== item ||
+      this.hostMotion.dragging ||
+      !supportsBitmapCrossing() ||
+      !source ||
+      !underlay ||
+      !embeddedCardElement(underlay, item.id)
+    ) {
+      remove();
+      return;
+    }
+
+    let token = ++this.boundarySequence;
+    let key = `stack-return-${token}`;
+    let destination: HTMLElement | undefined;
+    this.boundaryCrossingToken = token;
+    let budgetToken = this.hostMotion.beginBitmap();
+    try {
+      await crossfadeCardBitmap(
+        source,
+        `[data-bitmap-return="${key}"]`,
+        async () => {
+          if (this.isDestroying || token !== this.boundarySequence) return;
+          remove();
+          await new Promise<void>((resolve) =>
+            schedule('afterRender', resolve),
+          );
+          // Its hidden body now has the real destination layout. If the tile
+          // disappeared or scrolled away, let the outgoing bitmap just fade.
+          destination = embeddedCardOrigin(underlay, item.id)?.source;
+          if (destination) destination.dataset.bitmapReturn = key;
+        },
+        motionDurations.boundaryReturn,
+        boundaryReturnEase,
+        (finish) => this.hostMotion.onBitmapReady(budgetToken, finish),
+        underlay,
+      );
+    } finally {
+      this.hostMotion.endBitmap(budgetToken);
+      forgetCardActionOrigin(underlay, item.id);
+      if (destination?.dataset.bitmapReturn === key)
+        delete destination.dataset.bitmapReturn;
+      if (this.boundaryCrossingToken === token)
+        this.boundaryCrossingToken = undefined;
     }
   };
 
@@ -637,7 +788,11 @@ export default class InteractSubmode extends Component {
   }
 
   private openSelectedSearchResultInStack = restartableTask(
-    async (cardId: string, kind?: SearchResultKind) => {
+    async (
+      cardId: string,
+      kind?: SearchResultKind,
+      openingOrigin?: CardOpenOrigin,
+    ) => {
       let waiterToken = waiter.beginAsync();
       try {
         let searchSheetTrigger = this.searchSheetTrigger; // Will be set by showSearchWithTrigger
@@ -654,6 +809,7 @@ export default class InteractSubmode extends Component {
         ) {
           let newItem = new StackItem({
             id: cardId,
+            openingOrigin,
             format: 'isolated',
             stackIndex: 0,
             type: kind ?? this.getStackItemType(cardId, cardId),
@@ -679,6 +835,7 @@ export default class InteractSubmode extends Component {
         ) {
           await this.viewCard(this.stacks.length, cardId, 'isolated', {
             type: kind,
+            openingOrigin,
           });
         } else {
           // In case, that the search was accessed directly without clicking right and left buttons,
@@ -691,7 +848,10 @@ export default class InteractSubmode extends Component {
             numberOfStacks === 0 ||
             this.operatorModeStateService.stackIsEmpty(stackIndex)
           ) {
-            await this.viewCard(0, cardId, 'isolated', { type: kind });
+            await this.viewCard(0, cardId, 'isolated', {
+              type: kind,
+              openingOrigin,
+            });
           } else {
             stack = this.operatorModeStateService.rightMostStack();
             if (stack) {
@@ -699,6 +859,7 @@ export default class InteractSubmode extends Component {
               if (bottomMostItem) {
                 let stackItem = new StackItem({
                   id: cardId,
+                  openingOrigin,
                   format: 'isolated',
                   stackIndex,
                   type: kind ?? this.getStackItemType(cardId, cardId),
@@ -919,21 +1080,24 @@ export default class InteractSubmode extends Component {
       @onSearchSheetClosed={{this.clearSearchSheetTrigger}}
       @onCardSelectFromSearch={{perform this.openSelectedSearchResultInStack}}
       @newFileOptions={{this.newFileOptions}}
+      @bitmapCrossingActive={{this.boundaryCrossingToken}}
       data-test-interact-submode
       as |search|
     >
-      <div
+      <WorkspaceScene
+        @portal={{this.operatorModeStateService.workspacePortal}}
+        @concealed={{this.workspaceConcealed}}
         class={{cn
           'interact-submode'
           has-expanded-card=this.operatorModeStateService.hasAnyStackItemExpanded
         }}
-        style={{this.backgroundImageStyle}}
         {{onKeyMod 'Escape' this.handleEscape}}
         {{! Ctrl+E (not Cmd+E — taken by browsers' "Use Selection for Find").
            Lowercase 'e' matches event.key, so Dvorak/AZERTY users get the
            shortcut on whatever key produces 'e' on their layout. }}
         {{onKeyMod 'ctrl+e' this.handleToggleEdit}}
       >
+        <WorkspaceWallpaper @backgroundURL={{this.backgroundImageURL}} />
         {{#if this.canCreateNeighborStack}}
           <NeighborStackTriggerButton
             class='neighbor-stack-trigger stack-trigger-left'
@@ -945,8 +1109,9 @@ export default class InteractSubmode extends Component {
             }}
           />
         {{/if}}
-        <StackMotion
+        <div
           class={{cn 'stacks' is-multi-stack=(gt this.stacks.length 1)}}
+          {{motion role='workspace-cards'}}
         >
           {{#each this.stacks as |stack stackIndex|}}
             {{#let
@@ -993,7 +1158,7 @@ export default class InteractSubmode extends Component {
             @copy={{fn (perform this.copy)}}
             @isCopying={{this.copy.isRunning}}
           />
-        </StackMotion>
+        </div>
         {{#if this.canCreateNeighborStack}}
           <NeighborStackTriggerButton
             class='neighbor-stack-trigger stack-trigger-right'
@@ -1018,7 +1183,7 @@ export default class InteractSubmode extends Component {
             </:content>
           </DeleteModal>
         {{/if}}
-      </div>
+      </WorkspaceScene>
     </SubmodeLayout>
 
     <style scoped>
@@ -1036,11 +1201,11 @@ export default class InteractSubmode extends Component {
         justify-content: center;
         align-items: center;
         position: relative;
-        background-position: center;
-        background-size: cover;
         height: 100%;
       }
       .stacks {
+        position: relative;
+        z-index: 1;
         flex: 1;
         height: 100%;
         display: flex;

@@ -7,7 +7,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
-import { modifier } from 'ember-modifier';
+import { motion } from 'glimmer-motion';
 
 import { trackedFunction } from 'reactiveweb/function';
 
@@ -22,9 +22,15 @@ import { IconSearch } from '@cardstack/boxel-ui/icons';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 
+import {
+  searchCardOrigin,
+  type CardOpenOrigin,
+} from '@cardstack/host/lib/card-open-origin';
+
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type SearchSheetStateService from '@cardstack/host/services/search-sheet-state';
 import { SEARCH_SHEET_BASE_FILTER } from '@cardstack/host/services/search-sheet-state';
+import { removeCardJsonExtension } from '@cardstack/host/utils/search/types';
 import type { SearchResultKind } from '@cardstack/host/utils/search/types';
 import {
   isURLSearchKey,
@@ -32,6 +38,8 @@ import {
 } from '@cardstack/host/utils/search/url';
 
 import SearchPanel from '../search/panel';
+
+import SearchSheetMotion from './motion';
 
 import type StoreService from '../../services/store';
 import type { SortOption } from '../search/constants';
@@ -51,6 +59,7 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     mode: SearchSheetMode;
+    instant?: boolean;
     onSetup: (
       doSearch: (term: string, typeRef?: ResolvedCodeRef) => void,
     ) => void;
@@ -58,26 +67,16 @@ interface Signature {
     onFocus: () => void;
     onBlur: () => void;
     onSearch: (term: string) => void;
-    onCardSelect: (cardId: string, kind?: SearchResultKind) => void;
+    onCardSelect: (
+      cardId: string,
+      kind?: SearchResultKind,
+      origin?: CardOpenOrigin,
+    ) => void;
     onInputInsertion?: (element: HTMLElement) => void;
     onFilterChange?: () => void;
   };
   Blocks: {};
 }
-
-// After the search sheet's height transition ends, dispatch a window resize
-// event so ember-basic-dropdown repositions any open wormholed dropdowns
-// (e.g. TypePicker, RealmPicker) whose trigger moved during the transition.
-const repositionDropdownsOnTransitionEnd = modifier((element: Element) => {
-  let handler = (event: TransitionEvent) => {
-    if (event.propertyName === 'height') {
-      window.dispatchEvent(new Event('resize'));
-    }
-  };
-  element.addEventListener('transitionend', handler as EventListener);
-  return () =>
-    element.removeEventListener('transitionend', handler as EventListener);
-});
 
 export default class SearchSheet extends Component<Signature> {
   @service declare private realmServer: RealmServerService;
@@ -127,8 +126,9 @@ export default class SearchSheet extends Component<Signature> {
       case SearchSheetModes.ChooseResults:
       case SearchSheetModes.SearchResults:
         return 'results';
+      default:
+        return 'closed';
     }
-    return undefined;
   }
 
   private get placeholderText() {
@@ -159,6 +159,12 @@ export default class SearchSheet extends Component<Signature> {
     this.args.onBlur();
   }
 
+  private selectedOrigin?: ReturnType<typeof searchCardOrigin>;
+
+  @action private captureSelection(event: Event) {
+    this.selectedOrigin = searchCardOrigin(event);
+  }
+
   @action private handleCardSelect(
     selection: string | { realmURL: string },
     kind?: SearchResultKind,
@@ -169,7 +175,13 @@ export default class SearchSheet extends Component<Signature> {
     // Selecting a result keeps the search, so reopening returns to it. `kind`
     // carries the result's card/file classification so the consumer opens the
     // right URL without re-deriving it from the id.
-    this.args.onCardSelect(selection, kind);
+    let selected = this.selectedOrigin;
+    this.selectedOrigin = undefined;
+    let origin =
+      kind !== 'file' && selected?.cardId === removeCardJsonExtension(selection)
+        ? selected?.origin
+        : undefined;
+    this.args.onCardSelect(selection, kind, origin);
   }
 
   @action
@@ -301,11 +313,13 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   <template>
-    <div
+    <SearchSheetMotion
+      @size={{this.sheetSize}}
+      @instant={{@instant}}
       id='search-sheet'
-      class='search-sheet {{this.sheetSize}}'
+      {{on 'click' this.captureSelection capture=true}}
+      {{on 'keydown' this.captureSelection capture=true}}
       data-test-search-sheet={{@mode}}
-      {{repositionDropdownsOnTransitionEnd}}
       {{onClickOutside
         this.onBlur
         exceptSelector='.add-card-to-neighbor-stack,.boxel-dropdown__content,.boxel-picker__dropdown,.boxel-select__dropdown,.picker-before-options-with-search,.picker-option-row,.search-sheet-header,.search-sheet-section-header'
@@ -345,6 +359,7 @@ export default class SearchSheet extends Component<Signature> {
           >
             <Bar
               class='search-sheet__search-input-group'
+              {{motion role='search-sheet-header'}}
               @placeholder={{this.placeholderText}}
               @state={{this.inputValidationState}}
               @bottomTreatment={{this.inputBottomTreatment}}
@@ -356,6 +371,7 @@ export default class SearchSheet extends Component<Signature> {
             />
             <Content
               class='search-sheet__content'
+              {{motion role='search-sheet-content'}}
               @isCompact={{this.isCompact}}
               @handleSelect={{this.handleCardSelect}}
               @adorn={{true}}
@@ -366,7 +382,7 @@ export default class SearchSheet extends Component<Signature> {
               @scrollTop={{this.searchSheetState.resultsScrollTop}}
               @onScrollTopChange={{this.handleScrollTopChange}}
             />
-            <div class='footer'>
+            <div class='footer' {{motion role='search-sheet-footer'}}>
               <div class='buttons'>
                 <Button
                   {{on 'click' this.onCancel}}
@@ -377,79 +393,16 @@ export default class SearchSheet extends Component<Signature> {
           </SearchPanel>
         {{/each}}
       {{/if}}
-    </div>
+    </SearchSheetMotion>
     <style scoped>
-      :global(:root) {
-        --search-sheet-closed-height: calc(
-          var(--operator-mode-bottom-bar-item-height) +
-            var(--operator-mode-spacing)
-        );
-        --search-sheet-closed-width: var(--container-button-size);
-        --search-sheet-prompt-height: 10.45rem;
-      }
-
-      .search-sheet {
-        --search-sheet-left-offset: calc(var(--operator-mode-spacing));
-        --search-sheet-right-offset: calc(
-          var(--container-button-size) + 2 * var(--operator-mode-spacing)
-        );
-        background-color: transparent;
-        bottom: 0;
-        display: flex;
-        flex-direction: column;
-        justify-content: stretch;
-        left: var(--search-sheet-left-offset);
-        width: calc(
-          100% - var(--search-sheet-left-offset) -
-            var(--search-sheet-right-offset)
-        );
-        position: absolute;
-        z-index: var(--host-search-sheet-z-index);
-        transition:
-          height var(--boxel-transition),
-          width var(--boxel-transition);
-      }
-      .search-sheet:not(.closed) {
-        overflow: hidden;
-        background-color: var(--boxel-light);
-        border-top-right-radius: var(--boxel-border-radius-xxl);
-        border-top-left-radius: var(--boxel-border-radius-xxl);
-        border-bottom-right-radius: 0;
-        border-bottom-left-radius: 0;
-      }
       .search-sheet__search-input-group {
         width: calc(100% - 2 * var(--boxel-sp-xs));
         margin: var(--boxel-sp-xs);
         flex-wrap: nowrap;
         overflow: hidden;
-        animation: fade-in var(--boxel-transition);
       }
-      @keyframes fade-in {
-        from {
-          opacity: 0;
-        }
-        to {
-          opacity: 1;
-        }
-      }
-
       .results .search-sheet__search-input-group {
         margin-bottom: 3px;
-      }
-
-      .closed {
-        height: var(--search-sheet-closed-height);
-        width: var(--search-sheet-closed-width);
-      }
-
-      .prompt {
-        height: var(--search-sheet-prompt-height);
-        box-shadow: var(--boxel-deep-box-shadow);
-      }
-
-      .results {
-        height: calc(100% - var(--stack-padding-top));
-        box-shadow: var(--boxel-deep-box-shadow);
       }
 
       .search-sheet__content {
@@ -466,10 +419,6 @@ export default class SearchSheet extends Component<Signature> {
         background-color: var(--boxel-light);
         border-top: 1px solid var(--boxel-200);
         overflow: hidden;
-
-        transition:
-          flex var(--boxel-transition),
-          opacity calc(var(--boxel-transition) / 4);
       }
 
       .closed .footer,

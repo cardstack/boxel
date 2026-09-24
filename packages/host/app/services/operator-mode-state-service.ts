@@ -34,6 +34,11 @@ import {
 import type { Submode } from '@cardstack/host/components/submode-switcher';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import { StackItem, type StackItemType } from '@cardstack/host/lib/stack-item';
+import {
+  workspaceOriginFromElement,
+  type WorkspaceOpenOrigin,
+  type WorkspacePortal,
+} from '@cardstack/host/lib/workspace-open-origin';
 
 import {
   file,
@@ -41,6 +46,7 @@ import {
   type FileResource,
 } from '@cardstack/host/resources/file';
 import { maybe } from '@cardstack/host/resources/maybe';
+import type HostMotionService from '@cardstack/host/services/host-motion';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
@@ -191,6 +197,7 @@ export default class OperatorModeStateService extends Service {
     return this.expandedStackItems.get(itemKey) ?? false;
   }
   setStackItemExpanded(itemKey: string, value: boolean) {
+    this.hostMotion.begin('header', itemKey);
     if (value) {
       // Only one card can be expanded at a time — clear all others so
       // the same card open in two stacks can't leave both expanded.
@@ -228,6 +235,7 @@ export default class OperatorModeStateService extends Service {
   @tracked expandedCardHeaderElement: HTMLElement | null = null;
 
   @service declare private cardService: CardService;
+  @service declare private hostMotion: HostMotionService;
   @service declare private codeSemanticsService: CodeSemanticsService;
   @service declare private errorDisplay: ErrorDisplayService;
   @service declare private loaderService: LoaderService;
@@ -371,6 +379,7 @@ export default class OperatorModeStateService extends Service {
     // returns to top, it auto-re-expands. The visual collapse is
     // already handled by isExpanded = isTopCard && isExpandedIntent
     // — a buried card never renders as expanded.
+    this.hostMotion.begin('stack', item.instanceId);
     this._state.stacks[stackIndex].push(item);
     if (item.id) {
       this.recentCardsService.add(item.id);
@@ -486,6 +495,7 @@ export default class OperatorModeStateService extends Service {
     if (!stack) {
       throw new Error(`No stack at index ${stackIndex}`);
     }
+    this.hostMotion.begin('stack', stack.at(-2)?.instanceId);
     let item = stack.pop();
     if (!item) {
       throw new Error(`No items in stack at index ${stackIndex}`);
@@ -851,15 +861,19 @@ export default class OperatorModeStateService extends Service {
     await this.updateCodePath(fileUrl);
   };
 
+  private codePathUpdateSequence = 0;
+
   async updateCodePath(
     codePath: RealmResourceIdentifier | URL | null,
     moduleInspectorView?: ModuleInspectorView,
   ) {
+    let sequence = ++this.codePathUpdateSequence;
     let codePathURL =
       typeof codePath === 'string'
         ? this.network.virtualNetwork.toURL(codePath)
         : codePath;
     let canonicalCodePath = await this.determineCanonicalCodePath(codePathURL);
+    if (sequence !== this.codePathUpdateSequence) return;
     this._state.codePath = canonicalCodePath;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();
@@ -910,6 +924,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   replaceCodePath(codePath: URL | null) {
+    ++this.codePathUpdateSequence;
     // replace history explicitly
     // typically used when, serving a redirect in the code path
     // solve UX issues with back button referring back to request url of redirect
@@ -1402,16 +1417,80 @@ export default class OperatorModeStateService extends Service {
   }
 
   openWorkspaceChooser() {
-    this._state.workspaceChooserOpened = true;
-    this.schedulePersist();
+    this.workspaceChooserOpened = true;
   }
 
   closeWorkspaceChooser() {
-    this._state.workspaceChooserOpened = false;
-    this.schedulePersist();
+    this.workspaceChooserOpened = false;
   }
 
-  openWorkspace = async (realmUrl: string) => {
+  @tracked workspacePortal?: WorkspacePortal;
+  private workspacePortalToken = 0;
+
+  private startWorkspacePortal(
+    origin: WorkspaceOpenOrigin,
+    direction: WorkspacePortal['direction'],
+  ) {
+    this.hostMotion.beginWorkspace();
+    let fade = false;
+    if (direction === 'closing') {
+      let tile = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-workspace-realm]'),
+      ).find(
+        (element) =>
+          element.dataset.workspaceRealm === origin.realmURL &&
+          !!element.closest('.workspace-card.is-enlarged') ===
+            !!origin.favorite,
+      );
+      let current = workspaceOriginFromElement(
+        tile ?? null,
+        origin.realmURL,
+        origin.backgroundURL,
+      );
+      fade = !current;
+      if (current) origin = current;
+    }
+    this.workspacePortal = {
+      token: ++this.workspacePortalToken,
+      origin,
+      direction,
+      fade,
+    };
+  }
+
+  finishWorkspacePortal(token: number) {
+    if (this.workspacePortal?.token === token) {
+      this.workspacePortal = undefined;
+      this.hostMotion.endWorkspace();
+    }
+  }
+
+  updateWorkspacePortalTarget(origin: WorkspaceOpenOrigin, token: number) {
+    let portal = this.workspacePortal;
+    if (
+      portal?.token !== token ||
+      portal.direction !== 'closing' ||
+      portal.origin.realmURL !== origin.realmURL ||
+      portal.origin.favorite !== origin.favorite
+    )
+      return;
+    // A modifier reads this tracked portal while reporting its tile. Do not
+    // invalidate that modifier again when layout has not actually changed.
+    if (
+      origin.x === portal.origin.x &&
+      origin.y === portal.origin.y &&
+      origin.width === portal.origin.width &&
+      origin.height === portal.origin.height &&
+      origin.radius === portal.origin.radius
+    )
+      return;
+    this.workspacePortal = { ...portal, origin };
+  }
+
+  openWorkspace = async (
+    realmUrl: string,
+    workspaceOrigin?: WorkspaceOpenOrigin,
+  ) => {
     // Ensure realmUrl has a trailing slash
     if (!realmUrl.endsWith('/')) {
       realmUrl = realmUrl + '/';
@@ -1419,12 +1498,33 @@ export default class OperatorModeStateService extends Service {
     let id = rri(`${realmUrl}index`);
     let stackItem = new StackItem({
       id,
+      workspaceOrigin,
       format: 'isolated',
       stackIndex: 0,
       type: 'card',
     });
-    this.clearStacks();
-    this.addItemToStack(stackItem);
+    // Change the scene and its ownership in one render. Awaiting code-path
+    // metadata between these changes lets the old card start a separate exit.
+    if (workspaceOrigin) this.startWorkspacePortal(workspaceOrigin, 'opening');
+    else this.workspacePortal = undefined;
+    let existing = this._state.stacks[0]?.[0];
+    if (
+      this._state.stacks.length === 1 &&
+      this._state.stacks[0]?.length === 1 &&
+      existing?.id === id &&
+      existing.format === 'isolated'
+    ) {
+      // Returning to the retained index should preserve its DOM, scroll, and
+      // resources. Only the wallpaper origin changes when another tile copy
+      // (favorite versus catalog) was selected.
+      existing.workspaceOrigin = workspaceOrigin;
+    } else {
+      this.clearStacks();
+      this.addItemToStack(stackItem);
+    }
+    this.updateSubmode(Submodes.Interact);
+    this._state.workspaceChooserOpened = false;
+    this.cachedRealmURL = new URL(realmUrl);
 
     let lastOpenedFile = this.recentFilesService.recentFiles.find(
       (file: RecentFile) => file.realmURL.href === realmUrl,
@@ -1434,10 +1534,6 @@ export default class OperatorModeStateService extends Service {
         ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
         : id,
     );
-    this.updateSubmode(Submodes.Interact);
-
-    this._state.workspaceChooserOpened = false;
-    this.cachedRealmURL = new URL(realmUrl);
   };
 
   get workspaceChooserOpened() {
@@ -1445,6 +1541,18 @@ export default class OperatorModeStateService extends Service {
   }
 
   set workspaceChooserOpened(workspaceChooserOpened: boolean) {
+    if (workspaceChooserOpened !== this.workspaceChooserOpened) {
+      let origin =
+        this._state.stacks.length === 1
+          ? this._state.stacks[0]?.[0]?.workspaceOrigin
+          : undefined;
+      if (origin && this.state.submode === Submodes.Interact) {
+        this.startWorkspacePortal(
+          origin,
+          workspaceChooserOpened ? 'closing' : 'opening',
+        );
+      }
+    }
     this._state.workspaceChooserOpened = workspaceChooserOpened;
     this.schedulePersist();
   }

@@ -6,7 +6,7 @@ import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { and, cn, not } from '@cardstack/boxel-ui/helpers';
+import { and, cn, eq, not } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, IconPlus } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -230,6 +230,10 @@ export default class SearchResultTile extends Component<Signature> {
       {{on 'dblclick' this.handleDblClick}}
       {{on 'keydown' this.handleKeydown}}
       {{this.registerCardEl}}
+      data-search-card-id={{if
+        (eq this.selectionKind 'card')
+        (removeCardJsonExtension this.resolvedItemId)
+      }}
       data-test-item-button-create-new={{@newCard.realmURL}}
       data-test-item-button={{removeCardJsonExtension this.resolvedItemId}}
       data-test-item-button-selected={{if @isSelected 'true'}}

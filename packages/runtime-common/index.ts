@@ -1705,6 +1705,7 @@ export { Loader };
 export {
   fetchWithTransientRetry,
   isRetryableStatus,
+  loaderForModule,
   DEFAULT_TRANSIENT_RETRY_DELAYS_MS,
 } from './loader.ts';
 export {

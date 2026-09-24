@@ -1,0 +1,125 @@
+{
+  "environment": "Chrome 153, headless Testem, desktop host, CPU 1x, development build",
+  "source": "/tmp/boxel-native-playback-trace.json",
+  "testLog": "/tmp/boxel-native-tests-final.log",
+  "method": "Representative native Animation intervals in the test renderer. Count complete Layout/Paint/UpdateLayoutTree/FunctionCall events between start + 50ms and end - 40ms, excluding setup and completion. These include the fixture sampling overhead and are not production GPU time or device FPS.",
+  "samples": [
+    {
+      "interaction": "header expand",
+      "startMicroseconds": 368966378507,
+      "endMicroseconds": 368966984261,
+      "durationMs": 605.754,
+      "measuredWindowMs": 515.754,
+      "events": {
+        "Layout": {
+          "count": 0,
+          "durationMs": 0.0
+        },
+        "Paint": {
+          "count": 62,
+          "durationMs": 1.598
+        },
+        "UpdateLayoutTree": {
+          "count": 31,
+          "durationMs": 3.377
+        },
+        "FunctionCall": {
+          "count": 94,
+          "durationMs": 3.55
+        }
+      }
+    },
+    {
+      "interaction": "header restore",
+      "startMicroseconds": 368967003892,
+      "endMicroseconds": 368967601377,
+      "durationMs": 597.485,
+      "measuredWindowMs": 507.485,
+      "events": {
+        "Layout": {
+          "count": 0,
+          "durationMs": 0.0
+        },
+        "Paint": {
+          "count": 60,
+          "durationMs": 1.39
+        },
+        "UpdateLayoutTree": {
+          "count": 30,
+          "durationMs": 2.93
+        },
+        "FunctionCall": {
+          "count": 91,
+          "durationMs": 2.925
+        }
+      }
+    },
+    {
+      "interaction": "sheet opening",
+      "startMicroseconds": 368970786479,
+      "endMicroseconds": 368970984142,
+      "durationMs": 197.663,
+      "measuredWindowMs": 107.663,
+      "events": {
+        "Layout": {
+          "count": 0,
+          "durationMs": 0.0
+        },
+        "Paint": {
+          "count": 0,
+          "durationMs": 0.0
+        },
+        "UpdateLayoutTree": {
+          "count": 6,
+          "durationMs": 0.356
+        },
+        "FunctionCall": {
+          "count": 13,
+          "durationMs": 0.506
+        }
+      }
+    },
+    {
+      "interaction": "stack entrance",
+      "startMicroseconds": 368977102549,
+      "endMicroseconds": 368977317222,
+      "durationMs": 214.673,
+      "measuredWindowMs": 124.673,
+      "events": {
+        "Layout": {
+          "count": 0,
+          "durationMs": 0.0
+        },
+        "Paint": {
+          "count": 0,
+          "durationMs": 0.0
+        },
+        "UpdateLayoutTree": {
+          "count": 7,
+          "durationMs": 0.374
+        },
+        "FunctionCall": {
+          "count": 14,
+          "durationMs": 0.427
+        }
+      }
+    }
+  ],
+  "finalVerification": {
+    "normalSpeed": {
+      "passed": 23,
+      "failed": 0,
+      "log": "/tmp/boxel-native-tests-release.log"
+    },
+    "cpuSlowdown4x": {
+      "browser": "Chrome 153",
+      "passed": 23,
+      "failed": 0,
+      "assertionsPassed": 233,
+      "elapsedMs": 20318,
+      "url": "https://localhost:4200/tests/index.html?filter=motion"
+    },
+    "lintLog": "/tmp/boxel-native-lint-release.log",
+    "buildLog": "/tmp/boxel-native-build-release.log"
+  }
+}

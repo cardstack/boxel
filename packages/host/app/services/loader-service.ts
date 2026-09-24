@@ -63,7 +63,10 @@ export default class LoaderService extends Service {
     }
     registerDestructor(this, () => {
       this.resetState();
-      this.loader?.dispose();
+      if (this.loader) {
+        Loader.clearForBundledModules(this.loader);
+        this.loader.dispose();
+      }
     });
   }
 
@@ -76,7 +79,9 @@ export default class LoaderService extends Service {
     log.debug(`resetting loader for session boundary (${reason ?? ''})`);
     this.clearSessionCaches();
     let previous = this.loader;
-    this.loader = previous ? Loader.cloneLoader(previous) : this.makeInstance();
+    this.loader = this.publish(
+      previous ? Loader.cloneLoader(previous) : this.makeInstance(),
+    );
     previous?.dispose();
   }
 
@@ -145,7 +150,7 @@ export default class LoaderService extends Service {
       let previous = this.loader;
       this.recordLoaderReplacement(previous, options?.codeChange);
       if (previous) {
-        this.loader = Loader.cloneLoader(previous);
+        this.loader = this.publish(Loader.cloneLoader(previous));
         previous.dispose();
       } else {
         this.loader = this.makeInstance();
@@ -196,6 +201,11 @@ export default class LoaderService extends Service {
         ),
       virtualNetwork: this.network.virtualNetwork,
     });
+    return this.publish(loader);
+  }
+
+  private publish(loader: Loader): Loader {
+    Loader.setForBundledModules(loader);
     return loader;
   }
 

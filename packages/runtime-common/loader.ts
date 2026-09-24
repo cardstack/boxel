@@ -251,6 +251,24 @@ export class Loader {
     { module: string; name: string }
   >();
   private static loaders = new WeakMap<Function, Loader>();
+  // Staging realm modules call loaderForModule(import.meta). This checkout's
+  // loader does not inject module-local metadata, so host-evaluated modules
+  // use the active application loader published by LoaderService.
+  static #forBundledModules: Loader | undefined;
+
+  static setForBundledModules(loader: Loader) {
+    Loader.#forBundledModules = loader;
+  }
+
+  static clearForBundledModules(loader: Loader) {
+    if (Loader.#forBundledModules === loader) {
+      Loader.#forBundledModules = undefined;
+    }
+  }
+
+  static forBundledModules(): Loader | undefined {
+    return Loader.#forBundledModules;
+  }
 
   private fetchImplementation: Fetch;
   private resolveImport: (moduleIdentifier: string) => string;
@@ -1708,4 +1726,14 @@ function isEvaluatable(
     return false;
   }
   return stateOrder[module.state] >= stateOrder['registered-completing-deps'];
+}
+
+// Accept the per-module loader used by newer realm code. The published host
+// loader is the compatibility path for modules evaluated by this checkout.
+export function loaderForModule(meta: { loader?: Loader }): Loader {
+  let loader = meta.loader ?? Loader.forBundledModules();
+  if (!loader) {
+    throw new Error('no Loader is available to this module');
+  }
+  return loader;
 }

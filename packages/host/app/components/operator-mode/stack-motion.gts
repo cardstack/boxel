@@ -1,83 +1,154 @@
-import { registerDestructor } from '@ember/destroyable';
 import { array } from '@ember/helper';
-import type Owner from '@ember/owner';
-import { isTesting } from '@embroider/macros';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
-import { Choreo, type Sprite } from 'glimmer-motion';
+import { Choreo, type Sprite, type PerformCommand } from 'glimmer-motion';
+
+import MotionTiming, {
+  motionEase as ease,
+  motionDurations,
+} from '@cardstack/host/lib/motion-timing';
+import { liftIn, liftOut } from '@cardstack/host/lib/motion-transform';
+import hostMotionBudget from '@cardstack/host/modifiers/host-motion-budget';
+import inspectHostMotion from '@cardstack/host/modifiers/inspect-host-motion';
+import type HostMotionService from '@cardstack/host/services/host-motion';
+
+import HeaderMotion from './header-motion';
+import StackReflow from './stack-reflow';
 
 interface Signature {
   Element: HTMLDivElement;
   Args: {
     // Tests can exercise real motion without slowing every host test down.
     duration?: number;
+    budgeted?: boolean;
+    instant?: boolean;
+    portalActive?: boolean;
+    onPerform?: (command: PerformCommand) => void;
   };
   Blocks: { default: [] };
 }
 
-const ease = [0.25, 0.1, 0.25, 1];
-const restingOpacity = (sprite: Sprite) =>
-  sprite.element.hasAttribute('data-stack-covered') ? 0 : 1;
+const restingOpacity = (sprite: Sprite) => [
+  Number(getComputedStyle(sprite.element).opacity),
+  sprite.element.hasAttribute('data-stack-covered') ? 0 : 1,
+];
 
-// Keep the region outside individual stacks so closing the last card in a
-// stack still has a living owner for its exit animation.
+// Own both stacks and their portaled headers. This region survives the last
+// card's exit and measures the header handoff in the same pass as expansion.
 export default class StackMotion extends Component<Signature> {
-  @tracked private reducedMotion = false;
+  @service declare private hostMotion: HostMotionService;
+  private timing = new MotionTiming(this);
 
-  constructor(owner: Owner, args: Signature['Args']) {
-    super(owner, args);
-    let preference = window.matchMedia('(prefers-reduced-motion: reduce)');
-    this.reducedMotion = preference.matches;
-    let update = () => (this.reducedMotion = preference.matches);
-    preference.addEventListener('change', update);
-    registerDestructor(this, () =>
-      preference.removeEventListener('change', update),
+  private get armed() {
+    return (
+      !this.args.instant &&
+      ((this.args.duration !== undefined && !this.args.budgeted) ||
+        this.hostMotion.isArmed('stack'))
     );
   }
 
+  private get primaryId() {
+    return this.args.duration !== undefined && !this.args.budgeted
+      ? undefined
+      : (this.hostMotion.primaryId ?? '__no-primary__');
+  }
+
+  private get headerDuration() {
+    return this.args.duration !== undefined || this.hostMotion.headerActive
+      ? this.duration
+      : 0;
+  }
+
   private get duration() {
-    if (this.reducedMotion) {
-      return 0;
-    }
-    return this.args.duration ?? (isTesting() ? 0 : 0.2);
+    return this.args.instant ? 0 : this.timing.duration(this.args.duration);
+  }
+
+  private get exitDuration() {
+    return this.args.instant
+      ? 0
+      : this.timing.duration(this.args.duration, motionDurations.exit);
   }
 
   <template>
-    <Choreo ...attributes as |c|>
+    <Choreo
+      class='host-stack-motion'
+      @onPerform={{@onPerform}}
+      ...attributes
+      as |c|
+    >
+      <div
+        hidden
+        {{inspectHostMotion c}}
+        {{hostMotionBudget this.hostMotion c 'stack'}}
+      ></div>
       {{yield}}
-      <c.Parallel>
-        <c.Tween
-          @of={{c.inserted 'opening-card'}}
-          @scale={{array 0.1 1}}
-          @opacity={{array 0 1}}
-          @duration={{this.duration}}
-          @ease={{ease}}
-        />
-        <c.Tween
-          @of={{array (c.removed 'opening-card') (c.removed 'stack-card')}}
-          @opacity={{0}}
-          @y='100%'
-          @duration={{this.duration}}
-          @ease={{ease}}
-        />
-        {{! A content resize can replace an entry tween with a kept-card run.
-        Move owns layout scaleX/scaleY; explicitly finish the entry's separate
-        scale and opacity channels instead of leaving their interrupted values. }}
-        <c.Tween
-          @of={{array (c.kept 'opening-card') (c.kept 'stack-card')}}
-          @scale={{1}}
-          @opacity={{restingOpacity}}
-          @duration={{this.duration}}
-          @ease={{ease}}
-        />
-        <c.Move
-          @of={{array (c.kept 'opening-card') (c.kept 'stack-card')}}
-          @size='scale'
-          @duration={{this.duration}}
-          @ease={{ease}}
-        />
-      </c.Parallel>
+      {{#if this.armed}}
+        <c.Parallel>
+          <HeaderMotion
+            @context={{c}}
+            @duration={{this.headerDuration}}
+            @primaryId={{this.primaryId}}
+          />
+          <c.Tween
+            @of={{c.inserted 'opening-card'}}
+            @transform={{liftIn}}
+            @opacity={{array 0 1}}
+            @duration={{this.duration}}
+            @ease={{ease}}
+          />
+          {{#unless @portalActive}}
+            <c.Tween
+              @of={{c.kept 'workspace-cards'}}
+              @transform='none'
+              @opacity={{1}}
+              @duration={{0}}
+            />
+            <c.Tween
+              @of={{c.kept 'workspace-wallpaper'}}
+              @clipPath='none'
+              @opacity={{1}}
+              @duration={{0}}
+            />
+            <c.Tween
+              @of={{array
+                (c.removed 'opening-card')
+                (c.removed 'stack-card')
+                (c.removed 'dock-card')
+              }}
+              @opacity={{0}}
+              @transform={{liftOut}}
+              @duration={{this.exitDuration}}
+              @ease={{ease}}
+            />
+          {{/unless}}
+          {{! Continue interrupted opacity; StackReflow owns position only.
+        Live text is never stretched with independent scaleX/scaleY. }}
+          <c.Tween
+            @of={{array
+              (c.kept 'opening-card')
+              (c.kept 'stack-card')
+              (c.kept 'dock-card')
+              (c.kept 'portal-card')
+            }}
+            @opacity={{restingOpacity}}
+            @duration={{this.duration}}
+            @ease={{ease}}
+          />
+          <StackReflow
+            @duration={{this.duration}}
+            @primaryId={{this.primaryId}}
+          />
+        </c.Parallel>
+      {{/if}}
     </Choreo>
+    <style scoped>
+      .host-stack-motion {
+        --choreo-raised-z-index: var(--host-card-motion-z-index, 150);
+      }
+      .host-stack-motion > :global([data-choreo-orphans]) {
+        z-index: var(--host-stack-exit-z-index, 100);
+      }
+    </style>
   </template>
 }

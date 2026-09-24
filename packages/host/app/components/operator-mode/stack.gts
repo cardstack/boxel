@@ -39,7 +39,7 @@ interface Signature {
     saveCard: SaveCardFn;
     deleteCard: DeleteCardFn;
     toolContext: ToolContext;
-    close: (stackItem: StackItem) => void;
+    close: (stackItem: StackItem, animate?: boolean) => void | Promise<void>;
     onSelectedCards: (
       selectedCards: CardDefOrId[],
       stackItem: StackItem,
@@ -73,7 +73,13 @@ export default class OperatorModeStack extends Component<Signature> {
 
     // Choreo retains departing DOM until its exit tween finishes. Update
     // state together so departures and the remaining cards share one run.
-    await Promise.all(itemsToDismiss.map((i) => this.args.close(i)));
+    // A single close can reverse its shared boundary. A multi-card trim is
+    // one state update, not several competing bitmap captures.
+    await Promise.all(
+      itemsToDismiss.map((i) =>
+        this.args.close(i, itemsToDismiss.length === 1),
+      ),
+    );
   });
 
   private setupStackItem = (
