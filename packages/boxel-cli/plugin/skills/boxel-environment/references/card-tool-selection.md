@@ -6,7 +6,7 @@ Choosing the right host-command combination for creating new cards or editing ex
 
 | Tool | Use When |
 |------|----------|
-| **run-realm-code** | **Always — any new file**, `.gts` definitions and `.json` instances alike (use `Realm.createFile`) |
+| **run-realm-code** | **Always — any new file**, `.gts` definitions and `.json` instances alike (use `realm.fs.writeText`) |
 | **copy-card + patch-fields** | Clone existing card as template, then modify |
 | **write-text-file** | Avoid for source files — use `run-realm-code` instead |
 
@@ -23,8 +23,8 @@ Choosing the right host-command combination for creating new cards or editing ex
 
 ```
 Card doesn't exist yet?
-├─ New .gts file → `run-realm-code` with `Realm.createFile`
-├─ New .json instance → `run-realm-code` with `Realm.createFile`
+├─ New .gts file → `run-realm-code` with `realm.fs.writeText`
+├─ New .json instance → `run-realm-code` with `realm.fs.writeText`
 └─ Clone + modify → copy-card → patch-fields
 
 Card already exists?

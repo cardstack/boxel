@@ -57,13 +57,13 @@ Treat `code` as an async function body so models can use `await` and an optional
 JSON-compatible `return` without writing a wrapper:
 
 ```js
-await Realm.createFile(
+await realm.fs.writeText(
   'https://example.com/workspace/person.gts',
   'import { CardDef } from "@cardstack/base/card-api";\n' +
     'export class Person extends CardDef {}\n',
 );
 
-await Realm.replaceCode(
+await realm.fs.replace(
   'https://example.com/workspace/person.gts',
   'export class Person extends CardDef {}',
   'export class Person extends CardDef { static displayName = "Person"; }',
@@ -72,10 +72,15 @@ await Realm.replaceCode(
 
 This is a transport example, not a complete card design.
 
-| API                                               | Proposed behavior                                                                                                                                                                                                                                                  |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `Realm.replaceCode(fileUrl, search, replacement)` | Existing file, nonempty search, exactly one literal occurrence. Zero matches and multiple matches produce distinct errors. Replacement is literal: `$&`, backslashes, and similar text are not replacement directives. Empty replacement deletes the matched text. |
-| `Realm.createFile(fileUrl, content)`              | Explicit creation. Refuse an existing path, including an empty file; do not silently rename or overwrite.                                                                                                                                                          |
+The names follow realm-runner's `realm.fs` surface so that later additions
+(reads, search) do not rename these calls. `path` is relative to the realm
+root, as in realm-runner; a full file URL inside the realm is also accepted.
+Unlike realm-runner, `writeText` only creates: it refuses an existing file.
+
+| API                                           | Proposed behavior                                                                                                                                                                                                                                                  |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `realm.fs.replace(path, search, replacement)` | Existing file, nonempty search, exactly one literal occurrence. Zero matches and multiple matches produce distinct errors. Replacement is literal: `$&`, backslashes, and similar text are not replacement directives. Empty replacement deletes the matched text. |
+| `realm.fs.writeText(path, content)`           | Explicit creation. Refuse an existing path, including an empty file; do not silently rename or overwrite.                                                                                                                                                          |
 
 With staging, successful calls resolve with a small receipt saying **staged**.
 Later calls see earlier staged content, and each file is saved once after the

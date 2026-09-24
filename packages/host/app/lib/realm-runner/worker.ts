@@ -55,28 +55,49 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
         const operations = ${JSON.stringify(operationsJSON)};
         const contents = JSON.parse(files);
         const changes = JSON.parse(operations);
+        const realmURL = ${JSON.stringify(request.realmURL)};
         const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
-        const replaceCode = (url, search, replacement) => {
-          if (typeof url !== 'string' || typeof search !== 'string' || typeof replacement !== 'string') {
-            throw new TypeError('Realm.replaceCode expects three strings');
+        // Paths are relative to the realm root, as in realm-runner. A full URL
+        // inside this realm is accepted too, since that is what the tool's
+        // fileUrls carry.
+        const resolvePath = (name, path) => {
+          if (typeof path !== 'string' || path.length === 0) throw new TypeError(name + ' expects a path string');
+          if (path.startsWith(realmURL)) return path;
+          if (/^[a-z][a-z0-9+.-]*:/i.test(path)) throw new Error('Path is outside this realm: ' + path);
+          if (path.startsWith('/') || path.includes('\\\\') || path.split('/').some((part) => part === '..' || part === '.' || part === '')) {
+            throw new Error('Path must be relative to the realm root: ' + path);
+          }
+          return realmURL + path;
+        };
+        const relative = (url) => url.slice(realmURL.length);
+        const replace = async (path, search, replacement) => {
+          const url = resolvePath('realm.fs.replace', path);
+          if (typeof search !== 'string' || typeof replacement !== 'string') {
+            throw new TypeError('realm.fs.replace expects a path, a search string and a replacement string');
           }
           if (!hasOwn(contents, url)) throw new Error('File was not supplied to this run: ' + url);
-          if (search.length === 0) throw new Error('Realm.replaceCode requires a non-empty search string');
+          if (search.length === 0) throw new Error('realm.fs.replace requires a non-empty search string');
           const first = contents[url].indexOf(search);
           if (first < 0) throw new Error('Search string was not found in ' + url);
           if (contents[url].indexOf(search, first + search.length) >= 0) throw new Error('Search string matched more than once in ' + url);
           contents[url] = contents[url].slice(0, first) + replacement + contents[url].slice(first + search.length);
           changes.push({ type: 'replace', url, search, replacement });
-          return { status: 'staged', url };
+          return { path: relative(url), matches: 1 };
         };
-        const createFile = (url, content) => {
-          if (typeof url !== 'string' || typeof content !== 'string') throw new TypeError('Realm.createFile expects two strings');
-          if (hasOwn(contents, url)) throw new Error('File already exists: ' + url);
+        // Only creates for now: overwriting an existing file is refused, so an
+        // edit to an existing file always goes through realm.fs.replace.
+        const writeText = async (path, content) => {
+          const url = resolvePath('realm.fs.writeText', path);
+          if (typeof content !== 'string') throw new TypeError('realm.fs.writeText expects a path and a content string');
+          if (hasOwn(contents, url)) throw new Error('File already exists; use realm.fs.replace to edit it: ' + url);
           contents[url] = content;
           changes.push({ type: 'create', url, content });
-          return { status: 'staged', url };
+          return { path: relative(url), staged: true };
         };
-        globalThis.Realm = Object.freeze({ replaceCode, createFile });
+        globalThis.realm = Object.freeze({
+          current: Object.freeze({ url: realmURL }),
+          fs: Object.freeze({ replace, writeText }),
+        });
         globalThis.__realmOperations = changes;
       })();
     `;

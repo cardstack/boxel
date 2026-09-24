@@ -19,6 +19,7 @@ export interface RealmRunnerResult {
 export interface RealmRunnerRequest {
   type: 'run';
   code: string;
+  realmURL: string;
   files: RealmRunnerFile[];
   timeoutMs: number;
 }

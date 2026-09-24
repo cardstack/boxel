@@ -8,6 +8,7 @@ import runRealmCode from '../lib/realm-runner/runner';
 import LintAndFixTool from './lint-and-fix';
 
 import type CardService from '../services/card-service';
+import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type ToolService from '../services/tool-service';
 import type * as BaseToolModule from '@cardstack/base/command';
@@ -32,6 +33,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
   typeof BaseToolModule.RunRealmCodeResult
 > {
   @service declare private cardService: CardService;
+  @service declare private network: NetworkService;
   @service declare private realm: RealmService;
   @service declare private toolService: ToolService;
 
@@ -88,6 +90,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
 
     let runnerResult = await runRealmCode({
       code: input.code,
+      realmURL: this.realmRootURL(realmURL),
       files,
       timeoutMs: RUN_TIMEOUT_MS,
     });
@@ -140,6 +143,16 @@ export default class RunRealmCodeTool extends HostBaseTool<
       files: outputFiles,
       scriptResult: runnerResult.scriptResult,
     });
+  }
+
+  // The sandbox resolves relative paths against the realm root, and the file
+  // URLs it is given are URL-form, so the root must be too — a realm may be
+  // registered under its prefix form.
+  private realmRootURL(realm: string): string {
+    let { virtualNetwork } = this.network;
+    return virtualNetwork.isRegisteredPrefix(realm)
+      ? virtualNetwork.toURL(realm).href
+      : new URL(realm).href;
   }
 
   private async prepareFiles(

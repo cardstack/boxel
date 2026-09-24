@@ -64,7 +64,7 @@ Quick lookup of every command available to this skill, what it does, and notable
 
 ## Editing
 
-- **`run-realm-code`** — The way to create or edit source files. It executes a staged script, saves successful edits, and triggers correctness checks after indexing. Use `Realm.createFile` for a new file and `Realm.replaceCode` for an existing one.
+- **`run-realm-code`** — The way to create or edit source files. It executes a staged script, saves successful edits, and triggers correctness checks after indexing. Use `realm.fs.writeText` for a new file and `realm.fs.replace` for an existing one.
 - `patch-fields_3e67` — Fine-grained card field updates (requires approval).
 - `patchCardInstance` — Update card data only.
 - `ApplyMarkdownEditCommand_c112` — Edit long markdown fields (>500 chars) surgically without truncation (requires approval).
