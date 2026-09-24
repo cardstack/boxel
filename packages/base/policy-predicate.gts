@@ -96,7 +96,7 @@ class Edit extends Component<typeof PolicyPredicateField> {
         @value={{@model.source}}
         @onInput={{this.setSource}}
         @readonly={{not @canEdit}}
-        @placeholder='Always allowed'
+        @placeholder={{if @model 'Empty condition' 'Always allowed'}}
         data-test-policy-predicate-input
       />
       <div class='snapshot'>
