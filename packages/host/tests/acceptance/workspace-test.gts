@@ -92,17 +92,17 @@ module('Acceptance | workspace card', function (hooks) {
 
     await waitFor(`${STACK} nav.tabs`);
     assert
-      .dom(`${STACK} nav.tabs .tab`)
+      .dom(`${STACK} nav.tabs [data-test-workspace-tab]`)
       .exists({ count: 3 }, 'Home, Library, and Activity tabs render');
     assert
-      .dom(`${STACK} nav.tabs .tab.active`)
+      .dom(`${STACK} nav.tabs [aria-current="true"]`)
       .hasText('Home', 'Home is the default segment');
 
-    await click(`${STACK} nav.tabs .tab:nth-child(2)`);
-    assert.dom(`${STACK} .library`).exists('Library pane renders');
+    await click(`${STACK} [data-test-workspace-tab="library"]`);
+    assert.dom(`${STACK} [data-test-library]`).exists('Library pane renders');
 
-    await click(`${STACK} nav.tabs .tab:nth-child(3)`);
-    assert.dom(`${STACK} .activity-pane`).exists('Activity pane renders');
+    await click(`${STACK} [data-test-workspace-tab="activity"]`);
+    assert.dom(`${STACK} [data-test-activity]`).exists('Activity pane renders');
   });
 
   // Pills are matched by their visible label rather than by index, since the
@@ -128,7 +128,7 @@ module('Acceptance | workspace card', function (hooks) {
     // The empty-space welcome hero offers a "New card" affordance that opens
     // the Spec chooser. The chosen Spec may live in any realm the user can
     // reach; the new card still lands in this workspace's realm.
-    await click(`${STACK} .welcome-alt`);
+    await click(`${STACK} [data-test-welcome-new-card]`);
     await waitFor('[data-test-card-chooser-modal]');
 
     // The realm scope must not be locked to the workspace's own realm — the
@@ -173,23 +173,19 @@ module('Acceptance | workspace card', function (hooks) {
     await waitFor(`${STACK} [data-test-browse]`);
 
     let noteChip = findTypeChip(assert, 'Note');
-    let noteTypeId = noteChip.getAttribute('data-test-type-chip');
-    // Without this the filter selector below interpolates to
-    // `[data-test-workspace-filter="null"]` and reports a missing element
-    // rather than a pill that carries no type id.
-    assert.ok(noteTypeId, 'the Note pill carries the type id it filters on');
+    assert.ok(
+      noteChip.getAttribute('data-test-type-chip'),
+      'the Note pill carries the type id it filters on',
+    );
 
     await click(noteChip);
 
     assert
-      .dom(`${STACK} nav.tabs .tab.active`)
+      .dom(`${STACK} nav.tabs [aria-current="true"]`)
       .hasText('Library', 'the pill switches to the Library segment');
     assert
-      .dom(`${STACK} [data-test-workspace-filter="${noteTypeId}"]`)
-      .hasClass(
-        'selected',
-        'the Library opens with the clicked type pre-selected',
-      );
+      .dom(`${STACK} [data-test-selected-filter="Note"]`)
+      .exists('the Library opens with the clicked type pre-selected');
   });
 
   // The Library rail lists a row per realm card type (sourced from the same
@@ -200,15 +196,13 @@ module('Acceptance | workspace card', function (hooks) {
     await click('[data-test-workspace-button="Unnamed Workspace"]');
     await waitFor(`${STACK} nav.tabs`);
 
-    await click(`${STACK} nav.tabs .tab:nth-child(2)`); // Library
-    await waitFor(`${STACK} .rail-group`);
+    await click(`${STACK} [data-test-workspace-tab="library"]`);
+    await waitFor(`${STACK} [data-test-rail-group]`);
 
-    let noteRow = [
-      ...document.querySelectorAll(`${STACK} .rail-row.type`),
-    ].find((el) => el.textContent?.includes('Note')) as HTMLElement | undefined;
-    assert.ok(noteRow, 'the Library rail lists a Note card-type row');
     assert
-      .dom(noteRow!.querySelector('.rail-count'))
+      .dom(
+        `${STACK} [data-test-boxel-filter-list-button="Note"] [data-test-filter-list-count]`,
+      )
       .hasText('1', 'the Note rail row shows its single-instance count');
   });
 
@@ -217,15 +211,15 @@ module('Acceptance | workspace card', function (hooks) {
     await click('[data-test-workspace-button="Unnamed Workspace"]');
     await waitFor(`${STACK} nav.tabs`);
 
-    await click(`${STACK} nav.tabs .tab:nth-child(3)`); // Activity
-    await waitFor(`${STACK} .feed-verb.remixed`);
+    await click(`${STACK} [data-test-workspace-tab="activity"]`); // Activity
+    await waitFor(`${STACK} [data-test-feed-verb="Remixed"]`);
     assert
-      .dom(`${STACK} .feed-verb.remixed`)
+      .dom(`${STACK} [data-test-feed-verb="Remixed"]`)
       .hasText('Remixed', 'the remix reads as a Remixed event, not a save');
 
-    await waitFor(`${STACK} .feed-remix-source`);
+    await waitFor(`${STACK} [data-test-feed-remix-source]`);
     assert
-      .dom(`${STACK} .feed-remix-source`)
+      .dom(`${STACK} [data-test-feed-remix-source]`)
       .hasText(
         'from First Note',
         'the event names the source it was cloned from',
@@ -237,12 +231,12 @@ module('Acceptance | workspace card', function (hooks) {
     await click('[data-test-workspace-button="Unnamed Workspace"]');
     await waitFor(`${STACK} nav.tabs`);
 
-    await click(`${STACK} nav.tabs .tab:nth-child(3)`); // Activity
-    await waitFor(`${STACK} .feed-row`);
+    await click(`${STACK} [data-test-workspace-tab="activity"]`); // Activity
+    await waitFor(`${STACK} [data-test-feed-row]`);
 
-    let rows = [...document.querySelectorAll(`${STACK} .feed-row`)];
+    let rows = [...document.querySelectorAll(`${STACK} [data-test-feed-row]`)];
     let titleOf = (row: Element) =>
-      row.querySelector('.feed-title')?.textContent?.trim();
+      row.querySelector('[data-test-feed-title]')?.textContent?.trim();
     let fileRow = rows.find((row) => titleOf(row) === 'welcome-song.mp3');
     assert.ok(
       fileRow,
@@ -254,7 +248,9 @@ module('Acceptance | workspace card', function (hooks) {
     // A file row must be dated, not merely present: '—' is the placeholder
     // rendered when the file's `lastModified` meta fails to reach the client,
     // and the title alone would still render in that case.
-    let when = fileRow!.querySelector('.feed-when')?.textContent?.trim() ?? '';
+    let when =
+      fileRow!.querySelector('[data-test-feed-when]')?.textContent?.trim() ??
+      '';
     assert.notStrictEqual(
       when,
       '—',
@@ -275,8 +271,8 @@ module('Acceptance | workspace card', function (hooks) {
     await click('[data-test-workspace-button="Unnamed Workspace"]');
     await waitFor(`${STACK} nav.tabs`);
 
-    await click(`${STACK} nav.tabs .tab:nth-child(3)`); // Activity
-    await waitFor(`${STACK} .feed-row`);
+    await click(`${STACK} [data-test-workspace-tab="activity"]`); // Activity
+    await waitFor(`${STACK} [data-test-feed-row]`);
 
     // A file feed row routes through the file stack-item path, keyed by the
     // file's URL — not the card path a card row takes.

@@ -120,6 +120,11 @@ export interface PrerenderHtmlPassResult {
   // spawned pass outside the browser). Surfaces on the job result so
   // dashboards attribute the sweep to the job that pays it.
   preWarmMs?: number;
+  // The swap's wall-clock and its transaction's attempt counts (see
+  // `BatchDoneResult`), present once the pass reached its swap.
+  swapMs?: number;
+  swapAttempts?: number;
+  swapRetryMs?: number;
 }
 
 // The `prerender_html` job's visit loop — the HTML channel's analog of the
@@ -236,6 +241,8 @@ export async function runPrerenderHtmlPass({
   // visit loop's resume-skip has no pre-warm analog), which is cheap — the
   // second attempt's populate calls hit the cache as O(1) reads, no re-renders.
   let preWarmMs: number | undefined;
+  let swapMs: number | undefined;
+  let swapCommit: { swapAttempts: number; swapRetryMs: number } | undefined;
   if (preWarm && !isBrowserTestEnv()) {
     let preWarmStart = Date.now();
     try {
@@ -450,11 +457,11 @@ export async function runPrerenderHtmlPass({
       );
     }
     let swapStart = Date.now();
-    let { totalIndexEntries } = await batch.done();
+    let { totalIndexEntries, ...commit } = await batch.done();
+    swapMs = Date.now() - swapStart;
+    swapCommit = commit;
     stats.totalIndexEntries = totalIndexEntries;
-    perfLog.debug(
-      `${jobTag} completed prerendered-html swap in ${Date.now() - swapStart} ms`,
-    );
+    perfLog.debug(`${jobTag} completed prerendered-html swap in ${swapMs} ms`);
   } finally {
     onProgress?.({
       type: 'indexing-finished',
@@ -487,6 +494,8 @@ export async function runPrerenderHtmlPass({
     generation,
     stats,
     ...(preWarmMs !== undefined ? { preWarmMs } : {}),
+    ...(swapMs !== undefined ? { swapMs } : {}),
+    ...(swapCommit ?? {}),
   };
 }
 

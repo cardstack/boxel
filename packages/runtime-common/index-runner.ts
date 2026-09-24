@@ -323,9 +323,11 @@ export class IndexRunner {
     current.#dependencyResolver.reset();
     let start = Date.now();
     // Between-visit phase walls, assembled onto the job result's `phaseTimings`
-    // at the end. `visitLoopMs` / `swapMs` are set inside the try below.
+    // at the end. `visitLoopMs`, `swapMs` and the swap's attempt counts are set
+    // inside the try below.
     let visitLoopMs: number | undefined;
     let swapMs: number | undefined;
+    let swapCommit: { swapAttempts: number; swapRetryMs: number } | undefined;
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} starting from scratch indexing`,
     );
@@ -455,8 +457,9 @@ export class IndexRunner {
         `${jobIdentity(current.#jobInfo)} completed index visit in ${Date.now() - visitStart} ms`,
       );
       let finalizeStart = Date.now();
-      let { totalIndexEntries } = await current.batch.done();
+      let { totalIndexEntries, ...commit } = await current.batch.done();
       swapMs = Date.now() - finalizeStart;
+      swapCommit = commit;
       current.#perfLog.debug(
         `${jobIdentity(current.#jobInfo)} completed index finalization in ${swapMs} ms`,
       );
@@ -505,6 +508,7 @@ export class IndexRunner {
         ...(visitLoopMs !== undefined ? { visitLoopMs } : {}),
         writeMs: current.batch.writeMs,
         ...(swapMs !== undefined ? { swapMs } : {}),
+        ...(swapCommit ?? {}),
       },
     };
   }
@@ -520,9 +524,11 @@ export class IndexRunner {
     current.#dependencyResolver.reset();
     let start = Date.now();
     // Between-visit phase walls, assembled onto the job result's `phaseTimings`
-    // at the end. `visitLoopMs` / `swapMs` are set inside the try below.
+    // at the end. `visitLoopMs`, `swapMs` and the swap's attempt counts are set
+    // inside the try below.
     let visitLoopMs: number | undefined;
     let swapMs: number | undefined;
+    let swapCommit: { swapAttempts: number; swapRetryMs: number } | undefined;
     let operations = new Map<string, 'update' | 'delete'>();
     for (let { url, operation } of changes) {
       if (operation === 'delete') {
@@ -679,8 +685,9 @@ export class IndexRunner {
       visitLoopMs = Date.now() - loopStart;
 
       let finalizeStart = Date.now();
-      let { totalIndexEntries } = await current.batch.done();
+      let { totalIndexEntries, ...commit } = await current.batch.done();
       swapMs = Date.now() - finalizeStart;
+      swapCommit = commit;
       current.stats.totalIndexEntries = totalIndexEntries;
     } finally {
       current.#onProgress?.({
@@ -724,6 +731,7 @@ export class IndexRunner {
         ...(visitLoopMs !== undefined ? { visitLoopMs } : {}),
         writeMs: current.batch.writeMs,
         ...(swapMs !== undefined ? { swapMs } : {}),
+        ...(swapCommit ?? {}),
       },
     };
   }

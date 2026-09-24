@@ -77,6 +77,12 @@ export interface IndexPhaseTimings {
   // The final atomic swap: `batch.done()` (realm-meta update, working → main
   // promotion, obsolete-row prune) in one transaction.
   swapMs?: number;
+  // How many times the swap's transaction ran. More than 1 means a deadlock
+  // or serialization failure against a concurrent commit to the same rows
+  // rolled it back and it ran again.
+  swapAttempts?: number;
+  // The part of `swapMs` spent on attempts that rolled back.
+  swapRetryMs?: number;
 }
 
 export interface StreamFileRef {

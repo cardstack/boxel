@@ -4,6 +4,7 @@ import {
   type ExecuteOptions,
   type Expression,
   type Querier,
+  type TransactionOptions,
   Deferred,
   expressionToSql,
   logger,
@@ -86,6 +87,10 @@ export function hashFilePathForAdvisoryLock(
 const MAX_FILE_WRITE_LOCKS = 256;
 
 const log = logger('pg-adapter');
+
+// deadlock_detected and serialization_failure: the attempt lost a race with
+// another transaction and is expected to succeed when run again.
+const RETRYABLE_TRANSACTION_SQLSTATES = new Set(['40P01', '40001']);
 
 // One line per file-write lock acquisition. Separate from `pg-adapter`'s own
 // channel because it is operational signal rather than adapter diagnostics,
@@ -969,6 +974,50 @@ export class PgAdapter implements DBAdapter {
         throw err;
       }
     });
+  }
+
+  // One transaction on one pinned pool connection: BEGIN, `fn`, COMMIT, with
+  // withConnection issuing the ROLLBACK when `fn` or the COMMIT throws. `fn`'s
+  // statements must go through `txQuerier`; anything it runs through
+  // `execute` checks out a different client and is outside the transaction.
+  //
+  // Postgres resolves a deadlock by aborting one participant (40P01), and a
+  // serialization failure (40001) means the same thing: this attempt lost,
+  // and running it again is expected to succeed. Both roll back and run `fn`
+  // again from the start, up to `maxAttempts`. Any other error is thrown
+  // straight away.
+  async withTransaction<T>(
+    fn: (txQuerier: Querier) => Promise<T>,
+    opts?: TransactionOptions,
+  ): Promise<T> {
+    let maxAttempts = Math.max(1, opts?.maxAttempts ?? 3);
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.withConnection(async (queryFn) => {
+          await queryFn(['BEGIN']);
+          let result = await fn(queryFn);
+          await queryFn(['COMMIT']);
+          return result;
+        });
+      } catch (err: unknown) {
+        let code = (err as { code?: unknown })?.code;
+        if (
+          attempt >= maxAttempts ||
+          typeof code !== 'string' ||
+          !RETRYABLE_TRANSACTION_SQLSTATES.has(code)
+        ) {
+          throw err;
+        }
+        log.warn(
+          `transaction${opts?.label ? ` for ${opts.label}` : ''} rolled back on SQLSTATE ${code} (attempt ${attempt} of ${maxAttempts}); retrying: ${(err as Error).message}`,
+        );
+        // A short randomized pause so the transaction that won the deadlock
+        // can finish before this one takes its locks again.
+        await new Promise((resolve) =>
+          setTimeout(resolve, attempt * (25 + Math.random() * 50)),
+        );
+      }
+    }
   }
 
   async withConnection<T>(

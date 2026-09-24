@@ -213,16 +213,15 @@ import {
   type FileMetaResource,
 } from './index.ts';
 import {
-  assertParamsSupplied,
   canonicalizeTarget,
   newOperationScope,
   readShape,
   resolveOperation,
   runOperation,
+  scopeCallerFor,
 } from './card-operations/dispatch.ts';
 import type { ReadShape } from './card-operations/dispatch.ts';
 import {
-  runInputTransform,
   runOutputTransform,
   type TransformContext,
 } from './card-operations/transforms.ts';
@@ -238,7 +237,6 @@ import {
   atEntry,
   batchEntryFor,
   carriesOperationsExt,
-  entryWithPayload,
   errorsDocument,
   invocationsIn,
   needsActor,
@@ -248,6 +246,7 @@ import {
   readResult,
   resultsTree,
   stagedTree,
+  stageWriteEntry,
   targetFor,
   writeResult,
   type EnvelopeEntry,
@@ -292,14 +291,23 @@ import {
   type TextFileRef,
 } from './stream.ts';
 import { transpileJS } from './transpile.ts';
-import type { Method, RouteTable } from './router.ts';
+import type {
+  CoarseRefusal,
+  Method,
+  Route,
+  RouteDescription,
+  RouteTable,
+} from './router.ts';
 import {
   ArchivedRealmError,
   AuthenticationError,
   AuthenticationErrorMessages,
   AuthorizationError,
+  CoarseAuthenticationRequired,
+  CoarsePermissionInsufficient,
   Router,
   SupportedMimeType,
+  isCoarseRefusal,
   lookupRouteTable,
 } from './router.ts';
 import { parseQuery } from './query.ts';
@@ -687,6 +695,26 @@ function renderHoldMaxMs(): number {
 // so the exemption holds for header-less probes too. Keep in sync with
 // `#publicEndpoints`.
 const ARCHIVED_SEAL_EXEMPT_PATHS = new Set(['_readiness-check', '_session']);
+// Marks the routes that dispatch into card operations — the card+json verbs,
+// the card+source routes and the `/_operations` envelope — as consumers of the
+// realm ACL's recorded outcome. The raw file serve and the module serve are
+// the realm's fallback rather than router routes and consume it too; no other
+// route does.
+const CONSUMES_COARSE_OUTCOME = { consumesCoarseOutcome: true } as const;
+// The methods for which the fallback file and module serve consumes the
+// ACL's outcome — the reads it answers.
+const FALLBACK_CONSUMING_METHODS: ReadonlySet<string> = new Set([
+  'GET',
+  'HEAD',
+]);
+const ROUTER_METHODS: Method[] = [
+  'GET',
+  'QUERY',
+  'POST',
+  'PATCH',
+  'DELETE',
+  'HEAD',
+];
 // How long one `_readiness-check` request holds while the gates it clears
 // settle, before answering not-ready instead. Shared across those gates rather
 // than granted per gate: the hold is a courtesy to the poller, `Retry-After`
@@ -1849,7 +1877,40 @@ export type RequestContext = {
   // all of which take the conservative bounded hold. Identity, not
   // authority, like `authenticatedUser`.
   anonymous?: true;
+  // The realm ACL's verdict on an external request, recorded by
+  // `Realm.handle` rather than enforced where it is made, since that runs
+  // before routing and cannot tell which route the request is for. `false`
+  // carries the refusal the ACL made in `coarseRefusal`, and the realm answers
+  // with exactly that refusal for any route that does not consume the outcome
+  // (see `RouteOptions.consumesCoarseOutcome`). Unset for a realm-internal
+  // dispatch, which the ACL does not judge.
+  coarseAllowed?: boolean;
+  coarseRefusal?: CoarseRefusal;
 };
+
+// What answers a request once it is routed: the answer itself, not yet run,
+// and whether it consumes the realm ACL's recorded outcome.
+interface RequestDispatch {
+  consumesCoarseOutcome: boolean;
+  handle: () => Promise<ResponseWithNodeStream>;
+}
+
+// A route as `Realm.routeDescriptions` lists it: a router route, or the
+// fallback file and module serve for one method, which answers whatever
+// path and media type no router route claimed.
+export type DispatchDescription =
+  | RouteDescription
+  | {
+      method: Method;
+      mimeType: '*';
+      path: '*';
+      consumesCoarseOutcome: boolean;
+    };
+
+type CoarseAdmission = (
+  request: Request,
+  requestContext: RequestContext,
+) => boolean | Promise<boolean>;
 
 export class Realm {
   #startedUp = new Deferred<void>();
@@ -1862,6 +1923,7 @@ export class Realm {
   #batchCore: BatchCore | undefined;
   #adapter: RealmAdapter;
   #router: Router;
+  #testOnlyCoarseAdmission: CoarseAdmission | undefined;
   #log = logger('realm');
   // Anchors the render-hold cap across back-to-back bulk commits; see
   // `_commitBatchUnlocked`. Undefined whenever no commit holds the lane.
@@ -2329,21 +2391,25 @@ export class Realm {
         '/_operations',
         SupportedMimeType.BoxelOperations,
         this.handleOperations.bind(this),
+        CONSUMES_COARSE_OUTCOME,
       )
       .query(
         '/_operations',
         SupportedMimeType.BoxelOperations,
         this.handleOperations.bind(this),
+        CONSUMES_COARSE_OUTCOME,
       )
       .post(
         '/_operations',
         SupportedMimeType.JSONAPI,
         this.handleOperations.bind(this),
+        CONSUMES_COARSE_OUTCOME,
       )
       .query(
         '/_operations',
         SupportedMimeType.JSONAPI,
         this.handleOperations.bind(this),
+        CONSUMES_COARSE_OUTCOME,
       )
       .post(
         '/_cancel-indexing-job',
@@ -2361,8 +2427,18 @@ export class Realm {
         SupportedMimeType.JSONAPI,
         this.invalidateURLs.bind(this),
       )
-      .post('(/|/.+/)', SupportedMimeType.CardJson, this.createCard.bind(this))
-      .get('/.*', SupportedMimeType.CardJson, this.getCard.bind(this))
+      .post(
+        '(/|/.+/)',
+        SupportedMimeType.CardJson,
+        this.createCard.bind(this),
+        CONSUMES_COARSE_OUTCOME,
+      )
+      .get(
+        '/.*',
+        SupportedMimeType.CardJson,
+        this.getCard.bind(this),
+        CONSUMES_COARSE_OUTCOME,
+      )
       .get('/.*', SupportedMimeType.CardHtml, this.getCardHtml.bind(this))
       .get(
         '/.*',
@@ -2374,37 +2450,46 @@ export class Realm {
         '/.+(?<!.json)',
         SupportedMimeType.CardJson,
         this.patchCardInstance.bind(this),
+        CONSUMES_COARSE_OUTCOME,
       )
       .delete(
         '/|/.+(?<!.json)',
         SupportedMimeType.CardJson,
         this.removeCard.bind(this),
+        CONSUMES_COARSE_OUTCOME,
       )
       .post(
         '/.*',
         SupportedMimeType.CardSource,
         this.upsertCardSource.bind(this),
+        CONSUMES_COARSE_OUTCOME,
       )
+      // The octet-stream spelling of the card+source write: the same one-file
+      // `update` operation, sent as bytes rather than text.
       .post(
         '/.*',
         SupportedMimeType.OctetStream,
         this.upsertBinaryFile.bind(this),
+        CONSUMES_COARSE_OUTCOME,
       )
       .get('/.*', SupportedMimeType.FileMeta, this.getFileMeta.bind(this))
       .head(
         '/.*',
         SupportedMimeType.CardSource,
         this.getSourceOrRedirect.bind(this),
+        CONSUMES_COARSE_OUTCOME,
       )
       .get(
         '/.*',
         SupportedMimeType.CardSource,
         this.getSourceOrRedirect.bind(this),
+        CONSUMES_COARSE_OUTCOME,
       )
       .delete(
         '/.+',
         SupportedMimeType.CardSource,
         this.removeCardSource.bind(this),
+        CONSUMES_COARSE_OUTCOME,
       )
       .get(
         '.*/',
@@ -2446,6 +2531,7 @@ export class Realm {
       '/.*',
       SupportedMimeType.CardJson,
       this.headCard.bind(this),
+      CONSUMES_COARSE_OUTCOME,
     );
   }
 
@@ -5017,7 +5103,10 @@ export class Realm {
     // One row peek per target for the whole request: entries often name the
     // same card, and which behavior a name resolves to is read off the
     // target's stored type.
-    let scope = newOperationScope(this.operationCore);
+    let caller = this.#callerOf(request, requestContext);
+    let scope = newOperationScope(this.operationCore, {
+      caller: scopeCallerFor(caller.actor),
+    });
     // An entry may describe the card it runs against with a query instead of
     // naming one, and this is where such a query becomes cards — against the
     // index as it stands now, which is the pre-batch state every other part of
@@ -5032,7 +5121,6 @@ export class Realm {
       envelopeOptions,
     );
     let entries = invocationsIn(tree);
-    let caller = this.#callerOf(request, requestContext);
     // Settled rather than raced, so the entry a refusal names is the earliest
     // one the caller got wrong rather than whichever index read came back
     // first. A batch with two bad entries would otherwise report a different
@@ -5138,39 +5226,18 @@ export class Realm {
 
     let writes = resolved.filter(({ definition }) => isWrite(definition.base));
     if (writes.length > 0) {
-      // Each entry's own two steps before it is staged, in the order
-      // `runOperation` runs them for a read: the `input` stage over the
-      // payload, then the `params` check against what it produced. A value an
-      // `input` supplies is what the check then sees, which is most of what an
-      // `input` is for.
-      //
-      // The check belongs here and not in the executors: a declared param with
-      // no value is the caller's mistake, and the behaviors read the payload
-      // differently enough that some would never notice — a `delete` reads no
-      // payload at all, so a declaration requiring one would be carried out
-      // over a card the caller had not said enough to remove.
-      //
-      // The transformed entry keeps its `position`, which is the key both the
-      // staging schedule and the results are looked up by, and the envelope's
-      // own members. Only the payload moves.
+      // Each entry's `input` stage and `params` check, which `stageWriteEntry`
+      // runs in the order `runOperation` runs them for a read. The transformed
+      // entry keeps its `position`, which is the key both the staging schedule
+      // and the results are looked up by.
       let staged = new Map<EntryPosition, BatchEntry>();
-      for (let write of writes) {
+      for (let [index, write] of writes.entries()) {
         try {
-          if (write.definition.input) {
-            write.entry = entryWithPayload(
-              write.entry,
-              await runInputTransform(
-                write.definition,
-                paramsFor(write.entry),
-                this.#transformContext(write.entry, caller),
-              ),
-            );
-          }
-          let { entry, definition } = write;
-          assertParamsSupplied(definition, paramsFor(entry), {
-            name: entry.name,
-            ...(entry.href ? { id: entry.href } : {}),
-          });
+          writes[index] = await stageWriteEntry(
+            write,
+            this.#transformContext(write.entry, caller),
+          );
+          let { entry, definition } = writes[index];
           staged.set(entry.position, batchEntryFor(entry, definition));
         } catch (err: unknown) {
           throw atEntry(err, write.entry.position);
@@ -5299,7 +5366,7 @@ export class Realm {
       );
       assertTravelsInEnvelope(canonical, definition);
       assertVersionableEntry(canonical, definition);
-      return { entry: canonical, target, definition };
+      return { entry: canonical, target, definition, scope };
     } catch (err: unknown) {
       throw atEntry(err, entry.position);
     }
@@ -5951,8 +6018,9 @@ export class Realm {
             : undefined;
         if (captureTokenUser !== undefined) {
           requestContext.authenticatedUser = captureTokenUser;
+          requestContext.coarseAllowed = true;
         } else {
-          await this.checkPermission(
+          await this.#recordCoarsePermission(
             request,
             requestContext,
             requiredPermission,
@@ -5960,30 +6028,45 @@ export class Realm {
         }
         // An archived realm is sealed for everyone, owner included: once a
         // caller is authorized, every external content request is
-        // short-circuited with 403 (archived). The seal runs AFTER
-        // checkPermission so an unauthenticated or unauthorized caller to a
-        // private realm gets the normal 401/403 and never learns the realm
-        // exists or is archived — only callers who could otherwise reach the
-        // content see the sealed response. A public realm's readers are
-        // authorized by checkPermission, so they do see the seal (the realm's
-        // existence is already public). The seal is method-agnostic, so reads
-        // and writes are blocked by this one check. The realm's public
-        // operational endpoints stay reachable while archived: the
-        // `_readiness-check` health probe (so health checks don't read an
-        // archived realm as down) and `_session` (so authentication still
-        // works). They're matched on `localPath`, independent of request
-        // headers, so a bare health probe that sends no `Accept` header is
-        // still exempt. The archive-management endpoints live on the realm
-        // SERVER router and never reach this boundary, so they stay reachable.
-        // Read fresh (no memoization) for the same reason createRequestContext
-        // does: a peer replica's archive/unarchive must take effect here
-        // without a restart.
-        if (
-          !ARCHIVED_SEAL_EXEMPT_PATHS.has(localPath) &&
-          (await isRealmArchived(this.#dbAdapter, new URL(this.url)))
-        ) {
-          throw new ArchivedRealmError(`Realm ${this.url} is archived`);
+        // short-circuited with 403 (archived). The seal applies only to a
+        // caller the ACL allowed, so an unauthenticated or unauthorized caller
+        // to a private realm gets the normal 401/403 and never learns the
+        // realm exists or is archived — only callers who could otherwise reach
+        // the content see the sealed response. A public realm's readers are
+        // allowed by the ACL, so they do see the seal (the realm's existence
+        // is already public). The seal is method-agnostic, so reads and writes
+        // are blocked by this one check. The realm's public operational
+        // endpoints stay reachable while archived: the `_readiness-check`
+        // health probe (so health checks don't read an archived realm as
+        // down) and `_session` (so authentication still works). They're
+        // matched on `localPath`, independent of request headers, so a bare
+        // health probe that sends no `Accept` header is still exempt. The
+        // archive-management endpoints live on the realm SERVER router and
+        // never reach this boundary, so they stay reachable.
+        if (requestContext.coarseAllowed) {
+          await this.#assertNotArchived(localPath);
         }
+      }
+      let dispatch = this.#routeRequest(request, localPath, requestContext);
+      // The terminal assertion: nothing reaches a handler with the ACL's
+      // refusal on it unless its route consumes that outcome, so a route that
+      // says nothing is refused exactly as the ACL would have refused it. A
+      // refusal of realm-owner authority is never consumed, whichever route
+      // the request lands on: owner authority is the ACL's alone to grant.
+      if (requestContext.coarseAllowed === false) {
+        if (
+          !dispatch.consumesCoarseOutcome ||
+          requiredPermission === 'realm-owner' ||
+          !(await this.#admitsDespiteCoarseRefusal(request, requestContext))
+        ) {
+          throw (
+            requestContext.coarseRefusal ??
+            new AuthorizationError(
+              'Insufficient permissions to perform this action',
+            )
+          );
+        }
+        await this.#assertNotArchived(localPath);
       }
       if (!this.#realmIndexQueryEngine) {
         return systemError({
@@ -5991,66 +6074,7 @@ export class Realm {
           message: 'search index is not available',
         });
       }
-      // Screenshot serving dispatches on the path prefix, not the router
-      // table: the router keys routes on the Accept header, and the browser
-      // requests this route must serve (`<img>` loads, og:image fetches)
-      // send `image/*`-shaped Accept values that match no supported mime
-      // type. Placed after checkPermission so the route inherits realm-read
-      // auth exactly like any realm resource. GET only — checkPermission
-      // exempts HEAD from auth realm-wide, so admitting HEAD here would
-      // hand unauthenticated callers an existence/size/content-hash oracle
-      // over a private realm's captures; no consumer of this route (image
-      // loads, crawlers) sends HEAD.
-      if (request.method === 'GET' && isCaptureServingPath(localPath)) {
-        return await this.serveScreenshot(
-          request,
-          requestContext,
-          localPath.slice(CAPTURE_SERVING_PREFIX.length),
-        );
-      }
-      // Hashed scoped-CSS serving also dispatches on the path rather than
-      // the router table: the request is a module load (`loader.import` of a
-      // `css` resource's href from search results), whose Accept header
-      // matches no supported mime type. The URL carries only a content hash —
-      // the stylesheet bytes live in the `scoped_css` table — so unlike the
-      // inline form (which `maybeHandleScopedCSSRequest` answers locally with
-      // no network hop) this form must be answered here. Gated on the
-      // `_scoped-css/` prefix, not just the filename shape, so a realm file
-      // whose path merely looks hashed isn't shadowed — `scopedCSSServingHref`
-      // is the only producer of these hrefs and always roots them under the
-      // prefix. Placed after checkPermission so it inherits realm-read auth;
-      // GET only for the same HEAD-oracle reason as screenshot serving above.
-      if (
-        request.method === 'GET' &&
-        localPath.startsWith(SCOPED_CSS_SERVING_PREFIX) &&
-        isHashedScopedCSSRequest(localPath)
-      ) {
-        return await this.serveHashedScopedCSS(request, requestContext);
-      }
-      // A file the realm is part-way through assembling, or one a write that
-      // died left behind. It is never indexed, so serving it would hand back
-      // content the realm does not otherwise acknowledge exists.
-      if (isPartialWritePath(localPath)) {
-        return notFound(request, requestContext);
-      }
-      // The GET dispatch above claims the whole `_screenshot/` subtree, so a
-      // realm file stored under it could never be read back — it would
-      // index, list, and answer every GET as an uncaptured miss. Refuse
-      // creation writes up front so the collision surfaces at write time
-      // (the `/_atomic` precheck enforces the same reservation for its
-      // operation hrefs). DELETE stays admitted as the recovery path for
-      // anything already stored there.
-      let reserved = ['PUT', 'PATCH', 'POST'].includes(request.method)
-        ? reservedWriteDestination(localPath)
-        : undefined;
-      if (reserved) {
-        return badRequest({ message: reserved, requestContext });
-      }
-      if (this.#router.handles(request)) {
-        return this.#router.handle(request, requestContext);
-      } else {
-        return this.fallbackHandle(request, requestContext);
-      }
+      return await dispatch.handle();
     } catch (e) {
       if (e instanceof AuthenticationError) {
         return createResponse({
@@ -6101,6 +6125,172 @@ export class Realm {
 
       throw e;
     }
+  }
+
+  // Picks what answers an external or internal request, without running it.
+  // Every answer the realm gives past its authorization check is chosen here,
+  // so each one says whether it consumes the ACL's recorded outcome and the
+  // terminal assertion in `internalHandle` sees all of them.
+  #routeRequest(
+    request: Request,
+    localPath: LocalPath,
+    requestContext: RequestContext,
+  ): RequestDispatch {
+    // Screenshot serving dispatches on the path prefix, not the router
+    // table: the router keys routes on the Accept header, and the browser
+    // requests this route must serve (`<img>` loads, og:image fetches)
+    // send `image/*`-shaped Accept values that match no supported mime
+    // type. Placed after the authorization check so the route inherits
+    // realm-read auth exactly like any realm resource. GET only — the check
+    // exempts HEAD from auth realm-wide, so admitting HEAD here would
+    // hand unauthenticated callers an existence/size/content-hash oracle
+    // over a private realm's captures; no consumer of this route (image
+    // loads, crawlers) sends HEAD.
+    if (request.method === 'GET' && isCaptureServingPath(localPath)) {
+      return {
+        consumesCoarseOutcome: false,
+        handle: () =>
+          this.serveScreenshot(
+            request,
+            requestContext,
+            localPath.slice(CAPTURE_SERVING_PREFIX.length),
+          ),
+      };
+    }
+    // Hashed scoped-CSS serving also dispatches on the path rather than
+    // the router table: the request is a module load (`loader.import` of a
+    // `css` resource's href from search results), whose Accept header
+    // matches no supported mime type. The URL carries only a content hash —
+    // the stylesheet bytes live in the `scoped_css` table — so unlike the
+    // inline form (which `maybeHandleScopedCSSRequest` answers locally with
+    // no network hop) this form must be answered here. Gated on the
+    // `_scoped-css/` prefix, not just the filename shape, so a realm file
+    // whose path merely looks hashed isn't shadowed — `scopedCSSServingHref`
+    // is the only producer of these hrefs and always roots them under the
+    // prefix. Inherits realm-read auth like screenshot serving; GET only for
+    // the same HEAD-oracle reason.
+    if (
+      request.method === 'GET' &&
+      localPath.startsWith(SCOPED_CSS_SERVING_PREFIX) &&
+      isHashedScopedCSSRequest(localPath)
+    ) {
+      return {
+        consumesCoarseOutcome: false,
+        handle: () => this.serveHashedScopedCSS(request, requestContext),
+      };
+    }
+    // A file the realm is part-way through assembling, or one a write that
+    // died left behind. It is never indexed, so serving it would hand back
+    // content the realm does not otherwise acknowledge exists.
+    if (isPartialWritePath(localPath)) {
+      return {
+        consumesCoarseOutcome: false,
+        handle: async () => notFound(request, requestContext),
+      };
+    }
+    // The GET dispatch above claims the whole `_screenshot/` subtree, so a
+    // realm file stored under it could never be read back — it would
+    // index, list, and answer every GET as an uncaptured miss. Refuse
+    // creation writes up front so the collision surfaces at write time
+    // (the `/_atomic` precheck enforces the same reservation for its
+    // operation hrefs). DELETE stays admitted as the recovery path for
+    // anything already stored there.
+    let reserved = ['PUT', 'PATCH', 'POST'].includes(request.method)
+      ? reservedWriteDestination(localPath)
+      : undefined;
+    if (reserved) {
+      return {
+        consumesCoarseOutcome: false,
+        handle: async () => badRequest({ message: reserved, requestContext }),
+      };
+    }
+    let route = this.#router.lookupRoute(request);
+    if (route) {
+      let matched: Route = route;
+      return {
+        consumesCoarseOutcome: matched.consumesCoarseOutcome,
+        handle: () => this.#router.handle(request, requestContext, matched),
+      };
+    }
+    // The raw file serve and the transpiled module serve, both of which read
+    // the stored bytes through the `readSource` operation. Those are reads, so
+    // only a read reaching here consumes the ACL's outcome; any other method
+    // is a request no route claimed, and is refused as the ACL refused it.
+    return {
+      consumesCoarseOutcome: FALLBACK_CONSUMING_METHODS.has(request.method),
+      handle: () => this.fallbackHandle(request, requestContext),
+    };
+  }
+
+  // The realm ACL's decision on an external request, recorded on the request
+  // context. The decision is the one `checkPermission` makes; an ACL refusal
+  // is kept to be answered after routing (see `internalHandle`), while a
+  // credential the realm cannot accept is still refused here.
+  async #recordCoarsePermission(
+    request: Request,
+    requestContext: RequestContext,
+    requiredPermission: 'read' | 'write' | 'realm-owner',
+  ): Promise<void> {
+    try {
+      await this.checkPermission(request, requestContext, requiredPermission);
+      requestContext.coarseAllowed = true;
+    } catch (e) {
+      if (!isCoarseRefusal(e)) {
+        throw e;
+      }
+      requestContext.coarseAllowed = false;
+      requestContext.coarseRefusal = e;
+    }
+  }
+
+  // Whether a request the realm ACL refused is admitted anyway by a route
+  // that consumes the ACL's outcome. Nothing widens the ACL, so the refusal
+  // stands on every route; this is the single point where a request the ACL
+  // declined could be admitted, and anything admitted here still meets the
+  // archived seal.
+  async #admitsDespiteCoarseRefusal(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<boolean> {
+    if (this.#testOnlyCoarseAdmission) {
+      return await this.#testOnlyCoarseAdmission(request, requestContext);
+    }
+    return false;
+  }
+
+  // Stands in for the admission decision so a test can show which requests
+  // an admission would reach and which the terminal assertion refuses
+  // regardless. Pass `undefined` to restore the real decision.
+  __testOnlySetCoarseAdmission(admit: CoarseAdmission | undefined): void {
+    this.#testOnlyCoarseAdmission = admit;
+  }
+
+  // Read fresh (no memoization) for the same reason createRequestContext
+  // does: a peer replica's archive/unarchive must take effect here without a
+  // restart.
+  async #assertNotArchived(localPath: LocalPath): Promise<void> {
+    if (
+      !ARCHIVED_SEAL_EXEMPT_PATHS.has(localPath) &&
+      (await isRealmArchived(this.#dbAdapter, new URL(this.url)))
+    ) {
+      throw new ArchivedRealmError(`Realm ${this.url} is archived`);
+    }
+  }
+
+  // Every route with whether it consumes the realm ACL's recorded outcome,
+  // for checking that set without reaching each route: the router's routes,
+  // then the fallback file and module serve per method. The path-prefix
+  // dispatches in `#routeRequest` consume nothing and are not listed.
+  routeDescriptions(): DispatchDescription[] {
+    return [
+      ...this.#router.routes(),
+      ...ROUTER_METHODS.map((method) => ({
+        method,
+        mimeType: '*' as const,
+        path: '*' as const,
+        consumesCoarseOutcome: FALLBACK_CONSUMING_METHODS.has(method),
+      })),
+    ];
   }
 
   // Requests for the root of the realm without a trailing slash aren't
@@ -8121,7 +8311,7 @@ export class Realm {
       warnRefusal(
         `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}) missing auth header`,
       );
-      throw new AuthenticationError(
+      throw new CoarseAuthenticationRequired(
         AuthenticationErrorMessages.MissingAuthHeader,
       );
     }
@@ -8227,7 +8417,7 @@ export class Realm {
         warnRefusal(
           `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
         );
-        throw new AuthorizationError(
+        throw new CoarsePermissionInsufficient(
           'Insufficient permissions to perform this action',
         );
       }

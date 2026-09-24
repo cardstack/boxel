@@ -113,7 +113,10 @@ export function isFileDefCodeRef(
   return false;
 }
 
-function extensionOfName(name: string): string {
+// The extension of a file's last path segment as the tables here key on it:
+// lowercase with the leading dot, or '' for none. A leading dot alone
+// (`.gitignore`) names a file, not an extension.
+export function extensionOfName(name: string): string {
   let dot = name.lastIndexOf('.');
   return dot <= 0 ? '' : name.slice(dot).toLowerCase();
 }

@@ -59,7 +59,7 @@
   --tooltip: var(--boxel-dark-80);
   --tooltip-foreground: var(--boxel-light);
   /* third ink step, fainter than --muted-foreground */
-  --subtle-foreground: var(--boxel-400);
+  --subtle-foreground: var(--boxel-450);
 
   /* roles */
   --primary: var(--boxel-highlight);
@@ -140,8 +140,8 @@
   --warning-foreground: var(--boxel-dark);
   --info: var(--boxel-blue);
   --info-foreground: var(--boxel-light);
-  --attention: var(--boxel-pink);
-  --attention-foreground: var(--boxel-light);
+  --attention: var(--boxel-amber);
+  --attention-foreground: var(--boxel-dark);
   --overlay: var(--boxel-dark-50);
 
   /* Hue as ink. `--x`/`--x-foreground` cover ink *on* a hue's fill; `--x-ink` is
