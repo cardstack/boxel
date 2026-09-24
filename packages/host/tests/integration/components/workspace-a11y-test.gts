@@ -79,7 +79,7 @@ module('Integration | Card | workspace | accessibility', function (hooks) {
     await renderCard(loader, new Workspace({}), 'isolated');
 
     assert
-      .dom('.search-box .search-kbd')
+      .dom('[data-test-search-hotkey]')
       .hasAttribute(
         'aria-hidden',
         'true',
@@ -87,7 +87,7 @@ module('Integration | Card | workspace | accessibility', function (hooks) {
       );
     // Both spellings, because the binding accepts either modifier.
     assert
-      .dom('.search-box .search-input')
+      .dom('[data-test-workspace-search]')
       .hasAttribute('aria-keyshortcuts', 'Meta+K Control+K');
   });
 
@@ -100,7 +100,7 @@ module('Integration | Card | workspace | accessibility', function (hooks) {
     // Asserted against the label the module computed for this browser rather
     // than a hardcoded glyph, so the test reads the same on any platform.
     assert
-      .dom('.search-box .search-kbd')
+      .dom('[data-test-search-hotkey]')
       .hasText(ws.searchHotkeyLabel(navigator.platform));
   });
 
@@ -122,7 +122,7 @@ module('Integration | Card | workspace | accessibility', function (hooks) {
     // "No matching cards" — that would report a real absence it never checked.
     await renderCard(loader, new Workspace({}), 'isolated');
 
-    await fillIn('.search-box .search-input', 'anything');
+    await fillIn('[data-test-workspace-search]', 'anything');
     // Let the debounce fire and the task settle before asserting the negative.
     await waitUntil(() => true, { timeout: 300 });
 
@@ -140,7 +140,7 @@ module('Integration | Card | workspace | accessibility', function (hooks) {
     await renderCard(loader, new Workspace({}), 'isolated');
 
     assert
-      .dom('.search-box .search-input')
+      .dom('[data-test-workspace-search]')
       .doesNotHaveAttribute('aria-controls')
       .doesNotHaveAttribute('aria-expanded');
   });
@@ -172,7 +172,7 @@ module('Integration | Card | workspace | accessibility', function (hooks) {
     );
 
     assert
-      .dom('.frame-actions')
+      .dom('[data-test-frame-actions]')
       .exists('the search chrome is still rendered')
       .isNotVisible('but hidden while the card is buried');
   });
@@ -190,7 +190,7 @@ module('Integration | Card | workspace | accessibility', function (hooks) {
       </template>,
     );
 
-    assert.dom('.frame-actions').isVisible('shown for the top card');
+    assert.dom('[data-test-frame-actions]').isVisible('shown for the top card');
   });
 });
 
@@ -295,14 +295,14 @@ module(
         </template>,
       );
       await waitUntil(() =>
-        document.querySelector('.search-box .search-input'),
+        document.querySelector('[data-test-workspace-search]'),
       );
     }
 
     test('a matching search announces a count, and blurring it falls silent', async function (assert) {
       await renderWorkspace();
 
-      await fillIn('.search-box .search-input', 'Mango');
+      await fillIn('[data-test-workspace-search]', 'Mango');
       await waitUntil(() => announcement() !== '', { timeout: 5000 });
       assert.strictEqual(
         announcement(),
@@ -313,7 +313,7 @@ module(
       // The regression: blur clears the dropdown but leaves the term. The region
       // must go silent (dismissed), not re-announce "No matching cards" for a
       // search that did match.
-      await blur('.search-box .search-input');
+      await blur('[data-test-workspace-search]');
       await waitUntil(() => announcement() === '', { timeout: 5000 });
       assert.strictEqual(
         announcement(),
@@ -325,7 +325,7 @@ module(
     test('a genuine no-match announces it, visually hidden', async function (assert) {
       await renderWorkspace();
 
-      await fillIn('.search-box .search-input', 'zzz-no-such-card');
+      await fillIn('[data-test-workspace-search]', 'zzz-no-such-card');
       await waitUntil(() => announcement() !== '', { timeout: 5000 });
       assert.strictEqual(announcement(), 'No matching cards');
 

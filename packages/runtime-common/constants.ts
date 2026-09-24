@@ -40,6 +40,13 @@ export const skillsIndexLocalPath = 'index.md';
 // rather than going through the room defaults.
 export const devSkillLocalPath = 'Skill/boxel-development';
 
+// The extensions the realm serves as compiled modules rather than as stored
+// content. Declared here, in a leaf, rather than in the barrel: modules low in
+// the import graph read it while their own body runs, and reaching the barrel
+// from one of them is a cycle — `index.ts` re-exports them, so a const
+// declared there is still in temporal dead zone at that point.
+export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
+
 export const baseRef: ResolvedCodeRef = {
   module: `${baseRealmRRI}card-api` as RealmResourceIdentifier,
   name: 'BaseDef',
