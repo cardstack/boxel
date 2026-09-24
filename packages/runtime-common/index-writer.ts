@@ -276,10 +276,6 @@ export interface PrerenderedHtmlChange {
   operation: 'update' | 'delete';
 }
 
-// The HTML half of a fused-visit index entry, in the shape the
-// prerendered_html writer consumes. A fused visit produces one combined
-// index+render diagnostics blob; the whole blob rides on both channels'
-// rows.
 // The copy of a row's diagnostics its `error_doc` carries. That copy is served
 // to whoever reads the broken card — the card error response's
 // `meta.diagnostics`, which the error panel renders and "send error to AI
@@ -291,6 +287,10 @@ function errorDocDiagnostics(diagnostics: Diagnostics): Diagnostics {
   return rest;
 }
 
+// The HTML half of a fused-visit index entry, in the shape the
+// prerendered_html writer consumes. A fused visit produces one combined
+// index+render diagnostics blob; the whole blob rides on both channels'
+// rows.
 function prerenderedHtmlEntryFrom(
   entry: SearchIndexEntry,
   diagnostics: Diagnostics,
