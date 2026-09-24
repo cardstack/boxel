@@ -492,14 +492,14 @@ function assignRealmConfig(
 // pointer (the index overlay says why), and like `config` called only where
 // the attribute is present.
 //
-// A pointer to the realm's authorization is held to a single shape, an object
-// whose `card` names a card on the web, and anything else leaves the realm
-// with no policy at all. That is the direction a malformed pointer has to fail
-// in: a realm with no policy is governed by its realm permissions alone,
-// whereas falling back to some default would grant access nobody wrote, and
-// refusing to start would take the realm down over a typo in its settings. An
-// explicit null is how an owner writes "no policy", so it is dropped without a
-// warning; every other shape says what it was in the log.
+// The pointer is a string naming a card on the web, and anything else leaves
+// the realm with no policy at all. That is the direction a malformed pointer
+// has to fail in: a realm with no policy is governed by its realm permissions
+// alone, whereas falling back to some default would grant access nobody
+// wrote, and refusing to start would take the realm down over a typo in its
+// settings. A null or blank value is how an owner writes "no policy" — the
+// field's editor stores one when its input is cleared — so it is dropped
+// without a warning; every other value says what it was in the log.
 //
 // Only the pointer is read here. What the card says, and whether it loads at
 // all, is decided by whatever follows it.
@@ -510,13 +510,13 @@ function assignRealmPolicy(
   log: { warn: (message: string) => void },
 ): void {
   delete realmInfo.policy;
-  if (policy === null) {
+  if (policy === null || (typeof policy === 'string' && !policy.trim())) {
     return;
   }
   let reference = readRealmPolicyReference(policy, virtualNetwork);
   if ('problem' in reference) {
     log.warn(
-      `ignoring the RealmConfig card's \`policy\`, which is ${reference.problem} rather than a reference to a policy card`,
+      `ignoring the RealmConfig card's \`policy\`, which is ${reference.problem} rather than the id of a policy card`,
     );
     return;
   }
@@ -529,20 +529,14 @@ function readRealmPolicyReference(
   policy: unknown,
   virtualNetwork: VirtualNetwork,
 ): RealmPolicyReference | { problem: string } {
-  if (Array.isArray(policy)) {
-    return { problem: 'an array' };
-  }
-  if (typeof policy !== 'object' || policy === null) {
-    return { problem: typeof policy };
-  }
-  if (!('card' in policy)) {
-    return { problem: 'an object with no `card`' };
-  }
-  let { card } = policy as { card: unknown };
-  if (typeof card !== 'string') {
-    let kind =
-      card === null ? 'null' : Array.isArray(card) ? 'an array' : typeof card;
-    return { problem: `an object whose \`card\` is ${kind}` };
+  if (typeof policy !== 'string') {
+    return {
+      problem: Array.isArray(policy)
+        ? 'an array'
+        : typeof policy === 'object'
+          ? 'an object'
+          : `a ${typeof policy}`,
+    };
   }
   // Either spelling a card id is served in: an absolute URL, or the prefix
   // form a prefix-mapped realm serves its cards' ids in, which the virtual
@@ -552,18 +546,17 @@ function readRealmPolicyReference(
   // could fairly be resolved against.
   let url: URL;
   try {
-    url = virtualNetwork.toURL(card);
+    url = virtualNetwork.toURL(policy.trim());
   } catch {
     return {
-      problem:
-        'an object whose `card` is neither an absolute URL nor a realm-prefixed card id',
+      problem: 'neither an absolute URL nor a realm-prefixed card id',
     };
   }
   // A card is served over http(s). A `file:`, `data:` or `javascript:` URL
   // parses as absolute but names nothing a realm could load as a card.
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     return {
-      problem: `an object whose \`card\` is a ${url.protocol} URL rather than an http(s) one`,
+      problem: `a ${url.protocol} URL rather than an http(s) one`,
     };
   }
   // Kept as the resolved URL, so whatever reads the pointer is handed one
