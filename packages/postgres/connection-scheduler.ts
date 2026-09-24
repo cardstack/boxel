@@ -30,10 +30,14 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 //   waiting tenant that currently holds the fewest, and arrival order breaks
 //   ties. A tenant with one query waiting behind another tenant's hundreds is
 //   served next, not last.
-// - While another tenant has work open, a tenant holds at most
-//   `tenantShare` connections; its excess waits here even if connections are
-//   free. A tenant with no one else active is not held to it, so a realm
-//   searching alone keeps the whole pool.
+// - While the pool is oversubscribed — more acquisitions wanting a connection
+//   than it has connections — and another tenant has work open, a tenant
+//   holds at most `tenantShare` connections; its excess waits here even if
+//   connections are free. Below that point nothing is held back: a pool
+//   with room for everyone's work is not a pool anyone is being crowded out
+//   of, and a search's own fan-out keeps all the parallelism it has. A tenant
+//   with no one else active is not held to it either, so a realm searching
+//   alone keeps the whole pool.
 // - Untagged work — anything not run under `withConnectionTenant`, which is
 //   everything but search — is ordered with the tenants as one more of them
 //   but never held to the share, and its activity does not hold anyone else
@@ -44,6 +48,14 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 //   It cannot finish, and so cannot give back the connection it is nested in,
 //   until it gets one; holding it to a share its own tenant's outer holders
 //   have used up would deadlock that tenant.
+//
+// Oversubscription is judged on demand — connections granted plus
+// acquisitions waiting — rather than on connections in use, because holding a
+// tenant to its share is what empties the pool: judged on use, the share
+// would lift the moment it took effect, the capped tenant would refill the
+// pool, and the share would return, over and over. On demand, the capped
+// tenant's own backlog keeps the condition true for as long as it lasts, and
+// it lifts once that backlog would fit.
 //
 // "Has work open" is whether a `withConnectionTenant` scope for the tenant is
 // running, not whether it happens to hold or want a connection at this
@@ -59,6 +71,7 @@ export class ConnectionScheduler {
   #held = new Map<TenantKey, number>();
   #queues = new Map<TenantKey, Waiter[]>();
   #nested: Waiter[] = [];
+  #waiting = 0;
   #arrivals = 0;
   #unsubscribe: () => void;
 
@@ -86,11 +99,7 @@ export class ConnectionScheduler {
   // Acquisitions waiting for a connection, whether for want of a free one or
   // because their tenant is at its share.
   get waiting(): number {
-    let count = this.#nested.length;
-    for (let queue of this.#queues.values()) {
-      count += queue.length;
-    }
-    return count;
+    return this.#waiting;
   }
 
   // Acquisitions waiting only because their tenant is at its share — the ones
@@ -111,11 +120,13 @@ export class ConnectionScheduler {
     let scope = scopeStorage.getStore();
     let key: TenantKey = scope?.tenant ?? UNTAGGED;
     let nested = holdsConnection(scope?.holding);
-    if (this.#inUse < this.#limit && (nested || this.#eligible(key))) {
+    // This arrival counts toward the demand it is judged against.
+    if (this.#inUse < this.#limit && (nested || this.#eligible(key, 1))) {
       return Promise.resolve(this.#grant(key));
     }
     return new Promise((resolve) => {
       let waiter: Waiter = { key, arrival: this.#arrivals++, resolve };
+      this.#waiting++;
       if (nested) {
         this.#nested.push(waiter);
       } else {
@@ -135,11 +146,16 @@ export class ConnectionScheduler {
     this.#unsubscribe();
   }
 
-  #eligible(key: TenantKey): boolean {
+  // Whether a free connection may go to `key`. `arriving` is demand not yet
+  // queued — the acquisition asking, when it has not had to wait.
+  #eligible(key: TenantKey, arriving = 0): boolean {
     if (key === UNTAGGED) {
       return true;
     }
     if ((this.#held.get(key) ?? 0) < this.#tenantShare) {
+      return true;
+    }
+    if (this.#inUse + this.#waiting + arriving <= this.#limit) {
       return true;
     }
     return !anotherTenantOpen(key);
@@ -171,6 +187,7 @@ export class ConnectionScheduler {
       if (!next) {
         return;
       }
+      this.#waiting--;
       next.resolve(this.#grant(next.key));
     }
   }

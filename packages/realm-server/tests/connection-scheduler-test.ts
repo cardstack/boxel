@@ -57,6 +57,18 @@ function openScope(tenant: string): {
   };
 }
 
+// Release everything held, then each queued acquisition as it is granted,
+// until nothing is left. Leaves the scheduler empty for the next test.
+async function drain(
+  held: (() => void)[],
+  queued: Promise<() => void>[],
+): Promise<void> {
+  held.forEach((release) => release());
+  for (let acquisition of queued) {
+    (await acquisition)();
+  }
+}
+
 module(basename(import.meta.filename), function () {
   test('grants up to the limit and hands a released connection to the next waiter', async function (assert) {
     let scheduler = new ConnectionScheduler({ limit: 2, tenantShare: 2 });
@@ -137,164 +149,247 @@ module(basename(import.meta.filename), function () {
     scheduler.dispose();
   });
 
-  test('a tenant searching alone is not held to its share', async function (assert) {
+  test('a tenant searching alone is not held to its share, however much it asks for', async function (assert) {
     let scheduler = new ConnectionScheduler({ limit: 6, tenantShare: 2 });
     let a = openScope(REALM_A);
-    let releases = await a.run(() =>
+    let granted = await a.run(() =>
       Promise.all(Array.from({ length: 6 }, () => scheduler.acquire())),
     );
+    let backlog = Array.from({ length: 10 }, () =>
+      a.run(() => scheduler.acquire()),
+    );
     assert.strictEqual(scheduler.inUse, 6, 'the whole pool');
-    assert.strictEqual(scheduler.waitingAtShare, 0);
-    releases.forEach((release) => release());
+    assert.strictEqual(scheduler.waiting, 10);
+    assert.strictEqual(
+      scheduler.waitingAtShare,
+      0,
+      'its backlog waits for connections, not for a share',
+    );
+    await drain(granted, backlog);
     a.close();
     await a.closed;
     scheduler.dispose();
   });
 
-  test('while another tenant has work open, a tenant waits at its share even with connections free', async function (assert) {
+  test('a pool with room for everyone’s work holds no one to the share', async function (assert) {
     let scheduler = new ConnectionScheduler({ limit: 6, tenantShare: 2 });
     let a = openScope(REALM_A);
     let b = openScope(REALM_B);
-
-    let first = await a.run(() => scheduler.acquire());
-    let second = await a.run(() => scheduler.acquire());
-    let third = a.run(() => scheduler.acquire());
-    assert.false(
-      (await settledWithin(third, 20)).settled,
-      'the third waits though four connections are free',
-    );
-    assert.strictEqual(scheduler.inUse, 2);
-    assert.strictEqual(scheduler.waitingAtShare, 1);
-
-    let quiet = await settledWithin(
-      b.run(() => scheduler.acquire()),
+    let granted = await settledWithin(
+      a.run(() =>
+        Promise.all(Array.from({ length: 5 }, () => scheduler.acquire())),
+      ),
       50,
     );
-    assert.true(quiet.settled, 'the other tenant is granted at once');
-
-    first();
-    let granted = await settledWithin(third, 200);
     assert.true(
       granted.settled,
-      'dropping under its share lets the waiter through',
+      'five connections past a share of two, while another tenant is open',
     );
-
-    second();
-    (granted as { value: () => void }).value();
-    (quiet as { value: () => void }).value();
+    assert.strictEqual(scheduler.inUse, 5);
+    assert.strictEqual(scheduler.waitingAtShare, 0);
+    (granted as { value: (() => void)[] }).value.forEach((release) =>
+      release(),
+    );
     a.close();
     b.close();
     await Promise.all([a.closed, b.closed]);
     scheduler.dispose();
   });
 
-  test('the share lifts when the other tenant’s last scope closes', async function (assert) {
+  test('once the pool is oversubscribed, a tenant waits at its share even with connections free, until the other tenant closes', async function (assert) {
     let scheduler = new ConnectionScheduler({ limit: 6, tenantShare: 2 });
     let a = openScope(REALM_A);
     let b = openScope(REALM_B);
 
-    let held = await a.run(() =>
-      Promise.all([scheduler.acquire(), scheduler.acquire()]),
+    let aHeld = await a.run(() =>
+      Promise.all(Array.from({ length: 6 }, () => scheduler.acquire())),
     );
-    let waiters = [
+    let aBacklog = Array.from({ length: 10 }, () =>
       a.run(() => scheduler.acquire()),
-      a.run(() => scheduler.acquire()),
-    ];
-    assert.strictEqual(scheduler.waitingAtShare, 2);
+    );
+    let bQueued = b.run(() => scheduler.acquire());
+    assert.strictEqual(scheduler.waiting, 11, 'demand is past the pool');
 
+    aHeld.pop()!();
+    let bGranted = await settledWithin(bQueued, 50);
+    assert.true(
+      bGranted.settled,
+      'the freed connection goes to the other tenant',
+    );
+
+    // Three more of the heavy tenant's queries finish. It is down to its share
+    // of two, three connections sit free, and its backlog still waits.
+    aHeld.pop()!();
+    aHeld.pop()!();
+    aHeld.pop()!();
+    assert.strictEqual(scheduler.inUse, 3);
+    assert.strictEqual(scheduler.waitingAtShare, 10);
+    assert.false(
+      (await settledWithin(aBacklog[0], 20)).settled,
+      'the backlog waits though connections are free',
+    );
+
+    let bRelease = (bGranted as { value: () => void }).value;
+    bRelease();
     b.close();
     await b.closed;
-    let granted = await settledWithin(Promise.all(waiters), 200);
-    assert.true(
-      granted.settled,
-      'the queued work runs once no other tenant is open',
+    assert.strictEqual(
+      scheduler.inUse,
+      6,
+      'with no one else open the backlog takes the whole pool',
     );
-    assert.strictEqual(scheduler.inUse, 4);
+    assert.strictEqual(scheduler.waitingAtShare, 0);
 
-    held.forEach((release) => release());
-    (granted as { value: (() => void)[] }).value.forEach((release) =>
-      release(),
-    );
+    await drain(aHeld, aBacklog);
     a.close();
     await a.closed;
     scheduler.dispose();
   });
 
-  test('untagged work is never held to the share and holds no one else to it', async function (assert) {
-    let scheduler = new ConnectionScheduler({ limit: 6, tenantShare: 2 });
+  test('a tenant at its share still gets its share, and past it once its backlog fits', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 4, tenantShare: 1 });
     let a = openScope(REALM_A);
+    let b = openScope(REALM_B);
 
-    let untagged = await Promise.all(
-      Array.from({ length: 3 }, () => scheduler.acquire()),
+    let aHeld = await a.run(() =>
+      Promise.all(Array.from({ length: 4 }, () => scheduler.acquire())),
     );
+    let order: number[] = [];
+    let aBacklog = Array.from({ length: 5 }, (_unused, n) =>
+      a
+        .run(() => scheduler.acquire())
+        .then((release) => {
+          order.push(n);
+          return release;
+        }),
+    );
+    aHeld.forEach((release) => release());
+    let first = await settledWithin(aBacklog[0], 50);
+    assert.true(first.settled, 'dropping under its share lets one through');
+    assert.strictEqual(scheduler.inUse, 1, 'and only one');
+
+    (first as { value: () => void }).value();
+    let rest = await settledWithin(Promise.all(aBacklog.slice(1)), 200);
+    assert.true(
+      rest.settled,
+      'once what is left fits the pool, the share stops applying',
+    );
+    assert.deepEqual(order, [0, 1, 2, 3, 4]);
+    (rest as { value: (() => void)[] }).value.forEach((release) => release());
+    a.close();
+    b.close();
+    await Promise.all([a.closed, b.closed]);
+    scheduler.dispose();
+  });
+
+  test('untagged work is never held to the share', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 4, tenantShare: 1 });
+    let a = openScope(REALM_A);
+    let b = openScope(REALM_B);
+
+    let aHeld = await a.run(() =>
+      Promise.all(Array.from({ length: 4 }, () => scheduler.acquire())),
+    );
+    let aBacklog = Array.from({ length: 10 }, () =>
+      a.run(() => scheduler.acquire()),
+    );
+    aHeld.pop()!();
+    aHeld.pop()!();
     assert.strictEqual(
-      currentConnectionTenant(),
-      undefined,
-      'these acquisitions are untagged',
+      scheduler.inUse,
+      2,
+      'two connections free while the tenant’s backlog waits at its share',
     );
-    let tenantWork = await settledWithin(
-      a.run(() =>
-        Promise.all(Array.from({ length: 3 }, () => scheduler.acquire())),
-      ),
+    assert.strictEqual(currentConnectionTenant(), undefined);
+    let untagged = await settledWithin(
+      Promise.all([scheduler.acquire(), scheduler.acquire()]),
       50,
     );
-    assert.true(
-      tenantWork.settled,
-      'untagged activity does not put the only open tenant at its share',
-    );
-    assert.strictEqual(scheduler.inUse, 6);
+    assert.true(untagged.settled, 'untagged work takes the free connections');
 
-    untagged.forEach((release) => release());
-    (tenantWork as { value: (() => void)[] }).value.forEach((release) =>
+    (untagged as { value: (() => void)[] }).value.forEach((release) =>
       release(),
+    );
+    b.close();
+    await b.closed;
+    await drain(aHeld, aBacklog);
+    a.close();
+    await a.closed;
+    scheduler.dispose();
+  });
+
+  test('untagged activity does not put the only open tenant at its share', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 4, tenantShare: 1 });
+    let a = openScope(REALM_A);
+
+    let untagged = await Promise.all([
+      scheduler.acquire(),
+      scheduler.acquire(),
+    ]);
+    let aHeld = await a.run(() =>
+      Promise.all([scheduler.acquire(), scheduler.acquire()]),
+    );
+    let aBacklog = Array.from({ length: 8 }, () =>
+      a.run(() => scheduler.acquire()),
+    );
+    untagged.pop()!();
+    let next = await settledWithin(aBacklog[0], 50);
+    assert.true(
+      next.settled,
+      'past its share on an oversubscribed pool, because no other tenant is open',
+    );
+    untagged.pop()!();
+    await drain(
+      [...aHeld, (next as { value: () => void }).value],
+      aBacklog.slice(1),
     );
     a.close();
     await a.closed;
     scheduler.dispose();
   });
 
-  test('work nested in a held connection is granted past the share and ahead of other waiters', async function (assert) {
-    let scheduler = new ConnectionScheduler({ limit: 3, tenantShare: 1 });
+  test('work nested in a held connection is granted ahead of other waiters and past the share, until the hold ends', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 4, tenantShare: 1 });
     let a = openScope(REALM_A);
     let b = openScope(REALM_B);
 
     let outer = await a.run(() => scheduler.acquire());
     let holding = await a.run(async () => markConnectionHeld());
-    let nested = await settledWithin(
-      a.run(() => holding.run(() => scheduler.acquire())),
-      50,
+    let bHeld = await b.run(() =>
+      Promise.all(Array.from({ length: 3 }, () => scheduler.acquire())),
     );
-    assert.true(
-      nested.settled,
-      'the nested acquisition is granted though its tenant is at its share',
+    let bBacklog = Array.from({ length: 5 }, () =>
+      b.run(() => scheduler.acquire()),
+    );
+    assert.strictEqual(
+      scheduler.inUse,
+      4,
+      'the pool is full and oversubscribed',
     );
 
-    let other = await b.run(() => scheduler.acquire());
-    assert.strictEqual(scheduler.inUse, 3, 'the pool is full');
-    let queuedB = b.run(() => scheduler.acquire());
-    let queuedNested = a.run(() => holding.run(() => scheduler.acquire()));
-    other();
-    let first = await Promise.race([
-      queuedNested.then(() => 'nested'),
-      queuedB.then(() => 'b'),
-    ]);
-    assert.strictEqual(first, 'nested', 'nested work goes first');
+    let nested = a.run(() => holding.run(() => scheduler.acquire()));
+    bHeld.pop()!();
+    let nestedGranted = await settledWithin(nested, 50);
+    assert.true(
+      nestedGranted.settled,
+      'the nested acquisition takes the freed connection, ahead of the backlog and past its tenant’s share',
+    );
 
     holding.end();
     let afterEnd = a.run(() => holding.run(() => scheduler.acquire()));
+    bHeld.pop()!();
     assert.false(
       (await settledWithin(afterEnd, 20)).settled,
-      'once the hold ends, the same context waits at its share again',
+      'once the hold ends, the same context waits at its share',
     );
 
     outer();
-    (nested as { value: () => void }).value();
-    (await queuedNested)();
-    (await queuedB)();
-    (await afterEnd)();
-    a.close();
+    (nestedGranted as { value: () => void }).value();
     b.close();
-    await Promise.all([a.closed, b.closed]);
+    await b.closed;
+    await drain(bHeld, [...bBacklog, afterEnd]);
+    a.close();
+    await a.closed;
     assert.strictEqual(scheduler.inUse, 0);
     scheduler.dispose();
   });
