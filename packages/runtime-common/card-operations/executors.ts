@@ -338,6 +338,13 @@ export interface StagedChange {
   // it — the same answer the atomic endpoint gives an `add` whose href is
   // taken.
   mints: LocalPath[];
+  // The mints that are side-loads rather than the entry's own card, keyed by
+  // path, with the local id each was sent under. A side-load is a linked card
+  // the caller sent along so the link has something to point at, which a card
+  // already stored at its destination answers for as well as a new one would —
+  // so the coordinator links to that card rather than refusing the batch, and
+  // names the side-load rather than the entry's own card when it cannot.
+  sideLoadMints?: Map<LocalPath, string>;
   // The card the entry's result reports.
   id: string;
   // Echoed on a create, so a client can match the URL the realm minted back to
@@ -484,6 +491,7 @@ export async function stageCreate(
       content: await serializeForStorage(primary, identity, ctx),
     },
   ];
+  let sideLoadMints = new Map<LocalPath, string>();
   for (let resource of includedResources(entry.document)) {
     // A side-loaded resource with no `lid` is not staged: it has no id to be
     // created under and nothing in the batch can link to it, so the client
@@ -499,7 +507,14 @@ export async function stageCreate(
     // Resolving them against the primary would resolve them against a card
     // one directory deep, which is not where the side-load lands and not
     // what a caller writing them meant.
-    writes.push(await stageSideLoaded(resource, resource.lid, undefined, ctx));
+    let sideLoad = await stageSideLoaded(
+      resource,
+      resource.lid,
+      undefined,
+      ctx,
+    );
+    writes.push(sideLoad);
+    sideLoadMints.set(sideLoad.path, resource.lid);
   }
   let lid = localIdOf(entry);
   return {
@@ -507,6 +522,7 @@ export async function stageCreate(
     appends: [],
     deletes: [],
     mints: writes.map((write) => write.path),
+    ...(sideLoadMints.size > 0 ? { sideLoadMints } : {}),
     id: identity.id,
     ...(lid ? { lid } : {}),
     primaryPath: identity.path,

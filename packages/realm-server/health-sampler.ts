@@ -1,6 +1,7 @@
 import { monitorEventLoopDelay, type IntervalHistogram } from 'node:perf_hooks';
 import { logger } from '@cardstack/runtime-common';
 import {
+  getBusiestRealmSearchRequestLoad,
   getSearchInFlight,
   getSearchRequestLoad,
   getSearchRequestsInFlight,
@@ -63,6 +64,10 @@ export function startHealthSampler(
     // the smoothing takes off a burst.
     let searchRequests = getSearchRequestsInFlight();
     let searchLoad = getSearchRequestLoad();
+    // Each realm's level is decided on that realm's own reading, so the
+    // process's says how loaded the replica is but not how close any realm is
+    // to a rung. The busiest realm's reading does.
+    let busiest = getBusiestRealmSearchRequestLoad();
     // Reuse the prerender heap-telemetry helpers so the realm-server health
     // line carries the same `heapUsedMB=… heapLimitMB=…` fields (one spelling
     // of the quantity, and the effective V8 limit read from the running
@@ -72,7 +77,9 @@ export function startHealthSampler(
     log.info(
       `eventLoopLagMs(mean/p99/max)=${meanLagMs.toFixed(0)}/${p99LagMs.toFixed(0)}/${maxLagMs.toFixed(0)} ` +
         `inFlightSearch=${inFlightSearch} searchRequests=${searchRequests} ` +
-        `searchLoad=${searchLoad.toFixed(2)} ${formatHeapTelemetry(heap)}`,
+        `searchLoad=${searchLoad.toFixed(2)} ` +
+        `realmSearchLoadMax=${(busiest?.sustained ?? 0).toFixed(2)} ` +
+        `${formatHeapTelemetry(heap)}`,
     );
   }, intervalMs);
   // Don't keep the process alive solely for sampling.
