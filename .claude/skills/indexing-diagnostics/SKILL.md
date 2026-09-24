@@ -1840,7 +1840,7 @@ LIMIT 20;
 
 ### What Mode O can't tell you
 
-- **Query-backed fields.** A query's matches are not recorded in `deps`, so a row whose query results a peer's commit moved is neither re-visited nor extended to. The next pass that reaches the row corrects it.
+- **Query-backed fields.** A query's matches are not recorded in `deps`, so a row whose query results a peer's commit moved is neither re-visited nor extended to. The next pass that reaches the row corrects it. A row a round does re-visit can still read a query's results from before the peer's commit, because the job-scoped search cache keys an in-render `_search` on the job, not on the index state it read.
 - **Render-only edges.** Extend reads `boxel_index.deps`, not `prerendered_html.deps`. A peer row whose HTML, but not its index row, came to depend on the pass is left to the HTML jobs, which render only after their passes commit.
 - **Which peer caused which re-visit.** A check reads every peer commit since the last one together. Join the re-visited URLs against the peers' `urls` (the second query) to attribute them.
 - **The wall of one round.** `validationMs` is the total across checks and rounds, and the per-round `info` line carries the round's size, not its duration.
