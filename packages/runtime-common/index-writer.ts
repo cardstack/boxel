@@ -642,6 +642,13 @@ export class Batch {
     return this.#baseGeneration;
   }
 
+  // Identifies this batch on its `realm_index_commits` row. Minted per batch,
+  // so it tells apart two commits under one job id, which a rerun of the same
+  // job produces.
+  get passId(): string {
+    return this.#passId;
+  }
+
   private get commitGeneration(): number {
     if (this.#commitGenerationInTransaction === undefined) {
       throw new Error(

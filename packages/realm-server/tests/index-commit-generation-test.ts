@@ -291,6 +291,23 @@ module(basename(import.meta.filename), function (hooks) {
       ],
       'the ledger records one row per commit, in commit order',
     );
+    let passIds = (
+      (await adapter.execute(
+        `SELECT pass_id FROM realm_index_commits
+          WHERE realm_url = $1 ORDER BY generation`,
+        { bind: [testRealm] },
+      )) as { pass_id: string }[]
+    ).map((row) => row.pass_id);
+    assert.deepEqual(
+      passIds,
+      [b.passId, a.passId],
+      "each ledger row names the pass that committed it, by that batch's pass id",
+    );
+    assert.notStrictEqual(
+      a.passId,
+      b.passId,
+      'every batch mints its own pass id',
+    );
   });
 
   test('a commit over a card a peer moved to another type recomputes the type the peer moved it into', async function (assert) {
