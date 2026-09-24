@@ -25,7 +25,7 @@ import {
   mergePrerenderHtmlChanges,
   skipsPrerenderHtml,
 } from '../jobs/prerender-html.ts';
-import type { Stats, IndexPhaseTimings } from '../worker.ts';
+import type { JobInfo, Stats, IndexPhaseTimings } from '../worker.ts';
 
 export { fromScratchIndex, incrementalIndex };
 const DEFAULT_FROM_SCRATCH_JOB_TIMEOUT_SEC = 60 * 60;
@@ -89,10 +89,13 @@ export interface IncrementalArgs extends WorkerArgs {
   deferPrerenderHtml: boolean;
   // Invalidation sets deferred by earlier passes of the same write, unioned
   // into the prerender_html job this pass spawns so one write pays for one
-  // render of each URL. The URLs ride at THIS pass's generation and loader
-  // epoch, which is correct: the render reads current source, so the newest
-  // pass's stamp is the right one for every merged URL — the same rule
-  // `choosePrerenderHtmlCoalesceDecision` applies when it merges two publishes.
+  // render of each URL. The URLs ride under THIS pass's loader epoch, which is
+  // correct: the render reads current source, so the newest pass's epoch is
+  // the right one for every merged URL — the same rule
+  // `choosePrerenderHtmlCoalesceDecision` applies when it merges two
+  // publishes. The job need not wait on the deferring passes: they ran
+  // earlier in the same write and have finished before this pass is
+  // enqueued.
   // Empty on every other index path; see `deferPrerenderHtml` for why it is
   // not optional.
   carriedPrerenderHtmlChanges: IncrementalChange[];
@@ -107,13 +110,18 @@ export interface IncrementalArgs extends WorkerArgs {
 }
 
 // An invalidation set an index pass computed but deliberately did not enqueue
-// a prerender_html job for. The generation and loader epoch are the spawning
+// a prerender_html job for. The loader epoch and job id are the deferring
 // pass's own, needed only when nothing carries the set forward and the caller
-// has to enqueue it directly.
+// has to enqueue it directly: the job id is the spawning index job that
+// enqueued job waits on.
 export interface DeferredPrerenderHtml extends JSONTypes.Object {
   changes: IncrementalChange[];
-  generation: number;
   loaderEpoch: string;
+  // Null when the pass ran without a queue job.
+  spawningIndexJobId: number | null;
+  // Set only by a worker predating `spawningIndexJobId`: the generation that
+  // pass anticipated at setup. Null otherwise.
+  generation: number | null;
 }
 
 export interface IncrementalResult {
@@ -515,6 +523,13 @@ function incomingClearsLastModified(args: unknown): boolean {
 // pass spawns runs co-equal with indexing (the publish blocks on that HTML)
 // rather than one tier below. Absent on every other index path. Read loosely
 // so a job enqueued before this field existed reads as false.
+// The index job a spawned prerender_html job waits on: this pass's own. A pass
+// run without a real queue job (`jobId` absent or not positive) records no job
+// on its `realm_index_commits` row, so there is nothing to wait on.
+function spawningIndexJobIdsFor(jobInfo: JobInfo | undefined): number[] {
+  return jobInfo && jobInfo.jobId > 0 ? [jobInfo.jobId] : [];
+}
+
 function argsAwaitedByPublish(args: unknown): boolean {
   return isObjectLike(args) && args.awaitedByPublish === true;
 }
@@ -573,7 +588,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       // Fire-and-forget: the index pass must not block on — or fail with —
       // the prerender enqueue. Fires as soon as the invalidation set is
       // known, so HTML rendering can start concurrently with the pass.
-      onInvalidationsReady: ({ changes, generation, loaderEpoch }) => {
+      onInvalidationsReady: ({ changes, loaderEpoch }) => {
         if (skipsPrerenderHtml(realmURL, skipPrerenderHtmlRealms)) {
           // Configured off for this realm. Says so out loud: a realm whose
           // HTML never renders reads, from every other vantage point, exactly
@@ -588,7 +603,8 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
           realmURL,
           realmUsername,
           changes: changes.map(({ url, operation }) => ({ url, operation })),
-          generation,
+          spawningIndexJobIds: spawningIndexJobIdsFor(jobInfo),
+          generation: null,
           loaderEpoch,
           spawningJobId: jobInfo?.jobId ?? null,
           spawningPriority: prerenderSpawnedPriority({
@@ -714,11 +730,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       reportStatus,
       onProgress: reportProgress,
       // See fromScratchIndex — same fire-and-forget early enqueue.
-      onInvalidationsReady: ({
-        changes: htmlChanges,
-        generation,
-        loaderEpoch,
-      }) => {
+      onInvalidationsReady: ({ changes: htmlChanges, loaderEpoch }) => {
         let changes = htmlChanges.map(({ url, operation }) => ({
           url,
           operation,
@@ -733,8 +745,9 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
               carriedPrerenderHtmlChanges,
               changes,
             ),
-            generation,
             loaderEpoch,
+            spawningIndexJobId: spawningIndexJobIdsFor(jobInfo)[0] ?? null,
+            generation: null,
           };
           return;
         }
@@ -745,7 +758,8 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
             carriedPrerenderHtmlChanges,
             changes,
           ),
-          generation,
+          spawningIndexJobIds: spawningIndexJobIdsFor(jobInfo),
+          generation: null,
           loaderEpoch,
           spawningJobId: jobInfo?.jobId ?? null,
           spawningPriority: prerenderSpawnedPriority({

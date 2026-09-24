@@ -651,14 +651,14 @@ function parseDeferredPrerenderHtml(
   if (!isObjectLike(value) || Array.isArray(value)) {
     return undefined;
   }
-  let { changes, generation, loaderEpoch } = value as Record<
-    string,
-    PgPrimitive
-  >;
+  let { changes, spawningIndexJobId, generation, loaderEpoch } =
+    value as Record<string, PgPrimitive>;
+  // A set from a worker predating `spawningIndexJobId` names its pass by the
+  // generation it anticipated instead; one naming neither is dropped.
   if (
     !Array.isArray(changes) ||
-    typeof generation !== 'number' ||
-    typeof loaderEpoch !== 'string'
+    typeof loaderEpoch !== 'string' ||
+    (typeof spawningIndexJobId !== 'number' && typeof generation !== 'number')
   ) {
     return undefined;
   }
@@ -676,7 +676,16 @@ function parseDeferredPrerenderHtml(
     }
     parsedChanges.push({ url, operation });
   }
-  return { changes: parsedChanges, generation, loaderEpoch };
+  return {
+    changes: parsedChanges,
+    loaderEpoch,
+    spawningIndexJobId:
+      typeof spawningIndexJobId === 'number' ? spawningIndexJobId : null,
+    generation:
+      typeof spawningIndexJobId !== 'number' && typeof generation === 'number'
+        ? generation
+        : null,
+  };
 }
 
 export interface IncrementalIndexEnqueueArgs {

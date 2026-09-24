@@ -11,8 +11,11 @@ import {
   isCardResource,
   jobIdentity,
   logger,
+  addExplicitParens,
+  every,
   param,
   query,
+  separatedByCommas,
   modulesConsumedInMeta,
   RealmPaths,
   renderScopeFor,
@@ -23,6 +26,7 @@ import {
   type DeclaredScreenshotVisitResult,
   type DefinitionLookup,
   type Diagnostics,
+  type Expression,
   type IndexWriter,
   type JobInfo,
   type LooseCardResource,
@@ -52,11 +56,11 @@ import {
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
 import { canonicalURL } from './dependency-url.ts';
 
-// Ceiling on holding a prerender-html job's visits for its spawning pass's
-// commit. Incremental commits land in well under a second of the enqueue; a
+// Ceiling on holding a prerender-html job's visits for its spawning passes'
+// commits. Incremental commits land in well under a second of the enqueue; a
 // from-scratch pass can hold this for its whole remaining runtime, so the
 // ceiling sits at the same scale as the passes themselves.
-const SPAWNING_GENERATION_WAIT_MS = 10 * 60_000;
+const SPAWNING_PASS_WAIT_MS = 10 * 60_000;
 import { uniqueDeps } from './dependency-collections.ts';
 import {
   preWarmModulesTable,
@@ -69,17 +73,21 @@ export interface PrerenderHtmlPassArgs {
   // dependents/re-renders as 'update', genuine deletions as 'delete'. The
   // fan-out is never recomputed here.
   changes: PrerenderedHtmlChange[];
-  // The realm generation the spawning index pass anticipated. Stamped on
-  // every row this pass writes; the monotonic swap guard uses it to reject
-  // out-of-order zombie writes.
-  generation: number;
-  // The queue job of the index pass that spawned this one. Serves two
-  // mechanisms: both halves of that pass present a prerender tab with the
-  // same render scope, so a tab serving them does not discard what it loaded
-  // when they alternate; and the spawning-generation gate waits for that
-  // pass's commit only while the job is still running. Null for a job
-  // enqueued without a spawning pass — its render scope keys off this job's
-  // own id and the gate's watermark check answers on its first probe.
+  // The index jobs whose passes computed the invalidation set. The visits
+  // wait until each has committed (its `realm_index_commits` row exists) or
+  // has stopped running without committing. Empty for a job spawned from
+  // committed state.
+  spawningIndexJobIds: number[];
+  // Read only while `spawningIndexJobIds` is empty (see
+  // `PrerenderHtmlArgs.generation`): the visits wait for the realm's
+  // `current_generation` to reach it. Null waits for nothing.
+  generation: number | null;
+  // The queue job that spawned this one. Both halves of an index pass present
+  // a prerender tab with the same render scope, so a tab serving them does
+  // not discard what it loaded when they alternate. A job with no
+  // `spawningIndexJobIds` also bounds its `generation` wait by this job's
+  // liveness. Null for a job enqueued without a spawning job — its render
+  // scope keys off this job's own id.
   spawningJobId: number | null;
   // The realm's loader epoch the spawning pass renders under. Threaded on
   // every visit so each prerender tab this pass touches resets its loader
@@ -114,8 +122,13 @@ export interface PrerenderHtmlPassArgs {
 
 export interface PrerenderHtmlPassResult {
   invalidations: string[];
+  // The realm's committed generation when the visits were released: every row
+  // this pass wrote is stamped at or below it.
   generation: number;
   stats: Stats;
+  // How long the visits waited for the spawning passes to commit, present
+  // when the pass had a database to wait on.
+  spawnGateMs?: number;
   // The pre-warm sweep's wall-clock, present only when it ran (a from-scratch-
   // spawned pass outside the browser). Surfaces on the job result so
   // dashboards attribute the sweep to the job that pays it.
@@ -128,8 +141,10 @@ export interface PrerenderHtmlPassResult {
 }
 
 // The `prerender_html` job's visit loop — the HTML channel's analog of the
-// incremental index loop in `IndexRunner`. Tombstones the whole invalidation
-// set up front, then visits each 'update' URL with a standalone
+// incremental index loop in `IndexRunner`. Waits for the spawning index
+// passes to commit, stamps each row with its URL's live index generation (see
+// `Batch.adoptIndexGenerations`), tombstones the whole invalidation set, then
+// visits each 'update' URL with a standalone
 // 'prerender-html' visit that renders from card+source (it never reads
 // `boxel_index`), writing HTML or render-error rows into
 // `prerendered_html_working`; 'delete' URLs are never visited so their
@@ -142,6 +157,7 @@ export interface PrerenderHtmlPassResult {
 export async function runPrerenderHtmlPass({
   realmURL,
   changes,
+  spawningIndexJobIds,
   generation,
   spawningJobId,
   loaderEpoch,
@@ -163,9 +179,9 @@ export async function runPrerenderHtmlPass({
   let log = logger('prerender-html-runner');
   let perfLog = logger('index-perf');
   let start = Date.now();
-  // realm + generation ride on every log line so the render channel can be
-  // correlated back to the index pass that spawned it.
-  let jobTag = `${jobIdentity(jobInfo)} [realm: ${realmURL.href}] [generation: ${generation}]`;
+  // realm + spawning index jobs ride on every log line so the render channel
+  // can be correlated back to the index passes that spawned it.
+  let jobTag = `${jobIdentity(jobInfo)} [realm: ${realmURL.href}] [spawning index jobs: ${spawningIndexJobIds.join(', ') || 'none'}]`;
   let batchId = `${jobInfo.jobId}-${uuidv4().slice(0, 8)}`;
   let realmPaths = new RealmPaths(realmURL, virtualNetwork);
   let stats: Stats = {
@@ -195,7 +211,6 @@ export async function runPrerenderHtmlPass({
 
   let batch = await indexWriter.createBatch(realmURL, virtualNetwork, jobInfo, {
     prerenderHtmlOnly: true,
-    generation,
   });
 
   // The job's URL set arrives fully computed in its args, so the progress row
@@ -215,9 +230,6 @@ export async function runPrerenderHtmlPass({
     files: [],
   });
 
-  await batch.seedPrerenderedHtmlInvalidations(
-    [...operations].map(([url, operation]) => ({ url, operation })),
-  );
   let filesCompleted = 0;
 
   // Pre-warm the module definition cache before the format renders fire. The
@@ -300,81 +312,49 @@ export async function runPrerenderHtmlPass({
     preWarmMs = Date.now() - preWarmStart;
   }
 
-  // Hold the visits until the spawning pass's generation is committed. A
-  // visit's own card + source come from the reader, but anything its renders
-  // load lazily — a linked card only a capture-only screenshot component
-  // reads is the canonical case — is served from `boxel_index`, which the
-  // spawning pass swaps only at its commit. This job is enqueued as soon as
-  // the invalidation set is known (deliberately, so queue latency and the
-  // module pre-warm above overlap the tail of the index pass), so ungated
-  // visits can read pre-edit documents and persist superseded linked data
-  // under the new generation.
-  //
-  // The wait's true bound is the spawning job's liveness, not wall clock: a
-  // spawner that reached a terminal status without advancing the watermark
-  // (its commit failed, or the realm was wiped out from under it — deletion
-  // and unpublish do this legitimately) will never advance it, and
-  // production then still serves exactly what these renders would read, so
-  // proceeding renders a consistent state. Holding a worker on wall clock
-  // instead starves every job queued behind this one for the full ceiling
-  // in exactly those flows. The ceiling below is a backstop against
-  // pathological job-row states only. A job with no spawner recorded spawns
-  // from committed state (reconcile, legacy enqueuers) and its watermark
-  // check passes on the first probe.
+  // Hold the visits until the spawning passes have committed. A visit's own
+  // card + source come from the reader, but anything its renders load lazily
+  // — a linked card only a capture-only screenshot component reads is the
+  // canonical case — is served from `boxel_index`, which a spawning pass swaps
+  // only at its commit. This job is enqueued as soon as the invalidation set
+  // is known (deliberately, so queue latency and the module pre-warm above
+  // overlap the tail of the index pass), so ungated visits can read pre-edit
+  // documents and persist superseded linked data.
+  let spawnGateMs: number | undefined;
   if (dbAdapter) {
-    let gateStart = Date.now();
-    let committed = false;
-    while (Date.now() - gateStart < SPAWNING_GENERATION_WAIT_MS) {
-      let [row] = (await query(dbAdapter, [
-        'SELECT current_generation FROM realm_generations WHERE realm_url =',
-        param(realmURL.href),
-      ])) as { current_generation: number | string }[];
-      if (row != null && Number(row.current_generation) >= generation) {
-        committed = true;
-        break;
-      }
-      if (spawningJobId == null) {
-        break;
-      }
-      let [spawner] = (await query(dbAdapter, [
-        `SELECT status FROM jobs WHERE id =`,
-        param(spawningJobId),
-      ])) as { status: string }[];
-      if (!spawner || spawner.status !== 'unfulfilled') {
-        // The spawner commits its batch and only then resolves, so a
-        // terminal status read here may postdate a commit the watermark
-        // probe above predates — give the watermark one last read.
-        let [finalRow] = (await query(dbAdapter, [
-          'SELECT current_generation FROM realm_generations WHERE realm_url =',
-          param(realmURL.href),
-        ])) as { current_generation: number | string }[];
-        committed =
-          finalRow != null && Number(finalRow.current_generation) >= generation;
-        break;
-      }
-      // Waiting on the spawning pass is progress, and on a realm whose index
-      // pass runs long this wait can reach its own ceiling — which is the same
-      // ten minutes as the deadline an incremental-spawned pass is given. A
-      // job that never rendered a file would otherwise be cut off here, in the
-      // exact case a progress-bounded deadline exists to protect. Counting a
-      // poll as proof of life costs the watchdog nothing: the loop is bounded
-      // independently by `SPAWNING_GENERATION_WAIT_MS`.
-      heartbeatJob(jobInfo.reservationId);
-      await delay(250);
-    }
-    let gateMs = Date.now() - gateStart;
-    if (committed) {
-      if (gateMs > 1000) {
+    let gate = await awaitSpawningPasses({
+      dbAdapter,
+      realmURL,
+      spawningIndexJobIds,
+      generation,
+      spawningJobId,
+      jobInfo,
+    });
+    spawnGateMs = gate.waitMs;
+    if (gate.uncommitted.length === 0) {
+      if (gate.waitMs > 1000) {
         perfLog.debug(
-          `${jobTag} spawning-generation gate held the visits ${gateMs} ms`,
+          `${jobTag} spawning-pass gate held the visits ${gate.waitMs} ms`,
         );
       }
     } else {
       log.warn(
-        `${jobTag} generation ${generation} is not committed and its spawning job ${spawningJobId ?? '(none)'} is not running; rendering against the committed index`,
+        `${jobTag} ${gate.uncommitted.join(', ')} did not commit and ${gate.uncommitted.length === 1 ? 'is' : 'are'} not running; rendering against the committed index`,
       );
     }
   }
+
+  // With the spawning passes committed, every row this pass writes takes its
+  // URL's live index generation, so a peer pass that committed in between
+  // cannot leave the stamps and the index rows they describe disagreeing.
+  // The tombstones seeded next are rows too, so they follow the adoption.
+  let renderGeneration = await batch.adoptIndexGenerations([
+    ...operations.keys(),
+  ]);
+  jobTag = `${jobTag} [generation: ${renderGeneration}]`;
+  await batch.seedPrerenderedHtmlInvalidations(
+    [...operations].map(([url, operation]) => ({ url, operation })),
+  );
 
   // One batched read of every rendered URL's content hash/size so the
   // per-visit getContentMeta lookups are served from memory rather than a DB
@@ -491,12 +471,184 @@ export async function runPrerenderHtmlPass({
   );
   return {
     invalidations: batch.invalidations,
-    generation,
+    generation: renderGeneration,
     stats,
+    ...(spawnGateMs !== undefined ? { spawnGateMs } : {}),
     ...(preWarmMs !== undefined ? { preWarmMs } : {}),
     ...(swapMs !== undefined ? { swapMs } : {}),
     ...(swapCommit ?? {}),
   };
+}
+
+// Waits until the index passes that spawned a prerender-html job have
+// committed, and returns how long that took plus the spawners it stopped
+// waiting on without seeing them commit.
+//
+// A spawning pass allocates its generation only when it commits, so the wait
+// is keyed on its job id and answered by the `realm_index_commits` ledger: a
+// row carrying that job id means the pass's commit is durable. Another pass's
+// commit advances `current_generation` just the same, which is why the
+// watermark cannot stand in for the ledger here.
+//
+// The wait's true bound is each spawning job's liveness, not wall clock: a
+// spawner that reached a terminal status without committing (its commit
+// failed, or the realm was wiped out from under it — deletion and unpublish
+// do this legitimately) never will, and production then still serves exactly
+// what these renders would read, so proceeding renders a consistent state.
+// Holding a worker on wall clock instead starves every job queued behind this
+// one for the full ceiling in exactly those flows. `SPAWNING_PASS_WAIT_MS` is
+// a backstop against pathological job-row states only.
+//
+// A job with no spawning index jobs was spawned from committed state
+// (reconcile), or by a worker predating the ledger wait; either way it
+// carries a generation, and it waits for `current_generation` to reach that,
+// bounded by `spawningJobId`'s liveness. A reconcile's generation is already
+// committed, so its first probe passes.
+async function awaitSpawningPasses({
+  dbAdapter,
+  realmURL,
+  spawningIndexJobIds,
+  generation,
+  spawningJobId,
+  jobInfo,
+}: {
+  dbAdapter: DBAdapter;
+  realmURL: URL;
+  spawningIndexJobIds: number[];
+  generation: number | null;
+  spawningJobId: number | null;
+  jobInfo: JobInfo;
+}): Promise<{ waitMs: number; uncommitted: string[] }> {
+  let start = Date.now();
+  if (spawningIndexJobIds.length > 0) {
+    let pending = new Set(spawningIndexJobIds);
+    let uncommitted: string[] = [];
+    while (pending.size > 0) {
+      for (let id of await committedSpawners(dbAdapter, realmURL, pending)) {
+        pending.delete(id);
+      }
+      if (pending.size === 0) {
+        break;
+      }
+      let running = await runningJobs(dbAdapter, pending);
+      let stopped = [...pending].filter((id) => !running.has(id));
+      if (stopped.length > 0) {
+        // A spawner commits its batch and only then resolves, so a terminal
+        // status read here may postdate a commit the ledger probe above
+        // predates — give the ledger one last read for those.
+        let committedLate = await committedSpawners(
+          dbAdapter,
+          realmURL,
+          new Set(stopped),
+        );
+        for (let id of stopped) {
+          pending.delete(id);
+          if (!committedLate.has(id)) {
+            uncommitted.push(`spawning index job ${id}`);
+          }
+        }
+        continue;
+      }
+      if (Date.now() - start >= SPAWNING_PASS_WAIT_MS) {
+        uncommitted.push(
+          ...[...pending].map((id) => `spawning index job ${id}`),
+        );
+        break;
+      }
+      await waitAndHeartbeat(jobInfo);
+    }
+    return { waitMs: Date.now() - start, uncommitted };
+  }
+  if (generation == null) {
+    return { waitMs: 0, uncommitted: [] };
+  }
+  let committed = false;
+  while (Date.now() - start < SPAWNING_PASS_WAIT_MS) {
+    if ((await committedGeneration(dbAdapter, realmURL)) >= generation) {
+      committed = true;
+      break;
+    }
+    if (spawningJobId == null) {
+      break;
+    }
+    if (!(await runningJobs(dbAdapter, new Set([spawningJobId]))).size) {
+      // The same last read as above, against the watermark.
+      committed =
+        (await committedGeneration(dbAdapter, realmURL)) >= generation;
+      break;
+    }
+    await waitAndHeartbeat(jobInfo);
+  }
+  return {
+    waitMs: Date.now() - start,
+    uncommitted: committed
+      ? []
+      : [`generation ${generation} (spawning job ${spawningJobId ?? 'none'})`],
+  };
+}
+
+// Waiting on the spawning passes is progress, and on a realm whose index pass
+// runs long this wait can reach its own ceiling — which is the same ten
+// minutes as the deadline an incremental-spawned pass is given. A job that
+// never rendered a file would otherwise be cut off here, in the exact case a
+// progress-bounded deadline exists to protect. Counting a poll as proof of
+// life costs the watchdog nothing: the wait is bounded independently by
+// `SPAWNING_PASS_WAIT_MS`.
+async function waitAndHeartbeat(jobInfo: JobInfo): Promise<void> {
+  heartbeatJob(jobInfo.reservationId);
+  await delay(250);
+}
+
+// Which of these index jobs have a commit of this realm on the ledger.
+async function committedSpawners(
+  dbAdapter: DBAdapter,
+  realmURL: URL,
+  jobIds: Set<number>,
+): Promise<Set<number>> {
+  let rows = (await query(dbAdapter, [
+    'SELECT DISTINCT job_id FROM realm_index_commits WHERE',
+    ...every([
+      ['realm_url =', param(realmURL.href)],
+      [
+        'job_id IN',
+        ...addExplicitParens(
+          separatedByCommas([...jobIds].map((id) => [param(id)])),
+        ),
+      ],
+    ]),
+  ] as Expression)) as { job_id: number | string }[];
+  return new Set(rows.map((row) => Number(row.job_id)));
+}
+
+// Which of these jobs are still queued or running.
+async function runningJobs(
+  dbAdapter: DBAdapter,
+  jobIds: Set<number>,
+): Promise<Set<number>> {
+  let rows = (await query(dbAdapter, [
+    'SELECT id FROM jobs WHERE',
+    ...every([
+      [
+        'id IN',
+        ...addExplicitParens(
+          separatedByCommas([...jobIds].map((id) => [param(id)])),
+        ),
+      ],
+      [`status = 'unfulfilled'`],
+    ]),
+  ] as Expression)) as { id: number | string }[];
+  return new Set(rows.map((row) => Number(row.id)));
+}
+
+async function committedGeneration(
+  dbAdapter: DBAdapter,
+  realmURL: URL,
+): Promise<number> {
+  let [row] = (await query(dbAdapter, [
+    'SELECT current_generation FROM realm_generations WHERE realm_url =',
+    param(realmURL.href),
+  ])) as { current_generation: number | string }[];
+  return row == null ? -1 : Number(row.current_generation);
 }
 
 // Per-slot wall-clock of the visit's capture attempts, keyed by slot name —
@@ -928,7 +1080,10 @@ async function visitForPrerenderedHtml({
               mediaCacheAdapter,
               realmURL,
               sourceURL: screenshotLedgerSourceURL(fileURL, 'instance'),
-              sourceGeneration: batch.provisionalGeneration,
+              // The generation the instance row is stamped with, which is its
+              // live index row's — the one the `_screenshot/` serving gate
+              // resolves a capture under.
+              sourceGeneration: batch.htmlRowGeneration(fileURL, 'instance'),
               contentHash,
               jobInfo,
               log,
@@ -1000,7 +1155,7 @@ async function visitForPrerenderedHtml({
             mediaCacheAdapter,
             realmURL,
             sourceURL: screenshotLedgerSourceURL(fileURL, 'file'),
-            sourceGeneration: batch.provisionalGeneration,
+            sourceGeneration: batch.htmlRowGeneration(fileURL, 'file'),
             contentHash,
             jobInfo,
             log,

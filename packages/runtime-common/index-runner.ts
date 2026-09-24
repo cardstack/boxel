@@ -190,7 +190,6 @@ export class IndexRunner {
   // concurrently with the still-running index pass.
   #onInvalidationsReady?: (args: {
     changes: PrerenderedHtmlChange[];
-    generation: number;
     loaderEpoch: string;
   }) => void;
   readonly stats: Stats = {
@@ -268,7 +267,6 @@ export class IndexRunner {
     onProgress?(event: IndexingProgressEvent): void;
     onInvalidationsReady?(args: {
       changes: PrerenderedHtmlChange[];
-      generation: number;
       loaderEpoch: string;
     }): void;
   }) {
@@ -766,7 +764,6 @@ export class IndexRunner {
         url,
         operation: deletes.has(url) ? 'delete' : 'update',
       })),
-      generation: this.batch.provisionalGeneration,
       loaderEpoch: this.batch.loaderEpoch,
     });
   }

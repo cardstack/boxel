@@ -105,7 +105,8 @@ module(basename(import.meta.filename), function (hooks) {
     id: number;
     status: string;
     args: {
-      generation: number;
+      spawningIndexJobIds: number[];
+      generation: number | null;
       spawningJobId: number | null;
       changes: { url: string; operation: string }[];
     };
@@ -197,8 +198,22 @@ module(basename(import.meta.filename), function (hooks) {
     let [job] = spawned;
     assert.strictEqual(
       job.args.generation,
-      generation,
-      'the job carries the generation its index pass committed',
+      null,
+      'the job names no generation: its index pass had not committed one when it was enqueued',
+    );
+    assert.strictEqual(
+      job.args.spawningIndexJobIds.length,
+      1,
+      'the job waits on the one index pass that spawned it',
+    );
+    let commits = (await testDbAdapter.execute(
+      `select generation from realm_index_commits where realm_url = $1 and job_id = $2`,
+      { bind: [realm.url, job.args.spawningIndexJobIds[0]] },
+    )) as { generation: number }[];
+    assert.deepEqual(
+      commits.map((commit) => commit.generation),
+      [generation],
+      'and that pass is the one whose commit the ledger records at the current generation',
     );
     assert.ok(
       job.args.changes.some(

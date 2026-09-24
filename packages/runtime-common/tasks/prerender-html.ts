@@ -11,7 +11,10 @@ import {
   type QueueCoalesceDecision,
 } from '../queue.ts';
 import { runPrerenderHtmlPass } from '../index-runner/prerender-html-visit.ts';
-import { mergePrerenderHtmlChanges } from '../jobs/prerender-html.ts';
+import {
+  mergePrerenderHtmlChanges,
+  parseSpawningIndexJobIds,
+} from '../jobs/prerender-html.ts';
 import {
   ensureRealmOwnerPermissions,
   incrementalChangesCover,
@@ -28,16 +31,26 @@ export interface PrerenderHtmlArgs extends WorkerArgs {
   // dependents/re-renders as 'update', genuine deletions as 'delete'. The
   // job never recomputes the fan-out.
   changes: IncrementalChange[];
-  // The realm generation the spawning index pass anticipated
-  // (`current_generation + 1` at its batch start). Stamped on every row the
-  // job writes; the monotonic swap guard keys off it, so correctness never
-  // depends on the index pass having committed — or committing at all.
-  generation: number;
+  // The index jobs whose passes computed this invalidation set. The job's
+  // visits wait until every one of them has committed — its row appears in
+  // the `realm_index_commits` ledger — or has stopped running without
+  // committing. A spawning pass allocates its generation only at commit, so
+  // these ids, not a generation, are what name the state this job renders
+  // after. Empty for a job spawned from committed state (reconcile) and for a
+  // job enqueued by a worker predating the field.
+  spawningIndexJobIds: number[];
+  // Read only while `spawningIndexJobIds` is empty: the realm generation the
+  // job was spawned from, which is committed state for a reconcile repair.
+  // A job enqueued by a worker predating `spawningIndexJobIds` carries the
+  // generation its spawning pass anticipated here instead, and its visits
+  // wait for `current_generation` to reach it. Null for a job spawned by an
+  // index pass. The rows the job writes are stamped per URL from the live
+  // index (see `runPrerenderHtmlPass`), never from this value.
+  generation: number | null;
   // The realm's loader epoch the spawning pass renders under (minted fresh
   // when its invalidation set includes executable modules). Threaded into
   // every render so each prerender tab resets its loader exactly once per
-  // module change; carried in args rather than read from the DB because the
-  // job can run before its spawning pass commits the epoch.
+  // module change.
   loaderEpoch: string;
   // The index job that computed this invalidation set. Load-bearing, not just
   // correlation: it is the render scope this job's visits run under
@@ -61,11 +74,16 @@ export interface PrerenderHtmlArgs extends WorkerArgs {
 
 export interface PrerenderHtmlResult extends JSONTypes.Object {
   invalidations: string[];
+  // The realm's committed generation when the job's visits were released:
+  // every row it wrote is stamped at or below it (see `runPrerenderHtmlPass`).
   generation: number;
+  // The index jobs the visits waited on (see `PrerenderHtmlArgs`).
+  spawningIndexJobIds: number[];
   stats: Stats;
   // Phase wall-clocks the job paid, by name, or null when it recorded none.
   // `preWarmMs` is the module pre-warm sweep (from-scratch-spawned jobs only),
-  // so dashboards attribute the sweep to the job that pays it. `swapMs`,
+  // so dashboards attribute the sweep to the job that pays it. `spawnGateMs`
+  // is how long the visits waited for the spawning passes to commit. `swapMs`,
   // `swapAttempts` and `swapRetryMs` describe the swap's transaction, as on an
   // index job's `phaseTimings`. A record of numbers rather than optional
   // members because the result is a `JSONTypes.Object`, whose index signature
@@ -93,6 +111,7 @@ function parsePrerenderHtmlArgsForCoalesce(
     realmURL,
     realmUsername,
     changes,
+    spawningIndexJobIds,
     generation,
     loaderEpoch,
     spawningJobId,
@@ -103,7 +122,6 @@ function parsePrerenderHtmlArgsForCoalesce(
     typeof realmURL !== 'string' ||
     typeof realmUsername !== 'string' ||
     !Array.isArray(changes) ||
-    typeof generation !== 'number' ||
     typeof loaderEpoch !== 'string'
   ) {
     return undefined;
@@ -112,7 +130,8 @@ function parsePrerenderHtmlArgsForCoalesce(
     realmURL,
     realmUsername,
     changes: changes as IncrementalChange[],
-    generation,
+    spawningIndexJobIds: parseSpawningIndexJobIds(spawningIndexJobIds),
+    generation: typeof generation === 'number' ? generation : null,
     loaderEpoch,
     spawningJobId: typeof spawningJobId === 'number' ? spawningJobId : null,
     coalescedPublishes:
@@ -121,14 +140,55 @@ function parsePrerenderHtmlArgsForCoalesce(
   };
 }
 
+// Which of two coalescing publishes describes the newer module world, so the
+// merged job takes its loader epoch and render scope. Normally the one that
+// enqueued later, the incoming one. A publish spawned from committed state (a
+// reconcile repair, which names no spawning pass) never outranks a publish
+// whose spawning passes are still to commit, because those commits land beyond
+// the committed state it read. Between two such committed-state publishes, the
+// higher generation is the newer.
+function newerPublish(
+  existing: PrerenderHtmlArgs,
+  incoming: PrerenderHtmlArgs,
+): PrerenderHtmlArgs {
+  let existingSpawned = existing.spawningIndexJobIds.length > 0;
+  let incomingSpawned = incoming.spawningIndexJobIds.length > 0;
+  if (incomingSpawned) {
+    return incoming;
+  }
+  if (existingSpawned) {
+    return existing;
+  }
+  return (incoming.generation ?? -1) >= (existing.generation ?? -1)
+    ? incoming
+    : existing;
+}
+
+function maxGeneration(a: number | null, b: number | null): number | null {
+  if (a == null) {
+    return b;
+  }
+  if (b == null) {
+    return a;
+  }
+  return Math.max(a, b);
+}
+
 // Modeled on `chooseIncrementalCoalesceDecision`: a same-realm pending
 // publish joins by merging the URL sets (update wins per URL — see
-// `mergePrerenderHtmlChanges`) and taking the max generation — the job
-// renders from current source, so the newest pass's stamp is the right one
-// for every merged URL. A publish can piggyback on an in-flight job only
-// when that job's args already cover every incoming (url, operation) at an
-// equal-or-newer generation; otherwise it inserts a fresh row, which the
-// per-realm concurrency group serializes behind the running job.
+// `mergePrerenderHtmlChanges`) and taking the union of the spawning index
+// jobs, so the merged job waits for every pass whose work it now renders. It
+// renders from current source, so it takes the newer publish's loader epoch
+// and render scope (see `newerPublish`).
+//
+// A publish can piggyback on an in-flight job only when that job already
+// waits on every spawning pass the publish names, covers every incoming
+// (url, operation), and renders under the same loader epoch. A publish from
+// committed state (no spawning passes) piggybacks only on an in-flight job
+// spawned from an equal-or-newer committed generation: a job with spawning
+// passes may already have read the index generations it stamps, so it cannot
+// promise to cover rows that moved since. Anything else inserts a fresh row,
+// which the per-realm concurrency group serializes behind the running job.
 function choosePrerenderHtmlCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
@@ -150,14 +210,7 @@ function choosePrerenderHtmlCoalesceDecision(
         },
       };
     }
-    // The loader epoch is an unordered token, so it rides with the
-    // generation that carried it: the merged job renders every URL from
-    // current source — the newest module world — so its renders must
-    // synchronize tabs to the newest pass's epoch.
-    let newest =
-      incomingArgs.generation >= existingArgs.generation
-        ? incomingArgs
-        : existingArgs;
+    let newest = newerPublish(existingArgs, incomingArgs);
     return {
       type: 'join',
       jobId: sameTypeCandidate.id,
@@ -169,10 +222,18 @@ function choosePrerenderHtmlCoalesceDecision(
             existingArgs.changes,
             incomingArgs.changes,
           ),
-          generation: newest.generation,
+          spawningIndexJobIds: [
+            ...new Set([
+              ...existingArgs.spawningIndexJobIds,
+              ...incomingArgs.spawningIndexJobIds,
+            ]),
+          ],
+          generation: maxGeneration(
+            existingArgs.generation,
+            incomingArgs.generation,
+          ),
           loaderEpoch: newest.loaderEpoch,
-          // Correlation follows the same newest-wins rule as the
-          // generation/epoch it attributes.
+          // The render scope follows the same rule as the epoch.
           spawningJobId:
             newest.spawningJobId ??
             (newest === incomingArgs ? existingArgs : incomingArgs)
@@ -202,7 +263,7 @@ function choosePrerenderHtmlCoalesceDecision(
         continue;
       }
       if (
-        existingArgs.generation >= incomingArgs.generation &&
+        waitsOnEverySpawner(existingArgs, incomingArgs) &&
         existingArgs.loaderEpoch === incomingArgs.loaderEpoch &&
         incrementalChangesCover(existingArgs.changes, incomingArgs.changes)
       ) {
@@ -212,6 +273,26 @@ function choosePrerenderHtmlCoalesceDecision(
   }
 
   return { type: 'insert' };
+}
+
+// Whether an in-flight job's wait covers an incoming publish's: every spawning
+// pass the publish names is one the job already waits on. A publish from
+// committed state needs a job spawned from committed state at least as new —
+// see `choosePrerenderHtmlCoalesceDecision`.
+function waitsOnEverySpawner(
+  existing: PrerenderHtmlArgs,
+  incoming: PrerenderHtmlArgs,
+): boolean {
+  if (incoming.spawningIndexJobIds.length === 0) {
+    return (
+      existing.spawningIndexJobIds.length === 0 &&
+      existing.generation != null &&
+      incoming.generation != null &&
+      existing.generation >= incoming.generation
+    );
+  }
+  let existingIds = new Set(existing.spawningIndexJobIds);
+  return incoming.spawningIndexJobIds.every((id) => existingIds.has(id));
 }
 
 registerQueueJobDefinition({
@@ -241,15 +322,22 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       realmUsername,
       realmURL,
       changes,
-      generation,
       loaderEpoch,
       // A job enqueued by an older worker (rolling deploy) or by a code path
       // predating the flag carries no `preWarm`; default it to false so the
       // boolean contract holds and a legacy job simply skips the sweep.
       preWarm = false,
     } = args;
+    // Both read loosely: a job enqueued by a worker predating
+    // `spawningIndexJobIds` carries none, and one predating the nullable
+    // generation always carries a number.
+    let spawningIndexJobIds = parseSpawningIndexJobIds(
+      args.spawningIndexJobIds,
+    );
+    let generation =
+      typeof args.generation === 'number' ? args.generation : null;
     log.debug(
-      `${jobIdentity(jobInfo)} starting prerender-html for realm ${realmURL} at generation ${generation} (${changes.length} changes, spawned by job ${args.spawningJobId}, preWarm ${preWarm})`,
+      `${jobIdentity(jobInfo)} starting prerender-html for realm ${realmURL} (${changes.length} changes, spawning index jobs [${spawningIndexJobIds.join(', ')}], generation ${generation ?? 'none'}, preWarm ${preWarm})`,
     );
     reportStatus(jobInfo, 'start');
     let userId = userIdFromUsername(realmUsername, matrixURL);
@@ -265,6 +353,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
     let pass = await runPrerenderHtmlPass({
       realmURL: new URL(realmURL),
       changes,
+      spawningIndexJobIds,
       generation,
       spawningJobId: args.spawningJobId ?? null,
       loaderEpoch,
@@ -300,24 +389,28 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
 
     // Fresh HTML is live — tell subscribed hosts so open live searches
     // re-run and pick up the new renderings / corrected full-text
-    // membership. Rides the worker→manager→realm-server event bridge.
+    // membership. Rides the worker→manager→realm-server event bridge. The
+    // generation is the committed one the renders were stamped against, which
+    // is the floor the host's live search reads at.
     reportRealmEvent?.({
       eventName: 'prerender_html',
       realmURL,
-      generation,
+      generation: pass.generation,
       invalidations,
     });
 
     reportStatus(jobInfo, 'finish');
     log.debug(
-      `${jobIdentity(jobInfo)} completed prerender-html for realm ${realmURL} at generation ${generation}:\n${JSON.stringify(stats, null, 2)}`,
+      `${jobIdentity(jobInfo)} completed prerender-html for realm ${realmURL} at generation ${pass.generation}:\n${JSON.stringify(stats, null, 2)}`,
     );
     return {
       invalidations,
-      generation,
+      generation: pass.generation,
+      spawningIndexJobIds,
       stats,
       phaseTimings: phaseTimingsRecord({
         preWarmMs: pass.preWarmMs,
+        spawnGateMs: pass.spawnGateMs,
         swapMs: pass.swapMs,
         swapAttempts: pass.swapAttempts,
         swapRetryMs: pass.swapRetryMs,

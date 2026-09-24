@@ -82,7 +82,6 @@ export class IndexWriter {
     opts?: {
       splitPrerenderHtml?: boolean;
       prerenderHtmlOnly?: boolean;
-      generation?: number;
     },
   ) {
     let batch = new Batch(
@@ -529,14 +528,18 @@ export class Batch {
   // `#copyFromSourceRealm` in `applyBatchUpdates`).
   #splitPrerenderHtml: boolean;
   // When true, this batch is the `prerender_html` job's batch: it writes only
-  // the `prerendered_html` channel (not `boxel_index`), stamps the carried
-  // generation without advancing `realm_generations`, and its swap carries a
-  // monotonic guard. The tombstone / last-known-good / resume / write logic is
+  // the `prerendered_html` channel (not `boxel_index`), stamps each row with
+  // the generation of the live index row it renders (see
+  // `adoptIndexGenerations`) without advancing `realm_generations`, and its
+  // swap carries a monotonic guard. The tombstone / last-known-good / resume / write logic is
   // otherwise identical to an index batch — the fan-out is not recomputed here
   // (it ran once in the index pass and is seeded via
   // `seedPrerenderedHtmlInvalidations`).
   #prerenderHtmlOnly: boolean;
-  #explicitGeneration: number | undefined;
+  // A `prerenderHtmlOnly` batch's per-row stamps: each URL's live
+  // `boxel_index` generation by row type, read once the job's spawning passes
+  // have committed. Undefined until `adoptIndexGenerations` runs.
+  #indexGenerations: Map<string, number> | undefined;
   #priorLoaderEpoch = '0';
   #mintedLoaderEpoch: string | undefined;
   #hasExecutableInvalidation = false;
@@ -561,6 +564,10 @@ export class Batch {
   // the pass will commit under — a peer that commits first takes it — so it is
   // never compared against committed state; the swap restamps every row it
   // promotes with the generation allocated at commit.
+  //
+  // A prerenderHtmlOnly batch allocates nothing: this holds the realm's
+  // committed generation as `adoptIndexGenerations` read it, and its rows are
+  // stamped per URL from the live index rather than with this value.
   #provisionalGeneration = 0;
   // The `current_generation` the pass was set up against: the committed state
   // its fan-out was computed from.
@@ -587,7 +594,6 @@ export class Batch {
     opts?: {
       splitPrerenderHtml?: boolean;
       prerenderHtmlOnly?: boolean;
-      generation?: number;
     },
   ) {
     this.realmURL = realmURL;
@@ -597,7 +603,6 @@ export class Batch {
     this.#splitPrerenderHtml =
       opts?.splitPrerenderHtml ?? dbAdapter.kind === 'pg';
     this.#prerenderHtmlOnly = opts?.prerenderHtmlOnly ?? false;
-    this.#explicitGeneration = opts?.generation;
     this.#currentInvalidationId = uuidv4();
     this.ready = this.setupBatch();
   }
@@ -610,8 +615,7 @@ export class Batch {
   }
 
   // The generation this batch stages its rows under (see
-  // `#provisionalGeneration`). For work that runs before the pass commits —
-  // the spawned `prerender_html` job's args, a visit's screenshot ledger rows.
+  // `#provisionalGeneration`). For work that runs before the pass commits.
   // Committed state is compared against `committedGeneration` instead.
   get provisionalGeneration(): number {
     return this.#provisionalGeneration;
@@ -690,16 +694,10 @@ export class Batch {
 
   private async setupBatch(): Promise<void> {
     if (this.#prerenderHtmlOnly) {
-      // The `prerender_html` job stamps the generation its spawning index
-      // pass anticipated — it never advances `realm_generations` (the
-      // monotonic swap guard in `done()` is what keeps out-of-order jobs
-      // safe, not the generation being exact).
-      if (this.#explicitGeneration == null) {
-        throw new Error(
-          `a prerenderHtmlOnly batch requires an explicit generation`,
-        );
-      }
-      this.#provisionalGeneration = this.#explicitGeneration;
+      // The `prerender_html` job never advances `realm_generations`. Its
+      // stamps are read from the live index once its spawning passes have
+      // committed (`adoptIndexGenerations`), and the monotonic swap guard in
+      // `done()` keeps an out-of-order job from overwriting newer rows.
       await this.loadResumedPrerenderedHtmlRows();
       return;
     }
@@ -1784,6 +1782,84 @@ export class Batch {
     };
   }
 
+  // Fix a prerenderHtmlOnly batch's stamps: every row it writes for a URL
+  // takes the generation the live `boxel_index` row of the same URL and type
+  // holds right now. The job calls this once its spawning passes have
+  // committed, so those rows are what the passes published — and a stamp read
+  // from the row it renders is exactly the generation the read path and the
+  // reconcile sweep compare it against, even when a peer pass of the realm
+  // committed in between. A URL with no index row of that type (a render that
+  // outran its index row, or a file the index never saw) takes the realm's
+  // committed generation instead.
+  //
+  // The index rows are read before `current_generation`: a swap publishes
+  // both in one transaction, so reading in that order keeps the realm
+  // generation at or above every row read. That realm generation is the
+  // batch's own — the value it reports, and the one its type watermarks
+  // carry. Returns it.
+  async adoptIndexGenerations(urls: string[]): Promise<number> {
+    if (!this.#prerenderHtmlOnly) {
+      throw new Error(
+        `adoptIndexGenerations is only valid on a prerenderHtmlOnly batch`,
+      );
+    }
+    await this.ready;
+    let indexGenerations = new Map<string, number>();
+    let uniqueURLs = [...new Set(urls)];
+    for (let offset = 0; offset < uniqueURLs.length; offset += 10000) {
+      let chunk = uniqueURLs.slice(offset, offset + 10000);
+      let rows = (await this.#query([
+        'SELECT url, type, generation FROM boxel_index WHERE',
+        ...every([
+          ['realm_url =', param(this.realmURL.href)],
+          [
+            'url IN',
+            ...addExplicitParens(
+              separatedByCommas(chunk.map((url) => [param(url)])),
+            ),
+          ],
+        ]),
+      ] as Expression)) as Pick<
+        BoxelIndexTable,
+        'url' | 'type' | 'generation'
+      >[];
+      for (let { url, type, generation } of rows) {
+        indexGenerations.set(indexGenerationKey(url, type), Number(generation));
+      }
+    }
+    let [row] = (await this.#query([
+      'SELECT current_generation FROM realm_generations WHERE realm_url =',
+      param(this.realmURL.href),
+    ])) as Pick<RealmGenerationsTable, 'current_generation'>[];
+    this.#provisionalGeneration = row ? Number(row.current_generation) : 0;
+    this.#indexGenerations = indexGenerations;
+    return this.#provisionalGeneration;
+  }
+
+  // The generation this batch stamps on the `prerendered_html` row of `url`
+  // and `type` — and on anything else keyed to that rendering, such as its
+  // screenshot ledger rows. On a prerenderHtmlOnly batch that is the live
+  // index row's generation (see `adoptIndexGenerations`); on any other batch,
+  // the generation it stages its rows under.
+  htmlRowGeneration(url: string, type: BoxelIndexTable['type']): number {
+    if (!this.#prerenderHtmlOnly) {
+      return this.#provisionalGeneration;
+    }
+    return (
+      this.#adoptedIndexGenerations().get(indexGenerationKey(url, type)) ??
+      this.#provisionalGeneration
+    );
+  }
+
+  #adoptedIndexGenerations(): Map<string, number> {
+    if (!this.#indexGenerations) {
+      throw new Error(
+        `the prerender-html batch for ${this.realmURL.href} wrote a row before adopting the index generations it stamps`,
+      );
+    }
+    return this.#indexGenerations;
+  }
+
   // Seed a prerenderHtmlOnly batch's invalidation set from the changes the
   // spawning index pass computed — the dependency fan-out already ran there
   // and is not recomputed here — and tombstone the whole set up front in
@@ -1880,9 +1956,21 @@ export class Batch {
     // Every rendering carries the stamps, whether or not the render itself
     // reported any diagnostics — an unstamped row could not be attributed to
     // a pass at all, which is what the render channel lacked.
+    let rowType = prerenderedRowType(entry);
+    let stampedFromIndexGeneration = this.#prerenderHtmlOnly
+      ? this.#adoptedIndexGenerations().get(
+          indexGenerationKey(url.href, rowType),
+        )
+      : undefined;
     let diagnostics: Diagnostics = {
       ...(entry.diagnostics ?? {}),
       ...this.#writeSideStamps(seq),
+      // The live index row generation this row's stamp was read from. Absent
+      // when the URL had no index row of this type to read, and the row took
+      // the realm's committed generation instead.
+      ...(stampedFromIndexGeneration !== undefined
+        ? { stampedFromIndexGeneration }
+        : {}),
     };
     let payload: Record<string, unknown>;
     switch (entry.type) {
@@ -2041,7 +2129,7 @@ export class Batch {
       url: url.href,
       file_alias: trimExecutableExtension(rri(url.href)).replace(/\.json$/, ''),
       realm_url: this.realmURL.href,
-      generation: this.#provisionalGeneration,
+      generation: this.htmlRowGeneration(url.href, rowType),
       is_deleted: false,
       rendered_at: Date.now(),
       job_id: this.jobInfo?.jobId ?? null,
@@ -2209,9 +2297,11 @@ export class Batch {
       // channel: no realm_meta, no realm_generations bump, no boxel_index
       // swap. The guarded swap makes an out-of-order (lower-generation)
       // zombie job a per-row no-op.
+      // Its rows carry the stamps `adoptIndexGenerations` read, and it
+      // commits under the realm generation read alongside them; it allocates
+      // none of its own.
+      this.#adoptedIndexGenerations();
       let commit = await this.#commit(async () => {
-        // Commits under the generation its job carried, which it staged its
-        // rows under; it allocates none of its own.
         this.#commitGenerationInTransaction = this.#provisionalGeneration;
         await this.promotePrerenderedHtmlWorking(columns.prerenderedHtml, {
           monotonicGuard: true,
@@ -3348,7 +3438,7 @@ export class Batch {
           // one alias per URL whether the row is live or tombstoned.
           trimExecutableExtension(rri(id)).replace(/\.json$/, ''),
           type,
-          this.#provisionalGeneration,
+          this.htmlRowGeneration(id, type),
           this.realmURL.href,
           true, // is_deleted
           null, // error_doc — a tombstone clears any prior render error
@@ -4136,6 +4226,10 @@ function baseTypeFromError(entry: {
 // multi-row upsert from touching one conflict target twice.
 // The `prerendered_html` row an entry writes to, error entries folded onto
 // the row they preserve — the render channel's `rowType`.
+function indexGenerationKey(url: string, type: string): string {
+  return `${type} ${url}`;
+}
+
 function prerenderedRowType(
   entry: PrerenderedHtmlEntry | PrerenderedHtmlErrorEntry,
 ): BoxelIndexTable['type'] {

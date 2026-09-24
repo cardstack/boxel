@@ -589,14 +589,20 @@ module(basename(import.meta.filename), function () {
         'the prerender_html job completed successfully',
       );
       let prerenderArgs = prerenderJob.args as {
-        generation: number;
+        spawningIndexJobIds: number[];
+        generation: number | null;
         spawningJobId: number | null;
         changes: { url: string; operation: string }[];
       };
+      assert.deepEqual(
+        prerenderArgs.spawningIndexJobIds,
+        [indexJob.id],
+        'the job waits on the index pass that spawned it, by job id',
+      );
       assert.strictEqual(
         prerenderArgs.generation,
-        1,
-        'the job carries the generation the index pass anticipated',
+        null,
+        'and names no generation, which that pass allocates only at commit',
       );
       assert.strictEqual(
         prerenderArgs.spawningJobId,
@@ -621,7 +627,8 @@ module(basename(import.meta.filename), function () {
       // The module pre-warm sweep's wall-clock is attributed to the job that
       // pays it: the prerender job records `preWarmMs`, the index job does not.
       let prerenderResult = prerenderJob.result as {
-        phaseTimings?: { preWarmMs?: unknown } | null;
+        spawningIndexJobIds?: unknown;
+        phaseTimings?: { preWarmMs?: unknown; spawnGateMs?: unknown } | null;
       } | null;
       assert.strictEqual(
         typeof prerenderResult?.phaseTimings?.preWarmMs,
@@ -629,6 +636,19 @@ module(basename(import.meta.filename), function () {
         `the prerender job result records the pre-warm wall-clock, got: ${JSON.stringify(
           prerenderResult,
         )}`,
+      );
+      // And the wait for its spawning pass's commit, together with which
+      // passes it waited on, so a slow render can be split into waiting and
+      // rendering from the job row alone.
+      assert.strictEqual(
+        typeof prerenderResult?.phaseTimings?.spawnGateMs,
+        'number',
+        'the prerender job result records the spawning-pass wait',
+      );
+      assert.deepEqual(
+        prerenderResult?.spawningIndexJobIds,
+        [indexJob.id],
+        'the prerender job result names the index passes it waited on',
       );
     });
 

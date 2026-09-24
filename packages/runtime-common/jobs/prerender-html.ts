@@ -35,6 +35,14 @@ export function mergePrerenderHtmlChanges(
   return [...byUrl.values()];
 }
 
+// A prerender-html job's `spawningIndexJobIds`, read loosely: args written by
+// a worker predating the field carry none.
+export function parseSpawningIndexJobIds(value: unknown): number[] {
+  return Array.isArray(value)
+    ? value.filter((id): id is number => typeof id === 'number')
+    : [];
+}
+
 // A prerender-html job normally floors one tier below the index pass that
 // spawned it — a user-initiated index (userInitiatedPriority) yields
 // userInitiatedPrerenderHtmlPriority, anything lower yields
@@ -66,7 +74,9 @@ export interface PrerenderHtmlEnqueueArgs {
   realmURL: string;
   realmUsername: string;
   changes: IncrementalChange[];
-  generation: number;
+  // See PrerenderHtmlArgs for both.
+  spawningIndexJobIds: number[];
+  generation: number | null;
   loaderEpoch: string;
   spawningJobId: number | null;
   spawningPriority: number;
@@ -107,8 +117,8 @@ export function prerenderHtmlConcurrencyGroup(realmURL: string): string {
 // A realm-wide watermark (`realm_generations.current_generation`) is the wrong
 // signal here and must not be reintroduced: an index batch advances it
 // unconditionally, a prerender batch never does, and the prerender job writes
-// rows only for the URLs it was handed, at the generation its spawning pass
-// anticipated. A pass that advances the watermark without a matching render
+// rows only for the URLs it was handed, each at its own index row's
+// generation. A pass that advances the watermark without a matching render
 // therefore leaves it unreachable on a realm that is in fact fully rendered.
 //
 // Resolves true when caught up, false on timeout.
@@ -233,7 +243,8 @@ export async function publishedHtmlHasCaughtUp(
 
 // Publish a `prerender_html` job through the normal queue-publish path. The
 // registered coalesce handler (tasks/prerender-html.ts) merges same-realm
-// publishes: per-URL update-wins merge, max generation/priority/timeout.
+// publishes: per-URL update-wins merge, the union of spawning index jobs, max
+// priority/timeout.
 // Callers fire-and-forget — an index pass must never block on, or fail
 // with, its prerender enqueue; a missed enqueue self-heals on the next pass.
 // Whether `realmURL` is configured to render no HTML.
@@ -263,6 +274,7 @@ export async function enqueuePrerenderHtmlJob(
     realmURL,
     realmUsername,
     changes,
+    spawningIndexJobIds,
     generation,
     loaderEpoch,
     spawningJobId,
@@ -276,6 +288,7 @@ export async function enqueuePrerenderHtmlJob(
     realmURL,
     realmUsername,
     changes,
+    spawningIndexJobIds,
     generation,
     loaderEpoch,
     spawningJobId,
