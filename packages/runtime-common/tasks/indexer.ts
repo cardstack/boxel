@@ -130,6 +130,10 @@ export interface IncrementalResult {
   // The realm generation this pass committed. Optional so a result produced
   // by an older worker mid-deploy still parses.
   generation?: number;
+  // The committed generation this pass was set up against. Below
+  // `generation - 1` when a peer pass of the realm committed while this one
+  // ran. Optional for the same reason as `generation`.
+  baseGeneration?: number;
   // Between-visit phase decomposition of the job wall (see IndexPhaseTimings).
   // Optional so a result from a worker predating the instrumentation parses.
   phaseTimings?: IndexPhaseTimings;
@@ -188,6 +192,8 @@ export interface FromScratchResult {
   stats: Stats;
   // See IncrementalResult.generation.
   generation?: number;
+  // See IncrementalResult.baseGeneration.
+  baseGeneration?: number;
   // See IncrementalResult.phaseTimings.
   phaseTimings?: IndexPhaseTimings;
 }
@@ -567,12 +573,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       // Fire-and-forget: the index pass must not block on — or fail with —
       // the prerender enqueue. Fires as soon as the invalidation set is
       // known, so HTML rendering can start concurrently with the pass.
-      onInvalidationsReady: ({
-        changes,
-        generation,
-        loaderEpoch,
-        fileDefBindings,
-      }) => {
+      onInvalidationsReady: ({ changes, generation, loaderEpoch }) => {
         if (skipsPrerenderHtml(realmURL, skipPrerenderHtmlRealms)) {
           // Configured off for this realm. Says so out loud: a realm whose
           // HTML never renders reads, from every other vantage point, exactly
@@ -603,7 +604,6 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
           // From-scratch: the prerender job runs the realm-wide module
           // pre-warm sweep before its format renders.
           preWarm: true,
-          fileDefBindings,
         }).catch((e) => {
           log.warn(
             `${jobIdentity(jobInfo)} failed to enqueue prerender_html job for ${realmURL}: ${(e as Error)?.message}`,
@@ -615,8 +615,14 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       prerenderer,
       realmOwnerUserId: userId,
     });
-    let { stats, ignoreData, invalidations, generation, phaseTimings } =
-      await IndexRunner.fromScratch(currentRun);
+    let {
+      stats,
+      ignoreData,
+      invalidations,
+      generation,
+      baseGeneration,
+      phaseTimings,
+    } = await IndexRunner.fromScratch(currentRun);
 
     log.debug(
       `${jobIdentity(jobInfo)} completed from-scratch indexing for realm ${
@@ -652,6 +658,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       ignoreData: { ...ignoreData },
       stats,
       ...(generation !== undefined ? { generation } : {}),
+      ...(baseGeneration !== undefined ? { baseGeneration } : {}),
       ...(phaseTimings !== undefined ? { phaseTimings } : {}),
     };
   };
@@ -711,7 +718,6 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
         changes: htmlChanges,
         generation,
         loaderEpoch,
-        fileDefBindings,
       }) => {
         let changes = htmlChanges.map(({ url, operation }) => ({
           url,
@@ -750,7 +756,6 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
           // Incremental: no realm-wide sweep — its cost is O(realm module
           // count), deliberately not paid on incrementals.
           preWarm: false,
-          fileDefBindings,
         }).catch((e) => {
           log.warn(
             `${jobIdentity(jobInfo)} failed to enqueue prerender_html job for ${realmURL}: ${(e as Error)?.message}`,
@@ -769,6 +774,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       invalidatedTypes,
       ignoreData,
       generation,
+      baseGeneration,
       phaseTimings,
     } = await IndexRunner.incremental(currentRun, {
       changes: changes.map(({ operation, url }) => ({
@@ -789,6 +795,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       ...(invalidatedTypes !== undefined ? { invalidatedTypes } : {}),
       stats,
       ...(generation !== undefined ? { generation } : {}),
+      ...(baseGeneration !== undefined ? { baseGeneration } : {}),
       ...(phaseTimings !== undefined ? { phaseTimings } : {}),
       ...(deferredPrerenderHtml !== undefined ? { deferredPrerenderHtml } : {}),
       coalescedCallers: getCoalescedCallers(args),

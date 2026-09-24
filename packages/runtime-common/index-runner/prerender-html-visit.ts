@@ -50,10 +50,6 @@ import {
   serializableError,
 } from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
-import {
-  readFileDefBindings,
-  type FileDefBindings,
-} from '../file-def-bindings.ts';
 import { canonicalURL } from './dependency-url.ts';
 
 // Ceiling on holding a prerender-html job's visits for its spawning pass's
@@ -93,10 +89,6 @@ export interface PrerenderHtmlPassArgs {
   // module pre-warm sweep before the format renders begin. False on
   // incremental spawns — the sweep is O(realm module count).
   preWarm: boolean;
-  // The file type bindings the spawning index pass resolved. Absent for a job
-  // enqueued before the payload carried them, or one with no spawning pass —
-  // the pass then reads the realm's config document itself.
-  spawnedFileDefBindings?: FileDefBindings;
   indexWriter: IndexWriter;
   definitionLookup: DefinitionLookup;
   virtualNetwork: VirtualNetwork;
@@ -128,6 +120,11 @@ export interface PrerenderHtmlPassResult {
   // spawned pass outside the browser). Surfaces on the job result so
   // dashboards attribute the sweep to the job that pays it.
   preWarmMs?: number;
+  // The swap's wall-clock and its transaction's attempt counts (see
+  // `BatchDoneResult`), present once the pass reached its swap.
+  swapMs?: number;
+  swapAttempts?: number;
+  swapRetryMs?: number;
 }
 
 // The `prerender_html` job's visit loop — the HTML channel's analog of the
@@ -149,7 +146,6 @@ export async function runPrerenderHtmlPass({
   spawningJobId,
   loaderEpoch,
   preWarm,
-  spawnedFileDefBindings,
   indexWriter,
   definitionLookup,
   virtualNetwork,
@@ -172,19 +168,6 @@ export async function runPrerenderHtmlPass({
   let jobTag = `${jobIdentity(jobInfo)} [realm: ${realmURL.href}] [generation: ${generation}]`;
   let batchId = `${jobInfo.jobId}-${uuidv4().slice(0, 8)}`;
   let realmPaths = new RealmPaths(realmURL, virtualNetwork);
-  // The bindings the index pass that spawned this job resolved, so the pass
-  // that writes a file's `types` and this one — which writes the HTML keyed on
-  // `types[0]` — agree by construction rather than by each reading a document
-  // an author may edit between them. A job enqueued before the payload carried
-  // them, or one spawned outside that path, reads the config itself.
-  let fileDefBindings =
-    spawnedFileDefBindings ??
-    (await readFileDefBindings({
-      reader,
-      realmURL,
-      virtualNetwork,
-      logWarn: (message) => log.warn(`${jobIdentity(jobInfo)} ${message}`),
-    }));
   let stats: Stats = {
     instancesIndexed: 0,
     filesIndexed: 0,
@@ -258,6 +241,8 @@ export async function runPrerenderHtmlPass({
   // visit loop's resume-skip has no pre-warm analog), which is cheap — the
   // second attempt's populate calls hit the cache as O(1) reads, no re-renders.
   let preWarmMs: number | undefined;
+  let swapMs: number | undefined;
+  let swapCommit: { swapAttempts: number; swapRetryMs: number } | undefined;
   if (preWarm && !isBrowserTestEnv()) {
     let preWarmStart = Date.now();
     try {
@@ -433,7 +418,6 @@ export async function runPrerenderHtmlPass({
             batch,
             prerenderer,
             virtualNetwork,
-            fileDefBindings,
             auth,
             batchId,
             jobInfo,
@@ -473,11 +457,11 @@ export async function runPrerenderHtmlPass({
       );
     }
     let swapStart = Date.now();
-    let { totalIndexEntries } = await batch.done();
+    let { totalIndexEntries, ...commit } = await batch.done();
+    swapMs = Date.now() - swapStart;
+    swapCommit = commit;
     stats.totalIndexEntries = totalIndexEntries;
-    perfLog.debug(
-      `${jobTag} completed prerendered-html swap in ${Date.now() - swapStart} ms`,
-    );
+    perfLog.debug(`${jobTag} completed prerendered-html swap in ${swapMs} ms`);
   } finally {
     onProgress?.({
       type: 'indexing-finished',
@@ -510,6 +494,8 @@ export async function runPrerenderHtmlPass({
     generation,
     stats,
     ...(preWarmMs !== undefined ? { preWarmMs } : {}),
+    ...(swapMs !== undefined ? { swapMs } : {}),
+    ...(swapCommit ?? {}),
   };
 }
 
@@ -709,7 +695,6 @@ async function visitForPrerenderedHtml({
   batch,
   prerenderer,
   virtualNetwork,
-  fileDefBindings,
   auth,
   batchId,
   jobInfo,
@@ -728,7 +713,6 @@ async function visitForPrerenderedHtml({
   batch: Batch;
   prerenderer: Prerenderer;
   virtualNetwork: VirtualNetwork;
-  fileDefBindings?: FileDefBindings;
   auth: string;
   batchId: string;
   jobInfo: JobInfo;
@@ -779,11 +763,7 @@ async function visitForPrerenderedHtml({
   }
 
   let fileURL = url.href;
-  let fileDefCodeRef = resolveFileDefCodeRef(
-    new URL(fileURL),
-    virtualNetwork,
-    fileDefBindings,
-  );
+  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL), virtualNetwork);
 
   // Floored once and used by both consumers below, so the modified time the
   // render stamps onto the card's document and the one the file's HTML bakes
@@ -810,9 +790,6 @@ async function visitForPrerenderedHtml({
 
   let renderOptions: RenderRouteOptions = {
     fileDefCodeRef,
-    ...(fileDefBindings && Object.keys(fileDefBindings).length > 0
-      ? { fileDefBindings: { realm: realmURL.href, types: fileDefBindings } }
-      : {}),
     ...(parsedCardResource ? { cardRender: true } : {}),
     fileRender: true,
     // The standalone visit resolves the file's resource + types from source
@@ -951,7 +928,7 @@ async function visitForPrerenderedHtml({
               mediaCacheAdapter,
               realmURL,
               sourceURL: screenshotLedgerSourceURL(fileURL, 'instance'),
-              sourceGeneration: batch.currentGeneration,
+              sourceGeneration: batch.provisionalGeneration,
               contentHash,
               jobInfo,
               log,
@@ -1023,7 +1000,7 @@ async function visitForPrerenderedHtml({
             mediaCacheAdapter,
             realmURL,
             sourceURL: screenshotLedgerSourceURL(fileURL, 'file'),
-            sourceGeneration: batch.currentGeneration,
+            sourceGeneration: batch.provisionalGeneration,
             contentHash,
             jobInfo,
             log,

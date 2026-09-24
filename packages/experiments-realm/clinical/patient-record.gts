@@ -22,7 +22,7 @@ import {
   linksTo,
   linksToMany,
 } from '@cardstack/base/card-api';
-import { AuditLog } from './audit-log';
+import { LogFile } from '@cardstack/base/log-file-def';
 import NumberField from '@cardstack/base/number';
 import StringField from '@cardstack/base/string';
 import {
@@ -890,11 +890,11 @@ export class PatientRecord extends CardDef {
   @field rhythmEvents = containsMany(RhythmEvent);
   @field vitals = containsMany(VitalsReading);
 
-  // The append-only ledger the batches write a line to. Naming the subclass
-  // here is what gives the batch handle its `record` member: a batch's members
-  // come from the type the field declares, and the realm binds the stored
-  // `.txt` to the same type so the name resolves on both sides.
-  @field auditLog = linksTo(AuditLog);
+  // The append-only ledger the batches write a line to. The linked file is a
+  // `LogFile` because the platform types every stored `.log` as one, which is
+  // what carries `record` at run time. Naming `LogFile` here is what types
+  // `record` on the batch handle and keeps the file picker to `.log` files.
+  @field auditLog = linksTo(LogFile);
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: PatientRecord) {

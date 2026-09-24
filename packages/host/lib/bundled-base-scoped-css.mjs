@@ -31,6 +31,67 @@ const SCOPED_CSS_IMPORT = /["']([^"']*\.glimmer-scoped\.css)["']/g;
 // Stylesheet specifiers are relative too and are collected separately.
 const RELATIVE_IMPORT = /["'](\.\.?\/[^"']*)["']/g;
 
+// Both patterns below match a quoted string anywhere in the module, and a
+// module's own comments are full of prose that looks like one — a code ref
+// written out in a doc comment reads as an import of a module that need not
+// even exist. Scan the code with its comments blanked so a specifier has to be
+// something the module actually evaluates.
+//
+// Read rather than matched: a comment is not a regular language. `/*` appears
+// inside line comments here (`@cardstack/boxel-host/lib/*` is written in one),
+// and a pattern that takes it for the start of a block comment blanks
+// everything to the next `*/` — thousands of characters away, taking real
+// imports with it. `//` appears inside strings for the same reason. Only a
+// reader that knows which of the three it is in can tell them apart.
+//
+// Blanked rather than removed, so every offset in the scanned text still lines
+// up with the real source.
+function withoutComments(code) {
+  let out = '';
+  let i = 0;
+  while (i < code.length) {
+    let c = code[i];
+    let next = code[i + 1];
+    if (c === '/' && next === '/') {
+      while (i < code.length && code[i] !== '\n') {
+        out += ' ';
+        i++;
+      }
+      continue;
+    }
+    if (c === '/' && next === '*') {
+      let close = code.indexOf('*/', i + 2);
+      let stop = close === -1 ? code.length : close + 2;
+      for (; i < stop; i++) {
+        out += code[i] === '\n' ? '\n' : ' ';
+      }
+      continue;
+    }
+    if (c === '"' || c === "'" || c === '`') {
+      let quote = c;
+      out += c;
+      i++;
+      while (i < code.length) {
+        if (code[i] === '\\') {
+          out += code.slice(i, i + 2);
+          i += 2;
+          continue;
+        }
+        out += code[i];
+        if (code[i] === quote) {
+          i++;
+          break;
+        }
+        i++;
+      }
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
 function isBaseModule(id) {
   return (
     id.includes(`${sep}packages${sep}base${sep}`) && /\.(gts|ts)(\?|$)/.test(id)
@@ -76,10 +137,11 @@ export function bundledBaseScopedCSS() {
         return null;
       }
       let name = baseModuleName(id);
-      let css = [...code.matchAll(SCOPED_CSS_IMPORT)].map((m) => m[1]);
+      let scannable = withoutComments(code);
+      let css = [...scannable.matchAll(SCOPED_CSS_IMPORT)].map((m) => m[1]);
       let imports = [
         ...new Set(
-          [...code.matchAll(RELATIVE_IMPORT)]
+          [...scannable.matchAll(RELATIVE_IMPORT)]
             .map((m) => m[1])
             .filter((specifier) => !specifier.endsWith('.glimmer-scoped.css'))
             .map((specifier) => resolveSibling(name, specifier)),

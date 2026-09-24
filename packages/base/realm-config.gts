@@ -837,23 +837,6 @@ export class RealmSettingsField extends JsonField {
   static edit = RealmSettingsEdit;
 }
 
-// Which FileDef subclass each file extension in this realm binds to, as a map
-// of extension to code ref:
-//
-//   { ".txt": { "module": "./audit-log", "name": "AuditLog" } }
-//
-// A realm says which class an extension binds to. It does not say what counts
-// as a file: an extension the platform does not already read as a file cannot
-// be bound, because the file-or-card question is answered in places that have
-// no realm in scope, including inside a card in the browser.
-//
-// `module` resolves against the realm's URL, so a binding means the same thing
-// for a file in a subdirectory as for one at the realm root.
-export class FileTypeBindingsField extends JsonField {
-  static displayName = 'File Type Bindings';
-  static icon = FileSettingsIcon;
-}
-
 class RealmConfigEmbedded extends Component<typeof RealmConfig> {
   <template>
     <div class='realm-config-embedded' data-test-realm-config-embedded>
@@ -1189,23 +1172,6 @@ export class RealmConfig extends CardDef {
   // request time, so editing this takes effect with the index update, no
   // restart.
   @field allowArbitraryScreenshots = contains(BooleanField);
-
-  // Read from the realm's stored `realm.json` rather than from its indexed
-  // row, so the realm and the index runner resolve a file's class from the
-  // same bytes — a file typed one way in the index and another when an
-  // operation is dispatched against it is the failure this binding exists to
-  // avoid, and the index row is what a served document's type is read off.
-  //
-  // Editing this on a realm that already holds files wants a realm re-index.
-  // A served document's `adoptsFrom` and an operation's dispatch both read
-  // the bindings live, so those two agree from the moment a binding is
-  // written; what lags is the indexed `types` on each already-stored file,
-  // which is what a search by the bound type and the fitted/embedded HTML
-  // lookup read.
-  @field fileTypes = contains(FileTypeBindingsField, {
-    description:
-      "Binds a file extension in this realm to a FileDef subclass, so a file stored here carries that class's declared operations. A map of extension to code ref. An extension with no binding resolves to the platform default for that file type. Editing this on a realm that already holds files needs a realm re-index before a search by the bound type finds them",
-  });
 
   @field config = contains(RealmSettingsField, {
     description:

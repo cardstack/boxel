@@ -5,6 +5,11 @@ import { join, resolve } from 'node:path';
 import { runTestsLocally } from '../src/lib/test-engine.ts';
 
 const FIXTURE_DIR = resolve(import.meta.dirname, 'fixtures', 'local-mode');
+const IMPORT_TIME_FIXTURE_DIR = resolve(
+  import.meta.dirname,
+  'fixtures',
+  'local-mode-import-time',
+);
 
 // Where `resolveHostDistDir` looks, in its order of preference. Local mode
 // runs the host's compiled test bundle in a real browser, so without one there
@@ -64,6 +69,27 @@ describe.skipIf(!dist)('local-mode `boxel test`', () => {
       expect(result.errorMessage).toBeUndefined();
       expect(result.status).toBe('passed');
       expect(result.passedCount).toBeGreaterThan(0);
+      expect(result.testFiles).toEqual(['sample.test.gts']);
+    },
+    RUN_TIMEOUT_MS,
+  );
+
+  // A test module may declare its QUnit modules at import time instead of from
+  // a `runTests` export. The harness attributes those too, so the run holds
+  // exactly that one test; a harness that missed it would add its own
+  // "no realm tests found" placeholder and report two.
+  it(
+    'counts a test declared at import time as the run',
+    async () => {
+      let result = await runTestsLocally({
+        workspaceDir: IMPORT_TIME_FIXTURE_DIR,
+      });
+
+      expect(
+        result.failures.map((f) => `${f.module} > ${f.testName}: ${f.message}`),
+      ).toEqual([]);
+      expect(result.status).toBe('passed');
+      expect(result.passedCount).toBe(1);
       expect(result.testFiles).toEqual(['sample.test.gts']);
     },
     RUN_TIMEOUT_MS,

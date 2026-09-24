@@ -55,10 +55,6 @@ import {
 } from './index-runner/visit-file.ts';
 import { performCardIndexing } from './index-runner/card-indexer.ts';
 import { performFileIndexing } from './index-runner/file-indexer.ts';
-import {
-  readFileDefBindings,
-  type FileDefBindings,
-} from './file-def-bindings.ts';
 
 // The result of a prefetched render, with any thrown error captured rather
 // than rejected so an un-awaited prefetch can't surface as an unhandled
@@ -173,11 +169,6 @@ export class IndexRunner {
     authUserId: string;
   };
   #realmOwnerUserId: string;
-  // The realm's file type bindings, read once per runner from its config
-  // document. The same document the realm itself resolves a file's class from,
-  // so the class this pass writes into a file's row is the class an operation
-  // dispatched against that file later resolves.
-  #fileDefBindings?: FileDefBindings;
   #definitionLookup: DefinitionLookup;
   #jobInfo: JobInfo;
   // Worker-job priority threaded from `pg-queue` → `tasks/indexer.ts`
@@ -201,7 +192,6 @@ export class IndexRunner {
     changes: PrerenderedHtmlChange[];
     generation: number;
     loaderEpoch: string;
-    fileDefBindings: FileDefBindings;
   }) => void;
   readonly stats: Stats = {
     instancesIndexed: 0,
@@ -280,7 +270,6 @@ export class IndexRunner {
       changes: PrerenderedHtmlChange[];
       generation: number;
       loaderEpoch: string;
-      fileDefBindings: FileDefBindings;
     }): void;
   }) {
     this.#indexWriter = indexWriter;
@@ -334,9 +323,13 @@ export class IndexRunner {
     current.#dependencyResolver.reset();
     let start = Date.now();
     // Between-visit phase walls, assembled onto the job result's `phaseTimings`
-    // at the end. `visitLoopMs` / `swapMs` are set inside the try below.
+    // at the end. `visitLoopMs`, `swapMs` and the swap's attempt counts are set
+    // inside the try below.
     let visitLoopMs: number | undefined;
     let swapMs: number | undefined;
+    let swapCommit:
+      | { swapAttempts: number; swapRetryMs: number; commitLockWaitMs?: number }
+      | undefined;
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} starting from scratch indexing`,
     );
@@ -389,7 +382,7 @@ export class IndexRunner {
     current.#perfLog.debug(
       `${jobIdentity(current.#jobInfo)} completed invalidations in ${discoverMs} ms`,
     );
-    await current.#notifyInvalidationsReady(
+    current.#notifyInvalidationsReady(
       discoverResult.urls,
       new Set(discoverResult.deletedUrls),
     );
@@ -466,8 +459,11 @@ export class IndexRunner {
         `${jobIdentity(current.#jobInfo)} completed index visit in ${Date.now() - visitStart} ms`,
       );
       let finalizeStart = Date.now();
-      let { totalIndexEntries } = await current.batch.done();
+      let { totalIndexEntries, ...commit } = await current.batch.done({
+        fullRealm: true,
+      });
       swapMs = Date.now() - finalizeStart;
+      swapCommit = commit;
       current.#perfLog.debug(
         `${jobIdentity(current.#jobInfo)} completed index finalization in ${swapMs} ms`,
       );
@@ -506,7 +502,8 @@ export class IndexRunner {
       invalidations: [...invalidations].map((url) => url.href),
       ignoreData: current.#ignoreData,
       stats: current.stats,
-      generation: current.batch.currentGeneration,
+      generation: current.batch.committedGeneration,
+      baseGeneration: current.batch.baseGeneration,
       phaseTimings: {
         totalMs: Date.now() - start,
         setupMs,
@@ -516,6 +513,7 @@ export class IndexRunner {
         ...(visitLoopMs !== undefined ? { visitLoopMs } : {}),
         writeMs: current.batch.writeMs,
         ...(swapMs !== undefined ? { swapMs } : {}),
+        ...(swapCommit ?? {}),
       },
     };
   }
@@ -531,9 +529,13 @@ export class IndexRunner {
     current.#dependencyResolver.reset();
     let start = Date.now();
     // Between-visit phase walls, assembled onto the job result's `phaseTimings`
-    // at the end. `visitLoopMs` / `swapMs` are set inside the try below.
+    // at the end. `visitLoopMs`, `swapMs` and the swap's attempt counts are set
+    // inside the try below.
     let visitLoopMs: number | undefined;
     let swapMs: number | undefined;
+    let swapCommit:
+      | { swapAttempts: number; swapRetryMs: number; commitLockWaitMs?: number }
+      | undefined;
     let operations = new Map<string, 'update' | 'delete'>();
     for (let { url, operation } of changes) {
       if (operation === 'delete') {
@@ -599,7 +601,7 @@ export class IndexRunner {
       try {
         await current.batch.invalidate(urls);
         discoverMs = Date.now() - discoverStart;
-        await current.#notifyInvalidationsReady(
+        current.#notifyInvalidationsReady(
           current.batch.invalidations,
           new Set(
             [...operations]
@@ -690,8 +692,9 @@ export class IndexRunner {
       visitLoopMs = Date.now() - loopStart;
 
       let finalizeStart = Date.now();
-      let { totalIndexEntries } = await current.batch.done();
+      let { totalIndexEntries, ...commit } = await current.batch.done();
       swapMs = Date.now() - finalizeStart;
+      swapCommit = commit;
       current.stats.totalIndexEntries = totalIndexEntries;
     } finally {
       current.#onProgress?.({
@@ -726,7 +729,8 @@ export class IndexRunner {
       invalidatedTypes: current.batch.touchedTypes,
       ignoreData: current.#ignoreData,
       stats: current.stats,
-      generation: current.batch.currentGeneration,
+      generation: current.batch.committedGeneration,
+      baseGeneration: current.batch.baseGeneration,
       phaseTimings: {
         totalMs: Date.now() - start,
         setupMs,
@@ -735,6 +739,7 @@ export class IndexRunner {
         ...(visitLoopMs !== undefined ? { visitLoopMs } : {}),
         writeMs: current.batch.writeMs,
         ...(swapMs !== undefined ? { swapMs } : {}),
+        ...(swapCommit ?? {}),
       },
     };
   }
@@ -746,7 +751,7 @@ export class IndexRunner {
   // dependents, which this pass does not visit (see
   // `Batch.renderOnlyInvalidations`). Only fires in split mode; the fused
   // path renders HTML inline and enqueues nothing.
-  async #notifyInvalidationsReady(visited: string[], deletes: Set<string>) {
+  #notifyInvalidationsReady(visited: string[], deletes: Set<string>) {
     if (!this.#onInvalidationsReady || !this.batch.splitPrerenderHtml) {
       return;
     }
@@ -761,16 +766,8 @@ export class IndexRunner {
         url,
         operation: deletes.has(url) ? 'delete' : 'update',
       })),
-      generation: this.batch.currentGeneration,
+      generation: this.batch.provisionalGeneration,
       loaderEpoch: this.batch.loaderEpoch,
-      // This pass's answer, handed on rather than left for the HTML job to
-      // read again. The two jobs write different halves of the same row —
-      // this pass writes `types`, that one writes the HTML keyed on
-      // `types[0]` — so two independent reads of a document an author can
-      // edit between them would key the HTML under one class and read it
-      // under another, and the row would simply have no fitted or embedded
-      // candidates with nothing saying why.
-      fileDefBindings: await this.getFileDefBindings(),
     });
   }
 
@@ -813,7 +810,6 @@ export class IndexRunner {
         batchId: this.#batchId,
         prerenderer: this.#prerenderer,
         virtualNetwork: this.#virtualNetwork,
-        fileDefBindings: await this.getFileDefBindings(),
         consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
         consumeResetStoreForRender: () => this.#consumeResetStoreForRender(),
         logDebug: (message) => this.#log.debug(message),
@@ -1142,11 +1138,7 @@ export class IndexRunner {
           );
         }
       }
-      // Carry realm_meta forward rather than recomputing it: the working
-      // table still holds the failed pass's un-promoted fan-out tombstones,
-      // and a recompute over that state would undercount live dependents in
-      // the type summary until the next successful pass.
-      await errorBatch.done({ carryForwardRealmMeta: true });
+      await errorBatch.done();
     } catch (recordErr) {
       // Recording is best-effort: if the failure was a DB outage the recovery
       // write fails too. The caller still rethrows the original error, so the
@@ -1166,22 +1158,6 @@ export class IndexRunner {
 
   get realmURL() {
     return this.#realmURL;
-  }
-
-  // Read once and held for the runner's life: a pass writes every file's row
-  // against one answer, so a binding edited mid-pass cannot leave the realm
-  // with rows typed two different ways.
-  private async getFileDefBindings(): Promise<FileDefBindings> {
-    if (!this.#fileDefBindings) {
-      this.#fileDefBindings = await readFileDefBindings({
-        reader: this.#reader,
-        realmURL: this.realmURL,
-        virtualNetwork: this.#virtualNetwork,
-        logWarn: (message) =>
-          this.#log.warn(`${jobIdentity(this.#jobInfo)} ${message}`),
-      });
-    }
-    return this.#fileDefBindings;
   }
 
   private async getModuleCacheContext() {
@@ -1379,7 +1355,6 @@ export class IndexRunner {
       diagnostics,
       dependencyResolver: this.#dependencyResolver,
       virtualNetwork: this.#virtualNetwork,
-      fileDefBindings: await this.getFileDefBindings(),
       updateEntry: async (entryURL, entry) => {
         await this.#writeEntry(entryURL, entry);
         this.#dependencyResolver.invalidateRelationshipDependencyRowCache(

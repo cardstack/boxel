@@ -100,6 +100,6 @@ const copy: Task<CopyArgs, CopyResult> = ({
     return {
       invalidations,
       totalNonErrorIndexEntries,
-      generation: batch.currentGeneration,
+      generation: batch.committedGeneration,
     };
   };

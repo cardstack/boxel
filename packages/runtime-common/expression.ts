@@ -492,8 +492,13 @@ export const tableValuedFunctionsPlaceholder = '__TABLE_VALUED_FUNCTIONS__';
 // pinned connection. Helpers default to the shared dbAdapter when no Querier
 // is provided, which preserves their pre-existing semantics for callers that
 // don't need transactional grouping.
+//
+// `coerceTypes` maps result columns back to their Postgres types on SQLite,
+// the same as `query`'s parameter does. Postgres returns typed values already,
+// so the Postgres queriers ignore it.
 export type Querier = (
   expression: Expression,
+  coerceTypes?: TypeCoercion,
 ) => Promise<Record<string, PgPrimitive>[]>;
 
 export async function query(

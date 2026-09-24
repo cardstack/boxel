@@ -39,6 +39,8 @@ import {
   createPrerenderAuth,
 } from '../helpers';
 
+import type { TestIndexRow } from '../helpers';
+
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 const testRealmURL2 = ri(`http://test-realm/test2/`);
@@ -1137,6 +1139,109 @@ module('Unit | index-writer', function (hooks) {
     assert.true(
       indexRow.is_deleted,
       'boxel_index row is tombstoned in lockstep',
+    );
+  });
+
+  // `tombstoneEntries` and `tombstonePrerenderedHtmlEntries` each build ONE
+  // multi-row upsert covering every invalidated URL. Every driver caps the
+  // bind parameters a single statement may carry — Postgres at 65,535,
+  // sqlite-wasm at 32,766 — so past a few thousand URLs the delete pass
+  // throws, the whole job is rejected, and the rows stay live with nothing
+  // scheduled to repair them. `#upsertIndexRows` already chunks against the
+  // adapter's budget; these two sites have to do the same.
+
+  // The budget the writer applies on sqlite. A tombstone row binds 10
+  // columns, so a chunked upsert never carries more than 90 rows * 10.
+  const SQLITE_BIND_BUDGET = 900;
+
+  const seedRenderedRows = (count: number): TestIndexRow[] => {
+    let rows: TestIndexRow[] = [];
+    for (let i = 1; i <= count; i++) {
+      rows.push({
+        url: `${testRealmURL}${i}.json`,
+        generation: 1,
+        realm_url: testRealmURL,
+        type: 'instance',
+        isolated_html: `<div class="isolated">${i}</div>`,
+      });
+    }
+    return rows;
+  };
+
+  const seededUrls = (rows: TestIndexRow[]) =>
+    rows.map((row) => new URL((row as { url: string }).url));
+
+  test('tombstone upserts are chunked and still tombstone every row', async function (assert) {
+    // 120 URLs * 10 columns = 1,200 binds in one statement: over the budget,
+    // but still under sqlite's hard ceiling, so this reports the invariant
+    // rather than dying on a driver error. Reaching the real ceiling needs
+    // more than 3,277 rows, and seeding that many costs more than the browser
+    // test timeout allows — so the budget is asserted directly, and the row
+    // counts guard the chunking against dropping a slice.
+    const URL_COUNT = 120;
+    let indexRows = seedRenderedRows(URL_COUNT);
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      indexRows,
+    );
+
+    let oversized: { table: string; binds: number }[] = [];
+    type Executor = typeof adapter.execute;
+    let originalExecute: Executor = adapter.execute.bind(adapter);
+    let spy: Executor = async (sql, opts) => {
+      let table =
+        /INSERT INTO (boxel_index_working|prerendered_html_working)/.exec(
+          sql,
+        )?.[1];
+      let binds = opts?.bind?.length ?? 0;
+      if (table && binds > SQLITE_BIND_BUDGET) {
+        oversized.push({ table, binds });
+      }
+      return originalExecute(sql, opts);
+    };
+    adapter.execute = spy;
+    try {
+      let batch = await indexWriter.createBatch(
+        new URL(testRealmURL),
+        virtualNetwork,
+      );
+      await batch.invalidate(seededUrls(indexRows));
+      await batch.done();
+    } finally {
+      adapter.execute = originalExecute;
+    }
+
+    assert.deepEqual(
+      oversized,
+      [],
+      'every tombstone upsert is chunked within the adapter bind budget',
+    );
+
+    let indexed = (await adapter.execute(
+      `SELECT is_deleted FROM boxel_index WHERE realm_url = $1`,
+      {
+        bind: [testRealmURL],
+        coerceTypes: { is_deleted: 'BOOLEAN' },
+      },
+    )) as unknown as Pick<BoxelIndexTable, 'is_deleted'>[];
+    assert.strictEqual(
+      indexed.filter((row) => row.is_deleted).length,
+      URL_COUNT,
+      'every boxel_index row is tombstoned',
+    );
+
+    let rendered = (await adapter.execute(
+      `SELECT is_deleted FROM prerendered_html WHERE realm_url = $1`,
+      {
+        bind: [testRealmURL],
+        coerceTypes: { is_deleted: 'BOOLEAN' },
+      },
+    )) as unknown as Pick<PrerenderedHtmlTable, 'is_deleted'>[];
+    assert.strictEqual(
+      rendered.filter((row) => row.is_deleted).length,
+      URL_COUNT,
+      'every prerendered_html row is tombstoned',
     );
   });
 
@@ -3147,6 +3252,80 @@ module('Unit | index-writer', function (hooks) {
       ],
       'correct card type summary after indexing is done',
     );
+  });
+
+  test('a failure inside the swap rolls back every statement the swap made', async function (assert) {
+    // The swap stamps `realm_type_generations` last, after promoting
+    // `boxel_index`, advancing `realm_generations` and writing `realm_meta`.
+    // A trigger that aborts that final write fails the swap at its latest
+    // point, so any earlier statement that had already committed on its own
+    // would still be visible afterwards.
+    let iconHTML = '<svg>test icon</svg>';
+    let personRef = { module: rri('./person'), name: 'Person' };
+    let personTypes = internalKeysFor(virtualNetwork, personRef, baseCardRef);
+    // Generation 1 of the test realm, with no rows.
+    await setupIndex(adapter);
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
+    await writeInstance(batch, {
+      id: '1',
+      name: 'Mango',
+      adoptsFrom: personRef,
+      displayNames: ['Person', 'Card'],
+      types: personTypes,
+      iconHTML,
+    });
+
+    await adapter.execute(
+      `CREATE TRIGGER index_writer_test_fail_swap
+       BEFORE INSERT ON realm_type_generations
+       BEGIN
+         SELECT RAISE(ABORT, 'injected index swap failure');
+       END`,
+    );
+    try {
+      // The SQLite worker surfaces a trigger abort as a bare Error, logging the
+      // trigger's message rather than carrying it, so this asserts only that
+      // the swap failed.
+      await assert.rejects(
+        batch.done(),
+        'the swap fails at its last statement',
+      );
+    } finally {
+      await adapter.execute(
+        'DROP TRIGGER IF EXISTS index_writer_test_fail_swap',
+      );
+    }
+
+    let promoted = await adapter.execute(
+      `SELECT url FROM boxel_index WHERE realm_url = $1`,
+      { bind: [testRealmURL] },
+    );
+    assert.deepEqual(promoted, [], 'no row reached boxel_index');
+    let generations = await adapter.execute(
+      `SELECT current_generation FROM realm_generations WHERE realm_url = $1`,
+      { bind: [testRealmURL] },
+    );
+    assert.deepEqual(
+      generations,
+      [{ current_generation: 1 }],
+      'the realm generation did not advance',
+    );
+    assert.deepEqual(
+      (await fetchRealmMetaRows(adapter)).length,
+      0,
+      'no realm_meta row was written',
+    );
+
+    // The rollback left the connection usable: the next statement is not
+    // inside a transaction the failure left open.
+    await adapter.execute('BEGIN');
+    await adapter.execute('COMMIT');
+    assert.ok(true, 'a new transaction starts cleanly after the rollback');
   });
 
   test('update realm meta carries forward the types a pass did not touch', async function (assert) {

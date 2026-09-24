@@ -288,6 +288,10 @@ export async function resetRealmState(
           `DELETE FROM realm_type_generations WHERE realm_url = $1`,
           [realmURL.href],
         );
+        await client.query(
+          `DELETE FROM realm_index_commits WHERE realm_url = $1`,
+          [realmURL.href],
+        );
         await client.query(`DELETE FROM realm_file_meta WHERE realm_url = $1`, [
           realmURL.href,
         ]);

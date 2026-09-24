@@ -12,6 +12,15 @@ export interface ExecuteOptions {
   coerceTypes?: TypeCoercion;
 }
 
+export interface TransactionOptions {
+  // Names the transaction in the log line a retry writes, e.g. the realm whose
+  // index swap is committing.
+  label?: string;
+  // How many times to run `fn` before giving up on a deadlock or
+  // serialization failure. Defaults to 3.
+  maxAttempts?: number;
+}
+
 export interface DBAdapter {
   kind: 'pg' | 'sqlite';
   isClosed: boolean;
@@ -21,6 +30,19 @@ export interface DBAdapter {
   ) => Promise<Record<string, PgPrimitive>[]>;
   close: () => Promise<void>;
   getColumnNames: (tableName: string) => Promise<string[]>;
+  // Run `fn` inside one transaction: every statement `fn` issues through
+  // `txQuerier` commits together, or none do if `fn` throws. Statements `fn`
+  // issues through the adapter itself are not part of the transaction.
+  //
+  // PgAdapter pins one pool connection for the whole transaction. A deadlock
+  // or serialization failure (SQLSTATE 40P01 / 40001) rolls back and runs `fn`
+  // again from the start, so `fn` must be safe to re-run and must keep no
+  // effects outside the database that a rollback would leave behind. SQLite
+  // runs the transaction on its single connection and never retries.
+  withTransaction: <T>(
+    fn: (txQuerier: Querier) => Promise<T>,
+    opts?: TransactionOptions,
+  ) => Promise<T>;
   // Best-effort cross-instance broadcast on a named channel. Backends that
   // don't support pub/sub (e.g. in-process SQLite) implement this as a no-op:
   // the caller must treat it as fire-and-forget cache-coherency, never as

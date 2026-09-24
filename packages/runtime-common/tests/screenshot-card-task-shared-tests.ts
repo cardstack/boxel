@@ -22,6 +22,7 @@ function makeDBAdapter(rows: Record<string, unknown>[]): DBAdapter {
     withWriteLock: async (_url, fn) => fn(undefined),
     withFileWriteLocks: async (_url, _paths, fn) => fn(() => {}),
     withUserCostLock: async (_userId, fn) => fn(),
+    withTransaction: async (fn) => fn(async () => rows as any),
   };
 }
 
