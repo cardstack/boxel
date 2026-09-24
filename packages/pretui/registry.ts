@@ -3,9 +3,9 @@
 // The demo and example registries are each one object built from ~70 bundles.
 // With object spread, a later bundle silently overwrites an earlier one, so
 // extracting a component into its own folder and forgetting to delete its old
-// territory entry produces a page that renders the stale demo while every gate
-// stays green: `missingDemoNames` checks that a key exists, not which module
-// supplied it. Merging through here turns that into a module-eval error that
+// territory entry produces a page that renders the stale demo while any check
+// that a key exists stays green, since it cannot tell which module supplied
+// it. Merging through here turns that into a module-eval error that
 // names both bundles.
 
 /**

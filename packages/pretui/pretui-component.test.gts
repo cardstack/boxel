@@ -4,6 +4,7 @@ import { module, test } from 'qunit';
 import { render, waitFor } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { PretUISpec } from './pretui-component';
+import { DEMO_MODULES, loadDemo } from './demo-locations';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Isolated = PretUISpec.isolated as any;
@@ -44,5 +45,11 @@ module('Pretui | PretUISpec', function (hooks) {
     let model = specModel('UsageString', 'live', 'Runtime');
     await render(<template><Isolated @model={{model}} /></template>);
     assert.dom('[data-demo-policy="excluded"]').exists();
+  });
+
+  test('every named usage module holds its page', async function (assert) {
+    for (let name of Object.keys(DEMO_MODULES)) {
+      assert.ok(await loadDemo({ name }), `${name} at ${DEMO_MODULES[name]}`);
+    }
   });
 });
