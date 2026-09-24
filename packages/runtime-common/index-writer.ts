@@ -3000,14 +3000,12 @@ export class Batch {
       return;
     }
 
-    await this.#query([
-      ...upsertMultipleRows(
-        'boxel_index_working',
-        'boxel_index_working_pkey',
-        columns,
-        rows,
-      ),
-    ]);
+    await this.#upsertWithinBindBudget(
+      'boxel_index_working',
+      'boxel_index_working_pkey',
+      columns,
+      rows,
+    );
 
     // On the fused path this batch owns the prerendered_html channel too, so
     // the deletion must tombstone both. (A split-mode batch leaves the
@@ -3026,6 +3024,34 @@ export class Batch {
   // clears any prior render error / diagnostics. The visit loop's writes
   // overwrite survivors, so only genuinely deleted URLs stay tombstoned
   // through the swap.
+  // One multi-row upsert binds `rows * columns` parameters, and every driver
+  // caps what a single statement may carry — SQLite at ~999, Postgres at
+  // 65,535. A realm-sized batch passes either ceiling, and the driver rejects
+  // the whole statement, so the caller loses its entire pass rather than part
+  // of it. Chunk against the same budget `#upsertIndexRows` uses.
+  async #upsertWithinBindBudget(
+    table: string,
+    constraint: string,
+    nameExpressions: string[][],
+    valueExpressions: Expression[][],
+  ): Promise<void> {
+    let bindBudget = this.#dbAdapter.kind === 'sqlite' ? 900 : 60000;
+    let rowsPerUpsert = Math.max(
+      1,
+      Math.floor(bindBudget / nameExpressions.length),
+    );
+    for (let i = 0; i < valueExpressions.length; i += rowsPerUpsert) {
+      await this.#query([
+        ...upsertMultipleRows(
+          table,
+          constraint,
+          nameExpressions,
+          valueExpressions.slice(i, i + rowsPerUpsert),
+        ),
+      ]);
+    }
+  }
+
   private async tombstonePrerenderedHtmlEntries(urls: string[]): Promise<void> {
     let existingTypes = await this.existingPrerenderedHtmlTypes(urls);
     for (let [url, entries] of existingTypes) {
@@ -3080,14 +3106,12 @@ export class Batch {
     if (rows.length === 0) {
       return;
     }
-    await this.#query([
-      ...upsertMultipleRows(
-        'prerendered_html_working',
-        'prerendered_html_working_pkey',
-        columns,
-        rows,
-      ),
-    ]);
+    await this.#upsertWithinBindBudget(
+      'prerendered_html_working',
+      'prerendered_html_working_pkey',
+      columns,
+      rows,
+    );
   }
 
   // The adoption chains `boxel_index_working` currently holds for these URLs.
