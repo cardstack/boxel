@@ -639,6 +639,7 @@ class Isolated extends Component<typeof Workspace> {
                   {{/each}}
                 </ul>
                 <Button
+                  data-test-search-result={{result.id}}
                   @kind='text-only'
                   @size='auto'
                   class='search-see-all'
@@ -656,6 +657,7 @@ class Isolated extends Component<typeof Workspace> {
         </div>
       </header>
 
+      data-test-search-see-all
       {{#if (eq this.segment 'home')}}
         <div class='stage scroll-container'>
           {{! greeting removed: Home opens with work, not a
