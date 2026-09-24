@@ -38,3 +38,11 @@ export function queueClaimOf(
   }
   return { queueWaitMs, concurrencyGroup, laneFamily };
 }
+
+// `IndexingProgressEvent.lane` for a job, spread into the event: the lane it
+// was claimed in, so its progress log lines say whose pass it is.
+export function progressLaneOf(jobInfo: JobInfo | undefined): {
+  lane?: string;
+} {
+  return jobInfo?.concurrencyGroup ? { lane: jobInfo.concurrencyGroup } : {};
+}

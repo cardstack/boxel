@@ -187,13 +187,6 @@ export interface IndexingProgressEvent {
   lane?: string;
 }
 
-// `IndexingProgressEvent.lane` for a job, spread into the event.
-export function progressLaneOf(jobInfo: JobInfo | undefined): {
-  lane?: string;
-} {
-  return jobInfo?.concurrencyGroup ? { lane: jobInfo.concurrencyGroup } : {};
-}
-
 // The job types an `indexJobsOnly` worker registers. The queue's claim
 // query only dequeues job types a worker has registered handlers for, so
 // restricting registration is what makes such a worker an indexing-only

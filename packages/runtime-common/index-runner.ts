@@ -46,7 +46,8 @@ import {
   isCardError,
   serializableError,
 } from './error.ts';
-import { progressLaneOf, type IndexingProgressEvent } from './worker.ts';
+import type { IndexingProgressEvent } from './worker.ts';
+import { progressLaneOf } from './jobs/queue-claim.ts';
 import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver.ts';
 import { resolveModuleCacheContext } from './index-runner/prewarm-modules.ts';
 import {

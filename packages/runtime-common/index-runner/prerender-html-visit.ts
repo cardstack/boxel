@@ -46,7 +46,8 @@ import {
   type ScreenshotManifestEntry,
 } from '../capture-spec.ts';
 import type { DBAdapter } from '../db.ts';
-import { progressLaneOf, type IndexingProgressEvent } from '../worker.ts';
+import type { IndexingProgressEvent } from '../worker.ts';
+import { progressLaneOf } from '../jobs/queue-claim.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 import {
   CardError,
