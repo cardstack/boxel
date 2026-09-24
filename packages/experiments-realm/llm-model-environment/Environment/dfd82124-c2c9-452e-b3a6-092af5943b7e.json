@@ -51,22 +51,38 @@
       },
       "shortcutSettings.0.requiredSkills.0": {
         "links": {
-          "self": "/skills/Skill/boxel-development"
+          "self": "/skills/skills/boxel/SKILL.md"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "/skills/skills/boxel/SKILL.md"
         }
       },
       "shortcutSettings.0.requiredSkills.1": {
         "links": {
-          "self": "/skills/Skill/boxel-environment"
+          "self": "/skills/skills/boxel-environment/SKILL.md"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "/skills/skills/boxel-environment/SKILL.md"
         }
       },
       "shortcutSettings.0.requiredSkills.2": {
         "links": {
-          "self": "/skills/Skill/source-code-editing"
+          "self": "/skills/skills/source-code-editing/SKILL.md"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "/skills/skills/source-code-editing/SKILL.md"
         }
       },
       "shortcutSettings.0.requiredSkills.3": {
         "links": {
-          "self": "/skills/Skill/boxel-design"
+          "self": "/skills/skills/boxel-design/SKILL.md"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "/skills/skills/boxel-design/SKILL.md"
         }
       },
       "shortcutSettings.1.preferredModel": {

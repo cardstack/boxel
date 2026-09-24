@@ -3,7 +3,6 @@ import { deburr } from 'lodash-es';
 import {
   realmURL,
   ensureTrailingSlash,
-  devSkillLocalPath,
   skillsIndexLocalPath,
 } from '@cardstack/runtime-common';
 export {
@@ -103,31 +102,19 @@ export const skillsRealmURL: string = ensureTrailingSlash(
 );
 
 /**
- * Constructs a universal @cardstack/skills/ reference to a skill card.
- *
- * @param skillId - The ID of the skill (e.g., 'boxel-environment', 'catalog-listing')
- * @returns The universal skill card reference
- *
- * @example
- * skillCardURL('catalog-listing')   // '@cardstack/skills/Skill/catalog-listing'
- */
-export function skillCardURL(skillId: string): string {
-  return `@cardstack/skills/Skill/${skillId}`;
-}
-
-/**
- * Constructs a universal @cardstack/skills/ reference to a `.md` skill file
- * (`skills/<name>/SKILL.md`) — the markdown skill form, resolved as a
- * `MarkdownDef` whose `boxel.kind: skill` frontmatter makes it a skill source.
+ * The URL of a `.md` skill file (`skills/<name>/SKILL.md`) in the skills
+ * realm — the markdown skill form, resolved as a `MarkdownDef` whose
+ * `boxel.kind: skill` frontmatter makes it a skill source. Spelled as a
+ * resolved absolute URL for the same reason as `skillsIndexId`: a skill body
+ * links to its references relative to its own location, and only an absolute
+ * id can anchor that resolution.
  *
  * @example
- * skillFileURL('source-code-editing')  // '@cardstack/skills/skills/source-code-editing/SKILL.md'
+ * skillFileURL('source-code-editing')  // `${skillsRealmURL}skills/source-code-editing/SKILL.md`
  */
 export function skillFileURL(skillName: string): string {
-  return `@cardstack/skills/skills/${skillName}/SKILL.md`;
+  return `${skillsRealmURL}skills/${skillName}/SKILL.md`;
 }
-
-export const devSkillId = `@cardstack/skills/${devSkillLocalPath}`;
 
 // The skills index, the default skill for every new AI room. Spelled as a
 // resolved absolute URL rather than an `@cardstack/skills/` reference because

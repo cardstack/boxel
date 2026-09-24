@@ -35,11 +35,6 @@ export function baseRRI(path: string): RealmResourceIdentifier {
 // skill the system card's `defaultSkillFiles` names.
 export const skillsIndexLocalPath = 'index.md';
 
-// The legacy `Skill` card carrying the Boxel coding guidance, enabled by the
-// build-listing and readme-spec flows, which set up their own skill lists
-// rather than going through the room defaults.
-export const devSkillLocalPath = 'Skill/boxel-development';
-
 // The extensions the realm serves as compiled modules rather than as stored
 // content. Declared here, in a leaf, rather than in the barrel: modules low in
 // the import graph need it, and reaching the barrel from one of them is a

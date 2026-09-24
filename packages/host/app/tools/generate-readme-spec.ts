@@ -3,7 +3,7 @@ import { service } from '@ember/service';
 import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
-import { devSkillId } from '../lib/utils';
+import { skillFileURL } from '../lib/utils';
 
 import OneShotLlmRequestTool from './one-shot-llm-request';
 import PatchCardInstanceTool from './patch-card-instance';
@@ -78,7 +78,7 @@ Requirements:
       userPrompt,
       systemPrompt,
       llmModel: 'anthropic/claude-3-haiku',
-      skillCardIds: [devSkillId],
+      skillCardIds: [skillFileURL('boxel')],
     });
 
     // Patch the spec's readMe field
