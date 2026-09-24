@@ -22,6 +22,11 @@ const MAX_FILE_SIZE = 500_000;
 // pure-CPU limit would need to be.
 const RUN_TIMEOUT_MS = 30_000;
 
+const WRITE_METHODS = new Set<RealmRunnerCallMethod>([
+  'fs.replace',
+  'fs.writeText',
+]);
+
 interface PreparedFile {
   url: string;
   content: string;
@@ -39,8 +44,9 @@ class RealmFsSession {
   private staged = new Map<string, string | undefined>();
   private baseline = new Map<string, string | undefined>();
   readonly changed = new Set<string>();
-  // Set by any failed call. A script that catches the rejection still fails
-  // the run, so a half-applied batch is never saved.
+  // Set by a failed write. A script that catches the rejection still fails
+  // the run, so a half-applied batch is never saved. A failed read is only
+  // data: the script may catch it and carry on.
   failure: string | undefined;
   private queue: Promise<unknown> = Promise.resolve();
 
@@ -57,8 +63,10 @@ class RealmFsSession {
     let result = this.queue.then(() => this.dispatch(method, args));
     this.queue = result.catch(() => undefined);
     return result.catch((error: unknown) => {
-      let message = error instanceof Error ? error.message : String(error);
-      this.failure ??= message;
+      if (WRITE_METHODS.has(method)) {
+        let message = error instanceof Error ? error.message : String(error);
+        this.failure ??= message;
+      }
       throw error;
     });
   }

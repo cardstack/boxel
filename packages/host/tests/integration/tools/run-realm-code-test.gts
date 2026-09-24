@@ -167,6 +167,27 @@ return 'done';`,
     assert.true(source.content.includes('"count": 1'));
   });
 
+  test('a caught failed read does not fail the run', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `let found = true;
+try { await realm.fs.readText('new-task.json'); } catch (e) { found = false; }
+if (!found) await realm.fs.writeText('new-task.json', '{}');
+return found;`,
+    });
+
+    assert.strictEqual(result.files[0]?.status, 'saved');
+    let source = await cardService.getSource(
+      new URL(`${testRealmURL}new-task.json`),
+    );
+    assert.strictEqual(source.status, 200);
+  });
+
   test('a realm call the script does not await fails the run', async function (assert) {
     let toolService = getService('tool-service');
     let command = new RunRealmCodeTool(toolService.toolContext);
