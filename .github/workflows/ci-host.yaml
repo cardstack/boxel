@@ -200,9 +200,15 @@ jobs:
             case "$file" in
               # Realm content whose name reads like a spec file. Matched ahead
               # of the spec-file arm, which spans `/` and would otherwise treat
-              # it as inert; this keeps such a file gated exactly as it is
-              # today by the package globs further down.
-              packages/*/tests/fixtures/*)
+              # it as inert; this keeps such a file gated by the package globs'
+              # own verdict.
+              #
+              # One prefix per package the spec arm covers, rather than
+              # `packages/*/`: a wildcard here reaches packages those globs
+              # never gated, and would make a fixture in one of them newly
+              # force a from-scratch index.
+              packages/realm-server/tests/fixtures/*|packages/runtime-common/tests/fixtures/*|\
+              packages/boxel-ui/tests/fixtures/*|packages/boxel-ui/docs-app/tests/fixtures/*)
                 use_cache=false
                 echo "Realm fixture change detected: $file"
                 break
