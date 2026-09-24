@@ -172,4 +172,57 @@ describe('profile list', () => {
       expect(chunks.join('\n')).not.toMatch(/\[/);
     });
   });
+
+  // A store that exists but can't be read must not be presented as an empty
+  // one: discovery reports the failure and exits non-zero, so a caller can tell
+  // "couldn't read the store" from "no such profile".
+  describe('unreadable store', () => {
+    let savedExitCode: typeof process.exitCode;
+
+    beforeEach(() => {
+      savedExitCode = process.exitCode;
+      process.exitCode = undefined;
+      fs.writeFileSync(path.join(tmpDir, 'profiles.json'), 'not valid json{{{');
+      // Re-load: the manager reads the store in its constructor, and the one
+      // from the outer beforeEach was built before the corrupt file existed.
+      manager = new ProfileManager(tmpDir);
+    });
+
+    afterEach(() => {
+      process.exitCode = savedExitCode;
+    });
+
+    it('reports the error to stderr and exits non-zero (human view)', async () => {
+      const errs: string[] = [];
+      const spy = vi
+        .spyOn(console, 'error')
+        .mockImplementation((...args: unknown[]) => {
+          errs.push(args.join(' '));
+        });
+      try {
+        await listProfiles(manager);
+      } finally {
+        spy.mockRestore();
+      }
+
+      // The message text sits between color codes, so a substring match finds
+      // it without stripping ANSI.
+      expect(errs.join('\n')).toMatch(/Could not read profiles file/);
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('carries the error in the JSON and exits non-zero', async () => {
+      const out = captureLog();
+      try {
+        await listProfiles(manager, { json: true });
+      } finally {
+        out.restore();
+      }
+
+      const parsed = JSON.parse(out.lines());
+      expect(parsed.error).toMatch(/Could not read profiles file/);
+      expect(parsed.profiles).toEqual([]);
+      expect(process.exitCode).toBe(1);
+    });
+  });
 });

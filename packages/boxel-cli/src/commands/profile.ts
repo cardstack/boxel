@@ -345,15 +345,22 @@ export async function profileCommand(
 // see the listing is complete rather than inferring it. `--json` gives
 // programmatic callers the same complete set without a decorated listing to
 // parse.
+//
+// When the store exists but can't be read, that is reported (a stderr message,
+// or an `error` field in `--json`) and the command exits non-zero, rather than
+// presenting an unreadable store as an empty one \u2014 an unreadable store must not
+// read as "no such profile".
 export async function listProfiles(
   manager: ProfileManager,
   options?: { json?: boolean },
 ): Promise<void> {
   const profiles = manager.listProfiles();
   const activeId = manager.getActiveProfileId();
+  const loadError = manager.getLoadError();
 
   if (options?.json) {
     const output = {
+      ...(loadError ? { error: loadError } : {}),
       activeProfile: activeId,
       profiles: profiles.map((id) => {
         const profile = manager.getProfile(id)!;
@@ -369,6 +376,15 @@ export async function listProfiles(
       }),
     };
     console.log(JSON.stringify(output, null, 2));
+    if (loadError) {
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  if (loadError) {
+    console.error(`\n${FG_RED}Error:${RESET} ${loadError}`);
+    process.exitCode = 1;
     return;
   }
 
