@@ -598,14 +598,18 @@ export class RenderRunner {
 
       let renderStart = Date.now();
       let nonce = String(this.#nonce);
-      // A capture is always a card render; `cardRender` stays authoritative
-      // over anything the caller passed. The caller's options carry the
-      // realm's `loaderEpoch`, so a pooled tab holding a superseded module
-      // graph resets its loader before this render (see the render route's
+      // A capture is always a card render. The only caller option it honors is
+      // the realm's `loaderEpoch`, which resets a pooled tab holding a
+      // superseded module graph before this render (see the render route's
       // loader-epoch synchronization) rather than capturing the old module.
+      // Take just that field rather than spreading the caller's options, so a
+      // capture can never be handed a second, conflicting render kind
+      // (`fileRender` / `fileExtract`).
       let renderOptions: RenderRouteOptions = {
-        ...(callerRenderOptions ?? {}),
         cardRender: true,
+        ...(callerRenderOptions?.loaderEpoch !== undefined
+          ? { loaderEpoch: callerRenderOptions.loaderEpoch }
+          : {}),
       };
       let serializedOptions = serializeRenderRouteOptions(renderOptions);
       const captureOptions: CaptureOptions = {

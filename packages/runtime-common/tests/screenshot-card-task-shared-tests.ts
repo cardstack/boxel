@@ -254,6 +254,13 @@ const tests = Object.freeze({
   // graph renders the old module and persists it under the new generation's
   // ledger key. The task threads the realm's committed `loader_epoch`; the
   // route resets the tab's loader when it differs.
+  //
+  // This pins the threading half only — that the task reads the epoch and puts
+  // it on the render options. The reset half (a warm pooled tab dropping and
+  // re-evaluating its module graph when the epoch it is handed changes) is the
+  // shared render-route path, covered against the real pool by the
+  // loader-reset-reason test in realm-server's prerendering-test; a capture
+  // reaches it through the same `render.html` build as a visit.
   'threads the realm loader epoch into the capture render options': async (
     assert,
   ) => {
