@@ -1859,8 +1859,9 @@ export * from './render-route-options.ts';
 export * from './publishability.ts';
 export * from './pr-manifest.ts';
 export * from './file-def-code-ref.ts';
+export * from './policy-file-def.ts';
 
-export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
+import { executableExtensions } from './constants.ts';
 // Extensions covered by the realm-wide pre-warm sweep that primes the
 // modules cache before the visit loop. This is an optimization, not a
 // correctness gate: a `.ts` / `.js` file CAN host a `CardDef`
