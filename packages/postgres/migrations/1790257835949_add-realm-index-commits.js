@@ -12,8 +12,10 @@ exports.shorthands = undefined;
 // full-realm pass (a from-scratch index or a copy) and for a pass that moved
 // too many rows to list; NULL reads as every URL in the realm. Each commit
 // deletes its own realm's rows older than the retention window, which the
-// `(realm_url, committed_at)` index serves. `committed_at` is epoch
-// milliseconds.
+// `(realm_url, committed_at)` index serves. `(realm_url, pass_id)` serves the
+// lookups that wait on a particular pass having committed: a job id can commit
+// more than once when its job reruns, so a pass is identified by `pass_id`.
+// `committed_at` is epoch milliseconds.
 exports.up = (pgm) => {
   pgm.createTable('realm_index_commits', {
     realm_url: { type: 'varchar', notNull: true },
@@ -30,6 +32,7 @@ exports.up = (pgm) => {
     primaryKey: ['realm_url', 'generation'],
   });
   pgm.createIndex('realm_index_commits', ['realm_url', 'committed_at']);
+  pgm.createIndex('realm_index_commits', ['realm_url', 'pass_id']);
 };
 
 exports.down = (pgm) => {
