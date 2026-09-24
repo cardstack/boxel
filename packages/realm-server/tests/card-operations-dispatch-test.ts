@@ -10,6 +10,7 @@ import {
   newOperationScope,
   resolveOperation,
   runOperation,
+  scopeCallerFor,
   type OperationCore,
   type OperationError,
   type OperationTarget,
@@ -1464,6 +1465,80 @@ module(basename(import.meta.filename), function () {
         `the refusal names the base it was built on: ${error.detail}`,
       );
     });
+    test('a scope says who it resolves for, and absence is not an empty id', async function (assert) {
+      let { core } = stub();
+      let signedIn = newOperationScope(core, {
+        caller: scopeCallerFor('@someone:example.com'),
+      });
+      assert.deepEqual(signedIn.caller, {
+        kind: 'user',
+        actor: '@someone:example.com',
+      });
+      let anonymous = newOperationScope(core, { caller: scopeCallerFor('') });
+      assert.deepEqual(
+        anonymous.caller,
+        { kind: 'anonymous' },
+        'a transport’s empty actor is nobody signed in',
+      );
+      let emptyId = newOperationScope(core, {
+        caller: { kind: 'user', actor: '' },
+      });
+      assert.notDeepEqual(
+        emptyId.caller,
+        anonymous.caller,
+        'and is told apart from a caller whose id is empty',
+      );
+      assert.deepEqual(
+        newOperationScope(core).caller,
+        { kind: 'unattributed' },
+        'a scope built without naming a caller has none',
+      );
+      assert.strictEqual(newOperationScope(core).proposed, undefined);
+    });
+
+    test('a scope with a caller resolves exactly as one without', async function (assert) {
+      let { core } = stub({
+        operations: { rename: { base: 'transform', deterministic: true } },
+      });
+      let withCaller = newOperationScope(core, {
+        caller: scopeCallerFor('@someone:example.com'),
+      });
+      assert.deepEqual(
+        await resolveOperation(core, CARD, 'rename', withCaller),
+        await resolveOperation(core, CARD, 'rename', newOperationScope(core)),
+      );
+    });
+
+    test('a derived scope shares the row memo and carries the caller over', async function (assert) {
+      let { core, calls } = stub();
+      let url = new URL(`${REALM}person-1`);
+      let batch = newOperationScope(core, {
+        caller: scopeCallerFor('@someone:example.com'),
+      });
+      let entry = batch.derive({ proposed: { title: 'Q3' } });
+      await batch.peekInstance(url);
+      await entry.peekInstance(url);
+      assert.strictEqual(
+        calls.filter((call) => call === 'instance').length,
+        1,
+        'the two invocations read the row once between them',
+      );
+      assert.deepEqual(entry.caller, batch.caller);
+      assert.deepEqual(entry.proposed, { title: 'Q3' });
+      assert.strictEqual(
+        batch.proposed,
+        undefined,
+        'deriving leaves the scope it came from as it was',
+      );
+      let unattributed = entry.derive({ caller: { kind: 'unattributed' } });
+      assert.deepEqual(unattributed.caller, { kind: 'unattributed' });
+      assert.strictEqual(
+        unattributed.proposed,
+        undefined,
+        'a proposed document is one invocation’s and does not carry over',
+      );
+    });
+
     test('the row peek is memoized for one invocation and no longer', async function (assert) {
       let { core, calls } = stub();
       let url = new URL(`${REALM}person-1`);
