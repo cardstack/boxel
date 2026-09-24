@@ -3209,6 +3209,9 @@ export function realmConfigCardJSON(
     // The realm's own settings, which a card operation reads with
     // `realmConfig("key")`.
     config?: Record<string, unknown>;
+    // The pointer to the realm's policy card. Typed loosely so a test can
+    // write a malformed one.
+    policy?: unknown;
   } = {},
 ): string {
   let attrs: Record<string, unknown> = {};
@@ -3230,6 +3233,9 @@ export function realmConfigCardJSON(
   }
   if (config.config !== undefined) {
     attrs.config = config.config;
+  }
+  if (config.policy !== undefined) {
+    attrs.policy = config.policy;
   }
   return JSON.stringify({
     data: {
