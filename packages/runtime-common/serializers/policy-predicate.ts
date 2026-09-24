@@ -51,13 +51,21 @@ export async function deserialize<T extends BaseDefConstructor>(
   return normalize(value) as BaseInstanceType<T>;
 }
 
-// A field value in memory is already a `PolicyPredicate`, but one assigned in
-// code may still be in either document shape.
+// A field value in memory is a `PolicyPredicate`; the document shapes are read
+// only by `deserialize`. A document shape assigned in code is refused here
+// rather than normalized, because until it is saved and reloaded the field's
+// templates and any direct reader of `where.source` would see it as having no
+// source at all.
 function asPredicate(value: unknown): PolicyPredicate | null {
+  if (value == null) {
+    return null;
+  }
   if (isPolicyPredicate(value)) {
     return value;
   }
-  return normalize(value);
+  throw new Error(
+    `a policy predicate in memory must be { source, snapshot }; a document shape (a BXL string or { bxl, snapshot }) is read only when a card is deserialized`,
+  );
 }
 
 export function isPolicyPredicate(value: unknown): value is PolicyPredicate {
