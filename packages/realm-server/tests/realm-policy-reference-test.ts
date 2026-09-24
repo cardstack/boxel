@@ -309,7 +309,7 @@ module(basename(import.meta.filename), function () {
       );
       assert.deepEqual(
         row?.type === 'instance' ? row.instance.attributes?.policy : undefined,
-        { card: POLICY_CARD },
+        POLICY_CARD,
         'the indexed row still names the policy card',
       );
       assert.strictEqual(

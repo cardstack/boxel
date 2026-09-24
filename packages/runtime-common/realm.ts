@@ -13018,7 +13018,8 @@ export class Realm {
 
   // The realm's policy, compiled: the card its pointer names, loaded on the
   // realm server's own authority and compiled once, then answered from memory
-  // until an index moves under the card or under a type its rules name.
+  // until an index moves under the card or under a type its rules name, and
+  // revalidated at least every few seconds regardless.
   // Undefined for a realm with no policy. A pointer to a card that is missing,
   // errored or not a RealmPolicy compiles to a policy that grants nothing, with
   // the reason recorded in its `issues`.
@@ -13038,13 +13039,15 @@ export class Realm {
   // cannot read, and often one this realm's own user cannot read either. A
   // request would also pass through that realm's permission checks, and those
   // are what a policy is consulted to decide, so a gated load of the policy
-  // would need the policy loaded already. The type definitions its rules name
-  // come from this realm's definition lookup, as an operation's do.
+  // would need the policy loaded already. The read takes only what the card's
+  // index visit recorded, so whether the card renders has no bearing on what
+  // it grants. The type definitions its rules name come from this realm's
+  // definition lookup, as an operation's do.
   #makePolicyCache(): RealmPolicyCache {
     let policyTypeKey: string | undefined;
     return new RealmPolicyCache({
       policyCard: async () => (await this.getRealmPolicy())?.card,
-      readCard: (url) => this.#realmIndexQueryEngine.instance(url),
+      readCard: (url) => this.#realmIndexQueryEngine.instanceSource(url),
       resolveCodeRef: (codeRef, relativeTo) => {
         let absolute = codeRefWithAbsoluteIdentifier(
           { module: rri(codeRef.module), name: codeRef.name },

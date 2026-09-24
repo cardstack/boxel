@@ -77,6 +77,7 @@ const GRANTS: Grant[] = [
     where: { bxl: 'actor() in .teacherIds', snapshot: true },
   },
   { operation: 'approve', where: '.teacherIds[0] == realmConfig("approver")' },
+  { operation: 'rename', where: 'instance().teacherIds | length > 0' },
   { operation: 'readSource' },
 ];
 
@@ -122,7 +123,7 @@ module(basename(import.meta.filename), function (hooks) {
             'realm.json': realmConfigCardJSON({
               name: 'Education',
               config: { approver: TEACHER },
-              policy: { card: POLICY_CARD },
+              policy: POLICY_CARD,
             }),
             'classroom.gts': classroomModule('teacherIds'),
             'note.json': note('An education note'),
@@ -181,13 +182,31 @@ module(basename(import.meta.filename), function (hooks) {
       realmConfigCardJSON({
         name: 'Education',
         config: { approver: TEACHER },
-        policy: card === null ? null : { card },
+        policy: card,
       }),
     );
   }
 
   function compiles() {
     return education.__testOnlyPolicyCacheStats().compiles;
+  }
+
+  function revalidations() {
+    return education.__testOnlyPolicyCacheStats().revalidations;
+  }
+
+  // Waits, without reading the policy, for the cache to reach a state. A read
+  // would revalidate on its own once the entry is old enough, so a test that
+  // means to show an index move reaching the cache has to see the move's
+  // background refresh land before it reads anything.
+  async function refreshed(done: () => boolean, what: string) {
+    let started = Date.now();
+    while (!done()) {
+      if (Date.now() - started > 30_000) {
+        throw new Error(`timed out waiting until ${what}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
   }
 
   function compiled(): Promise<CompiledRealmPolicy | undefined> {
@@ -258,6 +277,14 @@ module(basename(import.meta.filename), function (hooks) {
                 snapshot: false,
               },
             },
+            {
+              operation: 'rename',
+              where: {
+                source: 'instance().teacherIds | length > 0',
+                canonical: 'instance().teacherIds | length > 0',
+                snapshot: false,
+              },
+            },
             { operation: 'readSource' },
           ],
         },
@@ -267,10 +294,17 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a policy is compiled once, however often it is read', async function (assert) {
-    let first = await compiled();
-    let concurrent = await Promise.all([compiled(), compiled(), compiled()]);
+    let [first, ...concurrent] = await Promise.all([
+      compiled(),
+      compiled(),
+      compiled(),
+    ]);
     let later = await compiled();
-    assert.strictEqual(compiles(), 1, 'one compile across five reads');
+    assert.strictEqual(
+      compiles(),
+      1,
+      'three reads of a cold cache share one compile, and a later read is answered from memory',
+    );
     for (let policy of [...concurrent, later]) {
       assert.strictEqual(policy, first, 'every read is answered by it');
     }
@@ -278,15 +312,20 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('editing the policy card recompiles it', async function (assert) {
     let before = await compiled();
-    assert.strictEqual(before?.rules[0].grants.length, 4);
+    assert.strictEqual(before?.rules[0].grants.length, 5);
 
     await writeTo(
       org,
       'policies/education.json',
       policyCard([{ operation: 'read', where: '.teacherIds | length > 0' }]),
     );
+    await refreshed(() => compiles() === 2, 'the edit recompiles');
     let after = await compiled();
-    assert.strictEqual(compiles(), 2, 'the edit compiled once more');
+    assert.strictEqual(
+      compiles(),
+      2,
+      'the index move recompiled the policy before anything read it',
+    );
     assert.notStrictEqual(
       after?.version,
       before?.version,
@@ -302,7 +341,16 @@ module(basename(import.meta.filename), function (hooks) {
   test('an edit to an unrelated card, in either realm, does not recompile', async function (assert) {
     let before = await compiled();
     await writeTo(org, 'note.json', note('An edited org note'));
+    await refreshed(
+      () => revalidations() >= 1,
+      "the Org realm's move revalidates the policy",
+    );
+    let afterOrg = revalidations();
     await writeTo(education, 'note.json', note('An edited education note'));
+    await refreshed(
+      () => revalidations() > afterOrg,
+      "the Education realm's move revalidates the policy",
+    );
     let after = await compiled();
     assert.strictEqual(compiles(), 1, 'no compile after either edit');
     assert.strictEqual(after, before, 'the same compiled policy answers');
@@ -315,6 +363,7 @@ module(basename(import.meta.filename), function (hooks) {
       'classroom.gts',
       classroomModule('teacherUserIds'),
     );
+    await refreshed(() => compiles() === 2, 'the rename recompiles');
     await compiled();
     assert.strictEqual(
       compiles(),
@@ -383,9 +432,13 @@ module(basename(import.meta.filename), function (hooks) {
     await pointAt(`${ORG}policies/subtyped`);
     let before = await compiled();
     assert.deepEqual(before?.issues, [], 'a subtype of RealmPolicy compiles');
-    assert.strictEqual(before?.rules[0].grants.length, 4);
+    assert.strictEqual(before?.rules[0].grants.length, 5);
 
     await writeTo(org, 'org-policy.gts', subtype('CardDef'));
+    await refreshed(
+      () => compiles() >= 2,
+      'the changed definition recompiles the policy',
+    );
     let after = await compiled();
     assert.strictEqual(
       after?.version,
@@ -412,9 +465,10 @@ module(basename(import.meta.filename), function (hooks) {
     );
 
     await writeTo(org, 'policies/not-yet.json', policyCard(GRANTS));
+    await refreshed(() => compiles() === 2, 'the new card compiles');
     policy = await compiled();
     assert.deepEqual(policy?.issues, [], 'the card compiles once it exists');
-    assert.strictEqual(policy?.rules[0].grants.length, 4);
+    assert.strictEqual(policy?.rules[0].grants.length, 5);
   });
 
   test('a pointer to a card that will not load, or that is not a RealmPolicy, grants nothing', async function (assert) {

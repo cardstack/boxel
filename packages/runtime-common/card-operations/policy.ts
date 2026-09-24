@@ -1,9 +1,11 @@
 import stableStringify from 'safe-stable-stringify';
 
+import { now } from '../clock.ts';
 import type { ResolvedCodeRef } from '../code-ref.ts';
 import { computeContentHash } from '../content-hash.ts';
+import { isFilterRefersToNonexistentTypeError } from '../definition-lookup.ts';
 import type { Definition } from '../definitions.ts';
-import type { InstanceOrError } from '../index-query-engine.ts';
+import type { IndexedInstanceSource } from '../index-query-engine.ts';
 import { logger } from '../log.ts';
 import { rri } from '../realm-identifiers.ts';
 import type { PolicyIssue, PolicyIssueCode } from './types.ts';
@@ -63,9 +65,10 @@ export const realmPolicyRef: ResolvedCodeRef = {
 // the caller cannot read, and reading it under the caller's authority would
 // need the policy to be loaded already.
 export interface PolicyCompileEnvironment {
-  // The policy card's index row, read directly and not through any realm's
-  // request handling.
-  readCard(url: URL): Promise<InstanceOrError | undefined>;
+  // The policy card's row as its index visit recorded it, read directly and
+  // not through any realm's request handling. Its rendering plays no part: a
+  // card whose render failed still says what it grants.
+  readCard(url: URL): Promise<IndexedInstanceSource | undefined>;
   resolveCodeRef(
     codeRef: { module: string; name: string },
     relativeTo: URL,
@@ -101,6 +104,12 @@ export interface RealmPolicyCacheEnvironment extends PolicyCompileEnvironment {
 // rather than on the request that follows it. A read that finds the cache cold
 // compiles on demand.
 //
+// An entry is also revalidated once it has gone `MAX_UNVALIDATED_MS` without
+// one. The signals below are best-effort, and a move that never reaches this
+// process would otherwise leave the entry answered as it is for good,
+// including a grant that has since been removed. The bound makes a lost
+// signal cost one revalidation rather than an unending stale policy.
+//
 // Moves reach the cache from `noteRealmIndexMoved`. The realm calls it for its
 // own index swaps. The realm server calls it for the swaps of realms it has not
 // mounted. A policy card or a type's module usually lives in a realm other than
@@ -121,6 +130,9 @@ export class RealmPolicyCache {
     | { refresh: Refresh; promise: Promise<CompiledRealmPolicy> }
     | undefined;
   #registered = false;
+  // When `#current` was last known to match the index: the moment the read
+  // that built or revalidated it began.
+  #validatedAt = 0;
   // How often compiling and revalidating actually happen, for tests that
   // assert on it rather than on the result alone.
   readonly stats = { compiles: 0, revalidations: 0 };
@@ -138,7 +150,12 @@ export class RealmPolicyCache {
       return undefined;
     }
     let current = this.#current;
-    if (current && current.compiled.card === card && !this.#stale) {
+    if (
+      current &&
+      current.compiled.card === card &&
+      !this.#stale &&
+      now() - this.#validatedAt < MAX_UNVALIDATED_MS
+    ) {
       return current.compiled;
     }
     return await this.#refresh(card);
@@ -203,6 +220,7 @@ export class RealmPolicyCache {
 
   async #run(refresh: Refresh): Promise<CompiledRealmPolicy> {
     let { card } = refresh;
+    let startedAt = now();
     let row = await this.#env.readCard(new URL(card));
     let current = this.#current;
     let compilation: Compilation | undefined;
@@ -234,10 +252,19 @@ export class RealmPolicyCache {
     if (!refresh.moved.some((moved) => readsFrom(inputs, moved))) {
       this.#current = compilation;
       this.#stale = false;
+      this.#validatedAt = startedAt;
     }
     return compilation.compiled;
   }
 }
+
+// How long an entry is answered from memory without a revalidation, however
+// quiet the signals are. It is the same five seconds the live search cache
+// allows a result whose dependency it cannot see, for the same reason: it is
+// the staleness bound for what the signals miss. A revalidation is one narrow
+// index read plus the definition lookups, and a steady stream of reads pays it
+// once per interval rather than once per read.
+const MAX_UNVALIDATED_MS = 5_000;
 
 // Every realm's policy cache in this process. A move in one realm has to
 // reach a cache held by another realm, and a realm server mounts realms
@@ -302,30 +329,24 @@ function readsFrom(inputs: string[], realmURL: string): boolean {
 // bytes keeps its `meta.version`, yet a changed card definition can change the
 // adoption chain the row records and the attributes it serialized. Either one
 // changes what the policy compiles to.
-function rowIdentity(row: InstanceOrError | undefined): string {
+function rowIdentity(row: IndexedInstanceSource | undefined): string {
   if (!row) {
     return 'missing';
   }
-  let read =
-    row.type === 'instance'
-      ? {
-          types: row.types,
-          rules: (row.instance.attributes as { rules?: unknown } | undefined)
-            ?.rules,
-        }
-      : { error: row.error?.message };
   return computeContentHash(
     stableStringify({
-      type: row.type,
       version: row.sourceContentHash,
-      ...read,
+      error: row.error?.message,
+      types: row.types,
+      rules: (row.instance?.attributes as { rules?: unknown } | undefined)
+        ?.rules,
     }) ?? '',
   );
 }
 
 async function stillCurrent(
   compilation: Compilation,
-  row: InstanceOrError | undefined,
+  row: IndexedInstanceSource | undefined,
   env: PolicyCompileEnvironment,
 ): Promise<boolean> {
   if (rowIdentity(row) !== compilation.row) {
@@ -339,22 +360,30 @@ async function stillCurrent(
   return true;
 }
 
+// The definition's fingerprint, or undefined when the type has no definition.
+// Only the lookup's own "no such type" counts as that. Any other failure, a
+// database or network error, is thrown: the read fails and nothing is kept, so
+// the next read tries again. Kept as a missing type, it would drop the rule
+// until something next moved in that type's realm.
 async function definitionFingerprint(
   codeRef: ResolvedCodeRef,
   env: PolicyCompileEnvironment,
 ): Promise<string | undefined> {
+  let definition: Definition;
   try {
-    return computeContentHash(
-      stableStringify(await env.lookupDefinition(codeRef)) ?? '',
-    );
-  } catch {
-    return undefined;
+    definition = await env.lookupDefinition(codeRef);
+  } catch (e: unknown) {
+    if (isFilterRefersToNonexistentTypeError(e)) {
+      return undefined;
+    }
+    throw e;
   }
+  return computeContentHash(stableStringify(definition) ?? '');
 }
 
 async function compilePolicy(
   card: string,
-  row: InstanceOrError | undefined,
+  row: IndexedInstanceSource | undefined,
   env: PolicyCompileEnvironment,
   onInput: (url: string) => void,
 ): Promise<Compilation> {
@@ -384,7 +413,7 @@ async function compilePolicy(
     );
     return compiled();
   }
-  if (row.type === 'instance-error') {
+  if (!row.instance) {
     issue(
       'policy-card-unloadable',
       '',
