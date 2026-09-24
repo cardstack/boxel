@@ -72,7 +72,7 @@ The test helpers fail every test in a module when the served subset doesn't matc
 
 The host test build reads the manifest when it is built, so after a manifest change also rebuild the host dist before running host tests. When the guard can't tell which side is stale, its message names both fixes.
 
-Starting a stack runs it automatically. Re-running it against a running stack is enough, because the realm picks up the files without a restart.
+Starting a stack runs it automatically. Once the catalog realm answers, the start also touches the subset files. The compiled-module cache survives restarts and is cleared only by the running realm's file watcher, so a file the sync rewrote before boot would otherwise be served from a compile of its old content. If an assertion disagrees with the source the realm serves, touch the subset files while the stack is up. Re-running it against a running stack is enough, because the realm picks up the files without a restart.
 
 | Stack                                                                         | Serves as `/catalog/`                  | Sync to run                                       |
 | ----------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------- |
