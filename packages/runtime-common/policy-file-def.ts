@@ -14,9 +14,8 @@ import {
 // stored non-card file, keyed by extension the way `inferContentType` keys its
 // MIME types: lowercase, with the leading dot.
 //
-// It is the platform's extension table, the one the indexer types a file by
-// when no realm-level binding says otherwise, so a rule is judged against the
-// platform's type for the file and no realm binding is consulted. A rule naming an intermediate
+// It is the indexer's own extension table, so the type a rule is judged
+// against is the type the file is indexed as. A rule naming an intermediate
 // class covers every extension beneath it through the `FileDef` hierarchy: a
 // `.png` resolves to `PngDef`, which a rule naming `ImageDef` matches.
 //

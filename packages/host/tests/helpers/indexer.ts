@@ -304,20 +304,32 @@ async function insertRows(
   if (rows.length === 0) {
     return;
   }
-  await query(
-    client,
-    [
-      `INSERT INTO ${table}`,
-      ...addExplicitParens(separatedByCommas(rows[0].nameExpressions)),
-      'VALUES',
-      ...separatedByCommas(
-        rows.map((row) =>
-          addExplicitParens(separatedByCommas(row.valueExpressions)),
+  // One multi-row INSERT binds `rows * columns` parameters and every driver
+  // caps a statement's parameter count (sqlite-wasm at 32,766, Postgres at
+  // 65,535). A fixture big enough to exercise the writer's own chunking would
+  // otherwise blow that ceiling here, during setup, before the code under test
+  // ever runs — and a seed row carries more columns than a tombstone does, so
+  // setup would always fail first. Chunk against the same conservative budget
+  // the writer uses for sqlite.
+  let columnCount = rows[0].nameExpressions.length;
+  let rowsPerInsert = Math.max(1, Math.floor(900 / columnCount));
+  for (let i = 0; i < rows.length; i += rowsPerInsert) {
+    let slice = rows.slice(i, i + rowsPerInsert);
+    await query(
+      client,
+      [
+        `INSERT INTO ${table}`,
+        ...addExplicitParens(separatedByCommas(rows[0].nameExpressions)),
+        'VALUES',
+        ...separatedByCommas(
+          slice.map((row) =>
+            addExplicitParens(separatedByCommas(row.valueExpressions)),
+          ),
         ),
-      ),
-    ] as Expression,
-    coerceTypes,
-  );
+      ] as Expression,
+      coerceTypes,
+    );
+  }
 }
 
 // Normalize the fixture shapes (raw row / card / {card, data}) into flat row
