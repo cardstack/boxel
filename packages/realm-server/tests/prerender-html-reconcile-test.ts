@@ -202,7 +202,8 @@ module(basename(import.meta.filename), function (hooks) {
         realmURL,
         realmUsername: 'owner',
         generation,
-        ...(spawningIndexPasses ? { spawningIndexPasses } : {}),
+        // A job enqueued by current code: a repair names no passes.
+        spawningIndexPasses: spawningIndexPasses ?? [],
         loaderEpoch: '0',
         spawningJobId: null,
         coalescedPublishes: null,
