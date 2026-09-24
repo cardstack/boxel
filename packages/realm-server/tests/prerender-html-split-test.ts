@@ -1970,7 +1970,11 @@ module(basename(import.meta.filename), function () {
       }
 
       test("a peer's commit does not release the visits; the spawning pass's commit does", async function (assert) {
-        await commitIndexPass({ jobId: 1, generation: 1, urls: [cardURL] });
+        await commitIndexPass({
+          jobId: await insertIndexJob(),
+          generation: 1,
+          urls: [cardURL],
+        });
         let spawner = await insertIndexJob();
         let peer = await insertIndexJob();
 
@@ -2026,7 +2030,11 @@ module(basename(import.meta.filename), function () {
       });
 
       test('a spawning pass that stops running without committing releases the visits', async function (assert) {
-        await commitIndexPass({ jobId: 1, generation: 4, urls: [cardURL] });
+        await commitIndexPass({
+          jobId: await insertIndexJob(),
+          generation: 4,
+          urls: [cardURL],
+        });
         let spawner = await insertIndexJob();
 
         let visited: string[] = [];
