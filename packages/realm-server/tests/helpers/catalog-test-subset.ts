@@ -76,7 +76,7 @@ async function verifyServedSubset() {
     JSON.stringify([...marker.files].sort()) !== JSON.stringify(expectedFiles)
   ) {
     throw new Error(
-      `The catalog test subset the stack serves is stale: it is ${marker.revision}, the manifest pins ${manifest.revision}. ` +
+      `The catalog test subset is stale: the stack serves ${marker.revision}, the manifest pins ${manifest.revision}. ` +
         `Run \`pnpm --dir packages/catalog catalog:test-subset\` (add --into-clone when the stack serves the full catalog clone); the running realm picks the files up without a restart.`,
     );
   }
