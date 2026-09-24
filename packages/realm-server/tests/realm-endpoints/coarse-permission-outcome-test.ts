@@ -53,9 +53,9 @@ const readProbes: Probe[] = [
         .send('not json'),
   },
   {
-    label: 'GET /_screenshot/',
+    label: 'GET /_capture/',
     consumes: false,
-    send: (r) => r.get('/_screenshot/person-1').set('Accept', 'image/png'),
+    send: (r) => r.get('/_capture/person-1').set('Accept', 'image/png'),
   },
   {
     label: 'GET a directory listing',
@@ -121,11 +121,11 @@ const writeProbes: Probe[] = [
       r.post('/_atomic').set('Accept', SupportedMimeType.JSONAPI).send('{}'),
   },
   {
-    label: 'POST into the reserved _screenshot/ subtree',
+    label: 'POST into the reserved _capture/ subtree',
     consumes: false,
     send: (r) =>
       r
-        .post('/_screenshot/foo.gts')
+        .post('/_capture/foo.gts')
         .set('Accept', SupportedMimeType.CardSource)
         .send('export const x = 1;'),
   },

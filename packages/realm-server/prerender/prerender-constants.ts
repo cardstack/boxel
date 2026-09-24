@@ -227,7 +227,7 @@ export type PrerenderRetryPolicy = 'any-failure' | 'only-when-undelivered';
 export type PrerenderEndpoint =
   | 'prerender-module'
   | 'prerender-visit'
-  | 'prerender-screenshot'
+  | 'prerender-capture'
   | 'run-command';
 
 // The policy for each endpoint, read by both layers that retry — the client's
@@ -238,7 +238,7 @@ export type PrerenderEndpoint =
 const RETRY_POLICY_BY_PATH: Record<PrerenderEndpoint, PrerenderRetryPolicy> = {
   'prerender-module': 'any-failure',
   'prerender-visit': 'any-failure',
-  'prerender-screenshot': 'any-failure',
+  'prerender-capture': 'any-failure',
   'run-command': 'only-when-undelivered',
 };
 

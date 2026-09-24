@@ -1417,8 +1417,8 @@ export function buildPrerenderManagerApp(options?: {
   router.post('/run-command', (ctxt) =>
     proxyPrerenderRequest(ctxt, 'run-command', 'command'),
   );
-  router.post('/prerender-screenshot', (ctxt) =>
-    proxyPrerenderRequest(ctxt, 'prerender-screenshot', 'screenshot'),
+  router.post('/prerender-capture', (ctxt) =>
+    proxyPrerenderRequest(ctxt, 'prerender-capture', 'capture'),
   );
 
   // Broadcast a release-batch to every server currently assigned to the

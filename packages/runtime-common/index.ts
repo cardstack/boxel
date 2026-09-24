@@ -15,8 +15,8 @@ import type {
   CaptureContentType,
   CaptureMedia,
   CaptureOutputType,
-  ScreenshotFormat,
-  ScreenshotManifest,
+  OnDemandCaptureFormat,
+  CaptureManifest,
 } from './capture-spec.ts';
 import type { ErrorEntry } from './error.ts';
 import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
@@ -222,7 +222,7 @@ export interface BuildModelStagesMs {
   // Fetching the card's source document from the realm.
   fetchSource?: number;
   // Resolving `adoptsFrom` — loading and evaluating the card's module graph
-  // — plus the realm-meta and declared-screenshot lookups that follow it.
+  // — plus the realm-meta and declared-capture lookups that follow it.
   // The dominant stage on a cold module graph; `moduleEvaluationsMs` names
   // the individual modules.
   deriveType?: number;
@@ -434,12 +434,12 @@ export interface PrerenderMetaDiagnostics extends BuildModelDiagnostics {
   // cards-with-broken-links are cheaply enumerable. Omitted entirely
   // when the card has no broken links.
   brokenLinks?: BrokenLinkSummary[];
-  // Declared-screenshot slots whose capture failed during the
+  // Declared-capture slots whose capture failed during the
   // prerender-html visit. The row publishes normally — a failed capture is
-  // an absent screenshot, not an errored card (the brokenLinks model) — and
+  // an absent capture, not an errored card (the brokenLinks model) — and
   // the manifest simply omits the name, so this is the only indexed signal
   // that a declared capture is missing. Omitted when every slot captured.
-  screenshotErrors?: DeclaredScreenshotError[];
+  captureErrors?: DeclaredCaptureError[];
   // How many consecutive prerender-html renders of this row have recorded
   // at least one declared-capture failure, under any name. The row-level
   // companion to each entry's `consecutiveFailures`: a per-name run resets
@@ -447,8 +447,8 @@ export interface PrerenderMetaDiagnostics extends BuildModelDiagnostics {
   // alternating with a per-name one, format groups failing on alternating
   // renders), so the reconcile sweep's retry cap is enforced against this
   // counter, which no name change can reset. A render that records no
-  // capture errors drops it along with `screenshotErrors`.
-  screenshotCaptureFailureRenders?: number;
+  // capture errors drops it along with `captureErrors`.
+  captureFailureRenders?: number;
   // Consecutive renders that withheld a stale-shell failure for this row.
   // Withholding removes the `has_error` that would have told an operator to
   // reindex, so the reconcile sweep re-drives these instead — and this bounds
@@ -460,15 +460,15 @@ export interface PrerenderMetaDiagnostics extends BuildModelDiagnostics {
   // reconcile sweep re-drives these — and this bounds that, for a gateway
   // failure that keeps recurring rather than clearing on the next render.
   gatewayFailureRenders?: number;
-  // Per-slot wall-clock of the declared-screenshot captures this visit
+  // Per-slot wall-clock of the declared captures this visit
   // performed, keyed by slot name — the per-name decomposition of the
-  // `renderFormatsMs.card.screenshots` aggregate, so a slow capture is
+  // `renderFormatsMs.card.captures` aggregate, so a slow capture is
   // attributable to its slot. Failed attempts appear here too (their time
   // was spent all the same); carried-forward slots don't (nothing
   // rendered). Slots captured from one shared format render each record
   // that render's whole elapsed time, so entries can exceed the aggregate
   // when summed. Omitted when the visit captured nothing.
-  screenshotTimingsMs?: Record<string, number>;
+  captureTimingsMs?: Record<string, number>;
   // Wall-clock of the file extract a fused index render performs inside the
   // render.meta route after the card payload is materialized (see
   // FusedIndexMeta). This is the extract's share of the visit's
@@ -553,13 +553,13 @@ export interface RenderResponse extends PrerenderMeta {
   iconHTML: string | null;
   markdown: string | null;
   error?: RenderError;
-  // The card class's declared-screenshot captures, present when the visit
-  // args requested them (see PrerenderVisitArgs.screenshots) and this pass
+  // The card class's declared captures, present when the visit
+  // args requested them (see PrerenderVisitArgs.captures) and this pass
   // reached its capture step. Absent entirely on prerenderers that don't
   // support capture (the in-browser twin) — the caller writes no manifest
   // then. Carried on the pass sub-response because each rendering owns its
   // captures: the file rendering's land on FileRenderResponse the same way.
-  screenshots?: DeclaredScreenshotVisitResult;
+  captures?: DeclaredCaptureVisitResult;
 }
 
 // `ErrorEntry` lives in `./error.ts` alongside the `SerializedError` it wraps;
@@ -624,17 +624,17 @@ export interface RenderTimeoutDiagnostics extends BuildModelDiagnostics {
   renderElapsedMs?: number;
   // Sum of launch + render elapsed (server-observed).
   totalElapsedMs?: number;
-  // Screenshot-capture renders only: the components of `renderElapsedMs`,
-  // measured inside `captureScreenshot`. Navigation (route transition +
+  // Capture-capture renders only: the components of `renderElapsedMs`,
+  // measured inside `runCapture`. Navigation (route transition +
   // path settle), the prerender settle wait, the image/font paint wait, and
   // the capture loop — the lone `page.screenshot` for a singular capture, or
-  // each entry's viewport switch + screenshot for a batch. Their sum is
+  // each entry's viewport switch + capture for a batch. Their sum is
   // slightly under `renderElapsedMs`; the residual is the terminal-error
   // probe and dimension reads.
-  screenshotNavMs?: number;
-  screenshotSettleMs?: number;
-  screenshotImagePaintMs?: number;
-  screenshotCaptureMs?: number;
+  captureNavMs?: number;
+  captureSettleMs?: number;
+  captureImagePaintMs?: number;
+  cdpCaptureMs?: number;
   // Per-format wall-clock of the html-route renders in this visit, split by
   // the card rendering and the FileDef file rendering. Keys are the format
   // steps the visit ran (`isolated`, `head`, `atom`, `markdown`, and the
@@ -676,7 +676,7 @@ export interface RenderTimeoutDiagnostics extends BuildModelDiagnostics {
   // for a visit's wall-clock sees a complete set of buckets and a
   // regression in the plumbing shows up on its own. Clamped at zero and
   // omitted when the visit recorded no step buckets at all (a
-  // screenshot-capture visit, whose components are the `screenshot*`
+  // capture-capture visit, whose components are the `capture*`
   // fields).
   unattributedMs?: number;
   // Render-phase breadcrumb set by the host app as it progresses. If
@@ -861,9 +861,9 @@ export interface FileRenderResponse {
   iconHTML: string | null;
   markdown: string | null;
   error?: RenderError;
-  // The FileDef family's declared-screenshot captures — see
-  // RenderResponse.screenshots for the presence semantics.
-  screenshots?: DeclaredScreenshotVisitResult;
+  // The FileDef family's declared captures — see
+  // RenderResponse.captures for the presence semantics.
+  captures?: DeclaredCaptureVisitResult;
 }
 
 export type FileRenderArgs = ModulePrerenderArgs & {
@@ -1311,14 +1311,14 @@ export type PrerenderVisitArgs = {
   // |= "[job: J.R]"` a single reliable filter for "everything that
   // happened during this indexing job."
   jobId?: string;
-  // Present when the caller wants the visit to capture declared screenshots
-  // (`static screenshots`) on the same warm tab — the prerender-html
+  // Present when the caller wants the visit to capture declared captures
+  // (`static captures`) on the same warm tab — the prerender-html
   // indexing pass sends this when it has a MediaCache to persist into. One
   // opt-in covers both of the URL's renderings: the card pass captures the
   // card class's roster, the file pass the FileDef family's, each keying
   // carry-forward on its own row's prior manifest inside. Only honored by
   // 'prerender-html' visits.
-  screenshots?: DeclaredScreenshotVisitArgs;
+  captures?: DeclaredCaptureVisitArgs;
   // The realm view this visit renders against — one realm at one generation.
   // An index pass and the `prerender_html` job it spawns are separate queue
   // jobs that read the same files, so they carry the same scope, while the
@@ -1383,19 +1383,19 @@ export function cardSourceForVisit({
   return { source, realmURL, lastModified: lastModified * 1000 };
 }
 
-// Inputs the declared-screenshot capture steps need from the indexing side:
+// Inputs the declared-capture steps need from the indexing side:
 // what the previous pass captured (so unchanged file-content-keyed slots can
 // carry forward without re-rendering) and the source file's current
 // realm_file_meta content hash to compare against. The content hash is the
 // one file's; the prior manifests are per rendering — a URL's 'instance' and
 // 'file' prerendered_html rows each carry their own — keyed by the same row
 // type the storage layer speaks.
-export type DeclaredScreenshotVisitArgs = {
+export type DeclaredCaptureVisitArgs = {
   contentHash?: string | null;
-  priorManifests?: Partial<Record<'instance' | 'file', ScreenshotManifest>>;
+  priorManifests?: Partial<Record<'instance' | 'file', CaptureManifest>>;
 };
 
-export type DeclaredScreenshotError = {
+export type DeclaredCaptureError = {
   name: string;
   message: string;
   // Wall-clock the engine spent on the render/capture attempt that failed
@@ -1412,7 +1412,7 @@ export type DeclaredScreenshotError = {
   // error entry outright — which means a run also resets when the failing
   // name changes, so this is the per-name diagnostic term of the reconcile
   // sweep's bounded retry lane; the lane's convergence bound is the
-  // row-level `screenshotCaptureFailureRenders` counter alongside it.
+  // row-level `captureFailureRenders` counter alongside it.
   consecutiveFailures?: number;
 };
 
@@ -1420,7 +1420,7 @@ export type DeclaredScreenshotError = {
 // carries `base64`; a carry-forward (`carriedForward: true`, file-content-
 // keyed slot whose source bytes are unchanged) carries no bytes — the caller
 // copies the prior manifest entry instead of persisting anything.
-export type DeclaredScreenshotCaptureResult = {
+export type DeclaredCaptureResult = {
   name: string;
   specHash: string;
   // CSS px of the capture box; physical pixels are these × deviceScaleFactor.
@@ -1446,11 +1446,11 @@ export type DeclaredScreenshotCaptureResult = {
   captureMs?: number;
 };
 
-export interface DeclaredScreenshotVisitResult {
-  entries: DeclaredScreenshotCaptureResult[];
+export interface DeclaredCaptureVisitResult {
+  entries: DeclaredCaptureResult[];
   // Per-slot capture failures — the broken-links model: they never fail the
   // visit, the manifest just omits the name.
-  errors?: DeclaredScreenshotError[];
+  errors?: DeclaredCaptureError[];
 }
 
 // The scope string both halves of a pass compute independently, from the queue
@@ -1524,7 +1524,7 @@ export type RunCommandResponse = {
 
 // The individual capture overrides shared by the singular spec and each batch
 // entry. All fields optional and JSON-serializable.
-export type ScreenshotCaptureOverrides = {
+export type CaptureRequestOverrides = {
   // CSS-pixel render viewport applied via `page.setViewport` before the render
   // settles, then restored so pooled pages don't leak the size into later index
   // prerenders.
@@ -1543,8 +1543,8 @@ export type ScreenshotCaptureOverrides = {
   // away after the merge, so a normalized spec never carries null.
   clip?: { x: number; y: number; width: number; height: number } | null;
   // CSS selector for a single element to capture — an element-handle
-  // screenshot of the first match, tightly cropped to its box. Mutually
-  // exclusive with `clip` and `fullPage` (an element screenshot honors
+  // capture of the first match, tightly cropped to its box. Mutually
+  // exclusive with `clip` and `fullPage` (an element capture honors
   // neither). The selector is bounded in length; the capture path resolves it
   // with `document.querySelector`, so a non-CSS (e.g. XPath-shaped) string is a
   // named capture error rather than a wrong crop. A batch entry may set
@@ -1566,7 +1566,7 @@ export type ScreenshotCaptureOverrides = {
   // the ledger identity — two encodings of one render are two cache entries.
   type?: CaptureOutputType;
   // CSS media the render settles under before capture. `screen` (the
-  // default, elided) is the rendering every screenshot has always captured;
+  // default, elided) is the rendering every capture has always captured;
   // `print` — refused by the shared parse until the engine emulates it —
   // engages the card's print CSS. Part of the ledger identity.
   media?: CaptureMedia;
@@ -1575,37 +1575,37 @@ export type ScreenshotCaptureOverrides = {
 // One entry in a batch capture: a name plus the same per-capture overrides. An
 // entry's fields override the singular spec fields, which act as batch-wide
 // defaults.
-export type ScreenshotCaptureEntry = ScreenshotCaptureOverrides & {
+export type CaptureRequestEntry = CaptureRequestOverrides & {
   name: string;
 };
 
-// Optional per-capture overrides for a screenshot render. All fields are
+// Optional per-capture overrides for a capture render. All fields are
 // JSON-serializable so this rides through the worker queue on
-// `ScreenshotCardArgs`. Bounds are enforced by the shared strict parse in
+// `CaptureCardArgs`. Bounds are enforced by the shared strict parse in
 // `capture-spec.ts` before the job is enqueued (both the realm-server POST
-// body and the prerender server's screenshot route run it); the capture path
-// (`captureScreenshot`) treats these as already-validated but still rejects
+// body and the prerender server's capture route run it); the capture path
+// (`runCapture`) treats these as already-validated but still rejects
 // the mutually-exclusive `fullPage` + `clip` combination defensively and
 // bounds a fullPage capture's document extent, which no parse can know.
 //
 // When `captures` is present the render is captured once per entry (after a
 // single settle); each entry's overrides win over the singular fields. When it
 // is absent the singular fields describe a single capture.
-export type ScreenshotCaptureSpec = ScreenshotCaptureOverrides & {
-  captures?: ScreenshotCaptureEntry[];
+export type CaptureRequestSpec = CaptureRequestOverrides & {
+  captures?: CaptureRequestEntry[];
 };
 
-// ScreenshotFormat is defined (with its runtime const + guard) in
+// OnDemandCaptureFormat is defined (with its runtime const + guard) in
 // `capture-spec.ts`, re-exported from this module, and imported at the top of
 // this file for the types below.
 
-export type ScreenshotPrerenderArgs = {
+export type CapturePrerenderArgs = {
   realm: string;
   url: string;
   auth: string;
-  format: ScreenshotFormat;
+  format: OnDemandCaptureFormat;
   // Optional per-capture overrides (viewport, scale, fullPage, clip).
-  captureSpec?: ScreenshotCaptureSpec;
+  captureSpec?: CaptureRequestSpec;
   // Worker-job priority threaded through from the producer side. See
   // ModulePrerenderArgs for the contract.
   priority?: number;
@@ -1616,10 +1616,10 @@ export type ScreenshotPrerenderArgs = {
   jobId?: string;
 };
 
-// One captured artifact in a screenshot response. `deviceScaleFactor` is the
+// One captured artifact in a capture response. `deviceScaleFactor` is the
 // scale the render ran at, so a consumer can reconstruct physical vs CSS
 // pixel dimensions for raster output.
-export type ScreenshotCaptureResult = {
+export type CaptureResult = {
   name: string;
   base64: string;
   // CSS dimensions of a raster capture; absent for pdf output, which has no
@@ -1631,14 +1631,14 @@ export type ScreenshotCaptureResult = {
   pageCount?: number;
 };
 
-export type ScreenshotPrerenderResponse = {
+export type CapturePrerenderResponse = {
   status: 'ready' | 'error' | 'unusable';
   // Present on every ready response (a single entry named "default" when the
   // request used the singular fields); error and unusable responses carry
   // none. The top-level `base64`/`width`/`height` mirror `captures[0]` for
   // back-compat with the shipped host tool and the staging capture command,
   // which read the singular fields.
-  captures?: ScreenshotCaptureResult[];
+  captures?: CaptureResult[];
   base64?: string;
   width?: number;
   height?: number;
@@ -1662,13 +1662,13 @@ export interface Prerenderer {
   releaseBatch?(args: ReleaseBatchArgs): Promise<void>;
   // Optional: capture a settled card render to a PNG. Optional so test
   // stubs and older Prerenderer implementations are not forced to
-  // implement it; the screenshot-card worker task
-  // (`runtime-common/tasks/screenshot-card.ts`) probes for this method at
+  // implement it; the capture-card worker task
+  // (`runtime-common/tasks/capture-card.ts`) probes for this method at
   // runtime and surfaces a useful error if the configured prerenderer
   // doesn't support it.
-  prerenderScreenshot?(
-    args: ScreenshotPrerenderArgs,
-  ): Promise<ScreenshotPrerenderResponse>;
+  prerenderCapture?(
+    args: CapturePrerenderArgs,
+  ): Promise<CapturePrerenderResponse>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
@@ -1827,7 +1827,7 @@ export * from './job-utils.ts';
 export * from './prerender-html-reconcile.ts';
 export * from './media-cache.ts';
 export * from './media-cache-serving.ts';
-export * from './screenshot-perf.ts';
+export * from './capture-perf.ts';
 export * from './capture-spec.ts';
 export * from './capture-url-token.ts';
 export * from './expression.ts';

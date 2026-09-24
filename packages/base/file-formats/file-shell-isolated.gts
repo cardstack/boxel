@@ -441,7 +441,7 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
                 pinned by nothing. Two runs on different days therefore disagree
                 and Percy reports a diff. Hidden from Percy rather than
                 normalised: it is a database column rather than a file
-                attribute, and a screenshot is the wrong place to verify a
+                attribute, and a capture is the wrong place to verify a
                 timestamp. The label stays visible, so the row and the layout
                 around it are still compared. }}
                 <dd data-test-percy-hide>{{this.created}}</dd>

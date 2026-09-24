@@ -85,7 +85,7 @@ function isDocumentEmbedRequest(ctxt: Koa.Context): boolean {
   return destination === 'embed' || destination === 'object';
 }
 
-// A capture URL — `{realm}_screenshot/…` — names bytes the realm serves (a
+// A capture URL — `{realm}_capture/…` — names bytes the realm serves (a
 // PNG or a PDF), never a card the app could open. A tab navigation to one (a
 // "Download PDF" link opened in a new tab) advertises text/html like any
 // navigation, and the shell would boot the app against a URL that is not a
@@ -93,8 +93,8 @@ function isDocumentEmbedRequest(ctxt: Koa.Context): boolean {
 // accepts. GET only, matching the realm's dispatch: it serves captures on GET
 // alone, so any other method falls through to the ordinary negotiation.
 //
-// The realm reserves `_screenshot/` only at its root (`isCaptureServingPath`
-// on the realm-local path), so a nested `folder/_screenshot/card` is an
+// The realm reserves `_capture/` only at its root (`isCaptureServingPath`
+// on the realm-local path), so a nested `folder/_capture/card` is an
 // ordinary card path that must keep opening the app. The path-segment test
 // is a cheap pre-filter; the realm lookup that decides runs only for URLs
 // that pass it.

@@ -3,7 +3,7 @@
 // chain; card-api's `field` decorator refuses them at runtime, and this rule
 // is the authoring-time backstop. Keep in sync with `RESERVED_FIELD_NAMES`
 // in packages/base/card-api.gts.
-const RESERVED_FIELD_NAMES = ['screenshotURLs', 'screenshotsMeta'];
+const RESERVED_FIELD_NAMES = ['captureURLs', 'capturesMeta'];
 
 function isFieldDecorator(decorator) {
   let expression = decorator.expression;
@@ -28,7 +28,7 @@ module.exports = {
     type: 'problem',
     docs: {
       description:
-        'disallow `@field` declarations under names the system reserves for its own getters (e.g. `screenshotURLs`)',
+        'disallow `@field` declarations under names the system reserves for its own getters (e.g. `captureURLs`)',
       category: 'Ember Octane',
       url: 'https://github.com/cardstack/boxel/blob/main/packages/eslint-plugin-boxel/docs/rules/no-reserved-field-names.md',
       recommended: true,

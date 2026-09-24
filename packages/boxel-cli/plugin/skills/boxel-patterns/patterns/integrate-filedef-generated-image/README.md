@@ -15,4 +15,4 @@ validated: source-proven
 - `WriteBinaryFileCommand` expects raw base64 content without the `data:image/...;base64,` prefix.
 - Set `id`, `url`, and `sourceUrl` on the `ImageDef` to the returned `fileIdentifier`.
 
-**Source:** `packages/host/app/tools/screenshot-card.ts`, `realms-staging.stack.cards/ctse/selective-mouse/stencil-image-studio.gts`.
+**Source:** `packages/host/app/tools/capture-card.ts`, `realms-staging.stack.cards/ctse/selective-mouse/stencil-image-studio.gts`.

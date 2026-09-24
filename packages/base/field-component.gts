@@ -168,7 +168,7 @@ export function getBoxComponent(
   opts?: {
     componentCodeRef?: CodeRef;
     // Render this component in place of the class's format slot — the
-    // declared-screenshot capture path's way of rendering a capture-only
+    // declared-capture path's way of rendering a capture-only
     // component with the full author surface. Bypasses the component cache:
     // the cache is keyed only by model, and an override render must never
     // be handed a stable format component (or poison one).
@@ -368,7 +368,7 @@ export function getBoxComponent(
                     {{#let model.value as |card|}}
                       {{! A rendered field boundary carries
                           data-card-field=<fieldName> so selector-based
-                          screenshot capture and region discovery can address
+                          capture and region discovery can address
                           fields in templates that never opted in. That is: this
                           card-as-field container and the compound-field wrapper
                           below, plus the plural wrappers in

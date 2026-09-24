@@ -108,7 +108,7 @@ export class ImagePreview extends GlimmerComponent<ContentPreviewSignature> {
     if (!this.model.aspectRatio || this.model.aspectRatio < 1.33) {
       return undefined;
     }
-    let meta = (this.model.source as any)?.screenshotsMeta as
+    let meta = (this.model.source as any)?.capturesMeta as
       | Record<
           string,
           | { url?: string; width?: number; deviceScaleFactor?: number }

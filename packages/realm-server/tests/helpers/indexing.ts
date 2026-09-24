@@ -273,7 +273,7 @@ export interface PrerenderedHtmlRow {
   is_deleted: boolean | null;
   error_doc: unknown | null;
   diagnostics: Record<string, unknown> | null;
-  screenshots: Record<string, unknown> | null;
+  captures: Record<string, unknown> | null;
 }
 
 // Fetch a production `prerendered_html` row for assertions. Returns

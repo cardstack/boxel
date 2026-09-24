@@ -7,9 +7,9 @@ import {
   type RenderVisitResponse,
   logger,
   type RunCommandResponse,
-  type ScreenshotCaptureSpec,
-  type ScreenshotFormat,
-  type ScreenshotPrerenderResponse,
+  type CaptureRequestSpec,
+  type OnDemandCaptureFormat,
+  type CapturePrerenderResponse,
 } from '@cardstack/runtime-common';
 import { BrowserManager } from './browser-manager.ts';
 import {
@@ -632,7 +632,7 @@ export class Prerenderer {
     }
   }
 
-  async prerenderScreenshot({
+  async prerenderCapture({
     realm,
     url,
     auth,
@@ -645,26 +645,26 @@ export class Prerenderer {
     realm: string;
     url: string;
     auth: string;
-    format: ScreenshotFormat;
-    captureSpec?: ScreenshotCaptureSpec;
+    format: OnDemandCaptureFormat;
+    captureSpec?: CaptureRequestSpec;
     priority?: number;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     signal?: AbortSignal;
   }): Promise<{
-    response: ScreenshotPrerenderResponse;
+    response: CapturePrerenderResponse;
     timings: Timings;
     pool: PoolMeta;
   }> {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
     }
-    let screenshotStart = Date.now();
+    let cdpCaptureStart = Date.now();
     let affinityKey = toAffinityKey({
       affinityType: 'realm',
       affinityValue: realm,
     });
     try {
-      let result = await this.#renderRunner.captureScreenshotAttempt({
+      let result = await this.#renderRunner.runCaptureAttempt({
         affinityType: 'realm',
         affinityValue: realm,
         realm,
@@ -679,16 +679,16 @@ export class Prerenderer {
       Prerenderer.decorateRenderErrorsWithTimings(
         result.response,
         result.timings,
-        Date.now() - screenshotStart,
+        Date.now() - cdpCaptureStart,
         { priority, tabReused: result.pool?.reused },
       );
       return result;
     } catch (e) {
       if (e instanceof PrerenderCancelledError) {
-        await this.#handlePrerenderCancel(e, affinityKey, screenshotStart, url);
+        await this.#handlePrerenderCancel(e, affinityKey, cdpCaptureStart, url);
         throw e;
       }
-      log.error(`screenshot attempt failed (url ${url})`, e);
+      log.error(`capture attempt failed (url ${url})`, e);
       throw e;
     }
   }
@@ -735,7 +735,7 @@ export class Prerenderer {
       opts,
       priority,
       jobId,
-      screenshots,
+      captures,
       renderScope,
       cardSource,
     } = this.#gateClearCache(rawArgs);
@@ -798,7 +798,7 @@ export class Prerenderer {
             cardTypes,
             priority,
             jobId,
-            screenshots,
+            captures,
             renderScope,
             cardSource,
             signal,
@@ -836,7 +836,7 @@ export class Prerenderer {
               cardTypes,
               priority,
               jobId,
-              screenshots,
+              captures,
               renderScope,
               cardSource,
               signal,

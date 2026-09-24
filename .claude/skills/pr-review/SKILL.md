@@ -17,7 +17,7 @@ Expect most of the work to stay invisible. A review that traced six paths and fo
 Load these companion skills before writing a single comment; each applies in **both directions** — to the diff under review and to the review's own output:
 
 - **pr-comment-attribution** — every comment the review posts — inline comments, thread replies, and the review body — begins with the `[Claude Code 🤖]` prefix.
-- **pr-privacy** — scan the diff for user data the author is about to publish (fixtures, code comments, screenshots, PR text), and scan the review's own comments before posting: quoting a log line or DB row into a review comment publishes it.
+- **pr-privacy** — scan the diff for user data the author is about to publish (fixtures, code comments, captures, PR text), and scan the review's own comments before posting: quoting a log line or DB row into a review comment publishes it.
 - **evergreen-comments** — the review's own prose is evergreen (no ticket IDs, no PR numbers, no journey narration), and the diff's new or edited comments, docs, and skill files are checked for temporal wording, tracker references, and journey narration as a standing review dimension.
 
 If the diff touches an area with a dedicated domain skill (index-query-engine, search, gts-component-conventions, ember-best-practices, …), load it — those files carry the invariants the change must preserve, which is exactly what a review checks.

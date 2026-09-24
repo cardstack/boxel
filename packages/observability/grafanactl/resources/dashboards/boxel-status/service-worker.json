@@ -1237,7 +1237,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Resolved jobs per minute by `job_type`, taken from the `jobs` table. Lets you see whether the worker fleet is mostly indexing or whether cron-driven jobs (`daily-credit-grant`, `screenshot-card`, `run-command`) are crowding the queue.",
+        "description": "Resolved jobs per minute by `job_type`, taken from the `jobs` table. Lets you see whether the worker fleet is mostly indexing or whether cron-driven jobs (`daily-credit-grant`, `capture-card`, `run-command`) are crowding the queue.",
         "fieldConfig": {
           "defaults": {
             "color": {

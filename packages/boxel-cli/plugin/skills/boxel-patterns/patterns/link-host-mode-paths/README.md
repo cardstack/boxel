@@ -189,5 +189,5 @@ For end-to-end test coverage, see `packages/matrix/tests/host-mode.spec.ts` — 
 - [`app-card-home-with-search`](../app-card-home-with-search/README.md) — the Home card pattern that pairs naturally with a `/` route. Build your Home CardDef first, then add the routing rule.
 - [`theme-first-workflow`](../theme-first-workflow/README.md) — every routed page card wants a brand-driven theme.
 - [`show-card-list-with-views`](../show-card-list-with-views/README.md) — for the index card of a `/blog` route.
-- [`integrate-screenshot-card-format`](../integrate-screenshot-card-format/README.md) — auto-generate Open Graph images for each routed page (use the rule's target card id as the screenshot subject).
+- [`integrate-capture-card-format`](../integrate-capture-card-format/README.md) — auto-generate Open Graph images for each routed page (use the rule's target card id as the capture subject).
 - The base CardDef: `@cardstack/base/realm-config` (`RealmConfig` + `RoutingRuleField`).

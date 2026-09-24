@@ -758,7 +758,7 @@ export class RealmServer {
     queue: QueuePublisher;
     definitionLookup: DefinitionLookup;
     // MediaCache object store shared with the realms this server mounts;
-    // absent means the POST screenshot endpoint captures without persisting.
+    // absent means the POST capture endpoint captures without persisting.
     mediaCacheAdapter?: MediaCacheAdapter;
     assetsURL: URL;
     getIndexHTML: () => Promise<string>;

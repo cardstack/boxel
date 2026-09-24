@@ -69,7 +69,7 @@ module(basename(import.meta.filename), function (hooks) {
     permissions: Record<string, string[]> = {},
   ): Promise<ResponseWithNodeStream> {
     return serveMediaCacheEntry({
-      request: new Request(`${REALM_URL}_screenshot/card-1`, init),
+      request: new Request(`${REALM_URL}_capture/card-1`, init),
       requestContext: requestContext(permissions),
       entry,
       mediaCacheAdapter: adapter,
@@ -226,7 +226,7 @@ module(basename(import.meta.filename), function (hooks) {
     declaredEntry.lastAccessedAt =
       Date.now() - MEDIA_CACHE_TOUCH_THROTTLE_MS - 1;
     let response = await serveMediaCacheEntry({
-      request: new Request(`${REALM_URL}_screenshot/card-2`),
+      request: new Request(`${REALM_URL}_capture/card-2`),
       requestContext: requestContext(),
       entry: declaredEntry,
       mediaCacheAdapter: adapter,

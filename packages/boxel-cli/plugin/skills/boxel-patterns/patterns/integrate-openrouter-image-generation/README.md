@@ -23,4 +23,4 @@ OpenRouter image requests should use `/api/v1/chat/completions` with `modalities
 
 Never save the returned `data:image/...;base64,...` string in a card field. Strip the prefix, write the bytes with `WriteBinaryFileCommand`, then assign an `ImageDef` / `PngDef` link on the domain card.
 
-**Source:** OpenRouter image-generation docs and `packages/host/app/tools/screenshot-card.ts` for the realm-file persistence pattern.
+**Source:** OpenRouter image-generation docs and `packages/host/app/tools/capture-card.ts` for the realm-file persistence pattern.

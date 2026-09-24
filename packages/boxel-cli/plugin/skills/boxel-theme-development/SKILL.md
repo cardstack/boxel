@@ -36,7 +36,7 @@ Use this for the theme artifact itself. Use `boxel-design` when the task is prim
 
 3. **Gather source material.**
    - Existing Theme/BrandGuide JSON, if present.
-   - Any `DESIGN.md`, style guide, brand guide, logo pack, font URLs, screenshots, or reference sites.
+   - Any `DESIGN.md`, style guide, brand guide, logo pack, font URLs, captures, or reference sites.
    - Current realm conventions: where Theme cards live, how instances link `cardInfo.theme`, and whether a parent card computes `cardTheme`.
 
 4. **Map values before writing.**

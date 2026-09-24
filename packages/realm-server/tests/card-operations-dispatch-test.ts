@@ -192,7 +192,7 @@ function stub(opts: StubOptions = {}): Stub {
           generation: 7,
           indexedAt: 1700,
           deps: [],
-          screenshots: null,
+          captures: null,
         } as any;
       },
       async instance(url) {
@@ -210,7 +210,7 @@ function stub(opts: StubOptions = {}): Stub {
           generation: 7,
           indexedAt: 1700,
           lastModified: 1699,
-          screenshots: null,
+          captures: null,
         } as any;
       },
       async file() {
@@ -220,7 +220,7 @@ function stub(opts: StubOptions = {}): Stub {
               type: 'file',
               lastModified: 1699,
               generation: 4,
-              screenshots: null,
+              captures: null,
               deps: null,
               indexedAt: 1700,
             } as any)
@@ -815,7 +815,7 @@ module(basename(import.meta.filename), function () {
         indexedAt: 1700,
         lastModified: 1699,
         generation: 4,
-        screenshots: null,
+        captures: null,
         deps: null,
       });
       assert.strictEqual(
@@ -836,7 +836,7 @@ module(basename(import.meta.filename), function () {
         indexedAt: null,
         lastModified: 42,
         generation: null,
-        screenshots: null,
+        captures: null,
         deps: null,
       });
     });

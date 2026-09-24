@@ -561,7 +561,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     moduleCacheCoordinator,
   );
 
-  // One store shared by every realm this server mounts; the `_screenshot/`
+  // One store shared by every realm this server mounts; the `_capture/`
   // route serves every request as an uncaptured miss when none is configured.
   let mediaCacheAdapter = createMediaCacheAdapterFromEnv();
 

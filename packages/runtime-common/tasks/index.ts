@@ -23,7 +23,7 @@ export * from './scoped-css-gc.ts';
 export * from './prerender-html.ts';
 export * from './prerender-html-reconcile.ts';
 export * from './run-command.ts';
-export * from './screenshot-card.ts';
+export * from './capture-card.ts';
 
 type LoggerInstance = ReturnType<typeof import('../index.ts').logger>;
 

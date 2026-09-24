@@ -43,12 +43,12 @@ import {
 } from './error.ts';
 import type { DBAdapter } from './db.ts';
 import {
-  screenshotLedgerSourceURL,
-  type ScreenshotManifest,
+  captureLedgerSourceURL,
+  type CaptureManifest,
 } from './capture-spec.ts';
 import type { RealmMetaTable } from './index-structure.ts';
 import type { FileMetaResource } from './resource-types.ts';
-import type { DeclaredScreenshotError, Diagnostics } from './index.ts';
+import type { DeclaredCaptureError, Diagnostics } from './index.ts';
 import {
   ALL_TYPES_KEY,
   coerceTypes,
@@ -222,11 +222,11 @@ export interface FileEntry {
   diagnostics?: Diagnostics;
 }
 
-// One prerendered_html row's declared-screenshot state, as
-// `priorScreenshotStates` reads it back for the next pass over the same URL.
-export interface PriorScreenshotState {
-  manifest: ScreenshotManifest | null;
-  screenshotErrors: DeclaredScreenshotError[] | null;
+// One prerendered_html row's declared-capture state, as
+// `priorCaptureStates` reads it back for the next pass over the same URL.
+export interface PriorCaptureState {
+  manifest: CaptureManifest | null;
+  captureErrors: DeclaredCaptureError[] | null;
   captureFailureRenders: number | null;
 }
 
@@ -250,10 +250,10 @@ export interface PrerenderedHtmlEntry {
   // too so operators can retrospectively answer "why did this rendering
   // take N seconds?".
   diagnostics?: Diagnostics;
-  // The declared-screenshot manifest for this row — every slot the visit
+  // The declared-capture manifest for this row — every slot the visit
   // captured or carried forward. Absent/null clears the column: the
   // manifest always reflects what THIS pass captured, never a stale one.
-  screenshots?: ScreenshotManifest | null;
+  captures?: CaptureManifest | null;
 }
 
 export interface PrerenderedHtmlErrorEntry {
@@ -1397,7 +1397,7 @@ export class Batch {
     let manifestCopies: {
       sourceLedgerURL: string;
       destLedgerURL: string;
-      manifest: ScreenshotManifest;
+      manifest: CaptureManifest;
     }[] = [];
     let values = sources.map((entry) => {
       let destURL = copyURL(entry.url);
@@ -1405,13 +1405,13 @@ export class Batch {
       // rows, so `copyFrom` already seeded these into `#invalidations`; add
       // defensively so the swap below promotes every overlaid HTML row.
       this.#invalidations.add(destURL);
-      if (entry.screenshots && Object.keys(entry.screenshots).length > 0) {
+      if (entry.captures && Object.keys(entry.captures).length > 0) {
         let kind: 'instance' | 'file' =
           entry.type === 'instance' ? 'instance' : 'file';
         manifestCopies.push({
-          sourceLedgerURL: screenshotLedgerSourceURL(entry.url, kind),
-          destLedgerURL: screenshotLedgerSourceURL(destURL, kind),
-          manifest: entry.screenshots as ScreenshotManifest,
+          sourceLedgerURL: captureLedgerSourceURL(entry.url, kind),
+          destLedgerURL: captureLedgerSourceURL(destURL, kind),
+          manifest: entry.captures as CaptureManifest,
         });
       }
       entry.url = destURL;
@@ -1457,7 +1457,7 @@ export class Batch {
         values,
       ),
     ]);
-    await this.copyDeclaredScreenshotLedgerRows(sourceRealmURL, manifestCopies);
+    await this.copyDeclaredCaptureLedgerRows(sourceRealmURL, manifestCopies);
   }
 
   // A copied manifest is only as durable as the ledger rows that refcount
@@ -1471,12 +1471,12 @@ export class Batch {
   // in the source. Runs only when a manifest was copied, so it never touches
   // `media_cache_ledger` on adapters that don't carry it (captures only ever
   // happen on the Postgres side).
-  private async copyDeclaredScreenshotLedgerRows(
+  private async copyDeclaredCaptureLedgerRows(
     sourceRealmURL: URL,
     copies: {
       sourceLedgerURL: string;
       destLedgerURL: string;
-      manifest: ScreenshotManifest;
+      manifest: CaptureManifest;
     }[],
   ): Promise<void> {
     if (copies.length === 0) {
@@ -2160,7 +2160,7 @@ export class Batch {
 
   // The generation this batch stamps on the `prerendered_html` row of `url`
   // and `type` — and on anything else keyed to that rendering, such as its
-  // screenshot ledger rows. On a prerenderHtmlOnly batch that is the live
+  // capture ledger rows. On a prerenderHtmlOnly batch that is the live
   // index row's generation (see `adoptIndexGenerations`); on any other batch,
   // the generation it stages its rows under.
   htmlRowGeneration(url: string, type: BoxelIndexTable['type']): number {
@@ -2311,7 +2311,7 @@ export class Batch {
           last_known_good_deps: deps,
           error_doc: null,
           diagnostics,
-          screenshots: entry.screenshots ?? null,
+          captures: entry.captures ?? null,
         };
         break;
       }
@@ -2427,7 +2427,7 @@ export class Batch {
           // Like the HTML columns above: the manifest is a last-known-good
           // artifact — its objects still exist in the MediaCache and the
           // preserved HTML may reference them by name.
-          screenshots: production?.screenshots ?? null,
+          captures: production?.captures ?? null,
         };
         break;
       }
@@ -2478,7 +2478,7 @@ export class Batch {
     ]);
   }
 
-  // The declared-screenshot state the previous pass published for this URL's
+  // The declared-capture state the previous pass published for this URL's
   // rows, read from production `prerendered_html` in one query and keyed by
   // row type: the manifest is the carry-forward input for
   // `keyBy: 'file-content'` slots (skip re-rendering when the source bytes
@@ -2487,14 +2487,14 @@ export class Batch {
   // extends its run) plus the row-level failing-render counter the reconcile
   // sweep's bounded retry lane caps on. A row that doesn't exist has no key;
   // fields it carried nothing for are null.
-  async priorScreenshotStates(
+  async priorCaptureStates(
     url: URL,
-  ): Promise<Partial<Record<'instance' | 'file', PriorScreenshotState>>> {
+  ): Promise<Partial<Record<'instance' | 'file', PriorCaptureState>>> {
     // This runs once per visit, so it selects only what the two rows'
     // capture bookkeeping needs — the HTML columns are large and irrelevant
     // here.
     let rows = (await this.#query([
-      `SELECT type, screenshots, diagnostics FROM prerendered_html WHERE`,
+      `SELECT type, captures, diagnostics FROM prerendered_html WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
         any([
@@ -2508,20 +2508,19 @@ export class Batch {
       ]),
     ] as Expression)) as unknown as Pick<
       PrerenderedHtmlTable,
-      'type' | 'screenshots' | 'diagnostics'
+      'type' | 'captures' | 'diagnostics'
     >[];
-    let states: Partial<Record<'instance' | 'file', PriorScreenshotState>> = {};
+    let states: Partial<Record<'instance' | 'file', PriorCaptureState>> = {};
     for (let row of rows) {
       if (row.type !== 'instance' && row.type !== 'file') {
         continue;
       }
       let priorDiagnostics = row.diagnostics as Diagnostics | null;
-      let priorErrors = priorDiagnostics?.screenshotErrors;
-      let priorFailureRenders =
-        priorDiagnostics?.screenshotCaptureFailureRenders;
+      let priorErrors = priorDiagnostics?.captureErrors;
+      let priorFailureRenders = priorDiagnostics?.captureFailureRenders;
       states[row.type] = {
-        manifest: (row.screenshots as ScreenshotManifest | null) ?? null,
-        screenshotErrors:
+        manifest: (row.captures as CaptureManifest | null) ?? null,
+        captureErrors:
           Array.isArray(priorErrors) && priorErrors.length > 0
             ? priorErrors
             : null,
@@ -4453,7 +4452,7 @@ export class Batch {
         this.#prerenderedHtmlTombstonedLiveTypes.set(url, liveTypes);
       }
     }
-    // The HTML columns and the `screenshots` manifest are deliberately NOT
+    // The HTML columns and the `captures` manifest are deliberately NOT
     // in this list: the swap applies the tombstone to the production row in
     // place (`promotePrerenderedHtmlPending`), so it leaves those artifacts
     // there (is_deleted hides them), matching how the HTML columns have

@@ -11,9 +11,9 @@
 // retries once before falling through.
 //
 // The SW also absorbs 503 + Retry-After answers from the realm's
-// `_screenshot/` route, re-fetching at the server's suggested pace within a
+// `_capture/` route, re-fetching at the server's suggested pace within a
 // bounded budget so an in-app <img> waits out an in-flight capture instead
-// of showing a broken image. See the SCREENSHOT_* constants below.
+// of showing a broken image. See the CAPTURE_* constants below.
 
 // Map of realm URL prefix → JWT token
 const realmTokens = new Map();
@@ -29,7 +29,7 @@ const inflightTokenRequests = new Map();
 const TOKEN_REQUEST_TIMEOUT_MS = 200;
 const TOKEN_REQUEST_REFRESH_TIMEOUT_MS = 3000;
 
-// The realm's `_screenshot/` route answers 503 + Retry-After when a capture
+// The realm's `_capture/` route answers 503 + Retry-After when a capture
 // can't complete within its bounded sync wait (capture still rendering, or
 // the on-demand lane is congested). <img> has no retry logic, so without
 // help a broken image sticks until a manual reload. For requests on that
@@ -37,7 +37,7 @@ const TOKEN_REQUEST_REFRESH_TIMEOUT_MS = 3000;
 // the server's suggested pace, so the fetch event resolves late instead of
 // failing and the image pops in when the capture lands.
 //
-// The match is deliberately tight (GET + a `_screenshot/` path segment on a
+// The match is deliberately tight (GET + a `_capture/` path segment on a
 // request already scoped to a realm — a realm-token prefix match on the token
 // branches, a known realm origin on the tokenless branch — + status exactly
 // 503 + a numeric Retry-After): a blanket SW 503-retry would mask real
@@ -46,27 +46,27 @@ const TOKEN_REQUEST_REFRESH_TIMEOUT_MS = 3000;
 // template across a large grid would otherwise become that many synchronized
 // retry loops; the 404's short max-age already covers the brief uncaptured
 // window.
-const SCREENSHOT_PATH_SEGMENT = '/_screenshot/';
+const CAPTURE_PATH_SEGMENT = '/_capture/';
 // Bounds when re-fetches may start: retry sleeps are clamped to this window,
 // and a 503 arriving after it closes is let through so the <img> errors
 // visibly rather than hiding a permanently failing capture. The final
 // re-fetch can itself hold up to the server's sync wait, so worst-case wall
 // time is this budget plus one sync wait.
-const SCREENSHOT_RETRY_BUDGET_MS = 90000;
+const CAPTURE_RETRY_BUDGET_MS = 90000;
 
-// A request is on the screenshot route when it is a GET with a
-// `_screenshot/` path segment. Origin/realm scoping is the call sites' job
+// A request is on the capture route when it is a GET with a
+// `_capture/` path segment. Origin/realm scoping is the call sites' job
 // (see the engagement-gate comment above); position within the realm is
 // not checked — the realm serves the subtree only at its root, so a nested
 // segment on a plain file engages the loop harmlessly (plain files never
 // answer 503 + Retry-After). Only GET absorbs: the route itself is
 // GET-only, and HEAD/other methods keep the plain single-fetch behavior.
-function isScreenshotRoute(request) {
+function isCaptureRoute(request) {
   if (request.method !== 'GET') {
     return false;
   }
   try {
-    return new URL(request.url).pathname.includes(SCREENSHOT_PATH_SEGMENT);
+    return new URL(request.url).pathname.includes(CAPTURE_PATH_SEGMENT);
   } catch {
     return false;
   }
@@ -76,7 +76,7 @@ function isScreenshotRoute(request) {
 // undefined for any response that must be returned to the page as-is.
 // Retry-After is the contract: a 503 without one (or with an unparseable
 // value, e.g. an HTTP-date) is a real error, not a capture-pending signal.
-function screenshotRetryDelayMs(response) {
+function captureRetryDelayMs(response) {
   if (response.status !== 503) {
     return undefined;
   }
@@ -91,7 +91,7 @@ function screenshotRetryDelayMs(response) {
   return Math.max(1000, seconds * 1000);
 }
 
-// Fetch loop for `_screenshot/` requests. buildRequest is invoked per
+// Fetch loop for `_capture/` requests. buildRequest is invoked per
 // attempt so each retry picks up the freshest token from the realmTokens
 // map. A server-suggested pause longer than the remaining budget is clamped
 // to it rather than abandoned: the congested lane's Retry-After is
@@ -99,11 +99,11 @@ function screenshotRetryDelayMs(response) {
 // history, so the estimate can far overshoot the real wait — one retry at
 // the deadline is worth more than an immediate visible error. A 503
 // arriving once the window is closed is returned as-is.
-async function fetchScreenshotAbsorbing503s(buildRequest) {
-  let deadline = Date.now() + SCREENSHOT_RETRY_BUDGET_MS;
+async function fetchCaptureAbsorbing503s(buildRequest) {
+  let deadline = Date.now() + CAPTURE_RETRY_BUDGET_MS;
   for (;;) {
     let response = await fetch(buildRequest());
-    let delayMs = screenshotRetryDelayMs(response);
+    let delayMs = captureRetryDelayMs(response);
     if (delayMs === undefined) {
       return response;
     }
@@ -274,7 +274,7 @@ function buildRealmRequest(request, token) {
   // Access-Control-Allow-Origin (not '*'), which the realm server doesn't do.
   //
   // The cors upgrade also matters without a token: a no-cors response is
-  // opaque (status reads as 0), so the screenshot 503-absorption path
+  // opaque (status reads as 0), so the capture 503-absorption path
   // rebuilds tokenless requests to public realms as cors too, to be able to
   // read the status and Retry-After.
   let headers = new Headers(request.headers);
@@ -307,14 +307,14 @@ self.addEventListener('fetch', (event) => {
   let matchedToken = lookupToken(url);
 
   if (matchedToken) {
-    if (isScreenshotRoute(request)) {
+    if (isCaptureRoute(request)) {
       // Each attempt re-reads the token map: rotation is picked up, and a
       // removal (logout clears the map) makes the next attempt tokenless —
       // a private realm then answers 401, which is not absorbable, so the
       // loop ends instead of presenting the pre-logout JWT for the rest of
       // the budget.
       event.respondWith(
-        fetchScreenshotAbsorbing503s(() =>
+        fetchCaptureAbsorbing503s(() =>
           buildRealmRequest(request, lookupToken(url)),
         ),
       );
@@ -345,22 +345,22 @@ self.addEventListener('fetch', (event) => {
     (async () => {
       let token = await requestTokenFromClient(url, event.clientId);
       if (token) {
-        if (isScreenshotRoute(request)) {
+        if (isCaptureRoute(request)) {
           // Unlike the matched-token branch, `?? token` is load-bearing
           // here: the client's reply lands in the map keyed by its own
           // realmURL, which may not prefix this request's URL, so the map
           // lookup can miss forever while the token stays valid.
-          return fetchScreenshotAbsorbing503s(() =>
+          return fetchCaptureAbsorbing503s(() =>
             buildRealmRequest(request, lookupToken(url) ?? token),
           );
         }
         return fetch(buildRealmRequest(request, token));
       }
-      // Tokenless screenshot requests to a known realm origin (a public
+      // Tokenless capture requests to a known realm origin (a public
       // realm the page holds no session for) still get 503 absorption. The
       // request is rebuilt as cors so the status is readable cross-origin.
-      if (isScreenshotRoute(request) && realmHosts.has(requestOrigin)) {
-        return fetchScreenshotAbsorbing503s(() =>
+      if (isCaptureRoute(request) && realmHosts.has(requestOrigin)) {
+        return fetchCaptureAbsorbing503s(() =>
           buildRealmRequest(request, lookupToken(url)),
         );
       }

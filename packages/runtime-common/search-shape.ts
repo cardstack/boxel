@@ -2,7 +2,7 @@
 //
 // One JSON-object log line per `_federated-search` request on the
 // `boxel:search-shape` channel — the same emit convention as
-// `boxel:client-perf` and `boxel:screenshot-perf`: the whole line is one JSON
+// `boxel:client-perf` and `boxel:capture-perf`: the whole line is one JSON
 // object carrying an explicit `channel` field so Loki's `| json` parse reads
 // it, and every member is a flat top-level scalar so LogQL can filter and
 // aggregate on it directly (nested objects and arrays flatten into
@@ -216,7 +216,7 @@ export interface SearchShapeObservation {
 
 export type SearchShapeEvent = SearchShapeDescriptor & SearchShapeObservation;
 
-// Test seam, mirroring `emitSearchTiming` / `emitScreenshotPerf`: when set,
+// Test seam, mirroring `emitSearchTiming` / `emitCapturePerf`: when set,
 // events go to the sink instead of the logger so a test can assert on records
 // without scraping stdout.
 let searchShapeSink: ((event: SearchShapeEvent) => void) | undefined;

@@ -6,28 +6,28 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { PgAdapter } from '@cardstack/postgres';
 import type {
-  CaptureSpec,
+  CaptureIdentity,
   DefinitionLookup,
   IndexWriter,
   Prerenderer,
   QueuePublisher,
   QueueRunner,
   Realm,
-  ScreenshotCapturePerfEvent,
-  ScreenshotPerfEvent,
-  ScreenshotPrerenderResponse,
-  ScreenshotRequestPerfEvent,
+  CaptureRunPerfEvent,
+  CapturePerfEvent,
+  CapturePrerenderResponse,
+  CaptureRequestPerfEvent,
   VirtualNetwork as VirtualNetworkType,
 } from '@cardstack/runtime-common';
 import {
   Deferred,
   MEDIA_CACHE_MAX_AGE_SECONDS,
-  SCREENSHOT_PDF_MAX_BYTES,
-  SCREENSHOT_PDF_MAX_PAGES,
+  CAPTURE_PDF_MAX_BYTES,
+  CAPTURE_PDF_MAX_PAGES,
   VirtualNetwork,
   asExpressions,
-  canonicalCaptureSpecQuery,
-  canonicalCaptureSpecString,
+  canonicalCaptureIdentityQuery,
+  canonicalCaptureIdentityString,
   captureSpecHash,
   checkPdfCaptureBounds,
   countPdfPages,
@@ -36,11 +36,11 @@ import {
   insert,
   logger,
   parseCaptureSpecParams,
-  parseScreenshotCaptureSpec,
+  parseCaptureRequestSpec,
   putMedia,
   query,
-  screenshotCard,
-  setScreenshotPerfSink,
+  captureCard,
+  setCapturePerfSink,
 } from '@cardstack/runtime-common';
 
 import Koa from 'koa';
@@ -48,8 +48,8 @@ import Router from '@koa/router';
 import supertest from 'supertest';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
-import { enqueueScreenshotCardJob } from '@cardstack/runtime-common/jobs/screenshot-card';
-import handleScreenshotCard from '../handlers/handle-screenshot-card.ts';
+import { enqueueCaptureCardJob } from '@cardstack/runtime-common/jobs/capture-card';
+import handleCaptureCard from '../handlers/handle-capture-card.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 import { jwtMiddleware } from '../middleware/index.ts';
 import { createJWT } from '../utils/jwt.ts';
@@ -84,7 +84,7 @@ module(basename(import.meta.filename), function () {
       assert.true('spec' in bare, 'the bare URL parses');
       assert.true('spec' in explicit, 'the explicit-default URL parses');
       if ('spec' in bare && 'spec' in explicit) {
-        assert.strictEqual(canonicalCaptureSpecString(bare.spec), '{}');
+        assert.strictEqual(canonicalCaptureIdentityString(bare.spec), '{}');
         assert.strictEqual(
           await captureSpecHash(bare.spec),
           await captureSpecHash(explicit.spec),
@@ -98,7 +98,7 @@ module(basename(import.meta.filename), function () {
       assert.true('spec' in embedded, 'format=embedded parses');
       if ('spec' in embedded) {
         assert.strictEqual(
-          canonicalCaptureSpecString(embedded.spec),
+          canonicalCaptureIdentityString(embedded.spec),
           '{"format":"embedded"}',
         );
         assert.notStrictEqual(
@@ -116,7 +116,7 @@ module(basename(import.meta.filename), function () {
       assert.true('spec' in explicitDefaults, 'explicit defaults parse');
       if ('spec' in explicitDefaults) {
         assert.strictEqual(
-          canonicalCaptureSpecString(explicitDefaults.spec),
+          canonicalCaptureIdentityString(explicitDefaults.spec),
           '{}',
         );
       }
@@ -137,7 +137,7 @@ module(basename(import.meta.filename), function () {
       let viaGet = parseCaptureSpecParams(
         params('viewport=1280x800&dsf=2&format=embedded'),
       );
-      let viaPost = parseScreenshotCaptureSpec(
+      let viaPost = parseCaptureRequestSpec(
         {
           viewport: { width: 1280, height: 800 },
           deviceScaleFactor: 2,
@@ -159,7 +159,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('the canonical served query round-trips through the parser', async function (assert) {
-      let specs: Parameters<typeof canonicalCaptureSpecQuery>[0][] = [
+      let specs: Parameters<typeof canonicalCaptureIdentityQuery>[0][] = [
         { format: 'isolated' },
         { format: 'embedded', viewport: { width: 1280, height: 800 } },
         { format: 'isolated', deviceScaleFactor: 1.5, fullPage: true },
@@ -187,7 +187,7 @@ module(basename(import.meta.filename), function () {
         { format: 'isolated', type: 'pdf' },
       ];
       for (let spec of specs) {
-        let queryString = canonicalCaptureSpecQuery(spec);
+        let queryString = canonicalCaptureIdentityQuery(spec);
         let reparsed = parseCaptureSpecParams(
           new URL(`http://x/${queryString}`).searchParams,
         );
@@ -197,8 +197,8 @@ module(basename(import.meta.filename), function () {
         );
         if ('spec' in reparsed) {
           assert.strictEqual(
-            canonicalCaptureSpecString(reparsed.spec),
-            canonicalCaptureSpecString(spec),
+            canonicalCaptureIdentityString(reparsed.spec),
+            canonicalCaptureIdentityString(spec),
             `"${queryString}" round-trips to the same canonical form`,
           );
         }
@@ -210,7 +210,7 @@ module(basename(import.meta.filename), function () {
       // and the 400 messages teach — `URLSearchParams` would percent-encode
       // the clip commas into `clip=0%2C0%2C400x300`.
       assert.strictEqual(
-        canonicalCaptureSpecQuery({
+        canonicalCaptureIdentityQuery({
           format: 'embedded',
           viewport: { width: 1280, height: 800 },
           deviceScaleFactor: 2,
@@ -219,7 +219,7 @@ module(basename(import.meta.filename), function () {
         '?format=embedded&viewport=1280x800&dsf=2&clip=0,10,400x300',
       );
       assert.strictEqual(
-        canonicalCaptureSpecQuery({ format: 'isolated', fullPage: true }),
+        canonicalCaptureIdentityQuery({ format: 'isolated', fullPage: true }),
         '?fullPage=true',
       );
     });
@@ -322,7 +322,7 @@ module(basename(import.meta.filename), function () {
       let explicit = parseCaptureSpecParams(params('type=png&media=screen'));
       assert.true('spec' in explicit, 'the explicit-default spelling parses');
       if ('spec' in explicit) {
-        assert.strictEqual(canonicalCaptureSpecString(explicit.spec), '{}');
+        assert.strictEqual(canonicalCaptureIdentityString(explicit.spec), '{}');
         assert.strictEqual(
           await captureSpecHash(explicit.spec),
           await captureSpecHash({ format: 'isolated' }),
@@ -358,7 +358,7 @@ module(basename(import.meta.filename), function () {
       }
 
       // The POST body runs the same engine gate with the same wording.
-      let viaPost = parseScreenshotCaptureSpec({ type: 'jpeg' }, 'isolated');
+      let viaPost = parseCaptureRequestSpec({ type: 'jpeg' }, 'isolated');
       assert.strictEqual(
         viaPost.error,
         'captureSpec.type "jpeg" is not supported by this capture engine',
@@ -373,16 +373,16 @@ module(basename(import.meta.filename), function () {
       assert.true('spec' in viaGet, 'media=print parses on the GET surface');
       if ('spec' in viaGet) {
         assert.strictEqual(
-          canonicalCaptureSpecString(viaGet.spec),
+          canonicalCaptureIdentityString(viaGet.spec),
           '{"media":"print"}',
         );
         assert.strictEqual(
-          canonicalCaptureSpecQuery(viaGet.spec),
+          canonicalCaptureIdentityQuery(viaGet.spec),
           '?media=print',
         );
       }
 
-      let viaPost = parseScreenshotCaptureSpec({ media: 'print' }, 'isolated');
+      let viaPost = parseCaptureRequestSpec({ media: 'print' }, 'isolated');
       assert.deepEqual(
         viaPost.captureSpec,
         { media: 'print' },
@@ -394,7 +394,7 @@ module(basename(import.meta.filename), function () {
       // Media emulation is page-level and a batch settles once, so every entry
       // renders under one media — a mixed-media batch is refused, not silently
       // rendered with the later entries under the wrong media.
-      let mixed = parseScreenshotCaptureSpec(
+      let mixed = parseCaptureRequestSpec(
         {
           media: 'print',
           captures: [{ name: 'a' }, { name: 'b', media: 'screen' }],
@@ -407,7 +407,7 @@ module(basename(import.meta.filename), function () {
       );
 
       // A uniform batch (the batch-wide default alone) is fine.
-      let uniform = parseScreenshotCaptureSpec(
+      let uniform = parseCaptureRequestSpec(
         { media: 'print', captures: [{ name: 'a' }, { name: 'b' }] },
         'isolated',
       );
@@ -419,7 +419,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('pdf output parses on the POST surface, singular-only', function (assert) {
-      let singular = parseScreenshotCaptureSpec({ type: 'pdf' }, 'isolated');
+      let singular = parseCaptureRequestSpec({ type: 'pdf' }, 'isolated');
       assert.strictEqual(singular.error, undefined, 'a singular pdf parses');
       assert.deepEqual(
         singular.captureSpec,
@@ -454,7 +454,7 @@ module(basename(import.meta.filename), function () {
         ],
       ] as const) {
         assert.strictEqual(
-          parseScreenshotCaptureSpec(raw, 'isolated').error,
+          parseCaptureRequestSpec(raw, 'isolated').error,
           message,
         );
       }
@@ -462,7 +462,7 @@ module(basename(import.meta.filename), function () {
       // A viewport spelling the engine default elides to the same canonical
       // form as omitting it, so it stays admitted — equivalent spellings must
       // behave identically.
-      let defaultViewport = parseScreenshotCaptureSpec(
+      let defaultViewport = parseCaptureRequestSpec(
         { type: 'pdf', viewport: { width: 800, height: 600 } },
         'isolated',
       );
@@ -512,7 +512,7 @@ module(basename(import.meta.filename), function () {
 
       let atPageCap = checkPdfCaptureBounds(
         'doc',
-        pagesPdf(SCREENSHOT_PDF_MAX_PAGES),
+        pagesPdf(CAPTURE_PDF_MAX_PAGES),
       );
       assert.strictEqual(
         atPageCap.error,
@@ -522,27 +522,27 @@ module(basename(import.meta.filename), function () {
 
       let overPages = checkPdfCaptureBounds(
         'doc',
-        pagesPdf(SCREENSHOT_PDF_MAX_PAGES + 1),
+        pagesPdf(CAPTURE_PDF_MAX_PAGES + 1),
       );
       assert.strictEqual(
         overPages.error,
-        `pdf capture "doc" produced ${SCREENSHOT_PDF_MAX_PAGES + 1} pages, over the ${SCREENSHOT_PDF_MAX_PAGES}-page cap`,
+        `pdf capture "doc" produced ${CAPTURE_PDF_MAX_PAGES + 1} pages, over the ${CAPTURE_PDF_MAX_PAGES}-page cap`,
         'over the page cap is an error naming the cap',
       );
 
       let overBytes = checkPdfCaptureBounds(
         'doc',
-        new Uint8Array(SCREENSHOT_PDF_MAX_BYTES + 1),
+        new Uint8Array(CAPTURE_PDF_MAX_BYTES + 1),
       );
       assert.strictEqual(
         overBytes.error,
-        `pdf capture "doc" produced ${SCREENSHOT_PDF_MAX_BYTES + 1} bytes, over the ${SCREENSHOT_PDF_MAX_BYTES}-byte cap`,
+        `pdf capture "doc" produced ${CAPTURE_PDF_MAX_BYTES + 1} bytes, over the ${CAPTURE_PDF_MAX_BYTES}-byte cap`,
         'over the byte cap is an error naming the cap',
       );
 
       let atByteCap = checkPdfCaptureBounds(
         'doc',
-        new Uint8Array(SCREENSHOT_PDF_MAX_BYTES),
+        new Uint8Array(CAPTURE_PDF_MAX_BYTES),
       );
       assert.strictEqual(
         atByteCap.error,
@@ -573,16 +573,16 @@ module(basename(import.meta.filename), function () {
       // itself — each non-default axis value keys its own capture —
       // independently of which parse surfaces admit a value, so gating or
       // unlocking a value at a surface never re-keys existing captures.
-      let png: CaptureSpec = { format: 'isolated' };
-      let pdf: CaptureSpec = { format: 'isolated', type: 'pdf' };
-      let print: CaptureSpec = { format: 'isolated', media: 'print' };
-      assert.strictEqual(canonicalCaptureSpecString(pdf), '{"type":"pdf"}');
+      let png: CaptureIdentity = { format: 'isolated' };
+      let pdf: CaptureIdentity = { format: 'isolated', type: 'pdf' };
+      let print: CaptureIdentity = { format: 'isolated', media: 'print' };
+      assert.strictEqual(canonicalCaptureIdentityString(pdf), '{"type":"pdf"}');
       assert.strictEqual(
-        canonicalCaptureSpecString(print),
+        canonicalCaptureIdentityString(print),
         '{"media":"print"}',
       );
-      assert.strictEqual(canonicalCaptureSpecQuery(pdf), '?type=pdf');
-      assert.strictEqual(canonicalCaptureSpecQuery(print), '?media=print');
+      assert.strictEqual(canonicalCaptureIdentityQuery(pdf), '?type=pdf');
+      assert.strictEqual(canonicalCaptureIdentityQuery(print), '?media=print');
       let hashes = await Promise.all([
         captureSpecHash(png),
         captureSpecHash(pdf),
@@ -596,7 +596,7 @@ module(basename(import.meta.filename), function () {
     });
   });
 
-  module('GET _screenshot capture flow', function (hooks) {
+  module('GET _capture flow', function (hooks) {
     let dbAdapter: PgAdapter;
     let publisher: QueuePublisher;
     let runner: QueueRunner;
@@ -615,14 +615,14 @@ module(basename(import.meta.filename), function () {
     let captureFailure: Error | undefined;
     // Telemetry captured through the perf sink instead of the log channel,
     // so tests assert on records, not stdout.
-    let perfEvents: ScreenshotPerfEvent[];
+    let perfEvents: CapturePerfEvent[];
 
     hooks.beforeEach(function () {
       perfEvents = [];
-      setScreenshotPerfSink((event) => perfEvents.push(event));
+      setCapturePerfSink((event) => perfEvents.push(event));
     });
     hooks.afterEach(function () {
-      setScreenshotPerfSink(undefined);
+      setCapturePerfSink(undefined);
     });
 
     setupDB(hooks, {
@@ -656,23 +656,23 @@ module(basename(import.meta.filename), function () {
           publisher,
           dbAdapter,
           mediaCacheAdapter: adapter,
-          screenshotSyncWaitMs: SYNC_WAIT_MS,
+          captureSyncWaitMs: SYNC_WAIT_MS,
         }));
       },
     });
 
-    // Registers the real screenshot-card task on the test runner, with a
+    // Registers the real capture-card task on the test runner, with a
     // stub prerenderer standing in for the Chrome pool. Only tests that
     // want a capture to complete start the worker; the rest leave enqueued
     // jobs unclaimed on purpose. `prerenderResult` swaps in a non-ready
     // outcome so a test can exercise the render-failure path.
     async function startWorker(
-      prerenderResult?: () => ScreenshotPrerenderResponse,
+      prerenderResult?: () => CapturePrerenderResponse,
     ) {
       let prerenderer = {
-        prerenderScreenshot: async (args: {
+        prerenderCapture: async (args: {
           captureSpec?: unknown;
-        }): Promise<ScreenshotPrerenderResponse> => {
+        }): Promise<CapturePrerenderResponse> => {
           captureCalls++;
           capturedSpecs.push(args.captureSpec ?? null);
           if (captureGate) {
@@ -720,18 +720,18 @@ module(basename(import.meta.filename), function () {
                 waits: { semaphoreMs: 1 },
                 renderElapsedMs: 20,
                 tabReused: true,
-                screenshotNavMs: 4,
-                screenshotSettleMs: 6,
-                screenshotImagePaintMs: 7,
-                screenshotCaptureMs: 3,
+                captureNavMs: 4,
+                captureSettleMs: 6,
+                captureImagePaintMs: 7,
+                cdpCaptureMs: 3,
               },
             },
           };
         },
       } as unknown as Prerenderer;
       await runner.register(
-        'screenshot-card',
-        screenshotCard({
+        'capture-card',
+        captureCard({
           dbAdapter,
           queuePublisher: publisher,
           prerenderer,
@@ -743,7 +743,7 @@ module(basename(import.meta.filename), function () {
           definitionLookup: null as unknown as DefinitionLookup,
           virtualNetwork,
           getReader: () => {
-            throw new Error('getReader is not used by screenshot-card');
+            throw new Error('getReader is not used by capture-card');
           },
           getAuthedFetch: async () => globalThis.fetch,
           createPrerenderAuth: () => 'test-auth',
@@ -774,11 +774,11 @@ module(basename(import.meta.filename), function () {
     }
 
     // Seeds the `prerendered_html` manifest row the `?name=` route and the
-    // card+json `meta.screenshots` join read — the artifact the prerender
+    // card+json `meta.captures` join read — the artifact the prerender
     // pass persists via `updatePrerenderedHtmlEntry`.
     async function seedManifestRow(
       localPath: string,
-      screenshots: Record<string, unknown>,
+      captures: Record<string, unknown>,
       generation = 1,
     ) {
       let { nameExpressions, valueExpressions } = asExpressions(
@@ -788,9 +788,9 @@ module(basename(import.meta.filename), function () {
           realm_url: REALM_URL,
           type: 'instance',
           generation,
-          screenshots,
+          captures,
         },
-        { jsonFields: ['screenshots'] },
+        { jsonFields: ['captures'] },
       );
       await query(
         dbAdapter,
@@ -798,7 +798,7 @@ module(basename(import.meta.filename), function () {
       );
     }
 
-    async function seedRealmConfigRow(allowArbitraryScreenshots: boolean) {
+    async function seedRealmConfigRow(allowArbitraryCaptures: boolean) {
       let { nameExpressions, valueExpressions } = asExpressions(
         {
           url: `${REALM_URL}realm.json`,
@@ -809,7 +809,7 @@ module(basename(import.meta.filename), function () {
           last_modified: Date.now(),
           resource_created_at: Date.now(),
           is_deleted: false,
-          pristine_doc: { attributes: { allowArbitraryScreenshots } },
+          pristine_doc: { attributes: { allowArbitraryCaptures } },
         },
         { jsonFields: ['pristine_doc'] },
       );
@@ -830,18 +830,18 @@ module(basename(import.meta.filename), function () {
       return response!;
     }
 
-    // The realm-server's POST /_screenshot-card surface wired to this
+    // The realm-server's POST /_capture-card surface wired to this
     // suite's real queue and MediaCache store, so cross-surface tests can
     // prove one capture satisfies both the POST response and its GET
-    // `_screenshot/` URL. The matrix stub is never consulted: the realm's
+    // `_capture/` URL. The matrix stub is never consulted: the realm's
     // permissions have no `users` grant.
-    function postScreenshotCard(attributes: Record<string, unknown>) {
+    function postCaptureCard(attributes: Record<string, unknown>) {
       let app = new Koa();
       let router = new Router();
       router.post(
-        '/_screenshot-card',
+        '/_capture-card',
         jwtMiddleware(realmSecretSeed, dbAdapter),
-        handleScreenshotCard({
+        handleCaptureCard({
           dbAdapter,
           queue: publisher,
           matrixClient: {
@@ -850,7 +850,7 @@ module(basename(import.meta.filename), function () {
             },
           } as unknown as MatrixClient,
           mediaCacheAdapter: adapter,
-          screenshotSyncWaitMs: SYNC_WAIT_MS,
+          captureSyncWaitMs: SYNC_WAIT_MS,
         } as unknown as CreateRoutesArgs),
       );
       app.use(router.routes());
@@ -859,9 +859,9 @@ module(basename(import.meta.filename), function () {
         realmSecretSeed,
       );
       return supertest(app.callback())
-        .post('/_screenshot-card')
+        .post('/_capture-card')
         .set('Authorization', `Bearer ${token}`)
-        .send({ data: { type: 'screenshot-card', attributes } });
+        .send({ data: { type: 'capture-card', attributes } });
     }
 
     test('an already-captured spec serves on a gated realm with zero capture work', async function (assert) {
@@ -876,7 +876,7 @@ module(basename(import.meta.filename), function () {
         lane: 'on-demand',
       });
 
-      let response = await get('_screenshot/card-1');
+      let response = await get('_capture/card-1');
 
       assert.strictEqual(response.status, 200);
       assert.strictEqual(response.headers.get('content-type'), 'image/png');
@@ -890,11 +890,11 @@ module(basename(import.meta.filename), function () {
     test('a gated miss is a 403 naming the flag', async function (assert) {
       await seedInstanceRow('card-1');
 
-      let response = await get('_screenshot/card-1');
+      let response = await get('_capture/card-1');
 
       assert.strictEqual(response.status, 403);
       assert.true(
-        (await response.text()).includes('allowArbitraryScreenshots'),
+        (await response.text()).includes('allowArbitraryCaptures'),
         'the refusal names the config flag',
       );
       assert.strictEqual(captureCalls, 0);
@@ -904,17 +904,17 @@ module(basename(import.meta.filename), function () {
       await seedInstanceRow('card-1');
       await seedRealmConfigRow(false);
 
-      assert.strictEqual((await get('_screenshot/card-1')).status, 403);
+      assert.strictEqual((await get('_capture/card-1')).status, 403);
 
       // The flag is read from the indexed config on every request, so an
       // index update is all it takes.
       await query(dbAdapter, [
-        `UPDATE boxel_index SET pristine_doc = '{"attributes":{"allowArbitraryScreenshots":true}}'::jsonb
+        `UPDATE boxel_index SET pristine_doc = '{"attributes":{"allowArbitraryCaptures":true}}'::jsonb
          WHERE url = '${REALM_URL}realm.json'`,
       ]);
       await startWorker();
 
-      let response = await get('_screenshot/card-1');
+      let response = await get('_capture/card-1');
       assert.strictEqual(response.status, 200);
       assert.strictEqual(captureCalls, 1);
     });
@@ -924,7 +924,7 @@ module(basename(import.meta.filename), function () {
       await seedRealmConfigRow(true);
       await startWorker();
 
-      let response = await get('_screenshot/card-1?format=embedded');
+      let response = await get('_capture/card-1?format=embedded');
       assert.strictEqual(response.status, 200);
       assert.strictEqual(response.headers.get('content-type'), 'image/png');
       assert.deepEqual(
@@ -941,7 +941,7 @@ module(basename(import.meta.filename), function () {
       });
       assert.strictEqual(entry?.lane, 'on-demand');
 
-      let second = await get('_screenshot/card-1?format=embedded');
+      let second = await get('_capture/card-1?format=embedded');
       assert.strictEqual(second.status, 200);
       assert.strictEqual(captureCalls, 1, 'the second request is a pure hit');
     });
@@ -954,7 +954,7 @@ module(basename(import.meta.filename), function () {
         error: 'capture failed in the engine',
       }));
 
-      let response = await get('_screenshot/card-1');
+      let response = await get('_capture/card-1');
       assert.strictEqual(response.status, 500);
       // A failure persists nothing, so no ledger entry short-circuits the
       // repeat; the explicit freshness window is the only thing bounding a
@@ -974,7 +974,7 @@ module(basename(import.meta.filename), function () {
       await seedRealmConfigRow(true);
       await startWorker();
 
-      await get('_screenshot/card-1');
+      await get('_capture/card-1');
       assert.strictEqual(captureCalls, 1);
 
       // An edit bumps the instance's index generation, which is part of the
@@ -983,7 +983,7 @@ module(basename(import.meta.filename), function () {
         `UPDATE boxel_index SET generation = 2 WHERE url = '${REALM_URL}card-1.json'`,
       ]);
 
-      let response = await get('_screenshot/card-1');
+      let response = await get('_capture/card-1');
       assert.strictEqual(response.status, 200);
       assert.strictEqual(captureCalls, 2, 'the edited card re-captured');
     });
@@ -994,7 +994,7 @@ module(basename(import.meta.filename), function () {
       captureGate = new Deferred<void>();
       await startWorker();
 
-      let response = await get('_screenshot/card-1');
+      let response = await get('_capture/card-1');
       assert.strictEqual(response.status, 503);
       assert.ok(
         Number(response.headers.get('retry-after')) >= 1,
@@ -1023,7 +1023,7 @@ module(basename(import.meta.filename), function () {
         'the timed-out capture persisted anyway',
       );
       let capturesSoFar = captureCalls;
-      let retry = await get('_screenshot/card-1');
+      let retry = await get('_capture/card-1');
       assert.strictEqual(retry.status, 200);
       assert.strictEqual(
         captureCalls,
@@ -1037,7 +1037,7 @@ module(basename(import.meta.filename), function () {
       await seedRealmConfigRow(true);
       await startWorker();
 
-      let response = await get('_screenshot/card-1?viewport=1280x800&dsf=2');
+      let response = await get('_capture/card-1?viewport=1280x800&dsf=2');
       assert.strictEqual(response.status, 200);
       assert.strictEqual(captureCalls, 1);
       assert.deepEqual(
@@ -1073,12 +1073,12 @@ module(basename(import.meta.filename), function () {
       );
 
       // Another spelling of the same geometry is the same cache key.
-      let second = await get('_screenshot/card-1?dsf=2.0&viewport=1280x800');
+      let second = await get('_capture/card-1?dsf=2.0&viewport=1280x800');
       assert.strictEqual(second.status, 200);
       assert.strictEqual(captureCalls, 1, 'the second request is a pure hit');
 
       // A different geometry is its own capture identity.
-      let different = await get('_screenshot/card-1?viewport=640x480');
+      let different = await get('_capture/card-1?viewport=640x480');
       assert.strictEqual(different.status, 200);
       assert.strictEqual(captureCalls, 2, 'a new spec renders fresh');
     });
@@ -1093,7 +1093,7 @@ module(basename(import.meta.filename), function () {
       await seedInstanceRow('card-1');
       await startWorker();
 
-      let job = await enqueueScreenshotCardJob(
+      let job = await enqueueCaptureCardJob(
         {
           realmURL: REALM_URL,
           realmUsername: OWNER,
@@ -1141,7 +1141,7 @@ module(basename(import.meta.filename), function () {
         format: 'isolated',
         type: 'pdf',
       });
-      let job = await enqueueScreenshotCardJob(
+      let job = await enqueueCaptureCardJob(
         {
           realmURL: REALM_URL,
           realmUsername: OWNER,
@@ -1188,7 +1188,7 @@ module(basename(import.meta.filename), function () {
       await seedRealmConfigRow(true);
       await startWorker();
 
-      let response = await get('_screenshot/card-1?type=pdf');
+      let response = await get('_capture/card-1?type=pdf');
       assert.strictEqual(response.status, 200);
       assert.strictEqual(
         response.headers.get('content-type'),
@@ -1224,7 +1224,7 @@ module(basename(import.meta.filename), function () {
       );
 
       // The repeat is a pure ledger hit: zero new Chrome work.
-      let hit = await get('_screenshot/card-1?type=pdf');
+      let hit = await get('_capture/card-1?type=pdf');
       assert.strictEqual(hit.status, 200);
       assert.strictEqual(captureCalls, 1, 'no re-render on the hit');
     });
@@ -1238,7 +1238,7 @@ module(basename(import.meta.filename), function () {
       await seedInstanceRow('card-1');
       await startWorker();
 
-      let job = await enqueueScreenshotCardJob(
+      let job = await enqueueCaptureCardJob(
         {
           realmURL: REALM_URL,
           realmUsername: OWNER,
@@ -1289,8 +1289,8 @@ module(basename(import.meta.filename), function () {
       // second request reaches the queue and can coalesce instead of
       // failing fast.
       let job = await insertJob(dbAdapter, {
-        job_type: 'screenshot-card',
-        concurrency_group: `screenshot:${REALM_URL}`,
+        job_type: 'capture-card',
+        concurrency_group: `capture:${REALM_URL}`,
         status: 'resolved',
         finished_at: new Date().toISOString(),
         result: {},
@@ -1302,14 +1302,14 @@ module(basename(import.meta.filename), function () {
       captureGate = new Deferred<void>();
       await startWorker();
 
-      let first = get('_screenshot/card-1?viewport=1280x800');
+      let first = get('_capture/card-1?viewport=1280x800');
       // Wait for the first capture to be claimed and parked on the gate so
       // the second request's publish sees it as an in-flight twin.
       let deadline = Date.now() + 5000;
       while (captureCalls === 0 && Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 25));
       }
-      let second = get('_screenshot/card-1?viewport=1280x800');
+      let second = get('_capture/card-1?viewport=1280x800');
       // Give the second request time to publish (and coalesce) before the
       // render completes.
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -1333,18 +1333,18 @@ module(basename(import.meta.filename), function () {
       // worker started it stays pending, and pending × the default capture
       // estimate dwarfs the budget.
       await insertJob(dbAdapter, {
-        job_type: 'screenshot-card',
-        concurrency_group: `screenshot:${REALM_URL}`,
+        job_type: 'capture-card',
+        concurrency_group: `capture:${REALM_URL}`,
       });
 
-      let response = await get('_screenshot/card-1');
+      let response = await get('_capture/card-1');
 
       assert.strictEqual(response.status, 503);
       assert.ok(Number(response.headers.get('retry-after')) >= 1);
       assert.strictEqual(captureCalls, 0, 'nothing was enqueued or rendered');
     });
 
-    test('HEAD never reaches the screenshot route, even for a captured spec', async function (assert) {
+    test('HEAD never reaches the capture route, even for a captured spec', async function (assert) {
       // checkPermission exempts HEAD from auth realm-wide; the GET-only
       // dispatch is what keeps HEAD from becoming an unauthenticated
       // existence/size/content-hash oracle. Even a spec with a live capture
@@ -1360,7 +1360,7 @@ module(basename(import.meta.filename), function () {
         lane: 'on-demand',
       });
 
-      let response = await get('_screenshot/card-1', 'HEAD');
+      let response = await get('_capture/card-1', 'HEAD');
 
       assert.notStrictEqual(response.status, 200);
       assert.strictEqual(
@@ -1374,18 +1374,18 @@ module(basename(import.meta.filename), function () {
     test('parameter errors are 400s naming the field', async function (assert) {
       await seedInstanceRow('card-1');
 
-      let unknown = await get('_screenshot/card-1?sparkle=true');
+      let unknown = await get('_capture/card-1?sparkle=true');
       assert.strictEqual(unknown.status, 400);
       assert.true((await unknown.text()).includes('sparkle'));
 
-      let mixed = await get('_screenshot/card-1?name=hero&format=embedded');
+      let mixed = await get('_capture/card-1?name=hero&format=embedded');
       assert.strictEqual(mixed.status, 400);
       assert.true((await mixed.text()).includes('name cannot be combined'));
 
-      let malformed = await get('_screenshot/card-1?name=not%20a%20name');
+      let malformed = await get('_capture/card-1?name=not%20a%20name');
       assert.strictEqual(malformed.status, 400);
       assert.true(
-        (await malformed.text()).includes('not a valid screenshot name'),
+        (await malformed.text()).includes('not a valid capture name'),
       );
     });
 
@@ -1418,7 +1418,7 @@ module(basename(import.meta.filename), function () {
 
       // The realm's capture gate stays closed: names never trigger capture
       // work, so they serve regardless of it.
-      let response = await get('_screenshot/card-1?name=hero');
+      let response = await get('_capture/card-1?name=hero');
       assert.strictEqual(response.status, 200);
       assert.strictEqual(response.headers.get('content-type'), 'image/png');
       assert.strictEqual(
@@ -1432,12 +1432,12 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(captureCalls, 0);
       assert.strictEqual(perfEvents.length, 1, 'one record for the hit');
-      let event = perfEvents[0] as ScreenshotRequestPerfEvent;
+      let event = perfEvents[0] as CaptureRequestPerfEvent;
       assert.strictEqual(event.surface, 'get-named');
       assert.strictEqual(event.outcome, 'hit');
       assert.strictEqual(event.lane, 'declared');
 
-      let revalidated = await get('_screenshot/card-1?name=hero', 'GET', {
+      let revalidated = await get('_capture/card-1?name=hero', 'GET', {
         'if-none-match': `"${entry.objectKey}"`,
       });
       assert.strictEqual(
@@ -1488,12 +1488,12 @@ module(basename(import.meta.filename), function () {
         },
       });
 
-      let response = await get('_screenshot/card-1?name=hero');
+      let response = await get('_capture/card-1?name=hero');
       assert.strictEqual(response.status, 200);
       assert.strictEqual(
         response.headers.get('etag'),
         `"${older.objectKey}"`,
-        'the served ETag is exactly the hash meta.screenshots advertises',
+        'the served ETag is exactly the hash meta.captures advertises',
       );
       assert.deepEqual(
         [...(await nodeStreamToBuffer(response.nodeStream!))],
@@ -1507,7 +1507,7 @@ module(basename(import.meta.filename), function () {
 
       // Live instance, no manifest at all: not yet prerendered with capture
       // support.
-      let unrendered = await get('_screenshot/card-1?name=hero');
+      let unrendered = await get('_capture/card-1?name=hero');
       assert.strictEqual(unrendered.status, 404);
       assert.true(
         unrendered.headers
@@ -1528,12 +1528,12 @@ module(basename(import.meta.filename), function () {
           deviceScaleFactor: 2,
         },
       });
-      let unknownName = await get('_screenshot/card-1?name=hero');
+      let unknownName = await get('_capture/card-1?name=hero');
       assert.strictEqual(unknownName.status, 404);
 
       // A manifest entry whose ledger row is gone (reclaimed): still a miss,
       // never an error.
-      let reclaimed = await get('_screenshot/card-1?name=other');
+      let reclaimed = await get('_capture/card-1?name=other');
       assert.strictEqual(reclaimed.status, 404);
 
       assert.strictEqual(captureCalls, 0);
@@ -1570,11 +1570,11 @@ module(basename(import.meta.filename), function () {
         `UPDATE boxel_index SET is_deleted = TRUE WHERE url = '${REALM_URL}card-1.json'`,
       ]);
 
-      let response = await get('_screenshot/card-1?name=hero');
+      let response = await get('_capture/card-1?name=hero');
       assert.strictEqual(response.status, 404);
     });
 
-    test('card+json joins the manifest into meta.screenshots', async function (assert) {
+    test('card+json joins the manifest into meta.captures', async function (assert) {
       let { nameExpressions, valueExpressions } = asExpressions(
         {
           url: `${REALM_URL}card-2.json`,
@@ -1629,10 +1629,10 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(response.status, 200);
       let json = await response.json();
       assert.deepEqual(
-        json.data.meta.screenshots,
+        json.data.meta.captures,
         {
           hero: {
-            url: `${REALM_URL}_screenshot/card-2?name=hero`,
+            url: `${REALM_URL}_capture/card-2?name=hero`,
             hash: entry.objectKey,
             contentType: 'image/png',
             width: 800,
@@ -1641,7 +1641,7 @@ module(basename(import.meta.filename), function () {
             useAsThumbnail: true,
           },
         },
-        'the manifest joins into meta.screenshots in its public projection',
+        'the manifest joins into meta.captures in its public projection',
       );
 
       // An instance with no manifest gets no key at all — absence is the
@@ -1652,7 +1652,7 @@ module(basename(import.meta.filename), function () {
       });
       assert.strictEqual(bare.status, 200);
       let bareJson = await bare.json();
-      assert.strictEqual(bareJson.data.meta.screenshots, undefined);
+      assert.strictEqual(bareJson.data.meta.captures, undefined);
     });
 
     test('the card+json validator rotates when the manifest changes, without any index write', async function (assert) {
@@ -1693,10 +1693,10 @@ module(basename(import.meta.filename), function () {
       // A re-capture repoints the manifest — a prerendered_html write that
       // moves neither `indexed_at` nor the realm info. The old validator
       // must stop matching or a cached document 304s past its own
-      // screenshots forever.
+      // captures forever.
       await query(dbAdapter, [
         `UPDATE prerendered_html
-           SET screenshots = '{"hero":{"specHash":"declared-hero-spec","objectKey":"object-b","contentType":"image/png","width":800,"height":600,"deviceScaleFactor":2}}'::jsonb
+           SET captures = '{"hero":{"specHash":"declared-hero-spec","objectKey":"object-b","contentType":"image/png","width":800,"height":600,"deviceScaleFactor":2}}'::jsonb
          WHERE url = '${REALM_URL}card-1.json'`,
       ]);
       let recaptured = await get('card-1', 'GET', {
@@ -1710,7 +1710,7 @@ module(basename(import.meta.filename), function () {
       );
       let json = await recaptured.json();
       assert.strictEqual(
-        json.data.meta.screenshots.hero.hash,
+        json.data.meta.captures.hero.hash,
         'object-b',
         'the full response carries the fresh manifest',
       );
@@ -1725,7 +1725,7 @@ module(basename(import.meta.filename), function () {
       await seedRealmConfigRow(true);
       await startWorker();
 
-      let response = await get('_screenshot/nope');
+      let response = await get('_capture/nope');
 
       assert.strictEqual(response.status, 404);
       assert.strictEqual(captureCalls, 0);
@@ -1743,7 +1743,7 @@ module(basename(import.meta.filename), function () {
         deviceScaleFactor: 2,
       };
 
-      let response = await postScreenshotCard({
+      let response = await postCaptureCard({
         realmURL: REALM_URL,
         cardId: `${REALM_URL}card-1`,
         format: 'isolated',
@@ -1754,7 +1754,7 @@ module(basename(import.meta.filename), function () {
       let served = response.body.data.attributes.captures?.[0]?.url as string;
       assert.strictEqual(
         served,
-        `${REALM_URL}_screenshot/card-1?viewport=1280x800&dsf=2`,
+        `${REALM_URL}_capture/card-1?viewport=1280x800&dsf=2`,
         'the served URL spells the spec in the GET grammar',
       );
 
@@ -1783,7 +1783,7 @@ module(basename(import.meta.filename), function () {
         captureSpec,
       };
 
-      let response = await postScreenshotCard(attributes);
+      let response = await postCaptureCard(attributes);
       assert.strictEqual(response.status, 503);
       assert.ok(
         Number(response.headers['retry-after']) >= 1,
@@ -1816,7 +1816,7 @@ module(basename(import.meta.filename), function () {
       );
 
       let capturesSoFar = captureCalls;
-      let retry = await postScreenshotCard(attributes);
+      let retry = await postCaptureCard(attributes);
       assert.strictEqual(retry.status, 201);
       assert.strictEqual(
         captureCalls,
@@ -1825,20 +1825,20 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(
         retry.body.data.attributes.captures?.[0]?.url,
-        `${REALM_URL}_screenshot/card-1?viewport=1280x800`,
+        `${REALM_URL}_capture/card-1?viewport=1280x800`,
       );
     });
 
     module('capture-stage telemetry', function () {
-      function requestEvent(): ScreenshotRequestPerfEvent | undefined {
+      function requestEvent(): CaptureRequestPerfEvent | undefined {
         return perfEvents.find(
-          (event): event is ScreenshotRequestPerfEvent =>
+          (event): event is CaptureRequestPerfEvent =>
             event.eventType === 'request',
         );
       }
-      function captureEvent(): ScreenshotCapturePerfEvent | undefined {
+      function captureEvent(): CaptureRunPerfEvent | undefined {
         return perfEvents.find(
-          (event): event is ScreenshotCapturePerfEvent =>
+          (event): event is CaptureRunPerfEvent =>
             event.eventType === 'capture',
         );
       }
@@ -1848,7 +1848,7 @@ module(basename(import.meta.filename), function () {
         await seedRealmConfigRow(true);
         await startWorker();
 
-        let response = await get('_screenshot/card-1?format=embedded', 'GET', {
+        let response = await get('_capture/card-1?format=embedded', 'GET', {
           'x-boxel-logging-correlation-id': 'corr-dsl-1',
         });
         assert.strictEqual(response.status, 200);
@@ -1908,7 +1908,7 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(capture?.navMs, 4);
         assert.strictEqual(capture?.settleMs, 6);
         assert.strictEqual(capture?.imagePaintMs, 7);
-        assert.strictEqual(capture?.screenshotMs, 3);
+        assert.strictEqual(capture?.cdpCaptureMs, 3);
         assert.true(capture?.tabReused);
         assert.strictEqual(typeof capture?.permissionsMs, 'number');
         assert.strictEqual(typeof capture?.prerenderMs, 'number');
@@ -1944,7 +1944,7 @@ module(basename(import.meta.filename), function () {
           lane: 'on-demand',
         });
 
-        let response = await get('_screenshot/card-1');
+        let response = await get('_capture/card-1');
         assert.strictEqual(response.status, 200);
 
         assert.strictEqual(perfEvents.length, 1, 'one record for a hit');
@@ -1959,7 +1959,7 @@ module(basename(import.meta.filename), function () {
       test('a gated miss emits a gated record and stops at the gate', async function (assert) {
         await seedInstanceRow('card-1');
 
-        let response = await get('_screenshot/card-1');
+        let response = await get('_capture/card-1');
         assert.strictEqual(response.status, 403);
 
         let request = requestEvent();
@@ -1973,11 +1973,11 @@ module(basename(import.meta.filename), function () {
         await seedInstanceRow('card-1');
         await seedRealmConfigRow(true);
         await insertJob(dbAdapter, {
-          job_type: 'screenshot-card',
-          concurrency_group: `screenshot:${REALM_URL}`,
+          job_type: 'capture-card',
+          concurrency_group: `capture:${REALM_URL}`,
         });
 
-        let response = await get('_screenshot/card-1');
+        let response = await get('_capture/card-1');
 
         assert.strictEqual(response.status, 503);
         // The client half of this contract is the host's auth service
@@ -2013,7 +2013,7 @@ module(basename(import.meta.filename), function () {
         captureGate = new Deferred<void>();
         await startWorker();
 
-        let response = await get('_screenshot/card-1');
+        let response = await get('_capture/card-1');
         assert.strictEqual(response.status, 503);
 
         let request = requestEvent();
@@ -2045,7 +2045,7 @@ module(basename(import.meta.filename), function () {
         captureFailure = new Error('prerender exhausted its retries');
         await startWorker();
 
-        let response = await get('_screenshot/card-1');
+        let response = await get('_capture/card-1');
         assert.strictEqual(response.status, 500);
 
         let request = requestEvent();
@@ -2078,7 +2078,7 @@ module(basename(import.meta.filename), function () {
         await seedRealmConfigRow(true);
         await startWorker();
 
-        assert.strictEqual((await get('_screenshot/card-1')).status, 200);
+        assert.strictEqual((await get('_capture/card-1')).status, 200);
         // An edit bumps the generation — a new capture identity — but the
         // stub render produces the same bytes, so the store dedupes the
         // upload while the ledger gains a row.
@@ -2086,9 +2086,9 @@ module(basename(import.meta.filename), function () {
           `UPDATE boxel_index SET generation = 2 WHERE url = '${REALM_URL}card-1.json'`,
         ]);
         perfEvents = [];
-        setScreenshotPerfSink((event) => perfEvents.push(event));
+        setCapturePerfSink((event) => perfEvents.push(event));
 
-        assert.strictEqual((await get('_screenshot/card-1')).status, 200);
+        assert.strictEqual((await get('_capture/card-1')).status, 200);
         assert.strictEqual(captureCalls, 2, 'the edit forced a re-render');
         assert.strictEqual(captureEvent()?.persistOutcome, 'deduped');
       });

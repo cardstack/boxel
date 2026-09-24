@@ -1,13 +1,13 @@
-// The image family's declared-screenshot slots and their capture-only
+// The image family's declared-capture slots and their capture-only
 // components. Capture-only means: referenced only from the `static
-// screenshots` declaration and rendered only by the screenshot render route
+// captures` declaration and rendered only by the capture render route
 // during the prerender pass — never part of the format API or `@fields`.
 //
 // This module sits in card-api's universal dependency graph (ImageDef's
 // declaration reaches it), so it leans on the primitives already there
 // (`FileImage`, the shared letterbox rule, the view-model projection) and
 // nothing heavier. It must not import card-api at runtime — card-api imports
-// it — so the ScreenshotSpec type comes in type-only.
+// it — so the CaptureSpec type comes in type-only.
 import GlimmerComponent from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
@@ -15,11 +15,11 @@ import { FileImage } from './file-image';
 import { letterboxImage } from './file-presentation';
 import { ensureFileViewModel, type FileViewModel } from './file-view-model';
 
-import type { ScreenshotSpec } from '../card-api';
+import type { CaptureSpec } from '../card-api';
 
 interface CaptureSignature {
   Args: {
-    // The FileDef instance (the screenshot render route passes the same
+    // The FileDef instance (the capture render route passes the same
     // author surface a format render gets).
     model: any;
   };
@@ -117,12 +117,12 @@ export const IMAGE_RENDITION_SLOT_NAMES = [
 // margins need it) and the strongest encoder `page.screenshot` offers for
 // photographic content.
 
-// Every image family member's thumbnail, assigned to `ImageDef.screenshots`
+// Every image family member's thumbnail, assigned to `ImageDef.captures`
 // (vectors included — the fitted cell and the thumbnail fallback chain
 // consume `thumb` for SVG and raster alike). The box is the recommended
 // thumbnail box: the CardsGrid tile, 170×250 at the default
 // deviceScaleFactor of 2.
-export const IMAGE_THUMB_SCREENSHOTS: Record<string, ScreenshotSpec> = {
+export const IMAGE_THUMB_CAPTURES: Record<string, CaptureSpec> = {
   thumb: {
     render: ImageThumbCapture,
     width: 170,
@@ -133,17 +133,17 @@ export const IMAGE_THUMB_SCREENSHOTS: Record<string, ScreenshotSpec> = {
   },
 };
 
-// The srcset renditions, assigned to `RasterImageDef.screenshots` rather
+// The srcset renditions, assigned to `RasterImageDef.captures` rather
 // than `ImageDef`'s: srcset excludes vectors and the fitted cell uses
 // `thumb`, so an SVG's renditions would be pure prerender cost with no
 // consumer — and class placement is the only exclusion lever, since
-// `getScreenshots` merges every declaration level and has no
+// `getCaptures` merges every declaration level and has no
 // removal-by-subclass mechanism. Residual: `GifDef` is a raster, so GIFs
 // still pay for renditions the srcset gate never reads; that resolves if
 // renditions become consumable for stills, and the placement can be
 // revisited then. The renditions capture at deviceScaleFactor 1 so their
 // declared width IS their physical width — the `w` descriptor srcset needs.
-export const IMAGE_RENDITION_SCREENSHOTS: Record<string, ScreenshotSpec> = {
+export const IMAGE_RENDITION_CAPTURES: Record<string, CaptureSpec> = {
   'rendition-640': {
     render: ImageRenditionCapture,
     width: 640,

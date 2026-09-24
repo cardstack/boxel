@@ -315,7 +315,7 @@ export function isMarkdownFile(id: string): boolean {
 // and each one reads the reservation from here so a change to it reaches all
 // of them. Removals stay admitted everywhere, being the recovery path for
 // anything already stored under it.
-export const CAPTURE_SERVING_PREFIX = '_screenshot/';
+export const CAPTURE_SERVING_PREFIX = '_capture/';
 
 export function isCaptureServingPath(localPath: LocalPath): boolean {
   return localPath.startsWith(CAPTURE_SERVING_PREFIX);

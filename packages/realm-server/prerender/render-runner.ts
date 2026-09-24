@@ -1,6 +1,6 @@
 import {
-  type DeclaredScreenshotVisitArgs,
-  type DeclaredScreenshotVisitResult,
+  type DeclaredCaptureVisitArgs,
+  type DeclaredCaptureVisitResult,
   type FusedIndexMeta,
   type PrerenderMeta,
   type PrerenderTypes,
@@ -12,9 +12,9 @@ import {
   type FileRenderResponse,
   type RenderRouteOptions,
   type RunCommandResponse,
-  type ScreenshotCaptureSpec,
-  type ScreenshotFormat,
-  type ScreenshotPrerenderResponse,
+  type CaptureRequestSpec,
+  type OnDemandCaptureFormat,
+  type CapturePrerenderResponse,
   type AffinityType,
   type PrerenderQueue,
   type RenderVisitResponse,
@@ -35,8 +35,8 @@ import {
   captureResult,
   captureModule,
   captureFileExtract,
-  captureDeclaredScreenshots,
-  captureScreenshot,
+  captureDeclared,
+  runCapture,
   isRenderError,
   renderAncestors,
   renderHTML,
@@ -47,7 +47,7 @@ import {
   type CaptureOptions,
   type ModuleCapture,
   type FileExtractCapture,
-  type ScreenshotCapture,
+  type PrerenderCapture,
   cardRenderTimeout,
   withTimeout,
   transitionTo,
@@ -282,7 +282,7 @@ export class RenderRunner {
   ): RenderProfileContext {
     // `card`/`step` mirror what `label` concatenates but stay structured so
     // the artifact sink can key on them; `jobId` is threaded only by the
-    // visit path (on-demand screenshot/module/command renders carry none).
+    // visit path (on-demand capture/module/command renders carry none).
     return { affinityKey, label: `${url} ${step}`, card: url, step, jobId };
   }
 
@@ -518,7 +518,7 @@ export class RenderRunner {
     }
   }
 
-  async captureScreenshotAttempt({
+  async runCaptureAttempt({
     affinityType,
     affinityValue,
     realm,
@@ -535,20 +535,20 @@ export class RenderRunner {
     realm: string;
     url: string;
     auth: string;
-    format: ScreenshotFormat;
-    captureSpec?: ScreenshotCaptureSpec;
+    format: OnDemandCaptureFormat;
+    captureSpec?: CaptureRequestSpec;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     priority?: number;
     signal?: AbortSignal;
   }): Promise<{
-    response: ScreenshotPrerenderResponse;
+    response: CapturePrerenderResponse;
     timings: Timings;
     pool: PoolInfo;
   }> {
     this.#nonce++;
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
     log.info(
-      `screenshot prerendering url=${url} format=${format} nonce=${this.#nonce} affinity=${affinityKey} realm=${realm} priority=${priority ?? 0}`,
+      `capture prerendering url=${url} format=${format} nonce=${this.#nonce} affinity=${affinityKey} realm=${realm} priority=${priority ?? 0}`,
     );
 
     const { page, reused, launchMs, waits, pageId, release } =
@@ -618,29 +618,29 @@ export class RenderRunner {
             format,
             '0',
           );
-          return await captureScreenshot(page, format, 0, captureOptions);
+          return await runCapture(page, format, 0, captureOptions);
         },
         opts?.timeoutMs,
-        this.#profileContext(affinityKey, url, `screenshot ${format}`),
+        this.#profileContext(affinityKey, url, `capture ${format}`),
         signal,
       );
 
-      let response: ScreenshotPrerenderResponse;
+      let response: CapturePrerenderResponse;
       if (isRenderError(capture)) {
         let renderError = capture as RenderError;
         markTimeout(renderError);
         if (
-          await this.#maybeEvict(affinityKey, 'screenshot render', renderError)
+          await this.#maybeEvict(affinityKey, 'capture render', renderError)
         ) {
           poolInfo.evicted = true;
         }
         let isUnusable = poolInfo.evicted || renderError.evict === true;
         response = {
           status: isUnusable ? 'unusable' : 'error',
-          error: renderError.error.message ?? 'screenshot render failed',
+          error: renderError.error.message ?? 'capture render failed',
         };
       } else {
-        let shot = capture as ScreenshotCapture;
+        let shot = capture as PrerenderCapture;
         // Top-level base64/width/height mirror captures[0] for back-compat with
         // the shipped host tool + staging capture command, which read the
         // singular fields.
@@ -659,10 +659,10 @@ export class RenderRunner {
           // response envelope's `meta.timing`/`meta.pool`.
           meta: {
             diagnostics: {
-              screenshotNavMs: shot.stepTimings.navMs,
-              screenshotSettleMs: shot.stepTimings.settleMs,
-              screenshotImagePaintMs: shot.stepTimings.imagePaintMs,
-              screenshotCaptureMs: shot.stepTimings.screenshotMs,
+              captureNavMs: shot.stepTimings.navMs,
+              captureSettleMs: shot.stepTimings.settleMs,
+              captureImagePaintMs: shot.stepTimings.imagePaintMs,
+              cdpCaptureMs: shot.stepTimings.cdpCaptureMs,
             },
           },
         };
@@ -894,7 +894,7 @@ export class RenderRunner {
     cardTypes,
     priority,
     jobId,
-    screenshots,
+    captures,
     renderScope,
     cardSource,
     signal,
@@ -1669,32 +1669,27 @@ export class RenderRunner {
           }
         }
 
-        // Declared screenshots capture on the same warm tab, after the
+        // Declared captures capture on the same warm tab, after the
         // format renders (the hydrated card and its images are already
         // settled and cached). Only the prerender-html half captures — the
-        // caller opts in by sending `screenshots` when it has a MediaCache
+        // caller opts in by sending `captures` when it has a MediaCache
         // to persist into.
-        let cardScreenshots: DeclaredScreenshotVisitResult | undefined;
-        if (
-          !cardShortCircuit &&
-          runHtmlSteps &&
-          !runIndexSteps &&
-          screenshots
-        ) {
-          let { result, escalation } = await this.#declaredScreenshotsStep({
+        let cardCaptures: DeclaredCaptureVisitResult | undefined;
+        if (!cardShortCircuit && runHtmlSteps && !runIndexSteps && captures) {
+          let { result, escalation } = await this.#declaredCapturesStep({
             page,
             kind: 'instance',
             bucket: 'card',
-            screenshots,
+            captures,
             captureOptions,
             affinityKey,
             url,
             jobId,
             timeoutMs: opts?.timeoutMs,
             signal,
-            recordStepMs: (ms) => recordFormatMs('card', 'screenshots', ms),
+            recordStepMs: (ms) => recordFormatMs('card', 'captures', ms),
           });
-          cardScreenshots = result;
+          cardCaptures = result;
           if (escalation) {
             applyStepError(escalation.error, escalation.evicted);
           }
@@ -1702,9 +1697,9 @@ export class RenderRunner {
             // The settle-time deps snapshot read after the isolated render
             // predates the captures above — a capture-only component's loads
             // (linked cards, their images) land in the tracker only during
-            // its render.screenshot render. Re-snapshot now so those loads
+            // its render.capture render. Re-snapshot now so those loads
             // fan into the row's deps and edits to that data invalidate the
-            // screenshot. Best-effort like the initial read: a null refresh
+            // capture. Best-effort like the initial read: a null refresh
             // (stale host build, dead page) keeps the settle-time deps.
             let refreshedDeps = await abortable(signal, () =>
               this.#refreshCapturedDeps(page),
@@ -1736,7 +1731,7 @@ export class RenderRunner {
           ...(meta as PrerenderMeta),
           ...(capturedDeps ? { deps: capturedDeps } : {}),
           ...(cardError ? { error: cardError } : {}),
-          ...(cardScreenshots ? { screenshots: cardScreenshots } : {}),
+          ...(cardCaptures ? { captures: cardCaptures } : {}),
           iconHTML,
           isolatedHTML,
           headHTML,
@@ -1881,7 +1876,7 @@ export class RenderRunner {
             // with the visit's realm alongside — a file render has no
             // response header to learn its realm from (the card branch reads
             // x-boxel-realm-url off the card GET), and the route needs it to
-            // compose declaration-derived screenshot URLs.
+            // compose declaration-derived capture URLs.
             await abortable(signal, () =>
               page.evaluate(
                 (data) => {
@@ -2130,13 +2125,13 @@ export class RenderRunner {
             }
           }
 
-          // The file rendering's declared screenshots, mirroring the card
+          // The file rendering's declared captures, mirroring the card
           // pass's capture step above: same warm tab, after the file's format
           // renders, and only when the caller can persist the bytes. The
-          // render.screenshots roster and render.screenshot captures read the
+          // render.captures roster and render.capture captures read the
           // parent render model's instance, which the fileRender transitions
           // above have set to the hydrated FileDef — so the roster here is
-          // the file family's `static screenshots`, not the card's.
+          // the file family's `static captures`, not the card's.
           //
           // Unlike the card half, no `#refreshCapturedDeps` follows these
           // captures — deliberately: a file row's deps are the extract
@@ -2146,27 +2141,22 @@ export class RenderRunner {
           // file row's deps, so edits to that data won't invalidate the
           // capture. A family like that needs this gate to grow the card
           // half's re-snapshot before it can rely on recapture.
-          let fileScreenshots: DeclaredScreenshotVisitResult | undefined;
-          if (
-            !fileShortCircuit &&
-            runHtmlSteps &&
-            !runIndexSteps &&
-            screenshots
-          ) {
-            let { result, escalation } = await this.#declaredScreenshotsStep({
+          let fileCaptures: DeclaredCaptureVisitResult | undefined;
+          if (!fileShortCircuit && runHtmlSteps && !runIndexSteps && captures) {
+            let { result, escalation } = await this.#declaredCapturesStep({
               page,
               kind: 'file',
               bucket: 'file',
-              screenshots,
+              captures,
               captureOptions,
               affinityKey,
               url,
               jobId,
               timeoutMs: opts?.timeoutMs,
               signal,
-              recordStepMs: (ms) => recordFormatMs('file', 'screenshots', ms),
+              recordStepMs: (ms) => recordFormatMs('file', 'captures', ms),
             });
-            fileScreenshots = result;
+            fileCaptures = result;
             if (escalation) {
               applyStepError(escalation.error, escalation.evicted);
             }
@@ -2174,7 +2164,7 @@ export class RenderRunner {
 
           let fileResponse: FileRenderResponse = {
             ...(fileError ? { error: fileError } : {}),
-            ...(fileScreenshots ? { screenshots: fileScreenshots } : {}),
+            ...(fileCaptures ? { captures: fileCaptures } : {}),
             iconHTML,
             isolatedHTML,
             headHTML,
@@ -2307,7 +2297,7 @@ export class RenderRunner {
 
   // Post-settle re-snapshot via the render route's refresh hook: the card's
   // tracking session accumulates through child-route renders (capture-only
-  // screenshot components), so a late snapshot is a superset of the
+  // capture components), so a late snapshot is a superset of the
   // settle-time one. Best-effort like #readCapturedDeps; null when the hook
   // is absent (stale host build) or the page died mid-call.
   async #refreshCapturedDeps(page: Page): Promise<string[] | null> {
@@ -2353,18 +2343,18 @@ export class RenderRunner {
     return { ok: true, value: r as T };
   }
 
-  // One rendering's declared-screenshot capture step, shared by the card and
+  // One rendering's declared-capture step, shared by the card and
   // file passes: runs the capture against the pass's settled page and
   // normalizes a step failure into the all-slots-errored result — a failed
-  // capture is an absent screenshot, never an errored row (the broken-links
+  // capture is an absent capture, never an errored row (the broken-links
   // model). Only an eviction or an auth failure comes back as an escalation
   // for the caller to fold into its pass error, since the page is then
   // unusable for anyone.
-  async #declaredScreenshotsStep({
+  async #declaredCapturesStep({
     page,
     kind,
     bucket,
-    screenshots,
+    captures,
     captureOptions,
     affinityKey,
     url,
@@ -2376,7 +2366,7 @@ export class RenderRunner {
     page: Page;
     kind: 'instance' | 'file';
     bucket: 'card' | 'file';
-    screenshots: DeclaredScreenshotVisitArgs;
+    captures: DeclaredCaptureVisitArgs;
     captureOptions: CaptureOptions;
     affinityKey: string;
     url: string;
@@ -2385,16 +2375,15 @@ export class RenderRunner {
     signal?: AbortSignal;
     recordStepMs: (ms: number) => void;
   }): Promise<{
-    result: DeclaredScreenshotVisitResult;
+    result: DeclaredCaptureVisitResult;
     escalation?: { error: RenderError; evicted: boolean };
   }> {
-    let label = `visit ${bucket} declared screenshots`;
+    let label = `visit ${bucket} declared captures`;
     let stepStart = Date.now();
     let stepResult = await this.#step(affinityKey, label, () =>
       withTimeout(
         page,
-        () =>
-          captureDeclaredScreenshots(page, screenshots, kind, captureOptions),
+        () => captureDeclared(page, captures, kind, captureOptions),
         timeoutMs,
         this.#profileContext(affinityKey, url, label, jobId),
         signal,
@@ -2410,8 +2399,7 @@ export class RenderRunner {
             {
               name: '*',
               message:
-                stepResult.error.error?.message ??
-                'declared screenshot capture failed',
+                stepResult.error.error?.message ?? 'declared capture failed',
               // The step failed as a unit, so this is the whole step's
               // elapsed time, not one slot's share.
               captureMs: stepMs,
@@ -2428,7 +2416,7 @@ export class RenderRunner {
           : {}),
       };
     }
-    return { result: stepResult.value as DeclaredScreenshotVisitResult };
+    return { result: stepResult.value as DeclaredCaptureVisitResult };
   }
 
   #captureToError(capture: RenderCapture): RenderError | undefined {
