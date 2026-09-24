@@ -369,6 +369,13 @@ module('Integration | realm policy', function (hooks) {
       { source: '', snapshot: true },
       'an emptied predicate is still a predicate, and keeps its snapshot flag',
     );
+    assert
+      .dom('[data-test-policy-predicate-input]')
+      .hasAttribute(
+        'placeholder',
+        'Empty condition',
+        'an emptied predicate does not read as always allowed',
+      );
 
     await fillIn('[data-test-policy-predicate-input]', providerPredicate);
     assert.deepEqual(
@@ -386,5 +393,12 @@ module('Integration | realm policy', function (hooks) {
     assert
       .dom('[data-test-policy-predicate-remove]')
       .doesNotExist('an unconditional grant has no condition to remove');
+    assert
+      .dom('[data-test-policy-predicate-input]')
+      .hasAttribute(
+        'placeholder',
+        'Always allowed',
+        'an unconditional grant reads as always allowed',
+      );
   });
 });
