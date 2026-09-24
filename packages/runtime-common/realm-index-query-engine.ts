@@ -90,8 +90,7 @@ import {
   type SearchEntryQuery,
 } from './search-entry.ts';
 import type { FieldDefinition } from './definitions.ts';
-import { servedFileDefCodeRef, urlNamesFile } from './file-def-code-ref.ts';
-import type { FileDefBindings } from './file-def-bindings.ts';
+import { urlNamesFile } from './file-def-code-ref.ts';
 import {
   normalizeQueryDefinition,
   buildQuerySearchURL,
@@ -394,10 +393,6 @@ export class RealmIndexQueryEngine {
       cardUrls,
       scope,
     } = searchEntryQuery;
-    // Read once for the call: a file's class is resolved from these wherever
-    // it is resolved from the index, so this path and the realm's own served
-    // document cannot answer differently for the same file.
-    let fileDefBindings = await this.#realm.getFileDefBindings();
     let engineOpts: Options = {
       ...opts,
       ...(cardUrls && cardUrls.length > 0 ? { cardUrls } : {}),
@@ -527,7 +522,6 @@ export class RealmIndexQueryEngine {
           let item: FileMetaResource = fileResourceFromIndex(
             new URL(url),
             file,
-            fileDefBindings,
           );
           if (fieldset.item.kind === 'sparse') {
             item = buildSparseItemResource(item, fieldset.item.fields);
@@ -1247,10 +1241,6 @@ export class RealmIndexQueryEngine {
     // that as zero.
     total: number | undefined;
   }> {
-    // Read once for the call: a file's class is resolved from these wherever
-    // it is resolved from the index, so this path and the realm's own served
-    // document cannot answer differently for the same file.
-    let fileDefBindings = await this.#realm.getFileDefBindings();
     let fieldPath = fieldName.includes('.')
       ? fieldName.slice(0, fieldName.lastIndexOf('.'))
       : '';
@@ -1325,11 +1315,7 @@ export class RealmIndexQueryEngine {
               opts,
             );
             realmResults = files.map((fileEntry) =>
-              fileResourceFromIndex(
-                new URL(fileEntry.canonicalURL),
-                fileEntry,
-                fileDefBindings,
-              ),
+              fileResourceFromIndex(new URL(fileEntry.canonicalURL), fileEntry),
             );
             addToTotal(meta?.page?.total);
           } else {
@@ -1825,10 +1811,6 @@ export class RealmIndexQueryEngine {
     // Which query-backed fields each root type has, walked once per type for
     // the whole pass. Every root of one type asks the same question of the
     // same definitions, and the walk is what reads them.
-    // Read once for the call: a file's class is resolved from these wherever
-    // it is resolved from the index, so this path and the realm's own served
-    // document cannot answer differently for the same file.
-    let fileDefBindings = await this.#realm.getFileDefBindings();
     let queryFieldPlans: QueryFieldPlanCache = new Map();
     let vnForIdentity = this.#realm.virtualNetwork;
     let realmPath = new RealmPaths(realmURL, vnForIdentity);
@@ -2356,11 +2338,7 @@ export class RealmIndexQueryEngine {
           if (!linkResource && entry.expectsFileMeta) {
             let fileEntry = fileMap.get(entry.linkURL.href);
             if (fileEntry) {
-              linkResource = fileResourceFromIndex(
-                entry.linkURL,
-                fileEntry,
-                fileDefBindings,
-              );
+              linkResource = fileResourceFromIndex(entry.linkURL, fileEntry);
             }
           }
         } else {
@@ -2726,13 +2704,6 @@ function enumerateFileRenderings(file: IndexedFile): RowRendering[] {
 function fileResourceFromIndex(
   fileURL: URL,
   fileEntry: LinkTargetFile,
-  // The realm's file type bindings, so this resolves a file's class the same
-  // way `Realm#fileMetaDocumentFromIndex` does. Without it the two disagree in
-  // the window between a binding being written and the re-index that re-types
-  // the rows: a direct file-meta GET would answer the bound class while the
-  // resource built here — the one a `linksTo` FileDef target and a file-meta
-  // search item hydrate from — answered the class the row still carries.
-  bindings?: FileDefBindings,
 ): FileMetaResource {
   let name = fileURL.pathname.split('/').pop() ?? fileURL.pathname;
   let inferredContentType = inferContentType(name);
@@ -2743,17 +2714,14 @@ function fileResourceFromIndex(
       : undefined;
   let lastModified = fileEntry.lastModified ?? unixTime(Date.now());
   let createdAt = fileEntry.resourceCreatedAt ?? lastModified;
-  let adoptsFrom = servedFileDefCodeRef(fileURL, {
-    bindings,
-    rowAdoptsFrom: codeRefFromInternalKey(fileEntry.types?.[0]),
-    resourceAdoptsFrom: isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
+  let adoptsFrom =
+    codeRefFromInternalKey(fileEntry.types?.[0]) ??
+    (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
       ? fileEntry.resource?.meta?.adoptsFrom
-      : undefined,
-    fallback: {
-      module: `${baseRealmRRI}card-api` as RealmResourceIdentifier,
-      name: 'FileDef',
-    },
-  });
+      : {
+          module: `${baseRealmRRI}card-api`,
+          name: 'FileDef',
+        });
   let resourceAttributes = fileEntry.resource?.attributes ?? {};
   let baseAttributes = {
     name: resourceAttributes.name ?? searchDoc.name ?? name,

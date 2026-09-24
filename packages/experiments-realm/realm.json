@@ -6,13 +6,7 @@
         "name": "Experiments Workspace"
       },
       "backgroundURL": "https://boxel-images.boxel.ai/background-images/4k-light-streaks.jpg",
-      "iconURL": "https://boxel-images.boxel.ai/icons/cardstack-black.png",
-      "fileTypes": {
-        ".log": {
-          "module": "./clinical/audit-log",
-          "name": "AuditLog"
-        }
-      }
+      "iconURL": "https://boxel-images.boxel.ai/icons/cardstack-black.png"
     },
     "meta": {
       "adoptsFrom": {
