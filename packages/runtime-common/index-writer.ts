@@ -365,6 +365,38 @@ const INDEX_COMMIT_LOCK_NAMESPACE = 'index-commit:';
 // Where index passes stage their rows until their commit promotes them.
 const PENDING_TABLES = ['boxel_index_pending', 'prerendered_html_pending'];
 
+// The columns a staged tombstone sets, besides its key. A tombstone is staged
+// with only these, and the swap applies them to the production row in place,
+// so everything else on that row stays as production holds it.
+const INDEX_TOMBSTONE_COLUMNS = [
+  'file_alias',
+  'generation',
+  'is_deleted',
+  'has_error',
+  'error_doc',
+  'diagnostics',
+];
+const HTML_TOMBSTONE_COLUMNS = [
+  'file_alias',
+  'generation',
+  'is_deleted',
+  'error_doc',
+  'diagnostics',
+  'rendered_at',
+];
+
+// How long an ad-hoc staging (a batch outside a job) goes without a write
+// before a commit's janitor clears it. Nothing records whether the batch that
+// staged it is still running, so this has to outlast the longest ad-hoc batch
+// — an in-browser from-scratch index of a large realm, which runs minutes.
+const ADHOC_STAGING_ABANDONED_MS = 24 * 60 * 60 * 1000;
+
+// The `staging_id` of a job's attempt: the job and the reservation the attempt
+// runs under, so each attempt stages apart from every other.
+export function jobStagingId(jobId: number, reservationId: number): string {
+  return `job:${jobId}.${reservationId}`;
+}
+
 // How long a realm's `realm_index_commits` rows are kept. Each commit prunes
 // its own realm's older rows, so the ledger stays bounded by commit rate.
 const INDEX_COMMIT_LEDGER_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -422,12 +454,12 @@ export interface BatchDoneResult extends PendingCleanupResult {
 export interface PendingCleanupResult {
   // Wall of the whole cleanup: this batch's own rows, then the janitor.
   pendingCleanupMs: number;
-  // Rows of this realm the janitor removed because the job that staged them
-  // is no longer running, across both pending tables, and how many jobs they
-  // belonged to. Absent where no janitor runs (SQLite, which has no job
-  // queue) and when the cleanup failed.
+  // Rows of this realm the janitor removed because no pass can commit them
+  // any more (see `Batch.clearOrphanedPendingRows`), across both pending
+  // tables, and how many stagings they belonged to. Absent when the cleanup
+  // failed.
   janitorRowsCleared?: number;
-  janitorJobsCleared?: number;
+  janitorStagingsCleared?: number;
 }
 
 export class Batch {
@@ -445,12 +477,13 @@ export class Batch {
   // CSS content hashes this batch has already interned into the `scoped_css`
   // table, so a stylesheet shared by many rows in one pass is written once.
   #internedScopedCSSHashes = new Set<string>();
-  // Production column lists, read once per batch (see `#productionColumns`).
-  #productionColumnNames = new Map<string, Promise<string[]>>();
+  // Pending-table column lists, read once per batch (see `#pendingColumns`).
+  #pendingColumnNames = new Map<string, Promise<string[]>>();
   #nodeResolvedInvalidations: string[] | undefined;
-  // URLs already staged in `boxel_index_pending` by an earlier attempt
-  // of *this same job*, with the last_modified value the previous
-  // attempt observed. Populated during `ready`. The visit loop in
+  // URLs an earlier attempt of *this same job* already staged, copied into
+  // this attempt's own staging (see `copyEarlierAttemptsRows`), with the
+  // last_modified value the previous attempt observed. Populated during
+  // `ready`. The visit loop in
   // IndexRunner consults this map to skip work the previous attempt
   // already finished; the from-scratch path additionally compares the
   // stored last_modified against the current EFS mtime so a file that
@@ -609,10 +642,12 @@ export class Batch {
   #passId = uuidv4();
   // The `staging_id` this batch's rows carry in the pending tables. Every
   // staging read and write is scoped to it, so the batch sees committed rows
-  // plus its own staged ones, never a peer pass's. A job's batches share
-  // `job:<id>`, which is what lets a retry resume what an earlier attempt of
-  // the job staged; a batch outside a job stages under `adhoc:<pass id>`,
-  // which nothing else shares.
+  // plus its own staged ones, never a peer pass's. A job's attempt stages
+  // under `jobStagingId(job, reservation)`: two attempts that overlap (a lease
+  // that lapsed while its worker was stalled) never read or clear each
+  // other's rows, and a retry resumes by copying an earlier attempt's rows in
+  // (`loadResumedRows`). A batch outside a job stages under
+  // `adhoc:<pass id>`, which nothing else shares.
   #stagingId: string;
   // Whether this pass rebuilt the whole realm (a from-scratch index or a
   // copy), as opposed to an incremental fan-out; recorded on the ledger row.
@@ -640,7 +675,7 @@ export class Batch {
     this.#prerenderHtmlOnly = opts?.prerenderHtmlOnly ?? false;
     this.#stagingId =
       jobInfo && jobInfo.jobId > 0
-        ? `job:${jobInfo.jobId}`
+        ? jobStagingId(jobInfo.jobId, jobInfo.reservationId)
         : `adhoc:${this.#passId}`;
     this.#currentInvalidationId = uuidv4();
     this.ready = this.setupBatch();
@@ -760,6 +795,7 @@ export class Batch {
     if (!this.jobInfo || this.jobInfo.jobId <= 0) {
       return;
     }
+    await this.copyEarlierAttemptsRows();
     // Exclude `has_error = true` rows. A retry exists precisely so a
     // transient failure (renderer hang, network blip, OOM) gets a
     // second chance — preserving the prior error row would freeze
@@ -817,6 +853,7 @@ export class Batch {
     if (!this.jobInfo || this.jobInfo.jobId <= 0) {
       return;
     }
+    await this.copyEarlierAttemptsPrerenderedHtmlRows();
     let rows = (await this.#query([
       `SELECT url FROM prerendered_html_pending WHERE`,
       ...every([
@@ -835,6 +872,115 @@ export class Batch {
     this.#perfLog.debug(
       `${jobIdentity(this.jobInfo)} resuming ${this.#resumedRows.size} prerendered-html URLs from prior attempt for ${this.realmURL.href}`,
     );
+  }
+
+  // Copies into this attempt's staging the rows earlier attempts of its job
+  // staged that it can resume: the newest live, unerrored row per URL and
+  // type across those attempts. Each attempt stages under its own id, so this
+  // is the only way one attempt's work reaches another — and a copy, so an
+  // earlier attempt that is still running (its lease lapsed while it stalled)
+  // keeps its own rows and cannot clear this attempt's. On the fused path a
+  // copied index row brings its HTML row from the same attempt, since the
+  // visit that wrote one wrote the other. A row this staging already holds is
+  // left as it is.
+  private async copyEarlierAttemptsRows(): Promise<void> {
+    let jobId = this.jobInfo!.jobId;
+    let columns = await this.#pendingColumns('boxel_index_pending');
+    let chosen = [
+      'SELECT * FROM (',
+      'SELECT p.*, ROW_NUMBER() OVER (PARTITION BY p.url, p.type ORDER BY p.indexed_at DESC) AS resume_rank',
+      'FROM boxel_index_pending AS p WHERE',
+      ...every([
+        ['p.realm_url =', param(this.realmURL.href)],
+        ['p.job_id =', param(jobId)],
+        ['p.staging_id <>', param(this.#stagingId)],
+        any([['p.is_deleted = false'], ['p.is_deleted IS NULL']]),
+        any([['p.has_error = false'], ['p.has_error IS NULL']]),
+      ]),
+      ') AS ranked WHERE ranked.resume_rank = 1',
+    ] as Expression;
+    await this.#query([
+      'INSERT INTO boxel_index_pending',
+      ...addExplicitParens(
+        separatedByCommas([...columns.map((c) => [c]), ['staging_id']]),
+      ),
+      'SELECT',
+      ...separatedByCommas([
+        ...columns.map((c) => [`earlier.${c}`]),
+        ['CAST(', param(this.#stagingId), 'AS VARCHAR)'],
+      ]),
+      'FROM (',
+      ...chosen,
+      ') AS earlier WHERE earlier.url IS NOT NULL',
+      'ON CONFLICT ON CONSTRAINT boxel_index_pending_pkey DO NOTHING',
+    ] as Expression);
+    if (this.#splitPrerenderHtml) {
+      return;
+    }
+    let htmlColumns = await this.#pendingColumns('prerendered_html_pending');
+    await this.#query([
+      'INSERT INTO prerendered_html_pending',
+      ...addExplicitParens(
+        separatedByCommas([...htmlColumns.map((c) => [c]), ['staging_id']]),
+      ),
+      'SELECT',
+      ...separatedByCommas([
+        ...htmlColumns.map((c) => [`h.${c}`]),
+        ['CAST(', param(this.#stagingId), 'AS VARCHAR)'],
+      ]),
+      'FROM prerendered_html_pending AS h JOIN (',
+      ...chosen,
+      ') AS earlier',
+      'ON earlier.url = h.url AND earlier.type = h.type AND earlier.staging_id = h.staging_id',
+      'WHERE',
+      ...every([['h.realm_url =', param(this.realmURL.href)]]),
+      'ON CONFLICT ON CONSTRAINT prerendered_html_pending_pkey DO NOTHING',
+    ] as Expression);
+  }
+
+  // The `prerendered_html_pending` analog of `copyEarlierAttemptsRows`, for a
+  // `prerenderHtmlOnly` batch: the newest live, unerrored rendering per URL
+  // and type that earlier attempts of its job staged.
+  private async copyEarlierAttemptsPrerenderedHtmlRows(): Promise<void> {
+    let columns = await this.#pendingColumns('prerendered_html_pending');
+    await this.#query([
+      'INSERT INTO prerendered_html_pending',
+      ...addExplicitParens(
+        separatedByCommas([...columns.map((c) => [c]), ['staging_id']]),
+      ),
+      'SELECT',
+      ...separatedByCommas([
+        ...columns.map((c) => [`earlier.${c}`]),
+        ['CAST(', param(this.#stagingId), 'AS VARCHAR)'],
+      ]),
+      'FROM (',
+      'SELECT h.*, ROW_NUMBER() OVER (PARTITION BY h.url, h.type ORDER BY h.rendered_at DESC) AS resume_rank',
+      'FROM prerendered_html_pending AS h WHERE',
+      ...every([
+        ['h.realm_url =', param(this.realmURL.href)],
+        ['h.job_id =', param(this.jobInfo!.jobId)],
+        ['h.staging_id <>', param(this.#stagingId)],
+        any([['h.is_deleted = false'], ['h.is_deleted IS NULL']]),
+        ['h.error_doc IS NULL'],
+      ]),
+      ') AS earlier WHERE earlier.resume_rank = 1',
+      'ON CONFLICT ON CONSTRAINT prerendered_html_pending_pkey DO NOTHING',
+    ] as Expression);
+  }
+
+  // A pending table's columns other than `staging_id`, which a copy sets
+  // itself. Read once per batch.
+  #pendingColumns(
+    table: 'boxel_index_pending' | 'prerendered_html_pending',
+  ): Promise<string[]> {
+    let columns = this.#pendingColumnNames.get(table);
+    if (!columns) {
+      columns = this.#dbAdapter
+        .getColumnNames(table)
+        .then((names) => names.filter((name) => name !== 'staging_id'));
+      this.#pendingColumnNames.set(table, columns);
+    }
+    return columns;
   }
 
   /**
@@ -867,12 +1013,12 @@ export class Batch {
   // in-flight batch, whose invalidation set covers fan-out tombstones a
   // `done()` would promote); that fresh batch has no tombstone memory, so
   // without this it would fall back to re-reading each file to decide "was
-  // this a card?". The two batches run for the same job and so share one
-  // staging id: any URL the fresh batch then failed to re-classify (a read
-  // blip, non-card on-disk content) would leave the in-flight batch's
-  // `instance` tombstone in the job's pending rows to be promoted — silently
-  // deleting a previously-good card. Seeding from the index (the reliable
-  // oracle) closes that.
+  // this a card?". The two batches run for the same attempt of the same job
+  // and so share one staging id: any URL the fresh batch then failed to
+  // re-classify (a read blip, non-card on-disk content) would leave the
+  // in-flight batch's `instance` tombstone in the attempt's pending rows to be
+  // promoted — silently deleting a previously-good card. Seeding from the
+  // index (the reliable oracle) closes that.
   async seedLiveTypesFromProduction(urls: URL[]): Promise<void> {
     await this.ready;
     if (urls.length === 0) {
@@ -2419,7 +2565,9 @@ export class Batch {
   // for atomicity to protect. Best-effort for the same reason: the commit
   // already stands, and failing the job here would only rerun published
   // work. Rows a failure leaves behind are removed by the janitor of a later
-  // commit to the realm, once this job is no longer running.
+  // commit to the realm, once this job is no longer running. Only this
+  // attempt's staging is deleted: an earlier attempt's rows that it resumed
+  // stay until the janitor clears them with the rest of its job's.
   private async clearPendingRows(): Promise<PendingCleanupResult> {
     let start = Date.now();
     try {
@@ -2432,50 +2580,96 @@ export class Batch {
           ]),
         ] as Expression);
       }
-      let janitor =
-        this.#dbAdapter.kind === 'pg'
-          ? await this.clearOrphanedPendingRows()
-          : undefined;
+      let janitor = await this.clearOrphanedPendingRows();
       return { pendingCleanupMs: Date.now() - start, ...janitor };
     } catch (e) {
       this.#log.warn(
-        `${jobIdentity(this.jobInfo)} could not clear pending rows staged under ${this.#stagingId} for ${this.realmURL.href} after its commit: ${(e as Error)?.message}`,
+        `${jobIdentity(this.jobInfo)} could not clear pending rows staged under ${this.#stagingId} for ${this.realmURL.href} after its commit: ${(e as Error)?.message ?? String(e)}`,
       );
       return { pendingCleanupMs: Date.now() - start };
     }
   }
 
-  // The janitor: removes this realm's pending rows whose job is no longer
-  // `unfulfilled` — it resolved or rejected — since no pass can commit or
-  // resume them any more. A job still `unfulfilled` keeps its rows even when
-  // no worker holds it, because its retry resumes from them. Rows whose job
-  // has no `jobs` row are left alone, as are rows staged outside a job, which
-  // carry no `job_id`: in neither case is there a record saying the batch
-  // that staged them has stopped.
+  // The janitor: removes this realm's pending rows that no pass can commit
+  // any more, so no reader needs them.
+  //  - A job's staging, once the job has resolved or rejected: the commit
+  //    fence (`assertAttemptHoldsJob`) refuses any attempt of it that is still
+  //    running. A job still `unfulfilled` keeps its attempts' rows, since its
+  //    retry resumes from them. Rows whose job has no `jobs` row are left
+  //    alone: nothing says that job has stopped. The queue is Postgres-only.
+  //  - An ad-hoc staging (a batch outside a job) with no write for
+  //    `ADHOC_STAGING_ABANDONED_MS`: a batch that died before its commit.
+  //    Nothing records whether an ad-hoc batch is still running, so its last
+  //    write is the only evidence, read from every column a write or
+  //    tombstone stamps.
   private async clearOrphanedPendingRows(): Promise<{
     janitorRowsCleared: number;
-    janitorJobsCleared: number;
+    janitorStagingsCleared: number;
   }> {
-    let jobs = new Set<number>();
+    let abandoned = await this.abandonedAdhocStagings();
+    let stagings = new Set<string>();
     let rows = 0;
     for (let table of PENDING_TABLES) {
+      let orphaned: Expression[] = [];
+      if (this.#dbAdapter.kind === 'pg') {
+        orphaned.push([
+          `EXISTS (SELECT 1 FROM jobs j WHERE j.id = ${table}.job_id AND j.status <> 'unfulfilled')`,
+        ]);
+      }
+      if (abandoned.length > 0) {
+        orphaned.push([
+          'staging_id IN',
+          ...addExplicitParens(
+            separatedByCommas(abandoned.map((id) => [param(id)])),
+          ),
+        ] as Expression);
+      }
+      if (orphaned.length === 0) {
+        continue;
+      }
       let cleared = (await this.#query([
-        `WITH cleared AS (DELETE FROM ${table} AS p WHERE`,
-        ...every([
-          ['p.realm_url =', param(this.realmURL.href)],
-          [
-            `EXISTS (SELECT 1 FROM jobs j WHERE j.id = p.job_id AND j.status <> 'unfulfilled')`,
-          ],
-        ]),
-        'RETURNING p.job_id)',
-        'SELECT job_id, COUNT(*) AS row_count FROM cleared GROUP BY job_id',
-      ] as Expression)) as { job_id: number; row_count: string | number }[];
-      for (let { job_id, row_count } of cleared) {
-        jobs.add(Number(job_id));
-        rows += Number(row_count);
+        // Unaliased: SQLite resolves no alias on the target of a DELETE.
+        `DELETE FROM ${table} WHERE`,
+        ...every([['realm_url =', param(this.realmURL.href)], any(orphaned)]),
+        'RETURNING staging_id',
+      ] as Expression)) as { staging_id: string }[];
+      for (let { staging_id } of cleared) {
+        stagings.add(staging_id);
+        rows++;
       }
     }
-    return { janitorRowsCleared: rows, janitorJobsCleared: jobs.size };
+    return { janitorRowsCleared: rows, janitorStagingsCleared: stagings.size };
+  }
+
+  // This realm's ad-hoc stagings whose last write, on either channel, is older
+  // than `ADHOC_STAGING_ABANDONED_MS`.
+  private async abandonedAdhocStagings(): Promise<string[]> {
+    let threshold = Date.now() - ADHOC_STAGING_ABANDONED_MS;
+    let lastWrite = (table: string, stamps: string[]) => [
+      `SELECT staging_id, MAX(${dbGreatest(
+        this.#dbAdapter.kind,
+        stamps,
+      )}) AS last_write FROM ${table} WHERE`,
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        [`staging_id LIKE 'adhoc:%'`],
+      ]),
+      'GROUP BY staging_id',
+    ];
+    let indexedAtStamp = dbJsonNumber(
+      this.#dbAdapter.kind,
+      'diagnostics',
+      'indexedAt',
+    );
+    let rows = (await this.#query([
+      'SELECT staging_id FROM (',
+      ...lastWrite('boxel_index_pending', ['indexed_at', indexedAtStamp]),
+      'UNION ALL',
+      ...lastWrite('prerendered_html_pending', ['rendered_at', indexedAtStamp]),
+      ') AS writes GROUP BY staging_id HAVING MAX(last_write) <',
+      param(threshold),
+    ] as Expression)) as { staging_id: string }[];
+    return rows.map(({ staging_id }) => staging_id);
   }
 
   // Runs `body` as one transaction, with every `#query` it makes sent through
@@ -2518,6 +2712,7 @@ export class Batch {
         attemptStart = now;
         this.#txQuerier = txQuerier;
         try {
+          await this.assertAttemptHoldsJob();
           await body();
         } finally {
           this.#txQuerier = undefined;
@@ -2526,6 +2721,71 @@ export class Batch {
       { label: `the index swap of ${this.realmURL.href}` },
     );
     return { swapAttempts, swapRetryMs };
+  }
+
+  // Refuses the commit of an attempt that no longer holds its job. The queue
+  // can let an attempt run on after it has lost the job — a deadline that
+  // expires marks the job rejected without cancelling its handler, and a
+  // lease that lapses lets another worker claim the job while the first
+  // attempt is still running — and nothing may publish from such an attempt:
+  // the janitor treats a finished job's staging as abandoned, and a
+  // superseded attempt's retry has already resumed its work. The test is the
+  // one `attemptJobFinalize` applies to a verdict: the job must still be
+  // `unfulfilled`, this attempt's reservation open, and a lapsed lease not
+  // already taken by a live one. Runs first in the swap's transaction, on
+  // every attempt of it, and takes the job row `FOR SHARE`, so the queue
+  // cannot finish the job or claim it again until the commit is over.
+  //
+  // Only a reservation that names its job is judged: without one (a batch
+  // outside a job, or a caller passing an attempt the queue never made)
+  // there is no attempt to have lost. SQLite has no job queue.
+  private async assertAttemptHoldsJob(): Promise<void> {
+    if (
+      this.#dbAdapter.kind !== 'pg' ||
+      !this.jobInfo ||
+      this.jobInfo.jobId <= 0
+    ) {
+      return;
+    }
+    let { jobId, reservationId } = this.jobInfo;
+    let [job] = (await this.#query([
+      'SELECT status FROM jobs WHERE id =',
+      param(jobId),
+      'FOR SHARE',
+    ] as Expression)) as { status: string }[];
+    let [reservation] = (await this.#query([
+      `SELECT completed_at IS NOT NULL AS closed, locked_until < NOW() AS expired,
+              EXISTS (
+                SELECT 1 FROM job_reservations other
+                 WHERE other.job_id = r.job_id AND other.id <> r.id
+                   AND other.completed_at IS NULL AND other.locked_until > NOW()
+              ) AS reclaimed
+         FROM job_reservations r WHERE`,
+      ...every([
+        ['r.id =', param(reservationId)],
+        ['r.job_id =', param(jobId)],
+      ]),
+    ] as Expression)) as {
+      closed: boolean;
+      expired: boolean;
+      reclaimed: boolean;
+    }[];
+    if (!job || !reservation) {
+      return;
+    }
+    let lost =
+      job.status !== 'unfulfilled'
+        ? `the job is ${job.status}`
+        : reservation.closed
+          ? 'its reservation is closed'
+          : reservation.expired && reservation.reclaimed
+            ? 'its lease lapsed and another attempt holds the job'
+            : undefined;
+    if (lost) {
+      throw new Error(
+        `${jobIdentity(this.jobInfo)} no longer holds its job (${lost}), so its index pass of ${this.realmURL.href} does not commit`,
+      );
+    }
   }
 
   // The realm_meta value at the realm's current committed generation, or
@@ -2971,6 +3231,7 @@ export class Batch {
         ...every([
           ['realm_url =', param(this.realmURL.href)],
           ['staging_id =', param(this.#stagingId)],
+          any([['is_deleted = false'], ['is_deleted IS NULL']]),
           [
             'url in',
             ...addExplicitParens(
@@ -2983,6 +3244,11 @@ export class Batch {
         'ON CONFLICT ON CONSTRAINT boxel_index_pkey DO UPDATE SET',
         ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
       ] as Expression);
+      await this.#applyStagedTombstones({
+        table: 'boxel_index',
+        tombstoneColumns: INDEX_TOMBSTONE_COLUMNS,
+        restamp: true,
+      });
 
       // Publish this pass's `prerendered_html_pending` rows, UNLESS this is a
       // split-mode index pass — in which case HTML flows only through the
@@ -3233,10 +3499,12 @@ export class Batch {
   }
 
   // Swap this batch's `prerendered_html_pending` rows into production
-  // `prerendered_html`, keyed by its staging id and invalidation set.
-  // `prerendered_html` has neither `job_id` nor `staging_id`, so its column
-  // names (`columns`, read before the swap's transaction opens) are the
-  // production projection and the SELECT drops both from the pending row.
+  // `prerendered_html`, keyed by its staging id and invalidation set: its live
+  // rows are upserted, then its tombstones applied in place
+  // (`#applyStagedTombstones`). `prerendered_html` has neither `job_id` nor
+  // `staging_id`, so its column names (`columns`, read before the swap's
+  // transaction opens) are the production projection and the SELECT drops
+  // both from the pending row.
   //
   // A prerenderHtmlOnly batch passes `monotonicGuard: true`: the trailing
   // `WHERE prerendered_html.generation <= EXCLUDED.generation` makes a stale
@@ -3272,6 +3540,7 @@ export class Batch {
       ...every([
         ['realm_url =', param(this.realmURL.href)],
         ['staging_id =', param(this.#stagingId)],
+        any([['is_deleted = false'], ['is_deleted IS NULL']]),
         [
           'url in',
           ...addExplicitParens(
@@ -3286,6 +3555,60 @@ export class Batch {
       ...(opts?.monotonicGuard
         ? ['WHERE prerendered_html.generation <= EXCLUDED.generation']
         : []),
+    ] as Expression);
+    await this.#applyStagedTombstones({
+      table: 'prerendered_html',
+      tombstoneColumns: HTML_TOMBSTONE_COLUMNS,
+      restamp: !opts?.monotonicGuard,
+      monotonicGuard: opts?.monotonicGuard,
+    });
+  }
+
+  // The second half of a swap: this batch's staged tombstones, applied to the
+  // production rows they delete. A staged tombstone carries only its
+  // `tombstoneColumns`, so it is an in-place UPDATE of the row rather than a
+  // copy — the row keeps the rest of its content, hidden by `is_deleted`. A
+  // tombstone is only staged for a row production holds, so there is always
+  // one to update; if another pass removed it first, there is nothing to
+  // delete. `restamp` gives the rows this commit's generation, as the live
+  // rows the swap promotes take it; otherwise each keeps the generation it was
+  // staged under, and `monotonicGuard` skips a row production already holds
+  // at a newer one, matching the guard on the swap's upsert.
+  async #applyStagedTombstones(args: {
+    table: 'boxel_index' | 'prerendered_html';
+    tombstoneColumns: string[];
+    restamp: boolean;
+    monotonicGuard?: boolean;
+  }): Promise<void> {
+    let assignments = args.tombstoneColumns.map((column) =>
+      column === 'generation' && args.restamp
+        ? ([
+            'generation = CAST(',
+            param(this.commitGeneration),
+            'AS INTEGER)',
+          ] as Expression)
+        : [`${column} = p.${column}`],
+    );
+    await this.#query([
+      `UPDATE ${args.table} AS t SET`,
+      ...separatedByCommas(assignments),
+      `FROM ${args.table}_pending AS p`,
+      'WHERE',
+      ...every([
+        ['p.realm_url =', param(this.realmURL.href)],
+        ['p.staging_id =', param(this.#stagingId)],
+        ['p.is_deleted = TRUE'],
+        [
+          'p.url IN',
+          ...addExplicitParens(
+            separatedByCommas([...this.#invalidations].map((i) => [param(i)])),
+          ),
+        ],
+        ['t.realm_url = p.realm_url'],
+        ['t.url = p.url'],
+        ['t.type = p.type'],
+        ...(args.monotonicGuard ? [['t.generation <= p.generation']] : []),
+      ] as Expression[]),
     ] as Expression);
   }
 
@@ -3420,26 +3743,19 @@ export class Batch {
         this.#tombstonedLiveTypes.set(url, liveTypes);
       }
     }
-    // `has_error` and `error_doc` are listed (with explicit false / null
-    // values per row) so the upsert's ON CONFLICT SET clause clears them.
-    // The primary key is `(realm_url, staging_id, url, type)`, so a
-    // tombstone collides with any row an earlier attempt of the same job
-    // staged for the URL — an error row, which resume leaves behind so the
-    // retry re-attempts it — and any column NOT in this list keeps its
-    // previous value. Without these two, the tombstone would inherit that
-    // attempt's `has_error = true` (and whatever `error_doc` it had,
-    // including `jsonb null`), and a deletion would promote as a row that
-    // reads as "errored but with no message".
+    // A staged tombstone carries only these columns. The swap applies it to
+    // the production row in place (`applyBatchUpdates`), so the rest of the
+    // row — its document, deps and types — stays as production holds it,
+    // hidden by `is_deleted`, which is what the last-known-good carry-forwards
+    // read if the file comes back. `has_error` and `error_doc` are listed
+    // with explicit false / null so the deletion clears any error state, both
+    // on the production row and on a row this staging already holds for the
+    // URL, whose other columns an ON CONFLICT upsert would otherwise keep.
     let columns = [
       'url',
-      'file_alias',
+      ...INDEX_TOMBSTONE_COLUMNS,
       'type',
-      'generation',
       'realm_url',
-      'is_deleted',
-      'has_error',
-      'error_doc',
-      'diagnostics',
       'job_id',
       'staging_id',
     ].map((c) => [c]);
@@ -3464,17 +3780,17 @@ export class Batch {
         [
           id,
           // The same file_alias form `updateEntry` writes, so a tombstone
-          // upsert doesn't swap the row's alias to a `.json`-suffixed
-          // variant that alias-keyed lookups (`urlsMatchingSeed*`) miss.
+          // doesn't swap the row's alias to a `.json`-suffixed variant that
+          // alias-keyed lookups (`urlsMatchingSeed*`) miss.
           trimExecutableExtension(rri(id)).replace(/\.json$/, ''),
-          type,
           this.#provisionalGeneration,
-          this.realmURL.href,
           true, // is_deleted
           false, // has_error — explicit clear so stale error state from
           // a prior pass does not survive the deletion
           null, // error_doc — same rationale
           tombstoneDiagnosticsJson,
+          type,
+          this.realmURL.href,
           jobIdValue,
           this.#stagingId,
         ].map((v) => [param(v)]),
@@ -3485,7 +3801,6 @@ export class Batch {
       return;
     }
 
-    await this.#stageProductionRows('boxel_index', toTombstone);
     await this.#upsertWithinBindBudget(
       'boxel_index_pending',
       'boxel_index_pending_pkey',
@@ -3549,20 +3864,15 @@ export class Batch {
       }
     }
     // The HTML columns and the `screenshots` manifest are deliberately NOT
-    // in this list: the tombstone lands on the production row
-    // `#stageProductionRows` copied in, so it leaves those artifacts in place
-    // (is_deleted hides them), matching how the HTML columns have always
-    // behaved through delete/restore cycles.
+    // in this list: the swap applies the tombstone to the production row in
+    // place (`promotePrerenderedHtmlPending`), so it leaves those artifacts
+    // there (is_deleted hides them), matching how the HTML columns have
+    // always behaved through delete/restore cycles.
     let columns = [
       'url',
-      'file_alias',
+      ...HTML_TOMBSTONE_COLUMNS,
       'type',
-      'generation',
       'realm_url',
-      'is_deleted',
-      'error_doc',
-      'diagnostics',
-      'rendered_at',
       'job_id',
       'staging_id',
     ].map((c) => [c]);
@@ -3580,13 +3890,13 @@ export class Batch {
           // alias-keyed consumers (e.g. the itemsThatReference deps scan) see
           // one alias per URL whether the row is live or tombstoned.
           trimExecutableExtension(rri(id)).replace(/\.json$/, ''),
-          type,
           this.htmlRowGeneration(id, type),
-          this.realmURL.href,
           true, // is_deleted
           null, // error_doc — a tombstone clears any prior render error
           null, // diagnostics — likewise cleared; they described the render this tombstone hides
-          now,
+          now, // rendered_at
+          type,
+          this.realmURL.href,
           jobIdValue,
           this.#stagingId,
         ].map((v) => [param(v)]),
@@ -3595,68 +3905,12 @@ export class Batch {
     if (rows.length === 0) {
       return;
     }
-    await this.#stageProductionRows('prerendered_html', urls);
     await this.#upsertWithinBindBudget(
       'prerendered_html_pending',
       'prerendered_html_pending_pkey',
       columns,
       rows,
     );
-  }
-
-  // Copy the production rows of `urls` into this batch's pending table, for
-  // the tombstone upsert that follows to mark deleted. That upsert lists only
-  // the columns a tombstone changes, so the rest of what the tombstone
-  // promotes — the row's document, deps, types, rendered HTML, screenshot
-  // manifest — comes from here: a deleted row keeps its last content, hidden
-  // by `is_deleted`, which is what the last-known-good carry-forwards read if
-  // the file comes back. A row this staging already holds, which an earlier
-  // attempt of the same job staged, is left as it is.
-  async #stageProductionRows(
-    table: 'boxel_index' | 'prerendered_html',
-    urls: string[],
-  ): Promise<void> {
-    if (urls.length === 0) {
-      return;
-    }
-    let pendingTable = `${table}_pending`;
-    let columns = (await this.#productionColumns(table)).map((c) => [c]);
-    // The same budget `#upsertWithinBindBudget` keeps to, less the two
-    // parameters every statement binds besides its URLs.
-    let bindBudget = this.#dbAdapter.kind === 'sqlite' ? 900 : 60000;
-    let urlsPerInsert = bindBudget - 2;
-    for (let offset = 0; offset < urls.length; offset += urlsPerInsert) {
-      let chunk = urls.slice(offset, offset + urlsPerInsert);
-      await this.#query([
-        `INSERT INTO ${pendingTable}`,
-        ...addExplicitParens(separatedByCommas([...columns, ['staging_id']])),
-        'SELECT',
-        ...separatedByCommas([
-          ...columns,
-          ['CAST(', param(this.#stagingId), 'AS VARCHAR)'],
-        ]),
-        `FROM ${table} WHERE`,
-        ...every([
-          ['realm_url =', param(this.realmURL.href)],
-          [
-            'url IN',
-            ...addExplicitParens(
-              separatedByCommas(chunk.map((url) => [param(url)])),
-            ),
-          ],
-        ]),
-        `ON CONFLICT ON CONSTRAINT ${pendingTable}_pkey DO NOTHING`,
-      ] as Expression);
-    }
-  }
-
-  #productionColumns(table: 'boxel_index' | 'prerendered_html') {
-    let columns = this.#productionColumnNames.get(table);
-    if (!columns) {
-      columns = this.#dbAdapter.getColumnNames(table);
-      this.#productionColumnNames.set(table, columns);
-    }
-    return columns;
   }
 
   // Each invalidated URL's rows as the production index still holds them:
@@ -4414,6 +4668,23 @@ export class Batch {
       }
     }
   }
+}
+
+// The largest of `columns`, a NULL counting as 0, in the adapter's spelling.
+function dbGreatest(kind: DBAdapter['kind'], columns: string[]): string {
+  let values = columns.map((column) => `COALESCE(${column}, 0)`).join(', ');
+  return kind === 'pg' ? `GREATEST(${values})` : `max(${values})`;
+}
+
+// A numeric field of a JSON column, in the adapter's spelling.
+function dbJsonNumber(
+  kind: DBAdapter['kind'],
+  column: string,
+  field: string,
+): string {
+  return kind === 'pg'
+    ? `(${column}->>'${field}')::bigint`
+    : `json_extract(${column}, '$.${field}')`;
 }
 
 function baseTypeFromError(entry: {

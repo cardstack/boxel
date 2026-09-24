@@ -7,11 +7,14 @@ exports.shorthands = undefined;
 // rows under its own `staging_id`, so two passes of one realm can stage at
 // once without reading or promoting each other's uncommitted rows.
 //
-// `staging_id` is `job:<id>` for a pass that runs as a queue job, and every
-// attempt of that job shares it, so a retry finds (and resumes) what an earlier
-// attempt staged. A batch that runs outside a job stages under
-// `adhoc:<pass id>`, which nothing else shares. `job_id` is kept alongside it
-// so rows left behind by a job that has finished can be found and removed.
+// `staging_id` is `job:<job id>.<reservation id>` for a pass that runs as a
+// queue job — one staging per attempt, so two attempts of a job that overlap
+// (a lease that lapsed while its worker was stalled) never read or clear each
+// other's rows. A retry copies what an earlier attempt of its job staged into
+// its own staging and resumes from there. A batch that runs outside a job
+// stages under `adhoc:<pass id>`, which nothing else shares. `job_id` is kept
+// alongside it, indexed with the realm, so a retry can find its job's earlier
+// attempts and rows left behind by a job that has finished can be removed.
 //
 // Each table is its production table's columns plus those two, created with
 // `LIKE` so the column set matches at creation. A column added to a production
@@ -35,6 +38,7 @@ exports.up = (pgm) => {
     pgm.addConstraint(pending, `${pending}_pkey`, {
       primaryKey: ['realm_url', 'staging_id', 'url', 'type'],
     });
+    pgm.createIndex(pending, ['realm_url', 'job_id']);
   }
 };
 

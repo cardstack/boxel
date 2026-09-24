@@ -420,9 +420,9 @@ export class IndexRunner {
     try {
       await current.#runVisitLoop(invalidations, {
         abortAfterIdleRenderTimeouts: current.#idleRenderTimeoutAbortAfter,
-        // Resume guard. If a previous attempt of this same job already wrote
-        // URL_X to the working table AND the EFS mtime hasn't changed since,
-        // skip the visit — the existing working row is still authoritative
+        // Resume guard. If a previous attempt of this same job already staged
+        // URL_X AND the EFS mtime hasn't changed since, skip the visit — the
+        // row this attempt resumed from it is still authoritative
         // and `applyBatchUpdates` will promote it (the constructor pre-seeded
         // it into `#invalidations`). If mtime DID change, fall through to a
         // normal visit so the upsert in `updateEntry` overwrites the resumed
@@ -659,7 +659,7 @@ export class IndexRunner {
             // file is deleted, there is nothing to visit
             return 'delete';
           }
-          // Previous attempt of this job already produced a working row for
+          // Previous attempt of this job already staged a row for
           // this URL. `args.changes` is the deterministic seed for
           // incremental jobs; if the file changed again, that's a different
           // changeset enqueued as a separate job. Skip.
@@ -1072,7 +1072,7 @@ export class IndexRunner {
 
   // A throw during the invalidation / dependency-ordering / file-meta-prefetch
   // phase happens before #runVisitLoop starts, so no per-file visit ever runs
-  // to attach an error to — and the in-flight batch's working table holds only
+  // to attach an error to — and the in-flight batch's staged rows are only
   // fan-out tombstones that were never re-visited, so promoting it via
   // `done()` would delete those dependents. Record the failure on a FRESH
   // batch scoped to just the URLs the job was handed: buffer their error rows
@@ -1436,7 +1436,7 @@ function assertURLEndsWithJSON(url: URL): URL {
 //
 // This is a guarantee about the order in which a pass writes its rows, not
 // about what a concurrent reader can observe: the pass promotes its whole
-// working table in one transaction (`batch.done()`), so no reader ever sees
+// staged rows in one transaction (`batch.done()`), so no reader ever sees
 // one row of a pass ahead of another.
 export function prioritizeWrittenURLs(
   invalidations: URL[],

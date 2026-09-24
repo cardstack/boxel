@@ -143,7 +143,7 @@ export interface PrerenderHtmlPassResult {
   swapRetryMs?: number;
   pendingCleanupMs?: number;
   janitorRowsCleared?: number;
-  janitorJobsCleared?: number;
+  janitorStagingsCleared?: number;
 }
 
 // The `prerender_html` job's visit loop — the HTML channel's analog of the

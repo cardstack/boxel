@@ -89,7 +89,7 @@ export interface PrerenderHtmlResult extends JSONTypes.Object {
   // so dashboards attribute the sweep to the job that pays it. `spawnGateMs`
   // is how long the visits waited for the spawning passes to commit. `swapMs`,
   // `swapAttempts` and `swapRetryMs` describe the swap's transaction, and
-  // `pendingCleanupMs`, `janitorRowsCleared` and `janitorJobsCleared` the
+  // `pendingCleanupMs`, `janitorRowsCleared` and `janitorStagingsCleared` the
   // cleanup after it, as on an index job's `phaseTimings`. A record of numbers rather than optional
   // members because the result is a `JSONTypes.Object`, whose index signature
   // rejects `undefined`.
@@ -458,7 +458,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
         swapRetryMs: pass.swapRetryMs,
         pendingCleanupMs: pass.pendingCleanupMs,
         janitorRowsCleared: pass.janitorRowsCleared,
-        janitorJobsCleared: pass.janitorJobsCleared,
+        janitorStagingsCleared: pass.janitorStagingsCleared,
       }),
     };
   };

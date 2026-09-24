@@ -23,7 +23,7 @@ interface DiscoverInvalidationsOptions {
 export interface DiscoverInvalidationsResult {
   urls: string[];
   // The subset of `urls` that are genuine deletions — present in the index
-  // (or a prior attempt's working rows) but absent from disk. The
+  // (or the rows a prior attempt of the job staged) but absent from disk. The
   // from-scratch caller threads these to the `prerender_html` job as
   // `operation: 'delete'` so the HTML channel tombstones them too.
   deletedUrls: string[];
@@ -92,8 +92,8 @@ export async function discoverInvalidations({
       skipList.push(mtimeUrl);
     }
   }
-  // Files present in the production index OR in this job's prior
-  // attempt's working rows, but absent from disk — they need
+  // Files present in the production index OR among the rows this job's
+  // prior attempt staged, but absent from disk — they need
   // tombstones. Covering `batch.resumedRows` is what makes the resume
   // safe: without it, a URL the previous attempt processed and that
   // has since been deleted would slip past tombstoning (the
