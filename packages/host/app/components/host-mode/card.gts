@@ -171,6 +171,10 @@ export default class HostModeCard extends Component<Signature> {
         flex: 1;
         z-index: 0;
         overflow: auto;
+        /* This is the scroller in host submode, so it owns the rubber-band.
+           Without this, overscrolling past either end chains out to the
+           document and bounces the UA canvas into view behind the card. */
+        overscroll-behavior: none;
         position: relative;
       }
 

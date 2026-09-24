@@ -108,7 +108,14 @@ interface Signature {
     onChangeView: (viewId: ViewOption['id']) => void;
     displaySidebar?: boolean;
   };
-  Blocks: { content: []; contentHeader: []; sidebar: [] };
+  Blocks: {
+    content: [];
+    contentHeader: [];
+    // Rendered ahead of the title, for a control that belongs to the whole
+    // pane rather than to the list, such as a sidebar toggle.
+    contentHeaderStart: [];
+    sidebar: [];
+  };
   Element: HTMLElement;
 }
 
@@ -135,6 +142,7 @@ export default class CardsGridLayout extends Component<Signature> {
         aria-label={{@activeFilter.displayName}}
       >
         <header class='content-header' data-test-cards-grid-header>
+          {{yield to='contentHeaderStart'}}
           {{#if @activeFilter.icon}}
             <div class='content-icon' data-test-cards-grid-header-icon>
               {{#if (this.isIconString @activeFilter.icon)}}
@@ -242,7 +250,7 @@ export default class CardsGridLayout extends Component<Signature> {
         --padding: var(--boxel-cards-grid-layout-padding, var(--boxel-sp-lg));
         --boxel-card-list-padding: var(
           --boxel-cards-grid-padding,
-          0 var(--padding)
+          0 var(--padding) var(--padding)
         );
         --sidebar-min-width: var(--boxel-cards-grid-sidebar-min-width, 11rem);
         --sidebar-max-width: var(--boxel-cards-grid-sidebar-max-width, 22rem);

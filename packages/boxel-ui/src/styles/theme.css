@@ -14,6 +14,12 @@
    The full list of tokens declared here is the contract every theme must
    satisfy. The dark-mode counterpart (a `.dark` / `[data-theme='dark']` scope)
    is layered on separately, below.
+
+   Every card renders against this contract. An unthemed card has the default
+   theme: the values in this file. A themed card links its own Theme, so its
+   CardContainer carries `data-boxel-theme-scope` and a scoped stylesheet that
+   layers that Theme over these defaults. That scope element is the
+   "themed-card boundary" the comments below refer to.
 */
 
 /* The inherited light/dark signal that scoped theme stylesheets key off (via a

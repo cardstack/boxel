@@ -43,6 +43,8 @@ import DoorOpenIcon from '@cardstack/boxel-icons/door-open';
 import SearchIcon from '@cardstack/boxel-icons/search';
 import XIcon from '@cardstack/boxel-icons/x';
 import PlusIcon from '@cardstack/boxel-icons/plus';
+import PanelLeftCloseIcon from '@cardstack/boxel-icons/panel-left-close';
+import PanelLeftOpenIcon from '@cardstack/boxel-icons/panel-left-open';
 import ArrowUpIcon from '@cardstack/boxel-icons/arrow-up';
 import ArrowDownIcon from '@cardstack/boxel-icons/arrow-down';
 
@@ -107,6 +109,16 @@ import { now as clockNow, nowDate } from './helpers/clock';
 // in packages/base.
 // @ts-ignore
 const here: string = (import.meta as any).url;
+
+// Below this width the Library pane starts with its filter rail closed.
+const LIBRARY_NARROW_WIDTH_REM = 40;
+
+function remToPx(rem: number): number {
+  let rootSize = parseFloat(
+    getComputedStyle(document.documentElement).fontSize,
+  );
+  return rem * (Number.isFinite(rootSize) ? rootSize : 16);
+}
 
 const [, StripView, GridView] = VIEW_OPTIONS;
 
@@ -627,6 +639,7 @@ class Isolated extends Component<typeof Workspace> {
                         class='search-result'
                         {{on 'click' (this.openResult result)}}
                         {{on 'keydown' this.onSearchKeydown}}
+                        data-test-search-result={{result.id}}
                       >
                         <span
                           class='search-result-title'
@@ -639,12 +652,12 @@ class Isolated extends Component<typeof Workspace> {
                   {{/each}}
                 </ul>
                 <Button
-                  data-test-search-result={{result.id}}
                   @kind='text-only'
                   @size='auto'
                   class='search-see-all'
                   {{on 'click' this.seeAllResults}}
                   {{on 'keydown' this.onSearchKeydown}}
+                  data-test-search-see-all
                 >
                   See all
                   {{this.searchTotal}}
@@ -657,7 +670,6 @@ class Isolated extends Component<typeof Workspace> {
         </div>
       </header>
 
-      data-test-search-see-all
       {{#if (eq this.segment 'home')}}
         <div class='stage scroll-container'>
           {{! greeting removed: Home opens with work, not a
@@ -970,60 +982,75 @@ class Isolated extends Component<typeof Workspace> {
           </div>
         </div>
       {{else if (eq this.segment 'library')}}
-        <div class='library' data-test-library>
-          <nav class='rail scroll-container' aria-label='Library filters'>
-            <div class='rail-group' data-test-rail-group>
-              <h3 class='rail-label kicker'>Library</h3>
-              <FilterList
-                @filters={{this.libraryFilters}}
-                @activeFilter={{this.activeFilter}}
-                @onChanged={{this.onChangeFilter}}
-                class='rail-list'
-              />
+        <div class='library' {{this.watchLibraryWidth}} data-test-library>
+          {{! Stays mounted so it can slide shut; inert while closed keeps its
+            controls out of the tab order and the accessibility tree. }}
+          <div
+            class='rail-slot {{if this.isRailOpen "open"}}'
+            inert={{if this.isRailOpen false true}}
+            data-test-library-rail-slot
+          >
+            <div class='rail-panel'>
+              <nav
+                id={{this.railId}}
+                class='rail scroll-container'
+                aria-label='Library filters'
+                data-test-library-rail
+              >
+                <div class='rail-group' data-test-rail-group>
+                  <h3 class='rail-label kicker'>Library</h3>
+                  <FilterList
+                    @filters={{this.libraryFilters}}
+                    @activeFilter={{this.activeFilter}}
+                    @onChanged={{this.onChangeFilter}}
+                    class='rail-list'
+                  />
+                </div>
+                {{#if this.cardTypeFilters.length}}
+                  <div class='rail-group' data-test-rail-group>
+                    <h3 class='rail-label kicker'>Card types</h3>
+                    <FilterList
+                      @filters={{this.cardTypeFilters}}
+                      @activeFilter={{this.activeFilter}}
+                      @onChanged={{this.onChangeFilter}}
+                      class='rail-list'
+                    >
+                      <:action as |option|>
+                        {{#if @canEdit}}
+                          <Tooltip @placement='right'>
+                            <:trigger>
+                              <IconButton
+                                @icon={{PlusIcon}}
+                                @variant='text-only'
+                                @size='small'
+                                @width='12'
+                                @height='12'
+                                class='rail-add'
+                                aria-label='New {{option.displayName}}'
+                                {{on 'click' (this.createOfType option)}}
+                              />
+                            </:trigger>
+                            <:content>New {{option.displayName}}</:content>
+                          </Tooltip>
+                        {{/if}}
+                      </:action>
+                    </FilterList>
+                  </div>
+                {{/if}}
+                {{#if this.fileTypeFilters.length}}
+                  <div class='rail-group' data-test-rail-group>
+                    <h3 class='rail-label kicker'>File types</h3>
+                    <FilterList
+                      @filters={{this.fileTypeFilters}}
+                      @activeFilter={{this.activeFilter}}
+                      @onChanged={{this.onChangeFilter}}
+                      class='rail-list'
+                    />
+                  </div>
+                {{/if}}
+              </nav>
             </div>
-            {{#if this.cardTypeFilters.length}}
-              <div class='rail-group' data-test-rail-group>
-                <h3 class='rail-label kicker'>Card types</h3>
-                <FilterList
-                  @filters={{this.cardTypeFilters}}
-                  @activeFilter={{this.activeFilter}}
-                  @onChanged={{this.onChangeFilter}}
-                  class='rail-list'
-                >
-                  <:action as |option|>
-                    {{#if @canEdit}}
-                      <Tooltip @placement='right'>
-                        <:trigger>
-                          <IconButton
-                            @icon={{PlusIcon}}
-                            @variant='text-only'
-                            @size='small'
-                            @width='12'
-                            @height='12'
-                            class='rail-add'
-                            aria-label='New {{option.displayName}}'
-                            {{on 'click' (this.createOfType option)}}
-                          />
-                        </:trigger>
-                        <:content>New {{option.displayName}}</:content>
-                      </Tooltip>
-                    {{/if}}
-                  </:action>
-                </FilterList>
-              </div>
-            {{/if}}
-            {{#if this.fileTypeFilters.length}}
-              <div class='rail-group' data-test-rail-group>
-                <h3 class='rail-label kicker'>File types</h3>
-                <FilterList
-                  @filters={{this.fileTypeFilters}}
-                  @activeFilter={{this.activeFilter}}
-                  @onChanged={{this.onChangeFilter}}
-                  class='rail-list'
-                />
-              </div>
-            {{/if}}
-          </nav>
+          </div>
           <CardsGridLayout
             @format='fitted'
             @displaySidebar={{false}}
@@ -1040,7 +1067,32 @@ class Isolated extends Component<typeof Workspace> {
             @onChangeFilter={{this.onChangeFilter}}
             @onChangeView={{this.onChangeView}}
             @onChangeSort={{this.onChangeSort}}
-          />
+          >
+            <:contentHeaderStart>
+              <Tooltip @placement='bottom'>
+                <:trigger>
+                  <IconButton
+                    @icon={{if
+                      this.isRailOpen
+                      PanelLeftCloseIcon
+                      PanelLeftOpenIcon
+                    }}
+                    @variant='text-only'
+                    @size='small'
+                    @width='16'
+                    @height='16'
+                    class='rail-toggle'
+                    aria-label={{this.railToggleLabel}}
+                    aria-expanded={{if this.isRailOpen 'true' 'false'}}
+                    aria-controls={{this.railId}}
+                    {{on 'click' this.toggleRail}}
+                    data-test-rail-toggle
+                  />
+                </:trigger>
+                <:content>{{this.railToggleLabel}}</:content>
+              </Tooltip>
+            </:contentHeaderStart>
+          </CardsGridLayout>
         </div>
       {{else}}
         <div class='activity-pane' data-test-activity>
@@ -1301,6 +1353,11 @@ class Isolated extends Component<typeof Workspace> {
            deliberate exceptions) */
         --grid-quick: 0.12s;
         --grid-soft: 0.18s;
+        --grid-slide: 0.26s;
+        --grid-ease-out: cubic-bezier(0.2, 0, 0, 1);
+        /* the chrome and the stage tighten to the card's width, not the
+           viewport's: the card can share the screen with a neighbor stack */
+        container-type: inline-size;
 
         display: flex;
         flex-direction: column;
@@ -1555,14 +1612,36 @@ class Isolated extends Component<typeof Workspace> {
       }
 
       /* ── Facet rail ────────────────────────────────────────── */
-      .rail {
-        width: var(--grid-rail-width);
+      /* The slot's width animates and pushes the grid; the panel keeps its
+         full width and is pinned to the slot's end edge, so it slides out
+         rather than being squeezed. */
+      .rail-slot {
         flex-shrink: 0;
+        display: flex;
+        justify-content: flex-end;
+        width: 0;
+        overflow: hidden;
+        transition: width var(--grid-slide) var(--grid-ease-out);
+      }
+      .rail-slot.open {
+        width: var(--grid-rail-width);
+      }
+      .rail-panel {
+        flex-shrink: 0;
+        width: var(--grid-rail-width);
+        display: flex;
+        flex-direction: column;
+        background-color: var(--muted);
+        border-inline-end: 1px solid var(--border);
+      }
+      .rail {
+        flex-grow: 1;
+        min-height: 0;
         overflow-y: auto;
         overflow-x: hidden;
-        background-color: var(--muted);
-        border-right: 1px solid var(--border);
-        padding: var(--boxel-sp) var(--boxel-sp-xs);
+        /* top matches the grid header's padding */
+        padding: var(--boxel-cards-grid-layout-padding, var(--boxel-sp-lg))
+          var(--boxel-sp-xs) var(--boxel-sp-lg);
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-lg);
@@ -1572,8 +1651,17 @@ class Isolated extends Component<typeof Workspace> {
         gap: 1px;
       }
       .rail-label {
-        padding: var(--boxel-sp-4xs) var(--boxel-sp-xs) var(--boxel-sp-3xs);
+        padding: 0 var(--boxel-sp-xs) var(--boxel-sp-2xs);
         color: var(--muted-foreground);
+      }
+      /* as tall as the grid header's first row (the toggle and the sort button
+         are --boxel-button-sm), so the Library heading sits level with the
+         toggle */
+      .rail-group:first-child .rail-label {
+        min-height: var(--boxel-button-sm);
+        display: flex;
+        align-items: center;
+        padding-block: 0;
       }
       /* FilterList paints its own rows; the selected and hover surfaces follow
          the card's neutral tier through the component's knobs */
@@ -1596,6 +1684,14 @@ class Isolated extends Component<typeof Workspace> {
       .rail-add:hover,
       .rail-add:focus-visible {
         --boxel-icon-button-color: var(--foreground);
+      }
+      .rail-toggle {
+        --boxel-icon-button-background: var(--muted);
+        flex-shrink: 0;
+        border: 1px solid var(--grid-chip-border);
+      }
+      .rail-toggle:hover {
+        border-color: currentColor;
       }
       .zone {
         display: grid;
@@ -1851,7 +1947,7 @@ class Isolated extends Component<typeof Workspace> {
         display: grid;
         grid-template-columns: repeat(
           auto-fill,
-          minmax(var(--grid-search-results-size), 1fr)
+          minmax(min(100%, var(--grid-search-results-size)), 1fr)
         );
         /* tile height set from DOOR_TILE_HEIGHT_* via doorsStyle */
         grid-auto-rows: var(--door-h);
@@ -2060,10 +2156,17 @@ class Isolated extends Component<typeof Workspace> {
       @container (width < 40rem) {
         .feed-row {
           grid-template-columns: 4.5rem minmax(0, 1fr);
+          gap: var(--boxel-sp-xs);
+        }
+        .feed-row:nth-of-type(even) {
+          background-color: var(--stripe);
         }
         .feed-note {
-          grid-column: 2;
+          grid-column: -1 / 1;
           padding-top: 0;
+        }
+        .feed-when {
+          text-align: left;
         }
       }
       .feed-meta {
@@ -2305,6 +2408,39 @@ class Isolated extends Component<typeof Workspace> {
       .operator-mode .buried .doors {
         display: none;
       }
+      /* after the base rules it overrides: same selectors, so source order
+         decides */
+      @container (width < 40rem) {
+        .frame {
+          padding-inline: var(--boxel-sp);
+        }
+        /* the search takes its own row at full width instead of wrapping
+           under the tabs at its fixed width */
+        .frame-actions {
+          flex-basis: 100%;
+        }
+        .search-box {
+          flex-grow: 1;
+        }
+        .search-box .search-input,
+        .search-results {
+          width: 100%;
+        }
+        .stage {
+          padding: var(--boxel-sp);
+          gap: var(--boxel-sp-lg);
+        }
+        .dock {
+          margin: 0 calc(-1 * var(--boxel-sp));
+          padding-inline: var(--boxel-sp);
+        }
+        .card-grid .dock-mini {
+          padding-inline: var(--boxel-sp);
+        }
+        .library {
+          --boxel-cards-grid-layout-padding: var(--boxel-sp);
+        }
+      }
       @media (prefers-reduced-motion: reduce) {
         .attention-dot,
         .setup-ring,
@@ -2312,7 +2448,8 @@ class Isolated extends Component<typeof Workspace> {
           animation: none;
         }
         .card-grid .dock-mini,
-        .dock-mini-fill {
+        .dock-mini-fill,
+        .rail-slot {
           transition: none;
         }
       }
@@ -2346,6 +2483,38 @@ class Isolated extends Component<typeof Workspace> {
     this.activeFilter = this.filterOptions[0];
     registerDestructor(this, () => this.teardownRealmSubscription());
   }
+
+  // The Library rail opens by default and closes by default once the pane is
+  // narrower than LIBRARY_NARROW_WIDTH_REM; a toggle overrides the width until
+  // the card re-renders. The width is read in JS rather than a container query
+  // so the toggle's aria-expanded always matches what is on screen.
+  @tracked private railPreference: boolean | undefined;
+  @tracked private isLibraryNarrow = false;
+  private railId = `${guidFor(this)}-rail`;
+
+  private get isRailOpen(): boolean {
+    return this.railPreference ?? !this.isLibraryNarrow;
+  }
+
+  private get railToggleLabel(): string {
+    return this.isRailOpen ? 'Hide Sidebar' : 'Show Sidebar';
+  }
+
+  @action private toggleRail() {
+    this.railPreference = !this.isRailOpen;
+  }
+
+  watchLibraryWidth = modifier((element: Element) => {
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    let observer = new ResizeObserver(([entry]) => {
+      this.isLibraryNarrow =
+        entry.contentRect.width < remToPx(LIBRARY_NARROW_WIDTH_REM);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  });
 
   setSegment = (segment: Segment) => () => {
     this.segment = segment;
