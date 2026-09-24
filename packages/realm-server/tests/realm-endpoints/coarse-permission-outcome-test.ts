@@ -187,6 +187,53 @@ const writeProbes: Probe[] = [
   },
 ];
 
+// A well-formed request for each route that consumes the ACL's outcome, so a
+// caller it admits reaches the operation the route resolves. The card+json
+// `HEAD` is not among them: the ACL lets every `HEAD` through, and the route
+// asks the read question itself.
+interface GatedProbe {
+  route: string;
+  send: (request: SuperTest<Test>, realmURL: string) => Test;
+}
+
+function operationsBatch(realmURL: string, name: string) {
+  return JSON.stringify({
+    'boxel:operations': [
+      { op: 'invoke', 'boxel:name': name, href: `${realmURL}person-1` },
+    ],
+  });
+}
+
+const gatedProbes: GatedProbe[] = [
+  {
+    route: `GET ${SupportedMimeType.CardJson}`,
+    send: (r) => r.get('/person-1').set('Accept', SupportedMimeType.CardJson),
+  },
+  ...[SupportedMimeType.BoxelOperations, SupportedMimeType.JSONAPI].flatMap(
+    (accept) => [
+      {
+        route: `QUERY ${accept}`,
+        send: (r: SuperTest<Test>, realmURL: string) =>
+          r
+            .post('/_operations')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .set('Accept', accept)
+            .set('Content-Type', SupportedMimeType.BoxelOperations)
+            .send(operationsBatch(realmURL, 'read')),
+      },
+      {
+        route: `POST ${accept}`,
+        send: (r: SuperTest<Test>, realmURL: string) =>
+          r
+            .post('/_operations')
+            .set('Accept', accept)
+            .set('Content-Type', SupportedMimeType.BoxelOperations)
+            .send(operationsBatch(realmURL, 'delete')),
+      },
+    ],
+  ),
+];
+
 function assertRefusal(
   assert: Assert,
   response: Response,
@@ -357,6 +404,41 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         ['DELETE', 'GET', 'HEAD', 'PATCH', 'POST', 'QUERY'],
         'the fallback file and module serve does not consume it for any method',
       );
+    });
+
+    test('every consuming route hands an admitted caller to the policy gate', async function (assert) {
+      let consumers = testRealm
+        .routeDescriptions()
+        .filter((route) => route.consumesCoarseOutcome)
+        .map((route) => `${route.method} ${route.mimeType}`)
+        .filter((route) => route !== `HEAD ${SupportedMimeType.CardJson}`)
+        .sort();
+      assert.deepEqual(
+        gatedProbes.map((probe) => probe.route).sort(),
+        consumers,
+        'there is a probe for every consuming route',
+      );
+      testRealm.__testOnlySetCoarseAdmission(() => true);
+      try {
+        for (let probe of gatedProbes) {
+          let response = await probe.send(request, testRealm.url);
+          assert.strictEqual(response.status, 403, `${probe.route}: status`);
+          assert.true(
+            response.text.includes('is not permitted on'),
+            `${probe.route}: the refusal is the gate’s, for a realm with no policy`,
+          );
+        }
+      } finally {
+        testRealm.__testOnlySetCoarseAdmission(undefined);
+      }
+      let person = await request
+        .get('/person-1')
+        .set('Accept', SupportedMimeType.CardJson)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'owner', ['read', 'write', 'realm-owner'])}`,
+        );
+      assert.strictEqual(person.status, 200, 'and nothing was deleted');
     });
 
     test('an admission reaches only consuming routes, and never a refusal of realm-owner authority', async function (assert) {

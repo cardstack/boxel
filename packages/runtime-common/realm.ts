@@ -231,6 +231,7 @@ import {
   type TransformContext,
 } from './card-operations/transforms.ts';
 import type {
+  CoarseDeclined,
   OperationCore,
   OperationScope,
   OperationStoredFile,
@@ -1986,6 +1987,10 @@ export type RequestContext = {
   // dispatch, which the ACL does not judge.
   coarseAllowed?: boolean;
   coarseRefusal?: CoarseRefusal;
+  // For a request the ACL declined for writing, whether it would have allowed
+  // the same caller to read. A batch that writes can also read, and those
+  // reads are still the ACL's to answer.
+  coarseReadAllowed?: boolean;
 };
 
 // What answers a request once it is routed: the answer itself, not yet run,
@@ -5217,13 +5222,14 @@ export class Realm {
     let coarseDeclined = this.#coarseDeclined(requestContext);
     let scope = newOperationScope(this.operationCore, {
       caller: scopeCallerFor(caller.actor),
-      ...coarseDeclined,
+      coarseDeclined,
     });
     // A target described by a query is found by running it, and that search
     // answers from every card of the realm before any entry is gated. The
     // gate grants operations on cards, not searches over the realm, so a
-    // caller the realm ACL declined names each target outright.
-    if (coarseDeclined.coarseDeclined) {
+    // caller the realm ACL would not let read the realm names each target
+    // outright.
+    if (coarseDeclined === 'all') {
       let described = invocationsIn(parsed).find((entry) => entry.find);
       if (described) {
         throw atEntry(
@@ -5361,7 +5367,7 @@ export class Realm {
           name: entry.name,
           ...(entry.data ? { params: paramsFor(entry) } : {}),
           ...caller,
-          ...coarseDeclined,
+          ...this.#readDeclined(requestContext),
         });
       } catch (err: unknown) {
         throw atEntry(err, entry.position);
@@ -5800,12 +5806,12 @@ export class Realm {
           resolveFileDefCodeRef(url, this.#virtualNetwork),
         unresolveInstanceIds: (doc) => this.#serveInstanceIdsAsRRI(doc),
         // Read on the realm server's own authority, as the compiled-policy
-        // cache reads the policy card. The type key is the spelling the index
-        // records an adoption chain in, the same one `isPolicyCard` matches.
+        // cache reads the policy card. The type keys are the ones the index
+        // engine's own type filter matches an adoption chain against.
         policy: {
           compiledPolicy: () => this.getCompiledPolicy(),
-          typeKey: (codeRef) =>
-            internalKeyFor(codeRef, undefined, this.#virtualNetwork),
+          typeKeys: (codeRef) =>
+            this.#realmIndexQueryEngine.typeKeysFor(codeRef),
           resolvedLink: (selfLink, relativeTo) =>
             resolvedRelationshipLink(
               selfLink,
@@ -5818,12 +5824,20 @@ export class Realm {
     return this.#operationCore;
   }
 
-  // Whether the realm ACL declined this request's caller, in the form an
-  // operation request carries it. Only a route that consumes the ACL's
-  // outcome is reached with its refusal on the request, and each hands this to
-  // every operation it resolves, so the policy gate sees the refusal.
-  #coarseDeclined(requestContext: RequestContext): { coarseDeclined?: true } {
-    return requestContext.coarseAllowed === false
+  // What the realm ACL declined for this request, in the form an operation
+  // scope carries it. Only a route that consumes the ACL's outcome is reached
+  // with its refusal on the request, and each hands this to every operation it
+  // resolves, so the policy gate sees the refusal.
+  #coarseDeclined(requestContext: RequestContext): CoarseDeclined {
+    if (requestContext.coarseAllowed !== false) {
+      return 'none';
+    }
+    return requestContext.coarseReadAllowed ? 'writes' : 'all';
+  }
+
+  // The same, for one read's operation request.
+  #readDeclined(requestContext: RequestContext): { coarseDeclined?: true } {
+    return this.#coarseDeclined(requestContext) === 'all'
       ? { coarseDeclined: true }
       : {};
   }
@@ -6410,6 +6424,14 @@ export class Realm {
       }
       requestContext.coarseAllowed = false;
       requestContext.coarseRefusal = e;
+      if (
+        requiredPermission === 'write' &&
+        (await this.#policyJudges(e, requestContext))
+      ) {
+        requestContext.coarseReadAllowed = (
+          await this.#readProbe(request, requestContext)
+        ).allowed;
+      }
     }
   }
 
@@ -6435,8 +6457,21 @@ export class Realm {
     if (this.#testOnlyCoarseAdmission) {
       return await this.#testOnlyCoarseAdmission(request, requestContext);
     }
+    return await this.#policyJudges(
+      requestContext.coarseRefusal,
+      requestContext,
+    );
+  }
+
+  // Whether the realm's policy is the one to judge a caller the ACL refused
+  // with `refusal`: the realm names a policy, and the refusal was of a verified
+  // user's permission rather than of a request that authenticated nobody.
+  async #policyJudges(
+    refusal: unknown,
+    requestContext: RequestContext,
+  ): Promise<boolean> {
     if (
-      !(requestContext.coarseRefusal instanceof CoarsePermissionInsufficient) ||
+      !(refusal instanceof CoarsePermissionInsufficient) ||
       !requestContext.authenticatedUser
     ) {
       return false;
@@ -10710,8 +10745,17 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    if (!(await this.permittedToRead(request, requestContext))) {
-      return this.realmIdentityResponse(requestContext);
+    // A `HEAD` passes the realm's permission check whoever sends it, so it
+    // asks the read question itself. A caller the ACL would not let read is
+    // answered by the realm's policy, as their `GET` is, where the policy has
+    // them to judge. Everyone else it refuses gets the discovery answer.
+    let probe = await this.#readProbe(request, requestContext);
+    let coarseDeclined: { coarseDeclined?: true } = {};
+    if (!probe.allowed) {
+      if (!(await this.#policyJudges(probe.refusal, requestContext))) {
+        return this.realmIdentityResponse(requestContext);
+      }
+      coarseDeclined = { coarseDeclined: true };
     }
     // Read-your-writes, as on the `GET`: a validator computed off an index the
     // requester's own write has not reached yet would 304 their next `GET`
@@ -10754,7 +10798,7 @@ export class Realm {
             target: { kind: 'instance', url: url.href },
             name: 'read',
             ...this.#callerOf(request, requestContext),
-            ...this.#coarseDeclined(requestContext),
+            ...coarseDeclined,
           },
           // No budget flag: a headers-only read assembles no closure, so there
           // is nothing for it to bound.
@@ -10763,6 +10807,12 @@ export class Realm {
       } catch (e) {
         if (!isOperationFailure(e)) {
           throw e;
+        }
+        if (
+          coarseDeclined.coarseDeclined &&
+          e.error.code === 'operation-not-permitted'
+        ) {
+          return this.realmIdentityResponse(requestContext);
         }
         return await this.#respondToCardJsonOutcome(
           cardJsonAssemblyFromFailure(e),
@@ -10861,23 +10911,24 @@ export class Realm {
     return createResponse({ init: { status: 200 }, requestContext });
   }
 
-  // Whether this caller may read the realm — asked, not enforced. The
-  // realm-wide `HEAD` exemption is deliberately not taken: it exists so a
-  // discovery probe can be answered without credentials, and a caller riding
-  // it has shown nothing about what it may read. A `HEAD` that answers a card's
-  // real headers is a read, so it asks the question a `GET` would.
-  private async permittedToRead(
+  // Whether this caller may read the realm — asked, not enforced — with the
+  // refusal when it may not. The realm-wide `HEAD` exemption is deliberately
+  // not taken: it exists so a discovery probe can be answered without
+  // credentials, and a caller riding it has shown nothing about what it may
+  // read. A `HEAD` that answers a card's real headers is a read, so it asks the
+  // question a `GET` would.
+  async #readProbe(
     request: Request,
     requestContext: RequestContext,
-  ): Promise<boolean> {
+  ): Promise<{ allowed: true } | { allowed: false; refusal: unknown }> {
     try {
       await this.checkPermission(request, requestContext, 'read', {
         probe: true,
       });
-      return true;
+      return { allowed: true };
     } catch (e) {
       if (e instanceof AuthenticationError || e instanceof AuthorizationError) {
-        return false;
+        return { allowed: false, refusal: e };
       }
       throw e;
     }
@@ -10931,7 +10982,7 @@ export class Realm {
       // without running it: the conditional 304 from the validator, and the
       // response cache from an assembly made for another caller. So neither
       // is taken for them.
-      let coarseDeclined = this.#coarseDeclined(requestContext);
+      let coarseDeclined = this.#readDeclined(requestContext);
       let ifNoneMatch = coarseDeclined.coarseDeclined
         ? null
         : request.headers.get('if-none-match');

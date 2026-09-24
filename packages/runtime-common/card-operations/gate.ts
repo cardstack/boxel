@@ -16,6 +16,7 @@ import type {
 import { loadBxlTransform } from './transforms.ts';
 import {
   OperationFailure,
+  isWrite,
   type BaseOperation,
   type OperationTarget,
 } from './types.ts';
@@ -56,8 +57,11 @@ import {
 export interface OperationPolicyAccess {
   // The realm's compiled policy. Undefined for a realm with no policy.
   compiledPolicy(): Promise<CompiledRealmPolicy | undefined>;
-  // The key an index row records a type under in its adoption chain.
-  typeKey(codeRef: ResolvedCodeRef): string;
+  // Every key an index row could record this type under in its adoption
+  // chain: the spelling the ref names, and the canonical one of the definition
+  // it resolves to, which differ when the ref reaches the type through a
+  // module that re-exports it.
+  typeKeys(codeRef: ResolvedCodeRef): Promise<string[]>;
   // A relationship link as the target's stored source spells it, resolved
   // against the file that holds it. A predicate compares card identities, so
   // it reads each link the way a mutation program does.
@@ -136,7 +140,7 @@ export async function gateOperation(
   typeDefinition: Definition | undefined,
   scope: OperationScope,
 ): Promise<GateDecision> {
-  if (!scope.coarseDeclined) {
+  if (!declines(scope, base)) {
     return { kind: 'coarse' };
   }
   let refuse = () => notPermitted(target, name);
@@ -167,7 +171,7 @@ export async function gateOperation(
   if (!policy) {
     throw refuse();
   }
-  let matched = matchingGrants(policy, row.types, name, core.policy);
+  let matched = await matchingGrants(policy, row.types, name, core.policy);
   if (matched.length === 0) {
     throw refuse();
   }
@@ -201,19 +205,29 @@ export async function gateOperation(
   throw refuse();
 }
 
+// Whether the realm ACL declined this invocation. A caller declined only
+// writes keeps the ACL's answer for every read.
+function declines(scope: OperationScope, base: BaseOperation): boolean {
+  return (
+    scope.coarseDeclined === 'all' ||
+    (scope.coarseDeclined === 'writes' && isWrite(base))
+  );
+}
+
 // Every grant for `name` in a rule whose type is in the target's adoption
 // chain. The index records that chain on the target's row, a type and every
 // type it descends from, so a rule on `CardDef` matches every card.
-function matchingGrants(
+async function matchingGrants(
   policy: CompiledRealmPolicy,
   types: string[],
   name: string,
   access: OperationPolicyAccess,
-): MatchedGrant[] {
+): Promise<MatchedGrant[]> {
   let chain = new Set(types);
   let matched: MatchedGrant[] = [];
   for (let rule of policy.rules) {
-    if (!chain.has(ruleTypeKey(rule, access))) {
+    let keys = await ruleTypeKeys(rule, access);
+    if (!keys.some((key) => chain.has(key))) {
       continue;
     }
     for (let grant of rule.grants) {
@@ -225,20 +239,26 @@ function matchingGrants(
   return matched;
 }
 
-// A compiled policy is held until something it was compiled from moves, and
-// one rule's type key never changes while it is held.
-const typeKeys = new WeakMap<CompiledPolicyRule, string>();
+// A compiled policy is held until something it was compiled from moves,
+// including the definition of every type its rules name, so one rule's type
+// keys do not change while it is held. A lookup that fails is not remembered:
+// the rule matches nothing for this invocation, and the next one asks again.
+const typeKeys = new WeakMap<CompiledPolicyRule, string[]>();
 
-function ruleTypeKey(
+async function ruleTypeKeys(
   rule: CompiledPolicyRule,
   access: OperationPolicyAccess,
-): string {
-  let key = typeKeys.get(rule);
-  if (key === undefined) {
-    key = access.typeKey(rule.targetType);
-    typeKeys.set(rule, key);
+): Promise<string[]> {
+  let keys = typeKeys.get(rule);
+  if (!keys) {
+    try {
+      keys = await access.typeKeys(rule.targetType);
+    } catch {
+      return [];
+    }
+    typeKeys.set(rule, keys);
   }
-  return key;
+  return keys;
 }
 
 // What a predicate reads: the target's stored source, projected the way a

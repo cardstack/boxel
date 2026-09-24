@@ -35,6 +35,7 @@ export {
 } from './dispatch.ts';
 export type {
   CanonicalizeOptions,
+  CoarseDeclined,
   GatedOperation,
   OperationCore,
   OperationDefinitionLookup,

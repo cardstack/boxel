@@ -112,6 +112,12 @@ const BULLETIN_MODULE = `
   }
 `;
 
+// A module that re-exports a type defined elsewhere. A rule may name the type
+// through it, and the index records the type under the module that defines it.
+const SCHOOL_MODULE = `
+  export { Syllabus } from "./syllabus";
+`;
+
 const SYLLABUS_MODULE = `
   import { contains, field, CardDef } from "@cardstack/base/card-api";
   import StringField from "@cardstack/base/string";
@@ -154,6 +160,10 @@ const RULES: Rule[] = [
       { operation: 'read', where: '(.title | tonumber) > 0' },
       { operation: 'read', where: { bxl: 'true', snapshot: true } },
     ],
+  },
+  {
+    targetType: { module: `${EDUCATION}school`, name: 'Syllabus' },
+    grants: [{ operation: 'update' }],
   },
 ];
 
@@ -248,6 +258,7 @@ module(basename(import.meta.filename), function (hooks) {
             'classroom.gts': CLASSROOM_MODULE,
             'bulletin.gts': BULLETIN_MODULE,
             'syllabus.gts': SYLLABUS_MODULE,
+            'school.gts': SCHOOL_MODULE,
             'classrooms/room-204.json': classroom('Room 204', [TEACHER]),
             'classrooms/room-205.json': classroom('Room 205', [COLLEAGUE]),
             'classrooms/room-206.json': classroom(
@@ -499,6 +510,59 @@ module(basename(import.meta.filename), function (hooks) {
         'the two bodies differ only in the URL the caller named',
       );
     });
+
+    test('a refusal says nothing about what a card’s type declares', async function (assert) {
+      // `archive` is declared on Classroom and granted to nobody. A Note
+      // declares no such operation, and room-999 does not exist. Answered as
+      // the resolution's own refusals, the three would tell a caller which
+      // URLs hold a card whose type declares `archive`.
+      let refusals = await Promise.all(
+        [ROOM_205, NOTE, `${EDUCATION}classrooms/room-999`].map(
+          async (href) => {
+            let response = await operations(
+              EDUCATION,
+              AUTH.teacher(),
+              invoke('archive', { href }),
+            );
+            return {
+              status: response.status,
+              body: response.text.replaceAll(href, '<href>'),
+            };
+          },
+        ),
+      );
+      assert.strictEqual(refusals[0].status, 403);
+      assert.deepEqual(
+        refusals[1],
+        refusals[0],
+        'a card whose type declares no such operation',
+      );
+      assert.deepEqual(refusals[2], refusals[0], 'a card that does not exist');
+    });
+
+    test('a rule may name its type through a module that re-exports it', async function (assert) {
+      let response = await operations(
+        EDUCATION,
+        AUTH.reader(),
+        invoke('update', {
+          href: `${EDUCATION}syllabi/algebra`,
+          data: {
+            type: 'card',
+            attributes: { title: 'Algebra II' },
+            meta: { adoptsFrom: adoptsFrom(SYLLABUS) },
+          },
+        }),
+      );
+      assert.strictEqual(
+        response.status,
+        200,
+        'the rule names Syllabus through the school module',
+      );
+      assert.strictEqual(
+        await titleOf(`${EDUCATION}syllabi/algebra`),
+        'Algebra II',
+      );
+    });
   });
 
   module('per lane', function () {
@@ -663,7 +727,7 @@ module(basename(import.meta.filename), function (hooks) {
       let scope = () =>
         newOperationScope(core, {
           caller: scopeCallerFor(TEACHER),
-          coarseDeclined: true,
+          coarseDeclined: 'all',
         });
       let target = { kind: 'instance' as const, url: ROOM_204 };
       let { definition, decision } = await resolveGatedOperation(
@@ -820,6 +884,56 @@ module(basename(import.meta.filename), function (hooks) {
         ),
         'a read whose target a search would find',
       );
+    });
+  });
+
+  module('a caller the ACL lets read', function () {
+    test('keeps the ACL’s answer for every read in a batch that writes', async function (assert) {
+      let batch = await operations(
+        EDUCATION,
+        AUTH.reader(),
+        invoke('read', { href: ROOM_205 }),
+        invoke('update', {
+          href: BULLETIN_1,
+          data: {
+            type: 'card',
+            attributes: { body: 'Posted by a reader' },
+            meta: { adoptsFrom: adoptsFrom(BULLETIN) },
+          },
+        }),
+      );
+      assert.strictEqual(
+        batch.status,
+        200,
+        'the read needs no grant, and the policy grants the update',
+      );
+      assert.true(batch.text.includes('Room 205'));
+      assert.strictEqual(
+        gateStats().predicateEvaluations,
+        0,
+        'and no read predicate was evaluated for the read',
+      );
+    });
+  });
+
+  module('HEAD', function () {
+    test('a policy-granted HEAD carries the headers its GET would', async function (assert) {
+      let own = await request
+        .head(path(ROOM_204))
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('Authorization', AUTH.teacher());
+      assert.strictEqual(own.status, 200);
+      assert.ok(own.get('etag'), 'the card’s validator');
+      assert.true(
+        (own.get('content-type') ?? '').startsWith(SupportedMimeType.CardJson),
+        'and its media type',
+      );
+      let denied = await request
+        .head(path(ROOM_205))
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('Authorization', AUTH.teacher());
+      assert.strictEqual(denied.status, 200, 'a denied HEAD is discovery');
+      assert.notOk(denied.get('etag'), 'with no card headers');
     });
   });
 

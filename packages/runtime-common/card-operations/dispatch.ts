@@ -19,6 +19,7 @@ import {
   DEFINITION_FREE_BASE_OPERATIONS,
   OperationFailure,
   isDocumentResult,
+  isOperationFailure,
   isHeadResult,
   type BaseOperation,
   type OperationDefinition,
@@ -278,11 +279,10 @@ export interface RunOperationOptions {
 export interface OperationScope {
   peekInstance(url: URL): Promise<InstanceOrError | undefined>;
   readonly caller: ScopeCaller;
-  // Whether the realm ACL declined the request this invocation belongs to.
-  // When it did, the policy gate decides whether the invocation runs. False
-  // for a caller the ACL allowed and for a request it never judged, and the
-  // gate then does nothing at all.
-  readonly coarseDeclined: boolean;
+  // What the realm ACL declined for the request this invocation belongs to.
+  // Where it declined an invocation, the policy gate decides whether it runs;
+  // everywhere else the gate does nothing at all.
+  readonly coarseDeclined: CoarseDeclined;
   // The payload a `create` entry is staged from, as its `input` stage and its
   // `params` check left it — what the operation would actually write, not the
   // bytes the caller sent. For a plain create that is the resource the card is
@@ -316,9 +316,19 @@ export type ScopeCaller =
 
 export interface ScopeInvocation {
   caller?: ScopeCaller;
-  coarseDeclined?: boolean;
+  coarseDeclined?: CoarseDeclined;
   proposed?: Record<string, unknown>;
 }
+
+// What the realm ACL declined for a request, judged per invocation rather than
+// once for the request, since one request can carry reads and writes.
+//
+// - `none`: a caller the ACL allowed, or a request it never judged.
+// - `writes`: a caller who may read the realm and not write it, on a request
+//   that writes. Their reads are the ACL's to answer, and only their writes
+//   are the policy's.
+// - `all`: a caller who may do neither.
+export type CoarseDeclined = 'none' | 'writes' | 'all';
 
 // The scope caller for a request's actor, which transports carry as a string
 // that is empty when nobody signed in.
@@ -344,7 +354,7 @@ export function newOperationScope(
   };
   let scopeFor = (
     caller: ScopeCaller,
-    coarseDeclined: boolean,
+    coarseDeclined: CoarseDeclined,
     proposed: Record<string, unknown> | undefined,
   ): OperationScope => ({
     peekInstance,
@@ -360,7 +370,7 @@ export function newOperationScope(
   });
   return scopeFor(
     invocation.caller ?? { kind: 'unattributed' },
-    invocation.coarseDeclined ?? false,
+    invocation.coarseDeclined ?? 'none',
     invocation.proposed,
   );
 }
@@ -584,18 +594,29 @@ export interface GatedOperation {
 // The gate is the last stage, after the operation is known to exist and to be
 // carried by the target. It matches rules against the adoption chain the index
 // recorded for the target, never against a type the caller named.
+//
+// For a caller the ACL declined outright, every refusal the resolution itself
+// makes is answered as the gate's. The resolution refuses for reasons that
+// describe the target: no such operation on its type, a declaration that did
+// not lower, a type that does not resolve. Answered as themselves, they would
+// tell such a caller which cards exist and what their types declare, which is
+// what the gate's refusal is written not to say.
 export async function resolveGatedOperation(
   core: OperationCore,
   target: OperationTarget,
   name: string,
   scope: OperationScope = newOperationScope(core),
 ): Promise<GatedOperation> {
-  let { definition, typeDefinition } = await resolveUngated(
-    core,
-    target,
-    name,
-    scope,
-  );
+  let resolved: Awaited<ReturnType<typeof resolveUngated>>;
+  try {
+    resolved = await resolveUngated(core, target, name, scope);
+  } catch (e: unknown) {
+    if (scope.coarseDeclined === 'all' && isOperationFailure(e)) {
+      throw notPermitted(target, name);
+    }
+    throw e;
+  }
+  let { definition, typeDefinition } = resolved;
   let decision = await gateOperation(
     core,
     target,
@@ -785,7 +806,7 @@ async function resolveReadShape(
       // paths by the handler.
       scope.derive({
         caller: { kind: 'unattributed' },
-        coarseDeclined: false,
+        coarseDeclined: 'none',
       }),
     );
   } catch {
@@ -812,7 +833,7 @@ export async function runOperation(
     target === request.target ? request : { ...request, target };
   let scope = newOperationScope(core, {
     caller: scopeCallerFor(canonical.actor),
-    ...(canonical.coarseDeclined ? { coarseDeclined: true } : {}),
+    ...(canonical.coarseDeclined ? { coarseDeclined: 'all' as const } : {}),
   });
   let definition = await resolveOperation(core, target, canonical.name, scope);
   // The four stages of an invocation, in the one order they run: the `input`
