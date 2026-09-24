@@ -92,7 +92,12 @@ function rebaseSpecifier(
 // and the copy the bundler puts in the chunk exposes the same class from that
 // same chunk. Anything else a bundled module imports has to be bundled too —
 // `Integration | bundled base modules` fails when it is not.
-export const FETCHED_RE_EXPORTS = new Set(['string', 'markdown', 'text-area']);
+export const FETCHED_RE_EXPORTS = new Set([
+  'string',
+  'markdown',
+  'text-area',
+  'file-api',
+]);
 
 export const BUNDLED_BASE_MODULES: Record<
   string,
@@ -122,7 +127,7 @@ export const BUNDLED_BASE_MODULES: Record<
   //
   // `file-api`, `command`, `commands/search-card-result`, `theme`, `index`,
   // `command-field`, `frontmatter-parse` and `file-formats/index` are out on
-  // the same rule; `FETCHED_RE_EXPORTS` lists the three a bundled module still
+  // the same rule; `FETCHED_RE_EXPORTS` lists the ones a bundled module still
   // imports, which are the ones the closure check has to allow.
   'card-api': () => import('@cardstack/base/card-api'),
   '-private': () => import('@cardstack/base/-private'),
@@ -170,9 +175,10 @@ export const BUNDLED_BASE_MODULES: Record<
   // walks past it. Card code importing it keeps fetching it from the realm,
   // where evaluation loads card-api first and the identity comes out right.
   //
-  // Nothing bundled imports it at runtime — card-serialization's import is
-  // `import type`, which erases — so leaving it out keeps the bundled set
-  // closed under imports.
+  // The file-def modules import it at runtime, which `FETCHED_RE_EXPORTS`
+  // allows on the same argument that covers `string`: the bundler resolves the
+  // re-export inside the importing chunk, so what it reaches is card-api's own
+  // class, from the chunk card-api is already in.
   'file-formats/file-image': () =>
     import('@cardstack/base/file-formats/file-image'),
   'file-formats/file-presentation': () =>

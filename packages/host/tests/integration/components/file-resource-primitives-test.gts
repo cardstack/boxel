@@ -9,7 +9,7 @@
 
 // @ts-ignore no public types for `precompileTemplate`
 import { precompileTemplate } from '@ember/template-compilation';
-import { render } from '@ember/test-helpers';
+import { render, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -251,6 +251,13 @@ module('Integration | FileDef resource primitives', function (hooks) {
         strictMode: true,
         scope: () => ({ FileAudio, file }),
       }),
+    );
+    // The blob load runs outside the runloop, so `render` settles before the
+    // fetch has failed and the modifier has fallen back. What the resource
+    // promises is that playback degrades to the canonical source, not that it
+    // does so within a render.
+    await waitUntil(
+      () => document.querySelector('audio')?.getAttribute('src') !== null,
     );
     assert
       .dom('audio')
