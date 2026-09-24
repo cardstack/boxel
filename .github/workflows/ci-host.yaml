@@ -1377,6 +1377,7 @@ jobs:
       # measured in the wrong environment — which is why there is still no
       # fallback to this run's own report.
       - name: Download a merged junit report from a qualifying PR run
+        id: timings-source
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1463,8 +1464,13 @@ jobs:
           # answer counts as not-Percy, so an unrecognised run is passed over
           # rather than measured on a guess.
           qualifies() {
-            local candidate="$1" jobs_json percy imported
-            jobs_json=$(gh api "repos/$REPO/actions/runs/$candidate/jobs?per_page=100") || return 1
+            local candidate="$1" jobs_json percy imported head merged
+            jobs_json=$(gh api "repos/$REPO/actions/runs/$candidate/jobs?per_page=100") || {
+              # Say so, rather than letting a transport or permissions failure
+              # read as a disqualification in the log.
+              echo "  run $candidate: could not read its jobs"
+              return 1
+            }
             percy=$(printf '%s' "$jobs_json" |
               jq -r '[.jobs[] | select(.name | test("Finalise Percy")) | .conclusion] | first // "unknown"')
             [ "$percy" = "success" ] || { echo "  run $candidate: Finalise Percy is $percy, not a Percy-loaded run"; return 1; }
@@ -1472,6 +1478,26 @@ jobs:
               jq -r '[.jobs[] | select(.name | startswith("Host Tests")) | .steps[]?
                       | select(.name == "Import cached realm index" and .conclusion == "success")] | length')
             [ "${imported:-0}" -gt 0 ] || { echo "  run $candidate: indexed from scratch"; return 1; }
+
+            # The run must measure code that landed. A PR run measures main
+            # plus that PR's diff, which is what makes it representative — but
+            # only if the diff is going to be there. An open PR that makes one
+            # module slow would otherwise be recorded as main's cost, and the
+            # generator's drift gate cannot catch it: it scores both packings
+            # against this run's own timings, so a large artificial change
+            # reads as a large improvement and is committed.
+            #
+            # `pull_requests[]` on the run object is empty often enough not to
+            # be usable, so ask the head commit which PRs contain it and
+            # whether any of them merged.
+            head=$(printf '%s' "$jobs_json" | jq -r 'first(.jobs[].head_sha) // empty')
+            [ -n "$head" ] || { echo "  run $candidate: no head commit to check"; return 1; }
+            merged=$(gh api "repos/$REPO/commits/$head/pulls" \
+              --jq '[.[] | select(.merged_at != null)] | length') || {
+              echo "  run $candidate: could not check whether its PR merged"
+              return 1
+            }
+            [ "${merged:-0}" -gt 0 ] || { echo "  run $candidate: its PR has not merged"; return 1; }
             return 0
           }
 
@@ -1485,11 +1511,11 @@ jobs:
           # cost in months — the exact failure this job exists to prevent.
           #
           # Taking another PR's run costs freshness of code, not correctness of
-          # shape: every condition above is checked on whichever run is used,
-          # so the measurement still describes the environment the weights are
-          # spent in. A run from a few hours ago is strictly fresher than a
-          # file that cannot be rewritten at all, and the generator's drift
-          # gate still decides whether the result is worth a commit.
+          # shape: every condition in `qualifies` is checked on whichever run
+          # is used, including that its PR merged, so the measurement
+          # describes both the environment the weights are spent in and code
+          # that is actually on main. A run from a few hours ago is fresher
+          # than a file that cannot be rewritten at all.
           # No older than a week, because the point is weights measured on
           # roughly current code — an ancient run is not an improvement on a
           # stale file, it is the same problem with a fresher commit date. The
@@ -1518,12 +1544,20 @@ jobs:
           # have been observed serving a cached page, and a stale page is
           # precisely how a long-superseded run would be picked. The age bound
           # makes that harmless either way.
-          candidates="$candidates
-          $(CUTOFF="$cutoff" gh api "repos/$REPO/actions/workflows/ci-host.yaml/runs?per_page=100" \
+          # The one call that has to work. Everything above degrades to "no
+          # preferred candidate", which is survivable; if this list cannot be
+          # fetched there is nothing to search, and a missing `actions: read`
+          # or an outage would otherwise end on the same quiet `leave` as a
+          # merge with nothing to qualify — a refresh silently disabled until
+          # someone notices the file has stopped moving.
+          recent=$(CUTOFF="$cutoff" gh api "repos/$REPO/actions/workflows/ci-host.yaml/runs?per_page=100" \
             --jq '[.workflow_runs[]
                    | select(.event == "pull_request" and .conclusion == "success"
                             and .run_attempt == 1 and .created_at > env.CUTOFF)]
-                  | sort_by(.created_at) | reverse | .[0:12] | .[].id' || true)"
+                  | sort_by(.created_at) | reverse | .[0:12] | .[].id') ||
+            broke "could not list recent CI Host runs"
+          candidates="$candidates
+          $recent"
 
           # Downloading is part of qualifying, not a step after it. A run whose
           # merged report has expired or was never published is no more usable
@@ -1546,6 +1580,9 @@ jobs:
             leave "no recent first-attempt CI Host run was Percy-loaded, cache-imported and still holds its merged report"
           fi
           echo "Shard timings will be regenerated from run $run_id"
+          # The generator's warning runs in the next step, which is a separate
+          # shell — naming the run from a variable set here would print empty.
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
 
       - name: Update memory baseline and shard timings
         # Retry from the latest main: another PR may merge to main while host
@@ -1596,7 +1633,7 @@ jobs:
               # below, which has nothing to do with shard timings.
               node packages/host/scripts/generate-test-module-timings.mjs merged-junit-report/host.xml \
                 --min-drift-seconds 60 --shard-count 16 ||
-                echo "::warning title=Shard timings not refreshed::the generator rejected the report from run $run_id"
+                echo "::warning title=Shard timings not refreshed::the generator rejected the report from run ${{ steps.timings-source.outputs.run_id }}"
             else
               echo "No merged junit report available — leaving shard timings unchanged."
             fi
