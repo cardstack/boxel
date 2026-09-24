@@ -1024,6 +1024,13 @@ export default class StoreService extends Service implements StoreInterface {
 
   // peek will return a stale instance in the case the server has an error for
   // this id
+  //
+  // `peek`, `get` and `getWithoutCache` split on `opts.type` where `peekError`
+  // does not, because only theirs changes the return type. Collapsing them
+  // means deriving the instance type from `opts.type`, which claims the
+  // type-parameter slot `T` occupies here — so it is one change with the
+  // decision about callers that assert a subclass through `T`, not a step
+  // before it.
   peek<T extends CardDef>(
     id: string,
     opts?: { type?: 'card' },
@@ -1085,11 +1092,6 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   // peekError will always return the current server state regarding errors for this id
-  peekError(id: string, opts?: { type?: 'card' }): CardErrorJSONAPI | undefined;
-  peekError(
-    id: string,
-    opts: { type: 'file-meta' },
-  ): CardErrorJSONAPI | undefined;
   peekError(
     id: string,
     opts?: { type?: StoreReadType },
@@ -1203,32 +1205,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.notifyCardInvalidationSubscribers(id);
   }
 
-  async patch<T extends CardDef = CardDef>(
-    id: string,
-    patch: PatchData,
-    opts?: { doNotPersist?: true },
-  ): Promise<T | CardErrorJSONAPI | undefined>;
-  async patch<T extends CardDef = CardDef>(
-    id: string,
-    patch: PatchData,
-    opts?: { doNotWaitForPersist?: true },
-  ): Promise<T | CardErrorJSONAPI | undefined>;
-  async patch<T extends CardDef = CardDef>(
-    id: string,
-    patch: PatchData,
-    opts?: { doNotPersist?: true; doNotWaitForPersist?: true },
-  ): Promise<T | CardErrorJSONAPI | undefined>;
-  async patch<T extends CardDef = CardDef>(
-    id: string,
-    patch: PatchData,
-    opts?: { clientRequestId?: string },
-  ): Promise<T | CardErrorJSONAPI | undefined>;
-  async patch<T extends CardDef = CardDef>(
-    id: string,
-    patch: PatchData,
-    opts?: { doNotWaitForPersist?: true; clientRequestId?: string },
-  ): Promise<T | CardErrorJSONAPI | undefined>;
-  async patch<T extends CardDef = CardDef>(
+  async patch(
     id: string,
     patch: PatchData,
     opts?: {
@@ -1236,12 +1213,12 @@ export default class StoreService extends Service implements StoreInterface {
       doNotWaitForPersist?: true;
       clientRequestId?: string;
     },
-  ): Promise<T | CardErrorJSONAPI | undefined> {
+  ): Promise<CardDef | CardErrorJSONAPI | undefined> {
     if (this.renderContextBlocksPersistence()) {
       return;
     }
     // eslint-disable-next-line ember/classic-decorator-no-classic-methods
-    let instance = await this.get<T>(id);
+    let instance = await this.get(id);
     if (!instance || !isCardInstance(instance)) {
       return;
     }
@@ -1310,7 +1287,7 @@ export default class StoreService extends Service implements StoreInterface {
       }
     }
 
-    return persistedResult as T | CardErrorJSONAPI;
+    return persistedResult;
   }
 
   // Instances only: the query runs against the search requesting full

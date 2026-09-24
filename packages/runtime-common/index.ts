@@ -2193,10 +2193,9 @@ export interface Store {
     id: string,
     opts: { type: 'file-meta' },
   ): T | CardErrorJSONAPI | undefined;
-  peekError(id: string, opts?: { type?: 'card' }): CardErrorJSONAPI | undefined;
   peekError(
     id: string,
-    opts: { type: 'file-meta' },
+    opts?: { type?: StoreReadType },
   ): CardErrorJSONAPI | undefined;
   get<T extends CardDef>(
     id: string,
@@ -2207,11 +2206,11 @@ export interface Store {
     opts: { type: 'file-meta' },
   ): Promise<T | CardErrorJSONAPI>;
   delete(id: string): Promise<void>;
-  patch<T extends CardDef>(
+  patch(
     id: string,
     patchData: PatchData,
     opts?: { doNotPersist?: boolean; clientRequestId?: string },
-  ): Promise<T | CardErrorJSONAPI | undefined>;
+  ): Promise<CardDef | CardErrorJSONAPI | undefined>;
   // `scope` pins which rows the search returns and drives the element type:
   // 'files' → `FileDef[]`, 'all' → `(CardDef | FileDef)[]`, and 'cards' (or
   // omitted) → `CardDef[]`. When omitted the scope is inferred from the filter —
