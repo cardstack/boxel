@@ -13,6 +13,7 @@ import type {
   UnavailableOverlay,
 } from './executors.ts';
 import type { BxlTransformModule } from './transforms.ts';
+import type { BxlPolicyParser } from './policy.ts';
 import type { OperationMissingReason } from './telemetry.ts';
 import type { DefinitionKind } from '../definitions.ts';
 
@@ -127,4 +128,13 @@ export type BxlTransformSlotsReachLocal = Assignable<
 // runner builds it inline rather than exporting a type for it.
 type LocalTransformProgramContext = NonNullable<
   Parameters<BxlTransformModule['runBxlTransform']>[2]
+>;
+
+// The same guard for the policy compiler. `policy.ts` states the one parser
+// call it makes structurally, and a profile issue whose `code` or `message`
+// changed shape would change which predicates it refuses without anything
+// failing to compile.
+export type BxlPolicyParserReachesLocal = Assignable<
+  BxlPolicyParser,
+  typeof import('@cardstack/bxl')
 >;

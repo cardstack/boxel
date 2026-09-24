@@ -1138,7 +1138,10 @@ export function setupLocalIndexing(hooks: NestedHooks) {
       clearFetchCache: true,
       reason: 'test teardown',
     });
-    getTestRealmRegistry().clear();
+    // The test-realm registry is cleared by setupApplicationTest /
+    // setupRenderingTest once the owner is destroyed, not here: the app is
+    // still live for the rest of teardown and its fetches must keep reaching
+    // the in-process realms.
   });
 }
 

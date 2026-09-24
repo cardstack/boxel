@@ -150,6 +150,12 @@ export class ProfileManager implements RealmAuthenticator {
   private matrixLoginFn: typeof matrixLogin;
   private promptPasswordFn: (question: string) => Promise<string>;
   private isTtyFn: () => boolean;
+  // Set when a profiles file exists on disk but couldn't be read as a profiles
+  // store (unparseable, or a shape we don't recognize). The manager still
+  // starts empty so `profile add` can recover, but discovery callers must be
+  // able to tell "couldn't read the store" apart from "no profiles yet" —
+  // otherwise an unreadable store reads as an absent profile.
+  private loadError: string | null = null;
 
   constructor(configDir?: string, deps?: ProfileManagerDeps) {
     this.configDir = configDir || DEFAULT_CONFIG_DIR;
@@ -169,34 +175,52 @@ export class ProfileManager implements RealmAuthenticator {
   private loadConfig(): ProfilesConfig {
     const defaultConfig: ProfilesConfig = { profiles: {}, activeProfile: null };
 
-    if (fs.existsSync(this.profilesFile)) {
-      try {
-        const data = fs.readFileSync(this.profilesFile, 'utf-8');
-        const parsed: unknown = JSON.parse(data);
+    // A missing file is the genuine "no profiles yet" case, not a load error.
+    if (!fs.existsSync(this.profilesFile)) {
+      return defaultConfig;
+    }
 
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          const candidate = parsed as Record<string, unknown>;
-          const profiles =
-            candidate.profiles &&
-            typeof candidate.profiles === 'object' &&
-            !Array.isArray(candidate.profiles)
-              ? (candidate.profiles as ProfilesConfig['profiles'])
-              : null;
-          const activeProfile =
-            candidate.activeProfile === null ||
-            typeof candidate.activeProfile === 'string'
-              ? (candidate.activeProfile as string | null)
-              : null;
+    try {
+      const data = fs.readFileSync(this.profilesFile, 'utf-8');
+      const parsed: unknown = JSON.parse(data);
 
-          if (profiles) {
-            return { profiles, activeProfile };
-          }
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const candidate = parsed as Record<string, unknown>;
+        const profiles =
+          candidate.profiles &&
+          typeof candidate.profiles === 'object' &&
+          !Array.isArray(candidate.profiles)
+            ? (candidate.profiles as ProfilesConfig['profiles'])
+            : null;
+        const activeProfile =
+          candidate.activeProfile === null ||
+          typeof candidate.activeProfile === 'string'
+            ? (candidate.activeProfile as string | null)
+            : null;
+
+        if (profiles) {
+          return { profiles, activeProfile };
         }
-      } catch {
-        // Corrupted file, start fresh
       }
+      // The file existed and parsed, but isn't a profiles store we recognize.
+      this.loadError =
+        `Profiles file at ${this.profilesFile} is not a recognizable profiles store; ` +
+        `starting with no profiles.`;
+    } catch (err) {
+      // Unreadable or unparseable. Start empty so `profile add` can recover,
+      // but remember the failure so discovery can report it.
+      this.loadError =
+        `Could not read profiles file at ${this.profilesFile}: ` +
+        `${err instanceof Error ? err.message : String(err)}`;
     }
     return defaultConfig;
+  }
+
+  // Non-null when a profiles file exists but couldn't be loaded — see
+  // `loadError`. Discovery callers (`profile list`) report it rather than
+  // presenting an unreadable store as an empty one.
+  getLoadError(): string | null {
+    return this.loadError;
   }
 
   private saveConfig(): void {
