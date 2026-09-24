@@ -44,8 +44,26 @@ export interface FetchRealmSourcesOptions {
    * shallow, but it is authored by someone else and a bound is cheap.
    */
   maxDepth?: number;
-  /** Sent as `Authorization` when the realm is not public. */
-  authorization?: string;
+  /**
+   * Identity the memo is partitioned by — the user behind `fetch`, when that
+   * fetch authenticates (both gates pass one that does). Two users reading the
+   * same private module URL must not share an entry: the realm decides per
+   * request what each may read, and a shared entry would answer one user with
+   * bytes fetched as another. Omit only for a genuinely anonymous fetch.
+   */
+  cacheScope?: string;
+  /**
+   * Per-request budget. The degrade-on-unreachable contract has to cover a
+   * hung realm as well as a refused connection: staging runs before the
+   * type-checker is spawned, so no downstream timeout applies to it, and one
+   * accepted-but-never-answered socket would otherwise stall the gate with no
+   * output. A timeout lands on the same failure -> degrade path as a refused
+   * connection. Modules fetch in parallel per depth level but a module's
+   * extension candidates probe sequentially (up to 4), so a fully hung realm
+   * costs at most 4x this per level — and stages nothing, so the walk ends at
+   * the entry level, well under the type-checker's own two-minute cap.
+   */
+  fetchTimeoutMs?: number;
 }
 
 export interface RealmSourceFailure {
@@ -67,6 +85,7 @@ export interface FetchRealmSourcesResult {
 }
 
 const DEFAULT_MAX_DEPTH = 10;
+const DEFAULT_FETCH_TIMEOUT_MS = 10_000;
 
 /**
  * Extensions to try when a specifier carries none. Card code imports
@@ -81,15 +100,13 @@ const DEFAULT_MAX_DEPTH = 10;
 const MODULE_EXTENSIONS = ['.gts', '.ts', '.gjs', '.js'];
 
 /**
- * Cross-call memo of fetched sources, keyed by absolute module URL. A run
- * type-checks many cards against the same handful of realm modules, and the
- * validators run repeatedly against a realm whose modules rarely change, so a
- * repeat fetch revalidates with the stored validator instead of re-downloading.
- *
- * The key is the URL alone, with no auth context. That is safe while every
- * fetch is anonymous; the day a caller passes `authorization`, two users
- * reading the same private module URL would share an entry — fold the auth into
- * the key before wiring an authenticated caller.
+ * Cross-call memo of fetched sources, keyed by `cacheScope` + absolute module
+ * URL. A run type-checks many cards against the same handful of realm modules,
+ * and the validators run repeatedly against a realm whose modules rarely
+ * change, so a repeat fetch revalidates with the stored validator instead of
+ * re-downloading. The scope in the key is what keeps two users' reads of the
+ * same private module URL from sharing an entry (see
+ * {@link FetchRealmSourcesOptions.cacheScope}).
  */
 const sourceCache = new Map<
   string,
@@ -200,7 +217,8 @@ async function fetchModuleSource(
   realmURL: string,
   realmPath: string,
   fetchFn: typeof globalThis.fetch,
-  authorization: string | undefined,
+  cacheScope: string | undefined,
+  fetchTimeoutMs: number,
 ): Promise<{ realmPath: string; source: string } | { error: string }> {
   let candidates = hasKnownExtension(realmPath)
     ? [realmPath]
@@ -219,7 +237,8 @@ async function fetchModuleSource(
       errors.push(`${candidate}: resolves outside the realm`);
       continue;
     }
-    let cached = sourceCache.get(url);
+    let cacheKey = `${cacheScope ?? ''}|${url}`;
+    let cached = sourceCache.get(cacheKey);
     let headers: Record<string, string> = {
       // A plain GET returns the module *transpiled* — decorators lowered,
       // templates compiled — which resolves and type-checks as though it were
@@ -227,9 +246,6 @@ async function fetchModuleSource(
       // bytes on disk.
       Accept: SupportedMimeType.CardSource,
     };
-    if (authorization) {
-      headers.Authorization = authorization;
-    }
     if (cached?.etag) {
       headers['If-None-Match'] = cached.etag;
     } else if (cached?.lastModified) {
@@ -238,7 +254,10 @@ async function fetchModuleSource(
 
     let response: Response;
     try {
-      response = await fetchFn(url, { headers });
+      response = await fetchFn(url, {
+        headers,
+        signal: AbortSignal.timeout(fetchTimeoutMs),
+      });
     } catch (error: unknown) {
       errors.push(
         `${candidate}: ${error instanceof Error ? error.message : String(error)}`,
@@ -255,7 +274,7 @@ async function fetchModuleSource(
     }
 
     let source = await response.text();
-    sourceCache.set(url, {
+    sourceCache.set(cacheKey, {
       source,
       etag: response.headers.get('etag') ?? undefined,
       lastModified: response.headers.get('last-modified') ?? undefined,
@@ -282,7 +301,8 @@ export async function fetchRealmSources(
     prefixRealmURLs,
     fetch: fetchFn = globalThis.fetch,
     maxDepth = DEFAULT_MAX_DEPTH,
-    authorization,
+    cacheScope,
+    fetchTimeoutMs = DEFAULT_FETCH_TIMEOUT_MS,
   } = options;
 
   let modules: RealmSourceModules = new Map();
@@ -347,7 +367,8 @@ export async function fetchRealmSources(
           realmURL,
           pending.realmPath,
           fetchFn,
-          authorization,
+          cacheScope,
+          fetchTimeoutMs,
         );
         return { pending, fetched };
       }),

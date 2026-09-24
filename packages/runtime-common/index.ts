@@ -16,7 +16,6 @@ import type {
   CaptureMedia,
   CaptureOutputType,
   ScreenshotFormat,
-  ScreenshotImageType,
   ScreenshotManifest,
 } from './capture-spec.ts';
 import type { ErrorEntry } from './error.ts';
@@ -291,14 +290,46 @@ export interface BuildModelDiagnostics {
   // earlier card in the same job rather than not happening.
   moduleEvaluationCount?: number;
   moduleEvaluationTotalMs?: number;
-  // Present only when this visit dropped the tab's loader before building
-  // the model, naming which of the two synchronizations did it. A drop
-  // makes a nonzero `moduleEvaluationCount` expected rather than
-  // surprising: the graph was warm and this visit threw it away, so the
-  // re-fetch and re-evaluation it pays for is the drop's price and not a
-  // property of the card. Its absence alongside a large count is the
-  // reading that says the tab had never evaluated the graph at all.
-  loaderResetReason?: 'clearCache' | 'loaderEpoch';
+  // Present only when this visit cleared the tab's loader before building
+  // the model, naming what cleared it. Each makes a nonzero
+  // `moduleEvaluationCount` expected rather than surprising, and each says
+  // something different about who is answerable for it:
+  //
+  //   - `clearCache` and `loaderEpoch` follow from an executable changing.
+  //     The epoch moved, or the flag was armed, because the pass invalidated
+  //     a module, so the re-fetch and re-evaluation is that change's price
+  //     and not a property of the card.
+  //   - `firstEpoch` does not. The tab had recorded no epoch of this realm's
+  //     series, so this is its first epoch-carrying visit, and the discard is
+  //     the price of where the pool ran the pass rather than of anything the
+  //     pass did. It reaches a warm loader either way — a pooled tab boots
+  //     the host app before serving anything, so a reset always discards
+  //     something; what varies is whether the pass caused the reset.
+  //
+  // So a count attributable to the pass is `clearCache` or `loaderEpoch`, and
+  // a fleet showing mostly `firstEpoch` is a pool-routing finding rather than
+  // an indexing one. Absence alongside a large count is none of the three,
+  // and is worth a look: a warm tab that nothing cleared has no accounted
+  // reason to evaluate a graph.
+  loaderResetReason?: 'clearCache' | 'loaderEpoch' | 'firstEpoch';
+  // Where the card branch got the instance's stored bytes: 'stash' when the
+  // visit carried them (`PrerenderVisitArgs.cardSource`) and the model was
+  // built without a `card+source` GET, 'fetch' when the render read them
+  // itself. Absent on a render with no card branch at all (a file-only visit).
+  //
+  // This is what makes the read collapse observable rather than inferred. The
+  // failure it exists to catch is silent: a stash that is written but not
+  // honored leaves the render fetching, the row correct, and every
+  // row-correctness assertion green — so the only way to tell the two apart is
+  // to record which path ran. `buildModelMs.fetchSource` narrows on the same
+  // question but answers it with a duration, which needs a threshold and a
+  // warm network to read.
+  //
+  // Carried out on the `render.meta` payload, which only the index visit runs
+  // — so on a row this describes the read behind the row's document. The
+  // prerender-html visit stashes and consumes a source the same way but never
+  // enters that route, so its own choice is reported nowhere.
+  cardSourceFrom?: 'stash' | 'fetch';
   // Per-field hydration wall-clock, keyed by dotted field path from the
   // card's root — the deserialization sibling of `searchDocFieldsMs`, and
   // the breakdown of `buildModelMs.hydrate`. Same bounding, so a cheap card
@@ -464,6 +495,22 @@ export interface PrerenderMeta {
   displayNames: string[] | null;
   deps: string[] | null;
   types: string[] | null;
+  // The content hash of the stored source this render read to build `serialized`
+  // — persisted as `boxel_index.source_content_hash` and served as
+  // `meta.version` on the card+json GET.
+  //
+  // It is reported from here, rather than computed by the worker over its own
+  // read of the same file, because a client uses it as the base a write is
+  // computed against. The two reads are separate `card+source` GETs seconds
+  // apart that can be answered by different realm-server replicas, so a hash
+  // taken from the worker's read can describe bytes this render never saw —
+  // including, in one interleaving, NEWER bytes than the document beside it,
+  // which reads to a client as a confirmation of state it never held. One read
+  // behind both the document and the hash is what makes that unrepresentable.
+  //
+  // Null when this render built no card document (an error render, or a file
+  // render, which has no stored card source behind it).
+  sourceContentHash?: string | null;
   // Optional host-side timing block. The Prerenderer lifts this onto
   // `response.meta.diagnostics` so it persists to
   // `boxel_index.diagnostics` for SQL-side perf triage.
@@ -1023,6 +1070,19 @@ export interface Diagnostics
   // card that is genuinely broken, so a reader must require presence.
   warmedHostShellHash?: string | null;
   warmedHostShellHashAtCompletion?: string | null;
+  // The ordering position of `warmedHostShellHash` — the position the realm
+  // server claimed for that shell when it observed it. The tokens above are
+  // hashes, so they answer "same shell?" and never "older shell?"; this is
+  // what makes a render's bundle comparable to the one now being served, and
+  // it is the value the write site copies into the row's own indexed column.
+  //
+  // Absent whenever no number reached the render: a realm server whose
+  // database could not answer reports the token alone, and the two services
+  // deploy separately, so a worker sees such responses throughout a rolling
+  // deploy. Absent therefore means unknown, never old — a repair selecting
+  // `< current` excludes it by SQL's own semantics, which is the intended
+  // reading.
+  warmedHostShellGeneration?: number;
   // Set only when the prerender server has concluded that a module-resolution
   // failure cannot be attributed to the card: the render failed on a missing
   // export, a re-render on a recycled pool failed the same way, and the pool
@@ -1243,7 +1303,61 @@ export type PrerenderVisitArgs = {
   // jobs interleave on a shared tab, and scoping on the job would tear that
   // tab's state down on every alternation while still holding one view.
   renderScope?: string;
+  // The card instance's stored bytes, for a visit whose caller already read
+  // them. The card branch of the render route builds its model from these
+  // instead of fetching the card's source for itself. Absent for any visit
+  // with no read behind it — an on-demand `/render` of a live card — which
+  // keeps fetching.
+  cardSource?: CardSourceVisitArgs;
 };
+
+// A card instance's stored source, handed to a visit by a caller that has
+// already read it, so the render need not read it again. The two header-derived
+// values travel with the bytes because the card branch reads both off its own
+// GET response when it makes one — the same reason the file-render stash
+// carries the visit's realm (a render has no response header to learn it from).
+export type CardSourceVisitArgs = {
+  // The bytes exactly as stored, i.e. what an `Accept: card+source` GET of the
+  // instance returns as its body.
+  source: string;
+  // What that GET's `x-boxel-realm-url` header would report.
+  realmURL: string;
+  // What `new Date(<last-modified header>).getTime()` would produce:
+  // milliseconds since the epoch. `Reader#readFile` parses the same header into
+  // seconds, so a caller holding a `FileRef` multiplies by 1000.
+  lastModified: number;
+};
+
+// Above this length a visit does not carry the card's source, and its render
+// fetches for itself. The bytes ride the `prerender-visit` POST the caller
+// already makes and then one CDP message to the page — both internal, and both
+// replacing a balancer round-trip — but neither should grow without bound for a
+// pathological instance. Counted in UTF-16 code units rather than encoded bytes:
+// this is a ceiling on an alternative to work that happens anyway, not an
+// accounting of the wire. Enforced both here and at the request boundary that
+// receives the payload, so a producer that bypasses this helper is still bound.
+export const MAX_STASHED_CARD_SOURCE_LENGTH = 1024 * 1024;
+
+// Build the `cardSource` a visit carries, or `undefined` when this file's bytes
+// should not travel — the file is not a card instance, or it exceeds the cap.
+// Shared by the two indexing visit sites so one rule decides for both.
+export function cardSourceForVisit({
+  source,
+  realmURL,
+  lastModified,
+  isCardInstance,
+}: {
+  source: string;
+  realmURL: string;
+  // Seconds since the epoch, as `Reader#readFile` reports it.
+  lastModified: number;
+  isCardInstance: boolean;
+}): CardSourceVisitArgs | undefined {
+  if (!isCardInstance || source.length > MAX_STASHED_CARD_SOURCE_LENGTH) {
+    return undefined;
+  }
+  return { source, realmURL, lastModified: lastModified * 1000 };
+}
 
 // Inputs the declared-screenshot capture steps need from the indexing side:
 // what the previous pass captured (so unchanged file-content-keyed slots can
@@ -1286,11 +1400,16 @@ export type DeclaredScreenshotCaptureResult = {
   name: string;
   specHash: string;
   // CSS px of the capture box; physical pixels are these × deviceScaleFactor.
-  width: number;
-  height: number;
-  deviceScaleFactor: number;
+  // Absent for a pdf capture, which has no raster geometry — `pageCount`
+  // describes the paged document instead.
+  width?: number;
+  height?: number;
+  deviceScaleFactor?: number;
+  // Page count of a pdf capture; absent for raster output. The document's byte
+  // size is derived from the persisted bytes, so it rides only on the manifest.
+  pageCount?: number;
   contentType: string;
-  imageType: ScreenshotImageType;
+  outputType: CaptureOutputType;
   keyBy: 'generation' | 'file-content';
   useAsThumbnail?: boolean;
   base64?: string;
@@ -1658,6 +1777,7 @@ export * from './bfm-card-references.ts';
 export * from './bfm-math-render.ts';
 export * from './bfm-mermaid-render.ts';
 export * from './constants.ts';
+import { executableExtensions } from './constants.ts';
 export * from './search-replace-markers.ts';
 export * from './helpers/const.ts';
 export * from './document.ts';
@@ -1721,6 +1841,7 @@ export { Loader };
 export {
   fetchWithTransientRetry,
   isRetryableStatus,
+  loaderForModule,
   DEFAULT_TRANSIENT_RETRY_DELAYS_MS,
 } from './loader.ts';
 export {
@@ -1739,8 +1860,8 @@ export * from './render-route-options.ts';
 export * from './publishability.ts';
 export * from './pr-manifest.ts';
 export * from './file-def-code-ref.ts';
+export * from './file-def-bindings.ts';
 
-export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 // Extensions covered by the realm-wide pre-warm sweep that primes the
 // modules cache before the visit loop. This is an optimization, not a
 // correctness gate: a `.ts` / `.js` file CAN host a `CardDef`

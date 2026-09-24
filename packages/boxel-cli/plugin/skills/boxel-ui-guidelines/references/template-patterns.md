@@ -264,27 +264,31 @@ Choose elements by meaning; reserve `<div>` for pure geometry/layout machinery:
 Attribute ordering: `data-test-*` attributes go **absolutely last** on an element — after all other attributes and after modifiers.
 
 ```gts
-// Avoid — divs for everything, no accessible names
+import { on } from '@ember/modifier';
+import { IconButton } from '@cardstack/boxel-ui/components';
+import PlusIcon from '@cardstack/boxel-icons/plus';
+
+// Avoid — divs for everything, raw button, no accessible names
 <div class='title'>{{@model.cardTitle}}</div>
 <div class='controls'>
   <button {{on 'click' this.zoomIn}}><PlusIcon /></button>
 </div>
 <div class='count'>{{this.count}}</div>
 
-// Correct — semantic elements, labels, data-test last
+// Correct — semantic elements, IconButton, labels, data-test last
 <header class='intro'>
   <h2><@fields.cardTitle /></h2>
   <p class='subtitle'><@fields.cardDescription /></p>
 </header>
 <div class='controls' role='toolbar' aria-label='Zoom controls'>
-  <button
-    type='button'
+  <IconButton
+    @icon={{PlusIcon}}
+    @width='16'
+    @height='16'
     aria-label='Zoom in'
     {{on 'click' this.zoomIn}}
     data-test-zoom-in
-  >
-    <PlusIcon width='16' height='16' aria-hidden='true' />
-  </button>
+  />
 </div>
 <output class='count' data-test-count>{{this.count}}</output>
 ```

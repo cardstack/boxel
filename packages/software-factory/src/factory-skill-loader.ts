@@ -101,9 +101,7 @@ const SKILL_PRIORITY: readonly string[] = [
  * `technical-rules.md` is deliberately absent from both this map and the
  * always-load list: boxel-skills folded its content into the `boxel`
  * SKILL.md Cardinal Rules table and the core-patterns.md schema-hygiene
- * checklist (both of which the factory already loads) and removed the file;
- * the copy still in the built plugin skill only lingers until the next
- * BOXEL_SKILLS_VERSION bump.
+ * checklist (both of which the factory already loads) and removed the file.
  */
 export const REFERENCE_KEYWORD_MAP: Record<string, string[]> = {
   'core-patterns.md': ['pattern', 'card', 'structure', 'safe'],

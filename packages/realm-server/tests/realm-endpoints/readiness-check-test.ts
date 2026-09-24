@@ -64,6 +64,52 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       assert.strictEqual(response.status, 200, 'reports ready');
     });
 
+    // The same lane, holding the one member of it that does not write the
+    // index. The daily scoped-css GC enqueues one of these per realm, so on a
+    // backed-up background queue this is the state every realm sits in for as
+    // long as the sweep takes to drain. Gating on the bare lane answers 503 for
+    // all of them — a realm whose index is in fact current.
+    test('a parked scoped-css-gc job leaves the realm ready', async function (assert) {
+      let [{ id: parkedJobId }] = (await dbAdapter.execute(
+        `INSERT INTO jobs (job_type, concurrency_group, timeout, priority, args)
+           VALUES ('scoped-css-gc', $1, 3600, 0, $2)
+           RETURNING id`,
+        {
+          bind: [
+            indexingConcurrencyGroup(testRealm.url),
+            JSON.stringify({ realmUrl: testRealm.url }),
+          ],
+        },
+      )) as { id: number }[];
+      // The reservation is what keeps the job in the lane: this realm has a
+      // worker, and a job it drained would clear the lane and pass the test
+      // without the narrowing doing anything.
+      await dbAdapter.execute(
+        `INSERT INTO job_reservations (job_id, locked_until, worker_id)
+           VALUES ($1, NOW() + interval '5 minutes', 'peer-replica-worker')`,
+        { bind: [parkedJobId] },
+      );
+
+      let response = await request
+        .get('/_readiness-check')
+        .set('Accept', SupportedMimeType.RealmInfo);
+
+      let [job] = (await dbAdapter.execute(
+        `SELECT status FROM jobs WHERE id = $1`,
+        { bind: [parkedJobId] },
+      )) as { status: string }[];
+      assert.strictEqual(
+        job.status,
+        'unfulfilled',
+        'the job was still in the lane when readiness answered',
+      );
+      assert.strictEqual(
+        response.status,
+        200,
+        'reports ready — a queued sweep says nothing about the index',
+      );
+    });
+
     // Park a job in this realm's index lane behind a live reservation — the
     // state a peer replica's in-progress index leaves in the database, and one
     // no worker here can claim, since pg-queue skips any concurrency group

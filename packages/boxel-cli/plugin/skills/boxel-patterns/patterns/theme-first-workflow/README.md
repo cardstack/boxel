@@ -25,7 +25,7 @@ If you skip this step and build the card with hard-coded colors, you've wasted t
 Use Boxel defaults when the card does not need a distinct visual or brand identity; do not create or link a Theme in that case. When a specific Theme is wanted, choose among these options in order of preference:
 
 1. **Reuse an existing Theme.** Most realms already have a couple. Browse `<realm>/Theme/*.json` or search with `npx boxel search` filtered on the Theme class. Pick by `styleName` / `visualDNA` fields.
-2. **Copy and edit.** Take an existing Theme, `copy-card` it, modify the `cssVariables` and `cssImports`. Catalog Themes have a "Copy and Edit" menu item built in.
+2. **Copy and edit.** Take an existing structured Theme (`StyleReference`, `DetailedStyleReference`, `BrandGuide` — anything descending from `StructuredTheme`), `copy-card` it, and edit its structured fields (`rootVariables`, `darkModeVariables`, `typography`, and on a `BrandGuide` the palette and mark fields). On those cards `cssVariables` and `cssImports` are computed from the structured fields, so never edit them directly; stylesheets that cannot be derived from the font stacks go in `customCssImports`. A bare `Theme` card has only the free-form `cssVariables` string — prefer copying a structured one. Catalog Themes have a "Copy and Edit" menu item built in.
 3. **Author a new Theme.** Choose the narrowest base that preserves the design intent:
    - `@cardstack/base/brand-guide` for a full brand system with logo/mark usage, functional palette, color palette, typography, voice, and detailed style guidance. It is also the only shipped structured theme shape with dedicated fields for custom CSS variables outside the token contract (`customCssVariables`, `brandColorPalette`). Use it when custom variables are needed, but know the cost: they have no `theme.css` default and no boundary reset, and linking a different theme drops them, so any template that reads one needs a fallback (see `boxel-ui-guidelines/references/theme-token-contract.md`).
    - `@cardstack/base/detailed-style-reference` for a full style system without logo/mark material.
@@ -109,7 +109,8 @@ After writing the card and a sample instance, preview it in the live app (see `s
 | `--card`, `--card-foreground` | Card body surface + text |
 | `--primary`, `--primary-foreground` | Primary action / brand |
 | `--secondary`, `--secondary-foreground` | Secondary action |
-| `--accent`, `--accent-foreground` | Highlights, links |
+| `--accent`, `--accent-foreground` | Highlight surface and the text on it |
+| `--primary-ink`, `--accent-ink`, `--success-ink`, … | A hue used *as* text or icon color on a neutral surface (links, status words) |
 | `--muted`, `--muted-foreground` | Subdued backgrounds + secondary text |
 | `--border` | Dividers, outlines |
 | `--radius` | Default border-radius |

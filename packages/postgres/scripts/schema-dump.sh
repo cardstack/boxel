@@ -32,6 +32,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=stripe_events \
   --exclude-table-and-children=ai_bot_event_processing \
   --exclude-table-and-children=proxy_endpoints \
+  --exclude-table-and-children=billable_call_reservations \
   --exclude-table-and-children=claimed_domains_for_sites \
   --exclude-table-and-children=session_rooms \
   --exclude-table-and-children=host_shell_generation \

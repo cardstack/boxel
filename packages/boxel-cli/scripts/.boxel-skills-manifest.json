@@ -1,5 +1,5 @@
 {
-  "version": "v0.1.4",
+  "version": "v0.1.5",
   "skills": [
     "boxel",
     "boxel-create-edit-cards",
@@ -15,6 +15,7 @@
     "boxel-ui-guidelines",
     "boxel-workspace-cardinal-rules",
     "bxl-authoring",
+    "card-operations-authoring",
     "catalog-listing",
     "catalog-reuse",
     "ember-best-practices",

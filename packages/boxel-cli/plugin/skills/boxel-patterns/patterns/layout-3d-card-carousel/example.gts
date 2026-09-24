@@ -1,10 +1,4 @@
-import {
-  CardDef,
-  Component,
-  field,
-  contains,
-} from '@cardstack/base/card-api';
-import StringField from '@cardstack/base/string';
+import { CardDef, Component } from '@cardstack/base/card-api';
 import {
   codeRef,
   realmURL,
@@ -14,7 +8,8 @@ import {
 } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { gt } from '@cardstack/boxel-ui/helpers';
+import { Button } from '@cardstack/boxel-ui/components';
+import { cn, gt, cssVar } from '@cardstack/boxel-ui/helpers';
 import CubeIcon from '@cardstack/boxel-icons/cube';
 
 // Replace this with the CardDef you want to display on the cylinder.
@@ -37,8 +32,6 @@ export class CardCarousel extends CardDef {
   static displayName = 'Card Carousel';
   static icon = CubeIcon;
   static prefersWideFormat = true;
-
-  @field cardTitle = contains(StringField);
 
   static isolated = class Isolated extends Component<typeof CardCarousel> {
     @tracked isRotating = false;
@@ -86,16 +79,12 @@ export class CardCarousel extends CardDef {
       <div class='stage'>
         <header>
           <h1>{{if @model.cardTitle @model.cardTitle 'Carousel'}}</h1>
-          <button type='button' {{on 'click' this.toggleRotate}}>
+          <Button @kind='secondary' @size='small' {{on 'click' this.toggleRotate}}>
             {{if this.isRotating 'Stop' 'Auto-rotate'}}
-          </button>
+          </Button>
         </header>
 
-        <div class='cylinder {{if this.isRotating "spinning"}}'>
-          {{! @overlays={{false}} — the carousel lays results out on the
-              cylinder itself, so it wants plain rendering with no
-              operator-mode overlay chrome interfering with the 3D
-              transforms. }}
+        <div class={{cn 'cylinder' spinning=this.isRotating}}>
           <@context.searchResultsComponent
             @query={{this.searchQuery}}
             @mode='hover'
@@ -109,7 +98,10 @@ export class CardCarousel extends CardDef {
               {{#each results.entries key='id' as |entry index|}}
                 <div
                   class='slot'
-                  style='--card-index: {{index}}; --total-cards: {{results.entries.length}}'
+                  style={{cssVar
+                    card-index=index
+                    total-cards=results.entries.length
+                  }}
                 >
                   <entry.component />
                 </div>
@@ -130,8 +122,6 @@ export class CardCarousel extends CardDef {
           /* Camera distance. Smaller = more dramatic perspective. */
           perspective: 1200px;
           perspective-origin: 50% 45%;
-          background: var(--background, #0f172a);
-          color: var(--foreground, #e2e8f0);
           overflow: hidden;
           position: relative;
         }
@@ -173,23 +163,19 @@ export class CardCarousel extends CardDef {
              - radius: scales with card count so they don't overlap
              - the trailing rotateY(-angle) counter-rotates the slot
                so each card's face still looks at the camera */
-          --angle: calc((360deg / var(--total-cards)) * var(--card-index));
-          --radius: max(300px, calc(var(--total-cards) * 30px));
+          --_angle: calc((360deg / var(--total-cards)) * var(--card-index));
+          --_radius: max(300px, calc(var(--total-cards) * 30px));
 
-          transform:
-            rotateY(var(--angle))
-            translateZ(var(--radius))
-            rotateY(calc(var(--angle) * -1));
+          transform: rotateY(var(--_angle)) translateZ(var(--_radius))
+            rotateY(calc(var(--_angle) * -1));
 
           transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .slot:hover {
-          transform:
-            rotateY(var(--angle))
-            translateZ(calc(var(--radius) + 50px))
-            rotateY(calc(var(--angle) * -1))
-            scale(1.1);
+          transform: rotateY(var(--_angle))
+            translateZ(calc(var(--_radius) + 50px))
+            rotateY(calc(var(--_angle) * -1)) scale(1.1);
         }
 
         .empty {
@@ -200,8 +186,12 @@ export class CardCarousel extends CardDef {
         }
 
         @keyframes spin {
-          from { transform: rotateY(0deg); }
-          to   { transform: rotateY(360deg); }
+          from {
+            transform: rotateY(0deg);
+          }
+          to {
+            transform: rotateY(360deg);
+          }
         }
       </style>
     </template>
@@ -232,5 +222,6 @@ export class CardCarousel extends CardDef {
 //   (rounded corners, halo). Pass `@overlays={{false}}` to drop the
 //   overlay, and for a clean carousel look pass `@displayContainer={{false}}`
 //   on searchResultsComponent as well (drops the container chrome from
-//   every row) or recolor the chrome via `:deep(.boxel-card-container)` from
-//   scoped CSS — see boxel-ui-guidelines/references/delegated-render-control.md.
+//   every row). Surface colors come from the Theme card, not from
+//   `:deep(.boxel-card-container)` — see
+//   boxel-ui-guidelines/references/delegated-render-control.md.

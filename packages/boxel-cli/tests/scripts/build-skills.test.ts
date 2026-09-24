@@ -8,6 +8,7 @@ import {
   parseFrontmatter,
   renderCatalogBlock,
 } from '../../scripts/build-skills.ts';
+import { SKILL_FRONTMATTER_DESCRIPTION_CASES } from '@cardstack/runtime-common/skill-frontmatter-contract';
 
 describe('computeStaleIds', () => {
   it('returns [] when there is no prior list', () => {
@@ -120,42 +121,26 @@ describe('parseFrontmatter', () => {
     expect(fm.name).toBe('first');
   });
 
-  // A description longer than a line is naturally authored as a YAML block
-  // scalar, and reading only the key's own line renders the README row as the
-  // literal `>-`.
-  it('reads a folded block scalar as its joined text', () => {
-    const fm = parseFrontmatter(
-      '---\nname: catalog-reuse\ndescription: >-\n  MANDATORY before writing any `.gts`.\n  Search the catalog first.\nboxel:\n  kind: skill\n---\n',
-    );
-    expect(fm.name).toBe('catalog-reuse');
-    expect(fm.description).toBe(
-      'MANDATORY before writing any `.gts`. Search the catalog first.',
-    );
-  });
+  // The block-scalar and quote cases come from the shared contract, so the
+  // same inputs are asserted against the catalog reader in
+  // factory-skill-loader.test.ts. A reader that drifts from the other fails
+  // here rather than surfacing as two descriptions for one skill.
+  for (const testCase of SKILL_FRONTMATTER_DESCRIPTION_CASES) {
+    it(`reads the ${testCase.label} description case`, () => {
+      const fm = parseFrontmatter(`---\n${testCase.frontmatter}\n---\n`);
+      expect(fm.description).toBe(testCase.description);
+    });
+  }
 
-  it('reads a literal block scalar with its line breaks kept', () => {
-    const fm = parseFrontmatter(
-      '---\nname: lit\ndescription: |\n  first line\n  second line\n---\n',
-    );
-    expect(fm.description).toBe('first line\nsecond line');
-  });
-
-  it('does not read a nested key as a block scalar continuation', () => {
+  // parseFrontmatter also returns `name`, which the shared contract doesn't
+  // cover: a top-level key after a block scalar must not be swallowed into the
+  // folded body.
+  it('captures a top-level key that follows a block scalar description', () => {
     const fm = parseFrontmatter(
       '---\ndescription: >-\n  the text\nname: after\n---\n',
     );
-    expect(fm.description).toBe('the text');
     expect(fm.name).toBe('after');
-  });
-
-  // YAML lets a block scalar carry an explicit indentation and/or chomping
-  // indicator (`>2`, `|-`, `>2-`); the reader must treat those as the block
-  // form too, not as a plain value beginning with `>`.
-  it('reads a block scalar with explicit indentation/chomping indicators', () => {
-    const fm = parseFrontmatter(
-      '---\nname: indicators\ndescription: >2-\n  wrapped text\n  onto two lines.\n---\n',
-    );
-    expect(fm.description).toBe('wrapped text onto two lines.');
+    expect(fm.description).toBe('the text');
   });
 
   it('returns {} for content without frontmatter', () => {

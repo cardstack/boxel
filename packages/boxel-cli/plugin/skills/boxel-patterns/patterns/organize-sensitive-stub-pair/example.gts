@@ -122,12 +122,12 @@ export class FullRecord extends CardDef {
 
     <template>
       <article class='record'>
-        <div class='sensitive-banner'>
-          SENSITIVE RECORD — Authorized Personnel Only
-        </div>
+        <p class='sensitive-banner' role='note'>
+          Sensitive record — authorized personnel only
+        </p>
 
         <header class='record-header'>
-          <h1>{{@model.cardTitle}}</h1>
+          <h1><@fields.cardTitle /></h1>
           {{#if @model.operationalStub}}
             <div class='stub-preview'>
               <span class='label'>Public Record</span>
@@ -153,29 +153,33 @@ export class FullRecord extends CardDef {
       </article>
 
       <style scoped>
-        .record { padding: 1.5rem; }
+        /* Card content: every color is a theme token, so the record follows
+           whatever Theme card it is linked to. Each fill carries its own
+           -foreground; nested text inherits. */
+        .record { padding: var(--boxel-sp-lg); }
         .sensitive-banner {
-          background: color-mix(in srgb, var(--boxel-error-100) 12%, white);
-          color: var(--boxel-error-100);
-          padding: 0.5rem 1rem;
+          background-color: var(--destructive);
+          color: var(--destructive-foreground);
+          padding: var(--boxel-sp-xs) var(--boxel-sp);
           font-weight: 600;
           text-transform: uppercase;
           letter-spacing: 0.08em;
-          font-size: 0.75rem;
+          font-size: var(--boxel-font-size-xs);
           border-radius: var(--boxel-border-radius);
-          margin-bottom: 1.5rem;
+          margin: 0 0 var(--boxel-sp-lg);
         }
-        .record-header { display: flex; justify-content: space-between; align-items: start; gap: 2rem; }
-        .stub-preview .label { display: block; font-size: 0.75rem; color: var(--boxel-600); margin-bottom: 0.25rem; }
+        .record-header { display: flex; justify-content: space-between; align-items: start; gap: var(--boxel-sp-xl); }
+        .stub-preview .label { display: block; font-size: var(--boxel-font-size-xs); color: var(--muted-foreground); margin-bottom: var(--boxel-sp-4xs); }
         .sync-alert {
-          padding: 0.75rem 1rem;
-          background: var(--boxel-100);
-          border-left: 3px solid var(--primary, var(--boxel-purple-300));
+          padding: var(--boxel-sp-sm) var(--boxel-sp);
+          background-color: var(--muted);
+          color: var(--muted-foreground);
+          border-left: 3px solid var(--primary);
           border-radius: var(--boxel-border-radius);
-          margin: 1rem 0;
+          margin: var(--boxel-sp) 0;
         }
-        .sync-alert ul { margin: 0.25rem 0 0.75rem 1.25rem; padding: 0; }
-        .record-sections { display: flex; flex-direction: column; gap: 1rem; }
+        .sync-alert ul { margin: var(--boxel-sp-4xs) 0 var(--boxel-sp-sm) var(--boxel-sp-lg); padding: 0; }
+        .record-sections { display: flex; flex-direction: column; gap: var(--boxel-sp); }
       </style>
     </template>
   };

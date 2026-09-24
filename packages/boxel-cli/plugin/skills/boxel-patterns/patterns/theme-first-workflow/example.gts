@@ -43,12 +43,8 @@ export class BlogPost extends CardDef {
           No hard-coded colors or fonts.
         */
         .post {
-          background: var(--card);
-          color: var(--card-foreground);
-          border: 1px solid var(--border);
-          border-radius: var(--radius);
+          /* isolated: the CardContainer already paints --background / --foreground */
           padding: 2rem;
-          font-family: var(--font-sans);
         }
 
         .post h1 {
@@ -61,9 +57,8 @@ export class BlogPost extends CardDef {
           line-height: 1.7;
         }
 
-        /* Links inherit the theme's accent */
-        .body :global(a) {
-          color: var(--accent);
+        .body :deep(a) {
+          color: var(--accent-ink);
         }
       </style>
     </template>

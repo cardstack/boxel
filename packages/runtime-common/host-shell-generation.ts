@@ -117,6 +117,34 @@ export async function claimHostShellGeneration(
   return rowToGeneration(claimed[0]);
 }
 
+// The number to report for a shell that was just claimed, or `undefined` when
+// there is no ordering to report.
+//
+// `claimHostShellGeneration` deliberately does not throw when it cannot answer
+// — a database that predates the migration, or whose seeded row has gone, must
+// not fail a boot over a diagnostic — so it resolves to the not-observed
+// sentinel instead. Reading `.generation` off that yields `0`, which is a
+// perfectly well-formed number and travels the whole path unnoticed: it is
+// stamped onto rows, and every later `host_shell_generation < current` repair
+// then treats them as older than everything. Absence is the honest answer, and
+// the repair predicate excludes it.
+//
+// Also rejects a claim describing some other shell. That should not happen —
+// the claim returns the row it observed under the lock — but a number that
+// orders a bundle this render did not run is worse than no number.
+export function reportableHostShellGeneration(
+  claimed: HostShellGeneration,
+  shellHash: string,
+): number | undefined {
+  if (claimed.generation === NO_HOST_SHELL_OBSERVED) {
+    return undefined;
+  }
+  if (claimed.shellHash !== shellHash) {
+    return undefined;
+  }
+  return claimed.generation;
+}
+
 // The generation of the shell currently being served, for comparing against
 // the generation stamped on a row.
 export async function currentHostShellGeneration(

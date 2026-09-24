@@ -236,35 +236,51 @@ export const SERVER_MAX_ASSEMBLED_LINK_RESOURCES = parsePositiveInt(
 // ---------------------------------------------------------------------------
 // The link-shape policy's tuning (see runtime-common/link-shape-policy.ts).
 //
-// These bound the rung below admission control: how much of a result's link
-// graph a live read carries, chosen from prevailing load. Admission control
-// answers a saturated process by refusing work; this answers it one step
-// earlier by serving a cheaper representation, which costs the caller a
-// follow-up fetch rather than the whole request.
+// These decide how much of a result's link graph a live read carries, chosen
+// from prevailing load. Admission control answers a burst against its cap by
+// refusing work; this answers sustained load by serving a cheaper
+// representation, which costs the caller a follow-up fetch rather than the
+// whole request.
 //
-// Every number below was derived from the production realm-server's own
-// `inFlightSearch` record rather than chosen up front. The 7-day distribution
-// (37,644 health samples) is bimodal: 51.5% of samples sit at 0-1 in-flight
-// and 77% at or below 5, while 2.4% pile up at exactly the admission cap —
-// the shedding regime. Between those lies the band this policy acts in.
+// The reading the thresholds below are compared against is the time-weighted
+// mean of **search requests in flight** on one process: every admitted
+// `_search` / `_federated-search` from admission until its response ends,
+// including the ones the live-search cache answers from another request's
+// computation. It is not the admission gate's own count, which is of
+// computations — a request the cache answers hands its slot back as soon as
+// the cache decides so, while it goes on waiting for the computation it
+// joined. The two differ by a factor that tracks the cache's miss rate, and
+// that factor is not a property of the process: it was 3.1-4.5 on a staging
+// dashboard load whose readers shared eight queries (a 19% miss rate) and
+// 1.6-2.0 on production traffic (a 54% miss rate). A threshold in computation
+// units therefore denoted roughly twice as many requests on the first as on
+// the second, which is why the thresholds are in request units.
 //
-// The thresholds are absolute in-flight counts, not fractions of the cap,
-// because that is the unit they were measured in. They were derived against
-// the default cap of 30 and want re-deriving if the cap moves materially;
-// `normalizeThresholds` in the policy keeps them under whatever cap is in
-// force so a policy can never be configured to engage only after shedding has
-// already started.
+// The thresholds are absolute request counts, per replica. They are not
+// bounded by the admission cap: the cap counts computations, and the request
+// count exceeds it whenever the cache coalesces.
+//
+// The request readings below were reconstructed from the realm server's own
+// request log — each admitted `_search` / `_federated-search`, per-realm and
+// indexing-lane requests included and shed requests excluded, occupying the
+// span its logged duration covers — because they were measured on processes
+// that did not count requests themselves. That span begins before admission,
+// so it includes any time a request spent queued for a slot, which this count
+// does not; the reconstruction reads high by at most the request rate times
+// the admission wait (about 2.7 per replica on the engaged staging arm, and
+// only while the gate was full), so the same traffic reads somewhat lower on
+// the count the ladder actually uses.
 // ---------------------------------------------------------------------------
 
-// Half-life of the time-weighted mean of in-flight searches the policy decides
-// on. The measured episodes are hour-long plateaus, so the reading is
+// Half-life of the time-weighted mean of search requests in flight the policy
+// decides on. The measured episodes are hour-long plateaus, so the reading is
 // insensitive to this within the range tried (30s-300s moved its p90 by under
 // 12% on the saturation window). Chosen for stability rather than fit: two
 // minutes puts the reading ~90% of the way to a sustained change after about
 // seven, which is the "changes over minutes" the sticky decision needs, and it
 // flattens the bursts that reach the cap instantaneously without ever being
-// sustained — on a control window whose raw samples peaked at the cap of 30,
-// the smoothed reading peaked at 17.
+// sustained — on a production window whose admission-slot samples peaked at
+// the cap of 30, the same mean over those samples peaked at 17.
 const DEFAULT_LINK_SHAPE_LOAD_HALF_LIFE_MS = 120_000;
 
 // The floor on how long a realm holds a level before it may leave it. The
@@ -279,7 +295,7 @@ const DEFAULT_LINK_SHAPE_MIN_DWELL_MS = 60_000;
 // Engage/release pairs for the two rungs.
 //
 // Each value is a **threshold on the load reading** — the time-weighted mean
-// of in-flight searches this process is serving, per replica — and not a
+// of search requests in flight on this process, per replica — and not a
 // setting that selects a link shape. Crossing one moves a realm's rung; which
 // shape a rung then serves is fixed by the ladder, not by these. Hence the
 // `_THRESHOLD` suffix: a bare `…_ENGAGE` reads as a switch that turns a shape
@@ -291,118 +307,119 @@ const DEFAULT_LINK_SHAPE_MIN_DWELL_MS = 60_000;
 //
 // # Each value is per replica, and the fleet size is part of the number
 //
-// The reading is fed only by the admissions one process served, and the ladder
+// The reading is fed only by the requests one process served, and the ladder
 // is a `Map` in that process's memory with no shared store. So the fleet-wide
 // load a rung corresponds to is the threshold multiplied by the number of
-// tasks. These are fitted against a **two-task** realm-server fleet, which is
-// what production ran across every window below. Doubling the fleet halves
+// tasks. These are fitted against a **two-task** realm-server fleet, in both
+// the staging runs and the production windows below. Doubling the fleet halves
 // each replica's share of the same traffic, so it does not make the rungs more
 // sensitive — it makes them take twice the fleet-wide load to reach. A
 // threshold carried to a fleet of a different size is a different policy, and
 // the count to read is distinct containers *concurrently*, not distinct
 // container ids seen over a window, which a deployment inflates.
 //
+// # Two populations, answering two different questions
+//
+// Where the lower rung engages is fitted to the one measurement of what
+// engaging buys: a staging A/B of the same dashboard load (19 readers, one
+// writer, an unbounded derived workload, 20 minutes, two replicas) run once
+// with the rung engaging and once with it held out of reach, same build and
+// same host bundle, only the thresholds different. Engaged, median
+// `loadLinks` fell from 1,923 ms to 631 ms, handler p50 from 3,517 ms to
+// 1,995 ms, a dashboard pass's payload from 8.8 MB to 6.8 MB, and throughput
+// rose from 288 to 326 searches a minute with a quarter of the 30-second
+// cancellations. The write path did not move (median 13,679 against
+// 13,664 ms over 145 writes), and neither did mean `loadLinks` — the rung
+// makes the typical search cheaper and leaves the expensive tail where it
+// was, so no placement of it is an answer to a slow p99.
+//
+// Where the rungs sit relative to ordinary traffic is a question about
+// production, which is used here as a guard and not as the fit: a harness
+// workload reaches a given reading with far fewer, costlier requests than
+// real traffic does, so the two populations are read separately and never
+// pooled.
+//
 // # Where the lower rung sits, and why
 //
-// Event-loop lag is the mechanism by which searches on one realm slow requests
-// on every other one, so it is the signal the rung is placed against. Pairing
-// each health sample's lag with the sustained reading from that same sample on
-// that same process, lag p99 climbs off the 20 ms histogram floor as the
-// reading leaves idle, reaches roughly 55-80 ms by a reading of about 3, and
-// then stops climbing: it is flat from there through 4, 5, 8 and 12, out to a
-// reading of 20. So the rung is placed where the loop's cost *begins*, which
-// is where the association exists, rather than where it is worst, which this
-// says nothing about.
+// The engaged arm's own rung first fired on each replica at request readings
+// of 13.7 and 15.4, and its other transitions fell between 13.8 and 18.8. On
+// the first replica the reading had already passed 14 about two minutes
+// earlier, peaked at 15.1 and dipped back to 13.7 by the time that rung
+// fired; the rung is consulted only on a read, so it fires on whatever the
+// reading is when one arrives. The held-out arm — load where engaging would
+// have helped, and did not happen — read p50 14.4 and 17.2 on its two
+// replicas. 14 is the highest engage that takes both promptly: it is crossed
+// 3.5 and 4.5 minutes into the engaged arm and 4.5 and 2.2 minutes into the
+// held-out one, which it then
+// holds for 67% and 89% of the window. At 15 the held-out arm's first replica
+// spends only 31% of its window engaged; at 16, 9%.
 //
-// Past 20 the association does not merely flatten, it reverses — the samples
-// above 20 sit back on the 20 ms floor. That is the range the upper rung and
-// the admission cap act in, so it is a different regime rather than a
-// continuation of this one, and it is not evidence for where this rung goes.
-// The likely reading is that a process that deep is queueing rather than
-// computing, but nothing here establishes that.
+// On production, over 304 replica-hours from mid-September at the 5s cadence
+// with both tasks covered, ordinary traffic's request reading peaks at 3.70,
+// so 14 leaves close to four times the headroom over the busiest quiet
+// window; replaying the ladder over that span degrades 0.0% of it.
 //
-// Two things that observation does not establish, both worth holding onto
-// before it gets quoted for more than it says. Lag and the reading are both
-// downstream of the traffic, so a rung moving does not follow as a way to
-// reduce lag — only as a way to act before the loop has finished slowing.
-// And a curve that is flat from 3 through 20 means the reading barely
-// discriminates across the whole range both rungs live in, so it is a weak
-// control signal exactly where the ladder leans on it. That is the same
-// conclusion the count-versus-cost point below reaches by another route, and
-// the reason a cost-aware signal would beat retuning this one again.
+// Production engages later on this rung than a computation count would have it
+// engage, and that is deliberate. Production's miss rate is higher, so the same
+// request count produces a larger computation count there: at the moments a
+// computation rung of 4 actually fired, the request reading was 6.3-9.0 on
+// production and 13.7-18.8 on the harness. Replayed over a saturation episode on production (1.5 hours, two
+// replicas), a request rung of 14 degrades 20.9% of the episode where a
+// computation rung of 4 degrades 53.7%, and a second, smaller wave in the same
+// episode, peaking at a reading of 13.1, does not engage at all. That replay
+// is open-loop — it replays a trajectory recorded while a computation ladder
+// was already degrading it — so the busy-window figures are estimates, and
+// they err low: a ladder that degrades less of an episode sees a higher
+// reading than the one replayed. The quiet-window figure is unaffected, since
+// nothing engages there.
 //
-// 4 rather than 3 is bought by the quiet side. Replaying the production
-// reading through this ladder over 71 covered replica-hours of ordinary
-// traffic, the sustained reading peaks at 2.06 — so 4 leaves about a factor of
-// two of headroom over the busiest quiet window, where 3 would leave under
-// one, and 3 buys only another 1-2 points of degraded time on the busy
-// windows.
-//
-// On that replay's quiet windows every candidate spends 0.0% of its time
-// degraded, at 3, 4, 5 and 8 alike, because the reading never reaches any of
-// them. That is not in tension with the 3.8% the upper rung's note records
-// for an engage of 8, which came from a different and far busier window: the
-// control window fitted against there had raw samples at the cap of 30 and a
-// smoothed peak of 17, where these peak at 2.06. A quiet window is only as
-// informative as the load it actually carried, so both figures need their
-// window named, and neither is stale.
-//
-// What the busy windows buy, and pay, is the other half. Over the two busiest
-// replayed stretches, degraded time goes from 42.5% and 36.2% at 8/4 to 88.7%
-// and 88.8% at 4/2 — so this roughly doubles the time a loaded realm spends
-// shedding multi-row closures, which is the point and also the cost.
-//
-// Level changes do not follow that in either direction cleanly. Inside those
-// same stretches the rate at 4/2 is at or below 8/4 (0.81 against 1.63; 1.01
-// against 1.01), while over all replayed time it rises, 0.19 to 0.28 per
-// replica-hour. Both remain far below what the mechanism permits — the dwell
-// floor bounds a realm to one change a minute, so a ceiling of 60 per
-// realm-hour, and more than that across realms. Note this whole estimate is
-// open-loop: the replayed reading was recorded by a process on which this
-// policy never engaged, so it cannot show the feedback by which degrading
-// lowers service time and therefore lowers the reading that chose it. The
-// quiet-window figures are unaffected, since nothing engages there; these busy
-// ones are estimates awaiting a run with the rung reachable.
-//
-// The release keeps the engage/release ratio the ladder already used at both
-// rungs, which puts it at 2. Replaying the alternatives at this engage, a
-// release of 1 holds a realm degraded noticeably longer for a slightly lower
-// change rate (15.0% of all replayed time against 11.8%, at 0.23 changes per
-// replica-hour against 0.28), and a release of 3 gives most of that time back
-// at the highest change rate of the three (10.7% at 0.40). 2 is the middle of
-// that, and the one that leaves the band two wide.
-//
-// One consequence of halving both numbers together is worth being explicit
-// about, because it is easy to read as an oversight. The engage at 4 sits
-// clear of the 2.06 that quiet traffic peaks at, but the release at 2 sits
-// just *under* it — so a realm that has engaged must fall below the busiest
-// ordinary reading before it carries closures again, where at 8/4 both ends of
-// the band were clear of it. That asymmetry is deliberate: degraded is the
-// cheaper side to be wrong on, since a shed closure costs a caller extra
-// fetches while a carried one under load costs every other caller on the
-// process. It does mean a realm coming off a busy stretch lingers at
-// `multi-row` longer than the engage alone suggests.
+// The release keeps the engage/release ratio of 1/2 the ladder uses at both
+// rungs, which puts it at 7. Coming off load, the reading falls under 7 within
+// 0-34 s of when the computation count's mean falls under 2 across six
+// replica-windows, so a release of 7 on requests is as prompt as a release of
+// 2 on computations. It is also not what decides how long a realm is
+// *recorded* at a degraded level after load ends: the level is evaluated only
+// on a read, so an idle realm keeps the level it had until its next reader
+// arrives, and that reader is decided against the current reading and served
+// the released shape.
 //
 // What this rung is not is a defence against the cost of any one search. The
-// reading counts admitted searches and says nothing about what each is doing,
-// so the same number covers very different amounts of work — an expensive
-// derived workload reaches a given reading with far fewer requests than
-// ordinary traffic does. Two readings are comparable only within a similar
-// mix.
-const DEFAULT_LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD = 4;
-const DEFAULT_LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD = 2;
+// reading counts requests and says nothing about what each is doing, so the
+// same number covers very different amounts of work — an expensive derived
+// workload reaches a given reading with far fewer requests than ordinary
+// traffic does. Two readings are comparable only within a similar mix.
+const DEFAULT_LINK_SHAPE_MULTI_ROW_ENGAGE_THRESHOLD = 14;
+const DEFAULT_LINK_SHAPE_MULTI_ROW_RELEASE_THRESHOLD = 7;
 
 // The upper rung sheds the closure from single-row reads too, which is the
-// last thing a live read has left to give up, so it is placed against the
-// process falling over rather than against the loop slowing down. It stays
-// well clear of the lower rung and below the admission cap: a reading of 12
-// against a cap of 30 leaves the ladder a band to act in before shedding
-// starts, which is the ordering the policy exists to create. Lowering it to 8
-// degrades a fleet whose half-hour means never leave single digits — measured
-// at the time it was set, that cost a quiet window 3.8% of its time degraded
-// against 0.3% — so it is held above the range ordinary busy traffic reaches.
-const DEFAULT_LINK_SHAPE_ALL_ENGAGE_THRESHOLD = 12;
-const DEFAULT_LINK_SHAPE_ALL_RELEASE_THRESHOLD = 6;
+// last thing a live read has left to give up, and nothing has measured it
+// helping. So it is placed above every load it has been observed on rather
+// than against one: the sustained request reading peaked at 22.4 on the
+// engaged staging arm (reached after engaging), 20.9 on the held-out one, and
+// no higher than 23.6 on any staging load window, so 28 sits at least 19%
+// clear of all of them and load measured as beneficial at the lower rung does
+// not reach this one.
+//
+// Production's busiest recent episode read 27.5 at its peak, and that is a
+// floor rather than a prediction: it was recorded while a ladder engaging at
+// a lower request count was degrading over half the episode, and degrading
+// shortens service time, which lowers the reading. Under this ladder, which
+// degrades less of it, the same traffic would read higher and may reach
+// `all`. That is accepted: an episode at that level is one the admission gate
+// is already shedding on, which is the regime the last rung exists for. A
+// rung of 24 would have put that episode at `all` from the moment its first
+// requests were shed, even on the degrading trajectory.
+//
+// It is not placed against the onset of shedding, because that onset is not a
+// sustained reading: sheds are driven by bursts against the instantaneous
+// admission cap, and on the loads above they began at request readings from
+// 8.7 to 17.7 — inside the range where the lower rung is measured to help.
+//
+// The release keeps the ratio of 1/2, at 14, which is also the lower rung's
+// engage: a realm coming down off `all` returns to `multi-row` no earlier than
+// the reading at which it would have entered it.
+const DEFAULT_LINK_SHAPE_ALL_ENGAGE_THRESHOLD = 28;
+const DEFAULT_LINK_SHAPE_ALL_RELEASE_THRESHOLD = 14;
 
 // How often a process that is serving live reads records the decision it is
 // making, even when that decision is "no change". Without it, a policy that

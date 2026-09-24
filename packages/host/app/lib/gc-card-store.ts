@@ -496,7 +496,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     if (isLocalId(id)) {
       return id;
     }
-    return this.#virtualNetwork.toRealURLHref(id);
+    return this.#virtualNetwork.keyForIdentifier(id);
   }
 
   getCard(id: string): CardDef | undefined {

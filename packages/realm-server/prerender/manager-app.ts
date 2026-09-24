@@ -12,7 +12,9 @@ import {
   PRERENDER_DISPATCH_HEADER,
   PRERENDER_DISPATCH_NONE,
   PRERENDER_JOB_ID_HEADER,
+  PRERENDER_HOST_SHELL_GENERATION_HEADER,
   PRERENDER_HOST_SHELL_HASH_HEADER,
+  parseHostShellGeneration,
   PRERENDER_REQUEST_ID_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
@@ -79,6 +81,12 @@ type Registry = {
   // the echoed token against its own baseline, and a token it has not warmed
   // against is a recycle whether or not this manager saw an earlier one.
   hostShellHash?: string;
+  // The ordering position of `hostShellHash`, when the reporting realm server
+  // could claim one. Set and cleared with the token in one assignment so the
+  // pair a prerender server records always describes a single shell: a
+  // generation left over from a previous token would be stamped onto rows as
+  // the bundle that rendered them, which is worse than stamping nothing.
+  hostShellGeneration?: number;
 };
 
 const log = logger('prerender-manager');
@@ -526,6 +534,14 @@ export function buildPrerenderManagerApp(options?: {
       // browser when the host is redeployed (see PRERENDER_HOST_SHELL_HASH_HEADER).
       if (registry.hostShellHash) {
         ctxt.set(PRERENDER_HOST_SHELL_HASH_HEADER, registry.hostShellHash);
+        // Only ever beside the token, never alone: a generation with no token
+        // to attach it to describes nothing a prerender server can act on.
+        if (registry.hostShellGeneration !== undefined) {
+          ctxt.set(
+            PRERENDER_HOST_SHELL_GENERATION_HEADER,
+            String(registry.hostShellGeneration),
+          );
+        }
       }
       ctxt.status = 204;
       ctxt.set('X-Prerender-Server-Id', url);
@@ -572,6 +588,11 @@ export function buildPrerenderManagerApp(options?: {
         ctxt.body = { errors: [{ status: 400, message: 'hash too long' }] };
         return;
       }
+      // Optional: a realm server whose database could not answer reports the
+      // token alone, and the fleet still recycles on it.
+      let generation = parseHostShellGeneration(
+        requestBody?.data?.attributes?.generation,
+      );
       if (registry.hostShellHash !== hash) {
         // Two distinct events, kept distinct in the log. A manager holding no
         // token has usually just restarted in the same deploy train as the
@@ -586,6 +607,14 @@ export function buildPrerenderManagerApp(options?: {
             : `host shell token changed (${registry.hostShellHash} -> ${hash}); prerender servers will recycle on next heartbeat`,
         );
         registry.hostShellHash = hash;
+        registry.hostShellGeneration = generation;
+      } else if (generation !== undefined) {
+        // The same token reported again, this time carrying a number. Both
+        // report sites run against the same token, so the second one is how a
+        // generation arrives after the first could not claim it. Filling the
+        // gap is safe; the reverse is not, which is why a later report with no
+        // number leaves an existing one alone rather than erasing it.
+        registry.hostShellGeneration = generation;
       }
       ctxt.status = 204;
     } catch (e) {

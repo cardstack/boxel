@@ -26,6 +26,7 @@ Two pieces make this work:
 import { CardDef, Component, field, contains, linksTo } from '@cardstack/base/card-api';
 import { Command } from '@cardstack/runtime-common';
 import SaveCardCommand from '@cardstack/boxel-host/tools/save-card';
+import { Button } from '@cardstack/boxel-ui/components';
 
 import { IdentitySection, MedicalSection, /* … */ } from './sections';
 import { OperationalStub } from './operational-stub';
@@ -76,9 +77,9 @@ export class FullRecord extends CardDef {
     <template>
       {{!-- Sensitive banner up top, then sections, then a sync button when needsSync --}}
       {{#if this.needsSync}}
-        <button type='button' {{on 'click' this.syncStub}}>
+        <Button type='button' {{on 'click' this.syncStub}}>
           Sync stub ({{this.syncIssues.length}} field(s) drifted)
-        </button>
+        </Button>
       {{/if}}
       {{!-- … rest of the isolated layout, with sensitive banner + sections … --}}
     </template>

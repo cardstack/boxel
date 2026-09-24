@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from '@lukeed/uuid';
 import { heartbeatJob } from '../queue.ts';
 
 import {
+  cardSourceForVisit,
   delay,
   flattenPrerenderHtmlVisitMeta,
   hasCardExtension,
@@ -49,6 +50,10 @@ import {
   serializableError,
 } from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
+import {
+  readFileDefBindings,
+  type FileDefBindings,
+} from '../file-def-bindings.ts';
 import { canonicalURL } from './dependency-url.ts';
 
 // Ceiling on holding a prerender-html job's visits for its spawning pass's
@@ -88,6 +93,10 @@ export interface PrerenderHtmlPassArgs {
   // module pre-warm sweep before the format renders begin. False on
   // incremental spawns — the sweep is O(realm module count).
   preWarm: boolean;
+  // The file type bindings the spawning index pass resolved. Absent for a job
+  // enqueued before the payload carried them, or one with no spawning pass —
+  // the pass then reads the realm's config document itself.
+  spawnedFileDefBindings?: FileDefBindings;
   indexWriter: IndexWriter;
   definitionLookup: DefinitionLookup;
   virtualNetwork: VirtualNetwork;
@@ -140,6 +149,7 @@ export async function runPrerenderHtmlPass({
   spawningJobId,
   loaderEpoch,
   preWarm,
+  spawnedFileDefBindings,
   indexWriter,
   definitionLookup,
   virtualNetwork,
@@ -162,6 +172,19 @@ export async function runPrerenderHtmlPass({
   let jobTag = `${jobIdentity(jobInfo)} [realm: ${realmURL.href}] [generation: ${generation}]`;
   let batchId = `${jobInfo.jobId}-${uuidv4().slice(0, 8)}`;
   let realmPaths = new RealmPaths(realmURL, virtualNetwork);
+  // The bindings the index pass that spawned this job resolved, so the pass
+  // that writes a file's `types` and this one — which writes the HTML keyed on
+  // `types[0]` — agree by construction rather than by each reading a document
+  // an author may edit between them. A job enqueued before the payload carried
+  // them, or one spawned outside that path, reads the config itself.
+  let fileDefBindings =
+    spawnedFileDefBindings ??
+    (await readFileDefBindings({
+      reader,
+      realmURL,
+      virtualNetwork,
+      logWarn: (message) => log.warn(`${jobIdentity(jobInfo)} ${message}`),
+    }));
   let stats: Stats = {
     instancesIndexed: 0,
     filesIndexed: 0,
@@ -410,6 +433,7 @@ export async function runPrerenderHtmlPass({
             batch,
             prerenderer,
             virtualNetwork,
+            fileDefBindings,
             auth,
             batchId,
             jobInfo,
@@ -599,6 +623,11 @@ export async function persistDeclaredScreenshots({
       for (let i = 0; i < binaryString.length; i++) {
         bytes[i] = binaryString.charCodeAt(i);
       }
+      // A pdf capture is a paged document, not a raster tile: it persists with
+      // null pixel dimensions (the ledger and both adapters are
+      // format-agnostic) and carries the paginated document's page count and
+      // byte size on the manifest instead of width/height/deviceScaleFactor.
+      let isPdf = entry.contentType === 'application/pdf';
       let { objectKey } = await putMedia(dbAdapter, mediaCacheAdapter, {
         bytes,
         contentType: entry.contentType,
@@ -609,16 +638,25 @@ export async function persistDeclaredScreenshots({
         sourceContentHash:
           entry.keyBy === 'file-content' ? (contentHash ?? null) : null,
         lane: 'declared',
-        width: entry.width,
-        height: entry.height,
+        width: isPdf ? null : entry.width,
+        height: isPdf ? null : entry.height,
       });
       let manifestEntry: ScreenshotManifestEntry = {
         specHash: entry.specHash,
         objectKey,
         contentType: entry.contentType,
-        width: entry.width,
-        height: entry.height,
-        deviceScaleFactor: entry.deviceScaleFactor,
+        ...(isPdf
+          ? {
+              ...(entry.pageCount !== undefined
+                ? { pageCount: entry.pageCount }
+                : {}),
+              byteSize: bytes.byteLength,
+            }
+          : {
+              width: entry.width,
+              height: entry.height,
+              deviceScaleFactor: entry.deviceScaleFactor,
+            }),
         ...(entry.useAsThumbnail ? { useAsThumbnail: true as const } : {}),
         ...(entry.keyBy === 'file-content' && contentHash
           ? { sourceContentHash: contentHash }
@@ -671,6 +709,7 @@ async function visitForPrerenderedHtml({
   batch,
   prerenderer,
   virtualNetwork,
+  fileDefBindings,
   auth,
   batchId,
   jobInfo,
@@ -689,6 +728,7 @@ async function visitForPrerenderedHtml({
   batch: Batch;
   prerenderer: Prerenderer;
   virtualNetwork: VirtualNetwork;
+  fileDefBindings?: FileDefBindings;
   auth: string;
   batchId: string;
   jobInfo: JobInfo;
@@ -739,7 +779,23 @@ async function visitForPrerenderedHtml({
   }
 
   let fileURL = url.href;
-  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL), virtualNetwork);
+  let fileDefCodeRef = resolveFileDefCodeRef(
+    new URL(fileURL),
+    virtualNetwork,
+    fileDefBindings,
+  );
+
+  // Floored once and used by both consumers below, so the modified time the
+  // render stamps onto the card's document and the one the file's HTML bakes
+  // are the same number even for a file whose adapter reports no mtime.
+  let fileLastModified = fileRef.lastModified ?? unixTime(Date.now());
+
+  let cardSource = cardSourceForVisit({
+    source: fileRef.content,
+    realmURL: realmURL.href,
+    lastModified: fileLastModified,
+    isCardInstance: Boolean(parsedCardResource),
+  });
 
   // Hand through the write-time content hash + size so the extract pass can
   // skip buffering the file (same optimization as the index visit; only
@@ -754,6 +810,9 @@ async function visitForPrerenderedHtml({
 
   let renderOptions: RenderRouteOptions = {
     fileDefCodeRef,
+    ...(fileDefBindings && Object.keys(fileDefBindings).length > 0
+      ? { fileDefBindings: { realm: realmURL.href, types: fileDefBindings } }
+      : {}),
     ...(parsedCardResource ? { cardRender: true } : {}),
     fileRender: true,
     // The standalone visit resolves the file's resource + types from source
@@ -779,7 +838,7 @@ async function visitForPrerenderedHtml({
     // reader. Sourcing it from the row would need a per-path accessor that
     // does not exist — `realm_file_meta` carries createdAt, contentHash and
     // contentSize, not lastModified.
-    fileLastModified: fileRef.lastModified ?? unixTime(Date.now()),
+    fileLastModified,
     fileCreatedAt,
   };
 
@@ -835,6 +894,12 @@ async function visitForPrerenderedHtml({
       : {}),
     visitType: 'prerender-html',
     renderOptions,
+    // The bytes this visit already read, so the card's format renders build
+    // their model from them rather than fetching the instance's source again.
+    // This job runs separately from the index pass and so cannot share that
+    // pass's read — but its own read, the one that answered "is this card JSON"
+    // above, now feeds the render too, which is the pair that can collapse.
+    ...(cardSource ? { cardSource } : {}),
     ...(jobPriority !== undefined ? { priority: jobPriority } : {}),
     ...(jobInfo ? { jobId: `${jobInfo.jobId}.${jobInfo.reservationId}` } : {}),
     ...(screenshotVisitArgs ? { screenshots: screenshotVisitArgs } : {}),

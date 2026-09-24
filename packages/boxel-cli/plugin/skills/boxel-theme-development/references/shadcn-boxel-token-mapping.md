@@ -83,8 +83,8 @@ Use these instead:
 - Body/default text: `color: var(--foreground)`.
 - Secondary text: `color: var(--muted-foreground)`.
 - Text on primary buttons or selected states: `color: var(--primary-foreground)` with `background-color: var(--primary)`.
-- Link-like text: use `--foreground` or another readable foreground treatment, then add identity through underline, border, icon, or nearby `--primary` indicator.
-- Icons, strokes, progress, and selection accents may use `--primary`, but check contrast against the actual surface.
+- Link-like text and status words on a neutral surface: `color: var(--primary-ink)` (or the matching `--*-ink`). The ink tokens default to the hue mixed 60% toward `--foreground`, so they read on `--background`, `--card`, and `--muted` in both schemes.
+- Icons, strokes, and other marks follow the same pairing rule as text: on a neutral surface use `--primary-ink`, and on a `--primary` fill use `--primary-foreground`. `--primary` itself is a fill, not a foreground color; use it as a `background-color` or a filled indicator paired with `--primary-foreground`, never as `color`, `stroke`, or `fill` on its own.
 
 If a BrandGuide maps `--primary` from `--brand-primary`, generate or explicitly set `--primary-foreground` for contrast. Do not assume the brand primary can carry text by itself.
 

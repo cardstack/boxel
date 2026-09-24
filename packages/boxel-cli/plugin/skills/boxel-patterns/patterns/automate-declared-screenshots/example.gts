@@ -35,7 +35,8 @@ class SocialCard extends Component<typeof Recipe> {
         flex-direction: column;
         justify-content: center;
         padding: 4rem;
-        background: var(--background, #fff);
+        background-color: var(--card);
+        color: var(--card-foreground);
       }
       .social h1 {
         font-size: 4rem;
@@ -91,7 +92,7 @@ export class Recipe extends CardDef {
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <article>
+      <article class='article'>
         <h1>{{@model.title}}</h1>
         <p>{{@model.tagline}}</p>
 
@@ -102,11 +103,22 @@ export class Recipe extends CardDef {
             src-less <img> still renders (alt text and a layout hole). }}
         {{#if @model.screenshotURLs.social}}
           <img
+            class='screenshot'
             src={{@model.screenshotURLs.social}}
             alt='Share preview for {{@model.title}}'
           />
         {{/if}}
       </article>
+      <style scoped>
+        .article {
+          padding: 1.5rem;
+        }
+        .screenshot {
+          margin-top: 1.5rem;
+          border: 1px solid var(--border);
+          border-radius: var(--boxel-border-radius-sm);
+        }
+      </style>
     </template>
   };
 }

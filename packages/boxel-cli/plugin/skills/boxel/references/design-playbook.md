@@ -341,7 +341,7 @@ Per format, outer-element rules. `CardContainer` — which wraps every card rend
 
 Compound-field `embedded`/`edit` templates are the exception: nested inside a card surface, they may choose a different background/foreground combo to distinguish themselves — usually `--card` + `--card-foreground`.
 
-**If the brand demands a specific outer treatment** (sharp corners, custom border), put it on the **Theme card** (`--radius`, `--background`, `--border`). The wrapper's `--themed` cascade picks it up. Every linked card gets it for free — without format CSS contention.
+**If the brand demands a specific outer treatment** (sharp corners, custom border), put it on the **Theme card** (`--background`, `--border`, `--radius` — the wrapper's corner and the inner `--boxel-border-radius-*` scale both follow `--radius`). The CardContainer reads those tokens directly, so every linked card gets it for free — without format CSS contention.
 
 **Fitted — start from `<FittedCard>` for standard compositions.** For standard compositions (image + eyebrow + title + subtitle + meta + footer + badges), use the `FittedCard` component from `@cardstack/boxel-ui/components` and carry the design identity through its `--fc-*` variables and slot content — see the "Prefer `<FittedCard>`" section of `container-query-fitted-layout.md`. When the design calls for a special fitted template (barcode ticket stub, terminal ticker, boarding pass, magazine spread — the kind in that guide's File Inventory), skip `FittedCard` and hand-roll per the guide.
 

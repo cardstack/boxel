@@ -52,10 +52,12 @@ import type { DeclaredScreenshotError, Diagnostics } from './index.ts';
 import {
   ALL_TYPES_KEY,
   coerceTypes,
+  isPartitionedRealmMetaValue,
   type BoxelIndexTable,
   type CardTypeSummary,
   type PrerenderedHtmlTable,
   type RealmGenerationsTable,
+  type RealmMetaValue,
 } from './index-structure.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
 import { md5 } from 'super-fast-md5';
@@ -133,6 +135,20 @@ export interface InstanceEntry {
   types: string[];
   displayNames: string[];
   deps: Set<string>;
+  // The content hash of the stored source the render read to produce
+  // `resource`, persisted to `boxel_index.source_content_hash` and served as
+  // `meta.version` on the card+json GET.
+  //
+  // Reported by the render rather than computed here, because a client sends it
+  // back as the base its next write is computed against and the realm answers
+  // `baseMatched` from it. The worker's own read of the same file is a separate
+  // `card+source` GET that can be answered by a different replica, so a hash
+  // taken from there can describe bytes the document was not built from.
+  //
+  // Undefined when the render produced no fingerprint — an older prerenderer,
+  // or a render that built no card document. The column is then null and the
+  // GET reports no version, which is what it did before the column existed.
+  sourceContentHash?: string;
   // Per-row render timing diagnostics (launch/waits/render timings
   // plus host-side breadcrumbs). Populated from the Prerenderer's
   // `response.meta` and persisted onto `boxel_index.diagnostics`.
@@ -323,6 +339,25 @@ const WRITE_BUFFER_FLUSH_THRESHOLD = 100;
 // ceiling.
 const TYPE_STAMP_CHUNK = 200;
 
+// Touched types past which a pass rebuilds its whole type summary instead of
+// recomputing the touched entries and carrying the rest forward. A pass that
+// moved this many types is recomputing most of the realm's vocabulary anyway,
+// so the scoped form stops being a saving while still binding one parameter
+// per key — the same bound-parameter ceiling `TYPE_STAMP_CHUNK` keeps clear of.
+const SCOPED_TYPE_SUMMARY_MAX_TYPES = 200;
+
+// How `realm_meta.value` is ordered, shared by both rollup paths so they cannot
+// order the same set differently.
+//
+// `code_ref` is the tiebreak, and it is what makes this a total order: display
+// names are not unique — several types can share one, and `MAX(display_names->>0)`
+// is NULL for any type none of whose rows carry a label, so those all tie with
+// each other. Without a tiebreak the database is free to return tied entries in
+// any order, and the scoped path breaks such ties by which arm of its union a
+// row came from — so an edit to one type would reshuffle unrelated ones in the
+// sidebar. `code_ref` is the group key, so it is unique within each arm.
+const TYPE_SUMMARY_ORDER_BY = `ORDER BY display_name ASC NULLS LAST, code_ref ASC`;
+
 // One `boxel_index` row as `existingIndexTypes` reads it back.
 interface ExistingIndexRowType {
   type: BoxelIndexTable['type'];
@@ -330,9 +365,37 @@ interface ExistingIndexRowType {
   cardTypes: string[] | null;
 }
 
+// One consumer `itemsThatReference` found for a path. `renderEdge` is true
+// when the consumer references the path only from its `prerendered_html.deps`
+// — its HTML used the path, its index visit did not.
+interface ReferencingItem {
+  url: string;
+  alias: string | null;
+  type: BoxelIndexTable['type'];
+  renderEdge: boolean;
+}
+
+// The state of one transitive walk of the reference graph in `invalidate()`.
+interface FanOutWalk {
+  // Reference scans keyed by path, shared between walks so a path the index
+  // walk already scanned costs the full walk nothing.
+  references: Map<string, Promise<ReferencingItem[]>>;
+  followRenderEdges: boolean;
+  visited: Set<string>;
+}
+
 export class Batch {
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
+  // The fan-out's render-only dependents: URLs reachable from the changed
+  // files only through a `prerendered_html.deps` edge somewhere on the path.
+  // Their index rows cannot have moved — anything a card's index visit reads
+  // lands in its `boxel_index.deps` — so a split-mode pass leaves them out of
+  // `#invalidations` (and so out of the visit loop, the tombstones, and the
+  // swap) and hands them to its `prerender_html` job alongside the URLs it
+  // does visit. Always empty on the fused path, whose visits render HTML
+  // inline and therefore must visit every renderer.
+  #renderOnlyInvalidations = new Set<string>();
   // CSS content hashes this batch has already interned into the `scoped_css`
   // table, so a stylesheet shared by many rows in one pass is written once.
   #internedScopedCSSHashes = new Set<string>();
@@ -734,6 +797,12 @@ export class Batch {
 
   get invalidations() {
     return [...this.#invalidations];
+  }
+
+  // See `#renderOnlyInvalidations`: the URLs whose HTML this pass's fan-out
+  // reached but whose index rows it leaves alone.
+  get renderOnlyInvalidations() {
+    return [...this.#renderOnlyInvalidations];
   }
 
   /**
@@ -1434,6 +1503,7 @@ export class Batch {
           // a document instead of a resource
           type: 'instance',
           pristine_doc: entry.resource,
+          source_content_hash: entry.sourceContentHash ?? null,
           search_doc: entry.searchData,
           icon_html: entry.iconHTML,
           deps: [...entry.deps],
@@ -1535,6 +1605,22 @@ export class Batch {
             ? null
             : (errorEntry?.error ?? entry.error),
           has_error: !withholdFailure,
+          // Restated after `...production`, which carries the previous row's
+          // whole shape — its generation included — and would otherwise win
+          // over the one assigned below, since `entryPayload` is spread last.
+          //
+          // Which of the two is right depends on whose content this row ends
+          // up serving, and the two error paths differ. A withheld failure
+          // republishes the last good render untouched, so the row still shows
+          // that bundle's work and keeps its generation: restamping it with
+          // this render's would claim the withheld attempt produced content it
+          // did not. A published error is this render's own output, so it
+          // takes this render's generation — and that is the case a repair
+          // most needs to find, which carrying the previous number forward
+          // would hide.
+          host_shell_generation: withholdFailure
+            ? (production.host_shell_generation ?? null)
+            : (diagnostics.warmedHostShellGeneration ?? null),
           diagnostics: diagnostics,
         };
         break;
@@ -1548,6 +1634,16 @@ export class Batch {
       url: href,
       file_alias: trimExecutableExtension(rri(url.href)).replace(/\.json$/, ''),
       generation: this.generation,
+      // The host bundle that rendered this row, as an ordering rather than the
+      // hash beside it in `diagnostics`. Promoted out of the jsonb into its own
+      // indexed column because the query it exists for — every row below the
+      // shell now being served — is a range scan over the largest table here,
+      // and a jsonb extract has no index to walk.
+      //
+      // `null` when the render reported no number, which is unknown rather than
+      // old. `< current` excludes null, so such a row stays out of a repair
+      // instead of being swept into the first one that runs.
+      host_shell_generation: diagnostics.warmedHostShellGeneration ?? null,
       realm_url: this.realmURL.href,
       is_deleted: false,
       indexed_at: Date.now(),
@@ -2067,11 +2163,34 @@ export class Batch {
   }
 
   // Re-stamp the current committed generation's realm_meta value at this
-  // batch's generation. Runs inside done()'s transaction before
-  // applyBatchUpdates advances realm_generations, so the JOIN-anchored read
-  // still resolves the prior row here. Falls back to a fresh compute when no
-  // prior row exists (a realm that has never completed a pass).
+  // batch's generation. Falls back to a fresh compute when no prior row exists
+  // (a realm that has never completed a pass).
+  //
+  // The value is written through exactly as read, deliberately: a realm still
+  // holding the legacy shape has no `files` arm, and normalizing on the way
+  // through would invent an empty one and stamp it at this generation as
+  // though a pass had established it. Re-stamping what is already there says
+  // nothing new about the realm, which is the whole point of this path.
   private async carryForwardRealmMeta(): Promise<void> {
+    let value = await this.currentRealmMetaValue();
+    if (value === undefined) {
+      await this.updateRealmMeta();
+      return;
+    }
+    await this.writeRealmMeta(value);
+  }
+
+  // The realm_meta value at the realm's current committed generation, or
+  // undefined for a realm that has never completed a pass.
+  //
+  // Anchored on `realm_generations.current_generation` rather than on the
+  // highest-numbered row, which a from-scratch reindex leaves behind — the
+  // same JOIN the read side uses. Callers run inside done()'s transaction
+  // before applyBatchUpdates advances the generation, so this resolves the row
+  // the pass is about to publish over.
+  private async currentRealmMetaValue(): Promise<
+    RealmMetaTable['value'] | undefined
+  > {
     let [row] = (await this.#query([
       `SELECT rm.value
        FROM realm_meta rm
@@ -2082,15 +2201,15 @@ export class Batch {
       ...every([['rm.realm_url =', param(this.realmURL.href)]]),
       `LIMIT 1`,
     ] as Expression)) as unknown as { value: RealmMetaTable['value'] }[];
-    if (!row) {
-      await this.updateRealmMeta();
-      return;
-    }
+    return row?.value;
+  }
+
+  private async writeRealmMeta(value: RealmMetaTable['value']): Promise<void> {
     let { nameExpressions, valueExpressions } = asExpressions(
       {
         realm_url: this.realmURL.href,
         generation: this.generation,
-        value: row.value,
+        value,
         indexed_at: unixTime(new Date().getTime()),
       } as Omit<RealmMetaTable, 'indexed_at'> & {
         indexed_at: number;
@@ -2184,33 +2303,65 @@ export class Batch {
   }
 
   private async updateRealmMeta() {
-    let instances = await this.#fetchTypeSummary('instance');
-    let files = await this.#fetchTypeSummary('file');
+    let value =
+      (await this.scopedRealmMetaValue()) ?? (await this.fullRealmMetaValue());
+    await this.writeRealmMeta(value);
+  }
 
-    let value = { instances, files };
+  private async fullRealmMetaValue(): Promise<RealmMetaValue> {
+    return {
+      instances: await this.#fetchTypeSummary('instance'),
+      files: await this.#fetchTypeSummary('file'),
+    };
+  }
 
-    let { nameExpressions, valueExpressions } = asExpressions(
-      {
-        realm_url: this.realmURL.href,
-        generation: this.generation,
-        value,
-        indexed_at: unixTime(new Date().getTime()),
-      } as Omit<RealmMetaTable, 'indexed_at'> & {
-        indexed_at: number;
-      },
-      {
-        jsonFields: ['value'],
-      },
-    );
-
-    await this.#query([
-      ...upsert(
-        'realm_meta',
-        'realm_meta_pkey',
-        nameExpressions,
-        valueExpressions,
+  // The summary this pass publishes, built from the types it moved and the
+  // previous generation's entries for everything else — or undefined when this
+  // pass cannot be published that way and has to rebuild the whole summary.
+  //
+  // `typeSetIsComplete` is the condition that matters. It asks whether every
+  // URL the swap promotes had its prior adoption chain read before the pass
+  // wrote over it, which is exactly what makes `#touchedTypes` a complete
+  // account of the groups whose counts could have moved. A row written without
+  // that read can be leaving a type nothing else in the pass names, and this
+  // path would carry that type's now-stale count forward as if it were still
+  // current. Same polarity as the `bumpAllTypes` decision `done()` makes from
+  // the same predicate: absence reads as "unknown", never as "unaffected".
+  //
+  // The prior value also has to be one a pass actually wrote, both arms and
+  // all. A realm still holding the legacy shape has no `files` arm at all, and
+  // reading it through `normalizeRealmMetaValue` would synthesize an empty one
+  // that is indistinguishable from a realm with no file rows — carried forward,
+  // that publishes the realm as having no file types. Rebuilding is what gives
+  // such a realm its `files` arm, so it keeps rebuilding until it has one.
+  //
+  // The rest is cost, not correctness. A realm that has never completed a pass
+  // has no prior entries to carry, and a pass that moved more types than the
+  // scoped form is worth binding parameters for rebuilds instead.
+  private async scopedRealmMetaValue(): Promise<RealmMetaValue | undefined> {
+    if (!this.typeSetIsComplete) {
+      return undefined;
+    }
+    let touchedTypes = this.touchedTypes;
+    if (touchedTypes.length > SCOPED_TYPE_SUMMARY_MAX_TYPES) {
+      return undefined;
+    }
+    let prior = await this.currentRealmMetaValue();
+    if (!isPartitionedRealmMetaValue(prior)) {
+      return undefined;
+    }
+    return {
+      instances: await this.#fetchMergedTypeSummary(
+        'instance',
+        touchedTypes,
+        prior.instances,
       ),
-    ]);
+      files: await this.#fetchMergedTypeSummary(
+        'file',
+        touchedTypes,
+        prior.files,
+      ),
+    };
   }
 
   // Aggregates per-type summaries (count, display name, code-ref key, icon)
@@ -2228,27 +2379,123 @@ export class Batch {
   // entries for the same type — one labeled "Markdown", one labeled
   // "MarkdownDef" (the CodeRef-name fallback) — that resolve to identical
   // searches and confuse users during the transition window.
+  //
+  // `count(i.url)` counts rows, not distinct URLs, because the two are the
+  // same thing here: the table's primary key is `(url, realm_url, type)` and
+  // this query fixes `realm_url` and `type`, so no URL can appear twice in a
+  // group. Asking for the distinct count instead is not free — it makes the
+  // aggregate order its whole input by `(types->>0, url)`, which under a
+  // locale collation is the most expensive thing in the swap: both keys are
+  // long URLs that share a per-realm prefix, so the comparison cannot use
+  // abbreviated keys and runs at full length on every pair.
   async #fetchTypeSummary(
     indexType: BoxelIndexTable['type'],
   ): Promise<CardTypeSummary[]> {
     let results = await this.#query([
-      `SELECT CAST(count(DISTINCT i.url) AS INTEGER) as total, MAX(i.display_names->>0) as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
+      ...this.#typeSummaryAggregate(indexType),
+      TYPE_SUMMARY_ORDER_BY,
+    ] as Expression);
+    return results as unknown as CardTypeSummary[];
+  }
+
+  // The per-type aggregate itself, shared by both rollup paths and differing
+  // only in which leaf types it covers — every type in the realm when
+  // `leafTypes` is omitted, that set when it is given.
+  //
+  // One builder rather than two spellings of the same query: what a summary row
+  // is — its columns, what counts as a live row — has to move on both paths at
+  // once, or a realm's summary comes to depend on which path its last pass took,
+  // with nothing raised and nothing red.
+  #typeSummaryAggregate(
+    indexType: BoxelIndexTable['type'],
+    leafTypes?: string[],
+  ): Expression {
+    return [
+      `SELECT CAST(count(i.url) AS INTEGER) as total, MAX(i.display_names->>0) as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
        FROM boxel_index_working as i
           WHERE`,
       ...every([
         ['i.realm_url =', param(this.realmURL.href)],
         ['i.type = ', param(indexType)],
         ['i.types IS NOT NULL'],
-        [
-          dbExpression({
-            pg: `(i.types->>0) IS NOT NULL`,
-            sqlite: `json_extract(i.types, '$[0]') IS NOT NULL`,
-          }),
-        ],
+        leafTypes === undefined
+          ? [
+              dbExpression({
+                pg: `(i.types->>0) IS NOT NULL`,
+                sqlite: `json_extract(i.types, '$[0]') IS NOT NULL`,
+              }),
+            ]
+          : [
+              dbExpression({
+                pg: `(i.types->>0)`,
+                sqlite: `json_extract(i.types, '$[0]')`,
+              }),
+              `IN`,
+              ...addExplicitParens(
+                separatedByCommas(leafTypes.map((type) => [param(type)])),
+              ),
+            ],
         any([['i.is_deleted = false'], ['i.is_deleted IS NULL']]),
       ]),
       `GROUP BY i.types->>0`,
-      `ORDER BY MAX(i.display_names->>0) ASC NULLS LAST`,
+    ] as Expression;
+  }
+
+  // `#fetchTypeSummary` restricted to the types this pass moved, unioned with
+  // the entries the previous generation already held for every other type.
+  // Same result, without reading the whole realm's working set to produce it.
+  //
+  // The union and its ordering stay in SQL. `realm_meta.value` is ordered by
+  // display name, and what that ordering means belongs to whichever adapter
+  // holds the rows — a locale collation under Postgres, BINARY under SQLite.
+  // Merging in JS would have to reproduce that to leave the order the sidebar
+  // renders unchanged; letting the database order the merged set gives the same
+  // array a full rebuild would, on each adapter, without naming a collation at
+  // all. That holds entry for entry only because `TYPE_SUMMARY_ORDER_BY` is a
+  // total order — ordering on display name alone would let this form and the
+  // full rebuild disagree about tied entries, since this one would be breaking
+  // those ties by which arm of the union a row came out of.
+  //
+  // The carried arm is filtered by the touched set rather than merged under
+  // the recomputed one, so a type whose last row this pass removed — recomputed
+  // to nothing, and therefore absent from both arms — drops out of the summary
+  // instead of keeping its stale count.
+  async #fetchMergedTypeSummary(
+    indexType: BoxelIndexTable['type'],
+    touchedTypes: string[],
+    priorEntries: CardTypeSummary[],
+  ): Promise<CardTypeSummary[]> {
+    let touched = new Set(touchedTypes);
+    let carried = priorEntries.filter((entry) => !touched.has(entry.code_ref));
+    if (touched.size === 0) {
+      // Nothing moved, so the previous generation's entries are already the
+      // answer — and already in the order the database put them in.
+      return carried;
+    }
+    let carriedJSON = JSON.stringify(carried);
+    let results = await this.#query([
+      `SELECT total, display_name, code_ref, icon_html FROM (`,
+      ...this.#typeSummaryAggregate(indexType, [...touched]),
+      `UNION ALL`,
+      dbExpression({
+        pg: [
+          `SELECT p.total, p.display_name, p.code_ref, p.icon_html
+           FROM jsonb_to_recordset(`,
+          param(carriedJSON),
+          `::jsonb) AS p(total integer, display_name text, code_ref text, icon_html text)`,
+        ],
+        sqlite: [
+          `SELECT json_extract(p.value, '$.total') AS total,
+                  json_extract(p.value, '$.display_name') AS display_name,
+                  json_extract(p.value, '$.code_ref') AS code_ref,
+                  json_extract(p.value, '$.icon_html') AS icon_html
+           FROM json_each(`,
+          param(carriedJSON),
+          `) AS p`,
+        ],
+      }),
+      `) AS summary`,
+      TYPE_SUMMARY_ORDER_BY,
     ] as Expression);
     return results as unknown as CardTypeSummary[];
   }
@@ -2328,6 +2575,49 @@ export class Batch {
         await this.promotePrerenderedHtmlWorking();
         this.#publishedPrerenderedHtml = true;
       }
+    }
+
+    await this.stampRenderOnlyEntries();
+  }
+
+  // Render-only dependents keep their index row — its search document
+  // cannot have moved — but two things keyed on that row must still see the
+  // change. The card+json validator and response cache key on `indexed_at`,
+  // and a card's `included` resources are assembled from its links at read
+  // time, so a renderer that links the changed card would otherwise keep
+  // serving the old linked resource under an unchanged ETag. And the
+  // prerender-html reconcile sweep finds HTML to repair by
+  // `prerendered_html.generation < boxel_index.generation`, so stamping this
+  // pass's generation keeps a lost `prerender_html` job repairable, exactly
+  // as it is for the rows this pass visits. One UPDATE stands in for the
+  // visit the row no longer gets.
+  private async stampRenderOnlyEntries() {
+    if (this.#renderOnlyInvalidations.size === 0) {
+      return;
+    }
+    let urls = [...this.#renderOnlyInvalidations];
+    let indexedAt = Date.now();
+    for (let offset = 0; offset < urls.length; offset += 5000) {
+      await this.#query([
+        'UPDATE boxel_index SET',
+        ...separatedByCommas([
+          ['indexed_at =', param(indexedAt)],
+          ['generation =', param(this.generation)],
+        ]),
+        'WHERE',
+        ...every([
+          ['realm_url =', param(this.realmURL.href)],
+          [
+            'url IN',
+            ...addExplicitParens(
+              separatedByCommas(
+                urls.slice(offset, offset + 5000).map((url) => [param(url)]),
+              ),
+            ),
+          ],
+          any([['is_deleted = false'], ['is_deleted IS NULL']]) as Expression,
+        ]),
+      ] as Expression);
     }
   }
 
@@ -2612,6 +2902,23 @@ export class Batch {
         this.#recordTouchedTypes(cardTypes);
       }
     }
+    // The read above names the chain each URL is leaving as *production* knows
+    // it, but the type summary aggregates over `boxel_index_working`, and no
+    // pass prunes that table. A row an abandoned job wrote there can therefore
+    // hold a leaf production never had — one a completed pass has already
+    // counted into the summary — and this pass is about to write over it. A
+    // rollup scoped to production's chains alone would leave that leaf's count
+    // standing for a row that no longer carries it, and because nothing live
+    // adopts it, no later scoped pass would name it either.
+    //
+    // Only `#touchedTypes` is widened here. The tombstone decisions below stay
+    // on production, which is the reliable oracle for what is live — the
+    // working table also holds the un-promoted tombstones of a pass that
+    // failed. Widening is safe in a way narrowing would not be: a type named
+    // that did not actually move is recomputed to the value it already had.
+    for (let cardTypes of await this.workingIndexTypes(invalidations)) {
+      this.#recordTouchedTypes(cardTypes);
+    }
     // Every URL read above now has its prior chain in `#touchedTypes`,
     // including the ones production holds no row for — those have no prior
     // chain to leave. This is the read `typeSetIsComplete` asks about.
@@ -2693,14 +3000,12 @@ export class Batch {
       return;
     }
 
-    await this.#query([
-      ...upsertMultipleRows(
-        'boxel_index_working',
-        'boxel_index_working_pkey',
-        columns,
-        rows,
-      ),
-    ]);
+    await this.#upsertWithinBindBudget(
+      'boxel_index_working',
+      'boxel_index_working_pkey',
+      columns,
+      rows,
+    );
 
     // On the fused path this batch owns the prerendered_html channel too, so
     // the deletion must tombstone both. (A split-mode batch leaves the
@@ -2719,6 +3024,34 @@ export class Batch {
   // clears any prior render error / diagnostics. The visit loop's writes
   // overwrite survivors, so only genuinely deleted URLs stay tombstoned
   // through the swap.
+  // One multi-row upsert binds `rows * columns` parameters, and every driver
+  // caps what a single statement may carry — SQLite at ~999, Postgres at
+  // 65,535. A realm-sized batch passes either ceiling, and the driver rejects
+  // the whole statement, so the caller loses its entire pass rather than part
+  // of it. Chunk against the same budget `#upsertIndexRows` uses.
+  async #upsertWithinBindBudget(
+    table: string,
+    constraint: string,
+    nameExpressions: string[][],
+    valueExpressions: Expression[][],
+  ): Promise<void> {
+    let bindBudget = this.#dbAdapter.kind === 'sqlite' ? 900 : 60000;
+    let rowsPerUpsert = Math.max(
+      1,
+      Math.floor(bindBudget / nameExpressions.length),
+    );
+    for (let i = 0; i < valueExpressions.length; i += rowsPerUpsert) {
+      await this.#query([
+        ...upsertMultipleRows(
+          table,
+          constraint,
+          nameExpressions,
+          valueExpressions.slice(i, i + rowsPerUpsert),
+        ),
+      ]);
+    }
+  }
+
   private async tombstonePrerenderedHtmlEntries(urls: string[]): Promise<void> {
     let existingTypes = await this.existingPrerenderedHtmlTypes(urls);
     for (let [url, entries] of existingTypes) {
@@ -2773,14 +3106,37 @@ export class Batch {
     if (rows.length === 0) {
       return;
     }
-    await this.#query([
-      ...upsertMultipleRows(
-        'prerendered_html_working',
-        'prerendered_html_working_pkey',
-        columns,
-        rows,
-      ),
-    ]);
+    await this.#upsertWithinBindBudget(
+      'prerendered_html_working',
+      'prerendered_html_working_pkey',
+      columns,
+      rows,
+    );
+  }
+
+  // The adoption chains `boxel_index_working` currently holds for these URLs.
+  // Feeds `#touchedTypes` only — see `tombstoneEntries` for why the tombstone
+  // decisions read production instead.
+  private async workingIndexTypes(
+    invalidations: string[],
+  ): Promise<(string[] | null)[]> {
+    if (invalidations.length === 0) {
+      return [];
+    }
+    let uniqueInvalidations = [...new Set(invalidations)];
+    let rows = (await this.#query([
+      'SELECT types FROM boxel_index_working WHERE',
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        [
+          'url IN',
+          ...addExplicitParens(
+            separatedByCommas(uniqueInvalidations.map((id) => [param(id)])),
+          ),
+        ],
+      ]),
+    ] as Expression)) as Pick<BoxelIndexTable, 'types'>[];
+    return rows.map((row) => row.types);
   }
 
   // Each invalidated URL's rows as the production index still holds them:
@@ -2908,29 +3264,66 @@ export class Batch {
     this.#perfLog.debug(
       `${jobIdentity} starting invalidation of ${urls.map((u) => u.href).join()}`,
     );
-    let visited = new Set<string>();
-    let invalidations: string[] = [];
+    // The index pass visits what the change reaches through index edges
+    // alone. On the split path the full closure — index and render edges
+    // together — is walked as well, and whatever it adds is left to the
+    // `prerender_html` job. The fused path renders inline, so its visits must
+    // cover every renderer: there the index walk follows both edge kinds and
+    // there is no second walk. Both walks share one reference scan per path.
+    let fanOut: FanOutWalk = {
+      references: new Map(),
+      followRenderEdges: !this.#splitPrerenderHtml,
+      visited: new Set(),
+    };
+    let renderFanOut: FanOutWalk | undefined = this.#splitPrerenderHtml
+      ? {
+          references: fanOut.references,
+          followRenderEdges: true,
+          visited: new Set(),
+        }
+      : undefined;
+    let invalidations = new Set<string>();
+    let renderInvalidations = new Set<string>();
     for (let url of urls) {
       for (let seed of await this.invalidationSeeds(url)) {
         let alias = trimExecutableExtension(rri(seed));
-        let workingInvalidations = [
-          ...new Set([
-            ...(!this.nodeResolvedInvalidations.includes(alias) ? [seed] : []),
-            ...(alias ? await this.calculateInvalidations(alias, visited) : []),
-          ]),
-        ];
-        invalidations = [
-          ...new Set([...invalidations, ...workingInvalidations]),
-        ];
+        if (!this.nodeResolvedInvalidations.includes(alias)) {
+          invalidations.add(seed);
+        }
+        if (!alias) {
+          continue;
+        }
+        for (let dependent of await this.calculateInvalidations(
+          alias,
+          fanOut,
+        )) {
+          invalidations.add(dependent);
+        }
+        if (renderFanOut) {
+          for (let dependent of await this.calculateInvalidations(
+            alias,
+            renderFanOut,
+          )) {
+            renderInvalidations.add(dependent);
+          }
+        }
       }
     }
+    for (let url of renderInvalidations) {
+      if (!invalidations.has(url) && !this.#invalidations.has(url)) {
+        this.#renderOnlyInvalidations.add(url);
+      }
+    }
+    for (let url of invalidations) {
+      this.#renderOnlyInvalidations.delete(url);
+    }
 
-    if (invalidations.length === 0) {
+    if (invalidations.size === 0) {
       return;
     }
 
     let insertStart = Date.now();
-    await this.tombstoneEntries(invalidations);
+    await this.tombstoneEntries([...invalidations]);
 
     this.#perfLog.debug(
       `${jobIdentity(this.jobInfo)} inserted invalidated rows for  ${urls.map((u) => u.href).join()} in ${
@@ -2939,7 +3332,7 @@ export class Batch {
     );
 
     this.#perfLog.debug(
-      `${jobIdentity(this.jobInfo)} completed invalidation of ${urls.map((u) => u.href).join()} in ${Date.now() - start} ms`,
+      `${jobIdentity(this.jobInfo)} completed invalidation of ${urls.map((u) => u.href).join()} in ${Date.now() - start} ms (${invalidations.size} to visit, ${this.#renderOnlyInvalidations.size} render-only)`,
     );
 
     this.#invalidations = new Set([...this.#invalidations, ...invalidations]);
@@ -3145,13 +3538,9 @@ export class Batch {
     }));
   }
 
-  private async itemsThatReference(resolvedPath: string): Promise<
-    {
-      url: string;
-      alias: string | null;
-      type: BoxelIndexTable['type'];
-    }[]
-  > {
+  private async itemsThatReference(
+    resolvedPath: string,
+  ): Promise<ReferencingItem[]> {
     let start = Date.now();
     const pageSize = 1000;
     // Also search for the prefix form of the path (e.g. @cardstack/catalog/...)
@@ -3245,7 +3634,9 @@ export class Batch {
     // `prerendered_html.deps` carries edges only the format renders discover
     // — a rendered non-searchable link, the scoped-CSS artifacts of linked
     // instances. Both edge sets must feed the fan-out or a change to a
-    // render-only dependency would never re-render its consumers.
+    // render-only dependency would never re-render its consumers. Each item
+    // says which kind of edge found it, so the caller can keep render-only
+    // consumers out of the index visit (see `calculateInvalidations`).
     //
     // Production `boxel_index` is scanned as well because the working table
     // is a staging area whose coverage is not guaranteed: a row only exists
@@ -3262,20 +3653,20 @@ export class Batch {
       scanTable('boxel_index'),
     ]);
     let seen = new Set<string>();
-    let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: BoxelIndexTable['type'];
-    })[] = [];
-    for (let row of [
-      ...workingScan.results,
-      ...prerenderedScan.results,
-      ...productionScan.results,
-    ]) {
-      let key = `${row.url}|${row.type}`;
-      if (seen.has(key)) {
-        continue;
+    let results: ReferencingItem[] = [];
+    for (let [rows, renderEdge] of [
+      [workingScan.results, false],
+      [productionScan.results, false],
+      [prerenderedScan.results, true],
+    ] as const) {
+      for (let { url, file_alias, type } of rows) {
+        let key = `${url}|${type}`;
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        results.push({ url, alias: file_alias, type, renderEdge });
       }
-      seen.add(key);
-      results.push(row);
     }
     this.#perfLog.debug(
       `${jobIdentity(this.jobInfo)} time to determine items that reference ${resolvedPath} ${
@@ -3286,25 +3677,34 @@ export class Batch {
         productionScan.pageNumber
       })`,
     );
-    return results.map(({ url, file_alias, type }) => ({
-      url,
-      alias: file_alias,
-      type,
-    }));
+    return results;
   }
 
+  // The dependents of `resolvedPath`, transitively, along the edges `walk`
+  // follows. With `followRenderEdges` off, the walk stays on index edges: a
+  // consumer found only through `prerendered_html.deps` is neither returned
+  // nor recursed through, because nothing its index visit reads came from
+  // the change. The reference scans are memoized on `walk.references`, which
+  // the index walk and the full walk share.
   private async calculateInvalidations(
     resolvedPath: string,
-    visited: Set<string>,
+    walk: FanOutWalk,
   ): Promise<string[]> {
     if (
-      visited.has(resolvedPath) ||
+      walk.visited.has(resolvedPath) ||
       this.nodeResolvedInvalidations.includes(rri(resolvedPath))
     ) {
       return [];
     }
-    visited.add(resolvedPath);
-    let items = await this.itemsThatReference(resolvedPath);
+    walk.visited.add(resolvedPath);
+    let scan = walk.references.get(resolvedPath);
+    if (!scan) {
+      scan = this.itemsThatReference(resolvedPath);
+      walk.references.set(resolvedPath, scan);
+    }
+    let items = (await scan).filter(
+      ({ renderEdge }) => walk.followRenderEdges || !renderEdge,
+    );
     let invalidations = items.map(({ url }) => url);
     let aliases = items.map(({ alias, type, url }) =>
       this.invalidationTraversalAlias({ alias, type, url }),
@@ -3315,7 +3715,7 @@ export class Batch {
         await Promise.all(
           aliases
             .filter((a): a is string => Boolean(a))
-            .map((a) => this.calculateInvalidations(a, visited)),
+            .map((a) => this.calculateInvalidations(a, walk)),
         ),
       ),
     ];

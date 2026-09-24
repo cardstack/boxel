@@ -188,7 +188,7 @@ class Isolated extends Component<typeof ThumbnailCardAiDemo> {
         padding: var(--boxel-sp);
         border: 1px solid var(--boxel-200);
         border-radius: var(--boxel-border-radius-lg);
-        background: var(--boxel-50);
+        background-color: var(--boxel-50);
       }
       .result img {
         max-width: 100%;

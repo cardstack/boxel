@@ -63,6 +63,9 @@ NODE_ENV=development \
   --fromUrl='@cardstack/skills/' \
   --toUrl="${REALM_BASE_URL}/skills/" \
   \
+  --fromUrl='@cardstack/pretui/' \
+  --toUrl="${REALM_BASE_URL}/pretui/" \
+  \
   --fromUrl='@cardstack/openrouter/' \
   --toUrl="${REALM_BASE_URL}/openrouter/" \
   \

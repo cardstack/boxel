@@ -28,9 +28,11 @@ import {
 import {
   admitSearch,
   admitSearchUnconditionally,
+  beginSearchRequest,
   getSearchAdmissionLimit,
   getSearchInFlight,
   getSearchShedCount,
+  type SearchRequest,
 } from '../search-inflight.ts';
 
 // Matches the realm-server's search endpoints (`/_search`,
@@ -249,8 +251,11 @@ const SEARCH_ADMISSION_RELEASE = 'searchAdmissionRelease';
 // ceiling; only the request doing the computing keeps its slot until its
 // response ends. That holds for an indexing-lane admission too: an in-render
 // search served from another request's computation holds no document either,
-// and the count is of computations, whichever lane admitted them. Idempotent,
-// and a no-op for requests the gate never saw.
+// and the count is of computations, whichever lane admitted them. Only the slot
+// is handed back: the request goes on counting toward the link-shape policy's
+// reading until its response ends, since it is still waiting on the
+// computation it joined. Idempotent, and a no-op for requests the gate never
+// saw.
 export function releaseSearchAdmission(ctxt: Koa.Context): void {
   let release = ctxt.state[SEARCH_ADMISSION_RELEASE];
   if (typeof release === 'function') {
@@ -258,12 +263,31 @@ export function releaseSearchAdmission(ctxt: Koa.Context): void {
   }
 }
 
+// Where `searchAdmission` leaves the request it is counting, so the handler
+// that learns which realms the search names can attribute it to them.
+const SEARCH_REQUEST = 'searchRequest';
+
+// Count a search request toward the realms it names, from now until its
+// response ends — the reading each realm's link-shape level follows. Called by
+// whichever handler first knows the realms: the gate runs before the body is
+// parsed, and a federated search names its realms in the body. Idempotent per
+// realm, and a no-op for requests the gate did not count.
+export function attributeSearchRequest(
+  ctxt: Koa.Context,
+  realms: Iterable<string>,
+): void {
+  let searchRequest = ctxt.state[SEARCH_REQUEST] as SearchRequest | undefined;
+  searchRequest?.attribute(realms);
+}
+
 // Puts a search through the admission gate (`search-inflight.ts`). A search
 // that computes its own result holds its slot for the request's full lifecycle
 // (parse → SQL → serialize → send), which is the window in which it holds heap
 // and in which a saturated event loop would leave it unserviced; one that the
 // live-search cache serves from another's computation hands the slot back
-// early via `releaseSearchAdmission`. Mounted after CORS so that a shed
+// early via `releaseSearchAdmission`. Every admitted request, whichever it
+// is, is also counted as a request in flight until its response ends, which is
+// the reading the link-shape policy decides on. Mounted after CORS so that a shed
 // response carries the headers a cross-origin client needs to read its status
 // and Retry-After; before the body is parsed so that a shed costs nothing.
 export async function searchAdmission(ctxt: Koa.Context, next: Koa.Next) {
@@ -283,17 +307,27 @@ export async function searchAdmission(ctxt: Koa.Context, next: Koa.Next) {
   let arrivedAt = Date.now();
   let closed = false;
   let release: (() => void) | undefined;
+  let searchRequest: SearchRequest | undefined;
   let releaseSlot = () => {
     release?.();
     release = undefined;
   };
+  // The slot and the request end separately: a request the live-search cache
+  // serves from another's computation hands its slot back early, but it is
+  // still a request in flight — waiting on that computation — until its
+  // response ends, and that is the count the link-shape policy reads.
+  let end = () => {
+    releaseSlot();
+    searchRequest?.end();
+    searchRequest = undefined;
+  };
   ctxt.state[SEARCH_ADMISSION_RELEASE] = releaseSlot;
   // `finish` fires on a fully-sent response; `close` covers a connection
-  // torn down before that, so a slot can't leak on an abort.
-  ctxt.res.on('finish', releaseSlot);
+  // torn down before that, so neither count can leak on an abort.
+  ctxt.res.on('finish', end);
   ctxt.res.on('close', () => {
     closed = true;
-    releaseSlot();
+    end();
   });
 
   if (isIndexing) {
@@ -312,6 +346,14 @@ export async function searchAdmission(ctxt: Koa.Context, next: Koa.Next) {
       return;
     }
     release = admitted;
+  }
+  // Only a request whose connection is still open starts counting. The
+  // `close` listener is what ends the count, so a request that began after
+  // its close had already fired would never be ended — and a leaked request,
+  // unlike a leaked slot, holds the replica's load reading up until restart.
+  if (!closed) {
+    searchRequest = beginSearchRequest();
+    ctxt.state[SEARCH_REQUEST] = searchRequest;
   }
   return next();
 }

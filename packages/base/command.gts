@@ -739,6 +739,39 @@ export class ExecuteAtomicOperationsResult extends CardDef {
   @field results = containsMany(JsonField);
 }
 
+// One invocation of one operation a card's type declares. 'payload' carries
+// the operation's params, keyed exactly as its 'params' schema names them.
+//
+// 'realm' and 'relationships' describe a card the plain 'create' mints, and
+// are read for nothing else: where it lands, and the links it is created
+// holding, as JSON:API relationship objects. An operation that runs against
+// the card at 'cardId' runs in that card's own realm, and a declared
+// operation takes the cards it links among its params.
+export class InvokeCardOperationInput extends CardDef {
+  @field cardId = contains(StringField);
+  @field operation = contains(StringField);
+  @field payload = contains(JsonField);
+  @field realm = contains(StringField);
+  @field relationships = contains(JsonField);
+}
+
+// What an operation answers, in the two shapes an answer takes. A write
+// reports the card it wrote and the version it wrote — the card's own id, not
+// the target's, so a create reports the card it minted. A read reports the
+// document, which an author's output program may have reshaped. A delete
+// answers nothing and so fills neither: the card is gone, and the invocation
+// having succeeded is the whole of the news.
+//
+// 'cardId' rather than 'id' because CardDef already carries 'id' as the
+// instance's own identifier.
+export class InvokeCardOperationResult extends CardDef {
+  @field cardId = contains(StringField);
+  @field version = contains(StringField);
+  @field generation = contains(NumberField);
+  @field lastModified = contains(NumberField);
+  @field document = contains(JsonField);
+}
+
 // A publish destination for a realm. 'type' is 'subdirectory' (a Boxel Space
 // under the user's space domain, where 'name' is the realm-name path segment)
 // or 'custom' (a claimed custom domain, where 'name' is the full hostname).

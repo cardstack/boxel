@@ -119,10 +119,13 @@ Available only inside the running Boxel app. Each is a default-export `Command` 
 
 These are the HTTP endpoints the host commands map to. Useful when scripting via `curl` or `boxel-cli`:
 
-OpenRouter calls go through `/_request-forward` to the external `https://openrouter.ai/api/v1/chat/completions` URL. There is no live `/_openrouter/chat/completions` or `/_screenshot-card` endpoint in the current monorepo checkout.
+OpenRouter calls go through `/_request-forward` to the external `https://openrouter.ai/api/v1/chat/completions` URL. There is no live `/_openrouter/chat/completions` endpoint in the current monorepo checkout (the screenshot endpoints below *are* live — an older audit that predates them was stale).
 
 | Endpoint | Method | Purpose |
 |---|---|---|
+| `/_screenshot-card` | POST | Capture a settled render of a card — PNG (default) or paged PDF (`captureSpec.type: 'pdf'`, `media: 'screen' \| 'print'`). Backs `ScreenshotCardTool` (whose input is PNG-only; pass `captureSpec.type`/`media` when POSTing directly). Pattern: `integrate-screenshot-card-format`. |
+| `{realm}_screenshot/{path}?…` | GET | Durable serving URL for an on-demand capture — `?type=pdf[&media=print]` yields an always-current PDF (ledger hit on repeat, re-capture after an edit); embed instead of storing base64. Requires realm read: an `Authorization` header, or a `?token=` minted by `_sign-capture-urls` for the loads the service worker can't reach (`<object>`/`<embed>`, new-tab navigation). |
+| `{realm}_sign-capture-urls` | QUERY | Mint signed capture URLs: body `{ "urls": [ …1–100 of this realm's `_screenshot/` URLs… ] }` → `{ "signed": [{ "url", "signedUrl", "expiresAt" }] }`. Realm-read gate (grants nothing the caller lacks); 15-minute single-URL tokens; anonymous callers on a public realm get URLs echoed unsigned. Card code uses the `SignedCaptureLink`/`SignedCapture` components instead of calling this. Pattern: `integrate-screenshot-card-format`. |
 | `/_federated-search` | QUERY | Cross-realm search (used by `npx boxel search` + `SearchCardsByQueryCommand` when crossing realms). |
 | `/_federated-search-prerendered` | QUERY | Same with prerendered card results. |
 | `/_federated-info` | GET | Cross-realm realm metadata. |

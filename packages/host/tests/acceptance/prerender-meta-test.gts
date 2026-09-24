@@ -290,6 +290,9 @@ module('Acceptance | prerender | meta', function (hooks) {
 
   hooks.afterEach(function () {
     delete (globalThis as any).__boxelRenderContext;
+    // No test leaves a card-source stash behind for the next one: the render
+    // route honors it whenever it names the card being rendered.
+    delete (globalThis as any).__boxelCardRenderData;
   });
 
   test('can generate serialized instance', async function (assert) {
@@ -789,6 +792,144 @@ module('Acceptance | prerender | meta', function (hooks) {
       [...(fusedDeps ?? [])].sort(),
       [...(standaloneDeps ?? [])].sort(),
       'fused extract deps are set-equal to the standalone extract deps',
+    );
+  });
+
+  // The card branch of the render route builds its model from a caller-supplied
+  // stash when there is one, instead of fetching the instance's source for
+  // itself. Each of these stashes bytes that differ from the realm's copy, so
+  // the rendered card names which read it was built from — 'Stashed Hassan'
+  // could only have come from the stash, and 'Hassan' only from a fetch.
+  const STASHED_HASSAN = JSON.stringify({
+    data: {
+      attributes: { name: 'Stashed Hassan' },
+      meta: { adoptsFrom: { module: '../person', name: 'Person' } },
+    },
+  });
+
+  test('a card render builds its model from the stashed source rather than fetching', async function (assert) {
+    let url = `${testRealmURL}Person/hassan.json`;
+    (globalThis as any).__boxelCardRenderData = {
+      url,
+      source: STASHED_HASSAN,
+      realmURL: testRealmURL,
+      lastModified: Date.parse('2026-01-02T03:04:05Z'),
+    };
+
+    await visit(renderPath(url, '/meta'));
+    let { value } = await capturePrerenderResult('textContent');
+    let meta: PrerenderMeta = JSON.parse(value);
+
+    assert.strictEqual(
+      (meta.serialized as any)?.data?.attributes?.name,
+      'Stashed Hassan',
+      'the model was built from the stashed source',
+    );
+    // The serialized name proves the bytes came from the stash; this proves
+    // the render knows it, which is what a production row can be read for.
+    assert.strictEqual(
+      meta.diagnostics?.cardSourceFrom,
+      'stash',
+      'the build reports that it took the stashed path',
+    );
+    // The realm URL and the card's own identity still come out right: the
+    // stash supplies what the card branch otherwise reads off the response
+    // headers, and the route keys the model on the route's id either way.
+    assert.strictEqual(
+      (meta.serialized as any)?.data?.meta?.realmURL,
+      testRealmURL,
+      'the realm the stash names is the realm the instance is serialized into',
+    );
+    assert.strictEqual(
+      (meta.serialized as any)?.data?.id,
+      testRRI('Person/hassan'),
+      'the rendered card is the one the route names',
+    );
+  });
+
+  test('a stash naming a different card is ignored and the render fetches', async function (assert) {
+    let url = `${testRealmURL}Person/hassan.json`;
+    // A prerender tab serves many cards. A stash left over from another card's
+    // visit must never become this card's document.
+    (globalThis as any).__boxelCardRenderData = {
+      url: `${testRealmURL}Person/jade.json`,
+      source: STASHED_HASSAN,
+      realmURL: testRealmURL,
+      lastModified: Date.parse('2026-01-02T03:04:05Z'),
+    };
+
+    await visit(renderPath(url, '/meta'));
+    let { value } = await capturePrerenderResult('textContent');
+    let meta: PrerenderMeta = JSON.parse(value);
+
+    assert.strictEqual(
+      (meta.serialized as any)?.data?.attributes?.name,
+      'Hassan',
+      "the realm's bytes were used, not the stash's",
+    );
+    assert.strictEqual(
+      meta.diagnostics?.cardSourceFrom,
+      'fetch',
+      'the build reports that it fell back to fetching',
+    );
+  });
+
+  test('a stash that parses to something other than a card document is ignored', async function (assert) {
+    // `JSON.parse` succeeds for `null`, a number and an array, and the build
+    // goes on to test `'errors' in doc` — which throws for the first two and
+    // would latch a render error on the card. Falling back to the fetch is the
+    // whole point of validating the stash, so it has to cover what the source
+    // parses TO, not merely that it parsed.
+    let url = `${testRealmURL}Person/hassan.json`;
+    for (let source of ['null', '42', '[]', '{"notData":true}']) {
+      (globalThis as any).__boxelCardRenderData = {
+        url,
+        source,
+        realmURL: testRealmURL,
+        lastModified: Date.parse('2026-01-02T03:04:05Z'),
+      };
+
+      await visit(renderPath(url, '/meta'));
+      let { value } = await capturePrerenderResult('textContent');
+      let meta: PrerenderMeta = JSON.parse(value);
+
+      assert.strictEqual(
+        (meta.serialized as any)?.data?.attributes?.name,
+        'Hassan',
+        `source ${source} fell back to the realm's bytes`,
+      );
+      assert.strictEqual(
+        meta.diagnostics?.cardSourceFrom,
+        'fetch',
+        `source ${source} is reported as a fetch`,
+      );
+    }
+  });
+
+  test('a stash missing the values the card branch reads off the response is ignored', async function (assert) {
+    let url = `${testRealmURL}Person/hassan.json`;
+    // Without a realm URL there is nothing to serialize the instance into, and
+    // the fetch the stash replaces is the only other source for it. Falling
+    // back costs a round-trip; trusting a partial stash would cost correctness.
+    (globalThis as any).__boxelCardRenderData = {
+      url,
+      source: STASHED_HASSAN,
+      lastModified: Date.parse('2026-01-02T03:04:05Z'),
+    };
+
+    await visit(renderPath(url, '/meta'));
+    let { value } = await capturePrerenderResult('textContent');
+    let meta: PrerenderMeta = JSON.parse(value);
+
+    assert.strictEqual(
+      (meta.serialized as any)?.data?.attributes?.name,
+      'Hassan',
+      "the realm's bytes were used, not the incomplete stash's",
+    );
+    assert.strictEqual(
+      meta.diagnostics?.cardSourceFrom,
+      'fetch',
+      'the build reports that it fell back to fetching',
     );
   });
 });

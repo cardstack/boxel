@@ -23,6 +23,7 @@ import {
   extractIssueText,
 } from '../src/factory-skill-loader.ts';
 import { catalogSkills } from '../src/skill-catalog.ts';
+import { SKILL_FRONTMATTER_DESCRIPTION_CASES } from '@cardstack/runtime-common/skill-frontmatter-contract';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -959,65 +960,24 @@ module('factory-skill-loader > curated boxel references', function () {
 // agent's only basis for deciding whether to read the skill at all. A skill
 // whose description is authored as a YAML block scalar — the natural form once
 // it is longer than a line — used to advertise itself as the literal `>-`.
+//
+// The cases come from the shared contract so the same inputs are asserted
+// against `parseFrontmatter` in build-skills.test.ts: a reader that drifts
+// from the other fails here rather than surfacing as two descriptions for one
+// skill.
 module('skill-catalog > descriptions', function () {
-  test('a folded block scalar reads as its text, not its punctuation', async function (assert) {
-    let dir = await mkdtemp(join(tmpdir(), 'skills-'));
-    await mkdir(join(dir, 'folded'), { recursive: true });
-    await writeFile(
-      join(dir, 'folded', 'SKILL.md'),
-      [
-        '---',
-        'name: folded',
-        'description: >-',
-        '  MANDATORY before writing any `.gts`. Search the catalog',
-        '  before you author.',
-        'boxel:',
-        '  kind: skill',
-        '---',
-        '',
-        '# Folded',
-        '',
-      ].join('\n'),
-      'utf8',
-    );
+  for (let testCase of SKILL_FRONTMATTER_DESCRIPTION_CASES) {
+    test(`reads the ${testCase.label} case`, async function (assert) {
+      let dir = await mkdtemp(join(tmpdir(), 'skills-'));
+      await mkdir(join(dir, testCase.label), { recursive: true });
+      await writeFile(
+        join(dir, testCase.label, 'SKILL.md'),
+        `---\n${testCase.frontmatter}\n---\n\n# ${testCase.label}\n`,
+        'utf8',
+      );
 
-    let entries = await catalogSkills([dir]);
-    assert.strictEqual(
-      entries[0].description,
-      'MANDATORY before writing any `.gts`. Search the catalog before you author.',
-    );
-  });
-
-  test('a plain single-line description still reads as itself', async function (assert) {
-    let dir = await mkdtemp(join(tmpdir(), 'skills-'));
-    await mkdir(join(dir, 'plain'), { recursive: true });
-    await writeFile(
-      join(dir, 'plain', 'SKILL.md'),
-      ['---', 'name: plain', 'description: Just one line.', '---', ''].join(
-        '\n',
-      ),
-      'utf8',
-    );
-
-    let entries = await catalogSkills([dir]);
-    assert.strictEqual(entries[0].description, 'Just one line.');
-  });
-
-  // The README reader strips wrapping quotes from a plain description; the
-  // catalog reader must match it so `list_skills` and the generated table
-  // advertise the same text.
-  test('a quoted single-line description drops its wrapping quotes', async function (assert) {
-    let dir = await mkdtemp(join(tmpdir(), 'skills-'));
-    await mkdir(join(dir, 'quoted'), { recursive: true });
-    await writeFile(
-      join(dir, 'quoted', 'SKILL.md'),
-      ['---', 'name: quoted', 'description: "A quoted line."', '---', ''].join(
-        '\n',
-      ),
-      'utf8',
-    );
-
-    let entries = await catalogSkills([dir]);
-    assert.strictEqual(entries[0].description, 'A quoted line.');
-  });
+      let entries = await catalogSkills([dir]);
+      assert.strictEqual(entries[0].description, testCase.description);
+    });
+  }
 });

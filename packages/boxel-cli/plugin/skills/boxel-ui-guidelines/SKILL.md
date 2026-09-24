@@ -27,7 +27,7 @@ You are a Boxel UI specialist. Whenever you write or review GTS templates and ca
 ## Sections (load on demand)
 
 - `references/theme-token-contract.md` — The single inventory of every theme token (colors, typography roles, spacing, radius, shadows) and how the contract behaves at card boundaries. Other skills point here instead of listing tokens.
-- `references/use-boxel-design-tokens-for-theming.md` — Use Boxel Design Tokens for Theming: fallback rule, spacing/typography options, the color-pairing rules (`--*` tokens paint, `--*-foreground` writes) and the list of contrast pairings the theme guarantees.
+- `references/use-boxel-design-tokens-for-theming.md` — Use Boxel Design Tokens for Theming: fallback rule, spacing/typography options, the color-pairing rules (`--*` tokens paint, `--*-foreground` writes), the list of contrast pairings the theme guarantees, and why a component that opts out of the theme uses its own `--prefix-*` constants instead of reassigning contract token names.
 - `references/font-loading-theme-card-owns-imports.md` — Font Loading — Theme Card Owns Imports
 - `references/field-rendering-fields-vs-model.md` — Field Rendering: @fields vs @model
 - `references/template-patterns.md` — Template Patterns. Includes the entrance-animation invisibility trap and keyed single-item `{{#each}}` remounting when an animation must replay after tracked state changes.
@@ -37,13 +37,13 @@ You are a Boxel UI specialist. Whenever you write or review GTS templates and ca
 - `references/prefer-component-apis-write-new-components-when-needed.md` — Prefer Component APIs; Write New Components When Needed
 - `references/use-boxel-ui-components.md` — Use Boxel-UI Components
 - `references/style-budget.md` — Style budget — keep `<style>` blocks ≤40% of file, deduplicate across formats
-- **`references/delegated-render-control.md`** — How the host wraps `<@fields.X @format='...' />` chrome (CardContainer + field-component classes) and how the parent overrides it via theme cascade, `:deep()`, or `@displayContainer={{false}}`. **Critical reading when embedding child cards in a parent that has its own design language.** Covers:
-  - **Divider strategy is binary** — parent draws lines (AND kills `--boundaries` shadow), OR child halo IS the boundary (no parent borders). Both at once = "drop shadow fighting a thin border."
+- **`references/delegated-render-control.md`** — How the host wraps `<@fields.X @format='...' />` chrome (CardContainer + field-component classes) and how the parent shapes it via the theme cascade, a `class` on the field, or `@displayContainer={{false}}` — not `:deep()`. **Critical reading when embedding child cards in a parent that has its own design language.** Covers:
+  - **Divider strategy is binary** — parent draws lines (AND passes `@displayContainer={{false}}` on the items), OR child halo IS the boundary (no parent borders). Both at once = "drop shadow fighting a thin border."
   - **Picking the format** — fitted vs embedded by who owns the cell size (the most common rendering bug is fitted-with-short-content leaving empty box space).
-  - **Plural-field wrapper trap** — `.linksToMany-field` ≠ `.containsMany-field`; target `.plural-field` + `.linksToMany-itemContainer`/`.containsMany-item` with `display: contents`.
-  - **Atom alignment & invisibility** — default chrome has near-white background; `@displayContainer={{false}}` or recolor when on dark surfaces.
-  - **Stagger animations through `display: contents`** — CSS-variable cascade trick (nth-child on wrapper, animation-delay reads var on card).
-  - **Embedded MarkdownDef bounded preview** — tune with the `--markdown-embedded-max-height` / `--markdown-embedded-mask` custom properties (set both to `none` for full content). A framework-driven embedded render takes no component args, so an inherited custom property is the cross-boundary lever.
-  - Embedded grid chrome, image bleed, isolated previews, and what NOT to override (child container queries, fitted's width/height).
+  - **Plural-field wrapper trap** — the one-tag render inserts `.plural-field` + per-item wrappers between your grid and the cards; loop `{{#each @fields.plural as |Item|}}<Item class='…' />{{/each}}` instead, so the classed cards are the grid's children.
+  - **Atom alignment & surfaces** — `class` on the atom field for baseline/padding; `@displayContainer={{false}}` for plain inherited-color text, or a classed chip recolored to match the surface.
+  - **Stagger animations** — `:nth-child` on the looped, classed cards sets `--stagger-d`; `animation-delay` reads it.
+  - **Embedded MarkdownDef preview** — MarkdownDef uses the shared FileDef shells; tune the renderer with the `--md-preview-background` / `--md-preview-foreground` / `--md-preview-padding` custom properties. A framework-driven embedded render takes no component args, so an inherited custom property is the cross-boundary lever.
+  - Embedded grids, isolated previews, corners (the wrapper follows the theme's `--radius`; the interact ring copies the CardContainer's radius, so a one-off change goes on the field's class and nowhere else), and what NOT to override (child container queries, fitted's width/height, wrapper `overflow`).
   - The child-side contract — what every format MUST NOT decorate on its outermost element.
 - `references/checklist.md` — Checklist

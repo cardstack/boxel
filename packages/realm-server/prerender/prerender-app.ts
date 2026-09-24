@@ -10,6 +10,8 @@ import {
   isScreenshotFormat,
   parseScreenshotCaptureSpec,
   SCREENSHOT_FORMATS,
+  MAX_STASHED_CARD_SOURCE_LENGTH,
+  type CardSourceVisitArgs,
   type DeclaredScreenshotVisitArgs,
   type PrerenderVisitType,
   type RenderRouteOptions,
@@ -33,6 +35,8 @@ import { resolvePrerenderManagerURL } from './config.ts';
 import { heapTelemetry } from './heap-telemetry.ts';
 import { captureHeapSnapshot } from './heap-snapshot.ts';
 import {
+  parseHostShellGeneration,
+  PRERENDER_HOST_SHELL_GENERATION_HEADER,
   PRERENDER_HOST_SHELL_HASH_HEADER,
   PRERENDER_JOB_ID_HEADER,
   PRERENDER_REQUEST_ID_HEADER,
@@ -272,13 +276,18 @@ export function stampHostShellTokens(
     // = not sampled, so nothing is stamped and a reader gets no verdict.
     warmedAtStart?: string | null | undefined;
     warmedAtCompletion?: string | null | undefined;
+    // The ordering position of `warmedAtStart`. No `null` case: a number is
+    // either known or it is not, and there is nothing for a reader to conclude
+    // from the difference.
+    warmedGenerationAtStart?: number | undefined;
   },
 ): void {
   if (
     tokens.atStart === undefined &&
     tokens.atCompletion === undefined &&
     tokens.warmedAtStart === undefined &&
-    tokens.warmedAtCompletion === undefined
+    tokens.warmedAtCompletion === undefined &&
+    tokens.warmedGenerationAtStart === undefined
   ) {
     return;
   }
@@ -309,6 +318,13 @@ export function stampHostShellTokens(
         : {}),
       ...(tokens.warmedAtCompletion !== undefined
         ? { warmedHostShellHashAtCompletion: tokens.warmedAtCompletion }
+        : {}),
+      // The one value here the write site reads rather than an operator: it
+      // becomes the row's `host_shell_generation` column, which is what a
+      // repair pass selects on. The tokens beside it stay the record of how
+      // that number was arrived at.
+      ...(tokens.warmedGenerationAtStart !== undefined
+        ? { warmedHostShellGeneration: tokens.warmedGenerationAtStart }
         : {}),
     },
   };
@@ -498,6 +514,9 @@ export async function raceAgainstDrain<T>(
 export function buildPrerenderApp(options: {
   serverURL: string;
   maxPages?: number;
+  // Default true. False keeps the page pool from sending the manager
+  // affinity-eviction notices for a server that never registered.
+  registerWithManager?: boolean;
   isDraining?: () => boolean;
   drainingPromise?: Promise<void>;
   // The host-shell token the manager last *reported*, read at render start and
@@ -514,6 +533,10 @@ export function buildPrerenderApp(options: {
   // recycle fails. The gap between the two is what says a page may still be
   // running the outgoing bundle.
   getWarmedHostShellHash?: () => string | undefined;
+  // The ordering position of the token above. Stamped onto the row so a repair
+  // pass can select the rows a bundle that is no longer served produced —
+  // which the token alone cannot answer, being a hash.
+  getWarmedHostShellGeneration?: () => number | undefined;
   // The recycle triggered by the last token change, if one is still running.
   // A re-render awaits it so it lands on a page warmed against the current
   // shell instead of racing the teardown. Always resolves — the caller
@@ -529,6 +552,7 @@ export function buildPrerenderApp(options: {
   let prerenderer = new Prerenderer({
     maxPages,
     serverURL: options.serverURL,
+    registerWithManager: options.registerWithManager,
   });
 
   // One reaction on the shutdown promise for the whole process. Requests take
@@ -1308,6 +1332,43 @@ export function buildPrerenderApp(options: {
           ? rawRenderScope
           : undefined;
 
+      // The card instance's stored bytes, sent by a caller that already read
+      // them so the render need not read them again. All three fields are
+      // required together: the card branch reads the realm URL and the modified
+      // time off the response it would otherwise fetch, so a partial payload
+      // would leave the model missing values it has no other source for. A
+      // payload that fails this check is dropped rather than rejected — the
+      // render falls back to fetching, which is the behavior this whole path
+      // optimizes away and so is always safe.
+      //
+      // The size ceiling is enforced here as well as at the producer, because
+      // this is where the bytes actually arrive and where they are handed to a
+      // CDP message. A producer that assembles visit args without
+      // `cardSourceForVisit` would otherwise carry an unbounded payload past
+      // the only check on it.
+      let rawCardSource = attrs.cardSource;
+      let cardSource: CardSourceVisitArgs | undefined =
+        rawCardSource &&
+        typeof rawCardSource === 'object' &&
+        !Array.isArray(rawCardSource) &&
+        typeof rawCardSource.source === 'string' &&
+        rawCardSource.source.length <= MAX_STASHED_CARD_SOURCE_LENGTH &&
+        typeof rawCardSource.realmURL === 'string' &&
+        rawCardSource.realmURL.length > 0 &&
+        typeof rawCardSource.lastModified === 'number' &&
+        Number.isFinite(rawCardSource.lastModified)
+          ? {
+              source: rawCardSource.source,
+              realmURL: rawCardSource.realmURL,
+              lastModified: rawCardSource.lastModified,
+            }
+          : undefined;
+      if (rawCardSource && !cardSource) {
+        log.warn(
+          `visit prerender request for ${rawUrl} carried an unusable cardSource; the render will fetch the card's source for itself`,
+        );
+      }
+
       let start = Date.now();
       // Hoisted so a re-render after a host-shell change replays the same
       // visit rather than an approximation of it.
@@ -1327,6 +1388,7 @@ export function buildPrerenderApp(options: {
         ...(jobId ? { jobId } : {}),
         ...(screenshots ? { screenshots } : {}),
         ...(renderScope ? { renderScope } : {}),
+        ...(cardSource ? { cardSource } : {}),
         signal: ac.signal,
       };
       let shellAtStart = options.getHostShellHash?.();
@@ -1336,7 +1398,19 @@ export function buildPrerenderApp(options: {
         options.getWarmedHostShellHash
           ? (options.getWarmedHostShellHash() ?? null)
           : undefined;
+      // Sampled at the same moment as the token it belongs to. `undefined`
+      // covers both "no sampler" and "the manager reported no number", because
+      // a row can do nothing with either — unlike the token, where `null` is a
+      // verdict a reader acts on.
+      let sampleWarmedGeneration = () =>
+        options.getWarmedHostShellGeneration?.();
       let warmedAtStart = sampleWarmed();
+      // The start sample rather than the completion one: it names the bundle
+      // the page was running when the render began, and a render that straddles
+      // a recycle did most of its work on that page. Stamping the later value
+      // would let such a row read as current and escape the repair it is the
+      // reason for.
+      let warmedGenerationAtStart = sampleWarmedGeneration();
       let execPromise = prerenderer
         .prerenderVisit(visitArgs)
         .then((result) => ({ result }));
@@ -1409,9 +1483,11 @@ export function buildPrerenderApp(options: {
         // forward would stamp the response as having rendered on the outgoing
         // pool even when the retry ran entirely on the current shell.
         let retryWarmedAtStart: string | null | undefined;
+        let retryWarmedGenerationAtStart: number | undefined;
         let retryPromise = (async () => {
           await options.awaitHostShellRecycle?.();
           retryWarmedAtStart = sampleWarmed();
+          retryWarmedGenerationAtStart = sampleWarmedGeneration();
           return { result: await prerenderer.prerenderVisit(visitArgs) };
         })();
         let retryResult = await raceAgainstDrain(
@@ -1439,6 +1515,7 @@ export function buildPrerenderApp(options: {
         // stamped values describe two different renders — the retry's reported
         // tokens beside the discarded attempt's pool.
         warmedAtStart = retryWarmedAtStart;
+        warmedGenerationAtStart = retryWarmedGenerationAtStart;
         warmedAtCompletion = sampleWarmed();
         log.info(
           'visit of %s re-rendered on host shell %s after discarding a %dms attempt on %s',
@@ -1529,6 +1606,7 @@ export function buildPrerenderApp(options: {
         atCompletion: shellAtCompletion,
         warmedAtStart,
         warmedAtCompletion,
+        warmedGenerationAtStart,
       });
       // Timings are already inside `response.meta.diagnostics`. Here
       // we just populate the JSON:API envelope `meta.timing` that
@@ -1724,6 +1802,12 @@ export function createPrerenderHttpServer(options?: {
   // pass false so the qunit runner isn't torn down before teardown hooks can
   // release hardcoded test ports (CS-10813).
   fatalExitOnUncaught?: boolean;
+  // Default true. Gates every call this server makes to the prerender
+  // manager: the registration heartbeat, the unregister on close, and the
+  // page pool's affinity-eviction notices. A server that is only
+  // reached directly by its own URL passes false, so a machine-wide manager
+  // never routes other clients' renders to it.
+  registerWithManager?: boolean;
 }): Server {
   let draining = false;
   let drainingResolved = false;
@@ -1741,19 +1825,34 @@ export function createPrerenderHttpServer(options?: {
   // retries on the next heartbeat. A visit samples this one, because it moves
   // when the change is learned rather than when the teardown finishes.
   let reportedHostShellHash: string | undefined;
+  // The ordering position of `warmedHostShellHash`, moved with it in the same
+  // assignment. A visit stamps this onto the rows it produces, which is what a
+  // repair pass selects on — so it has to name the bundle the pages were
+  // actually running, not the one the manager has since reported. Undefined
+  // whenever the manager sent no number, and never carried over from a
+  // previous token: a stale generation on a current token would attribute rows
+  // to a bundle that did not render them.
+  //
+  // There is no reported counterpart. The reported token is sampled by a visit
+  // to decide whether the pool is behind, and that comparison is between
+  // tokens; a number for a shell no page here has loaded would order nothing.
+  let warmedHostShellGeneration: number | undefined;
   // The recycle in flight for the last token change, so a visit can wait for
   // the pool to be replaced before rendering again. Never rejects.
   let hostShellRecycle: Promise<void> | undefined;
   let recyclingForHostChange = false;
   let isClosing = false;
   let fatalExitOnUncaught = options?.fatalExitOnUncaught ?? true;
+  let registerWithManager = options?.registerWithManager ?? true;
   let serverURL = resolvePrerenderServerURL(options?.port);
   let { app, prerenderer } = buildPrerenderApp({
     getHostShellHash: () => reportedHostShellHash,
     getWarmedHostShellHash: () => warmedHostShellHash,
+    getWarmedHostShellGeneration: () => warmedHostShellGeneration,
     awaitHostShellRecycle: () => hostShellRecycle,
     maxPages: options?.maxPages,
     serverURL,
+    registerWithManager,
     isDraining: () => draining,
     drainingPromise: drainingDeferred.promise,
   });
@@ -1785,6 +1884,7 @@ export function createPrerenderHttpServer(options?: {
   );
 
   async function sendHeartbeat(status?: 'active' | 'draining') {
+    if (!registerWithManager) return;
     try {
       const managerURL = resolvePrerenderManagerURL();
       const capacity = prerenderer.currentPoolCapacity;
@@ -1820,6 +1920,9 @@ export function createPrerenderHttpServer(options?: {
       if (response) {
         reconcileHostShell(
           response.headers.get(PRERENDER_HOST_SHELL_HASH_HEADER),
+          parseHostShellGeneration(
+            response.headers.get(PRERENDER_HOST_SHELL_GENERATION_HEADER),
+          ),
         );
       }
     } catch (e) {
@@ -1838,7 +1941,10 @@ export function createPrerenderHttpServer(options?: {
   // restart serializes behind the warm rather than racing it — `closeAll`
   // awaits any in-flight standby refill before closing — so pages the warm is
   // mid-way through creating can't outlive the browser the restart replaces.
-  function reconcileHostShell(hash: string | null) {
+  function reconcileHostShell(
+    hash: string | null,
+    generation: number | undefined,
+  ) {
     // Recorded before the guards below, because what the manager reported is
     // true whether or not this server is in a position to act on it.
     if (hash) {
@@ -1851,10 +1957,21 @@ export function createPrerenderHttpServer(options?: {
       hash,
       warmedHostShellHash,
     );
+    // The number that goes with `nextWarmed`, captured here rather than read
+    // when the recycle resolves: another heartbeat can report a further token
+    // while the recycle is in flight, and the pool being re-warmed is the one
+    // this reconcile decided on.
+    let nextWarmedGeneration =
+      nextWarmed === undefined
+        ? undefined
+        : nextWarmed === hash
+          ? generation
+          : warmedHostShellGeneration;
     if (!recycle) {
       // Either nothing was reported or the token matches the baseline —
       // record it and we're done.
       warmedHostShellHash = nextWarmed;
+      warmedHostShellGeneration = nextWarmedGeneration;
       return;
     }
     recyclingForHostChange = true;
@@ -1867,6 +1984,7 @@ export function createPrerenderHttpServer(options?: {
       .recycle()
       .then(() => {
         warmedHostShellHash = nextWarmed;
+        warmedHostShellGeneration = nextWarmedGeneration;
       })
       .catch((e) => {
         // Leave warmedHostShellHash unchanged so the next heartbeat retries.
@@ -1879,7 +1997,7 @@ export function createPrerenderHttpServer(options?: {
   }
 
   function startHeartbeatLoop() {
-    if (heartbeatTimer) return;
+    if (heartbeatTimer || !registerWithManager) return;
     void sendHeartbeat();
     heartbeatTimer = setInterval(() => {
       void sendHeartbeat();
@@ -1900,6 +2018,7 @@ export function createPrerenderHttpServer(options?: {
   server.on('close', async () => {
     stopHeartbeatLoop();
     await stopPrerendererOnce();
+    if (!registerWithManager) return;
     try {
       await unregisterWithManager(serverURL);
     } catch (e) {

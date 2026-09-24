@@ -37,6 +37,8 @@
    has_error BOOLEAN DEFAULT false NOT NULL,
    last_known_good_deps BLOB,
    diagnostics BLOB,
+   host_shell_generation INTEGER,
+   source_content_hash TEXT,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 
@@ -61,6 +63,8 @@
    last_known_good_deps BLOB,
    diagnostics BLOB,
    job_id INTEGER,
+   host_shell_generation INTEGER,
+   source_content_hash TEXT,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 
