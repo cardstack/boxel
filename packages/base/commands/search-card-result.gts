@@ -1,16 +1,7 @@
-import GlimmerComponent from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
-import { action } from '@ember/object';
-import { Button, FieldContainer } from '@cardstack/boxel-ui/components';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
-import {
-  IconMinusCircle,
-  IconPlus,
-  IconSearchThick,
-} from '@cardstack/boxel-ui/icons';
+import { IconSearchThick } from '@cardstack/boxel-ui/icons';
 import { type Query, primitive } from '@cardstack/runtime-common';
-import type { BaseDef } from '../card-api';
 import {
   CardDef,
   Component,
@@ -18,22 +9,11 @@ import {
   contains,
   containsMany,
   field,
-  type CardContext,
-  type Format,
   FieldDef,
   linksToMany,
 } from '../card-api';
 import CodeRefField from '../code-ref';
-
-function getComponent(cardOrField: BaseDef) {
-  return cardOrField.constructor.getComponent(cardOrField);
-}
-
-interface CardListSignature {
-  cardIds: string[];
-  format: Format;
-  context?: CardContext;
-}
+import { CardList, SearchResultList } from './search-result-list';
 
 // `JsonField` lives in its own module so non-command code can reuse it.
 // Re-exported here so it is importable from this module too.
@@ -57,199 +37,35 @@ export class SearchCardsByTypeAndTitleInput extends CardDef {
   @field cardType = contains(StringField);
 }
 
-class CardList extends GlimmerComponent<CardListSignature> {
-  <template>
-    <ol class='result-list {{@format}}' data-test-result-list>
-      {{#each this.cardList.cards as |card|}}
-        <li
-          class='result-list-item {{@format}}'
-          data-test-result-card={{card.id}}
-          {{@context.cardComponentModifier
-            card=card
-            format='data'
-            fieldType=undefined
-            fieldName=undefined
-          }}
-        >
-          {{#let (getComponent card) as |Component|}}
-            <Component
-              @format={{@format}}
-              @displayContainer={{eq @format 'fitted'}}
-            />
-          {{/let}}
-        </li>
-      {{/each}}
-      {{#each this.cardList.cardErrors as |error|}}
-        <li class='result-list-item' data-test-card-error={{error.id}}>
-          Error: cannot render card
-          {{error.id}}:
-          {{error.message}}
-        </li>
-      {{/each}}
-      {{#if this.hasNoResults}}
-        No cards were found.
-      {{/if}}
-    </ol>
-    <style scoped>
-      .result-list {
-        margin: 0;
-        padding-left: var(--boxel-sp);
-      }
-      .result-list-item {
-        margin-bottom: var(--boxel-sp-xxs);
-      }
-      .result-list.embedded,
-      .result-list.fitted {
-        --grid-card-width: 10.25rem; /* 164px */
-        --grid-card-height: 14rem; /* 224px */
-        list-style-type: none;
-        margin: 0;
-        padding: 0;
-        display: grid;
-        grid-template-columns: repeat(auto-fill, var(--grid-card-width));
-        grid-auto-rows: max-content;
-        gap: var(--boxel-sp-xl) var(--boxel-sp-lg);
-      }
-      .result-list-item.embedded,
-      .result-list-item.fitted {
-        margin-bottom: 0;
-        width: var(--grid-card-width);
-        height: var(--grid-card-height);
-      }
-      .result-list-item :deep(.field-component-card.fitted-format) {
-        height: 100%;
-      }
-    </style>
-  </template>
-
-  @tracked cardList = this.args.context?.getCardCollection(
-    this,
-    () => this.args.cardIds,
-  );
-
-  get hasNoResults() {
-    return (
-      !this.cardList ||
-      (this.cardList.cards.length === 0 &&
-        this.cardList.cardErrors.length === 0)
-    );
-  }
-}
-
 class SearchCardsResultEmbeddedView extends Component<
   typeof SearchCardsResult
 > {
-  @tracked showAllResults = false;
-
-  get cardIdsToDisplay() {
-    if (!this.args.model.cardIds?.length) {
-      return [];
-    }
-    if (this.showAllResults) {
-      return this.args.model.cardIds;
-    }
-    return this.args.model.cardIds?.slice(0, this.paginateSize);
-  }
-
-  get numberOfCards() {
-    if (!this.args.model.cardIds) {
-      return 0;
-    }
-    return this.args.model.cardIds?.length;
-  }
-
-  get leftoverCardsToShow() {
-    return this.numberOfCards - this.paginateSize;
-  }
-
-  get numberOfCardsGreaterThanPaginateSize() {
-    return this.numberOfCards > this.paginateSize;
-  }
-
-  get paginateSize() {
-    return 5;
-  }
-
-  get toggleShowText() {
-    return !this.showAllResults
-      ? `Show ${this.leftoverCardsToShow} more results`
-      : 'See Less';
-  }
-
-  @action toggleShow() {
-    this.showAllResults = !this.showAllResults;
+  get cardIds() {
+    return this.args.model.cardIds ?? [];
   }
 
   <template>
-    <div class='tool-call-result'>
+    <SearchResultList @items={{this.cardIds}} as |visibleCardIds|>
       <CardList
-        @cardIds={{this.cardIdsToDisplay}}
+        @cardIds={{visibleCardIds}}
         @format='atom'
         @context={{@context}}
       />
-      <div class='footer'>
-        {{#if this.numberOfCardsGreaterThanPaginateSize}}
-          <Button
-            @size='small'
-            class='toggle-show'
-            {{on 'click' this.toggleShow}}
-            data-test-toggle-show-button
-          >
-            {{#if this.showAllResults}}
-              <IconMinusCircle width='11px' height='11px' role='presentation' />
-            {{else}}
-              <IconPlus width='11px' height='11px' role='presentation' />
-            {{/if}}
-
-            {{this.toggleShowText}}
-          </Button>
-        {{/if}}
-      </div>
-    </div>
-    <style scoped>
-      .tool-call-result {
-        color: var(--boxel-dark);
-        background-color: var(--boxel-light);
-        border-radius: var(--boxel-border-radius);
-        --left-padding: var(--boxel-sp-xs);
-        display: flex;
-        flex-direction: column;
-        font-weight: 600;
-        padding: var(--boxel-sp-sm) var(--boxel-sp-sm) var(--boxel-sp-xxs);
-      }
-      .footer {
-        color: var(--boxel-header-text-color);
-        text-overflow: ellipsis;
-      }
-      .toggle-show {
-        --icon-color: var(--boxel-highlight);
-        --icon-border: var(--boxel-highlight);
-        --boxel-button-min-height: 1.875rem;
-        --boxel-button-padding: 0px;
-        --boxel-button-font: var(--boxel-font-xs);
-        --icon-stroke-width: 2.5;
-        font-weight: 600;
-        color: var(--boxel-highlight);
-        display: flex;
-        justify-content: flex-start;
-        gap: var(--boxel-sp-xxxs);
-        border: none;
-      }
-      .toggle-show:focus:not(:disabled) {
-        outline-offset: 2px;
-      }
-      .result-list {
-        padding-left: var(--boxel-sp);
-        margin-block-end: 0;
-      }
-      .result-list li {
-        margin-bottom: var(--boxel-sp-xxs);
-      }
-    </style>
+    </SearchResultList>
   </template>
 }
 
-class SearchCardsResultIsolatedView extends SearchCardsResultEmbeddedView {
+class SearchCardsResultIsolatedView extends Component<
+  typeof SearchCardsResult
+> {
+  get cardIds() {
+    return this.args.model.cardIds ?? [];
+  }
+
+  get numberOfCards() {
+    return this.cardIds.length;
+  }
+
   <template>
     <section class='tool-call-result' data-test-tool-result-isolated>
       <header>
@@ -265,7 +81,7 @@ class SearchCardsResultIsolatedView extends SearchCardsResultEmbeddedView {
         </FieldContainer>
         <FieldContainer @label='Results' class='results'>
           <CardList
-            @cardIds={{this.cardIdsToDisplay}}
+            @cardIds={{this.cardIds}}
             @format='fitted'
             @context={{@context}}
           />
@@ -300,8 +116,6 @@ class SearchCardsResultIsolatedView extends SearchCardsResultEmbeddedView {
       }
     </style>
   </template>
-
-  @tracked showAllResults = true;
 }
 
 export class SearchCardSummaryField extends FieldDef {
