@@ -10,6 +10,7 @@ import type {
   CodeRef,
   Filter,
   RenderableSearchEntryLike,
+  SearchEntryWireQuery,
   SearchResultsYield,
 } from '@cardstack/runtime-common';
 
@@ -72,6 +73,9 @@ interface Signature {
     realmsLocked?: boolean;
     baseFilter?: Filter;
     offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
+    // The main search's query, which a realm section re-issues scoped to its
+    // own realm to load rows past the first page.
+    pageQuery?: SearchEntryWireQuery;
     // The recent card ids stripped of any `.json`, for most-recent-first
     // ordering of the compact recents row against the bare `entry.id`.
     recentCardBareIds: string[];
@@ -178,6 +182,7 @@ export default class SheetResults extends Component<Signature> {
         realmURLs: this.args.realms,
         offerToCreate: this.args.offerToCreate,
         realm: this.realm,
+        realmTotals: this.args.mainResults.meta.realmTotals,
       }),
       this.args.pagination.focusedSection,
     );
@@ -350,6 +355,7 @@ export default class SheetResults extends Component<Signature> {
           @onFocusSection={{this.onFocusSection}}
           @getDisplayedCount={{this.getDisplayedCount}}
           @onShowMore={{this.onShowMore}}
+          @pageQuery={{@pageQuery}}
           @selectedCards={{@selectedCards}}
           @multiSelect={{@multiSelect}}
           @offerToCreate={{@offerToCreate}}

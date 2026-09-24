@@ -12,9 +12,14 @@ import pluralize from 'pluralize';
 import { Button, GridContainer } from '@cardstack/boxel-ui/components';
 import { cn, eq, type FittedFormatId } from '@cardstack/boxel-ui/helpers';
 
-import type { CodeRef } from '@cardstack/runtime-common';
+import type {
+  CodeRef,
+  RenderableSearchEntryLike,
+  SearchEntryWireQuery,
+} from '@cardstack/runtime-common';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
+import { getRenderableSearchEntries } from '@cardstack/host/resources/renderable-search-entries';
 import type RealmService from '@cardstack/host/services/realm';
 import { UNKNOWN_REALM_NAME } from '@cardstack/host/services/realm';
 
@@ -31,7 +36,10 @@ import {
   type SearchResultKind,
 } from '@cardstack/host/utils/search/types';
 
-import { SECTION_SHOW_MORE_INCREMENT } from './constants';
+import {
+  SECTION_DISPLAY_LIMIT_FOCUSED,
+  SECTION_SHOW_MORE_INCREMENT,
+} from './constants';
 import ResultTile from './result-tile';
 import SearchSheetSectionHeader from './section-header';
 
@@ -79,6 +87,9 @@ interface Signature {
     onFocusSection?: (sectionId: string | null) => void;
     getDisplayedCount?: (sectionId: string, totalCount: number) => number;
     onShowMore?: (sectionId: string, totalCount: number) => void;
+    // The main search's query. A realm section re-issues it scoped to its own
+    // realm to load rows past the first page the main search returned.
+    pageQuery?: SearchEntryWireQuery;
     selectedCards?: (string | NewCardArgs)[];
     multiSelect?: boolean;
     offerToCreate?: {
@@ -118,6 +129,59 @@ export default class ResultSection extends Component<Signature> {
   @service declare realm: RealmService;
 
   recentsIcon = HistoryIcon;
+
+  // This realm's rows from the top, sized to cover what the section displays.
+  // Idle until "Show more" goes past the main search's first page.
+  private extendedResults = getRenderableSearchEntries(
+    this,
+    () => this.extendedQuery,
+    () => 'none',
+  );
+
+  private get firstPageSize(): number {
+    return this.args.pageQuery?.page?.size ?? SECTION_DISPLAY_LIMIT_FOCUSED;
+  }
+
+  // Grows a whole first page at a time, so crossing each boundary costs one
+  // fetch rather than one per "Show more".
+  private get extendedQuery(): SearchEntryWireQuery | undefined {
+    const section = this.realmSection;
+    const pageQuery = this.args.pageQuery;
+    const sid = this.args.section.sid;
+    const getDisplayedCount = this.args.getDisplayedCount;
+    if (!section || !pageQuery || !sid || !getDisplayedCount) {
+      return undefined;
+    }
+    const limit = getDisplayedCount(sid, section.totalCount);
+    const pageSize = this.firstPageSize;
+    if (limit <= section.cards.length || limit <= pageSize) {
+      return undefined;
+    }
+    return {
+      ...pageQuery,
+      realms: [section.realmUrl],
+      page: { size: Math.ceil(limit / pageSize) * pageSize },
+    };
+  }
+
+  private get loadedRealmCards(): RenderableSearchEntryLike[] {
+    const section = this.realmSection;
+    if (!section) return [];
+    if (!this.extendedQuery) return section.cards;
+    const extended = this.extendedResults.entries;
+    return extended.length > section.cards.length ? extended : section.cards;
+  }
+
+  get isLoadingMore(): boolean {
+    const section = this.realmSection;
+    const sid = this.args.section.sid;
+    const getDisplayedCount = this.args.getDisplayedCount;
+    if (!section || !sid || !getDisplayedCount) return false;
+    return (
+      this.extendedResults.isLoading &&
+      this.loadedRealmCards.length < getDisplayedCount(sid, section.totalCount)
+    );
+  }
 
   get realmSection(): RealmSection | null {
     return this.args.section.type === 'realm' ? this.args.section : null;
@@ -190,7 +254,7 @@ export default class ResultSection extends Component<Signature> {
     const getDisplayedCount = this.args.getDisplayedCount;
     if (!sid || !getDisplayedCount) return section.cards;
     const limit = getDisplayedCount(sid, section.totalCount);
-    return section.cards.slice(0, limit);
+    return this.loadedRealmCards.slice(0, limit);
   }
 
   get displayedRecentsCards() {
@@ -400,6 +464,8 @@ export default class ResultSection extends Component<Signature> {
             class='show-more'
             @kind='secondary-light'
             @size='small'
+            @loading={{this.isLoadingMore}}
+            @disabled={{this.isLoadingMore}}
             {{on 'click' (fn this.handleShowMore this.realmSection.totalCount)}}
             data-test-search-sheet-show-more
             data-test-show-more-cards

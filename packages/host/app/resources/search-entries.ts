@@ -597,9 +597,18 @@ export class SearchEntriesResource extends Resource<Args> {
           // Unpaginated (a partial refresh precondition), so the standing
           // entry count is the exact whole-set total; the response's total
           // only speaks for the fetched realm subset.
+          let refreshedTotals = this.realmTotalsFor(doc);
           this._meta = {
             ...this._meta,
             page: { total: this._entries.length },
+            ...(refreshedTotals
+              ? {
+                  realmTotals: {
+                    ...this._meta.realmTotals,
+                    ...refreshedTotals,
+                  },
+                }
+              : {}),
           };
         } else {
           // Server order is authoritative on a full run, but an unchanged
@@ -612,7 +621,8 @@ export class SearchEntriesResource extends Resource<Args> {
             adoptFresh(previousById.get(entry.id), entry),
           );
           this._entries.splice(0, this._entries.length, ...next);
-          this._meta = doc.meta;
+          let realmTotals = this.realmTotalsFor(doc);
+          this._meta = realmTotals ? { ...doc.meta, realmTotals } : doc.meta;
           this.hasCompletedFullRun = true;
         }
 
@@ -823,6 +833,41 @@ export class SearchEntriesResource extends Resource<Args> {
     }
   }
 
+  // Resolves a URL to the searched realm holding it, in the form entry rows
+  // carry as `realmUrl`. One RealmPaths per searched realm per call.
+  private realmUrlResolver(): (id: string) => string {
+    let realmPaths = this.realmsToSearch.map(
+      (realm) => new RealmPaths(ri(realm)),
+    );
+    return (id: string): string => {
+      let idRRI = rri(id);
+      for (let paths of realmPaths) {
+        if (paths.inRealm(idRRI)) {
+          return paths.url;
+        }
+      }
+      return new RealmPaths(this.network.virtualNetwork.toURL(id)).url;
+    };
+  }
+
+  // Re-keys the per-realm totals by the `realmUrl` form entry rows carry, so a
+  // section can look up its own realm's count.
+  private realmTotalsFor(
+    doc: EntryCollectionDocument,
+  ): Record<string, number> | undefined {
+    let totals = doc.meta?.realmTotals;
+    if (!totals) {
+      return undefined;
+    }
+    let realmUrlFor = this.realmUrlResolver();
+    return Object.fromEntries(
+      Object.entries(totals).map(([realm, total]) => [
+        realmUrlFor(realm),
+        total,
+      ]),
+    );
+  }
+
   private buildEntries(doc: EntryCollectionDocument): SearchEntry[] {
     let htmlById = new Map<string, HtmlResource>();
     let cssHrefById = new Map<string, string>();
@@ -846,19 +891,7 @@ export class SearchEntriesResource extends Resource<Args> {
       }
     }
 
-    // One RealmPaths per searched realm per build — not per entry.
-    let realmPaths = this.realmsToSearch.map(
-      (realm) => new RealmPaths(ri(realm)),
-    );
-    let realmUrlFor = (id: string): string => {
-      let idRRI = rri(id);
-      for (let paths of realmPaths) {
-        if (paths.inRealm(idRRI)) {
-          return paths.url;
-        }
-      }
-      return new RealmPaths(this.network.virtualNetwork.toURL(id)).url;
-    };
+    let realmUrlFor = this.realmUrlResolver();
 
     return doc.data.map((entry) => {
       let htmlResources = (entry.relationships.html?.data ?? [])

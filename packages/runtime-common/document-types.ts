@@ -64,6 +64,10 @@ export interface EntryCollectionDocument {
       // level — it cannot vary across entries, so it is never repeated per
       // entry. Present whenever the fieldset puts the html branch in play.
       htmlQuery?: HtmlQuery;
+      // Each answering realm's own match count, keyed by realm URL. The summed
+      // `page.total` can't tell a consumer how many rows one realm holds past
+      // its page, which is what paging a single realm's results needs.
+      realmTotals?: Record<string, number>;
     };
 }
 
