@@ -606,7 +606,7 @@ export async function showAllCards(page: Page) {
     // both rows carry the same extension-stripped `data-test-cards-grid-item`.
     // Selecting "Cards" narrows to instances only, so a locator keyed on a card
     // id resolves to exactly one element, matching CardsGrid's "All Cards".
-    await page.locator(`[data-test-workspace-filter="cards"]`).click();
+    await page.locator(`[data-test-boxel-filter-list-button="Cards"]`).click();
   }
 }
 
