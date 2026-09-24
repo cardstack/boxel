@@ -38,6 +38,13 @@ export interface HydratableEntryArgs {
   // The inert prerendered HTML for an HTML-backed row; absent for a full live
   // row, which resolves to its live instance with nothing to stay inert as.
   component?: HTMLComponent;
+  // The scoped stylesheets that rendering's markup is written against. The
+  // HTML arrives as inert markup carrying `data-scopedcss-*` scopes, and the
+  // rules behind those scopes are injected only when the module that owns them
+  // is evaluated — which nothing on this path otherwise does. Without loading
+  // them the card renders with whatever scopes happen to have been evaluated
+  // for other reasons, which is to say usually none of its own.
+  cssUrls?: string[];
   // The ancestor type the live/hydrated card renders as, so it matches its
   // prerendered-HTML siblings. Files render natively (undefined).
   renderType?: ResolvedCodeRef;
@@ -67,6 +74,7 @@ class _HydratableEntryComponent {
     readonly cardId: string,
     readonly name: string | undefined,
     readonly component: HTMLComponent | undefined,
+    readonly cssUrls: string[] | undefined,
     readonly renderType: ResolvedCodeRef | undefined,
     readonly type: StoreReadType | undefined,
     readonly format: Format,
@@ -84,6 +92,7 @@ setComponentTemplate(
       @cardId={{this.cardId}}
       @name={{this.name}}
       @component={{this.component}}
+      @cssUrls={{this.cssUrls}}
       @renderType={{this.renderType}}
       @type={{this.type}}
       @format={{this.format}}
@@ -131,6 +140,7 @@ export function hydratableEntryComponent(
     args.cardId,
     args.name,
     args.component,
+    args.cssUrls,
     args.renderType,
     args.type,
     args.format,

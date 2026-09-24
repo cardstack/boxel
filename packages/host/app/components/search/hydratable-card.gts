@@ -4,6 +4,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
+import { restartableTask } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 import { consume, provide } from 'ember-provide-consume-context';
 
@@ -21,6 +22,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import type { HTMLComponent } from '@cardstack/host/lib/html-component';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type StoreService from '@cardstack/host/services/store';
 
 import CardRenderer from '../card-renderer';
@@ -80,6 +82,10 @@ interface Signature {
     // The inert prerendered HTML for an HTML-backed row. Absent for a full
     // live row, which carries no HTML and resolves to its live instance.
     component?: HTMLComponent;
+    // The scoped stylesheets that HTML is written against. See
+    // `loadScopedCSS` below for why rendering it without them leaves the card
+    // unstyled.
+    cssUrls?: string[];
     // The ancestor type the HTML was rendered as; the live card renders under
     // the same type so a hydrated row matches its prerendered siblings.
     renderType?: ResolvedCodeRef;
@@ -118,6 +124,42 @@ export default class HydratableCard extends Component<Signature> {
     | CardContext
     | undefined;
   @service declare private store: StoreService;
+  @service declare private loaderService: LoaderService;
+
+  // Prerendered HTML arrives as inert markup whose elements carry
+  // `data-scopedcss-*` scopes. The rules behind those scopes are injected as a
+  // side effect of evaluating the module that owns them, so markup rendered
+  // without that evaluation is styled only by whatever scopes another part of
+  // the page happened to pull in — for a search result, usually none of its
+  // own. Importing each stylesheet the rendering names is what makes the card
+  // look like itself.
+  //
+  // Awaited through a tracked flag rather than fired and forgotten: a test's
+  // `settled()` follows the task, so a rendered result is either styled or not
+  // yet rendered, never briefly unstyled. That determinism is what a visual
+  // snapshot needs.
+  // Attached to the inert element so the load starts when that markup is
+  // actually in the document, and re-runs if a different rendering replaces
+  // it.
+  private styleInertMarkup = modifier(
+    (_element: Element, [urls]: [string[] | undefined]) => {
+      if (urls?.length) {
+        this.loadScopedCSS.perform();
+      }
+    },
+  );
+
+  private loadScopedCSS = restartableTask(async () => {
+    let cssUrls = this.args.cssUrls;
+    if (!cssUrls?.length) {
+      return;
+    }
+    await Promise.all(
+      cssUrls.map((cssModuleUrl) =>
+        this.loaderService.loader.import(cssModuleUrl),
+      ),
+    );
+  });
 
   // Flips true once a hydration gesture fires; `getCard` then fetches
   // `links.self`, deposits the instance in the Store, and tracks it live. A
@@ -301,6 +343,7 @@ export default class HydratableCard extends Component<Signature> {
       />
     {{else if @component}}
       <@component
+        {{this.styleInertMarkup @cssUrls}}
         {{hydrationTrigger this.mode this.hydrate}}
         {{this.trackElement
           cardId=@cardId

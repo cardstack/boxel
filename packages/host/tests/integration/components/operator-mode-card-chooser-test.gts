@@ -1099,6 +1099,37 @@ module('Integration | operator-mode | card chooser', function (hooks) {
     await click(`[data-test-open-search-field]`);
     await fillIn(`[data-test-search-field]`, 'ma');
     await waitFor('[data-test-search-sheet-show-only]');
+
+    // Prerendered results arrive as inert markup carrying `data-scopedcss-*`
+    // scopes; the rules behind them are injected only when the owning module
+    // is evaluated. Before the result path loaded them, 54 of 61 scopes here
+    // had no rule behind them and the cards rendered unstyled — intermittently,
+    // since a scope another part of the page happened to pull in would style a
+    // card by luck.
+    {
+      let scopes = new Set<string>();
+      for (let el of document.querySelectorAll('*')) {
+        for (let attr of el.getAttributeNames()) {
+          if (attr.startsWith('data-scopedcss-')) {
+            scopes.add(attr);
+          }
+        }
+      }
+      let injectedCss = Array.from(
+        document.querySelectorAll('style[data-boxel-scoped-css]'),
+      )
+        .map((node) => node.textContent ?? '')
+        .join('\n');
+      let unstyled = [...scopes].filter(
+        (scope) => !injectedCss.includes(scope),
+      );
+      assert.strictEqual(
+        unstyled.length,
+        0,
+        `every rendered scope has a rule behind it (unstyled: ${unstyled.join(', ')})`,
+      );
+    }
+
     await percySnapshot(assert);
     await click('[data-test-search-sheet-show-only]');
     const collapsedBlocks = document.querySelectorAll(

@@ -223,6 +223,7 @@ export class RenderableSearchEntry {
         cardId: this.id,
         name: this.name,
         component: inert,
+        cssUrls: html?.cssUrls,
         renderType: this.renderType,
         type: this.type,
         format: this.format,
