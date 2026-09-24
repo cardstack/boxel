@@ -66,9 +66,27 @@ export default class RoomMessageTool extends Component<Signature> {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private store: StoreService;
 
+  // A realm-code call is a script: show the script itself rather than the
+  // JSON-escaped string inside the arguments.
+  private get previewScript(): string | undefined {
+    let { name, arguments: payload } = this.args.messageTool;
+    let code = payload?.attributes?.code;
+    return name?.startsWith('run-realm-code_') && typeof code === 'string'
+      ? code
+      : undefined;
+  }
+
   private get previewCommandCode() {
+    let script = this.previewScript;
+    if (script !== undefined) {
+      return script;
+    }
     let { name, arguments: payload } = this.args.messageTool;
     return JSON.stringify({ name, payload }, null, 2);
+  }
+
+  private get previewLanguage() {
+    return this.previewScript !== undefined ? 'javascript' : 'json';
   }
 
   @cached
@@ -286,7 +304,10 @@ export default class RoomMessageTool extends Component<Signature> {
         <CodeBlock
           class={{cn 'tool-code-block' compact=@isCompact}}
           @monacoSDK={{@monacoSDK}}
-          @codeData={{hash code=this.previewCommandCode language='json'}}
+          @codeData={{hash
+            code=this.previewCommandCode
+            language=this.previewLanguage
+          }}
           data-test-tool-call-card-idle={{not
             (eq this.applyButtonState 'applying')
           }}
@@ -300,13 +321,19 @@ export default class RoomMessageTool extends Component<Signature> {
             @isCompact={{@isCompact}}
             @toolCallState='preparing'
           />
+          {{#if this.previewScript}}
+            <codeBlock.editor />
+          {{/if}}
         </CodeBlock>
       {{else}}
         <CodeBlock
           class={{cn 'tool-code-block' compact=@isCompact}}
           {{this.scrollBottomIntoView}}
           @monacoSDK={{@monacoSDK}}
-          @codeData={{hash code=this.previewCommandCode language='json'}}
+          @codeData={{hash
+            code=this.previewCommandCode
+            language=this.previewLanguage
+          }}
           data-test-tool-call-card-idle={{not
             (eq this.applyButtonState 'applying')
           }}

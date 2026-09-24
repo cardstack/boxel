@@ -1189,7 +1189,9 @@ export default class ToolService extends Service {
       return false;
     }
 
-    if (command.name === 'patchCardInstance') {
+    if (command.argumentsError) {
+      error = `The arguments of this "${command.name}" call were not valid JSON (${command.argumentsError}), so the call was not run. Send the call again with complete, valid JSON arguments.`;
+    } else if (command.name === 'patchCardInstance') {
       // special case for patchCardInstance command
       return true;
     }
@@ -1197,7 +1199,9 @@ export default class ToolService extends Service {
     let toolCodeRef = command.codeRef;
     let toolInstance: GenericCommand | undefined;
 
-    if (command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
+    if (error) {
+      // Already invalid; there is no tool to resolve.
+    } else if (command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
       toolInstance = new CheckCorrectnessTool(this.toolContext);
     } else if (!toolCodeRef) {
       error = `No command for the name "${command.name}" was found`;

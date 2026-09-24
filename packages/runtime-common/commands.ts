@@ -26,6 +26,10 @@ export interface ToolRequest {
   // can later carry e.g. 'host' too. The host therefore matches its own
   // executor explicitly rather than treating any value as "not mine to run".
   executedBy?: string;
+  // Set by ai-bot when the model's arguments for this call were not valid
+  // JSON once the turn finished; `arguments` is then empty. It carries the
+  // parse error so the tool result can tell the model what was wrong.
+  argumentsError?: string;
 }
 
 export const ToolContextStamp = Symbol.for('CommandContext');

@@ -177,12 +177,14 @@ export class Responder {
       reasoning: this.responseState.latestReasoning ?? '',
       // Normalize to the same shape the room event carries (see
       // toCommandRequest) so a client reads toolRequests identically on both
-      // channels; arguments come through as objects, empty until the streamed
-      // JSON completes.
+      // channels. Arguments still streaming are parsed as far as they go, so
+      // the preview shows them as they are written.
       toolRequests: (this.responseState.toolCalls ?? [])
         .filter(Boolean)
         .map((toolCall) =>
-          toCommandRequest(toolCall as ChatCompletionMessageFunctionToolCall),
+          toCommandRequest(toolCall as ChatCompletionMessageFunctionToolCall, {
+            partialArguments: true,
+          }),
         ),
     };
     // matrix-js-sdk's sendToDevice takes a Map<userId, Map<deviceId, content>>

@@ -25,10 +25,17 @@ import ResponseEventData from './response-event-data.ts';
 import { logger } from '@cardstack/runtime-common';
 import type { MatrixClient } from 'matrix-js-sdk';
 
+import { parsePartialJson } from '../partial-json.ts';
+
 let log = logger('ai-bot');
 
+// With `partialArguments`, arguments that are still streaming are parsed as
+// far as they go, so a preview can show them growing. Only the ephemeral
+// stream preview asks for that; room events keep empty arguments until the
+// JSON is complete, so nothing can run a half-written call.
 export function toCommandRequest(
   toolCall: ChatCompletionMessageFunctionToolCall,
+  opts?: { partialArguments?: boolean; finished?: boolean },
 ): Partial<ToolRequest> {
   let { id, function: f } = toolCall;
   let result = {} as Partial<ToolRequest>;
@@ -45,7 +52,25 @@ export function toCommandRequest(
       // If the arguments are not valid JSON, we'll just return an empty object
       // This will happen during streaming, when the tool call is not yet complete
       // and the arguments are not yet available
-      result['arguments'] = {};
+      if (opts?.partialArguments) {
+        let partial = parsePartialJson(f.arguments);
+        result['arguments'] =
+          partial && typeof partial === 'object' && !Array.isArray(partial)
+            ? (partial as ToolRequest['arguments'])
+            : {};
+      } else {
+        result['arguments'] = {};
+      }
+      if (opts?.finished) {
+        // The turn is over, so these arguments will never complete. Say so,
+        // rather than letting the call fail on the empty arguments with a
+        // schema error that does not point at the cause.
+        let message = error instanceof Error ? error.message : String(error);
+        result['argumentsError'] = message;
+        log.warn(
+          `tool call ${id ?? '(no id)'} (${f.name ?? 'unnamed'}) finished with arguments that are not valid JSON: ${message}. Raw arguments (${f.arguments.length} chars): ${f.arguments}`,
+        );
+      }
     }
   }
   // readRealmFile is a tool ai-bot fulfills itself: tag it so the host records
@@ -249,7 +274,10 @@ export default class MatrixResponsePublisher {
         responseStateSnapshot.toolCalls
           .filter(Boolean) // Elide empty tool calls, which can be produced by gpt-5 at the time of this writing
           .map((toolCall) =>
-            toCommandRequest(toolCall as ChatCompletionMessageFunctionToolCall),
+            toCommandRequest(
+              toolCall as ChatCompletionMessageFunctionToolCall,
+              { finished: responseStateSnapshot.isStreamingFinished },
+            ),
           ),
         contentAndReasoning.reasoning,
       );
