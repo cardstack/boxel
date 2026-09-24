@@ -4,6 +4,7 @@ import type { Filter } from '@cardstack/runtime-common';
 import { assertQuery } from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
+import { pruneEmptyQueryParts } from '../utils/search/prune-empty-query';
 
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
@@ -79,15 +80,16 @@ export class SearchCardsByQueryTool extends HostBaseTool<
   protected async run(
     input: BaseToolModule.SearchCardsByQueryInput,
   ): Promise<BaseToolModule.SearchCardsResult> {
-    assertQuery(input.query);
+    let query = pruneEmptyQueryParts(input.query);
+    assertQuery(query);
     let realmUrls = this.realmServer.availableRealmIdentifiers;
     let instances: CardDef[] = [];
     try {
       // store.search pins `scope: 'cards'`, so the raw query already resolves
       // to card instances only.
-      instances = await this.store.search(input.query, realmUrls);
+      instances = await this.store.search(query, realmUrls);
     } catch (e) {
-      console.error(`Error searching in realms:`, e, input.query);
+      console.error(`Error searching in realms:`, e, query);
     }
 
     let commandModule = await this.loadToolModule();
@@ -102,7 +104,7 @@ export class SearchCardsByQueryTool extends HostBaseTool<
             cardTitle: c.cardTitle,
           }),
       ),
-      cardDescription: `Query: ${JSON.stringify(input.query.filter, null, 2)}`,
+      cardDescription: `Query: ${JSON.stringify(query.filter, null, 2)}`,
     });
     return resultCard;
   }

@@ -268,7 +268,7 @@ export default class MessageBuilder {
         (c) => c.toolRequest.id === encodedCommandRequest.id,
       );
       if (command) {
-        this.applyToolRequestChunk(command, encodedCommandRequest);
+        await this.updateExistingTool(message, command, encodedCommandRequest);
       } else {
         let built = await this.buildMessageCommand(
           message,
@@ -284,7 +284,11 @@ export default class MessageBuilder {
           (c) => c.toolRequest.id === encodedCommandRequest.id,
         );
         if (existing) {
-          this.applyToolRequestChunk(existing, encodedCommandRequest);
+          await this.updateExistingTool(
+            message,
+            existing,
+            encodedCommandRequest,
+          );
         } else {
           message.tools.push(built);
         }
@@ -323,6 +327,48 @@ export default class MessageBuilder {
 
   updateMessageCodePatchResult(message: Message) {
     message.codePatchResults = this.buildMessageCodePatchResults(message);
+  }
+
+  // A MessageTool resolves its tool (codeRef, approval, verb) once, when the
+  // first chunk of its request arrives. Resolve again when a later chunk
+  // renames the request, or when the finished request still has no tool: the
+  // first chunk can carry a name that is not complete yet, or the declaring
+  // skill can fail to load, and without this the call fails at validation
+  // with "No command for the name" although its skill declares it.
+  private async updateExistingTool(
+    message: Message,
+    tool: MessageTool,
+    encodedToolRequest: Partial<EncodedToolRequest>,
+  ) {
+    let decoded = decodeToolRequest(encodedToolRequest);
+    let renamed = !!decoded.name && decoded.name !== tool.name;
+    // Only a call nothing has answered yet: a result already recorded for it
+    // stays as it is.
+    let unresolvedAtEnd =
+      tool.toolCallStatus === 'ready' &&
+      !tool.codeRef &&
+      !!decoded.name &&
+      decoded.executedBy !== AI_BOT_EXECUTOR &&
+      !!(this.event.content as CardMessageContent).isStreamingFinished;
+    if (
+      (!renamed && !unresolvedAtEnd) ||
+      this.event.origin_server_ts < tool.toolRequestEventTs
+    ) {
+      this.applyToolRequestChunk(tool, encodedToolRequest);
+      return;
+    }
+    let rebuilt = await this.buildMessageCommand(message, decoded);
+    rebuilt.toolRequestEventTs = this.event.origin_server_ts;
+    // The build awaited network loads; find the tool again, since another
+    // pass may have replaced it or written a newer chunk meanwhile.
+    let index = message.tools.findIndex((c) => c.toolRequest.id === decoded.id);
+    if (index < 0) {
+      message.tools.push(rebuilt);
+    } else if (
+      message.tools[index].toolRequestEventTs <= rebuilt.toolRequestEventTs
+    ) {
+      message.tools.splice(index, 1, rebuilt);
+    }
   }
 
   // Builder passes finishing out of order must not regress a MessageTool's
