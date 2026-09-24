@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -21,6 +22,8 @@ import {
   estimateTokens,
   extractIssueText,
 } from '../src/factory-skill-loader.ts';
+import { catalogSkills } from '../src/skill-catalog.ts';
+import { SKILL_FRONTMATTER_DESCRIPTION_CASES } from '@cardstack/runtime-common/skill-frontmatter-contract';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -943,4 +946,34 @@ module('factory-skill-loader > curated boxel references', function () {
       'no pending reference has shipped in the built boxel skill yet — once one does, remove it from PENDING_BOXEL_REFERENCES',
     );
   });
+});
+
+// ---------------------------------------------------------------------------
+// Frontmatter descriptions
+// ---------------------------------------------------------------------------
+
+// `list_skills` advertises each skill by its description, and that row is the
+// agent's only basis for deciding whether to read the skill at all. A skill
+// whose description is authored as a YAML block scalar — the natural form once
+// it is longer than a line — used to advertise itself as the literal `>-`.
+//
+// The cases come from the shared contract so the same inputs are asserted
+// against `parseFrontmatter` in build-skills.test.ts: a reader that drifts
+// from the other fails here rather than surfacing as two descriptions for one
+// skill.
+module('skill-catalog > descriptions', function () {
+  for (let testCase of SKILL_FRONTMATTER_DESCRIPTION_CASES) {
+    test(`reads the ${testCase.label} case`, async function (assert) {
+      let dir = await mkdtemp(join(tmpdir(), 'skills-'));
+      await mkdir(join(dir, testCase.label), { recursive: true });
+      await writeFile(
+        join(dir, testCase.label, 'SKILL.md'),
+        `---\n${testCase.frontmatter}\n---\n\n# ${testCase.label}\n`,
+        'utf8',
+      );
+
+      let entries = await catalogSkills([dir]);
+      assert.strictEqual(entries[0].description, testCase.description);
+    });
+  }
 });

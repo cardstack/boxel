@@ -102,6 +102,7 @@ module('command runner', () => {
       withWriteLock: async (_url, fn) => fn(undefined),
       withFileWriteLocks: async (_url, _paths, fn) => fn(() => {}),
       withUserCostLock: async (_userId, fn) => fn(),
+      withTransaction: async (fn) => fn(async () => []),
     } as DBAdapter;
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
@@ -251,6 +252,7 @@ module('command runner', () => {
       withWriteLock: async (_url, fn) => fn(undefined),
       withFileWriteLocks: async (_url, _paths, fn) => fn(() => {}),
       withUserCostLock: async (_userId, fn) => fn(),
+      withTransaction: async (fn) => fn(async () => []),
     } as DBAdapter;
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
@@ -515,6 +517,7 @@ module('command runner', () => {
       withWriteLock: async (_url, fn) => fn(undefined),
       withFileWriteLocks: async (_url, _paths, fn) => fn(() => {}),
       withUserCostLock: async (_userId, fn) => fn(),
+      withTransaction: async (fn) => fn(async () => []),
     } as DBAdapter;
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
@@ -613,6 +616,7 @@ module('command runner', () => {
       withWriteLock: async (_url, fn) => fn(undefined),
       withFileWriteLocks: async (_url, _paths, fn) => fn(() => {}),
       withUserCostLock: async (_userId, fn) => fn(),
+      withTransaction: async (fn) => fn(async () => []),
     } as DBAdapter;
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
@@ -753,6 +757,7 @@ module('command runner', () => {
       withWriteLock: async (_url, fn) => fn(undefined),
       withFileWriteLocks: async (_url, _paths, fn) => fn(() => {}),
       withUserCostLock: async (_userId, fn) => fn(),
+      withTransaction: async (fn) => fn(async () => []),
     } as DBAdapter;
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
@@ -961,6 +966,7 @@ module('command runner', () => {
       withWriteLock: async (_url, fn) => fn(undefined),
       withFileWriteLocks: async (_url, _paths, fn) => fn(() => {}),
       withUserCostLock: async (_userId, fn) => fn(),
+      withTransaction: async (fn) => fn(async () => []),
     } as DBAdapter;
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
@@ -1108,6 +1114,7 @@ module('command runner', () => {
       withWriteLock: async (_url, fn) => fn(undefined),
       withFileWriteLocks: async (_url, _paths, fn) => fn(() => {}),
       withUserCostLock: async (_userId, fn) => fn(),
+      withTransaction: async (fn) => fn(async () => []),
     } as DBAdapter;
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
@@ -1259,6 +1266,7 @@ module('command runner', () => {
       withWriteLock: async (_url, fn) => fn(undefined),
       withFileWriteLocks: async (_url, _paths, fn) => fn(() => {}),
       withUserCostLock: async (_userId, fn) => fn(),
+      withTransaction: async (fn) => fn(async () => []),
     } as DBAdapter;
 
     let commandRunner = makeRunner(
@@ -1449,6 +1457,7 @@ module('command runner', () => {
       withWriteLock: async (_url, fn) => fn(undefined),
       withFileWriteLocks: async (_url, _paths, fn) => fn(() => {}),
       withUserCostLock: async (_userId, fn) => fn(),
+      withTransaction: async (fn) => fn(async () => []),
     } as DBAdapter;
 
     let commandRunner = makeRunner(
@@ -1630,6 +1639,7 @@ module('command runner', () => {
       withWriteLock: async (_url, fn) => fn(undefined),
       withFileWriteLocks: async (_url, _paths, fn) => fn(() => {}),
       withUserCostLock: async (_userId, fn) => fn(),
+      withTransaction: async (fn) => fn(async () => []),
     } as DBAdapter;
 
     let commandRunner = makeRunner(

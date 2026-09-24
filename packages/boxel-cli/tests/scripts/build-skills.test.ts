@@ -8,6 +8,7 @@ import {
   parseFrontmatter,
   renderCatalogBlock,
 } from '../../scripts/build-skills.ts';
+import { SKILL_FRONTMATTER_DESCRIPTION_CASES } from '@cardstack/runtime-common/skill-frontmatter-contract';
 
 describe('computeStaleIds', () => {
   it('returns [] when there is no prior list', () => {
@@ -118,6 +119,28 @@ describe('parseFrontmatter', () => {
   it('keeps the first occurrence when a key repeats', () => {
     const fm = parseFrontmatter('---\nname: first\nname: second\n---\n');
     expect(fm.name).toBe('first');
+  });
+
+  // The block-scalar and quote cases come from the shared contract, so the
+  // same inputs are asserted against the catalog reader in
+  // factory-skill-loader.test.ts. A reader that drifts from the other fails
+  // here rather than surfacing as two descriptions for one skill.
+  for (const testCase of SKILL_FRONTMATTER_DESCRIPTION_CASES) {
+    it(`reads the ${testCase.label} description case`, () => {
+      const fm = parseFrontmatter(`---\n${testCase.frontmatter}\n---\n`);
+      expect(fm.description).toBe(testCase.description);
+    });
+  }
+
+  // parseFrontmatter also returns `name`, which the shared contract doesn't
+  // cover: a top-level key after a block scalar must not be swallowed into the
+  // folded body.
+  it('captures a top-level key that follows a block scalar description', () => {
+    const fm = parseFrontmatter(
+      '---\ndescription: >-\n  the text\nname: after\n---\n',
+    );
+    expect(fm.name).toBe('after');
+    expect(fm.description).toBe('the text');
   });
 
   it('returns {} for content without frontmatter', () => {

@@ -16,7 +16,7 @@ clinician.gts           Clinician, and the two halves of a transfer
 facility.gts            HospitalFacility
 patient-record.gts      ConsultRequest, PatientRecord, and the interactive chart
 clinical-dashboard.gts  the two saved searches, rendered as entry rows
-audit/*.txt             the append-only ledger the batches write to
+audit/*.log             the append-only ledger the batches write to
 ```
 
 `ConsultRequest` shares a module with `PatientRecord` rather than having one of
@@ -85,15 +85,18 @@ record does not show.
 
 ## The audit log
 
-`audit/pt-100*.log` are plain text files in this realm, linked from each record
-with `linksTo(AuditLog)`. The batches append one line to them in the same commit
-as the card change.
+`audit/pt-100*.log` are log files in this realm, linked from each record with
+`linksTo(LogFile)`. The batches append one line to them in the same commit as
+the card change.
 
 The log is the one place here where the operation is declared on a **file**
-rather than a card, and it is worth reading for that:
+rather than a card, and it is worth reading for that. The declaration is not
+in this realm at all: every stored `.log` is base's `LogFile`, which declares
+it —
 
 ```ts
-export class AuditLog extends TextFileDef {
+// @cardstack/base/log-file-def
+export class LogFile extends TextFileDef {
   @operation static record = {
     base: 'appendLine',
     params: { what: StringField },
@@ -121,48 +124,21 @@ Three things about it are worth knowing before copying the pattern:
   to say and never who said it. `. +` merges into the payload rather than
   replacing it, and `NOW()` answers an Excel serial rather than a timestamp, so
   it is formatted — unformatted it would append a number like `46023.518`.
-- **A declaration on a file is only reachable if the realm binds the file to
-  it.** A stored file's class comes from its extension, and `realm.json` is
-  where this realm says which class its own extensions mean:
-
-  ```json
-  {
-    "attributes": {
-      "fileTypes": {
-        ".log": { "module": "./clinical/audit-log", "name": "AuditLog" }
-      }
-    }
-  }
-  ```
-
-  Without that entry a `.log` is base's `TextFileDef`, the declaration lowers
-  and indexes without complaint, and every invocation of it fails to resolve.
-  A realm binds which _class_ an extension means; it does not get to say what
-  counts as a file, so the extension has to be one the platform already reads
-  as one — and not one the platform keeps for itself, which rules out the
-  executable extensions and `.json`, where a binding would re-type every module
-  or every card instance rather than a realm's own content. The binding is also
-  realm-wide, which is why these logs use `.log` rather than `.txt`: every
-  `.txt` in this realm would otherwise become an audit log, including a
-  hello-world file and three format-preview samples. It also means one
-  extension maps to one class with no path scoping, so a second feature in
-  this realm wanting `.log` files would have to adopt `AuditLog` or pick a
-  different extension.
-
-- **Bind before the files are indexed, or expect a window.** A realm that adds
-  a binding to files it already holds keeps the old class in those rows until
-  the next pass re-indexes them, so a search by the bound type will not find
-  them yet. These fixtures are bound from the start, so the rows carry
-  `AuditLog` immediately.
-
+- **A file's class comes from its extension, and nothing in this realm
+  configures it.** The platform types every `.log` as `LogFile` and every
+  `.jsonl` as `JSONLFile`, which declares the same `record` and appends each
+  entry as one JSON object instead of a line of text. The linked log is a
+  `LogFile` because of its extension, whatever the field names; naming
+  `LogFile` on the field is what types `record` on the batch handle and keeps
+  the file picker to `.log` files.
 - **`appendLine` creates the file it appends to**, so nothing here has to
-  exist first, and a binding adds a name rather than taking the base
-  operations away: `b.on(log).appendLine({ line })` still works on a bound
-  file. These logs are checked in for a different reason — a
-  `linksTo(AuditLog)` needs a stored file to hydrate an instance from, and
-  `b.on(log)` takes that instance. Where nothing is stored yet, name the path
-  instead — `b.on('clinical/audit/pt-1004.log')` — and the first append brings
-  the file into being.
+  exist first, and a declaration adds a name rather than taking the base
+  operations away: `b.on(log).appendLine({ line })` still works on a log.
+  These logs are checked in for a different reason — a `linksTo(LogFile)`
+  needs a stored file to hydrate an instance from, and `b.on(log)` takes that
+  instance. Where nothing is stored yet, name the path instead —
+  `b.on('clinical/audit/pt-1004.log')` — and the first append brings the file
+  into being.
 
 ## Running it
 

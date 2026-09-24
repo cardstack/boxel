@@ -253,10 +253,11 @@ and nothing more.
 There is a second spelling, and it is the one to reach for when the line should
 not be the caller's to write. An `input` program _produces_ the payload, so a
 declaration can compose the line from values the caller has no way to supply —
-the authenticated actor, a realm setting, the realm's own clock:
+the authenticated actor, a realm setting, the realm's own clock. Base's
+`LogFile`, the class every stored `.log` is, declares exactly that:
 
 ```ts
-export class AuditLog extends TextFileDef {
+export class LogFile extends TextFileDef {
   @operation static record = {
     base: 'appendLine',
     params: { what: StringField },
@@ -273,10 +274,13 @@ is refused for a missing param. And `NOW()` answers an Excel serial rather than
 a timestamp, so it is formatted; unformatted it appends a number like
 `46023.518`.
 
-A declaration on a `FileDef` is only reachable if the realm binds its files to
-that class — see the `fileTypes` map in a realm's `realm.json`. Without a
-binding a stored file is the platform's class for its extension, and a named
-operation declared on a subclass lowers, indexes, and never resolves.
+A stored file's class comes from its extension, through the platform's own
+table: `.log` is `LogFile`, `.jsonl` is `JSONLFile` (whose `record` appends
+each entry as one JSON object), `.txt` is `TextFileDef`, and so on. A realm does
+not configure it. So a named operation is reachable on a file only when it is
+declared on the class the platform maps that file's extension to — one declared
+on an author's own `FileDef` subclass lowers and indexes, but no stored file
+resolves to it.
 
 ### The raw escape hatch
 

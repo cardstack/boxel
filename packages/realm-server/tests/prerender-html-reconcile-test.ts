@@ -202,7 +202,6 @@ module(basename(import.meta.filename), function (hooks) {
         loaderEpoch: '0',
         spawningJobId: null,
         coalescedPublishes: null,
-        fileDefBindings: null,
         changes: urls.map((url) => ({ url, operation })),
       },
     });

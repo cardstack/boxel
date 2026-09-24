@@ -34,7 +34,6 @@ import {
   type ScreenshotsMeta,
   parseRenderRouteOptions,
   serializeRenderRouteOptions,
-  type RenderRouteOptions,
   logger as runtimeLogger,
   type BuildModelDiagnostics,
   type BuildModelStagesMs,
@@ -336,18 +335,6 @@ export default class RenderRoute extends Route<Model> {
     let parsedOptions = parseRenderRouteOptions(options);
     let canonicalOptions = serializeRenderRouteOptions(parsedOptions);
     this.#setupTransitionHelper(id, nonce, canonicalOptions);
-    // The realm's file type bindings, for the render store's direct file-meta
-    // extract — the path a card render takes when its template renders a
-    // linked FileDef. Stamped on a global for the same reason the consuming
-    // realm below is: the store reads it from inside a render, where there is
-    // no route to hand it an argument through. Assigned unconditionally, so a
-    // render whose options carry none clears what the previous render left and
-    // one realm's bindings cannot type the next render's files.
-    (
-      globalThis as unknown as {
-        __boxelFileDefBindings?: RenderRouteOptions['fileDefBindings'];
-      }
-    ).__boxelFileDefBindings = parsedOptions.fileDefBindings;
     // Stamp the "consuming realm" — the realm that owns the card being
     // rendered — onto a global the store-service's federated-search
     // wrapper reads. The realm-server's job-scoped search cache pairs
