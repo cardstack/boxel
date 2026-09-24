@@ -46,3 +46,18 @@ export function progressLaneOf(jobInfo: JobInfo | undefined): {
 } {
   return jobInfo?.concurrencyGroup ? { lane: jobInfo.concurrencyGroup } : {};
 }
+
+// Row diagnostics as they leave the server for a reader of the realm: without
+// `queueClaim`. A writer lane's group names the user whose pass wrote the row
+// (`indexing:<realm>#user:<matrix id>`), which the `diagnostics` column keeps
+// for operators and a reader has no need for. Every path that serves a row's
+// diagnostics outside the database goes through here: an error doc's
+// `meta.diagnostics`, and `_indexing-errors`.
+export function withoutQueueClaim<T extends object>(
+  diagnostics: T,
+): Omit<T, 'queueClaim'> {
+  let { queueClaim: _queueClaim, ...rest } = diagnostics as T & {
+    queueClaim?: unknown;
+  };
+  return rest;
+}

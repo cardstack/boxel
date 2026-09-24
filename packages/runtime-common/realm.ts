@@ -16,6 +16,7 @@ import {
   prerenderHtmlWriterLane,
 } from './jobs/prerender-html.ts';
 import { JobClaimHold } from './jobs/claim-hold.ts';
+import { withoutQueueClaim } from './jobs/queue-claim.ts';
 import { settledBy } from './settled-by.ts';
 import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
@@ -12398,7 +12399,11 @@ export class Realm {
         let baseAttributes = {
           url: row.url,
           entryType: row.type,
-          diagnostics: row.diagnostics,
+          // Any reader of the realm can call this endpoint (see
+          // `withoutQueueClaim`).
+          diagnostics: row.diagnostics
+            ? withoutQueueClaim(row.diagnostics)
+            : row.diagnostics,
         };
         let findings: {
           type:
