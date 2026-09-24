@@ -22,7 +22,7 @@ The first three read from the same `diagnostics` column; the difference is the q
 
 ## Where the diagnostics live
 
-Seven places, all correlated:
+Eight places, all correlated:
 
 1. **`boxel_index.diagnostics` (and `boxel_index_working.diagnostics`)** — JSONB column, populated for **every** row the indexer writes, regardless of `has_error`. Source of truth for the **index visit** of a card/file: the `RenderTimeoutDiagnostics` server timings of that visit plus the host-side `PrerenderMetaDiagnostics` block (`serializeMs`, `searchDocMs`, `searchDocSettleMs`/`searchDocSettlePasses`, `searchDocFieldsMs`, `searchDocLinkLoads`, `computedCalls`/`computedCacheHits`), the per-route `indexRoutesMs` breakdown (the index-half sibling of the render channel's `renderFormatsMs` — the wall-clock of each index-visit route step, so the per-visit floor decomposes into `meta` / `icon` / `fileExtract` buckets; see [Mode L](#mode-l--the-index-visits-per-route-floor-meta--icon--file-extract)), and the write-side stamps: `invalidationId`, `indexedAt`, `writeSeq` (this row's position in its pass's write order — the only field that orders two rows of the same pass; see [Reconstructing a pass's write order](#reconstructing-a-passs-write-order)), and `requestId`. It also carries an `indexVisitClientMs` block (`read` / `renderRpc` / `bookkeeping`) — the indexer's per-row client-side overhead _outside_ the server render, i.e. this row's slice of the between-visit wall (see [Mode K](#mode-k--the-index-jobs-between-visit-wall-non-render-overhead)) — and a `brokenLinks` array on any card row whose render found a broken `linksTo` / `linksToMany` target — see [Mode E](#mode-e--enumerate-cards-with-broken-links). Note `brokenLinks` is the one block that isn't about _timing_: a card with broken links still indexes as a clean `type='instance'` (the broken slot renders a placeholder), so it's the only indexed signal that the row has a broken reference. Rows written by a fused single-visit pass (the SQLite in-browser path) carry one **combined** blob covering both visits here instead.
 2. **`prerendered_html.diagnostics` (and `prerendered_html_working.diagnostics`)** — JSONB column, populated for every row the `prerender_html` job writes, success and render-error alike. Source of truth for the **prerender-html visit**: launch/wait timings, `renderElapsedMs`/`totalElapsedMs`, the per-format `renderFormatsMs` breakdown, and the visit's HTTP correlation id under `prerenderHtmlRequestId` (never `requestId` — that name always means an index visit). On instance rows it also carries the declared-screenshot channel: `screenshotTimingsMs` (per-slot capture wall-clock) and `screenshotErrors` (per-slot capture failures with their `consecutiveFailures` retry bookkeeping) — see [Mode M](#mode-m--declared-screenshot-capture-failures-and-per-slot-timings). It carries the same three write-side stamps as the index channel — `invalidationId`, `indexedAt`, `writeSeq` — on **every** live row, whether or not the render reported timings of its own, so a `prerender_html` job's fan-out groups and orders exactly like an index pass's. **The two channels' `invalidationId`s are different**: the id is scoped to a `Batch`, and an index pass and the `prerender_html` job it spawns are separate batches. Each id groups its own channel; join the channels on `url` (plus `generation`), never on `invalidationId`. See [Two visits, two tables](#two-visits-two-tables--which-timings-live-where).
@@ -31,6 +31,7 @@ Seven places, all correlated:
 5. **Logs** — `prerender-server`, `manager`, and `remote-prerenderer` lines all carry `requestId=…`. `grep requestId=<uuid>` collates one call across all three processes. The same id lands on `boxel_index.diagnostics->>'requestId'` and `modules.diagnostics->>'requestId'` — and, for the render channel, on `prerendered_html.diagnostics->>'prerenderHtmlRequestId'` — so a hung card render and the module renders it triggered (via `getDefinition`) can be joined back to one investigation. For saturation incidents there's also the periodic `prerender-queue-snapshot` line on each prerender server.
 6. **Realm-server search-timing logs** — separate from the prerender `requestId` chain above. The realm-server emits, per instrumented `_federated-search`, a `realm:search-timing` line (request→response stage breakdown) and a `realm:requests` `-->` line with `dur=` (total) — both keyed by `corr=<id>`, the `x-boxel-logging-correlation-id` the prerendered host stamps. A periodic `realm:health` line reports event-loop lag + in-flight `_search` count during saturation windows. These are the _server's_ view of the search the card is blocked on; the card's `boxel_index.diagnostics` only has the _client's_ view (`queryLoadsInFlight`). See [Mode G](#mode-g--an-in-render-_search-was-slow-server-side-search-timing).
 7. **`jobs.result.phaseTimings`** — JSONB, one object per completed index job (on the `from-scratch-index` / `incremental-index` row's `result` column). The **job-level** phase decomposition: the once-per-job phases that surround and interleave the serial visit loop (`setupMs`, `discoverMs`, `orderMs`, `preWarmMs`, `swapMs` with its transaction's `swapAttempts` / `swapRetryMs`, and the from-scratch-only `mtimesMs`), plus `visitLoopMs` (the whole serial loop), `writeMs` (the aggregate row-write time — tracked here, not per row, because a row can't time its own INSERT), and `totalMs`. This is the only place the _between-visit_ wall is attributed; the per-row server render lives on `boxel_index.diagnostics.totalElapsedMs` and the per-row client overhead on `boxel_index.diagnostics.indexVisitClientMs`. See [Mode K](#mode-k--the-index-jobs-between-visit-wall-non-render-overhead).
+8. **`realm_index_commits`** — one row per committed index swap: the ledger of which pass took each generation of a realm, the URLs its commit promoted, and the committed generation it started from (`base_generation`). `realm_generations` holds only the newest generation; this holds the recent ones, in commit order, kept for seven days. See [Reading the commit ledger](#reading-the-commit-ledger).
 
 For UI triage you'll typically read the JSON error response (which surfaces `error_doc.diagnostics` as `meta.diagnostics`). For operator / SQL triage — especially slow non-failing reindexes — query the `diagnostics` column directly.
 
@@ -1280,6 +1281,7 @@ SELECT id,
        status,
        extract(epoch FROM (finished_at - started_at)) * 1000 AS wall_ms,
        result->>'generation'      AS generation,
+       result->>'baseGeneration'  AS base_generation,
        result->'phaseTimings'     AS phase_timings
 FROM jobs
 WHERE concurrency_group = 'indexing:<realm-url>'   -- e.g. indexing:https://app.example/team/realm/
@@ -1288,7 +1290,7 @@ ORDER BY id DESC
 LIMIT 5;
 ```
 
-`phase_timings` is `{ totalMs, setupMs, mtimesMs, discoverMs, orderMs, preWarmMs, visitLoopMs, writeMs, swapMs, swapAttempts, swapRetryMs }` (ms, except `swapAttempts`, which is a count). Read it against `wall_ms`: `totalMs` should land close to the job's wall; the gap between `visitLoopMs` and the visit render sum (step 2) is the per-visit client overhead + `writeMs`.
+`phase_timings` is `{ totalMs, setupMs, mtimesMs, discoverMs, orderMs, preWarmMs, visitLoopMs, writeMs, swapMs, swapAttempts, swapRetryMs, commitLockWaitMs }` (ms, except `swapAttempts`, which is a count). `generation` is the generation the job's swap committed; `base_generation` is the committed generation the job was set up against, so a gap wider than one means another pass of the realm committed while this one ran. Read it against `wall_ms`: `totalMs` should land close to the job's wall; the gap between `visitLoopMs` and the visit render sum (step 2) is the per-visit client overhead + `writeMs`.
 
 ### Step 2 — sum the per-row halves for the same job
 
@@ -1335,13 +1337,38 @@ LIMIT 20;
 - **`renderRpc`** — the client-observed prerender round-trip minus the server's own `totalElapsedMs`: serialization + the wire hop to the prerender server + any wait the server doesn't count. Large `renderRpc` with small server render means the transport/queue is the cost, not the render. ~0 on the fused / in-browser path (no wire hop).
 - **`bookkeeping`** — dependency resolution + index-entry construction between the render finishing and the write. The per-row cost that varies with a card's dependency shape; the top of step 3 names the heavy cards.
 - **`writeMs`** (job-level) — the Σ of the working-table upserts. This is I/O the render tab doesn't need, so it's the leading pipelining candidate (overlap it with the next visit).
-- **`setupMs`** (job-level) — `createBatch`: the generation bump and the resumable working-row scan, before any visit. Normally small; large `setupMs` is a retry job re-scanning a big working table, or DB slowness.
+- **`setupMs`** (job-level) — `createBatch`: reading the committed generation the pass starts from, and the resumable working-row scan, before any visit. Normally small; large `setupMs` is a retry job re-scanning a big working table, or DB slowness.
 - **`discoverMs` / `swapMs`** (job-level) — the serial bookends. `discoverMs` runs before the first visit, `swapMs` after the last, so neither can overlap a visit; they're the floor the pipelining can't remove.
 - **`swapAttempts` / `swapRetryMs`** (job-level) — the swap is one database transaction on one pinned connection. It publishes all of the pass or none of it: a failure part-way through rolls back, and the realm stays exactly as the previous pass left it. On Postgres, a deadlock (`40P01`) or serialization failure (`40001`) against a concurrent commit rolls the swap back and runs it again. `swapAttempts` counts the runs, and `swapRetryMs` is the part of `swapMs` spent on runs that rolled back.
   - Normal value: `swapAttempts` is 1 and `swapRetryMs` is 0.
   - More than 1 means a concurrent transaction deadlocked with the swap on the same rows. The usual one is a `prerender_html` job of the same realm stamping `realm_type_generations`: it runs in its own lane, so it can commit alongside an index swap. Each retry also writes a `pg-adapter` `warn` line naming the SQLSTATE and the realm (`transaction for the index swap of <realm> rolled back on SQLSTATE …`).
   - A value of 1 does not rule out contention. Every commit stamps the type watermarks in the same sorted order, so a concurrent commit on those rows usually makes the swap wait rather than deadlock, and a wait is not a retry. That time shows up in `swapMs` alone. To tell a contended swap from a slow one, look for a `prerender_html` job of the same realm whose swap overlapped this one (compare the two jobs' `finished_at` and `swapMs`).
   - `prerender_html` job results carry the same three fields (`swapMs`, `swapAttempts`, `swapRetryMs`) on their `phaseTimings`, alongside `preWarmMs`.
+- **`commitLockWaitMs`** (job-level) — the part of `swapMs` the committing attempt spent waiting for the realm's commit lock. A pass allocates its generation at commit, one past the realm's `current_generation`, while holding a per-realm lock that serializes commits (not passes); the wait is the time another pass of the same realm spent finishing its own commit. Near 0 while a realm's index passes run one at a time. `prerender_html` jobs take no commit lock and carry no such field.
+
+### Reading the commit ledger
+
+`realm_index_commits` has one row per committed index swap, written inside the swap's transaction, so a row exists exactly when its commit landed. Columns: `generation` (the one the commit took), `base_generation` (the `current_generation` the pass was set up against), `pass_id` (minted per batch, so the attempts of a retried job are distinct), `job_id`, `urls` (the sorted URLs the commit promoted; `NULL` when `full_realm` is true — a from-scratch index or a copy promotes every URL in the realm), and `committed_at` (epoch ms). Each commit prunes its own realm's rows older than seven days.
+
+```sql
+-- A realm's recent commits, newest first, with the passes that overlapped a
+-- peer's commit flagged.
+SELECT generation,
+       base_generation,
+       generation - base_generation > 1          AS overlapped_a_peer,
+       job_id,
+       full_realm,
+       jsonb_array_length(urls)                  AS url_count,
+       to_timestamp(committed_at / 1000.0)       AS committed_at
+FROM realm_index_commits
+WHERE realm_url = '<realm-url>'
+ORDER BY generation DESC
+LIMIT 20;
+```
+
+- **Which pass published a row.** A row's `boxel_index.generation` is the generation of the commit that last promoted it; join it to the ledger on `(realm_url, generation)` to get the job and its URL set.
+- **What committed while a pass ran.** The rows with `generation` above a pass's `base_generation` and below its own `generation` are the peers that committed between its setup and its commit. Their `urls` are what that pass's fan-out could not have seen.
+- **Gaps.** Generations are contiguous per realm, so a missing number inside the retention window means a ledger row was deleted, not a commit skipped.
 
 ### What Mode K can't tell you
 

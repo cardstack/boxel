@@ -656,7 +656,7 @@ module(basename(import.meta.filename), function () {
         let row = byURL.get(url(name));
         assert.strictEqual(
           row?.generation,
-          batch.currentGeneration,
+          batch.committedGeneration,
           `${name}'s index row carries the pass's generation, so the HTML reconcile sweep can still repair it`,
         );
         assert.notEqual(

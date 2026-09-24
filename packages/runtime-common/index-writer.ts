@@ -57,6 +57,7 @@ import {
   type CardTypeSummary,
   type PrerenderedHtmlTable,
   type RealmGenerationsTable,
+  type RealmIndexCommitsTable,
   type RealmMetaValue,
 } from './index-structure.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
@@ -358,6 +359,14 @@ const SCOPED_TYPE_SUMMARY_MAX_TYPES = 200;
 // sidebar. `code_ref` is the group key, so it is unique within each arm.
 const TYPE_SUMMARY_ORDER_BY = `ORDER BY display_name ASC NULLS LAST, code_ref ASC`;
 
+// Prefixed onto the realm URL to form the index swap's commit-lock key, so the
+// key cannot coincide with any other advisory lock taken on a realm.
+const INDEX_COMMIT_LOCK_NAMESPACE = 'index-commit:';
+
+// How long a realm's `realm_index_commits` rows are kept. Each commit prunes
+// its own realm's older rows, so the ledger stays bounded by commit rate.
+const INDEX_COMMIT_LEDGER_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
 // One `boxel_index` row as `existingIndexTypes` reads it back.
 interface ExistingIndexRowType {
   type: BoxelIndexTable['type'];
@@ -392,6 +401,10 @@ export interface BatchDoneResult {
   // Wall-clock spent on attempts that rolled back, so it can be subtracted
   // from the swap's total to get the time of the attempt that committed.
   swapRetryMs: number;
+  // How long the committing attempt waited for the realm's commit lock, i.e.
+  // for another pass of the same realm to finish committing. Absent for a
+  // `prerenderHtmlOnly` batch, which takes no commit lock.
+  commitLockWaitMs?: number;
 }
 
 export class Batch {
@@ -542,7 +555,26 @@ export class Batch {
       contentSize: number | undefined;
     }
   >();
-  declare private generation: number;
+  // `current_generation + 1` as read when the batch was set up. Stamped on the
+  // rows the pass stages in the working tables, and used to recognize those
+  // rows as this pass's own while it runs. It is only a guess at the number
+  // the pass will commit under — a peer that commits first takes it — so it is
+  // never compared against committed state; the swap restamps every row it
+  // promotes with the generation allocated at commit.
+  #provisionalGeneration = 0;
+  // The `current_generation` the pass was set up against: the committed state
+  // its fan-out was computed from.
+  #baseGeneration = 0;
+  // Allocated inside the swap's transaction, while the commit lock is held, so
+  // generations follow commit order. Set on every attempt of the transaction;
+  // `#committedGeneration` is set only once one of them has committed.
+  #commitGenerationInTransaction: number | undefined;
+  #committedGeneration: number | undefined;
+  // Identifies this pass on its `realm_index_commits` ledger row.
+  #passId = uuidv4();
+  // Whether this pass rebuilt the whole realm (a from-scratch index or a
+  // copy), as opposed to an incremental fan-out; recorded on the ledger row.
+  #fullRealm = false;
   private realmURL: URL; // this assumes that we only index cards in our own realm...
   private virtualNetwork: VirtualNetwork;
   private jobInfo?: JobInfo;
@@ -577,11 +609,38 @@ export class Batch {
     return this.#splitPrerenderHtml;
   }
 
-  // The realm generation this batch stamps on every row it writes
-  // (`current_generation + 1`, computed at batch start). Threaded out so the
-  // index event and the spawned `prerender_html` job can carry it.
-  get currentGeneration(): number {
-    return this.generation;
+  // The generation this batch stages its rows under (see
+  // `#provisionalGeneration`). For work that runs before the pass commits —
+  // the spawned `prerender_html` job's args, a visit's screenshot ledger rows.
+  // Committed state is compared against `committedGeneration` instead.
+  get provisionalGeneration(): number {
+    return this.#provisionalGeneration;
+  }
+
+  // The generation this batch's swap committed under: the value its commit
+  // wrote to `realm_generations.current_generation`. Read by the job result
+  // and the index event, after `done()`.
+  get committedGeneration(): number {
+    if (this.#committedGeneration === undefined) {
+      throw new Error(
+        `the index batch for ${this.realmURL.href} has not committed, so it has no committed generation`,
+      );
+    }
+    return this.#committedGeneration;
+  }
+
+  // The committed `current_generation` this batch was set up against.
+  get baseGeneration(): number {
+    return this.#baseGeneration;
+  }
+
+  private get commitGeneration(): number {
+    if (this.#commitGenerationInTransaction === undefined) {
+      throw new Error(
+        `the index batch for ${this.realmURL.href} stamped a commit-time generation outside its commit`,
+      );
+    }
+    return this.#commitGenerationInTransaction;
   }
 
   // The loader epoch this batch's renders thread into the /render route:
@@ -640,7 +699,7 @@ export class Batch {
           `a prerenderHtmlOnly batch requires an explicit generation`,
         );
       }
-      this.generation = this.#explicitGeneration;
+      this.#provisionalGeneration = this.#explicitGeneration;
       await this.loadResumedPrerenderedHtmlRows();
       return;
     }
@@ -947,7 +1006,7 @@ export class Batch {
       this.#invalidations.add(destURL);
       entry.url = destURL;
       entry.realm_url = this.realmURL.href;
-      entry.generation = this.generation;
+      entry.generation = this.#provisionalGeneration;
       entry.job_id = this.jobInfo?.jobId ?? null;
       entry.file_alias = copyURL(entry.file_alias);
       entry.types = entry.types ? entry.types.map(copyURL) : entry.types;
@@ -999,6 +1058,7 @@ export class Batch {
     // `applyBatchUpdates` fills the destination's prerendered_html channel
     // from the source realm's `prerendered_html` rows.
     this.#copyFromSourceRealm = sourceRealmURL;
+    this.#fullRealm = true;
   }
 
   // Copy the source realm's `prerendered_html` rows onto the destination's
@@ -1050,7 +1110,7 @@ export class Batch {
       entry.url = destURL;
       entry.realm_url = this.realmURL.href;
       entry.file_alias = copyURL(entry.file_alias);
-      entry.generation = this.generation;
+      entry.generation = this.commitGeneration;
       entry.rendered_at = now;
       entry.job_id = this.jobInfo?.jobId ?? null;
       entry.deps = entry.deps ? entry.deps.map(copyURL) : entry.deps;
@@ -1158,7 +1218,7 @@ export class Batch {
           realm_url: this.realmURL.href,
           source_url: destLedgerURL,
           capture_spec_hash: source.capture_spec_hash,
-          source_generation: this.generation,
+          source_generation: this.commitGeneration,
           object_key: source.object_key,
           source_content_hash: source.source_content_hash,
           lane: 'declared',
@@ -1647,7 +1707,7 @@ export class Batch {
     let preparedEntry = {
       url: href,
       file_alias: trimExecutableExtension(rri(url.href)).replace(/\.json$/, ''),
-      generation: this.generation,
+      generation: this.#provisionalGeneration,
       // The host bundle that rendered this row, as an ordering rather than the
       // hash beside it in `diagnostics`. Promoted out of the jsonb into its own
       // indexed column because the query it exists for — every row below the
@@ -1981,7 +2041,7 @@ export class Batch {
       url: url.href,
       file_alias: trimExecutableExtension(rri(url.href)).replace(/\.json$/, ''),
       realm_url: this.realmURL.href,
-      generation: this.generation,
+      generation: this.#provisionalGeneration,
       is_deleted: false,
       rendered_at: Date.now(),
       job_id: this.jobInfo?.jobId ?? null,
@@ -2123,15 +2183,15 @@ export class Batch {
 
   async done(opts?: {
     // Write the previous generation's realm_meta value at this batch's
-    // generation instead of recomputing it from `boxel_index_working`. The
-    // setup-phase failure recovery finalizes while the working table still
-    // holds the failed pass's un-promoted fan-out tombstones; a recompute
-    // over that state would undercount live dependents in the type summary
-    // until the next successful pass. Its error rows don't change the
-    // realm's type counts, so the prior summary is the accurate one — and a
-    // row must exist at this generation, because reads join realm_meta to
-    // realm_generations.current_generation.
+    // generation instead of recomputing it. The setup-phase failure recovery
+    // publishes only error rows for the URLs whose pass failed. Its error rows
+    // don't change the realm's type counts, so the prior summary is the
+    // accurate one — and a row must exist at this generation, because reads
+    // join realm_meta to realm_generations.current_generation.
     carryForwardRealmMeta?: true;
+    // This batch rebuilt the whole realm rather than an incremental fan-out.
+    // Recorded on the commit's ledger row.
+    fullRealm?: true;
   }): Promise<BatchDoneResult> {
     // Drain any rows the visit loop left buffered before the swap reads the
     // working table. A no-op for a prerenderHtmlOnly batch (which never
@@ -2150,6 +2210,9 @@ export class Batch {
       // swap. The guarded swap makes an out-of-order (lower-generation)
       // zombie job a per-row no-op.
       let commit = await this.#commit(async () => {
+        // Commits under the generation its job carried, which it staged its
+        // rows under; it allocates none of its own.
+        this.#commitGenerationInTransaction = this.#provisionalGeneration;
         await this.promotePrerenderedHtmlWorking(columns.prerenderedHtml, {
           monotonicGuard: true,
         });
@@ -2164,26 +2227,42 @@ export class Batch {
           monotonicGuard: true,
         });
       });
+      this.#committedGeneration = this.#provisionalGeneration;
       return { totalIndexEntries: this.#invalidations.size, ...commit };
     }
+    if (opts?.fullRealm) {
+      this.#fullRealm = true;
+    }
+    // Set by the attempt that commits; an attempt that rolls back and runs
+    // again overwrites it.
+    let commitLockWaitMs = 0;
     let commit = await this.#commit(async () => {
+      // First, so every statement below stamps the generation this commit
+      // takes, and so the rest of the swap runs with the realm's commits
+      // serialized behind it.
+      commitLockWaitMs = await this.allocateCommitGeneration();
+      await this.applyBatchUpdates(columns);
+      // After the swap, so the summary is computed from the rows this commit
+      // published and the realm's other committed rows — never from another
+      // pass's rows still staged in the working table.
       if (opts?.carryForwardRealmMeta) {
         await this.carryForwardRealmMeta();
       } else {
         await this.updateRealmMeta();
       }
-      await this.applyBatchUpdates(columns);
       await this.pruneObsoleteEntries();
       await this.stampTypeGenerations({
         types: this.touchedTypes,
         channels: { index: true, html: this.#publishedPrerenderedHtml },
         bumpAllTypes: !this.typeSetIsComplete,
       });
+      await this.recordCommit();
       await this.publishGeneration();
     });
+    this.#committedGeneration = this.commitGeneration;
 
     let totalIndexEntries = await this.numberOfIndexEntries();
-    return { totalIndexEntries, ...commit };
+    return { totalIndexEntries, ...commit, commitLockWaitMs };
   }
 
   // Runs `body` as one transaction, with every `#query` it makes sent through
@@ -2206,7 +2285,9 @@ export class Batch {
   // The attempt count and the time spent on attempts that rolled back say how
   // often a deadlock forced a re-run. They do not measure lock waits: a swap
   // that waits on a concurrent commit's row locks without deadlocking still
-  // commits on its first attempt, and the wait shows up only in `swapMs`.
+  // commits on its first attempt. The wait for the realm's commit lock is
+  // reported separately, as `commitLockWaitMs`; any other row-lock wait shows
+  // up only in `swapMs`.
   async #commit(body: () => Promise<void>): Promise<{
     swapAttempts: number;
     swapRetryMs: number;
@@ -2280,7 +2361,7 @@ export class Batch {
     let { nameExpressions, valueExpressions } = asExpressions(
       {
         realm_url: this.realmURL.href,
-        generation: this.generation,
+        generation: this.commitGeneration,
         value,
         indexed_at: unixTime(new Date().getTime()),
       } as Omit<RealmMetaTable, 'indexed_at'> & {
@@ -2440,7 +2521,7 @@ export class Batch {
   }
 
   // Aggregates per-type summaries (count, display name, code-ref key, icon)
-  // for one kind of row in boxel_index_working — either CardDef instances or
+  // for one kind of row in boxel_index — either CardDef instances or
   // FileDef files. The shape of the result rows matches `CardTypeSummary`
   // exactly, so callers can drop them straight into `realm_meta.value`.
   //
@@ -2487,7 +2568,7 @@ export class Batch {
   ): Expression {
     return [
       `SELECT CAST(count(i.url) AS INTEGER) as total, MAX(i.display_names->>0) as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
-       FROM boxel_index_working as i
+       FROM boxel_index as i
           WHERE`,
       ...every([
         ['i.realm_url =', param(this.realmURL.href)],
@@ -2575,14 +2656,53 @@ export class Batch {
     return results as unknown as CardTypeSummary[];
   }
 
+  // One `realm_index_commits` row per commit: which pass took the generation,
+  // which URLs it promoted, and the committed generation it started from.
+  // A full-realm pass promotes every URL in the realm, so its row names none
+  // rather than carrying the whole realm's URL list. Rows past the retention
+  // window are pruned from the realm's own ledger on the way.
+  private async recordCommit(): Promise<void> {
+    let now = Date.now();
+    let { nameExpressions, valueExpressions } = asExpressions(
+      {
+        realm_url: this.realmURL.href,
+        generation: this.commitGeneration,
+        base_generation: this.#baseGeneration,
+        pass_id: this.#passId,
+        job_id:
+          this.jobInfo && this.jobInfo.jobId > 0 ? this.jobInfo.jobId : null,
+        urls: this.#fullRealm ? null : [...this.#invalidations].sort(),
+        full_realm: this.#fullRealm,
+        committed_at: now,
+      } as RealmIndexCommitsTable,
+      { jsonFields: ['urls'] },
+    );
+    await this.#query([
+      ...upsert(
+        'realm_index_commits',
+        'realm_index_commits_pkey',
+        nameExpressions,
+        valueExpressions,
+      ),
+    ]);
+    await this.#query([
+      'DELETE FROM realm_index_commits WHERE',
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        ['committed_at <', param(now - INDEX_COMMIT_LEDGER_RETENTION_MS)],
+      ]),
+    ] as Expression);
+  }
+
   // Advances the realm to this batch's generation, and records the loader
   // epoch if this batch minted one. It is the swap's last statement: every
   // write to this row waits for the transaction that updated it to end, and a
   // user's module save writes it too (the write path mints a loader epoch
   // here), so issuing it last keeps the row locked for the commit alone rather
   // than for the whole swap. The statements before it read
-  // `current_generation` only to find the previous pass's `realm_meta`, which
-  // is the value they need.
+  // `current_generation` without locking the row: to allocate this commit's
+  // generation, under the commit lock, and to find the previous pass's
+  // `realm_meta`, which is the value they need.
   private async publishGeneration() {
     // Reading the getter is what mints, so read it before asking whether it
     // did. `loader_epoch` joins the upsert only when this batch minted one:
@@ -2596,7 +2716,7 @@ export class Batch {
     let loaderEpoch = this.loaderEpoch;
     let { nameExpressions, valueExpressions } = asExpressions({
       realm_url: this.realmURL.href,
-      current_generation: this.generation,
+      current_generation: this.commitGeneration,
       ...(this.#mintedLoaderEpoch === undefined
         ? {}
         : { loader_epoch: loaderEpoch }),
@@ -2622,7 +2742,7 @@ export class Batch {
         'INSERT INTO boxel_index',
         ...addExplicitParens(separatedByCommas(columnExpressions)),
         'SELECT',
-        ...separatedByCommas(columnExpressions),
+        ...separatedByCommas(this.#restampedColumns(columns.boxelIndex)),
         'FROM boxel_index_working',
         'WHERE',
         ...every([
@@ -2666,6 +2786,22 @@ export class Batch {
     await this.stampRenderOnlyEntries();
   }
 
+  // The swap's SELECT list: every column as staged, except `generation`,
+  // which takes this commit's. The working rows carry the provisional
+  // generation the pass anticipated at setup, which a peer that committed
+  // first may have taken.
+  #restampedColumns(columns: string[]): Expression[] {
+    return columns.map((column) =>
+      column === 'generation'
+        ? ([
+            'CAST(',
+            param(this.commitGeneration),
+            'AS INTEGER) AS generation',
+          ] as Expression)
+        : [column],
+    );
+  }
+
   // Render-only dependents keep their index row — its search document
   // cannot have moved — but two things keyed on that row must still see the
   // change. The card+json validator and response cache key on `indexed_at`,
@@ -2688,7 +2824,7 @@ export class Batch {
         'UPDATE boxel_index SET',
         ...separatedByCommas([
           ['indexed_at =', param(indexedAt)],
-          ['generation =', param(this.generation)],
+          ['generation =', param(this.commitGeneration)],
         ]),
         'WHERE',
         ...every([
@@ -2805,7 +2941,7 @@ export class Batch {
       .map((typeKey) => [
         [param(this.realmURL.href)],
         [param(typeKey)],
-        ...channels.map(() => [param(this.generation)]),
+        ...channels.map(() => [param(this.commitGeneration)]),
       ]) as Expression[][];
     // Chunked so a realm with a large type vocabulary stays inside the
     // driver's bound-parameter ceiling.
@@ -2881,9 +3017,11 @@ export class Batch {
   // `WHERE prerendered_html.generation <= EXCLUDED.generation` makes a stale
   // (lower-generation) write a per-row no-op — the backstop against an
   // expired-reservation zombie job overwriting a newer pass's rows — while
-  // keeping an equal-generation retry idempotent. Index/copy batches swap
-  // unguarded, exactly as before the split: their generation is freshly
-  // bumped, so the guard would always pass anyway.
+  // keeping an equal-generation retry idempotent. It publishes the rows at the
+  // generation they were staged under, which is the one its job carried.
+  // Index/copy batches swap unguarded, restamping each row with the
+  // generation their commit allocated: that generation is the realm's newest,
+  // so the guard would always pass anyway.
   private async promotePrerenderedHtmlWorking(
     columns: string[],
     opts?: {
@@ -2899,7 +3037,11 @@ export class Batch {
       'INSERT INTO prerendered_html',
       ...addExplicitParens(separatedByCommas(prerenderedColumns)),
       'SELECT',
-      ...separatedByCommas(prerenderedColumns),
+      ...separatedByCommas(
+        opts?.monotonicGuard
+          ? prerenderedColumns
+          : this.#restampedColumns(prerenderedNames),
+      ),
       'FROM prerendered_html_working',
       'WHERE',
       ...every([
@@ -2922,25 +3064,26 @@ export class Batch {
   }
 
   private async pruneObsoleteEntries() {
-    // Delete every realm_meta row for this realm except the one we just
-    // wrote. The previous predicate (`generation < this.generation`)
-    // only swept rows from incremental indexing where generations march
-    // forward. A from-scratch reindex resets the generation to a low number,
-    // leaving older high-generation rows orphaned forever — those legacy rows
-    // then poisoned `_types` reads when the SELECT picked the wrong one.
-    // Cleaning by `!=` covers both directions safely; the unique key on
-    // (realm_url, generation) guarantees we never accidentally keep
-    // two current rows.
+    // Delete every realm_meta row for this realm except the one this commit
+    // just wrote. Cleaning by `!=` rather than `<` also sweeps rows numbered
+    // above the current generation, which a realm whose generation counter
+    // was ever reset can hold, and which would otherwise poison `_types`
+    // reads when the SELECT picked the wrong one. The unique key on
+    // (realm_url, generation) guarantees we never accidentally keep two
+    // current rows.
     await this.#query([
       `DELETE FROM realm_meta`,
       'WHERE',
       ...every([
-        ['generation !=', param(this.generation)],
+        ['generation !=', param(this.commitGeneration)],
         ['realm_url =', param(this.realmURL.href)],
       ]),
     ] as Expression);
   }
 
+  // Records the committed state this pass starts from, and the provisional
+  // generation it stages its rows under. The number the pass commits under is
+  // allocated later, by `allocateCommitGeneration`.
   private async setNextGeneration() {
     let [row] = (await this.#query([
       'SELECT current_generation, loader_epoch FROM realm_generations WHERE realm_url =',
@@ -2948,24 +3091,57 @@ export class Batch {
     ])) as Pick<RealmGenerationsTable, 'current_generation' | 'loader_epoch'>[];
     this.#priorLoaderEpoch = row?.loader_epoch ?? '0';
     if (!row) {
-      let { nameExpressions, valueExpressions } = asExpressions({
-        realm_url: this.realmURL.href,
-        current_generation: 0,
-        loader_epoch: '0',
-      } as RealmGenerationsTable);
-      // Make the batch updates live
+      // A peer pass can commit the realm's first generation between the read
+      // above and this insert, so an existing row is left exactly as it is.
       await this.#query([
-        ...upsert(
-          'realm_generations',
-          'realm_generations_pkey',
-          nameExpressions,
-          valueExpressions,
-        ),
-      ]);
-      this.generation = 1;
-    } else {
-      this.generation = row.current_generation + 1;
+        'INSERT INTO realm_generations (realm_url, current_generation, loader_epoch) VALUES',
+        ...(addExplicitParens(
+          separatedByCommas([
+            [param(this.realmURL.href)],
+            [param(0)],
+            [param('0')],
+          ]),
+        ) as Expression),
+        'ON CONFLICT ON CONSTRAINT realm_generations_pkey DO NOTHING',
+      ] as Expression);
     }
+    this.#baseGeneration = row ? Number(row.current_generation) : 0;
+    this.#provisionalGeneration = this.#baseGeneration + 1;
+  }
+
+  // Allocates the generation this pass commits under: one past the realm's
+  // committed `current_generation`, read while holding the realm's commit
+  // lock. The lock serializes commits, not passes — two passes of one realm
+  // can run side by side, and whichever commits second reads the first's
+  // generation here and takes the next one — so `current_generation` only
+  // ever advances, in commit order.
+  //
+  // The lock is a transaction-scoped advisory lock in a key space of its own
+  // rather than a row lock on `realm_generations`: a user's module save writes
+  // that row to mint a loader epoch, and a row lock taken here would hold that
+  // save until the whole swap commits. The generation it guards has no other
+  // writer — the loader-epoch mint leaves `current_generation` alone — so a
+  // plain read under the lock is exact. SQLite runs every transaction on one
+  // connection, so there is nothing to lock there.
+  //
+  // Returns the time spent waiting for the lock.
+  private async allocateCommitGeneration(): Promise<number> {
+    let lockStart = Date.now();
+    if (this.#dbAdapter.kind === 'pg') {
+      await this.#query([
+        'SELECT pg_advisory_xact_lock(hashtextextended(',
+        param(`${INDEX_COMMIT_LOCK_NAMESPACE}${this.realmURL.href}`),
+        ', 0))',
+      ] as Expression);
+    }
+    let commitLockWaitMs = Date.now() - lockStart;
+    let [row] = (await this.#query([
+      'SELECT current_generation FROM realm_generations WHERE realm_url =',
+      param(this.realmURL.href),
+    ])) as Pick<RealmGenerationsTable, 'current_generation'>[];
+    this.#commitGenerationInTransaction =
+      (row ? Number(row.current_generation) : 0) + 1;
+    return commitLockWaitMs;
   }
 
   private async tombstoneEntries(invalidations: string[]) {
@@ -2997,23 +3173,6 @@ export class Batch {
       for (let { cardTypes } of entries) {
         this.#recordTouchedTypes(cardTypes);
       }
-    }
-    // The read above names the chain each URL is leaving as *production* knows
-    // it, but the type summary aggregates over `boxel_index_working`, and no
-    // pass prunes that table. A row an abandoned job wrote there can therefore
-    // hold a leaf production never had — one a completed pass has already
-    // counted into the summary — and this pass is about to write over it. A
-    // rollup scoped to production's chains alone would leave that leaf's count
-    // standing for a row that no longer carries it, and because nothing live
-    // adopts it, no later scoped pass would name it either.
-    //
-    // Only `#touchedTypes` is widened here. The tombstone decisions below stay
-    // on production, which is the reliable oracle for what is live — the
-    // working table also holds the un-promoted tombstones of a pass that
-    // failed. Widening is safe in a way narrowing would not be: a type named
-    // that did not actually move is recomputed to the value it already had.
-    for (let cardTypes of await this.workingIndexTypes(invalidations)) {
-      this.#recordTouchedTypes(cardTypes);
     }
     // Every URL read above now has its prior chain in `#touchedTypes`,
     // including the ones production holds no row for — those have no prior
@@ -3080,7 +3239,7 @@ export class Batch {
           // variant that alias-keyed lookups (`urlsMatchingSeed*`) miss.
           trimExecutableExtension(rri(id)).replace(/\.json$/, ''),
           type,
-          this.generation,
+          this.#provisionalGeneration,
           this.realmURL.href,
           true, // is_deleted
           false, // has_error — explicit clear so stale error state from
@@ -3189,7 +3348,7 @@ export class Batch {
           // one alias per URL whether the row is live or tombstoned.
           trimExecutableExtension(rri(id)).replace(/\.json$/, ''),
           type,
-          this.generation,
+          this.#provisionalGeneration,
           this.realmURL.href,
           true, // is_deleted
           null, // error_doc — a tombstone clears any prior render error
@@ -3208,31 +3367,6 @@ export class Batch {
       columns,
       rows,
     );
-  }
-
-  // The adoption chains `boxel_index_working` currently holds for these URLs.
-  // Feeds `#touchedTypes` only — see `tombstoneEntries` for why the tombstone
-  // decisions read production instead.
-  private async workingIndexTypes(
-    invalidations: string[],
-  ): Promise<(string[] | null)[]> {
-    if (invalidations.length === 0) {
-      return [];
-    }
-    let uniqueInvalidations = [...new Set(invalidations)];
-    let rows = (await this.#query([
-      'SELECT types FROM boxel_index_working WHERE',
-      ...every([
-        ['realm_url =', param(this.realmURL.href)],
-        [
-          'url IN',
-          ...addExplicitParens(
-            separatedByCommas(uniqueInvalidations.map((id) => [param(id)])),
-          ),
-        ],
-      ]),
-    ] as Expression)) as Pick<BoxelIndexTable, 'types'>[];
-    return rows.map((row) => row.types);
   }
 
   // Each invalidated URL's rows as the production index still holds them:
@@ -3287,7 +3421,7 @@ export class Batch {
       `SELECT DISTINCT url FROM boxel_index_working WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
-        ['generation =', param(this.generation)],
+        ['generation =', param(this.#provisionalGeneration)],
         any([
           ['url =', param(seedURL.href)],
           ['file_alias =', param(seedURL.href)],
