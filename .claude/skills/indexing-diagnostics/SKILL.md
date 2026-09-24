@@ -1774,7 +1774,7 @@ If either set is non-empty and fewer than 3 rounds have run, the transaction rol
 1. It extends the pass to Extend and their dependents, through the same fan-out `invalidate()` runs.
 2. It puts every URL it will re-visit back to a tombstone over the row production holds now, so a file a peer deleted stays deleted if the re-visit reads nothing.
 3. It picks up any loader epoch minted since the pass read one. A pass that minted its own takes a fresh one instead.
-4. It re-visits, then tells the pass's `prerender_html` job about the URLs the round added (every URL of the pass, when the loader epoch moved).
+4. It re-visits, then re-announces to the pass's `prerender_html` job every URL it re-visited, as an update, plus the render-only dependents the round added. When the loader epoch moved it re-announces every URL of the pass. A URL the pass deleted and a peer wrote back is re-announced as an update, so the job does not tombstone the live card's HTML.
 
 Then the commit runs again and checks the peers that committed during the round. After 3 rounds that still find something stale, the commit goes ahead anyway. In the same transaction it inserts a follow-up `incremental-index` job for the URLs still stale, taking the lane (`concurrency_group`), `priority` and `initiated_by` of the pass's own job row. The follow-up carries no `coalescedCallers`, so no write waits on it, and it announces its own pass when it lands: an incremental index event through the worker's event bridge, and `NOTIFY realm_index_updated`.
 
@@ -1845,12 +1845,12 @@ LIMIT 20;
 - **`rounds = 0` with a `validation_ms`**: peers committed during the pass but nothing they committed was read by it. The cost is the check alone, a few queries under the commit lock.
 - **`rounds ≥ 1`**: compare `revisits` against the pass's size. A round re-visits only what the peers touched, so a round as large as the pass means a peer's commit listed no URLs (a full-realm pass, or one too wide to list), and the pass read that as touching everything.
 - **`rounds = 3` with a follow-up job**: peers kept committing over the same cards for the whole pass. If a follow-up itself reaches the cap and enqueues another, something is rewriting those cards faster than a pass completes.
-- **Two `prerender_html` jobs naming the same pass id in `spawningIndexPasses`**: the pass re-announced after a round. That happens for the URLs a round added, and for all of them when the loader epoch moved.
+- **Two `prerender_html` jobs naming the same pass id in `spawningIndexPasses`**: the pass re-announced after a round, and its first job had already been claimed, so the two did not merge. A round re-announces the URLs it re-visited, and every URL of the pass when the loader epoch moved.
 
 ### What Mode O can't tell you
 
 - **Query-backed fields.** A query's matches are not recorded in `deps`, so a row whose query results a peer's commit moved is neither re-visited nor extended to. The next pass that reaches the row corrects it. A row a round does re-visit can still read a query's results from before the peer's commit, because the job-scoped search cache keys an in-render `_search` on the job, not on the index state it read.
-- **Render-only edges.** Extend reads `boxel_index.deps`, not `prerendered_html.deps`. A peer row whose HTML, but not its index row, came to depend on the pass is left to the HTML jobs, which render only after their passes commit.
+- **Render-only edges.** Extend reads `boxel_index.deps`, not `prerendered_html.deps`, so a peer row whose HTML, but not its index row, came to depend on the pass is not extended to. The peer's `prerender_html` job waits only on the peer's own pass, so it can render that row against this pass's cards before this pass commits, and the row's HTML stays stale. Neither the check nor the reconcile sweep, which compares the HTML row's generation with the index row's, catches it. The next pass that reaches the row corrects it.
 - **Which peer caused which re-visit.** A check reads every peer commit since the last one together. Join the re-visited URLs against the peers' `urls` (the second query) to attribute them.
 - **The wall of one round.** `validationMs` is the total across checks and rounds, and the per-round `info` line carries the round's size, not its duration.
 
