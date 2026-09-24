@@ -66,8 +66,13 @@ module(basename(import.meta.filename), function (hooks) {
 
   // Stages one card of `typeKey` in the batch, the way an index visit would.
   async function stageCard(batch: Batch, name: string, typeKey: string) {
+    await batch.invalidate([new URL(url(name))]);
+    await writeCard(batch, name, typeKey);
+  }
+
+  // The visit's write alone, for a pass whose invalidation ran earlier.
+  async function writeCard(batch: Batch, name: string, typeKey: string) {
     let cardURL = new URL(url(name));
-    await batch.invalidate([cardURL]);
     await batch.updateEntry(cardURL, {
       type: 'instance',
       resource: {
@@ -156,7 +161,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   async function ledger() {
     let rows = (await adapter.execute(
-      `SELECT generation, base_generation, urls, full_realm
+      `SELECT generation, base_generation, urls, render_only_urls, full_realm
          FROM realm_index_commits
         WHERE realm_url = $1
         ORDER BY generation`,
@@ -165,12 +170,14 @@ module(basename(import.meta.filename), function (hooks) {
       generation: number;
       base_generation: number;
       urls: string[] | null;
+      render_only_urls: string[] | null;
       full_realm: boolean;
     }[];
     return rows.map((row) => ({
       generation: Number(row.generation),
       baseGeneration: Number(row.base_generation),
       urls: row.urls,
+      renderOnlyUrls: row.render_only_urls,
       fullRealm: row.full_realm,
     }));
   }
@@ -271,16 +278,57 @@ module(basename(import.meta.filename), function (hooks) {
           generation: 1,
           baseGeneration: 0,
           urls: [url('b')],
+          renderOnlyUrls: [],
           fullRealm: false,
         },
         {
           generation: 2,
           baseGeneration: 0,
           urls: [url('a')],
+          renderOnlyUrls: [],
           fullRealm: false,
         },
       ],
       'the ledger records one row per commit, in commit order',
+    );
+  });
+
+  test('a commit over a card a peer moved to another type recomputes the type the peer moved it into', async function (assert) {
+    let seed = await createBatch({ splitPrerenderHtml: false });
+    await stageCard(seed, 'x', personKey);
+    await seed.done();
+    assert.deepEqual(
+      await publishedTypeCounts(),
+      { [personKey]: 1 },
+      'precondition: x is published as a Person',
+    );
+
+    // Both passes invalidate x while it is still a Person, so each reads
+    // Person as the type x is leaving. A then moves x to Pet and commits; B
+    // moves it back to Person and commits after.
+    let a = await createBatch({ splitPrerenderHtml: false });
+    let b = await createBatch({ splitPrerenderHtml: false });
+    await b.invalidate([new URL(url('x'))]);
+    await stageCard(a, 'x', petKey);
+    await a.done();
+    assert.deepEqual(
+      await publishedTypeCounts(),
+      { [petKey]: 1 },
+      'precondition: after A, x is published as a Pet',
+    );
+
+    await writeCard(b, 'x', personKey);
+    await b.done();
+    assert.strictEqual(b.committedGeneration, 3, 'B commits after A');
+    assert.deepEqual(
+      await publishedTypeCounts(),
+      { [personKey]: 1 },
+      'the summary no longer counts x as the Pet A had made it',
+    );
+    assert.strictEqual(
+      (await indexWatermarks())[petKey],
+      3,
+      'the Pet watermark moves with B, whose commit took x out of Pet',
     );
   });
 

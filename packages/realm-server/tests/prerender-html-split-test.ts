@@ -636,6 +636,23 @@ module(basename(import.meta.filename), function () {
       );
 
       await batch.done();
+      let [commit] = (await adapter.execute(
+        `SELECT urls, render_only_urls FROM realm_index_commits
+          WHERE realm_url = $1 AND generation = $2`,
+        { bind: [testRealm, batch.committedGeneration] },
+      )) as { urls: string[] | null; render_only_urls: string[] | null }[];
+      assert.deepEqual(
+        commit,
+        {
+          urls: urls('hub', 'linker', 'linker-of-linker'),
+          render_only_urls: urls(
+            'linker-of-renderer',
+            'renderer',
+            'renderer-of-renderer',
+          ),
+        },
+        "the commit's ledger row lists both the rows it promoted and the render-only rows it restamped",
+      );
       let rows = (await adapter.execute(
         `SELECT url, generation, indexed_at, is_deleted FROM boxel_index
           WHERE realm_url = $1 AND url = ANY($2)`,
