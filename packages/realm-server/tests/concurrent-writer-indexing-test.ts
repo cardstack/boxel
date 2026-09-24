@@ -72,6 +72,13 @@ const reportGts = `
   export class Report extends CardDef {
     @field title = contains(StringField);
     @field student = linksTo(Student);
+    // Reads the linked student into the report's own index row, so a hub
+    // pass for the student visits the report rather than only re-rendering it.
+    @field studentName = contains(StringField, {
+      computeVia: function (this: Report) {
+        return this.student?.name;
+      },
+    });
     static isolated = class Isolated extends Component<typeof this> {
       <template><p class="report">{{@model.title}} for {{@model.student.name}}</p></template>
     };
@@ -191,16 +198,18 @@ async function indexRow(
   | {
       generation: number;
       pristine_doc: { attributes?: Record<string, unknown> } | null;
+      search_doc: Record<string, unknown> | null;
     }
   | undefined
 > {
   let [row] = (await dbAdapter.execute(
-    `SELECT generation, pristine_doc FROM boxel_index
+    `SELECT generation, pristine_doc, search_doc FROM boxel_index
       WHERE url = $1 AND type = 'instance'`,
     { bind: [url] },
   )) as {
     generation: number;
     pristine_doc: { attributes?: Record<string, unknown> } | null;
+    search_doc: Record<string, unknown> | null;
   }[];
   return row === undefined
     ? undefined
@@ -402,8 +411,8 @@ module(basename(import.meta.filename), function () {
         let report1 = `${realmURL.href}report-1.json`;
         let { hubEdit } = await startHeldHubEdit();
 
-        // Writer A's pass has already visited report-1, a dependent of the
-        // hub, against the bytes it had before this save.
+        // Writer A's pass has already visited report-1, which reads the hub
+        // into its own index row, against the bytes it had before this save.
         let leafResponse = await leafSaveWithinBudget(
           saveAs(
             WRITER_B,
@@ -454,6 +463,16 @@ module(basename(import.meta.filename), function () {
           row?.pristine_doc?.attributes?.title,
           'Reading log, week 2',
           "report-1's index row carries writer B's edit, although writer A committed last",
+        );
+        assert.strictEqual(
+          row?.search_doc?.studentName,
+          'Mango Abdel-Rahman',
+          "report-1's index row carries writer A's edit of the student it reads",
+        );
+        assert.strictEqual(
+          row?.generation,
+          hubPass?.generation,
+          "report-1's row is the one writer A's re-visit wrote",
         );
 
         // Every render either pass owes was enqueued before its save
