@@ -19,7 +19,7 @@ const SETTINGS = { approver: '@mae:localhost' };
 
 const REJECTION = "ignoring the RealmConfig card's `policy`";
 const NOT_AN_IDENTIFIER =
-  'which is an object whose `card` is neither an absolute URL nor a realm-prefixed card id';
+  'which is neither an absolute URL nor a realm-prefixed card id';
 
 // Every warning the realm logs while `fn` runs. The realm and this suite share
 // the named `realm` logger, so a tap on its method factory sees exactly what
@@ -75,7 +75,7 @@ module(basename(import.meta.filename), function () {
         'realm.json': realmConfigCardJSON({
           name: REALM_NAME,
           config: SETTINGS,
-          policy: { card: POLICY_CARD },
+          policy: POLICY_CARD,
         }),
         'note.json': NOTE,
       },
@@ -129,7 +129,7 @@ module(basename(import.meta.filename), function () {
         `the prefix resolves to a URL in this realm's network: ${resolved}`,
       );
 
-      await writeRealmConfig({ card: prefixed });
+      await writeRealmConfig(prefixed);
       assert.deepEqual(
         await testRealm.getRealmPolicy(),
         { card: resolved },
@@ -187,9 +187,9 @@ module(basename(import.meta.filename), function () {
       let stored = JSON.parse(
         readFileSync(join(testRealmPath, 'realm.json'), 'utf8'),
       );
-      assert.deepEqual(
+      assert.strictEqual(
         stored.data.attributes.policy,
-        { card: POLICY_CARD },
+        POLICY_CARD,
         'the file the card wrote still holds the pointer',
       );
       assert.deepEqual(
@@ -269,18 +269,27 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('an explicit null policy leaves the realm with none, without a warning', async function (assert) {
-      let policy: unknown = 'unread';
-      let warnings = await realmWarningsDuring(async () => {
-        await writeRealmConfig(null);
-        policy = await testRealm.getRealmPolicy();
-      });
-      assert.strictEqual(policy, undefined, 'the realm has no policy');
-      assert.deepEqual(
-        warnings.filter((w) => w.includes('`policy`')),
-        [],
-        'null is how an owner writes "no policy"',
-      );
+    // Null is an unset field, and a blank string is what the field's editor
+    // stores when its input is cleared.
+    test('a null or blank policy leaves the realm with none, without a warning', async function (assert) {
+      for (let value of [null, '', '   ']) {
+        let policy: unknown = 'unread';
+        let warnings = await realmWarningsDuring(async () => {
+          await writeRealmConfig(value);
+          policy = await testRealm.getRealmPolicy();
+        });
+        let label = JSON.stringify(value);
+        assert.strictEqual(
+          policy,
+          undefined,
+          `${label}: the realm has no policy`,
+        );
+        assert.deepEqual(
+          warnings.filter((w) => w.includes('`policy`')),
+          [],
+          `${label}: is how an owner writes "no policy"`,
+        );
+      }
     });
 
     // Each one replaces the well-formed pointer the realm started with, so a
@@ -289,59 +298,59 @@ module(basename(import.meta.filename), function () {
     test('a malformed policy pointer is dropped with a warning, and the realm keeps serving', async function (assert) {
       let shapes: { label: string; value: unknown; problem: string }[] = [
         {
-          label: 'a bare URL',
-          value: POLICY_CARD,
-          problem: 'which is string',
+          label: 'an object naming the card',
+          value: { card: POLICY_CARD },
+          problem: 'which is an object',
         },
         {
           label: 'an array',
-          value: [{ card: POLICY_CARD }],
+          value: [POLICY_CARD],
           problem: 'which is an array',
         },
         {
-          label: 'an object with no card',
-          value: { url: POLICY_CARD },
-          problem: 'which is an object with no `card`',
+          label: 'a number',
+          value: 42,
+          problem: 'which is a number',
         },
         {
-          label: 'a card that is not a string',
-          value: { card: 42 },
-          problem: 'which is an object whose `card` is number',
+          label: 'a boolean',
+          value: true,
+          problem: 'which is a boolean',
         },
         {
-          label: 'a card that is not a URL',
-          value: { card: 'not a url' },
+          label: 'a string that is not a URL',
+          value: 'not a url',
           problem: NOT_AN_IDENTIFIER,
         },
         {
-          label: 'a relative card',
-          value: { card: './policies/education' },
+          label: 'a relative reference',
+          value: './policies/education',
           problem: NOT_AN_IDENTIFIER,
         },
         {
-          label: 'a card under a prefix no realm is mapped at',
-          value: { card: '@nowhere/policies/education' },
+          label: 'an id under a prefix no realm is mapped at',
+          value: '@nowhere/policies/education',
           problem: NOT_AN_IDENTIFIER,
         },
         {
           label: 'a file URL',
-          value: { card: 'file:///etc/passwd' },
-          problem: 'which is an object whose `card` is a file: URL',
+          value: 'file:///etc/passwd',
+          problem: 'which is a file: URL',
         },
         {
           label: 'a data URL',
-          value: { card: 'data:application/json,{}' },
-          problem: 'which is an object whose `card` is a data: URL',
+          value: 'data:application/json,{}',
+          problem: 'which is a data: URL',
         },
         {
           label: 'a javascript URL',
-          value: { card: 'javascript:alert(1)' },
-          problem: 'which is an object whose `card` is a javascript: URL',
+          value: 'javascript:alert(1)',
+          problem: 'which is a javascript: URL',
         },
         {
           label: 'a mailto URL',
-          value: { card: 'mailto:owner@example.test' },
-          problem: 'which is an object whose `card` is a mailto: URL',
+          value: 'mailto:owner@example.test',
+          problem: 'which is a mailto: URL',
         },
       ];
 
@@ -398,7 +407,7 @@ module(basename(import.meta.filename), function () {
           'realm.json': realmConfigCardJSON({
             name: REALM_NAME,
             config: SETTINGS,
-            policy: POLICY_CARD,
+            policy: { card: POLICY_CARD },
           }),
           'note.json': NOTE,
         },

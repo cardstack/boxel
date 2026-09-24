@@ -891,10 +891,6 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
     'cardInfo',
     ...cardDefComputedFields,
     'theme',
-    // A JSON pointer with no editor of its own, which would render here as an
-    // empty row. It is set by editing `realm.json`, and it stays declared, so a
-    // save from this editor keeps it.
-    'policy',
   ];
 
   private get cardInfoFieldDisplayNames(): string[] | undefined {
@@ -1182,24 +1178,20 @@ export class RealmConfig extends CardDef {
       "Realm-level settings a card operation reads with realmConfig('key') — an approver's user id, a threshold, a default assignee. Values are JSON. They are not indexed for search and are not included in the realmInfo carried on card responses",
   });
 
-  // The card that holds this realm's policy, as `{ "card": "<card id>" }`,
-  // where the id is an absolute URL or a realm-prefixed id. A declared field
-  // for the reason `config` is one: a pointer the card did not declare would
-  // be dropped by the next write to this card.
+  // The card that holds this realm's policy, by its id: an absolute URL or a
+  // realm-prefixed id.
   //
-  // A JSON value rather than a link to the policy card, because a link is
-  // followed whenever this card is read. The response for a card side-loads
-  // the cards it links to, and a link into another realm is fetched under this
-  // realm's own authority rather than the reader's. So every reader of this
-  // realm's config would be handed the policy's rules and predicates, even when
-  // the policy lives in a realm they have no permission to read, which is where
-  // a policy commonly lives. A value is read by the realm and followed by
-  // nothing on a read. JSON rather than a compound field so that a value that
-  // is not a usable pointer reaches the realm as written, and leaves it with no
-  // policy rather than with whatever a typed field made of it.
-  @field policy = contains(JsonField, {
+  // The id rather than a link to the policy card, because a link is followed
+  // whenever this card is read. The response for a card side-loads the cards
+  // it links to, and a link into another realm is fetched under this realm's
+  // own authority rather than the reader's. So every reader of this realm's
+  // config would be handed the policy's rules and predicates, even when the
+  // policy lives in a realm they have no permission to read, which is where a
+  // policy commonly lives. An id is read by the realm and followed by nothing
+  // on a read.
+  @field policy = contains(StringField, {
     description:
-      'The RealmPolicy card that governs this realm, as { "card": "<URL or realm-prefixed id of the card>" }. Absent for a realm with no policy. Only the pointer lives here; the rules live on the card it names',
+      'The RealmPolicy card that governs this realm, by its URL or realm-prefixed id. Absent for a realm with no policy. Only the pointer lives here; the rules live on the card it names',
   });
 
   @field cardTitle = contains(StringField, {
