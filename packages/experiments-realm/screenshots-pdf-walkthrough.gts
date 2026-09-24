@@ -1,19 +1,23 @@
 import { CardDef, Component, field, linksTo } from '@cardstack/base/card-api';
 
-import { realmURL } from '@cardstack/runtime-common';
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+
+import { realmURL, rri } from '@cardstack/runtime-common';
 import {
   SignedCapture,
   SignedCaptureLink,
 } from '@cardstack/boxel-host/lib/signed-capture';
 
 import Camera from '@cardstack/boxel-icons/camera';
-import Code from '@cardstack/boxel-icons/code-2';
+import Code from '@cardstack/boxel-icons/code';
 import FilePdf from '@cardstack/boxel-icons/file-type-pdf';
 import Wand from '@cardstack/boxel-icons/wand';
 import Link from '@cardstack/boxel-icons/link';
 import Gauge from '@cardstack/boxel-icons/gauge';
 import Bolt from '@cardstack/boxel-icons/bolt';
 import Route from '@cardstack/boxel-icons/route';
+import Terminal from '@cardstack/boxel-icons/terminal';
 
 // A presentation-grade walkthrough of the Screenshots & PDF feature — narrative
 // sections that explain each surface, plus a live demo pane that renders a real
@@ -21,7 +25,7 @@ import Route from '@cardstack/boxel-icons/route';
 // sprint-planning walkthrough: link a card, open this in interact mode, and the
 // captures below are the actual served artifacts, not mockups.
 //
-// The three code samples below are plain strings rendered into <pre> blocks, so
+// The four code samples below are plain strings rendered into <pre> blocks, so
 // their `{{…}}` and tags are never parsed as part of this component's template.
 
 const DECLARATIVE_SNIPPET = `// Declarative — captured for free at index time, feeds the thumbnail chain
@@ -52,6 +56,17 @@ const DSL_SNIPPET = `# URL DSL — paste straight into an <img> / <object>, no J
 {realm}_screenshot/{path}?name=hero            # a declared slot (no render work)
 {realm}_screenshot/{path}?type=pdf             # PDF
 {realm}_screenshot/{path}?type=pdf&media=print # PDF under the card's print CSS`;
+
+const CLI_SNIPPET = `# CLI — scriptable captures from a shell or a CI job
+boxel screenshot {card-url}                       # PNG, isolated -> ./<file>.png
+boxel screenshot {card-url} --viewport 1280x800 --dsf 2
+boxel screenshot {card-url} --format fitted --envelope 400x300
+boxel screenshot {card-url} --url-only            # print served URLs, skip bytes
+
+# batch — one request per card, writes screenshot-manifest.json into --out
+boxel screenshot --spec captures.json --out ./shots
+#   spec entries pass captureSpec through verbatim — that is how you
+#   ask for { "type": "pdf" }, which has no flag of its own`;
 
 interface Pillar {
   key: string;
@@ -121,6 +136,50 @@ class Isolated extends Component<typeof ScreenshotsPdfWalkthrough> {
     return base ? `${base}?type=pdf&media=print` : undefined;
   }
 
+  // The demos this walkthrough points at ship in the same realm, so their
+  // instances are addressable from this card's own realm rather than needing
+  // a link field apiece — the footer is a table of contents, not data the
+  // card owns.
+  private get ownRealm(): string | undefined {
+    return (this.args.model as any)?.[realmURL]?.href;
+  }
+
+  get demos() {
+    let realm = this.ownRealm;
+    return [
+      {
+        title: 'Screenshot Card Demo',
+        blurb: 'imperative capture with a format picker',
+        module: 'screenshot-card-demo.gts',
+        url: realm
+          ? `${realm}ScreenshotCardDemo/2039c60b-f928-40d5-84bf-94d61fa8bf71`
+          : undefined,
+      },
+      {
+        title: 'Signed Capture URL Tester',
+        blurb: 'PNG / PDF / print, bare vs signed on a private realm',
+        module: 'signed-capture-url-tester.gts',
+        url: realm
+          ? `${realm}SignedCaptureUrlTester/4e247673-ca96-42e7-a70b-0660c603041e`
+          : undefined,
+      },
+    ];
+  }
+
+  // A capture renders this card with no host actions wired up, so the footer
+  // has to read as prose there rather than as dead buttons.
+  get canNavigate(): boolean {
+    return Boolean(this.args.viewCard && this.ownRealm);
+  }
+
+  openDemo = (url: string | undefined, event: Event) => {
+    if (!url) {
+      return;
+    }
+    event.preventDefault();
+    this.args.viewCard?.(rri(url), 'isolated');
+  };
+
   <template>
     <article class='walkthrough'>
       <header class='hero'>
@@ -135,7 +194,7 @@ class Isolated extends Component<typeof ScreenshotsPdfWalkthrough> {
           behind it rotate.
         </p>
         <ul class='badges'>
-          <li>3 entry points</li>
+          <li>4 entry points</li>
           <li>PNG · PDF</li>
           <li>Auto-invalidated</li>
           <li>Content-addressed</li>
@@ -155,19 +214,25 @@ class Isolated extends Component<typeof ScreenshotsPdfWalkthrough> {
       </section>
 
       <section class='block'>
-        <h2><Route width='18' height='18' /> Three ways to ask for a capture</h2>
+        <h2><Route width='18' height='18' />
+          Four ways to ask for a capture</h2>
         <div class='pillars entry'>
           <div class='entry-card'>
-            <div class='entry-head'><Code width='16' height='16' /><h3>Declarative</h3></div>
-            <p>Add a <code>static screenshots</code> roster to a card. Captured
-              during indexing — no imperative call — and wired into the thumbnail
-              fallback chain.</p>
+            <div class='entry-head'><Code width='16' height='16' /><h3
+              >Declarative</h3></div>
+            <p>Add a
+              <code>static screenshots</code>
+              roster to a card. Captured during indexing — no imperative call —
+              and wired into the thumbnail fallback chain.</p>
             <pre class='code'>{{DECLARATIVE_SNIPPET}}</pre>
           </div>
           <div class='entry-card'>
-            <div class='entry-head'><Wand width='16' height='16' /><h3>Imperative</h3></div>
-            <p>Call the screenshot tool from an AI action or command. It POSTs to
-              <code>/_screenshot-card</code> and hands back the durable URL.</p>
+            <div class='entry-head'><Wand width='16' height='16' /><h3
+              >Imperative</h3></div>
+            <p>Call the screenshot tool from an AI action or command. It POSTs
+              to
+              <code>/_screenshot-card</code>
+              and hands back the durable URL.</p>
             <pre class='code'>{{IMPERATIVE_SNIPPET}}</pre>
           </div>
           <div class='entry-card'>
@@ -175,6 +240,15 @@ class Isolated extends Component<typeof ScreenshotsPdfWalkthrough> {
             <p>Compose a URL and drop it into markup. A public realm needs no
               auth; a private one uses the signed-capture affordances.</p>
             <pre class='code'>{{DSL_SNIPPET}}</pre>
+          </div>
+          <div class='entry-card'>
+            <div class='entry-head'><Terminal width='16' height='16' /><h3
+              >CLI</h3></div>
+            <p>Drive the same
+              <code>/_screenshot-card</code>
+              endpoint from a shell. Writes image files plus a per-capture
+              manifest, so a CI job can capture a set of cards and diff them.</p>
+            <pre class='code'>{{CLI_SNIPPET}}</pre>
           </div>
         </div>
       </section>
@@ -202,7 +276,10 @@ class Isolated extends Component<typeof ScreenshotsPdfWalkthrough> {
               </figcaption>
               <SignedCapture @url={{this.pngUrl}} as |signedUrl error|>
                 {{#if signedUrl}}
-                  <img src={{signedUrl}} alt='Live PNG capture of the target card' />
+                  <img
+                    src={{signedUrl}}
+                    alt='Live PNG capture of the target card'
+                  />
                 {{else if error}}
                   <p class='status status--error'>{{error}}</p>
                 {{else}}
@@ -240,18 +317,31 @@ class Isolated extends Component<typeof ScreenshotsPdfWalkthrough> {
       </section>
 
       <section class='block'>
-        <h2><FilePdf width='18' height='18' /> PDF is a dimension, not a system</h2>
+        <h2><FilePdf width='18' height='18' />
+          PDF is a dimension, not a system</h2>
         <p class='prose'>
-          A PDF is the same pipeline with <code>type: 'pdf'</code> — Chrome's
-          <code>page.pdf()</code> instead of a raster tile. Two capabilities
-          shipped: <strong>declared PDFs</strong> (a <code>type: 'pdf'</code>
-          entry in the <code>static screenshots</code> roster, paper taken from
-          the card's own <code>@page</code> print CSS), and
-          <strong>on-demand PDF</strong> via <code>?type=pdf</code> on the DSL or
-          the POST body. PDF specs refuse raster-only geometry loudly rather than
-          silently ignoring it, and are capped at 20 pages / 10&nbsp;MB. Separately,
-          the <code>PdfDef</code> file family renders PDFs live in a native viewer
-          and paints a real first-page poster via vendored pdf.js at capture time.
+          A PDF is the same pipeline with
+          <code>type: 'pdf'</code>
+          — Chrome's
+          <code>page.pdf()</code>
+          instead of a raster tile. Two capabilities shipped:
+          <strong>declared PDFs</strong>
+          (a
+          <code>type: 'pdf'</code>
+          entry in the
+          <code>static screenshots</code>
+          roster, paper taken from the card's own
+          <code>@page</code>
+          print CSS), and
+          <strong>on-demand PDF</strong>
+          via
+          <code>?type=pdf</code>
+          on the DSL or the POST body. PDF specs refuse raster-only geometry
+          loudly rather than silently ignoring it, and are capped at 20 pages /
+          10&nbsp;MB. Separately, the
+          <code>PdfDef</code>
+          file family renders PDFs live in a native viewer and paints a real
+          first-page poster via vendored pdf.js at capture time.
         </p>
       </section>
 
@@ -270,12 +360,25 @@ class Isolated extends Component<typeof ScreenshotsPdfWalkthrough> {
       <footer class='block outro'>
         <h2>Try the working demos</h2>
         <ul class='links'>
-          <li><strong>Screenshot Card Demo</strong> — imperative capture with a
-            format picker (<code>screenshot-card-demo.gts</code>).</li>
-          <li><strong>Signed Capture URL Tester</strong> — PNG / PDF / print,
-            bare vs signed on a private realm (<code>signed-capture-url-tester.gts</code>).</li>
-          <li><strong>This card</strong> — link a Target above for a live capture
-            of any instance in the realm.</li>
+          {{#each this.demos as |demo|}}
+            <li>
+              {{#if this.canNavigate}}
+                <button
+                  type='button'
+                  class='demo-link'
+                  {{on 'click' (fn this.openDemo demo.url)}}
+                >{{demo.title}}</button>
+              {{else}}
+                <strong>{{demo.title}}</strong>
+              {{/if}}
+              —
+              {{demo.blurb}}
+              (<code>{{demo.module}}</code>).
+            </li>
+          {{/each}}
+          <li><strong>This card</strong>
+            — link a Target above for a live capture of any instance in the
+            realm.</li>
         </ul>
       </footer>
     </article>
@@ -302,7 +405,11 @@ class Isolated extends Component<typeof ScreenshotsPdfWalkthrough> {
         padding: var(--boxel-sp-lg);
         border-radius: var(--boxel-border-radius-xl, 1rem);
         background:
-          radial-gradient(120% 140% at 0% 0%, var(--accent-soft), transparent 60%),
+          radial-gradient(
+            120% 140% at 0% 0%,
+            var(--accent-soft),
+            transparent 60%
+          ),
           var(--muted);
         border: 1px solid var(--border, var(--muted));
       }
@@ -390,7 +497,9 @@ class Isolated extends Component<typeof ScreenshotsPdfWalkthrough> {
         gap: var(--boxel-sp);
       }
       @container (min-width: 46rem) {
-        .entry { grid-template-columns: repeat(3, 1fr); }
+        .entry {
+          grid-template-columns: repeat(3, 1fr);
+        }
       }
       .entry-card {
         display: flex;
@@ -449,7 +558,9 @@ class Isolated extends Component<typeof ScreenshotsPdfWalkthrough> {
         gap: var(--boxel-sp);
       }
       @container (min-width: 44rem) {
-        .demo-grid { grid-template-columns: 1fr 1fr; }
+        .demo-grid {
+          grid-template-columns: 1fr 1fr;
+        }
       }
       .pane {
         display: flex;
@@ -476,7 +587,9 @@ class Isolated extends Component<typeof ScreenshotsPdfWalkthrough> {
         font-weight: 700;
         letter-spacing: 0.04em;
       }
-      .tag--pdf { background: #c2410c; }
+      .tag--pdf {
+        background: #c2410c;
+      }
       .url {
         word-break: break-all;
         font-size: 0.7rem;
@@ -504,10 +617,14 @@ class Isolated extends Component<typeof ScreenshotsPdfWalkthrough> {
         gap: var(--boxel-sp);
       }
       @container (min-width: 40rem) {
-        .pillars { grid-template-columns: 1fr 1fr; }
+        .pillars {
+          grid-template-columns: 1fr 1fr;
+        }
       }
       @container (min-width: 60rem) {
-        .pillars:not(.entry) { grid-template-columns: repeat(3, 1fr); }
+        .pillars:not(.entry) {
+          grid-template-columns: repeat(3, 1fr);
+        }
       }
       .pillar {
         display: flex;
@@ -526,7 +643,9 @@ class Isolated extends Component<typeof ScreenshotsPdfWalkthrough> {
         font-size: var(--boxel-font-size);
         font-weight: 600;
       }
-      .pillar h3 :deep(svg) { color: var(--accent); }
+      .pillar h3 :deep(svg) {
+        color: var(--accent);
+      }
       .pillar p {
         margin: 0;
         font-size: var(--boxel-font-size-sm);
@@ -550,6 +669,28 @@ class Isolated extends Component<typeof ScreenshotsPdfWalkthrough> {
         line-height: 1.5;
       }
 
+      .demo-link {
+        padding: 0;
+        border: 0;
+        background: none;
+        font: inherit;
+        font-weight: 600;
+        color: var(--accent);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        cursor: pointer;
+      }
+
+      .demo-link:hover {
+        text-decoration-thickness: 2px;
+      }
+
+      .demo-link:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+
       .hint {
         margin: 0;
         color: var(--muted-foreground);
@@ -565,7 +706,11 @@ class Isolated extends Component<typeof ScreenshotsPdfWalkthrough> {
         margin: 0;
         padding: var(--boxel-sp-sm);
         border-radius: var(--boxel-border-radius);
-        background: color-mix(in srgb, var(--boxel-error-100, crimson) 12%, transparent);
+        background: color-mix(
+          in srgb,
+          var(--boxel-error-100, crimson) 12%,
+          transparent
+        );
         color: var(--boxel-error-100, crimson);
         font-size: var(--boxel-font-size-sm);
       }
