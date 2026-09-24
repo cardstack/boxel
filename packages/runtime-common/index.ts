@@ -1035,6 +1035,13 @@ export interface Diagnostics
   //
   // Absent on a tombstoned row and on rows written before the stamp existed.
   writeSeq?: number;
+  // On a `prerendered_html` row written by the `prerender_html` job: the
+  // generation of the live `boxel_index` row (same URL and type) that the
+  // row's own generation was read from once the job's spawning index passes
+  // had committed. Equal to the row's generation. Absent when there was no
+  // such index row, in which case the row took the realm's committed
+  // generation.
+  stampedFromIndexGeneration?: number;
   // Host-shell token the prerender server had been told was current when this
   // render started, and again when its response was assembled. Two different
   // values mean the render straddled a host redeploy: the page resolved

@@ -185,6 +185,19 @@
    PRIMARY KEY ( realm_url ) 
 );
 
+ CREATE TABLE IF NOT EXISTS realm_index_commits (
+   realm_url TEXT NOT NULL,
+   generation INTEGER NOT NULL,
+   base_generation INTEGER NOT NULL,
+   pass_id TEXT NOT NULL,
+   job_id INTEGER,
+   urls BLOB,
+   render_only_urls BLOB,
+   full_realm BOOLEAN DEFAULT false NOT NULL,
+   committed_at NOT NULL,
+   PRIMARY KEY ( realm_url, generation ) 
+);
+
  CREATE TABLE IF NOT EXISTS realm_meta (
    realm_url TEXT NOT NULL,
    generation INTEGER NOT NULL,

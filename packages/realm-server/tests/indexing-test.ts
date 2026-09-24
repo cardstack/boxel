@@ -589,14 +589,29 @@ module(basename(import.meta.filename), function () {
         'the prerender_html job completed successfully',
       );
       let prerenderArgs = prerenderJob.args as {
+        spawningIndexPasses: { jobId: number; passId: string }[];
         generation: number;
         spawningJobId: number | null;
         changes: { url: string; operation: string }[];
       };
+      assert.deepEqual(
+        prerenderArgs.spawningIndexPasses.map((pass) => pass.jobId),
+        [indexJob.id],
+        'the job waits on the pass of the index job that spawned it',
+      );
+      let ledger = (await testDbAdapter.execute(
+        `SELECT job_id FROM realm_index_commits WHERE pass_id = $1`,
+        { bind: [prerenderArgs.spawningIndexPasses[0].passId] },
+      )) as { job_id: number }[];
+      assert.deepEqual(
+        ledger.map((row) => Number(row.job_id)),
+        [indexJob.id],
+        'identified by the pass id that pass committed under',
+      );
       assert.strictEqual(
         prerenderArgs.generation,
         1,
-        'the job carries the generation the index pass anticipated',
+        'and carries the generation that pass anticipated, for older workers',
       );
       assert.strictEqual(
         prerenderArgs.spawningJobId,
@@ -621,7 +636,8 @@ module(basename(import.meta.filename), function () {
       // The module pre-warm sweep's wall-clock is attributed to the job that
       // pays it: the prerender job records `preWarmMs`, the index job does not.
       let prerenderResult = prerenderJob.result as {
-        phaseTimings?: { preWarmMs?: unknown } | null;
+        spawningIndexJobIds?: unknown;
+        phaseTimings?: { preWarmMs?: unknown; spawnGateMs?: unknown } | null;
       } | null;
       assert.strictEqual(
         typeof prerenderResult?.phaseTimings?.preWarmMs,
@@ -629,6 +645,19 @@ module(basename(import.meta.filename), function () {
         `the prerender job result records the pre-warm wall-clock, got: ${JSON.stringify(
           prerenderResult,
         )}`,
+      );
+      // And the wait for its spawning pass's commit, together with which
+      // passes it waited on, so a slow render can be split into waiting and
+      // rendering from the job row alone.
+      assert.strictEqual(
+        typeof prerenderResult?.phaseTimings?.spawnGateMs,
+        'number',
+        'the prerender job result records the spawning-pass wait',
+      );
+      assert.deepEqual(
+        prerenderResult?.spawningIndexJobIds,
+        [indexJob.id],
+        'the prerender job result names the index passes it waited on',
       );
     });
 

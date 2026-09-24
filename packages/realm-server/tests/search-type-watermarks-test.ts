@@ -513,19 +513,37 @@ module(basename(import.meta.filename), function () {
       ]);
     });
 
+    // A prerender-html job's swap, from a job that read the realm's committed
+    // generation as `generation` when its visits were released — the value
+    // its type watermarks carry.
+    async function renderOnlySwap({
+      generation,
+      jobId,
+    }: {
+      generation: number;
+      jobId: number;
+    }) {
+      await dbAdapter.execute(
+        `UPDATE realm_generations SET current_generation = $1 WHERE realm_url = $2`,
+        { bind: [generation, realmA] },
+      );
+      let batch = await new IndexWriter(dbAdapter).createBatch(
+        realm(),
+        virtualNetwork,
+        { jobId, reservationId: 1, priority: 0, queueWaitMs: null },
+        { prerenderHtmlOnly: true },
+      );
+      await batch.adoptIndexGenerations([`${realmA}pet-1.json`]);
+      await batch.seedPrerenderedHtmlInvalidations([
+        { url: `${realmA}pet-1.json`, operation: 'update' },
+      ]);
+      await batch.done();
+    }
+
     test('a render-only swap moves the HTML leg of the rows it published, and only that leg', async function (assert) {
       await indexPass();
 
-      let htmlOnly = await new IndexWriter(dbAdapter).createBatch(
-        realm(),
-        virtualNetwork,
-        { jobId: 99, reservationId: 1, priority: 0, queueWaitMs: null },
-        { prerenderHtmlOnly: true, generation: 9 },
-      );
-      await htmlOnly.seedPrerenderedHtmlInvalidations([
-        { url: `${realmA}pet-1.json`, operation: 'update' },
-      ]);
-      await htmlOnly.done();
+      await renderOnlySwap({ generation: 9, jobId: 99 });
 
       assert.deepEqual(await stampedRows(), [
         { typeKey: `${realmA}card-api/CardDef`, index: 1, html: 9 },
@@ -536,21 +554,7 @@ module(basename(import.meta.filename), function () {
     test('a stale render-only swap does not lower the HTML watermark', async function (assert) {
       await indexPass();
       for (let generation of [9, 3]) {
-        let batch = await new IndexWriter(dbAdapter).createBatch(
-          realm(),
-          virtualNetwork,
-          {
-            jobId: generation,
-            reservationId: 1,
-            priority: 0,
-            queueWaitMs: null,
-          },
-          { prerenderHtmlOnly: true, generation },
-        );
-        await batch.seedPrerenderedHtmlInvalidations([
-          { url: `${realmA}pet-1.json`, operation: 'update' },
-        ]);
-        await batch.done();
+        await renderOnlySwap({ generation, jobId: generation });
       }
 
       assert.deepEqual(await stampedRows(), [

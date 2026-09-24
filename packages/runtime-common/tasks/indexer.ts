@@ -24,8 +24,9 @@ import {
   enqueuePrerenderHtmlJob,
   mergePrerenderHtmlChanges,
   skipsPrerenderHtml,
+  type SpawningIndexPass,
 } from '../jobs/prerender-html.ts';
-import type { Stats, IndexPhaseTimings } from '../worker.ts';
+import type { JobInfo, Stats, IndexPhaseTimings } from '../worker.ts';
 
 export { fromScratchIndex, incrementalIndex };
 const DEFAULT_FROM_SCRATCH_JOB_TIMEOUT_SEC = 60 * 60;
@@ -89,10 +90,13 @@ export interface IncrementalArgs extends WorkerArgs {
   deferPrerenderHtml: boolean;
   // Invalidation sets deferred by earlier passes of the same write, unioned
   // into the prerender_html job this pass spawns so one write pays for one
-  // render of each URL. The URLs ride at THIS pass's generation and loader
-  // epoch, which is correct: the render reads current source, so the newest
-  // pass's stamp is the right one for every merged URL — the same rule
-  // `choosePrerenderHtmlCoalesceDecision` applies when it merges two publishes.
+  // render of each URL. The URLs ride under THIS pass's loader epoch, which is
+  // correct: the render reads current source, so the newest pass's epoch is
+  // the right one for every merged URL — the same rule
+  // `choosePrerenderHtmlCoalesceDecision` applies when it merges two
+  // publishes. The job need not wait on the deferring passes: they ran
+  // earlier in the same write and have finished before this pass is
+  // enqueued.
   // Empty on every other index path; see `deferPrerenderHtml` for why it is
   // not optional.
   carriedPrerenderHtmlChanges: IncrementalChange[];
@@ -107,13 +111,18 @@ export interface IncrementalArgs extends WorkerArgs {
 }
 
 // An invalidation set an index pass computed but deliberately did not enqueue
-// a prerender_html job for. The generation and loader epoch are the spawning
-// pass's own, needed only when nothing carries the set forward and the caller
-// has to enqueue it directly.
+// a prerender_html job for. The loader epoch, pass and generation are the
+// deferring pass's own, needed only when nothing carries the set forward and
+// the caller has to enqueue it directly: the pass is the spawning index pass
+// that enqueued job waits on, and the generation is the fallback it carries
+// for older workers (see `PrerenderHtmlArgs.generation`).
 export interface DeferredPrerenderHtml extends JSONTypes.Object {
   changes: IncrementalChange[];
-  generation: number;
   loaderEpoch: string;
+  // Null when the pass ran without a queue job, and on a set from a worker
+  // predating the field.
+  spawningIndexPass: SpawningIndexPass | null;
+  generation: number;
 }
 
 export interface IncrementalResult {
@@ -130,6 +139,10 @@ export interface IncrementalResult {
   // The realm generation this pass committed. Optional so a result produced
   // by an older worker mid-deploy still parses.
   generation?: number;
+  // The committed generation this pass was set up against. Below
+  // `generation - 1` when a peer pass of the realm committed while this one
+  // ran. Optional for the same reason as `generation`.
+  baseGeneration?: number;
   // Between-visit phase decomposition of the job wall (see IndexPhaseTimings).
   // Optional so a result from a worker predating the instrumentation parses.
   phaseTimings?: IndexPhaseTimings;
@@ -188,6 +201,8 @@ export interface FromScratchResult {
   stats: Stats;
   // See IncrementalResult.generation.
   generation?: number;
+  // See IncrementalResult.baseGeneration.
+  baseGeneration?: number;
   // See IncrementalResult.phaseTimings.
   phaseTimings?: IndexPhaseTimings;
 }
@@ -513,6 +528,17 @@ function argsAwaitedByPublish(args: unknown): boolean {
   return isObjectLike(args) && args.awaitedByPublish === true;
 }
 
+// The index pass a spawned prerender_html job waits on: this one. A pass run
+// without a real queue job (`jobId` absent or not positive) has no job whose
+// liveness bounds the wait, so the job waits on nothing and renders against
+// the committed index.
+function spawningIndexPassFor(
+  jobInfo: JobInfo | undefined,
+  passId: string,
+): SpawningIndexPass | null {
+  return jobInfo && jobInfo.jobId > 0 ? { jobId: jobInfo.jobId, passId } : null;
+}
+
 registerQueueJobDefinition({
   jobType: 'incremental-index',
   coalesce: chooseIncrementalCoalesceDecision,
@@ -567,7 +593,12 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       // Fire-and-forget: the index pass must not block on — or fail with —
       // the prerender enqueue. Fires as soon as the invalidation set is
       // known, so HTML rendering can start concurrently with the pass.
-      onInvalidationsReady: ({ changes, generation, loaderEpoch }) => {
+      onInvalidationsReady: ({
+        changes,
+        loaderEpoch,
+        passId,
+        provisionalGeneration,
+      }) => {
         if (skipsPrerenderHtml(realmURL, skipPrerenderHtmlRealms)) {
           // Configured off for this realm. Says so out loud: a realm whose
           // HTML never renders reads, from every other vantage point, exactly
@@ -582,7 +613,10 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
           realmURL,
           realmUsername,
           changes: changes.map(({ url, operation }) => ({ url, operation })),
-          generation,
+          spawningIndexPasses: [spawningIndexPassFor(jobInfo, passId)].filter(
+            (pass) => pass !== null,
+          ),
+          generation: provisionalGeneration,
           loaderEpoch,
           spawningJobId: jobInfo?.jobId ?? null,
           spawningPriority: prerenderSpawnedPriority({
@@ -609,8 +643,14 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       prerenderer,
       realmOwnerUserId: userId,
     });
-    let { stats, ignoreData, invalidations, generation, phaseTimings } =
-      await IndexRunner.fromScratch(currentRun);
+    let {
+      stats,
+      ignoreData,
+      invalidations,
+      generation,
+      baseGeneration,
+      phaseTimings,
+    } = await IndexRunner.fromScratch(currentRun);
 
     log.debug(
       `${jobIdentity(jobInfo)} completed from-scratch indexing for realm ${
@@ -646,6 +686,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       ignoreData: { ...ignoreData },
       stats,
       ...(generation !== undefined ? { generation } : {}),
+      ...(baseGeneration !== undefined ? { baseGeneration } : {}),
       ...(phaseTimings !== undefined ? { phaseTimings } : {}),
     };
   };
@@ -703,8 +744,9 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       // See fromScratchIndex — same fire-and-forget early enqueue.
       onInvalidationsReady: ({
         changes: htmlChanges,
-        generation,
         loaderEpoch,
+        passId,
+        provisionalGeneration,
       }) => {
         let changes = htmlChanges.map(({ url, operation }) => ({
           url,
@@ -720,8 +762,9 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
               carriedPrerenderHtmlChanges,
               changes,
             ),
-            generation,
             loaderEpoch,
+            spawningIndexPass: spawningIndexPassFor(jobInfo, passId),
+            generation: provisionalGeneration,
           };
           return;
         }
@@ -732,7 +775,10 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
             carriedPrerenderHtmlChanges,
             changes,
           ),
-          generation,
+          spawningIndexPasses: [spawningIndexPassFor(jobInfo, passId)].filter(
+            (pass) => pass !== null,
+          ),
+          generation: provisionalGeneration,
           loaderEpoch,
           spawningJobId: jobInfo?.jobId ?? null,
           spawningPriority: prerenderSpawnedPriority({
@@ -761,6 +807,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       invalidatedTypes,
       ignoreData,
       generation,
+      baseGeneration,
       phaseTimings,
     } = await IndexRunner.incremental(currentRun, {
       changes: changes.map(({ operation, url }) => ({
@@ -781,6 +828,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       ...(invalidatedTypes !== undefined ? { invalidatedTypes } : {}),
       stats,
       ...(generation !== undefined ? { generation } : {}),
+      ...(baseGeneration !== undefined ? { baseGeneration } : {}),
       ...(phaseTimings !== undefined ? { phaseTimings } : {}),
       ...(deferredPrerenderHtml !== undefined ? { deferredPrerenderHtml } : {}),
       coalescedCallers: getCoalescedCallers(args),

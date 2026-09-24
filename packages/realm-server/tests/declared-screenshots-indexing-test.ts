@@ -4,6 +4,7 @@ import { basename } from 'path';
 
 import {
   declaredCaptureSpecHash,
+  findLiveInstanceGeneration,
   rri,
   type ScreenshotManifest,
 } from '@cardstack/runtime-common';
@@ -481,6 +482,25 @@ module(basename(import.meta.filename), function (hooks) {
         'ledger rows key the generation the row was rendered at',
       );
     }
+    // The serving gate resolves a capture under the live index row's
+    // generation, so the ledger has to key that exact number — which the
+    // job reads from the index row once its spawning pass has committed.
+    let liveGeneration = await findLiveInstanceGeneration(testDbAdapter, {
+      realmURL: realm.url,
+      instanceURL: `${testRealm}widget`,
+    });
+    assert.notStrictEqual(liveGeneration, undefined, 'the instance is live');
+    assert.deepEqual(
+      [...new Set(ledger.map((ledgerRow) => ledgerRow.source_generation))],
+      [liveGeneration],
+      'ledger rows key the live index row’s generation',
+    );
+    assert.strictEqual(
+      (row!.diagnostics as { stampedFromIndexGeneration?: number } | null)
+        ?.stampedFromIndexGeneration,
+      liveGeneration,
+      'the HTML row records the index generation its stamp was read from',
+    );
     assert.ok(
       startsWith(objectBytes(card.objectKey), PNG_MAGIC),
       'the fitted capture is a PNG',

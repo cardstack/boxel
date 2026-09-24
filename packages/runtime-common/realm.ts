@@ -4700,6 +4700,11 @@ export class Realm {
         realmURL: this.url,
         realmUsername: await this.getRealmOwnerUsername(),
         changes: deferred.changes,
+        // The deferring pass has finished by now, so the job's wait on it
+        // ends on its first probe.
+        spawningIndexPasses: deferred.spawningIndexPass
+          ? [deferred.spawningIndexPass]
+          : [],
         generation: deferred.generation,
         loaderEpoch: deferred.loaderEpoch,
         spawningJobId: null,
