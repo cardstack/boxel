@@ -182,7 +182,7 @@ export class RealmPolicyCache {
     }
     if (!this.#registered) {
       this.#registered = true;
-      policyCaches.add(new WeakRef(this));
+      policyCaches.add(new WeakRefConstructor(this));
     }
     let current = this.#current;
     let refresh: Refresh = {
@@ -244,7 +244,19 @@ export class RealmPolicyCache {
 // lazily, so the realm whose index moved may not be mounted here at all. Held
 // weakly, so a cache goes when its realm does. A cache registers when it
 // first compiles, so a realm with no policy is never here.
-const policyCaches = new Set<WeakRef<RealmPolicyCache>>();
+const policyCaches = new Set<WeakHandle<RealmPolicyCache>>();
+
+// `WeakRef`, reached without naming its type. `packages/postgres` typechecks
+// the realm, and so this module, under a `lib` that predates it. Every runtime
+// the realm runs in has it.
+interface WeakHandle<T> {
+  deref(): T | undefined;
+}
+const WeakRefConstructor = (
+  globalThis as unknown as {
+    WeakRef: new <T extends object>(target: T) => WeakHandle<T>;
+  }
+).WeakRef;
 
 // The index of the realm at `realmURL` has moved: its index swapped, here or on
 // a peer. Every compiled policy in the process that reads from that realm is
@@ -285,15 +297,30 @@ function readsFrom(inputs: string[], realmURL: string): boolean {
   return inputs.some((input) => input.startsWith(realmURL));
 }
 
-// The part of a policy card's row that compiling reads. The version is the
-// source fingerprint, so a row reindexed from unchanged bytes keeps it. A row
-// with no fingerprint is identified by its generation instead, which changes
-// on every reindex. That recompiles more often than needed, and never less.
+// Everything in a policy card's row that compiling reads, as one fingerprint.
+// The source fingerprint alone is not enough: a row reindexed from unchanged
+// bytes keeps its `meta.version`, yet a changed card definition can change the
+// adoption chain the row records and the attributes it serialized. Either one
+// changes what the policy compiles to.
 function rowIdentity(row: InstanceOrError | undefined): string {
   if (!row) {
     return 'missing';
   }
-  return `${row.type}:${row.sourceContentHash ?? `generation ${row.generation}`}`;
+  let read =
+    row.type === 'instance'
+      ? {
+          types: row.types,
+          rules: (row.instance.attributes as { rules?: unknown } | undefined)
+            ?.rules,
+        }
+      : { error: row.error?.message };
+  return computeContentHash(
+    stableStringify({
+      type: row.type,
+      version: row.sourceContentHash,
+      ...read,
+    }) ?? '',
+  );
 }
 
 async function stillCurrent(
@@ -555,6 +582,16 @@ async function compilePredicate(
         ADMITTED_CALL_DENIAL.test(issue.message)
       ),
   );
+  // A `where` with nothing in it parses to a program with no body, which the
+  // profile has nothing to refuse. It is not a grant with no condition: that
+  // is written by leaving `where` out, and an empty one is what an editor
+  // leaves behind when the predicate is cleared. Read as unconditional, it
+  // would widen access on a slip.
+  if (program.body == null) {
+    return {
+      problem: '`where` is empty; a grant with no condition leaves `where` out',
+    };
+  }
   if (refusals.length > 0) {
     return {
       problem: `the \`policy\` profile refuses \`where\`: ${refusals
@@ -578,6 +615,7 @@ export interface BxlPolicyParser {
     source: string,
     options: { profile: 'policy' },
   ): {
+    body: unknown;
     canonicalSource: string;
     profileIssues: {
       code: string;

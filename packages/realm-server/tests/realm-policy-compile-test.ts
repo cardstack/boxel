@@ -323,7 +323,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a predicate that reads params() is refused by the policy profile, and the rest of the policy compiles', async function (assert) {
+  test('a predicate that reads params(), does not parse, or is empty is refused, and the rest of the policy compiles', async function (assert) {
     await writeTo(
       org,
       'policies/education.json',
@@ -331,6 +331,7 @@ module(basename(import.meta.filename), function (hooks) {
         { operation: 'read', where: '.teacherIds | contains(actor())' },
         { operation: 'update', where: 'params("teacher") == actor()' },
         { operation: 'delete', where: '.teacherIds ==' },
+        { operation: 'archive', where: '   ' },
       ]),
     );
     let policy = await compiled();
@@ -344,10 +345,11 @@ module(basename(import.meta.filename), function (hooks) {
       [
         { code: 'invalid-predicate', path: 'rules[0].grants[1].where' },
         { code: 'invalid-predicate', path: 'rules[0].grants[2].where' },
+        { code: 'invalid-predicate', path: 'rules[0].grants[3].where' },
       ],
       'each refusal is recorded against its grant',
     );
-    let [paramsIssue, parseIssue] = (policy?.issues ?? []).map(
+    let [paramsIssue, parseIssue, emptyIssue] = (policy?.issues ?? []).map(
       (issue) => issue.message,
     );
     assert.true(
@@ -357,6 +359,44 @@ module(basename(import.meta.filename), function (hooks) {
     assert.true(
       String(parseIssue).includes('does not parse'),
       `a predicate that does not parse says so: ${parseIssue}`,
+    );
+    assert.true(
+      String(emptyIssue).includes('`where` is empty'),
+      `an empty predicate is refused rather than read as no condition: ${emptyIssue}`,
+    );
+  });
+
+  // The card's own bytes never change here, so its `meta.version` does not
+  // either. What changes is the definition it adopts from, and with it the
+  // adoption chain its row records.
+  test('a policy card whose type stops being a RealmPolicy stops granting, though its own bytes are unchanged', async function (assert) {
+    let subtype = (base: string) => `
+      import { ${base} } from "${base === 'RealmPolicy' ? '@cardstack/catalog/realm-policy/realm-policy' : '@cardstack/base/card-api'}";
+      export class OrgPolicy extends ${base} {}
+    `;
+    await writeTo(org, 'org-policy.gts', subtype('RealmPolicy'));
+    await writeTo(
+      org,
+      'policies/subtyped.json',
+      policyCard(GRANTS, { module: rri('../org-policy'), name: 'OrgPolicy' }),
+    );
+    await pointAt(`${ORG}policies/subtyped`);
+    let before = await compiled();
+    assert.deepEqual(before?.issues, [], 'a subtype of RealmPolicy compiles');
+    assert.strictEqual(before?.rules[0].grants.length, 4);
+
+    await writeTo(org, 'org-policy.gts', subtype('CardDef'));
+    let after = await compiled();
+    assert.strictEqual(
+      after?.version,
+      before?.version,
+      "the card's meta.version is unchanged",
+    );
+    assert.deepEqual(after?.rules, [], 'it grants nothing');
+    assert.deepEqual(
+      after?.issues.map(({ code }) => code),
+      ['not-a-policy'],
+      'because it is no longer a RealmPolicy',
     );
   });
 
