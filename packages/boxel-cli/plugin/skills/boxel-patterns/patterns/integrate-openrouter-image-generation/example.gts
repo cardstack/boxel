@@ -149,6 +149,7 @@ export default class GenerateOpenRouterImageCommand extends Command<
       path,
       realm: input.targetRealmUrl,
       base64Content: image.base64Content,
+      contentType: image.contentType,
       useNonConflictingFilename: true,
     });
 
