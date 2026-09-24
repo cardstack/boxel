@@ -37,8 +37,8 @@ interface PrerenderHtmlJobRow {
   args: {
     realmURL: string;
     realmUsername: string;
-    generation: number | null;
-    spawningIndexJobIds?: number[];
+    generation: number;
+    spawningIndexPasses?: { jobId: number; passId: string }[];
     loaderEpoch: string;
     changes: { url: string; operation: string }[];
   };
@@ -184,16 +184,15 @@ module(basename(import.meta.filename), function (hooks) {
     status = 'unfulfilled',
     operation = 'update',
     finishedMinutesAgo,
-    spawningIndexJobIds,
+    spawningIndexPasses,
   }: {
     realmURL: string;
-    // Null for a job spawned by index passes, which names them instead.
-    generation: number | null;
+    generation: number;
     urls: string[];
     status?: string;
     operation?: string;
     finishedMinutesAgo?: number;
-    spawningIndexJobIds?: number[];
+    spawningIndexPasses?: { jobId: number; passId: string }[];
   }) {
     let job = await insertJob(dbAdapter, {
       job_type: 'prerender_html',
@@ -203,7 +202,7 @@ module(basename(import.meta.filename), function (hooks) {
         realmURL,
         realmUsername: 'owner',
         generation,
-        ...(spawningIndexJobIds ? { spawningIndexJobIds } : {}),
+        ...(spawningIndexPasses ? { spawningIndexPasses } : {}),
         loaderEpoch: '0',
         spawningJobId: null,
         coalescedPublishes: null,
@@ -515,8 +514,9 @@ module(basename(import.meta.filename), function (hooks) {
     // stamps yet, and will read them from a commit newer than this row.
     await seedPrerenderHtmlJob({
       realmURL,
-      generation: null,
-      spawningIndexJobIds: [777],
+      // The anticipated generation, read only by older workers.
+      generation: 5,
+      spawningIndexPasses: [{ jobId: 777, passId: 'pass-777' }],
       urls: [`${realmURL}mango.json`],
     });
 
@@ -547,8 +547,8 @@ module(basename(import.meta.filename), function (hooks) {
     await seedIndexCommit({ realmURL, jobId: 778, generation: 3 });
     await seedPrerenderHtmlJob({
       realmURL,
-      generation: null,
-      spawningIndexJobIds: [778],
+      generation: 3,
+      spawningIndexPasses: [{ jobId: 778, passId: 'pass-778' }],
       urls: [`${realmURL}mango.json`],
     });
 
@@ -561,8 +561,8 @@ module(basename(import.meta.filename), function (hooks) {
     let jobs = await prerenderHtmlJobs(realmURL);
     assert.strictEqual(jobs.length, 1, 'the repair coalesced into one job');
     assert.deepEqual(
-      jobs[0].args.spawningIndexJobIds,
-      [778],
+      jobs[0].args.spawningIndexPasses,
+      [{ jobId: 778, passId: 'pass-778' }],
       'the coalesced job still waits on its spawning pass',
     );
     assert.strictEqual(

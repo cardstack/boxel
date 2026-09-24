@@ -652,8 +652,10 @@ function parseDeferredPrerenderHtml(
   if (!isObjectLike(value) || Array.isArray(value)) {
     return undefined;
   }
-  let { changes, spawningIndexPass, generation, loaderEpoch } =
-    value as Record<string, PgPrimitive>;
+  let { changes, spawningIndexPass, generation, loaderEpoch } = value as Record<
+    string,
+    PgPrimitive
+  >;
   if (
     !Array.isArray(changes) ||
     typeof generation !== 'number' ||

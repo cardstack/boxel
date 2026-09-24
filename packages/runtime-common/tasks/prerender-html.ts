@@ -267,7 +267,10 @@ function choosePrerenderHtmlCoalesceDecision(
             existingArgs.spawningIndexPasses,
             incomingArgs.spawningIndexPasses,
           ),
-          generation: Math.max(existingArgs.generation, incomingArgs.generation),
+          generation: Math.max(
+            existingArgs.generation,
+            incomingArgs.generation,
+          ),
           loaderEpoch: newest.loaderEpoch,
           // The render scope follows the same rule as the epoch.
           spawningJobId:

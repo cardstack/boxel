@@ -589,20 +589,29 @@ module(basename(import.meta.filename), function () {
         'the prerender_html job completed successfully',
       );
       let prerenderArgs = prerenderJob.args as {
-        spawningIndexJobIds: number[];
-        generation: number | null;
+        spawningIndexPasses: { jobId: number; passId: string }[];
+        generation: number;
         spawningJobId: number | null;
         changes: { url: string; operation: string }[];
       };
       assert.deepEqual(
-        prerenderArgs.spawningIndexJobIds,
+        prerenderArgs.spawningIndexPasses.map((pass) => pass.jobId),
         [indexJob.id],
-        'the job waits on the index pass that spawned it, by job id',
+        'the job waits on the pass of the index job that spawned it',
+      );
+      let ledger = (await testDbAdapter.execute(
+        `SELECT job_id FROM realm_index_commits WHERE pass_id = $1`,
+        { bind: [prerenderArgs.spawningIndexPasses[0].passId] },
+      )) as { job_id: number }[];
+      assert.deepEqual(
+        ledger.map((row) => Number(row.job_id)),
+        [indexJob.id],
+        'identified by the pass id that pass committed under',
       );
       assert.strictEqual(
         prerenderArgs.generation,
-        null,
-        'and names no generation, which that pass allocates only at commit',
+        1,
+        'and carries the generation that pass anticipated, for older workers',
       );
       assert.strictEqual(
         prerenderArgs.spawningJobId,

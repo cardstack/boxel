@@ -1373,23 +1373,28 @@ LIMIT 20;
 
 ### A prerender_html job's wait on its spawning passes
 
-An index pass enqueues its `prerender_html` job as soon as its invalidation set is fixed, mid-pass, but it takes its generation only when it commits. So the job's args name the pass by job id (`spawningIndexJobIds`) rather than by generation, and its visits wait until each of those jobs has a `realm_index_commits` row — or has stopped running without one (a failed commit, a deleted realm), in which case the job renders against the committed index and logs a `warn` naming the spawner. A peer pass's commit never releases the wait, even though it advances `current_generation`. A reconcile repair has no spawning passes and names the committed `generation` it was spawned from instead; a job enqueued by a worker predating the field carries only `generation`, and waits for `current_generation` to reach it.
+An index pass enqueues its `prerender_html` job as soon as its invalidation set is fixed, mid-pass, but it takes its generation only when it commits. So the job's args name each spawning pass as `spawningIndexPasses: [{ jobId, passId }]`, where `passId` is the id its batch minted. The job's visits wait until each `passId` has a `realm_index_commits` row, or until that pass's job has stopped running without one (a failed commit, a deleted realm). In that case the job renders against the committed index and logs a `warn` naming the job and pass.
+
+The wait is keyed on the pass rather than the job because one job id can commit twice: a job whose reservation expires, or whose worker dies between its commit and its resolve, runs again under the same id with a new pass. A peer pass's commit never releases the wait either, even though it advances `current_generation`.
+
+A reconcile repair has no spawning passes, and waits on the committed `generation` it was spawned from, which its first probe passes. A job enqueued by a worker predating `spawningIndexPasses` waits for `current_generation` to reach its `generation`. Spawned jobs carry the generation their pass anticipated in `generation` too, but only an older worker reads it.
 
 Once released, the job reads each URL's live `boxel_index.generation` and stamps that onto the URL's `prerendered_html` row (and its declared-screenshot ledger rows' `source_generation`), recording it as `prerendered_html.diagnostics.stampedFromIndexGeneration`. A URL with no index row of that type takes the realm's committed generation and carries no such field. The job result's `generation` is that committed generation.
 
-The job result records the wait: `spawningIndexJobIds` (the passes it waited on, after any coalescing) and `phaseTimings.spawnGateMs`.
+The job result records the wait: `spawningIndexJobIds` (the jobs of the passes it waited on, after any coalescing) and `phaseTimings.spawnGateMs`. The pass ids themselves are on the job's `args`.
 
 ```sql
 -- Recent prerender_html jobs of a realm: how long each waited, and on which
 -- commits.
 SELECT j.id,
        (j.result->'phaseTimings'->>'spawnGateMs')::int AS spawn_gate_ms,
-       j.result->'spawningIndexJobIds'                 AS spawners,
+       j.args->'spawningIndexPasses'                   AS spawning_passes,
        (j.result->>'generation')::int                  AS rendered_against,
        (SELECT jsonb_agg(c.generation ORDER BY c.generation)
           FROM realm_index_commits c
          WHERE c.realm_url = '<realm-url>'
-           AND c.job_id IN (SELECT jsonb_array_elements_text(j.result->'spawningIndexJobIds')::int)
+           AND c.pass_id IN (SELECT p->>'passId'
+                               FROM jsonb_array_elements(j.args->'spawningIndexPasses') p)
        )                                               AS spawner_commits
 FROM jobs j
 WHERE j.job_type = 'prerender_html'
@@ -1400,7 +1405,7 @@ LIMIT 20;
 ```
 
 - **A long `spawn_gate_ms`** is the job waiting out its spawning pass's remaining runtime, not a slow render. On a from-scratch spawn it can cover most of the index pass.
-- **`spawner_commits` empty for a listed spawner** means that pass never committed: the job rendered against whatever production held, and its log has a `rendering against the committed index: spawning index job <id> stopped running without committing` warning.
+- **`spawner_commits` shorter than `spawning_passes`** means a pass never committed. The job rendered against whatever production held, and its log has a `rendering against the committed index: spawning index job <id> stopped running without committing pass <passId>` warning.
 - **A row whose `generation` differs from `stampedFromIndexGeneration`** should not exist; the two are written together.
 
 ### What Mode K can't tell you
