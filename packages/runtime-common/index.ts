@@ -1784,6 +1784,20 @@ export * from './card-operations/client.ts';
 // `@cardstack/runtime-common/card-operations` directly and takes that cost on
 // purpose.
 export type * from './card-operations/types.ts';
+// The compiled-policy cache reaches bxl only through a specifier TypeScript
+// cannot follow, so exporting it from the barrel costs no consumer that
+// typecheck program. The realm server announces other realms' index moves to
+// it through `noteRealmIndexMoved`.
+export {
+  noteRealmIndexMoved,
+  realmPolicyRef,
+} from './card-operations/policy.ts';
+export type {
+  CompiledOperationGrant,
+  CompiledPolicyPredicate,
+  CompiledPolicyRule,
+  CompiledRealmPolicy,
+} from './card-operations/policy.ts';
 export * from './query-canonicalization.ts';
 export * from './searchable-routes.ts';
 export * from './catalog.ts';
