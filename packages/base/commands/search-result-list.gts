@@ -227,8 +227,6 @@ interface EntryResultRowSignature {
     kind: string | undefined;
     format: Format;
     context?: CardContext;
-    // Full-text match relevance, shown as a chip when present.
-    matchRelevance?: number | undefined;
     // Title/name to show before hydration completes or when it fails.
     fallbackLabel?: string | undefined;
   };
@@ -258,14 +256,6 @@ export class EntryResultRow extends GlimmerComponent<EntryResultRowSignature> {
     return this.cardResource?.cardError;
   }
 
-  private get relevanceLabel(): string | undefined {
-    let relevance = this.args.matchRelevance;
-    if (relevance == null || !Number.isFinite(relevance)) {
-      return undefined;
-    }
-    return relevance.toFixed(2);
-  }
-
   <template>
     <li
       class='result-entry {{@format}}'
@@ -289,19 +279,11 @@ export class EntryResultRow extends GlimmerComponent<EntryResultRowSignature> {
           <span class='entry-fallback'>{{@fallbackLabel}}</span>
         {{/if}}
       </span>
-      {{#if this.relevanceLabel}}
-        <span
-          class='relevance-chip'
-          title='Full-text match relevance'
-          data-test-entry-relevance={{@url}}
-        >{{this.relevanceLabel}}</span>
-      {{/if}}
     </li>
     <style scoped>
       .result-entry {
         display: flex;
         align-items: center;
-        justify-content: space-between;
         gap: var(--boxel-sp-xs);
         margin-bottom: var(--boxel-sp-xxs);
       }
@@ -311,14 +293,6 @@ export class EntryResultRow extends GlimmerComponent<EntryResultRowSignature> {
       .entry-error,
       .entry-fallback {
         font-weight: 500;
-      }
-      .relevance-chip {
-        flex-shrink: 0;
-        font: 500 var(--boxel-font-xs);
-        color: var(--boxel-450);
-        background-color: var(--boxel-100);
-        border-radius: var(--boxel-border-radius-sm);
-        padding: 0 var(--boxel-sp-xxxs);
       }
     </style>
   </template>

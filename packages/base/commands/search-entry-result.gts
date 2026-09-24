@@ -77,7 +77,6 @@ export class SearchEntriesResult extends CardDef {
                 @kind={{result.kind}}
                 @format='atom'
                 @context={{@context}}
-                @matchRelevance={{result.matchRelevance}}
                 @fallbackLabel={{if
                   result.cardTitle
                   result.cardTitle

@@ -40,7 +40,6 @@ interface RowSpec {
   kind?: string;
   cardTitle?: string;
   name?: string;
-  matchRelevance?: number;
 }
 
 // Supplies the CardContext the operator-mode container provides in production,
@@ -227,23 +226,19 @@ module('Integration | search-entries-result', function (hooks) {
       assert.dom('[data-test-toggle-show-button]').containsText('See Less');
     });
 
-    test('surfaces match relevance and the incomplete signal', async function (assert) {
+    test('surfaces the incomplete signal', async function (assert) {
       await renderEntriesResult({
         rows: [
           {
             url: 'http://test/Author/1',
             kind: 'card',
             cardTitle: 'Ada Lovelace',
-            matchRelevance: 0.6073,
           },
         ],
         total: 4,
         incomplete: true,
       });
 
-      assert
-        .dom('[data-test-entry-relevance="http://test/Author/1"]')
-        .hasText('0.61');
       assert
         .dom('[data-test-search-entries-count]')
         .hasText('1 result (incomplete: a realm failed)');
