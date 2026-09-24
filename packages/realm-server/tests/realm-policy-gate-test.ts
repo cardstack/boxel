@@ -126,8 +126,9 @@ type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
 // Two rules name `Classroom`, so a grant in either one admits a read. The
 // writes on `Classroom` are the named operations `rename` and
 // `appendActivity`, granted outright, and a `delete` that rests on a
-// predicate. `Bulletin` takes its plain writes outright. The one `Syllabus`
-// grant rests on a predicate that throws for any title that is not a number.
+// predicate. `Bulletin` takes its plain writes outright. A `Syllabus` read
+// rests on a predicate that throws for any title that is not a number, or on
+// one annotated as reading a snapshot tier, which the gate never evaluates.
 const RULES: Rule[] = [
   {
     targetType: CLASSROOM,
@@ -149,7 +150,10 @@ const RULES: Rule[] = [
   },
   {
     targetType: SYLLABUS,
-    grants: [{ operation: 'read', where: '(.title | tonumber) > 0' }],
+    grants: [
+      { operation: 'read', where: '(.title | tonumber) > 0' },
+      { operation: 'read', where: { bxl: 'true', snapshot: true } },
+    ],
   },
 ];
 
@@ -767,7 +771,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   module('fail closed', function () {
-    test('a predicate that throws does not hold', async function (assert) {
+    test('a predicate that throws does not hold, and one that reads a snapshot tier is never evaluated', async function (assert) {
       assert.strictEqual(
         (await getCard(`${EDUCATION}syllabi/course-42`, AUTH.teacher())).status,
         200,
@@ -781,7 +785,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(
         gateStats().predicateEvaluations,
         2,
-        'both were evaluated',
+        'the throwing predicate was evaluated for both, and the snapshot one for neither',
       );
     });
 

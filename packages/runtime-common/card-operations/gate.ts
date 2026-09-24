@@ -145,9 +145,9 @@ export async function gateOperation(
   if (base === 'readSource' || base === 'query') {
     throw refuse();
   }
-  // A rule matches the type the index recorded for the target. A type target
-  // has no index row, and a file's row records no adoption chain, so no rule
-  // can match either.
+  // A rule matches the adoption chain the index recorded on the target's card
+  // row. A type target has no row, and a file is not a card, so neither is
+  // matched by a rule here.
   if (target.kind !== 'instance') {
     throw refuse();
   }
@@ -187,6 +187,12 @@ export async function gateOperation(
   let actor = scope.caller.kind === 'user' ? scope.caller.actor : undefined;
   for (let candidate of matched) {
     let where = candidate.grant.where!;
+    // A predicate annotated as reading a snapshot tier asks for computed or
+    // linked values, and the gate reads the stored source alone. So it is
+    // never evaluated, and its grant admits nothing.
+    if (where.snapshot) {
+      continue;
+    }
     stats.predicateEvaluations++;
     if (await holds(core, where, subject, actor)) {
       return { kind: 'granted', grant: candidate };
@@ -288,10 +294,6 @@ async function predicateSubject(
 // Whether one predicate holds for this caller. Only `true` holds. Anything
 // else it answers, and any way it fails, does not.
 //
-// A predicate annotated as reading a snapshot tier asks for computed or
-// linked values, and the gate reads the stored source alone. So it is never
-// evaluated, and its grant admits nothing.
-//
 // It runs through the transform runner, the one BXL entry that carries the
 // request context a predicate reads. `params()` is not supplied, so a
 // predicate cannot read the payload even where compiling let one through.
@@ -306,9 +308,6 @@ async function holds(
   subject: PredicateSubject,
   actor: string | undefined,
 ): Promise<boolean> {
-  if (where.snapshot) {
-    return false;
-  }
   try {
     let bxl = await loadBxlTransform();
     let realmConfig = where.canonical.includes('realmConfig')
