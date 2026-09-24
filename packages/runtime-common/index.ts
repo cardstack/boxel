@@ -1565,6 +1565,7 @@ export {
   CONTENT_HASH_HEAD_BYTES,
   CONTENT_HASH_TAIL_BYTES,
 } from './content-hash.ts';
+export { uint8ArrayToBase64 } from './base64.ts';
 export type { FileSizeLimits } from './write-size-validation.ts';
 export {
   isSplicedSource,

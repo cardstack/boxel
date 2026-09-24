@@ -43,7 +43,6 @@ export async function writeGeneratedImageFile(
     path: `${pathStem}.${image.extension}`,
     realm,
     base64Content: image.base64Content,
-    contentType: image.contentType,
     useNonConflictingFilename: true,
   });
 
