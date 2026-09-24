@@ -171,6 +171,7 @@ module('Integration | card-delete', function (hooks) {
             },
           },
         },
+        'notes.txt': 'Some notes',
         'realm.json': realmConfigCardJSON({
           name: 'Test Workspace 1',
           backgroundURL:
@@ -217,6 +218,47 @@ module('Integration | card-delete', function (hooks) {
     );
     let notFound = await adapter.openFile('Pet/mango.json');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
+    assert.dom('[data-test-delete-modal-container]').doesNotExist();
+  });
+
+  test('can delete a file from the index card stack item', async function (assert) {
+    setCardInOperatorModeState([`${testRealmURL}index`]);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    assert.ok(
+      await adapter.openFile('notes.txt'),
+      'file exists in file system',
+    );
+    await click('[data-test-boxel-filter-list-button="All Files"]');
+    await triggerEvent(
+      `[data-test-cards-grid-item="${testRealmURL}notes.txt"] .field-component-card`,
+      'mouseenter',
+    );
+    await click(
+      `[data-test-overlay-card="${testRealmURL}notes.txt"] [data-test-overlay-more-options]`,
+    );
+    await click('[data-test-boxel-menu-item-text="Delete"]');
+    await waitFor(`[data-test-delete-modal="${testRealmURL}notes.txt"]`);
+    assert
+      .dom(`[data-test-delete-modal="${testRealmURL}notes.txt"]`)
+      .containsText('Delete the file notes.txt?');
+
+    await click('[data-test-confirm-delete-button]');
+
+    await waitUntil(
+      () =>
+        !document.querySelector(
+          `[data-test-cards-grid-item="${testRealmURL}notes.txt"]`,
+        ),
+    );
+    assert.strictEqual(
+      await adapter.openFile('notes.txt'),
+      undefined,
+      'file does not exist',
+    );
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
   });
 

@@ -36,6 +36,7 @@ import {
   codeRefWithAbsoluteIdentifier,
   identifyCard,
   isCardInstance,
+  isFileDefInstance,
   isResolvedCodeRef,
   CardError,
   loadCardDef,
@@ -98,7 +99,12 @@ import type RealmServer from '../../services/realm-server';
 import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
 import type ToolService from '../../services/tool-service';
-import type { CardContext, CardDef, Format } from '@cardstack/base/card-api';
+import type {
+  CardContext,
+  CardDef,
+  FileDef,
+  Format,
+} from '@cardstack/base/card-api';
 import type { Spec } from '@cardstack/base/spec';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
@@ -130,6 +136,7 @@ const CodeSubmodeNewFileOptions: TemplateOnlyComponent = <template>
 interface CardToDelete {
   id: string;
   title: string;
+  isFile?: boolean;
 }
 
 function isInteractiveTarget(target: EventTarget | null): boolean {
@@ -550,6 +557,26 @@ export default class InteractSubmode extends Component {
   @action
   private async requestDeleteCard(card: CardDef | URL | string): Promise<void> {
     let cardToDelete: CardToDelete | undefined;
+    let id =
+      typeof card === 'string' || card instanceof URL
+        ? new URL(card).href
+        : card.id;
+    if (detectStackItemTypeForTarget(card, id, this.store) === 'file') {
+      let fileDef = isFileDefInstance<FileDef>(card)
+        ? card
+        : await this.store.get<FileDef>(id, { type: 'file-meta' });
+      // A file whose metadata fails to load is still deletable; fall back to
+      // its URL's filename for the dialog.
+      let title = isFileDefInstance<FileDef>(fileDef)
+        ? fileDef.name
+        : undefined;
+      this.cardToDelete = {
+        id,
+        title: title || decodeURIComponent(id.split('/').pop() ?? id),
+        isFile: true,
+      };
+      return;
+    }
     if (typeof card === 'object' && 'id' in card) {
       let loadedCard = card as CardDef;
       cardToDelete = {
@@ -1010,7 +1037,8 @@ export default class InteractSubmode extends Component {
             @isDeleteRunning={{this.delete.isRunning}}
           >
             <:content>
-              Delete the card
+              Delete the
+              {{if this.cardToDelete.isFile 'file' 'card'}}
               <strong>{{this.cardToDelete.title}}</strong>?
             </:content>
           </DeleteModal>

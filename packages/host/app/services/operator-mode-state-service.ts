@@ -33,7 +33,11 @@ import {
 
 import type { Submode } from '@cardstack/host/components/submode-switcher';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
-import { StackItem, type StackItemType } from '@cardstack/host/lib/stack-item';
+import {
+  StackItem,
+  detectStackItemTypeForTarget,
+  type StackItemType,
+} from '@cardstack/host/lib/stack-item';
 
 import {
   file,
@@ -398,7 +402,15 @@ export default class OperatorModeStateService extends Service {
     return newItem;
   }
 
+  // Deletes a card instance, or a file when the id names one (a FileDef row
+  // in a cards grid routes its delete here too).
   async deleteCard(cardId: string) {
+    if (
+      detectStackItemTypeForTarget(undefined, cardId, this.store) === 'file'
+    ) {
+      await this.deleteFile(cardId);
+      return;
+    }
     let cardRealmUrl = (await this.network.authedFetch(cardId)).headers.get(
       'X-Boxel-Realm-Url',
     );
@@ -424,6 +436,34 @@ export default class OperatorModeStateService extends Service {
     let cardPath = realmPaths.local(rri(`${cardId}.json`));
     this.recentFilesService.removeRecentFile(cardPath);
     this.recentCardsService.remove(cardId);
+  }
+
+  private async deleteFile(fileId: string) {
+    // Prefer the realm registry: the header lookup below GETs the file's
+    // bytes, which can be large for media.
+    let fileRealm: string | null | undefined = this.realm.realmOf(rri(fileId));
+    if (!fileRealm) {
+      fileRealm = (await this.network.authedFetch(fileId)).headers.get(
+        'X-Boxel-Realm-Url',
+      );
+    }
+    if (!fileRealm) {
+      throw new Error(`Could not determine the realm for file "${fileId}"`);
+    }
+
+    await this.store.delete(fileId, { type: 'file-meta' });
+
+    let items: StackItem[] = [];
+    for (let stack of this._state.stacks || []) {
+      items.push(
+        ...(stack.filter((i: StackItem) => i.id === fileId) as StackItem[]),
+      );
+    }
+    for (let item of items) {
+      this.trimItemsFromStack(item);
+    }
+    let realmPaths = new RealmPaths(ri(fileRealm));
+    this.recentFilesService.removeRecentFile(realmPaths.local(rri(fileId)));
   }
 
   async copySource(fromUrl: string, toUrl: string) {
