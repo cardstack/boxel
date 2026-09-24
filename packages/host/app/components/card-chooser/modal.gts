@@ -2,6 +2,7 @@ import { registerDestructor } from '@ember/destroyable';
 import { array, fn, hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { guidFor } from '@ember/object/internals';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
@@ -9,6 +10,7 @@ import Component from '@glimmer/component';
 
 import { restartableTask, task } from 'ember-concurrency';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
+import { modifier } from 'ember-modifier';
 
 import pluralize from 'pluralize';
 
@@ -105,18 +107,29 @@ function selectionEquals(
 
 const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
 
+const captureElement = modifier(
+  (element: HTMLElement, [callback]: [(element: HTMLElement) => void]) => {
+    callback(element);
+  },
+);
+
 export default class CardChooserModal extends Component<Signature> {
   <template>
     {{! The realm and type pickers portal their dropdown content here, outside
-        the modal so the modal's overflow can't clip it. It sits outside every
-        conditional below so its element identity is stable for the life of
-        this component: focusTrap captures additionalElements once, when it
-        installs, so a container tied to a single chooser's lifetime leaves
-        the trap holding a detached node, and focus landing in a picker's
-        search field bounces straight back into the modal. }}
+        the modal so the modal's overflow can't clip it. focusTrap has to count
+        this container as inside the trap, or an open picker reads as outside it
+        and focus landing in the picker's search field bounces straight back
+        into the modal. focusTrap reads additionalElements once, when it
+        installs, and never revisits it, so every reopened chooser builds a
+        fresh trap from whatever `focusTrapAdditionalElements` returns now. This
+        div sits outside every conditional below so its element outlives every
+        chooser: the reference captured here stays valid for all of them. The id
+        is per-instance so multiple choosers on one route (e.g. /_freestyle)
+        don't collide. }}
     <div
-      id='card-chooser-picker-wormhole'
+      id={{this.pickerWormholeId}}
       data-test-card-chooser-picker-wormhole
+      {{captureElement this.capturePickerWormhole}}
     ></div>
     {{#if this.state}}
       {{! when we "and" these two conditions, the type checks don't seem to work as you'd expect }}
@@ -151,7 +164,7 @@ export default class CardChooserModal extends Component<Signature> {
                   class='card-chooser-search'
                   @onInput={{this.setSearchKey}}
                   @placeholder='Search for a card or enter card URL'
-                  @pickerDestination='card-chooser-picker-wormhole'
+                  @pickerDestination={{this.pickerWormholeId}}
                 />
               </:header>
               <:content>
@@ -245,9 +258,21 @@ export default class CardChooserModal extends Component<Signature> {
     });
   }
 
+  // The container is unconditional and captured directly, so this is set once
+  // and holds the same element for the component's lifetime — no document-wide
+  // lookup, and no dependence on when a given trap happens to read it.
+  private pickerWormholeElement: HTMLElement | undefined;
+
+  private get pickerWormholeId(): string {
+    return `${guidFor(this)}-picker-wormhole`;
+  }
+
+  @action private capturePickerWormhole(element: HTMLElement) {
+    this.pickerWormholeElement = element;
+  }
+
   get focusTrapAdditionalElements() {
-    const el = document.getElementById('card-chooser-picker-wormhole');
-    return el ? [el] : [];
+    return this.pickerWormholeElement ? [this.pickerWormholeElement] : [];
   }
 
   private get state(): State | undefined {

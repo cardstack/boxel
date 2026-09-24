@@ -422,8 +422,8 @@ module('Integration | operator-mode | card chooser', function (hooks) {
       await waitFor(`[data-test-stack-card="${testRealmURL}Person/hassan"]`);
 
       // The pickers portal their dropdowns outside the modal, so the modal's
-      // focus trap has to cover that container, and it captures the container
-      // list once, when it installs. Reopening the chooser is what catches a
+      // focus trap has to cover that container, and it reads the container list
+      // once, when it installs. Reopening the chooser is what catches a
       // container the trap can no longer reach.
       await waitFor(`[data-test-add-new="pet"]`);
       await click(`[data-test-add-new="pet"]`);
@@ -437,6 +437,11 @@ module('Integration | operator-mode | card chooser', function (hooks) {
 
       await click('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
       await waitFor('[data-test-boxel-picker-search] input');
+      // This is the assertion that discriminates the regression. `typeIn` below
+      // focuses its own target first, so the value and filtered-row assertions
+      // pass even when the trap had stolen focus away — only this `isFocused`
+      // check fails when the fix is reverted. Don't drop it on the belief the
+      // rest still covers this.
       assert
         .dom('[data-test-boxel-picker-search] input')
         .isFocused('the realm filter field keeps the focus it opened with');
