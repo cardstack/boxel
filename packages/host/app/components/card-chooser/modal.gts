@@ -107,6 +107,17 @@ const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
 
 export default class CardChooserModal extends Component<Signature> {
   <template>
+    {{! The realm and type pickers portal their dropdown content here, outside
+        the modal so the modal's overflow can't clip it. It sits outside every
+        conditional below so its element identity is stable for the life of
+        this component: focusTrap captures additionalElements once, when it
+        installs, so a container tied to a single chooser's lifetime leaves
+        the trap holding a detached node, and focus landing in a picker's
+        search field bounces straight back into the modal. }}
+    <div
+      id='card-chooser-picker-wormhole'
+      data-test-card-chooser-picker-wormhole
+    ></div>
     {{#if this.state}}
       {{! when we "and" these two conditions, the type checks don't seem to work as you'd expect }}
       {{#if (not this.state.dismissModal)}}
@@ -183,10 +194,6 @@ export default class CardChooserModal extends Component<Signature> {
                 </div>
               </:footer>
             </ModalContainer>
-            <div
-              id='card-chooser-picker-wormhole'
-              data-test-card-chooser-picker-wormhole
-            ></div>
           </SearchPanel>
         {{/each}}
       {{/if}}
