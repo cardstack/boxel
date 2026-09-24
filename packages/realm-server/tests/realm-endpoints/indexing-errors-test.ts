@@ -131,22 +131,20 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       };
       let diagnostics = { invalidationId: 'inv-test-1', ms: 42 };
       let cardURL = `${sourceRealm.url}broken-instance.json`;
-      for (let table of ['boxel_index', 'boxel_index_working']) {
-        await dbAdapter.execute(
-          `UPDATE ${table}
-           SET has_error = TRUE,
-               error_doc = $1::jsonb,
-               diagnostics = $2::jsonb
-           WHERE url = $3 AND type = 'instance'`,
-          {
-            bind: [
-              JSON.stringify(errorDoc),
-              JSON.stringify(diagnostics),
-              cardURL,
-            ],
-          },
-        );
-      }
+      await dbAdapter.execute(
+        `UPDATE boxel_index
+         SET has_error = TRUE,
+             error_doc = $1::jsonb,
+             diagnostics = $2::jsonb
+         WHERE url = $3 AND type = 'instance'`,
+        {
+          bind: [
+            JSON.stringify(errorDoc),
+            JSON.stringify(diagnostics),
+            cardURL,
+          ],
+        },
+      );
 
       let response = await request
         .get(`${new URL(sourceRealm.url).pathname}_indexing-errors`)

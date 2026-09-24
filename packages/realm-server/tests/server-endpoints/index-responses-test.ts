@@ -674,19 +674,17 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             );
 
             for (let slug of deleteSlugs) {
-              for (let table of ['boxel_index', 'boxel_index_working']) {
-                let rows = (await dbAdapter.execute(
-                  `SELECT COUNT(*) AS count
-                   FROM ${table}
-                   WHERE type = 'instance'
-                     AND is_deleted IS NOT TRUE
-                     AND (regexp_replace(url, '^https?://', '') LIKE '${realmURLNoProtocol}%${slug}%'
-                          OR regexp_replace(file_alias, '^https?://', '') LIKE '${realmURLNoProtocol}%${slug}%')`,
-                )) as { count: string | number }[];
+              let rows = (await dbAdapter.execute(
+                `SELECT COUNT(*) AS count
+                 FROM boxel_index
+                 WHERE type = 'instance'
+                   AND is_deleted IS NOT TRUE
+                   AND (regexp_replace(url, '^https?://', '') LIKE '${realmURLNoProtocol}%${slug}%'
+                        OR regexp_replace(file_alias, '^https?://', '') LIKE '${realmURLNoProtocol}%${slug}%')`,
+              )) as { count: string | number }[];
 
-                if (Number(rows[0]?.count ?? 0) > 0) {
-                  return false;
-                }
+              if (Number(rows[0]?.count ?? 0) > 0) {
+                return false;
               }
             }
 

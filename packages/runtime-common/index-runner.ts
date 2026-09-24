@@ -14,6 +14,7 @@ import {
   realmConfigHrefFor,
   type IndexWriter,
   type Batch,
+  type BatchDoneResult,
   type LooseCardResource,
   type InstanceEntry,
   type InstanceErrorIndexEntry,
@@ -332,9 +333,7 @@ export class IndexRunner {
     // inside the try below.
     let visitLoopMs: number | undefined;
     let swapMs: number | undefined;
-    let swapCommit:
-      | { swapAttempts: number; swapRetryMs: number; commitLockWaitMs?: number }
-      | undefined;
+    let swapCommit: Omit<BatchDoneResult, 'totalIndexEntries'> | undefined;
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} starting from scratch indexing`,
     );
@@ -421,9 +420,9 @@ export class IndexRunner {
     try {
       await current.#runVisitLoop(invalidations, {
         abortAfterIdleRenderTimeouts: current.#idleRenderTimeoutAbortAfter,
-        // Resume guard. If a previous attempt of this same job already wrote
-        // URL_X to the working table AND the EFS mtime hasn't changed since,
-        // skip the visit — the existing working row is still authoritative
+        // Resume guard. If a previous attempt of this same job already staged
+        // URL_X AND the EFS mtime hasn't changed since, skip the visit — the
+        // row this attempt resumed from it is still authoritative
         // and `applyBatchUpdates` will promote it (the constructor pre-seeded
         // it into `#invalidations`). If mtime DID change, fall through to a
         // normal visit so the upsert in `updateEntry` overwrites the resumed
@@ -538,9 +537,7 @@ export class IndexRunner {
     // inside the try below.
     let visitLoopMs: number | undefined;
     let swapMs: number | undefined;
-    let swapCommit:
-      | { swapAttempts: number; swapRetryMs: number; commitLockWaitMs?: number }
-      | undefined;
+    let swapCommit: Omit<BatchDoneResult, 'totalIndexEntries'> | undefined;
     let operations = new Map<string, 'update' | 'delete'>();
     for (let { url, operation } of changes) {
       if (operation === 'delete') {
@@ -662,7 +659,7 @@ export class IndexRunner {
             // file is deleted, there is nothing to visit
             return 'delete';
           }
-          // Previous attempt of this job already produced a working row for
+          // Previous attempt of this job already staged a row for
           // this URL. `args.changes` is the deterministic seed for
           // incremental jobs; if the file changed again, that's a different
           // changeset enqueued as a separate job. Skip.
@@ -842,7 +839,7 @@ export class IndexRunner {
   // dependents — but the NEXT visit's render is started before the current
   // visit's bookkeeping + row write, so the tab renders file N+1 while the
   // worker writes file N. Since a render reads only production `boxel_index`
-  // (never this pass's uncommitted `boxel_index_working` rows), rendering
+  // (never this pass's uncommitted `boxel_index_pending` rows), rendering
   // ahead cannot observe a write that hasn't landed yet.
   //
   // `skipReason` suppresses the render for URLs a prior attempt already
@@ -1075,7 +1072,7 @@ export class IndexRunner {
 
   // A throw during the invalidation / dependency-ordering / file-meta-prefetch
   // phase happens before #runVisitLoop starts, so no per-file visit ever runs
-  // to attach an error to — and the in-flight batch's working table holds only
+  // to attach an error to — and the in-flight batch's staged rows are only
   // fan-out tombstones that were never re-visited, so promoting it via
   // `done()` would delete those dependents. Record the failure on a FRESH
   // batch scoped to just the URLs the job was handed: buffer their error rows
@@ -1126,8 +1123,9 @@ export class IndexRunner {
       );
       // Seed the live-card oracle from the production index so an existing
       // card is written as an instance-error — overwriting the `instance`
-      // tombstone the in-flight batch left in the shared working table —
-      // rather than having that tombstone promoted and the card deleted.
+      // tombstone the in-flight batch staged under this job's staging id,
+      // which this batch shares — rather than having that tombstone
+      // promoted and the card deleted.
       await errorBatch.seedLiveTypesFromProduction(recordUrls);
       for (let url of recordUrls) {
         if (errorBatch.resumedRows.has(url.href)) {
@@ -1393,7 +1391,7 @@ export class IndexRunner {
     }
   }
 
-  // The single chokepoint every `boxel_index_working` row write goes through.
+  // The single chokepoint every `boxel_index_pending` row write goes through.
   // Hands the row to the batch's write-behind buffer rather than upserting it
   // inline, so the visit loop can start the next file's render while this row
   // (and its neighbors, coalesced into a multi-row upsert) drains. The batch
@@ -1438,7 +1436,7 @@ function assertURLEndsWithJSON(url: URL): URL {
 //
 // This is a guarantee about the order in which a pass writes its rows, not
 // about what a concurrent reader can observe: the pass promotes its whole
-// working table in one transaction (`batch.done()`), so no reader ever sees
+// staged rows in one transaction (`batch.done()`), so no reader ever sees
 // one row of a pass ahead of another.
 export function prioritizeWrittenURLs(
   invalidations: URL[],
@@ -1479,12 +1477,12 @@ export function prioritizeWrittenURLs(
 
 // Visit-class priority, in the order a pass must write the classes:
 //
-//   0. The realm's RealmConfig card at <realmURL>realm.json — write its
-//      working-index row first so any /_info query that lands AFTER the
-//      pass commits (`batch.done()` swaps boxel_index_working into
+//   0. The realm's RealmConfig card at <realmURL>realm.json — stage its
+//      index row first so any /_info query that lands AFTER the
+//      pass commits (`batch.done()` swaps boxel_index_pending into
 //      boxel_index) sees the RealmConfig overlay and resolves the realm's
 //      display name. parseRealmInfo's overlay path queries the live
-//      `boxel_index` table without `useWorkInProgressIndex`, so it cannot
+//      `boxel_index` table, which holds no staged rows, so it cannot
 //      see realm.json mid-pass; this ordering only guarantees a correct
 //      answer at and after the pass-end commit (and on subsequent
 //      passes). Host-side prerender caching of stale realmInfo (see

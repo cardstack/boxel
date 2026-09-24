@@ -72,12 +72,16 @@ export interface BoxelIndexTable {
   // so operators can post-hoc investigate slow (but not failing) renders
   // and enumerate cards with broken links. See `Diagnostics` in `index.ts`.
   diagnostics: Record<string, unknown> | null;
-  // Originating worker job id. Stamped on every working-table write so
-  // a retry of the same job can find (and skip) URLs the previous
-  // attempt already processed. Only present on `boxel_index_working`
-  // — the production `boxel_index` mirror does not carry this column,
-  // hence the field is optional.
+  // Originating worker job id. Only present on the staging tables
+  // (`boxel_index_pending`, and the unused `boxel_index_working`) —
+  // the production `boxel_index` does not carry this column, hence the field
+  // is optional.
   job_id?: number | null;
+  // Which pass's staging a `boxel_index_pending` row belongs to: `job:<id>`,
+  // shared by every attempt of that job so a retry can find (and skip) URLs
+  // an earlier attempt already processed, or `adhoc:<pass id>` for a batch
+  // that runs outside a job. Only present on the pending table.
+  staging_id?: string;
 }
 
 // Prerendered HTML lives on its own channel, separate from the search-doc
@@ -124,10 +128,14 @@ export interface PrerenderedHtmlTable {
   // configured) or the card declares none; a slot whose capture failed is
   // simply absent (see `diagnostics.screenshotErrors`).
   screenshots: Record<string, unknown> | null;
-  // Originating worker job id. Only present on `prerendered_html_working`;
-  // the production `prerendered_html` mirror does not carry this column,
+  // Originating worker job id. Only present on the staging tables
+  // (`prerendered_html_pending`, and the unused
+  // `prerendered_html_working`); the production `prerendered_html` does not carry this column,
   // hence the field is optional.
   job_id?: number | null;
+  // See `BoxelIndexTable.staging_id`. Only present on
+  // `prerendered_html_pending`.
+  staging_id?: string;
 }
 
 export interface RealmGenerationsTable {

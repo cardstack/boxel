@@ -9,6 +9,7 @@ import {
   internalKeyFor,
   baseCardRef,
   coerceTypes,
+  jobStagingId,
   mergeErrorDetail,
   mergeErrorsByGeneration,
   ri,
@@ -343,7 +344,7 @@ module('Unit | index-writer', function (hooks) {
     ]);
 
     let invalidatedEntries = await adapter.execute(
-      'SELECT url, realm_url, is_deleted FROM boxel_index_working WHERE generation = 2 ORDER BY url COLLATE "POSIX"',
+      'SELECT url, realm_url, is_deleted FROM boxel_index_pending WHERE generation = 2 ORDER BY url COLLATE "POSIX"',
       { coerceTypes: { is_deleted: 'BOOLEAN' } },
     );
     assert.deepEqual(
@@ -356,7 +357,7 @@ module('Unit | index-writer', function (hooks) {
       'the "work-in-progress" version of the index entries have been marked as deleted',
     );
     let otherRealms = await adapter.execute(
-      `SELECT url, realm_url, generation, is_deleted FROM boxel_index_working WHERE realm_url != '${testRealmURL}'`,
+      `SELECT url, realm_url, generation, is_deleted FROM boxel_index WHERE realm_url != '${testRealmURL}'`,
       { coerceTypes: { is_deleted: 'BOOLEAN' } },
     );
     assert.deepEqual(
@@ -495,7 +496,7 @@ module('Unit | index-writer', function (hooks) {
       'buffered URLs join the invalidation set synchronously',
     );
     let beforeFlush = await adapter.execute(
-      `SELECT url FROM boxel_index_working WHERE realm_url = $1`,
+      `SELECT url FROM boxel_index_pending WHERE realm_url = $1`,
       { bind: [testRealmURL] },
     );
     assert.deepEqual(beforeFlush, [], 'no rows are written while buffered');
@@ -512,13 +513,13 @@ module('Unit | index-writer', function (hooks) {
     // The flush wrote every buffered row, not only the one queried — so a
     // dependent's transitively-earlier writes are all visible too.
     let afterFlush = await adapter.execute(
-      `SELECT url FROM boxel_index_working WHERE realm_url = $1 ORDER BY url COLLATE "POSIX"`,
+      `SELECT url FROM boxel_index_pending WHERE realm_url = $1 ORDER BY url COLLATE "POSIX"`,
       { bind: [testRealmURL] },
     );
     assert.deepEqual(
       afterFlush,
       [{ url: depURL.href }, { url: dependentURL.href }],
-      'the flush coalesced all buffered rows into the working table',
+      'the flush coalesced all buffered rows into the pending table',
     );
   });
 
@@ -572,13 +573,11 @@ module('Unit | index-writer', function (hooks) {
   });
 
   test('invalidations reach dependents whose rows exist only in the production index', async function (assert) {
-    // A production row without a working counterpart is a reachable state:
-    // the working table is a staging area that only gains a row once a visit
-    // writes one in this deployment's lifetime — an index imported from a
-    // dump that carries only the production tables, or rows staged under a
-    // since-changed schema. The dependency fan-out must find such dependents
-    // or a module edit leaves their indexed computed values stale until each
-    // file is touched individually.
+    // Committed rows are the whole of what a pass's fan-out has to go on
+    // before it has staged anything: nothing is staged for them, and a pass
+    // reads no other pass's staging. The dependency fan-out must find such
+    // dependents or a module edit leaves their indexed computed values stale
+    // until each file is touched individually.
     await setupIndex(
       adapter,
       [{ realm_url: testRealmURL, current_generation: 1 }],
@@ -768,7 +767,7 @@ module('Unit | index-writer', function (hooks) {
     );
 
     let [wipVersion] = await adapter.execute(
-      `SELECT generation, pristine_doc, search_doc, deps, types FROM boxel_index_working WHERE url = $1`,
+      `SELECT generation, pristine_doc, search_doc, deps, types FROM boxel_index_pending WHERE url = $1`,
       {
         bind: [`${testRealmURL}1.json`],
         coerceTypes: {
@@ -913,7 +912,7 @@ module('Unit | index-writer', function (hooks) {
     });
 
     let [row] = await adapter.execute(
-      `SELECT pristine_doc, search_doc, display_names FROM boxel_index_working WHERE url = $1`,
+      `SELECT pristine_doc, search_doc, display_names FROM boxel_index_pending WHERE url = $1`,
       {
         bind: [`${testRealmURL}1.json`],
         coerceTypes: {
@@ -944,7 +943,7 @@ module('Unit | index-writer', function (hooks) {
       'lone surrogates are replaced while the valid emoji pair is preserved',
     );
     let [renderedRow] = await adapter.execute(
-      `SELECT markdown FROM prerendered_html_working WHERE url = $1`,
+      `SELECT markdown FROM prerendered_html_pending WHERE url = $1`,
       { bind: [`${testRealmURL}1.json`] },
     );
     assert.strictEqual(
@@ -1191,7 +1190,7 @@ module('Unit | index-writer', function (hooks) {
     let originalExecute: Executor = adapter.execute.bind(adapter);
     let spy: Executor = async (sql, opts) => {
       let table =
-        /INSERT INTO (boxel_index_working|prerendered_html_working)/.exec(
+        /INSERT INTO (boxel_index_pending|prerendered_html_pending)/.exec(
           sql,
         )?.[1];
       let binds = opts?.bind?.length ?? 0;
@@ -1668,13 +1667,13 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
-  test('promotes prerendered_html_working rows resumed from a prior job attempt', async function (assert) {
+  test('promotes prerendered_html_pending rows resumed from a prior job attempt', async function (assert) {
     let url = `${testRealmURL}1.json`;
-    // Seed both working tables as if a prior attempt of job 42 wrote this row
-    // (a fused visit writes each entry's index half to boxel_index_working and
-    // its HTML half to prerendered_html_working). A resuming batch pre-seeds
+    // Seed both pending tables as if a prior attempt of job 42 staged this row
+    // (a fused visit writes each entry's index half to boxel_index_pending and
+    // its HTML half to prerendered_html_pending). A resuming batch pre-seeds
     // the URL into its invalidation set without re-running updateEntry, so the
-    // swap on done() must promote both channels' working rows.
+    // swap on done() must promote both channels' pending rows.
     await setupIndex(
       adapter,
       [{ realm_url: testRealmURL, current_generation: 1 }],
@@ -1686,6 +1685,7 @@ module('Unit | index-writer', function (hooks) {
             realm_url: testRealmURL,
             type: 'instance',
             job_id: 42,
+            staging_id: jobStagingId(42, 1),
             last_modified: String(1700000000),
             is_deleted: false,
             deps: [],
@@ -1701,7 +1701,7 @@ module('Unit | index-writer', function (hooks) {
     let batch = await indexWriter.createBatch(
       new URL(testRealmURL),
       virtualNetwork,
-      { jobId: 42, reservationId: 1, priority: 0, queueWaitMs: null },
+      { jobId: 42, reservationId: 2, priority: 0, queueWaitMs: null },
     );
     await batch.done();
 
@@ -2892,7 +2892,7 @@ module('Unit | index-writer', function (hooks) {
     let entry = await indexQueryEngine.getInstance(
       new URL(`${testRealmURL}1`),
       {
-        useWorkInProgressIndex: true,
+        pendingStagingId: batch.stagingId,
       },
     );
     if (entry?.type === 'instance') {
@@ -2973,7 +2973,7 @@ module('Unit | index-writer', function (hooks) {
 
     let entry = await indexQueryEngine.getInstance(
       new URL(`${testRealmURL}1`),
-      { useWorkInProgressIndex: true },
+      { pendingStagingId: batch.stagingId },
     );
     if (entry?.type === 'instance') {
       assert.strictEqual(
@@ -3039,7 +3039,7 @@ module('Unit | index-writer', function (hooks) {
     );
 
     let invalidatedEntries = (await adapter.execute(
-      'SELECT url, realm_url, is_deleted FROM boxel_index_working WHERE generation = 2 ORDER BY url COLLATE "POSIX"',
+      'SELECT url, realm_url, is_deleted FROM boxel_index_pending WHERE generation = 2 ORDER BY url COLLATE "POSIX"',
       { coerceTypes: { is_deleted: 'BOOLEAN' } },
     )) as Pick<BoxelIndexTable, 'url' | 'realm_url' | 'is_deleted'>[];
     assert.deepEqual(
@@ -3332,7 +3332,7 @@ module('Unit | index-writer', function (hooks) {
     // The rollup that publishes a pass recomputes only the types the pass
     // moved and reuses the previous generation's entries for the rest. The
     // planted Person entry is deliberately impossible — nothing in the
-    // working table would ever aggregate to 42 — so it can only survive by
+    // index would ever aggregate to 42 — so it can only survive by
     // being carried, which is what tells these assertions apart from a pass
     // that quietly rebuilt the whole summary.
     let iconHTML = '<svg>test icon</svg>';
@@ -3777,7 +3777,7 @@ module('Unit | index-writer', function (hooks) {
       ],
     );
 
-    // Person's planted count is one the working table cannot produce, so it
+    // Person's planted count is one the index cannot produce, so it
     // survives only by being carried — which is what makes this a test of the
     // merge rather than of a rebuild that happens to agree with it.
     await plantRealmMeta(adapter, 1, {
@@ -3868,7 +3868,7 @@ module('Unit | index-writer', function (hooks) {
         },
       ],
     );
-    // Dog's planted count is one the working table cannot produce — it holds a
+    // Dog's planted count is one the index cannot produce — it holds a
     // single Dog row — so a rebuild would publish 1 and only the merge keeps 42.
     await plantRealmMeta(adapter, 1, {
       instances: [
@@ -3992,7 +3992,7 @@ module('Unit | index-writer', function (hooks) {
       virtualNetwork,
     );
     // No new writes — just finalize so updateRealmMeta runs against the
-    // working table that setupIndex seeded.
+    // index that setupIndex seeded.
     await batch.done();
 
     let realmMeta = await fetchRealmMeta(adapter);
@@ -4333,6 +4333,7 @@ module('Unit | index-writer', function (hooks) {
             realm_url: testRealmURL,
             type: 'instance',
             job_id: 42,
+            staging_id: jobStagingId(42, 1),
             last_modified: String(lastModified),
             is_deleted: false,
             deps: [],
@@ -4348,7 +4349,7 @@ module('Unit | index-writer', function (hooks) {
       virtualNetwork,
       {
         jobId: 42,
-        reservationId: 1,
+        reservationId: 2,
         priority: 0,
         queueWaitMs: null,
       },
@@ -4383,6 +4384,7 @@ module('Unit | index-writer', function (hooks) {
             realm_url: testRealmURL,
             type: 'instance',
             job_id: 42,
+            staging_id: jobStagingId(42, 1),
             last_modified: '1700000000',
             is_deleted: false,
             has_error: true,
@@ -4404,7 +4406,7 @@ module('Unit | index-writer', function (hooks) {
       virtualNetwork,
       {
         jobId: 42,
-        reservationId: 1,
+        reservationId: 2,
         priority: 0,
         queueWaitMs: null,
       },
@@ -4433,6 +4435,7 @@ module('Unit | index-writer', function (hooks) {
             realm_url: testRealmURL,
             type: 'instance',
             job_id: 99,
+            staging_id: jobStagingId(99, 1),
             last_modified: '1700000000',
             is_deleted: false,
             deps: [],
@@ -4448,7 +4451,7 @@ module('Unit | index-writer', function (hooks) {
       virtualNetwork,
       {
         jobId: 42,
-        reservationId: 1,
+        reservationId: 2,
         priority: 0,
         queueWaitMs: null,
       },
@@ -4460,58 +4463,268 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
-  test('working rows from another job are visible to dependency-walk queries but not to resumedRows', async function (assert) {
-    // The cumulative working table is the source of truth for the
-    // reverse-deps walk in `Batch.invalidate` (via
-    // `itemsThatReference`). Rows from completed prior batches must
-    // stay so subsequent jobs can find them. The `job_id` filter in
-    // `loadResumedRows` is what isolates the *current* job's
-    // resume-handoff from those rows.
-    let otherUrl = `${testRealmURL}other-job-row.json`;
+  test("another pass's staged rows are invisible to this pass's discovery, dependency reads and summary, and survive its commit", async function (assert) {
+    let iconHTML = '<svg>test icon</svg>';
+    let personTypes = internalKeysFor(
+      virtualNetwork,
+      { module: rri('./person'), name: 'Person' },
+      baseCardRef,
+    );
+    let petTypes = internalKeysFor(
+      virtualNetwork,
+      { module: rri('./pet'), name: 'Pet' },
+      baseCardRef,
+    );
+    let hubURL = `${testRealmURL}hub.json`;
+    let doomedURL = `${testRealmURL}doomed.json`;
+    let stagedURL = `${testRealmURL}staged-pet.json`;
+    let committedPerson = (url: string) => ({
+      url,
+      generation: 1,
+      realm_url: testRealmURL,
+      type: 'instance' as const,
+      deps: [`${testRealmURL}person`],
+      types: personTypes,
+      display_names: ['Person'],
+      icon_html: iconHTML,
+    });
     await setupIndex(
       adapter,
       [{ realm_url: testRealmURL, current_generation: 1 }],
-      {
-        working: [
-          {
-            url: otherUrl,
-            generation: 1,
-            realm_url: testRealmURL,
-            type: 'instance',
-            job_id: 99,
-            last_modified: '1700000000',
-            is_deleted: false,
-            deps: [],
-            types: [],
-          },
-        ],
-        production: [],
-      },
+      [committedPerson(hubURL), committedPerson(doomedURL)],
     );
+
+    // Stages the hub as `name` with its own HTML, so the two passes' versions
+    // of it read apart on both channels.
+    let stageHub = async (
+      stagingBatch: Awaited<ReturnType<IndexWriter['createBatch']>>,
+      name: string,
+    ) => {
+      let now = Date.now();
+      await stagingBatch.updateEntry(new URL(hubURL), {
+        type: 'instance',
+        resource: makeCardResource('hub', name, {
+          module: rri('./person'),
+          name: 'Person',
+        }),
+        lastModified: now,
+        resourceCreatedAt: now,
+        searchData: { name },
+        deps: new Set([`${testRealmURL}person`]),
+        displayNames: ['Person'],
+        types: personTypes,
+        iconHTML,
+        isolatedHtml: `<p>${name}</p>`,
+      });
+    };
+
+    // The peer stages its own version of the hub, a deletion of a committed
+    // card, and a new card that depends on the hub, then stops short of its
+    // commit.
+    let peer = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+      { jobId: 99, reservationId: 1, priority: 0, queueWaitMs: null },
+    );
+    await stageHub(peer, 'Peer Hub');
+    await peer.invalidate([new URL(doomedURL)]);
+    let timestamp = Date.now();
+    await peer.updateEntry(new URL(stagedURL), {
+      type: 'instance',
+      resource: makeCardResource('staged-pet', 'Staged', {
+        module: rri('./pet'),
+        name: 'Pet',
+      }),
+      lastModified: timestamp,
+      resourceCreatedAt: timestamp,
+      searchData: { name: 'Staged' },
+      deps: new Set([hubURL]),
+      displayNames: ['Pet'],
+      types: petTypes,
+      iconHTML,
+    });
 
     let batch = await indexWriter.createBatch(
       new URL(testRealmURL),
       virtualNetwork,
-      {
-        jobId: 42,
-        reservationId: 1,
-        priority: 0,
-        queueWaitMs: null,
-      },
     );
-    assert.strictEqual(
-      batch.resumedRows.size,
-      0,
-      'rows tagged with a different job_id are NOT in resumedRows',
-    );
-    let surviving = await adapter.execute(
-      'SELECT url FROM boxel_index_working WHERE realm_url = $1',
-      { bind: [testRealmURL] },
+    await batch.invalidate([new URL(hubURL)]);
+    assert.deepEqual(
+      batch.invalidations,
+      [hubURL],
+      "the fan-out does not follow the peer's staged dependency edge",
     );
     assert.deepEqual(
-      surviving.map((r) => r.url),
-      [otherUrl],
-      'cumulative working state is preserved (it is the source for reverse-deps walks)',
+      (await batch.getDependencyRows([stagedURL, doomedURL])).map((row) => ({
+        url: row.url,
+        isDeleted: row.isDeleted,
+      })),
+      [{ url: doomedURL, isDeleted: false }],
+      "dependency reads see the committed rows, not the peer's staged card or its tombstone",
+    );
+    assert.deepEqual(
+      await batch.getOrderingDependencyRows([stagedURL]),
+      [],
+      "ordering reads do not see the peer's staged card",
+    );
+    await stageHub(batch, 'Hub');
+    await batch.done();
+
+    assert.deepEqual(
+      (await fetchRealmMeta(adapter)).value,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          2,
+        ),
+      ],
+      "the published summary counts only committed cards: the peer's staged card and deletion are not in it",
+    );
+    let production = (await adapter.execute(
+      `SELECT url, is_deleted FROM boxel_index WHERE realm_url = $1 ORDER BY url COLLATE "POSIX"`,
+      { bind: [testRealmURL], coerceTypes: { is_deleted: 'BOOLEAN' } },
+    )) as { url: string; is_deleted: boolean | null }[];
+    assert.deepEqual(
+      production.map((row) => [row.url, Boolean(row.is_deleted)]),
+      [
+        [doomedURL, false],
+        [hubURL, false],
+      ],
+      "the commit promotes none of the peer's other rows, and applies none of its deletions",
+    );
+    let hubVersions = async () => {
+      let [index] = (await adapter.execute(
+        `SELECT search_doc FROM boxel_index WHERE url = $1 AND type = 'instance'`,
+        { bind: [hubURL], coerceTypes: { search_doc: 'JSON' } },
+      )) as { search_doc: { name: string } }[];
+      let [html] = (await adapter.execute(
+        `SELECT isolated_html FROM prerendered_html WHERE url = $1 AND type = 'instance'`,
+        { bind: [hubURL] },
+      )) as { isolated_html: string | null }[];
+      return { index: index?.search_doc?.name, html: html?.isolated_html };
+    };
+    assert.deepEqual(
+      await hubVersions(),
+      { index: 'Hub', html: '<p>Hub</p>' },
+      "for a URL both passes staged, the commit promotes its own version on both channels, not the peer's",
+    );
+    let peerStaged = (await adapter.execute(
+      `SELECT url FROM boxel_index_pending WHERE staging_id = $1 ORDER BY url COLLATE "POSIX"`,
+      { bind: [peer.stagingId] },
+    )) as { url: string }[];
+    assert.deepEqual(
+      peerStaged.map((row) => row.url),
+      [doomedURL, hubURL, stagedURL],
+      "the commit leaves the peer's staged rows in place",
+    );
+
+    await peer.done();
+    assert.deepEqual(
+      (await fetchRealmMeta(adapter)).value,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          1,
+        ),
+        makeCardTypeSummary(`${testRealmURL}pet/Pet`, 'Pet', iconHTML, 1),
+      ],
+      "the peer's own commit publishes what it staged",
+    );
+    assert.deepEqual(
+      await hubVersions(),
+      { index: 'Peer Hub', html: '<p>Peer Hub</p>' },
+      "the peer's commit promotes the peer's version of the hub",
+    );
+    let [doomed] = (await adapter.execute(
+      `SELECT is_deleted, types FROM boxel_index WHERE url = $1`,
+      {
+        bind: [doomedURL],
+        coerceTypes: { is_deleted: 'BOOLEAN', types: 'JSON' },
+      },
+    )) as { is_deleted: boolean; types: string[] }[];
+    assert.true(doomed.is_deleted, "the peer's deletion lands with its commit");
+    assert.deepEqual(
+      doomed.types,
+      personTypes,
+      'the promoted tombstone keeps the rest of the row it hides',
+    );
+  });
+
+  test('a commit clears ad-hoc staging idle past the abandonment window, and leaves recent staging alone', async function (assert) {
+    let iconHTML = '<svg>test icon</svg>';
+    let types = internalKeysFor(
+      virtualNetwork,
+      { module: rri('./person'), name: 'Person' },
+      baseCardRef,
+    );
+    let stageCard = async (id: string) => {
+      let batch = await indexWriter.createBatch(
+        new URL(testRealmURL),
+        virtualNetwork,
+      );
+      await writeInstance(batch, {
+        id,
+        name: id,
+        adoptsFrom: { module: rri('./person'), name: 'Person' },
+        displayNames: ['Person'],
+        types,
+        iconHTML,
+      });
+      return batch;
+    };
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      [],
+    );
+    // Neither batch runs as a job, and neither reaches its commit.
+    let abandoned = await stageCard('abandoned');
+    let recent = await stageCard('recent');
+    let longAgo = Date.now() - 2 * 24 * 60 * 60 * 1000;
+    await adapter.execute(
+      `UPDATE boxel_index_pending SET indexed_at = $1, diagnostics = NULL WHERE staging_id = $2`,
+      { bind: [longAgo, abandoned.stagingId] },
+    );
+    await adapter.execute(
+      `UPDATE prerendered_html_pending SET rendered_at = $1, diagnostics = NULL WHERE staging_id = $2`,
+      { bind: [longAgo, abandoned.stagingId] },
+    );
+
+    let committer = await stageCard('committed');
+    let result = await committer.done();
+
+    let stagings = async (table: string) =>
+      (
+        (await adapter.execute(
+          `SELECT DISTINCT staging_id FROM ${table} WHERE realm_url = $1`,
+          { bind: [testRealmURL] },
+        )) as { staging_id: string }[]
+      )
+        .map((row) => row.staging_id)
+        .sort();
+    assert.deepEqual(
+      await stagings('boxel_index_pending'),
+      [recent.stagingId],
+      'the idle staging is cleared from the index channel; the recent one and the committed one are not left behind',
+    );
+    assert.deepEqual(
+      await stagings('prerendered_html_pending'),
+      [recent.stagingId],
+      'and from the HTML channel',
+    );
+    assert.strictEqual(
+      result.janitorStagingsCleared,
+      1,
+      'the janitor counts the one staging it cleared',
+    );
+    assert.strictEqual(
+      result.janitorRowsCleared,
+      2,
+      'its index row and its HTML row',
     );
   });
 
@@ -4528,6 +4741,7 @@ module('Unit | index-writer', function (hooks) {
             realm_url: testRealmURL,
             type: 'instance',
             job_id: 42,
+            staging_id: jobStagingId(42, 1),
             last_modified: '1700000000',
             deps: [],
             types: [],
@@ -4542,7 +4756,7 @@ module('Unit | index-writer', function (hooks) {
       virtualNetwork,
       {
         jobId: 42,
-        reservationId: 1,
+        reservationId: 2,
         priority: 0,
         queueWaitMs: null,
       },
@@ -4583,6 +4797,7 @@ module('Unit | index-writer', function (hooks) {
             realm_url: testRealmURL,
             type: 'instance',
             job_id: 42,
+            staging_id: jobStagingId(42, 1),
             last_modified: '1700000000',
             is_deleted: false,
             has_error: false,
@@ -4601,7 +4816,7 @@ module('Unit | index-writer', function (hooks) {
       virtualNetwork,
       {
         jobId: 42,
-        reservationId: 1,
+        reservationId: 2,
         priority: 0,
         queueWaitMs: null,
       },
@@ -4630,6 +4845,14 @@ module('Unit | index-writer', function (hooks) {
   });
 
   module('getOrderingDependencyRows', function () {
+    // The working rows below are staged by this job, and each test reads them
+    // through a batch running as it: a pass reads only its own staging.
+    const stagingJob = {
+      jobId: 7,
+      reservationId: 1,
+      priority: 0,
+      queueWaitMs: null,
+    };
     test('returns production row when URL exists only in boxel_index', async function (assert) {
       let url = `${testRealmURL}prod-only.json`;
       let depUrl = `${testRealmURL}prod-only-dep.json`;
@@ -4654,6 +4877,7 @@ module('Unit | index-writer', function (hooks) {
       let batch = await indexWriter.createBatch(
         new URL(testRealmURL),
         virtualNetwork,
+        stagingJob,
       );
       let rows = await batch.getOrderingDependencyRows([url]);
       assert.deepEqual(
@@ -4663,7 +4887,7 @@ module('Unit | index-writer', function (hooks) {
       );
     });
 
-    test('returns working row when URL exists only in boxel_index_working and is not deleted', async function (assert) {
+    test('returns the staged row when URL exists only in boxel_index_pending and is not deleted', async function (assert) {
       let url = `${testRealmURL}working-only.json`;
       let depUrl = `${testRealmURL}working-only-dep.json`;
       await setupIndex(
@@ -4676,6 +4900,11 @@ module('Unit | index-writer', function (hooks) {
               generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
+              job_id: stagingJob.jobId,
+              staging_id: jobStagingId(
+                stagingJob.jobId,
+                stagingJob.reservationId,
+              ),
               is_deleted: false,
               deps: [depUrl],
               types: [],
@@ -4688,6 +4917,7 @@ module('Unit | index-writer', function (hooks) {
       let batch = await indexWriter.createBatch(
         new URL(testRealmURL),
         virtualNetwork,
+        stagingJob,
       );
       let rows = await batch.getOrderingDependencyRows([url]);
       assert.deepEqual(
@@ -4711,6 +4941,11 @@ module('Unit | index-writer', function (hooks) {
               generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
+              job_id: stagingJob.jobId,
+              staging_id: jobStagingId(
+                stagingJob.jobId,
+                stagingJob.reservationId,
+              ),
               is_deleted: false,
               deps: [workingDep],
               types: [],
@@ -4732,6 +4967,7 @@ module('Unit | index-writer', function (hooks) {
       let batch = await indexWriter.createBatch(
         new URL(testRealmURL),
         virtualNetwork,
+        stagingJob,
       );
       let rows = await batch.getOrderingDependencyRows([url]);
       assert.deepEqual(
@@ -4755,6 +4991,11 @@ module('Unit | index-writer', function (hooks) {
               generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
+              job_id: stagingJob.jobId,
+              staging_id: jobStagingId(
+                stagingJob.jobId,
+                stagingJob.reservationId,
+              ),
               is_deleted: true,
               deps: [workingDep],
               types: [],
@@ -4776,6 +5017,7 @@ module('Unit | index-writer', function (hooks) {
       let batch = await indexWriter.createBatch(
         new URL(testRealmURL),
         virtualNetwork,
+        stagingJob,
       );
       let rows = await batch.getOrderingDependencyRows([url]);
       assert.deepEqual(
@@ -4798,6 +5040,11 @@ module('Unit | index-writer', function (hooks) {
               generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
+              job_id: stagingJob.jobId,
+              staging_id: jobStagingId(
+                stagingJob.jobId,
+                stagingJob.reservationId,
+              ),
               is_deleted: true,
               deps: [depUrl],
               types: [],
@@ -4810,6 +5057,7 @@ module('Unit | index-writer', function (hooks) {
       let batch = await indexWriter.createBatch(
         new URL(testRealmURL),
         virtualNetwork,
+        stagingJob,
       );
       let rows = await batch.getOrderingDependencyRows([url]);
       assert.deepEqual(
@@ -4837,6 +5085,11 @@ module('Unit | index-writer', function (hooks) {
               generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
+              job_id: stagingJob.jobId,
+              staging_id: jobStagingId(
+                stagingJob.jobId,
+                stagingJob.reservationId,
+              ),
               is_deleted: false,
               deps: [workingOnlyDep],
               types: [],
@@ -4846,6 +5099,11 @@ module('Unit | index-writer', function (hooks) {
               generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
+              job_id: stagingJob.jobId,
+              staging_id: jobStagingId(
+                stagingJob.jobId,
+                stagingJob.reservationId,
+              ),
               is_deleted: false,
               deps: [bothWorkingDep],
               types: [],
@@ -4875,6 +5133,7 @@ module('Unit | index-writer', function (hooks) {
       let batch = await indexWriter.createBatch(
         new URL(testRealmURL),
         virtualNetwork,
+        stagingJob,
       );
       let rows = await batch.getOrderingDependencyRows([
         workingOnlyUrl,
@@ -4916,6 +5175,11 @@ module('Unit | index-writer', function (hooks) {
               generation: 1,
               realm_url: testRealmURL,
               type: 'instance',
+              job_id: stagingJob.jobId,
+              staging_id: jobStagingId(
+                stagingJob.jobId,
+                stagingJob.reservationId,
+              ),
               is_deleted: false,
               has_error: true,
               error_doc: {
@@ -4936,6 +5200,7 @@ module('Unit | index-writer', function (hooks) {
       let batch = await indexWriter.createBatch(
         new URL(testRealmURL),
         virtualNetwork,
+        stagingJob,
       );
       let rows = await batch.getOrderingDependencyRows([url]);
       assert.strictEqual(rows.length, 1, 'one row returned');

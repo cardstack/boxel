@@ -20,7 +20,10 @@ import { clearHtmlComponentCache } from '@cardstack/host/lib/html-component';
 import type SessionService from '@cardstack/host/services/session';
 import { AiAssistantOpen } from '@cardstack/host/utils/local-storage-keys';
 
-import { getTestRealmRegistry } from './test-realm-registry';
+import {
+  getTestRealmRegistry,
+  isInProcessRealmURL,
+} from './test-realm-registry';
 
 import { cleanupMonacoEditorModels } from './index';
 
@@ -75,6 +78,14 @@ const slowFetches: { desc: string; durationMs: number }[] = [];
 const SLOW_FETCH_THRESHOLD_MS = 1_000;
 const SLOW_FETCHES_LIMIT = 20;
 let currentTestEpoch = 0;
+
+// The current test's owner and whether ember-qunit has destroyed it, so a
+// fetch diagnostic can tell a request the live app issued from one made
+// mid-teardown or after the owner is gone. The owner is held here rather than
+// read from getContext(), which ember-qunit unsets before it destroys the
+// owner, and is dropped once destroyed so it isn't pinned past its test.
+let currentOwner: { isDestroying?: boolean; isDestroyed?: boolean } | undefined;
+let ownerDestroyed = false;
 
 // Module/name of the test currently running, captured from QUnit.testStart so a
 // global error can be attributed to the test that produced it. Resets on page
@@ -262,11 +273,12 @@ function getQUnitWithCallbacks():
     : undefined;
 }
 
-function setupFetchDebugging(hooks: NestedHooks) {
+function setupFetchDebugging(hooks: NestedHooks): () => void {
   let originalFetch: typeof globalThis.fetch | undefined;
   let wrappedFetch: typeof globalThis.fetch | undefined;
 
   hooks.beforeEach(function () {
+    currentOwner = (this as { owner?: typeof currentOwner }).owner;
     inFlightFetches.clear();
     recentFailedFetches.length = 0;
     slowFetches.length = 0;
@@ -298,14 +310,37 @@ function setupFetchDebugging(hooks: NestedHooks) {
         // is populated at realm construction, so this path has no such
         // window. Non-fetch resources (images, workers) still rely on the
         // service worker.
-        for (let [realmUrl, { realm }] of getTestRealmRegistry()) {
+        let registry = getTestRealmRegistry();
+        let matchedRealm = false;
+        for (let [realmUrl, { realm }] of registry) {
           if (url.startsWith(realmUrl)) {
+            matchedRealm = true;
             let response = await realm.maybeHandle(new Request(input, init));
             if (response) {
               return response;
             }
             break;
           }
+        }
+        let ownerState = describeOwnerState();
+        if (
+          !matchedRealm &&
+          isInProcessRealmURL(url) &&
+          ownerState !== 'live'
+        ) {
+          // The in-process realm-server origin has no listener on the real
+          // network, so this request is about to reject with `Failed to
+          // fetch`. A miss while the owner is live is routine (host mode's
+          // head lookup targets the server root, and some tests register no
+          // realms at all); one with the owner going away is a request that
+          // outlived its test's app, and the owner state plus what the
+          // registry held says which teardown step it slipped past.
+          console.warn(
+            `[test-fetch] no registered test realm serves ${method} ${url} ` +
+              `(owner: ${ownerState}; registered realms: ${
+                [...registry.keys()].join(', ') || '<none>'
+              }; test: ${currentTestLabel})`,
+          );
         }
         return await boundFetch(input, init);
       } catch (error) {
@@ -328,7 +363,7 @@ function setupFetchDebugging(hooks: NestedHooks) {
     globalThis.fetch = wrappedFetch;
   });
 
-  hooks.afterEach(function () {
+  return function restoreFetch() {
     if (originalFetch && globalThis.fetch === wrappedFetch) {
       globalThis.fetch = originalFetch;
     }
@@ -338,7 +373,46 @@ function setupFetchDebugging(hooks: NestedHooks) {
     // afterEach, so clearing here would empty the snapshot exactly when
     // the timeout-diagnostics callback needs it. beforeEach already
     // resets the buffer at the start of the next test.
+  };
+}
+
+// QUnit runs afterEach hooks last-registered-first, and ember-qunit destroys
+// the owner in the afterEach it registers. Until that hook has run the app is
+// still live: teardown's own `settled()` calls re-render, realm index events
+// are still delivered, and a card's fire-and-forget load (a CardsGrid's
+// `_types` refresh, say) can issue a fetch. Such a fetch must still be
+// answered in-process — on the real network the test-realm host doesn't exist,
+// and the `Failed to fetch` it rejects with escapes as an uncaught error that
+// fails the test. So the fetch wrapper and the test-realm registry are torn
+// down in a hook registered ahead of ember-qunit's, which therefore runs after
+// the owner is destroyed.
+function setupAfterOwnerTeardown(
+  hooks: NestedHooks,
+  getRestoreFetch: () => (() => void) | undefined,
+) {
+  hooks.beforeEach(function () {
+    ownerDestroyed = false;
   });
+  hooks.afterEach(function () {
+    ownerDestroyed = true;
+    currentOwner = undefined;
+    getRestoreFetch()?.();
+    getTestRealmRegistry().clear();
+  });
+}
+
+function describeOwnerState(): string {
+  if (ownerDestroyed) {
+    return 'destroyed';
+  }
+  if (!currentOwner) {
+    return 'none';
+  }
+  return currentOwner.isDestroyed
+    ? 'destroyed'
+    : currentOwner.isDestroying
+      ? 'destroying'
+      : 'live';
 }
 
 function rememberFailedFetch(
@@ -940,10 +1014,12 @@ function seedAiAssistantClosed(hooks: NestedHooks) {
 }
 
 export function setupApplicationTest(hooks: NestedHooks) {
+  let restoreFetch: (() => void) | undefined;
+  setupAfterOwnerTeardown(hooks, () => restoreFetch);
   emberSetupApplicationTest(hooks);
   setupWindowMock(hooks);
   seedAiAssistantClosed(hooks);
-  setupFetchDebugging(hooks);
+  restoreFetch = setupFetchDebugging(hooks);
   setupUnhandledRejectionDiagnostics(hooks);
   hooks.afterEach(async function () {
     resetServiceIfPresent(this.owner, 'service:ai-assistant-panel-service');
@@ -974,10 +1050,12 @@ function failOnParticipantErrors(session: SessionService | undefined) {
 }
 
 export function setupRenderingTest(hooks: NestedHooks) {
+  let restoreFetch: (() => void) | undefined;
+  setupAfterOwnerTeardown(hooks, () => restoreFetch);
   emberSetupRenderingTest(hooks);
   setupWindowMock(hooks);
   seedAiAssistantClosed(hooks);
-  setupFetchDebugging(hooks);
+  restoreFetch = setupFetchDebugging(hooks);
   setupUnhandledRejectionDiagnostics(hooks);
   hooks.afterEach(async function () {
     // MatrixService is the session orchestrator, not a participant, so

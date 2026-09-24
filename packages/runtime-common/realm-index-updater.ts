@@ -260,7 +260,7 @@ export class RealmIndexUpdater {
   // when this user has nothing in flight, even while other users' or
   // system-originated jobs are pending: those jobs can only make the caller's
   // read fresher-than-requested, never wrong, because the production index
-  // rows stay live (and consistent) until the working-table swap lands.
+  // rows stay live (and consistent) until the pass's swap lands.
   incrementalIndexingInitiatedBy(user: string): Promise<void> | undefined {
     let pending = [...this.#incrementalIndexingDeferreds.entries()]
       .filter(([, { initiatedBy }]) => initiatedBy === user)
@@ -300,7 +300,7 @@ export class RealmIndexUpdater {
   // membership answers "should I wait for this" and "can I trust what this
   // produced" differently. For the wait, a from-scratch re-derives index rows
   // from bytes already on disk and its production rows stay live and
-  // consistent until the working-table swap, so it moves nothing a staging
+  // consistent until the pass's swap, so it moves nothing a staging
   // write reads — while waiting for one would park every writer in the realm
   // for as long as a full reindex takes. Excluded, and not because the other
   // gate excludes it.

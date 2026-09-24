@@ -776,9 +776,9 @@ module(basename(import.meta.filename), function () {
       await htmlRow('unrelated', []);
     }
 
-    async function workingURLs() {
+    async function pendingURLs() {
       let rows = (await adapter.execute(
-        `SELECT url FROM boxel_index_working WHERE realm_url = $1`,
+        `SELECT url FROM boxel_index_pending WHERE realm_url = $1`,
         { bind: [testRealm] },
       )) as { url: string }[];
       return rows.map((row) => row.url).sort();
@@ -805,7 +805,7 @@ module(basename(import.meta.filename), function () {
         'what reaches the edited card only through a render edge is left to the HTML job',
       );
       assert.deepEqual(
-        await workingURLs(),
+        await pendingURLs(),
         urls('hub', 'linker', 'linker-of-linker'),
         'the pass tombstones only the rows it will visit',
       );
@@ -1034,8 +1034,8 @@ module(basename(import.meta.filename), function () {
       return rows[0];
     }
 
-    // Every live row on either channel carries the three write-side stamps
-    // in its `diagnostics` column (see `Diagnostics`). Assert they are there,
+    // Every live row on either channel carries the write-side stamps in its
+    // `diagnostics` column (see `Diagnostics`). Assert they are there,
     // then return the rest of the blob so a render-side assertion can compare
     // exactly what the render produced. Not for `error_doc.diagnostics`: that
     // mirror carries the render's own diagnostics only.
@@ -1046,7 +1046,7 @@ module(basename(import.meta.filename), function () {
     ): Record<string, unknown> {
       assert.ok(diagnostics, `${label} carries a diagnostics blob`);
       let rest: Record<string, unknown> = { ...(diagnostics ?? {}) };
-      for (let key of ['invalidationId', 'indexedAt', 'writeSeq']) {
+      for (let key of ['invalidationId', 'passId', 'indexedAt', 'writeSeq']) {
         assert.notStrictEqual(
           rest[key],
           undefined,
@@ -1350,12 +1350,12 @@ module(basename(import.meta.filename), function () {
       await batch.seedPrerenderedHtmlInvalidations([
         { url, operation: 'update' },
       ]);
-      let workingRows = (await adapter.execute(
-        `SELECT type, is_deleted, generation FROM prerendered_html_working WHERE url = $1 ORDER BY type`,
+      let pendingRows = (await adapter.execute(
+        `SELECT type, is_deleted, generation FROM prerendered_html_pending WHERE url = $1 ORDER BY type`,
         { bind: [url] },
       )) as { type: string; is_deleted: boolean; generation: number }[];
       assert.deepEqual(
-        workingRows.map((r) => ({
+        pendingRows.map((r) => ({
           type: r.type,
           is_deleted: Boolean(r.is_deleted),
           generation: r.generation,
@@ -1364,7 +1364,7 @@ module(basename(import.meta.filename), function () {
           { type: 'file', is_deleted: true, generation: 2 },
           { type: 'instance', is_deleted: true, generation: 2 },
         ],
-        'the whole set is tombstoned up front in the working table',
+        'the whole set is tombstoned up front in the pending table',
       );
 
       await batch.updatePrerenderedHtmlEntry(new URL(url), {
@@ -1777,16 +1777,16 @@ module(basename(import.meta.filename), function () {
       await attempt2.seedPrerenderedHtmlInvalidations([
         { url, operation: 'update' },
       ]);
-      let workingRows = (await adapter.execute(
-        `SELECT is_deleted, isolated_html FROM prerendered_html_working WHERE url = $1`,
+      let pendingRows = (await adapter.execute(
+        `SELECT is_deleted, isolated_html FROM prerendered_html_pending WHERE url = $1`,
         { bind: [url] },
       )) as { is_deleted: boolean | null; isolated_html: string | null }[];
       assert.strictEqual(
-        workingRows[0].isolated_html,
+        pendingRows[0].isolated_html,
         '<h1>attempt 1</h1>',
         'seeding does not tombstone over the resumed row',
       );
-      assert.false(Boolean(workingRows[0].is_deleted));
+      assert.false(Boolean(pendingRows[0].is_deleted));
       await attempt2.done();
 
       let row = await productionRow(url);

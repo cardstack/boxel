@@ -112,10 +112,14 @@ module(basename(import.meta.filename), function (hooks) {
     return row === undefined ? undefined : Number(row.generation);
   }
 
-  async function workingGeneration(name: string): Promise<number | undefined> {
+  async function pendingGeneration(
+    batch: Batch,
+    name: string,
+  ): Promise<number | undefined> {
     let [row] = (await adapter.execute(
-      `SELECT generation FROM boxel_index_working WHERE url = $1 AND type = 'instance'`,
-      { bind: [url(name)] },
+      `SELECT generation FROM boxel_index_pending
+        WHERE staging_id = $1 AND url = $2 AND type = 'instance'`,
+      { bind: [batch.stagingId, url(name)] },
     )) as { generation: number }[];
     return row === undefined ? undefined : Number(row.generation);
   }
@@ -203,6 +207,11 @@ module(basename(import.meta.filename), function (hooks) {
       'the summary B publishes holds only committed rows, not the card A has staged',
     );
     let watermarksAfterB = await indexWatermarks();
+    assert.strictEqual(
+      await pendingGeneration(a, 'a'),
+      1,
+      'precondition: A staged its row under the provisional generation',
+    );
 
     await a.done();
     assert.strictEqual(
@@ -221,11 +230,6 @@ module(basename(import.meta.filename), function (hooks) {
       'the realm generation ends at the last commit',
     );
 
-    assert.strictEqual(
-      await workingGeneration('a'),
-      1,
-      'precondition: A staged its row under the provisional generation',
-    );
     assert.strictEqual(
       await productionGeneration('boxel_index', 'a'),
       2,

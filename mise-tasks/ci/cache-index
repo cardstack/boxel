@@ -206,7 +206,7 @@ echo "Test realms ready. Dumping index tables..."
 # Tables that make up the cache. This is the single source of truth: the same
 # list drives pg_dump's -t args and the completeness check in the separate
 # "Verify index cache" CI step (via the sidecar written below). Keep the
-# TRUNCATE list in scripts/import-cached-index.sh in sync. The *_working
+# TRUNCATE list in scripts/import-cached-index.sh in sync. The *_pending
 # tables are deliberately excluded — they are transient UNLOGGED scratch space.
 CACHE_TABLES=(boxel_index prerendered_html realm_generations realm_meta)
 

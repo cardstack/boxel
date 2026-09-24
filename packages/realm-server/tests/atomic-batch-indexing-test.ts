@@ -66,7 +66,7 @@ function makeFileSystem() {
 // runs in the setup phase — after the invalidation tombstones are written,
 // before any file is visited — the phase #runVisitLoop's per-URL isolation
 // cannot cover, so throwing here exercises the setup-phase recovery path AND
-// leaves the in-flight `instance` tombstone in the working table (the state a
+// leaves the in-flight `instance` tombstone in the job's pending rows (the state a
 // naive recovery would wrongly promote). The `PARTITION BY` string is unique to
 // `queryOrderingDependencyRows`; it appears in neither the `/_atomic` write nor
 // the recovery's own writes (so the write still returns 201 and the recovery's
@@ -518,7 +518,7 @@ module(basename(import.meta.filename), function (hooks) {
     try {
       await realm.delete('keep-me.json', { waitForIndex: false });
       // The fault firing is the proof the delete's index job ran its setup
-      // phase — past `invalidate()`, which seeded the working-table delete
+      // phase — past `invalidate()`, which seeded the pending delete
       // tombstones — and threw. Waiting on the in-process signal keeps the
       // test off job-table finalization timing, which is not the contract
       // under test.
