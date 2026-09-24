@@ -891,6 +891,10 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
     'cardInfo',
     ...cardDefComputedFields,
     'theme',
+    // A JSON pointer with no editor of its own, which would render here as an
+    // empty row. It is set by editing `realm.json`, and it stays declared, so a
+    // save from this editor keeps it.
+    'policy',
   ];
 
   private get cardInfoFieldDisplayNames(): string[] | undefined {

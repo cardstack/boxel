@@ -39,6 +39,7 @@ module('Integration | realm-config | settings', function (hooks) {
   async function renderRealmConfig(
     config: Record<string, unknown> | undefined,
     format: 'isolated' | 'edit',
+    attributes: Record<string, unknown> = {},
   ) {
     let loader = getService('loader-service').loader;
     let cardsGrid: typeof import('@cardstack/base/cards-grid') =
@@ -58,6 +59,7 @@ module('Integration | realm-config | settings', function (hooks) {
             attributes: {
               cardInfo: { name: 'Settings Workspace' },
               ...(config ? { config } : {}),
+              ...attributes,
             },
             meta: {
               adoptsFrom: {
@@ -238,5 +240,20 @@ module('Integration | realm-config | settings', function (hooks) {
     assert
       .dom('[data-test-realm-settings-empty]')
       .exists('and the table reads as a realm with no settings');
+  });
+
+  // The realm's policy pointer is a declared field beside the settings, but
+  // one with no editor of its own, so it gets no row here.
+  test('the policy pointer has no row in the editor', async function (assert) {
+    await renderRealmConfig({ approver: '@mae:localhost' }, 'edit', {
+      policy: { card: 'https://realms.example.test/org/policies/education' },
+    });
+
+    assert
+      .dom('[data-test-field="config"]')
+      .exists('the editor draws a row for each declared field it edits');
+    assert
+      .dom('[data-test-field="policy"]')
+      .doesNotExist('and none for the policy pointer');
   });
 });

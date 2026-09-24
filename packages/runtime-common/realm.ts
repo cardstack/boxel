@@ -486,26 +486,27 @@ function assignRealmConfig(
 // reason called only where the attribute is present.
 //
 // A pointer to the realm's authorization is held to a single shape, an object
-// whose `card` is an absolute URL, and anything else leaves the realm with no
-// policy at all. That is the direction a malformed pointer has to fail in: a
-// realm with no policy is governed by its realm permissions alone, whereas
-// falling back to some default would grant access nobody wrote, and refusing
-// to start would take the realm down over a typo in its settings. An explicit
-// null is how an owner writes "no policy", so it is dropped without a warning;
-// every other shape says what it was in the log.
+// whose `card` names a card on the web, and anything else leaves the realm
+// with no policy at all. That is the direction a malformed pointer has to fail
+// in: a realm with no policy is governed by its realm permissions alone,
+// whereas falling back to some default would grant access nobody wrote, and
+// refusing to start would take the realm down over a typo in its settings. An
+// explicit null is how an owner writes "no policy", so it is dropped without a
+// warning; every other shape says what it was in the log.
 //
 // Only the pointer is read here. What the card says, and whether it loads at
 // all, is decided by whatever follows it.
 function assignRealmPolicy(
   realmInfo: RealmInfo,
   policy: unknown,
+  virtualNetwork: VirtualNetwork,
   log: { warn: (message: string) => void },
 ): void {
   delete realmInfo.policy;
   if (policy === null) {
     return;
   }
-  let reference = readRealmPolicyReference(policy);
+  let reference = readRealmPolicyReference(policy, virtualNetwork);
   if ('problem' in reference) {
     log.warn(
       `ignoring the RealmConfig card's \`policy\`, which is ${reference.problem} rather than a reference to a policy card`,
@@ -519,6 +520,7 @@ function assignRealmPolicy(
 // the log.
 function readRealmPolicyReference(
   policy: unknown,
+  virtualNetwork: VirtualNetwork,
 ): RealmPolicyReference | { problem: string } {
   if (Array.isArray(policy)) {
     return { problem: 'an array' };
@@ -535,20 +537,35 @@ function readRealmPolicyReference(
       card === null ? 'null' : Array.isArray(card) ? 'an array' : typeof card;
     return { problem: `an object whose \`card\` is ${kind}` };
   }
-  // Parsed without a base, so a relative reference fails here along with one
-  // that is not a URL at all: there is no base a pointer in the realm's
-  // settings could fairly be resolved against. The parsed href is what is
-  // kept, so the pointer names its card the way a card URL is written
-  // everywhere else in the realm.
+  // Either spelling a card id is served in: an absolute URL, or the prefix
+  // form a prefix-mapped realm serves its cards' ids in, which the virtual
+  // network resolves to the URL the realm is mounted at. Resolved without a
+  // base, so a relative reference is refused along with one that is not an
+  // identifier at all: there is no base a pointer in the realm's settings
+  // could fairly be resolved against.
+  let url: URL;
   try {
-    return { card: new URL(card).href };
+    url = virtualNetwork.toURL(card);
   } catch {
-    return { problem: 'an object whose `card` is not an absolute URL' };
+    return {
+      problem:
+        'an object whose `card` is neither an absolute URL nor a realm-prefixed card id',
+    };
   }
+  // A card is served over http(s). A `file:`, `data:` or `javascript:` URL
+  // parses as absolute but names nothing a realm could load as a card.
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    return {
+      problem: `an object whose \`card\` is a ${url.protocol} URL rather than an http(s) one`,
+    };
+  }
+  // Kept as the resolved URL, so whatever reads the pointer is handed one
+  // spelling of it however the owner wrote it.
+  return { card: url.href };
 }
 
 // A realm's pointer to the card that holds its policy. Only the card's URL is
-// carried; loading and compiling it is the policy runtime's concern.
+// carried; nothing in the realm loads or compiles the card it names.
 export interface RealmPolicyReference {
   card: string;
 }
@@ -13169,7 +13186,12 @@ export class Realm {
           assignRealmConfig(realmInfo, attrs.config, this.#log);
         }
         if ('policy' in attrs) {
-          assignRealmPolicy(realmInfo, attrs.policy, this.#log);
+          assignRealmPolicy(
+            realmInfo,
+            attrs.policy,
+            this.#virtualNetwork,
+            this.#log,
+          );
         }
       }
     } catch (e) {
@@ -13212,7 +13234,12 @@ export class Realm {
           assignRealmConfig(realmInfo, attrs.config, this.#log);
         }
         if ('policy' in attrs) {
-          assignRealmPolicy(realmInfo, attrs.policy, this.#log);
+          assignRealmPolicy(
+            realmInfo,
+            attrs.policy,
+            this.#virtualNetwork,
+            this.#log,
+          );
         }
       }
     } catch (e) {

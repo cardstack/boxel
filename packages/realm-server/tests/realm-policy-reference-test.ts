@@ -4,7 +4,7 @@ import { basename, join } from 'path';
 import { readFileSync } from 'fs';
 import type { Test, SuperTest } from 'supertest';
 import { logger, rri } from '@cardstack/runtime-common';
-import type { Realm } from '@cardstack/runtime-common';
+import type { Realm, VirtualNetwork } from '@cardstack/runtime-common';
 import {
   createJWT,
   realmConfigCardJSON,
@@ -18,6 +18,8 @@ const REALM_NAME = 'Policy Reference Test Realm';
 const SETTINGS = { approver: '@mae:localhost' };
 
 const REJECTION = "ignoring the RealmConfig card's `policy`";
+const NOT_AN_IDENTIFIER =
+  'which is an object whose `card` is neither an absolute URL nor a realm-prefixed card id';
 
 // Every warning the realm logs while `fn` runs. The realm and this suite share
 // the named `realm` logger, so a tap on its method factory sees exactly what
@@ -63,6 +65,7 @@ module(basename(import.meta.filename), function () {
     let realmURL = new URL('http://127.0.0.1:4444/policy-reference/');
     let testRealm: Realm;
     let testRealmPath: string;
+    let virtualNetwork: VirtualNetwork;
     let request: SuperTest<Test>;
 
     setupPermissionedRealmCached(hooks, {
@@ -79,6 +82,7 @@ module(basename(import.meta.filename), function () {
       onRealmSetup(args) {
         testRealm = args.testRealm;
         testRealmPath = args.testRealmPath;
+        virtualNetwork = args.virtualNetwork;
         request = args.request;
       },
     });
@@ -112,6 +116,24 @@ module(basename(import.meta.filename), function () {
         await testRealm.getRealmPolicy(),
         { card: POLICY_CARD },
         'the pointer realm.json holds',
+      );
+    });
+
+    // A prefix-mapped realm serves its cards' ids in prefix form, so a pointer
+    // copied from one of them is written that way.
+    test('a pointer written as a realm-prefixed card id is read as the URL it resolves to', async function (assert) {
+      let prefixed = '@cardstack/catalog/policies/education';
+      let resolved = virtualNetwork.toURL(prefixed).href;
+      assert.true(
+        resolved.startsWith('http'),
+        `the prefix resolves to a URL in this realm's network: ${resolved}`,
+      );
+
+      await writeRealmConfig({ card: prefixed });
+      assert.deepEqual(
+        await testRealm.getRealmPolicy(),
+        { card: resolved },
+        'the pointer is handed back in URL form',
       );
     });
 
@@ -289,12 +311,37 @@ module(basename(import.meta.filename), function () {
         {
           label: 'a card that is not a URL',
           value: { card: 'not a url' },
-          problem: 'which is an object whose `card` is not an absolute URL',
+          problem: NOT_AN_IDENTIFIER,
         },
         {
           label: 'a relative card',
           value: { card: './policies/education' },
-          problem: 'which is an object whose `card` is not an absolute URL',
+          problem: NOT_AN_IDENTIFIER,
+        },
+        {
+          label: 'a card under a prefix no realm is mapped at',
+          value: { card: '@nowhere/policies/education' },
+          problem: NOT_AN_IDENTIFIER,
+        },
+        {
+          label: 'a file URL',
+          value: { card: 'file:///etc/passwd' },
+          problem: 'which is an object whose `card` is a file: URL',
+        },
+        {
+          label: 'a data URL',
+          value: { card: 'data:application/json,{}' },
+          problem: 'which is an object whose `card` is a data: URL',
+        },
+        {
+          label: 'a javascript URL',
+          value: { card: 'javascript:alert(1)' },
+          problem: 'which is an object whose `card` is a javascript: URL',
+        },
+        {
+          label: 'a mailto URL',
+          value: { card: 'mailto:owner@example.test' },
+          problem: 'which is an object whose `card` is a mailto: URL',
         },
       ];
 
