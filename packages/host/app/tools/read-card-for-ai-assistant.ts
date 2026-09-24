@@ -6,7 +6,6 @@ import HostBaseTool from '../lib/host-base-tool';
 
 import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
-import type { CardDef } from '@cardstack/base/card-api';
 import type * as BaseToolModule from '@cardstack/base/command';
 import type { FileDef } from '@cardstack/base/file-api';
 
@@ -33,7 +32,7 @@ export default class ReadCardForAssistantTool extends HostBaseTool<
     let { matrixService } = this;
 
     await matrixService.ready;
-    let maybeCard = await this.store.get<CardDef>(input.cardId);
+    let maybeCard = await this.store.get(input.cardId);
     if (isCardInstance(maybeCard)) {
       let cardFileDef = (
         await matrixService.uploadCards([maybeCard])

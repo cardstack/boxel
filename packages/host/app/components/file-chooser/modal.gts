@@ -113,7 +113,7 @@ export default class FileChooserModal extends Component<Signature> {
       try {
         if (deferred && selectedRealm && path) {
           let fileId = new RealmPaths(selectedRealm.id).fileRRI(path);
-          let file = await this.store.get<FileDef>(fileId, {
+          let file = await this.store.get(fileId, {
             type: 'file-meta',
           });
           if (isCardErrorJSONAPI(file)) {

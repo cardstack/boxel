@@ -263,17 +263,16 @@ module('Integration | operations invocation', function (hooks) {
   // as an error.
   async function cardAt(localPath: string): Promise<CardDefType> {
     return loaded(
-      await getService('store').get<CardDefType>(`${testRealmURL}${localPath}`),
+      await getService('store').get(`${testRealmURL}${localPath}`),
       localPath,
     );
   }
 
   async function fileAt(localPath: string): Promise<FileDefType> {
     return loaded(
-      await getService('store').get<FileDefType>(
-        `${testRealmURL}${localPath}`,
-        { type: 'file-meta' },
-      ),
+      await getService('store').get(`${testRealmURL}${localPath}`, {
+        type: 'file-meta',
+      }),
       localPath,
     );
   }
@@ -810,7 +809,7 @@ module('Integration | operations invocation', function (hooks) {
         typeof OperationsModule
       >('@cardstack/base/operations'));
       let elsewhere = loaded(
-        await getService('store').get<CardDefType>(`${testRealm2URL}elsewhere`),
+        await getService('store').get(`${testRealm2URL}elsewhere`),
         'test2/elsewhere',
       );
       let report = await cardAt('report-refused');

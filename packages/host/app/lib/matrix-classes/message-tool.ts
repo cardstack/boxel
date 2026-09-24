@@ -167,7 +167,7 @@ export default class MessageTool {
     }
     let id = cardDoc.data.id;
     if (id) {
-      let live = await this.store.get<CardDef>(id);
+      let live = await this.store.get(id);
       if (isCardInstance(live)) {
         return live;
       }

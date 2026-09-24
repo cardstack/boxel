@@ -387,9 +387,7 @@ module('Integration | operations query', function (hooks) {
   });
 
   test('a saved search is invoked on the class that declares it', async function (assert) {
-    let card = await getService('store').get<CardDef>(
-      `${testRealmURL}reports/open-1`,
-    );
+    let card = await getService('store').get(`${testRealmURL}reports/open-1`);
     await settled();
 
     assert.strictEqual(

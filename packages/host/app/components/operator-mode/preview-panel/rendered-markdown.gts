@@ -213,7 +213,7 @@ export default class RenderedMarkdown extends Component<Signature> {
     await Promise.all(
       urls.map(async (url) => {
         try {
-          let result = await this.store.get<FileDef>(url, {
+          let result = await this.store.get(url, {
             type: 'file-meta',
           });
           if (!isCardErrorJSONAPI(result)) {

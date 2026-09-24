@@ -881,7 +881,7 @@ export default class InteractSubmode extends Component {
       return;
     }
 
-    let spec = await this.store.get<Spec>(specId);
+    let spec = await this.store.get(specId);
 
     if (!spec) {
       throw new Error(`Could not find spec "${specId}" in the store`);

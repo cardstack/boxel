@@ -177,7 +177,7 @@ module('Integration | operations store reconciliation', function (hooks) {
     let url = `${testRealmURL}${localPath}`;
     let store = getService('store');
     store.addReference(url);
-    let instance = await store.get<CardDefType>(url);
+    let instance = await store.get(url);
     if (!instance || !('id' in instance)) {
       throw new Error(`${localPath} did not load: ${JSON.stringify(instance)}`);
     }
@@ -681,7 +681,7 @@ module('Integration | operations store reconciliation', function (hooks) {
 
     let report = await cardAt('report-foreign');
     let activity = await unsavedActivity('Lab safety');
-    let consumer = (await getService('store').get<CardDefType>(
+    let consumer = (await getService('store').get(
       `${testRealm2URL}consumer`,
     )) as CardDefType;
     // The link a browser makes before the target has a URL: the consumer in the

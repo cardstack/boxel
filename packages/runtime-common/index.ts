@@ -2167,6 +2167,14 @@ export interface AddOptions extends CreateOptions {
 
 export type StoreReadType = 'card' | 'file-meta';
 
+// What each read type yields. `peek`/`get` derive their instance type from the
+// `type` they are handed, so a file read is `FileDef`-typed without the caller
+// naming a type and a card read cannot be mis-asserted as a file.
+export interface InstanceForReadType {
+  card: CardDef;
+  'file-meta': FileDef;
+}
+
 export interface Store {
   save(id: string): void;
   create(
@@ -2185,26 +2193,18 @@ export interface Store {
     instanceOrDoc: T | LooseSingleCardDocument,
     opts?: CreateOptions,
   ): Promise<T | CardErrorJSONAPI>;
-  peek<T extends CardDef>(
+  peek<K extends StoreReadType = 'card'>(
     id: string,
-    opts?: { type?: 'card' },
-  ): T | CardErrorJSONAPI | undefined;
-  peek<T extends FileDef>(
-    id: string,
-    opts: { type: 'file-meta' },
-  ): T | CardErrorJSONAPI | undefined;
+    opts?: { type?: K },
+  ): InstanceForReadType[K] | CardErrorJSONAPI | undefined;
   peekError(
     id: string,
     opts?: { type?: StoreReadType },
   ): CardErrorJSONAPI | undefined;
-  get<T extends CardDef>(
+  get<K extends StoreReadType = 'card'>(
     id: string,
-    opts?: { type?: 'card' },
-  ): Promise<T | CardErrorJSONAPI>;
-  get<T extends FileDef>(
-    id: string,
-    opts: { type: 'file-meta' },
-  ): Promise<T | CardErrorJSONAPI>;
+    opts?: { type?: K },
+  ): Promise<InstanceForReadType[K] | CardErrorJSONAPI>;
   delete(id: string): Promise<void>;
   patch(
     id: string,

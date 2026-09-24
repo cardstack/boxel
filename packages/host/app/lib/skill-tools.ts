@@ -84,10 +84,10 @@ export async function loadSkillSource(
   id: string,
 ): Promise<SkillSource | undefined> {
   if (isMarkdownSkillId(id)) {
-    let fileMeta = await store.get<MarkdownDef>(id, { type: 'file-meta' });
+    let fileMeta = await store.get(id, { type: 'file-meta' });
     return isSkillMarkdown(fileMeta) ? fileMeta : undefined;
   }
-  let card = await store.get<SkillModule.Skill>(id);
+  let card = await store.get(id);
   return isCardInstance(card) && isSkillCardInstance(card) ? card : undefined;
 }
 
@@ -98,10 +98,10 @@ export function peekSkillSource(
   id: string,
 ): SkillSource | undefined {
   if (isMarkdownSkillId(id)) {
-    let fileMeta = store.peek<MarkdownDef>(id, { type: 'file-meta' });
+    let fileMeta = store.peek(id, { type: 'file-meta' });
     return isSkillMarkdown(fileMeta) ? fileMeta : undefined;
   }
-  let card = store.peek<SkillModule.Skill>(id);
+  let card = store.peek(id);
   return isCardInstance(card) && isSkillCardInstance(card) ? card : undefined;
 }
 

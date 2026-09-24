@@ -55,7 +55,7 @@ A write answers the card it wrote and the version that card now holds; a read an
   protected async run(
     input: BaseToolModule.InvokeCardOperationInput,
   ): Promise<BaseToolModule.InvokeCardOperationResult> {
-    let card = await this.store.get<CardDef>(input.cardId);
+    let card = await this.store.get(input.cardId);
     if (!isCardInstance(card)) {
       throw new Error(
         `cannot invoke "${input.operation}": ${input.cardId} did not load: ${card.message}`,

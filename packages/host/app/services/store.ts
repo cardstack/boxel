@@ -60,6 +60,7 @@ import {
   RealmPaths,
   type CardAPIForMatching,
   clearReplacedArrayFieldMeta,
+  type InstanceForReadType,
   type Store as StoreInterface,
   type AddOptions,
   type CreateOptions,
@@ -1024,31 +1025,16 @@ export default class StoreService extends Service implements StoreInterface {
 
   // peek will return a stale instance in the case the server has an error for
   // this id
-  //
-  // `peek`, `get` and `getWithoutCache` split on `opts.type` where `peekError`
-  // does not, because only theirs changes the return type. Collapsing them
-  // means deriving the instance type from `opts.type`, which claims the
-  // type-parameter slot `T` occupies here — so it is one change with the
-  // decision about callers that assert a subclass through `T`, not a step
-  // before it.
-  peek<T extends CardDef>(
+  peek<K extends StoreReadType = 'card'>(
     id: string,
-    opts?: { type?: 'card' },
-  ): T | CardErrorJSONAPI | undefined;
-  peek<T extends FileDef>(
-    id: string,
-    opts: { type: 'file-meta' },
-  ): T | CardErrorJSONAPI | undefined;
-  peek<T extends CardDef | FileDef>(
-    id: string,
-    opts?: { type?: StoreReadType },
-  ): T | CardErrorJSONAPI | undefined {
+    opts?: { type?: K },
+  ): InstanceForReadType[K] | CardErrorJSONAPI | undefined {
     id = asURL(id, this.network.virtualNetwork);
-    let readType = opts?.type ?? 'card';
-    if (readType === 'file-meta') {
-      return this.store.getFileMetaInstanceOrError<T & FileDef>(id);
-    }
-    return this.store.getCardInstanceOrError<T & CardDef>(id);
+    let result =
+      (opts?.type ?? 'card') === 'file-meta'
+        ? this.store.getFileMetaInstanceOrError<FileDef>(id)
+        : this.store.getCardInstanceOrError<CardDef>(id);
+    return result as InstanceForReadType[K] | CardErrorJSONAPI | undefined;
   }
 
   // All hydrated (non-error) card instances currently in the Store. The result
@@ -1104,64 +1090,46 @@ export default class StoreService extends Service implements StoreInterface {
     return this.store.getCardError(id);
   }
 
-  async get<T extends CardDef>(
+  async get<K extends StoreReadType = 'card'>(
     id: string,
     opts?: {
-      type?: 'card';
+      type?: K;
       dependencyTrackingContext?: RuntimeDependencyTrackingContext;
     },
-  ): Promise<T | CardErrorJSONAPI>;
-  async get<T extends FileDef>(
-    id: string,
-    opts: {
-      type: 'file-meta';
-      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
-    },
-  ): Promise<T | CardErrorJSONAPI>;
-  async get<T extends CardDef | FileDef>(
-    id: string,
-    opts?: {
-      type?: StoreReadType;
-      dependencyTrackingContext?: RuntimeDependencyTrackingContext;
-    },
-  ): Promise<T | CardErrorJSONAPI> {
-    let readType = opts?.type ?? 'card';
-    if (readType === 'file-meta') {
-      return await this.getFileMetaInstance<T & FileDef>({
-        idOrDoc: id,
-        opts: { dependencyTrackingContext: opts?.dependencyTrackingContext },
-      });
-    }
-    return await this.getCardInstance<T & CardDef>({
-      idOrDoc: id,
-      opts: { dependencyTrackingContext: opts?.dependencyTrackingContext },
-    });
+  ): Promise<InstanceForReadType[K] | CardErrorJSONAPI> {
+    let result =
+      (opts?.type ?? 'card') === 'file-meta'
+        ? await this.getFileMetaInstance<FileDef>({
+            idOrDoc: id,
+            opts: {
+              dependencyTrackingContext: opts?.dependencyTrackingContext,
+            },
+          })
+        : await this.getCardInstance<CardDef>({
+            idOrDoc: id,
+            opts: {
+              dependencyTrackingContext: opts?.dependencyTrackingContext,
+            },
+          });
+    return result as InstanceForReadType[K] | CardErrorJSONAPI;
   }
 
   // Bypass cached state and fetch from source of truth
-  async getWithoutCache<T extends CardDef>(
+  async getWithoutCache<K extends StoreReadType = 'card'>(
     id: string,
-    opts?: { type?: 'card' },
-  ): Promise<T | CardErrorJSONAPI>;
-  async getWithoutCache<T extends FileDef>(
-    id: string,
-    opts: { type: 'file-meta' },
-  ): Promise<T | CardErrorJSONAPI>;
-  async getWithoutCache<T extends CardDef | FileDef>(
-    id: string,
-    opts?: { type?: StoreReadType },
-  ): Promise<T | CardErrorJSONAPI> {
-    let readType = opts?.type ?? 'card';
-    if (readType === 'file-meta') {
-      return await this.getFileMetaInstance<T & FileDef>({
-        idOrDoc: id,
-        opts: { noCache: true },
-      });
-    }
-    return await this.getCardInstance<T & CardDef>({
-      idOrDoc: id,
-      opts: { noCache: true },
-    });
+    opts?: { type?: K },
+  ): Promise<InstanceForReadType[K] | CardErrorJSONAPI> {
+    let result =
+      (opts?.type ?? 'card') === 'file-meta'
+        ? await this.getFileMetaInstance<FileDef>({
+            idOrDoc: id,
+            opts: { noCache: true },
+          })
+        : await this.getCardInstance<CardDef>({
+            idOrDoc: id,
+            opts: { noCache: true },
+          });
+    return result as InstanceForReadType[K] | CardErrorJSONAPI;
   }
 
   async serializeFileDefAsDocument(

@@ -65,7 +65,6 @@ import type {
   BaseDef,
   CardCrudFunctions,
   CardDef,
-  FileDef,
   Format,
 } from '@cardstack/base/card-api';
 
@@ -464,8 +463,8 @@ export default class OperatorModeOverlays extends Overlays {
     }
     let isFile = renderedCard != null && this.isFileMetaTarget(renderedCard);
     let instance = isFile
-      ? this.store.peek<FileDef>(cardDefOrId, { type: 'file-meta' })
-      : this.store.peek<CardDef>(cardDefOrId);
+      ? this.store.peek(cardDefOrId, { type: 'file-meta' })
+      : this.store.peek(cardDefOrId);
     if (!instance || 'error' in instance) {
       return undefined;
     }
