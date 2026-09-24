@@ -64,9 +64,11 @@ export class SearchEntriesResult extends CardDef {
         <SearchResultList @items={{@model.results}} as |visibleResults|>
           <p class='result-count' data-test-search-entries-count>
             {{@model.results.length}}
-            of
-            {{@model.total}}
-            results{{if @model.incomplete ' (incomplete: a realm failed)' ''}}
+            {{if (eq @model.results.length 1) 'result' 'results'}}{{if
+              @model.incomplete
+              ' (incomplete: a realm failed)'
+              ''
+            }}
           </p>
           <ol class='result-list' data-test-result-list>
             {{#each visibleResults key='url' as |result|}}

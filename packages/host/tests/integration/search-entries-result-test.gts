@@ -174,9 +174,7 @@ module('Integration | search-entries-result', function (hooks) {
       });
 
       assert.dom('[data-test-search-entries-result]').exists();
-      assert
-        .dom('[data-test-search-entries-count]')
-        .containsText('2 of 2 results');
+      assert.dom('[data-test-search-entries-count]').hasText('2 results');
       assert.dom('[data-test-result-list] [data-test-result-entry]').exists({
         count: 2,
       });
@@ -248,7 +246,7 @@ module('Integration | search-entries-result', function (hooks) {
         .hasText('0.61');
       assert
         .dom('[data-test-search-entries-count]')
-        .containsText('(incomplete: a realm failed)');
+        .hasText('1 result (incomplete: a realm failed)');
     });
   });
 
