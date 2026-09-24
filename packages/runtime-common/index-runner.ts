@@ -327,7 +327,9 @@ export class IndexRunner {
     // inside the try below.
     let visitLoopMs: number | undefined;
     let swapMs: number | undefined;
-    let swapCommit: { swapAttempts: number; swapRetryMs: number } | undefined;
+    let swapCommit:
+      | { swapAttempts: number; swapRetryMs: number; commitLockWaitMs?: number }
+      | undefined;
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} starting from scratch indexing`,
     );
@@ -457,7 +459,9 @@ export class IndexRunner {
         `${jobIdentity(current.#jobInfo)} completed index visit in ${Date.now() - visitStart} ms`,
       );
       let finalizeStart = Date.now();
-      let { totalIndexEntries, ...commit } = await current.batch.done();
+      let { totalIndexEntries, ...commit } = await current.batch.done({
+        fullRealm: true,
+      });
       swapMs = Date.now() - finalizeStart;
       swapCommit = commit;
       current.#perfLog.debug(
@@ -498,7 +502,8 @@ export class IndexRunner {
       invalidations: [...invalidations].map((url) => url.href),
       ignoreData: current.#ignoreData,
       stats: current.stats,
-      generation: current.batch.currentGeneration,
+      generation: current.batch.committedGeneration,
+      baseGeneration: current.batch.baseGeneration,
       phaseTimings: {
         totalMs: Date.now() - start,
         setupMs,
@@ -528,7 +533,9 @@ export class IndexRunner {
     // inside the try below.
     let visitLoopMs: number | undefined;
     let swapMs: number | undefined;
-    let swapCommit: { swapAttempts: number; swapRetryMs: number } | undefined;
+    let swapCommit:
+      | { swapAttempts: number; swapRetryMs: number; commitLockWaitMs?: number }
+      | undefined;
     let operations = new Map<string, 'update' | 'delete'>();
     for (let { url, operation } of changes) {
       if (operation === 'delete') {
@@ -722,7 +729,8 @@ export class IndexRunner {
       invalidatedTypes: current.batch.touchedTypes,
       ignoreData: current.#ignoreData,
       stats: current.stats,
-      generation: current.batch.currentGeneration,
+      generation: current.batch.committedGeneration,
+      baseGeneration: current.batch.baseGeneration,
       phaseTimings: {
         totalMs: Date.now() - start,
         setupMs,
@@ -758,7 +766,7 @@ export class IndexRunner {
         url,
         operation: deletes.has(url) ? 'delete' : 'update',
       })),
-      generation: this.batch.currentGeneration,
+      generation: this.batch.provisionalGeneration,
       loaderEpoch: this.batch.loaderEpoch,
     });
   }
@@ -1130,11 +1138,7 @@ export class IndexRunner {
           );
         }
       }
-      // Carry realm_meta forward rather than recomputing it: the working
-      // table still holds the failed pass's un-promoted fan-out tombstones,
-      // and a recompute over that state would undercount live dependents in
-      // the type summary until the next successful pass.
-      await errorBatch.done({ carryForwardRealmMeta: true });
+      await errorBatch.done();
     } catch (recordErr) {
       // Recording is best-effort: if the failure was a DB outage the recovery
       // write fails too. The caller still rethrows the original error, so the

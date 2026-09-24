@@ -130,6 +130,10 @@ export interface IncrementalResult {
   // The realm generation this pass committed. Optional so a result produced
   // by an older worker mid-deploy still parses.
   generation?: number;
+  // The committed generation this pass was set up against. Below
+  // `generation - 1` when a peer pass of the realm committed while this one
+  // ran. Optional for the same reason as `generation`.
+  baseGeneration?: number;
   // Between-visit phase decomposition of the job wall (see IndexPhaseTimings).
   // Optional so a result from a worker predating the instrumentation parses.
   phaseTimings?: IndexPhaseTimings;
@@ -188,6 +192,8 @@ export interface FromScratchResult {
   stats: Stats;
   // See IncrementalResult.generation.
   generation?: number;
+  // See IncrementalResult.baseGeneration.
+  baseGeneration?: number;
   // See IncrementalResult.phaseTimings.
   phaseTimings?: IndexPhaseTimings;
 }
@@ -609,8 +615,14 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       prerenderer,
       realmOwnerUserId: userId,
     });
-    let { stats, ignoreData, invalidations, generation, phaseTimings } =
-      await IndexRunner.fromScratch(currentRun);
+    let {
+      stats,
+      ignoreData,
+      invalidations,
+      generation,
+      baseGeneration,
+      phaseTimings,
+    } = await IndexRunner.fromScratch(currentRun);
 
     log.debug(
       `${jobIdentity(jobInfo)} completed from-scratch indexing for realm ${
@@ -646,6 +658,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       ignoreData: { ...ignoreData },
       stats,
       ...(generation !== undefined ? { generation } : {}),
+      ...(baseGeneration !== undefined ? { baseGeneration } : {}),
       ...(phaseTimings !== undefined ? { phaseTimings } : {}),
     };
   };
@@ -761,6 +774,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       invalidatedTypes,
       ignoreData,
       generation,
+      baseGeneration,
       phaseTimings,
     } = await IndexRunner.incremental(currentRun, {
       changes: changes.map(({ operation, url }) => ({
@@ -781,6 +795,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       ...(invalidatedTypes !== undefined ? { invalidatedTypes } : {}),
       stats,
       ...(generation !== undefined ? { generation } : {}),
+      ...(baseGeneration !== undefined ? { baseGeneration } : {}),
       ...(phaseTimings !== undefined ? { phaseTimings } : {}),
       ...(deferredPrerenderHtml !== undefined ? { deferredPrerenderHtml } : {}),
       coalescedCallers: getCoalescedCallers(args),

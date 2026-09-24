@@ -83,6 +83,9 @@ export interface IndexPhaseTimings {
   swapAttempts?: number;
   // The part of `swapMs` spent on attempts that rolled back.
   swapRetryMs?: number;
+  // The part of `swapMs` the committing attempt spent waiting for the realm's
+  // commit lock — for another pass of the same realm to finish committing.
+  commitLockWaitMs?: number;
 }
 
 export interface StreamFileRef {

@@ -141,6 +141,32 @@ export interface RealmGenerationsTable {
   loader_epoch: string;
 }
 
+// One row per committed index pass: the ledger of which pass took each
+// generation of a realm. `realm_generations` holds only the newest generation;
+// this says what every recent one was — which URLs its commit promoted, and
+// what committed state the pass had started from. A row whose
+// `base_generation` is below `generation - 1` belongs to a pass that ran while
+// a peer committed.
+export interface RealmIndexCommitsTable {
+  realm_url: string;
+  generation: number;
+  // The `current_generation` the pass was set up against.
+  base_generation: number;
+  // Minted per batch, so the attempts of a retried job tell apart.
+  pass_id: string;
+  job_id: number | null;
+  // The URLs the commit promoted, sorted. NULL for a full-realm pass, and for
+  // a pass that moved too many rows to list; either way, read NULL as every
+  // URL in the realm.
+  urls: string[] | null;
+  // The render-only dependents the commit restamped without promoting, sorted.
+  // NULL exactly when `urls` is.
+  render_only_urls: string[] | null;
+  full_realm: boolean;
+  // Epoch milliseconds.
+  committed_at: number;
+}
+
 // The catch-all `realm_type_generations.type_key`. A lookup always folds this
 // row in alongside the keys it asked for, so a pass that cannot name the types
 // it touched — and a from-scratch rebuild, where a type whose last row
