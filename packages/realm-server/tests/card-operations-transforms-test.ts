@@ -7,12 +7,15 @@ import {
   isDocumentResult,
   isHeadResult,
   isOperationFailure,
+  newOperationScope,
   paramsFor,
   projectedResult,
   readShape,
   runInputTransform,
   runOperation,
   runOutputTransform,
+  scopeCallerFor,
+  stageWriteEntry,
   type EnvelopeEntry,
   type OperationCore,
   type OperationDefinition,
@@ -579,6 +582,123 @@ module(basename(import.meta.filename), function () {
         'the params the entry is staged from are the transformed ones',
       );
       assert.strictEqual(transformed.position, 0, 'the position is unchanged');
+    });
+
+    // A named create whose `input` supplies the one param its declaration
+    // requires, so a caller that sends nothing still satisfies the check — and
+    // what would be written differs from what was sent.
+    const TITLED_CREATE: OperationDefinition = {
+      base: 'create',
+      deterministic: true,
+      of: PERSON,
+      params: { title: { kind: 'field', codeRef: PERSON } },
+      input: {
+        syntax: 'solidified',
+        source: '. + {title: (.title // "Untitled")}',
+      },
+    };
+
+    function createEntry(data: Record<string, unknown>): EnvelopeEntry {
+      return { op: 'invoke', position: 0, name: 'draft', data };
+    }
+
+    const realmConfig = async () => ({});
+
+    test('a create’s scope carries the document its stages produced, not the caller’s payload', async function (assert) {
+      let core = stub();
+      let sent = { lid: 'draft-1', meta: { x: 1 }, note: 'from the caller' };
+      let staged = await stageWriteEntry(
+        {
+          entry: createEntry(sent),
+          target: { kind: 'type', codeRef: PERSON, realm: REALM },
+          definition: TITLED_CREATE,
+          scope: newOperationScope(core, { caller: scopeCallerFor(ACTOR) }),
+        },
+        {
+          name: 'draft',
+          params: paramsFor(createEntry(sent)),
+          actor: ACTOR,
+          realmConfig,
+        },
+      );
+      assert.deepEqual(
+        staged.scope.proposed,
+        { note: 'from the caller', title: 'Untitled' },
+        'the proposed document holds the param the input supplied, and ' +
+          'not the envelope members a named create’s params leave out',
+      );
+      assert.strictEqual(
+        (sent as Record<string, unknown>).title,
+        undefined,
+        'which the caller never sent',
+      );
+      assert.deepEqual(
+        staged.scope.caller,
+        { kind: 'user', actor: ACTOR },
+        'and the batch’s caller travels with it',
+      );
+    });
+
+    test('a plain create’s proposed document is the resource it is minted from', async function (assert) {
+      let resource = {
+        lid: 'draft-1',
+        attributes: { title: 'Q3' },
+        meta: { adoptsFrom: PERSON },
+      };
+      let staged = await stageWriteEntry(
+        {
+          entry: createEntry(resource),
+          target: { kind: 'type', codeRef: PERSON, realm: REALM },
+          definition: { base: 'create', deterministic: true },
+          scope: newOperationScope(stub(), { caller: scopeCallerFor(ACTOR) }),
+        },
+        { name: 'create', params: {}, actor: ACTOR, realmConfig },
+      );
+      assert.deepEqual(
+        staged.scope.proposed,
+        resource,
+        'the whole resource, local id and type included, as it is staged',
+      );
+    });
+
+    test('a create the params check refuses stages no proposed document', async function (assert) {
+      let { input: _input, ...withoutInput } = TITLED_CREATE;
+      let error = await refusal(() =>
+        stageWriteEntry(
+          {
+            entry: createEntry({}),
+            target: { kind: 'type', codeRef: PERSON, realm: REALM },
+            definition: withoutInput as OperationDefinition,
+            scope: newOperationScope(stub()),
+          },
+          { name: 'draft', params: {}, realmConfig },
+        ),
+      );
+      assert.strictEqual(error.code, 'invalid-params');
+    });
+
+    test('a write that is not a create carries no proposed document', async function (assert) {
+      let staged = await stageWriteEntry(
+        {
+          entry: {
+            op: 'invoke',
+            position: 0,
+            name: 'addComment',
+            href: CARD,
+            data: { body: 'hello' },
+          },
+          target: { kind: 'instance', url: CARD },
+          definition: { base: 'transform', deterministic: true },
+          scope: newOperationScope(stub(), { caller: scopeCallerFor(ACTOR) }),
+        },
+        {
+          name: 'addComment',
+          params: { body: 'hello' },
+          actor: ACTOR,
+          realmConfig,
+        },
+      );
+      assert.strictEqual(staged.scope.proposed, undefined);
     });
 
     test('a batch entry’s projection has to remain a result object', async function (assert) {

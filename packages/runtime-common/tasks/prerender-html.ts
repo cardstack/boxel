@@ -1,5 +1,4 @@
 import type * as JSONTypes from 'json-typescript';
-import type { FileDefBindings } from '../file-def-bindings.ts';
 import type { Task, WorkerArgs } from './index.ts';
 import {
   jobIdentity,
@@ -23,13 +22,6 @@ import {
 import type { Stats } from '../worker.ts';
 
 export { prerenderHtml };
-
-// A file type binding as it survives the queue: the same members as a
-// `ResolvedCodeRef`, declared so the args object satisfies the JSON index
-// signature `WorkerArgs` imposes.
-export interface SerializedFileDefBindings extends JSONTypes.Object {
-  [extension: string]: { [member: string]: string };
-}
 
 export interface PrerenderHtmlArgs extends WorkerArgs {
   // The invalidation set the spawning index pass computed, tagged per URL —
@@ -60,20 +52,6 @@ export interface PrerenderHtmlArgs extends WorkerArgs {
   // joins can't be counted here — a running worker holds its args in memory,
   // so the queue never writes an update for them.
   coalescedPublishes: number | null;
-  // The realm's file type bindings as the spawning index pass resolved them,
-  // spelled as the queue can carry them: a job's args round-trip through
-  // Postgres as JSON, so this is the structural shape rather than the branded
-  // `FileDefBindings`, which the pass narrows back on read.
-  //
-  // Carried rather than read again there so the pass that writes a file's
-  // `types` and the pass that writes the HTML keyed on `types[0]` share one
-  // answer by construction. A realm that binds nothing sends `{}` — an answer,
-  // and the one that lets the pass skip the config read entirely. `null` means
-  // only that this job predates the field, and is what sends the pass to read
-  // the document for itself. Nullable rather than optional for the same
-  // index-signature reason `queueWaitMs` is: the args object has to satisfy
-  // `JSONTypes.Object`, which has no `undefined`.
-  fileDefBindings: SerializedFileDefBindings | null;
   // True when a from-scratch index pass spawned this job (directly or via
   // coalescing, OR-preserved below): the realm-wide module pre-warm sweep runs
   // once at the start of the pass. Incremental spawns leave it false — the
@@ -85,11 +63,24 @@ export interface PrerenderHtmlResult extends JSONTypes.Object {
   invalidations: string[];
   generation: number;
   stats: Stats;
-  // The pre-warm sweep's wall-clock when it ran (from-scratch-spawned jobs),
-  // else null — so dashboards attribute the sweep to the job that pays it.
-  // Non-optional `| null` rather than `?:` because the result is a
-  // `JSONTypes.Object`, whose index signature rejects `undefined`.
-  phaseTimings: { preWarmMs: number } | null;
+  // Phase wall-clocks the job paid, by name, or null when it recorded none.
+  // `preWarmMs` is the module pre-warm sweep (from-scratch-spawned jobs only),
+  // so dashboards attribute the sweep to the job that pays it. `swapMs`,
+  // `swapAttempts` and `swapRetryMs` describe the swap's transaction, as on an
+  // index job's `phaseTimings`. A record of numbers rather than optional
+  // members because the result is a `JSONTypes.Object`, whose index signature
+  // rejects `undefined`.
+  phaseTimings: Record<string, number> | null;
+}
+
+// The measured phases only, or null when none was measured.
+function phaseTimingsRecord(
+  phases: Record<string, number | undefined>,
+): Record<string, number> | null {
+  let measured = Object.entries(phases).filter(
+    (entry): entry is [string, number] => entry[1] !== undefined,
+  );
+  return measured.length > 0 ? Object.fromEntries(measured) : null;
 }
 
 function parsePrerenderHtmlArgsForCoalesce(
@@ -107,7 +98,6 @@ function parsePrerenderHtmlArgsForCoalesce(
     spawningJobId,
     coalescedPublishes,
     preWarm,
-    fileDefBindings,
   } = args;
   if (
     typeof realmURL !== 'string' ||
@@ -128,31 +118,7 @@ function parsePrerenderHtmlArgsForCoalesce(
     coalescedPublishes:
       typeof coalescedPublishes === 'number' ? coalescedPublishes : null,
     preWarm: preWarm === true,
-    fileDefBindings: isSerializedFileDefBindings(fileDefBindings)
-      ? fileDefBindings
-      : null,
   };
-}
-
-// The bindings as they come back off the queue, held to their shape before the
-// pass trusts them: these args round-trip through Postgres as JSON, and a job
-// row can predate the field or have been written by a peer on an older
-// revision. Anything that is not a map of extension to `{ module, name }` is
-// read as "none carried", which sends the pass to the config document — the
-// same place it went before the payload carried them at all.
-function isSerializedFileDefBindings(
-  value: unknown,
-): value is SerializedFileDefBindings {
-  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
-    return false;
-  }
-  return Object.values(value as Record<string, unknown>).every(
-    (ref) =>
-      ref != null &&
-      typeof ref === 'object' &&
-      typeof (ref as { module?: unknown }).module === 'string' &&
-      typeof (ref as { name?: unknown }).name === 'string',
-  );
 }
 
 // Modeled on `chooseIncrementalCoalesceDecision`: a same-realm pending
@@ -220,17 +186,6 @@ function choosePrerenderHtmlCoalesceDecision(
           // job still runs the realm-wide sweep. The pass runs the sweep once
           // at its start regardless of how many publishes coalesced into it.
           preWarm: existingArgs.preWarm || incomingArgs.preWarm,
-          // Newest-wins, like the generation and epoch beside it: the merged
-          // job renders from current source, so the newest pass's answer for
-          // what a file's class is belongs with it.
-          // Newest-wins, like the generation and epoch beside it. `??` is
-          // right because only an absent payload is null: a newest pass whose
-          // realm binds nothing carries `{}`, which wins as it should rather
-          // than falling through to the older pass's map.
-          fileDefBindings:
-            newest.fileDefBindings ??
-            (newest === incomingArgs ? existingArgs : incomingArgs)
-              .fileDefBindings,
         },
       },
     };
@@ -307,19 +262,13 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
 
     let _fetch = await getAuthedFetch(args);
     let reader = getReader(_fetch, realmURL);
-    let { invalidations, stats, preWarmMs } = await runPrerenderHtmlPass({
+    let pass = await runPrerenderHtmlPass({
       realmURL: new URL(realmURL),
       changes,
       generation,
       spawningJobId: args.spawningJobId ?? null,
       loaderEpoch,
       preWarm,
-      // Held to its shape here too, not only on the coalesce path: this is
-      // the read that decides what the pass renders, and the row it comes
-      // from may have been written by a peer on an older revision.
-      spawnedFileDefBindings: isSerializedFileDefBindings(args.fileDefBindings)
-        ? (args.fileDefBindings as FileDefBindings)
-        : undefined,
       indexWriter,
       definitionLookup,
       virtualNetwork,
@@ -347,6 +296,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       dbAdapter,
       mediaCacheAdapter,
     });
+    let { invalidations, stats } = pass;
 
     // Fresh HTML is live — tell subscribed hosts so open live searches
     // re-run and pick up the new renderings / corrected full-text
@@ -366,6 +316,11 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       invalidations,
       generation,
       stats,
-      phaseTimings: preWarmMs !== undefined ? { preWarmMs } : null,
+      phaseTimings: phaseTimingsRecord({
+        preWarmMs: pass.preWarmMs,
+        swapMs: pass.swapMs,
+        swapAttempts: pass.swapAttempts,
+        swapRetryMs: pass.swapRetryMs,
+      }),
     };
   };

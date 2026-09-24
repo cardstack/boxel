@@ -5,6 +5,9 @@ const CONTENT_TYPE_OVERRIDES: Record<string, string> = {
   '.gts': 'text/typescript+glimmer',
   '.gjs': 'text/javascript+glimmer',
   '.ts': 'text/typescript',
+  // mime-db has no entry for JSON Lines, and an unknown extension resolves to
+  // binary content — which a line-oriented format is not.
+  '.jsonl': 'application/jsonl',
 };
 
 export function inferContentType(filename: string): string {
@@ -28,6 +31,7 @@ export function inferContentType(filename: string): string {
 // a lookup that resolves to either must land on the same side.
 const TEXTUAL_APPLICATION_TYPES = new Set([
   'application/json',
+  'application/jsonl',
   'application/javascript', // .js, .mjs
   'application/ecmascript',
   'application/node', // .cjs

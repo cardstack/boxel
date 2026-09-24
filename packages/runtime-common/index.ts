@@ -1777,7 +1777,6 @@ export * from './bfm-card-references.ts';
 export * from './bfm-math-render.ts';
 export * from './bfm-mermaid-render.ts';
 export * from './constants.ts';
-import { executableExtensions } from './constants.ts';
 export * from './search-replace-markers.ts';
 export * from './helpers/const.ts';
 export * from './document.ts';
@@ -1860,8 +1859,8 @@ export * from './render-route-options.ts';
 export * from './publishability.ts';
 export * from './pr-manifest.ts';
 export * from './file-def-code-ref.ts';
-export * from './file-def-bindings.ts';
 
+export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 // Extensions covered by the realm-wide pre-warm sweep that primes the
 // modules cache before the visit loop. This is an optimization, not a
 // correctness gate: a `.ts` / `.js` file CAN host a `CardDef`

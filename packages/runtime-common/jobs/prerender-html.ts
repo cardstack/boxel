@@ -6,14 +6,10 @@ import {
   type QueuePublisher,
 } from '../queue.ts';
 import { param, query, type PgPrimitive } from '../expression.ts';
-import type { FileDefBindings } from '../file-def-bindings.ts';
 import type { DBAdapter } from '../db.ts';
 import { Deferred } from '../deferred.ts';
 import type { IncrementalChange } from '../tasks/indexer.ts';
-import type {
-  PrerenderHtmlArgs,
-  SerializedFileDefBindings,
-} from '../tasks/prerender-html.ts';
+import type { PrerenderHtmlArgs } from '../tasks/prerender-html.ts';
 
 // When two publishes carry the same URL, the merged job keeps 'update':
 // the render consults disk truth, so an update-tagged URL whose file is
@@ -84,9 +80,6 @@ export interface PrerenderHtmlEnqueueArgs {
   // module pre-warm sweep — O(realm module count) — runs at the start of the
   // job only when set; incremental spawns leave it false.
   preWarm: boolean;
-  // The spawning index pass's resolved file type bindings, handed to the HTML
-  // job so both write the same row against one answer.
-  fileDefBindings?: FileDefBindings;
 }
 
 // Every realm's prerender-html jobs share one concurrency group so they
@@ -277,7 +270,6 @@ export async function enqueuePrerenderHtmlJob(
     timeoutSec,
     preWarm,
     awaitedByPublish,
-    fileDefBindings,
   }: PrerenderHtmlEnqueueArgs,
 ): Promise<Job<PgPrimitive>> {
   let args: PrerenderHtmlArgs = {
@@ -289,13 +281,6 @@ export async function enqueuePrerenderHtmlJob(
     spawningJobId,
     coalescedPublishes: null,
     preWarm,
-    // `{}` and `null` are different answers here, and the pass reads them
-    // differently: `{}` is "this realm binds nothing", which is an answer, and
-    // `null` is "this job carries none", which sends the pass to the config
-    // document. A spawning pass always has an answer — every realm that binds
-    // nothing included — so it never sends `null`; only a job enqueued before
-    // the payload carried the field does.
-    fileDefBindings: (fileDefBindings ?? {}) as SerializedFileDefBindings,
   };
   return await queuePublisher.publish({
     jobType: 'prerender_html',
