@@ -16,6 +16,7 @@ import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import * as yaml from 'yaml';
 
+import ENV from '@cardstack/host/config/environment';
 import { clearHtmlComponentCache } from '@cardstack/host/lib/html-component';
 import type SessionService from '@cardstack/host/services/session';
 import { AiAssistantOpen } from '@cardstack/host/utils/local-storage-keys';
@@ -75,6 +76,10 @@ const slowFetches: { desc: string; durationMs: number }[] = [];
 const SLOW_FETCH_THRESHOLD_MS = 1_000;
 const SLOW_FETCHES_LIMIT = 20;
 let currentTestEpoch = 0;
+
+// Set once ember-qunit has destroyed the test's owner, so a fetch diagnostic
+// can tell a request the live app issued from one that outlived it.
+let ownerDestroyed = false;
 
 // Module/name of the test currently running, captured from QUnit.testStart so a
 // global error can be attributed to the test that produced it. Resets on page
@@ -262,7 +267,7 @@ function getQUnitWithCallbacks():
     : undefined;
 }
 
-function setupFetchDebugging(hooks: NestedHooks) {
+function setupFetchDebugging(hooks: NestedHooks): () => void {
   let originalFetch: typeof globalThis.fetch | undefined;
   let wrappedFetch: typeof globalThis.fetch | undefined;
 
@@ -298,14 +303,37 @@ function setupFetchDebugging(hooks: NestedHooks) {
         // is populated at realm construction, so this path has no such
         // window. Non-fetch resources (images, workers) still rely on the
         // service worker.
-        for (let [realmUrl, { realm }] of getTestRealmRegistry()) {
+        let registry = getTestRealmRegistry();
+        let matchedRealm = false;
+        for (let [realmUrl, { realm }] of registry) {
           if (url.startsWith(realmUrl)) {
+            matchedRealm = true;
             let response = await realm.maybeHandle(new Request(input, init));
             if (response) {
               return response;
             }
             break;
           }
+        }
+        let ownerState = describeOwnerState();
+        if (
+          !matchedRealm &&
+          isInProcessRealmServerURL(url) &&
+          (ownerState !== 'live' || registry.size === 0)
+        ) {
+          // The in-process realm-server origin has no listener on the real
+          // network, so this request is about to reject with `Failed to
+          // fetch`. A miss while the owner is live and realms are registered
+          // is routine (host mode's head lookup targets the server root); one
+          // with the owner going away or the registry empty is a request
+          // that outlived its test's realms, and the owner state plus what
+          // the registry held says which teardown step it slipped past.
+          console.warn(
+            `[test-fetch] no registered test realm serves ${method} ${url} ` +
+              `(owner: ${ownerState}; registered realms: ${
+                [...registry.keys()].join(', ') || '<none>'
+              }; test: ${currentTestLabel})`,
+          );
         }
         return await boundFetch(input, init);
       } catch (error) {
@@ -328,7 +356,7 @@ function setupFetchDebugging(hooks: NestedHooks) {
     globalThis.fetch = wrappedFetch;
   });
 
-  hooks.afterEach(function () {
+  return function restoreFetch() {
     if (originalFetch && globalThis.fetch === wrappedFetch) {
       globalThis.fetch = originalFetch;
     }
@@ -338,7 +366,58 @@ function setupFetchDebugging(hooks: NestedHooks) {
     // afterEach, so clearing here would empty the snapshot exactly when
     // the timeout-diagnostics callback needs it. beforeEach already
     // resets the buffer at the start of the next test.
+  };
+}
+
+function isInProcessRealmServerURL(url: string): boolean {
+  try {
+    return new URL(url).origin === new URL(ENV.realmServerURL).origin;
+  } catch {
+    return false;
+  }
+}
+
+// QUnit runs afterEach hooks last-registered-first, and ember-qunit destroys
+// the owner in the afterEach it registers. Until that hook has run the app is
+// still live: teardown's own `settled()` calls re-render, realm index events
+// are still delivered, and a card's fire-and-forget load (a CardsGrid's
+// `_types` refresh, say) can issue a fetch. Such a fetch must still be
+// answered in-process — on the real network the test-realm host doesn't exist,
+// and the `Failed to fetch` it rejects with escapes as an uncaught error that
+// fails the test. So the fetch wrapper and the test-realm registry are torn
+// down in a hook registered ahead of ember-qunit's, which therefore runs after
+// the owner is destroyed.
+function setupAfterOwnerTeardown(
+  hooks: NestedHooks,
+  getRestoreFetch: () => (() => void) | undefined,
+) {
+  hooks.beforeEach(function () {
+    ownerDestroyed = false;
   });
+  hooks.afterEach(function () {
+    ownerDestroyed = true;
+    getRestoreFetch()?.();
+    getTestRealmRegistry().clear();
+  });
+}
+
+function describeOwnerState(): string {
+  if (ownerDestroyed) {
+    return 'destroyed';
+  }
+  let owner = (
+    getContext() as
+      | { owner?: { isDestroying?: boolean; isDestroyed?: boolean } }
+      | undefined
+  )?.owner;
+  if (!owner) {
+    return 'none';
+  }
+  return owner.isDestroyed
+    ? 'destroyed'
+    : owner.isDestroying
+      ? 'destroying'
+      : 'live';
 }
 
 function rememberFailedFetch(
@@ -940,10 +1019,12 @@ function seedAiAssistantClosed(hooks: NestedHooks) {
 }
 
 export function setupApplicationTest(hooks: NestedHooks) {
+  let restoreFetch: (() => void) | undefined;
+  setupAfterOwnerTeardown(hooks, () => restoreFetch);
   emberSetupApplicationTest(hooks);
   setupWindowMock(hooks);
   seedAiAssistantClosed(hooks);
-  setupFetchDebugging(hooks);
+  restoreFetch = setupFetchDebugging(hooks);
   setupUnhandledRejectionDiagnostics(hooks);
   hooks.afterEach(async function () {
     resetServiceIfPresent(this.owner, 'service:ai-assistant-panel-service');
@@ -974,10 +1055,12 @@ function failOnParticipantErrors(session: SessionService | undefined) {
 }
 
 export function setupRenderingTest(hooks: NestedHooks) {
+  let restoreFetch: (() => void) | undefined;
+  setupAfterOwnerTeardown(hooks, () => restoreFetch);
   emberSetupRenderingTest(hooks);
   setupWindowMock(hooks);
   seedAiAssistantClosed(hooks);
-  setupFetchDebugging(hooks);
+  restoreFetch = setupFetchDebugging(hooks);
   setupUnhandledRejectionDiagnostics(hooks);
   hooks.afterEach(async function () {
     // MatrixService is the session orchestrator, not a participant, so
