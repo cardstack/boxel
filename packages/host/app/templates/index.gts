@@ -44,6 +44,7 @@ import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
+import { isTrustedMessageOrigin } from '@cardstack/host/utils/trusted-message-origin';
 
 import type HostModeService from '../services/host-mode-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
@@ -316,5 +317,5 @@ function eventHasValidOrigin(event: MessageEvent) {
     return true;
   }
 
-  return new URL(config.realmServerURL).href.startsWith(event.origin);
+  return isTrustedMessageOrigin(event.origin, config.realmServerURL);
 }
