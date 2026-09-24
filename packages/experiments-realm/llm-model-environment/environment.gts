@@ -22,7 +22,7 @@ import {
 } from '@cardstack/base/card-api';
 import { Component } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
-import { MarkdownDef } from '@cardstack/base/markdown-file-def';
+import { Skill } from '@cardstack/base/skill';
 import { includes, uniqBy } from 'lodash-es';
 
 import SettingsIcon from '@cardstack/boxel-icons/settings';
@@ -36,7 +36,7 @@ export class ShortcutSettingsField extends FieldDef {
 
   @field name = contains(StringField);
   @field preferredModel = linksTo(() => Model);
-  @field requiredSkills = linksToMany(() => MarkdownDef);
+  @field requiredSkills = linksToMany(() => Skill);
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -97,7 +97,7 @@ export class ShortcutSettingsField extends FieldDef {
                         "custom-skill"
                       }}'
                   >
-                    {{if skill.title skill.title skill.id}}
+                    {{if skill.cardTitle skill.cardTitle skill.id}}
                   </div>
                 {{/if}}
               {{/each}}
@@ -1364,8 +1364,8 @@ class Isolated extends Component<typeof Environment> {
   }
 
   @action
-  viewSkill(skill: MarkdownDef) {
-    this.args.viewCard?.(skill.id, 'isolated', { type: 'file' });
+  viewSkill(skill: Skill) {
+    this.args.viewCard?.(skill, 'isolated');
   }
 
   get allShortcutsWithStatus() {
@@ -1670,7 +1670,7 @@ class Isolated extends Component<typeof Environment> {
                                 "custom-skill"
                               }}'
                             {{on 'click' (fn this.viewSkill skill)}}
-                          >{{if skill.title skill.title skill.id}}</button>
+                          >{{if skill.cardTitle skill.cardTitle skill.id}}</button>
                         {{/each}}
                       </div>
                     </div>
