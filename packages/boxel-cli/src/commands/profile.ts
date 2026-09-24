@@ -33,6 +33,10 @@ export interface ProfileCommandOptions {
   staging?: boolean;
   production?: boolean;
   local?: boolean;
+  // `profile list --json`: emit the full profile set as machine-readable JSON
+  // for programmatic callers, so nothing has to parse the decorated human
+  // listing.
+  json?: boolean;
 }
 
 interface EnvironmentDefaults {
@@ -252,7 +256,7 @@ export async function profileCommand(
 
   switch (subcommand) {
     case 'list':
-      await listProfiles(manager);
+      await listProfiles(manager, { json: options?.json });
       break;
 
     case 'add': {
@@ -335,9 +339,38 @@ export async function profileCommand(
   }
 }
 
-async function listProfiles(manager: ProfileManager): Promise<void> {
+// `profile list` is the discovery command: an agent or script asking "does
+// this profile exist?" needs the complete set, so it always lists every saved
+// profile \u2014 no truncation, and the human view names the total so a reader can
+// see the listing is complete rather than inferring it. `--json` gives
+// programmatic callers the same complete set without a decorated listing to
+// parse.
+export async function listProfiles(
+  manager: ProfileManager,
+  options?: { json?: boolean },
+): Promise<void> {
   const profiles = manager.listProfiles();
   const activeId = manager.getActiveProfileId();
+
+  if (options?.json) {
+    const output = {
+      activeProfile: activeId,
+      profiles: profiles.map((id) => {
+        const profile = manager.getProfile(id)!;
+        return {
+          id,
+          displayName: profile.displayName,
+          environment: getEnvironmentFromMatrixId(id),
+          domain: getDomainFromMatrixId(id),
+          matrixUrl: profile.matrixUrl,
+          realmServerUrl: profile.realmServerUrl,
+          active: id === activeId,
+        };
+      }),
+    };
+    console.log(JSON.stringify(output, null, 2));
+    return;
+  }
 
   if (profiles.length === 0) {
     console.log(`\n${FG_YELLOW}No profiles configured.${RESET}`);
@@ -345,7 +378,12 @@ async function listProfiles(manager: ProfileManager): Promise<void> {
     return;
   }
 
-  console.log(`\n${BOLD}Saved Profiles:${RESET}\n`);
+  const count = profiles.length;
+  console.log(
+    `\n${BOLD}Saved Profiles${RESET} ${DIM}(${count} ${
+      count === 1 ? 'profile' : 'profiles'
+    })${RESET}\n`,
+  );
 
   for (const id of profiles) {
     const profile = manager.getProfile(id)!;
