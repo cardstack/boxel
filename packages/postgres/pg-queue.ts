@@ -44,7 +44,10 @@ import '@cardstack/runtime-common/tasks/prerender-html-reconcile';
 import '@cardstack/runtime-common/tasks/scoped-css-gc';
 import type { PgAdapter } from './pg-adapter.ts';
 import type { JobReservationsTable, JobsTable } from './job-tables.ts';
-import { acquireLaneLocks } from './job-concurrency-lock.ts';
+import {
+  acquireLaneLocks,
+  NO_CONCURRENCY_GROUP_KEY,
+} from './job-concurrency-lock.ts';
 import {
   isExclusiveLane,
   laneFamilyOf,
@@ -497,6 +500,16 @@ const MAX_RESERVATION_COUNT_PER_JOB = 2;
 // the cap waits, as it would have waited behind the family's exclusive lane.
 const MAX_CONCURRENT_WRITER_LANES_PER_FAMILY = 2;
 
+// A row's lane and family as non-null keys for the claim query. See the
+// comment on that query for why it compares keys.
+function laneKey(alias: 'j'): string {
+  return `COALESCE(${alias}.concurrency_group, '${NO_CONCURRENCY_GROUP_KEY}')`;
+}
+
+function familyKey(alias: 'j'): string {
+  return `COALESCE(${laneFamilyOf(alias)}, '${NO_CONCURRENCY_GROUP_KEY}')`;
+}
+
 export class PgQueueRunner implements QueueRunner {
   #isDestroyed = false;
   #pgClient: PgAdapter;
@@ -618,12 +631,19 @@ export class PgQueueRunner implements QueueRunner {
             // family of its own group, so for them these reduce to the first
             // rule alone.
             //
-            // Every rule is `NOT EXISTS` rather than `NOT IN`, whose subquery
-            // yields no answer at all once it holds a null group: a running
-            // job with no group would stall every claim, and a pending one
-            // would never start while anything else ran. A null group is a
-            // lane of its own here, as it is to the coalescing lookup and the
-            // advisory lock.
+            // The lane and family rules compare keys rather than the columns:
+            // a missing group or family is spelled `NO_CONCURRENCY_GROUP_KEY`,
+            // the key the advisory lock uses for it, so a job with no group is
+            // a lane of its own here as it is to the lock and the coalescing
+            // lookup. That keeps both sides of every `NOT IN` non-null — a
+            // null in its subquery would make it match nothing, so one running
+            // job with no group would stall every claim — and keeps each
+            // subquery uncorrelated, so it is hashed once per claim rather
+            // than rescanned per pending job.
+            //
+            // The writer-only rules, the barrier and the cap, apply only to a
+            // job that fails the exclusive test, which a family-less job never
+            // does.
             `WITH
               pending_jobs AS (
                 SELECT * FROM jobs j WHERE j.status='unfulfilled'
@@ -665,8 +685,9 @@ export class PgQueueRunner implements QueueRunner {
                 SELECT * FROM job_reservations WHERE locked_until > NOW() AND completed_at IS NULL
               ),
               active_jobs AS (
-                SELECT DISTINCT j.id, j.concurrency_group,
-                       ${laneFamilyOf('j')} AS family,
+                SELECT DISTINCT j.id,
+                       ${laneKey('j')} AS lane_key,
+                       ${familyKey('j')} AS family_key,
                        ${isExclusiveLane('j')} AS exclusive
                   FROM jobs j, valid_reservations v WHERE v.job_id = j.id
               )
@@ -674,30 +695,30 @@ export class PgQueueRunner implements QueueRunner {
               WHERE NOT EXISTS (
                 SELECT 1 FROM valid_reservations v WHERE v.job_id = j.id
               )
-              AND NOT EXISTS (
-                SELECT 1 FROM active_jobs a
-                 WHERE a.concurrency_group IS NOT DISTINCT FROM j.concurrency_group
+              AND ${laneKey('j')} NOT IN (SELECT lane_key FROM active_jobs)
+              AND ${familyKey('j')} NOT IN (
+                SELECT family_key FROM active_jobs WHERE exclusive
               )
-              AND NOT EXISTS (
-                SELECT 1 FROM active_jobs a
-                 WHERE a.family IS NOT DISTINCT FROM ${laneFamilyOf('j')}
-                   AND (a.exclusive OR ${isExclusiveLane('j')})
-              )
-              AND (${isExclusiveLane('j')} OR (
-                NOT EXISTS (
-                  SELECT 1 FROM jobs p
-                   WHERE p.status = 'unfulfilled'
-                     AND p.concurrency_group = j.lane_family
-                     AND ${isExclusiveLane('p')}
-                     AND p.priority >= j.priority
-                     AND (p.created_at, p.id) < (j.created_at, j.id)
-                )
-                AND (
-                  SELECT COUNT(*) FROM active_jobs a
-                   WHERE a.family = j.lane_family AND NOT a.exclusive
-                ) <`,
+              AND (
+                (${isExclusiveLane('j')} AND ${familyKey('j')} NOT IN (
+                  SELECT family_key FROM active_jobs
+                ))
+                OR (NOT ${isExclusiveLane('j')}
+                  AND NOT EXISTS (
+                    SELECT 1 FROM jobs p
+                     WHERE p.status = 'unfulfilled'
+                       AND p.concurrency_group = j.lane_family
+                       AND ${isExclusiveLane('p')}
+                       AND p.priority >= j.priority
+                       AND (p.created_at, p.id) < (j.created_at, j.id)
+                  )
+                  AND (
+                    SELECT COUNT(*) FROM active_jobs a
+                     WHERE a.family_key = j.lane_family AND NOT a.exclusive
+                  ) <`,
             param(this.#maxWriterLanesPerFamily),
-            `))
+            `)
+              )
               ORDER BY j.created_at, j.id
               LIMIT 1`,
           ])) as unknown as JobsTable[];

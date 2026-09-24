@@ -319,6 +319,18 @@ module(basename(import.meta.filename), function (hooks) {
     });
     await stageCard(batch, 'a');
     await batch.invalidate([new URL(url('gone'))]);
+    let brokenURL = new URL(url('broken'));
+    await batch.invalidate([brokenURL]);
+    await batch.updateEntry(brokenURL, {
+      type: 'instance-error',
+      error: {
+        id: brokenURL.href,
+        status: 500,
+        title: 'broken',
+        message: 'a render that failed',
+        additionalErrors: null,
+      },
+    });
     await batch.done();
 
     assert.deepEqual(
@@ -349,6 +361,41 @@ module(basename(import.meta.filename), function (hooks) {
       },
       { isDeleted: true, queueClaim },
       'and so does the tombstone the pass wrote',
+    );
+    // A card's error doc is served to whoever reads the broken card, and a
+    // writer lane's group names the user whose pass wrote it, so the claim
+    // stays on the operators' column.
+    let [broken] = (await adapter.execute(
+      `SELECT diagnostics, error_doc FROM boxel_index WHERE url = $1 AND type = 'instance'`,
+      { bind: [url('broken')] },
+    )) as {
+      diagnostics: Record<string, unknown> | null;
+      error_doc: { diagnostics?: Record<string, unknown> } | null;
+    }[];
+    assert.deepEqual(
+      {
+        column: broken?.diagnostics?.queueClaim,
+        errorDocHasDiagnostics: Boolean(broken?.error_doc?.diagnostics),
+        errorDoc: broken?.error_doc?.diagnostics?.queueClaim,
+      },
+      { column: queueClaim, errorDocHasDiagnostics: true, errorDoc: undefined },
+      "an error row's diagnostics column carries the claim, and its error doc's copy leaves it out",
+    );
+    let [brokenHtml] = (await adapter.execute(
+      `SELECT diagnostics, error_doc FROM prerendered_html WHERE url = $1 AND type = 'instance'`,
+      { bind: [url('broken')] },
+    )) as {
+      diagnostics: Record<string, unknown> | null;
+      error_doc: { diagnostics?: Record<string, unknown> } | null;
+    }[];
+    assert.deepEqual(
+      {
+        column: brokenHtml?.diagnostics?.queueClaim,
+        errorDocHasDiagnostics: Boolean(brokenHtml?.error_doc?.diagnostics),
+        errorDoc: brokenHtml?.error_doc?.diagnostics?.queueClaim,
+      },
+      { column: queueClaim, errorDocHasDiagnostics: true, errorDoc: undefined },
+      'and so does the HTML error row the same visit wrote',
     );
 
     let adhoc = await createBatch();

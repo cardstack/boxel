@@ -26,13 +26,8 @@ import {
   skipsPrerenderHtml,
   type SpawningIndexPass,
 } from '../jobs/prerender-html.ts';
-import {
-  queueClaimOf,
-  type JobInfo,
-  type QueueClaim,
-  type Stats,
-  type IndexPhaseTimings,
-} from '../worker.ts';
+import type { JobInfo, Stats, IndexPhaseTimings } from '../worker.ts';
+import { queueClaimOf, type QueueClaim } from '../jobs/queue-claim.ts';
 
 export { fromScratchIndex, incrementalIndex };
 const DEFAULT_FROM_SCRATCH_JOB_TIMEOUT_SEC = 60 * 60;

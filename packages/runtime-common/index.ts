@@ -9,7 +9,7 @@ import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RenderRouteOptions } from './render-route-options.ts';
 import type { Definition } from './definitions.ts';
-import type { QueueClaim } from './worker.ts';
+import type { QueueClaim } from './jobs/queue-claim.ts';
 import type { OperationsTransport } from './card-operations/client.ts';
 import type { OperationLoweringIssue } from './card-operations/types.ts';
 import type {

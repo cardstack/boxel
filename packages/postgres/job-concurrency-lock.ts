@@ -1,5 +1,10 @@
 import { param, type Expression } from '@cardstack/runtime-common';
 
+// The key that stands for "no concurrency group". A job with no group is a lane
+// of its own, and every place that keys a lane — these locks, and the claim
+// query's lane and family keys — spells that lane with this one value.
+export const NO_CONCURRENCY_GROUP_KEY = '__queue_no_concurrency_group__';
+
 // Serializes everything that decides a job's fate within its lane. The claim
 // path takes it so two workers cannot claim the same job, or two jobs a lane
 // family says may not run together; anything that writes an outcome from
@@ -42,7 +47,7 @@ async function acquireLock(
 ) {
   await queryFn([
     'SELECT pg_advisory_xact_lock(hashtext(',
-    param(key ?? '__queue_no_concurrency_group__'),
+    param(key ?? NO_CONCURRENCY_GROUP_KEY),
     '))',
   ]);
 }

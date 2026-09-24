@@ -1881,7 +1881,7 @@ A claim hold (`job_claim_holds`) naming a family holds every lane in it. A hold 
 
 - **`jobs.result.queueClaim`**: `{ queueWaitMs, concurrencyGroup, laneFamily }` on every index job (`from-scratch-index`, `incremental-index`) and `prerender_html` job the queue claimed. `queueWaitMs` runs from the job's `created_at` to the claim of the attempt that ran, on the database clock. Absent on a job from a worker predating it.
 - **`jobs.result.phaseTimings.totalMs`**: the pass's own run.
-- **`diagnostics.queueClaim`** on every row the pass wrote, in `boxel_index` and `prerendered_html`: the same object, so a card's row names the wait of the pass that last wrote it without a join to `jobs`.
+- **`diagnostics.queueClaim`** on every row the pass wrote, in `boxel_index` and `prerendered_html`: the same object, so a card's row names the wait of the pass that last wrote it without a join to `jobs`. It is on the `diagnostics` column only. An error row's `error_doc.diagnostics` copy leaves it out, because that copy is served to whoever reads the broken card, and a writer lane's group names the user whose pass wrote the row.
 - **The worker's `queue` log line** at `info`: `starting job <id> (type=… priority=… group=… family=…) after <n>ms in queue`.
 
 `queueWaitMs` is measured from the job's creation. A publish that coalesced into a pending job later waited less than that. Read a coalesced caller's own wait from its request log (the `enqueue` / `awaitIndex` split on the write path) instead.

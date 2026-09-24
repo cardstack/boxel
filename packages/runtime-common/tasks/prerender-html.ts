@@ -23,7 +23,8 @@ import {
   maxPriorityAndTimeout,
   type IncrementalChange,
 } from './indexer.ts';
-import { queueClaimOf, type QueueClaim, type Stats } from '../worker.ts';
+import type { Stats } from '../worker.ts';
+import { queueClaimOf, type QueueClaim } from '../jobs/queue-claim.ts';
 
 export { prerenderHtml };
 
