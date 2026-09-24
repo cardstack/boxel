@@ -62,7 +62,12 @@ export class SearchResultList<T> extends GlimmerComponent<
   }
 
   private get toggleText() {
-    return this.showAll ? 'See Less' : `Show ${this.leftover} more results`;
+    if (this.showAll) {
+      return 'See Less';
+    }
+    return `Show ${this.leftover} more ${
+      this.leftover === 1 ? 'result' : 'results'
+    }`;
   }
 
   @action private toggle() {
@@ -237,6 +242,10 @@ interface EntryResultRowSignature {
 // batched card collection could not do (it reads a single type and can't
 // preserve interleaved order).
 export class EntryResultRow extends GlimmerComponent<EntryResultRowSignature> {
+  // `kind` and `context` are captured once here while the `url` thunk stays
+  // reactive. That is sound because consumers key rows by url and a url's kind
+  // never changes; a row reused across a kind flip would read the wrong store
+  // type.
   private cardResource = this.args.context?.getCard(this, () => this.args.url, {
     type: this.args.kind === 'file' ? 'file-meta' : 'card',
   });

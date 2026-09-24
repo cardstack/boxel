@@ -68,7 +68,7 @@ export class SearchEntriesResult extends CardDef {
             {{@model.total}}
             results{{if @model.incomplete ' (incomplete: a realm failed)' ''}}
           </p>
-          <ol class='result-list atom' data-test-result-list>
+          <ol class='result-list' data-test-result-list>
             {{#each visibleResults key='url' as |result|}}
               <EntryResultRow
                 @url={{result.url}}
@@ -81,7 +81,6 @@ export class SearchEntriesResult extends CardDef {
                   result.cardTitle
                   result.name
                 }}
-                data-test-search-entry={{result.url}}
               />
             {{/each}}
             {{#if (eq @model.results.length 0)}}
