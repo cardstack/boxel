@@ -63,11 +63,24 @@ export interface PrerenderHtmlResult extends JSONTypes.Object {
   invalidations: string[];
   generation: number;
   stats: Stats;
-  // The pre-warm sweep's wall-clock when it ran (from-scratch-spawned jobs),
-  // else null — so dashboards attribute the sweep to the job that pays it.
-  // Non-optional `| null` rather than `?:` because the result is a
-  // `JSONTypes.Object`, whose index signature rejects `undefined`.
-  phaseTimings: { preWarmMs: number } | null;
+  // Phase wall-clocks the job paid, by name, or null when it recorded none.
+  // `preWarmMs` is the module pre-warm sweep (from-scratch-spawned jobs only),
+  // so dashboards attribute the sweep to the job that pays it. `swapMs`,
+  // `swapAttempts` and `swapRetryMs` describe the swap's transaction, as on an
+  // index job's `phaseTimings`. A record of numbers rather than optional
+  // members because the result is a `JSONTypes.Object`, whose index signature
+  // rejects `undefined`.
+  phaseTimings: Record<string, number> | null;
+}
+
+// The measured phases only, or null when none was measured.
+function phaseTimingsRecord(
+  phases: Record<string, number | undefined>,
+): Record<string, number> | null {
+  let measured = Object.entries(phases).filter(
+    (entry): entry is [string, number] => entry[1] !== undefined,
+  );
+  return measured.length > 0 ? Object.fromEntries(measured) : null;
 }
 
 function parsePrerenderHtmlArgsForCoalesce(
@@ -249,7 +262,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
 
     let _fetch = await getAuthedFetch(args);
     let reader = getReader(_fetch, realmURL);
-    let { invalidations, stats, preWarmMs } = await runPrerenderHtmlPass({
+    let pass = await runPrerenderHtmlPass({
       realmURL: new URL(realmURL),
       changes,
       generation,
@@ -283,6 +296,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       dbAdapter,
       mediaCacheAdapter,
     });
+    let { invalidations, stats } = pass;
 
     // Fresh HTML is live — tell subscribed hosts so open live searches
     // re-run and pick up the new renderings / corrected full-text
@@ -302,6 +316,11 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       invalidations,
       generation,
       stats,
-      phaseTimings: preWarmMs !== undefined ? { preWarmMs } : null,
+      phaseTimings: phaseTimingsRecord({
+        preWarmMs: pass.preWarmMs,
+        swapMs: pass.swapMs,
+        swapAttempts: pass.swapAttempts,
+        swapRetryMs: pass.swapRetryMs,
+      }),
     };
   };

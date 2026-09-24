@@ -3254,6 +3254,80 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
+  test('a failure inside the swap rolls back every statement the swap made', async function (assert) {
+    // The swap stamps `realm_type_generations` last, after promoting
+    // `boxel_index`, advancing `realm_generations` and writing `realm_meta`.
+    // A trigger that aborts that final write fails the swap at its latest
+    // point, so any earlier statement that had already committed on its own
+    // would still be visible afterwards.
+    let iconHTML = '<svg>test icon</svg>';
+    let personRef = { module: rri('./person'), name: 'Person' };
+    let personTypes = internalKeysFor(virtualNetwork, personRef, baseCardRef);
+    // Generation 1 of the test realm, with no rows.
+    await setupIndex(adapter);
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
+    await writeInstance(batch, {
+      id: '1',
+      name: 'Mango',
+      adoptsFrom: personRef,
+      displayNames: ['Person', 'Card'],
+      types: personTypes,
+      iconHTML,
+    });
+
+    await adapter.execute(
+      `CREATE TRIGGER index_writer_test_fail_swap
+       BEFORE INSERT ON realm_type_generations
+       BEGIN
+         SELECT RAISE(ABORT, 'injected index swap failure');
+       END`,
+    );
+    try {
+      // The SQLite worker surfaces a trigger abort as a bare Error, logging the
+      // trigger's message rather than carrying it, so this asserts only that
+      // the swap failed.
+      await assert.rejects(
+        batch.done(),
+        'the swap fails at its last statement',
+      );
+    } finally {
+      await adapter.execute(
+        'DROP TRIGGER IF EXISTS index_writer_test_fail_swap',
+      );
+    }
+
+    let promoted = await adapter.execute(
+      `SELECT url FROM boxel_index WHERE realm_url = $1`,
+      { bind: [testRealmURL] },
+    );
+    assert.deepEqual(promoted, [], 'no row reached boxel_index');
+    let generations = await adapter.execute(
+      `SELECT current_generation FROM realm_generations WHERE realm_url = $1`,
+      { bind: [testRealmURL] },
+    );
+    assert.deepEqual(
+      generations,
+      [{ current_generation: 1 }],
+      'the realm generation did not advance',
+    );
+    assert.deepEqual(
+      (await fetchRealmMetaRows(adapter)).length,
+      0,
+      'no realm_meta row was written',
+    );
+
+    // The rollback left the connection usable: the next statement is not
+    // inside a transaction the failure left open.
+    await adapter.execute('BEGIN');
+    await adapter.execute('COMMIT');
+    assert.ok(true, 'a new transaction starts cleanly after the rollback');
+  });
+
   test('update realm meta carries forward the types a pass did not touch', async function (assert) {
     // The rollup that publishes a pass recomputes only the types the pass
     // moved and reuses the previous generation's entries for the rest. The
