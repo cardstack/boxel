@@ -15,6 +15,10 @@ import nodePgMigrate, { type RunnerOption } from 'node-pg-migrate';
 import { join } from 'path';
 import { Pool, Client, type PoolClient, type Notification } from 'pg';
 
+import {
+  ConnectionScheduler,
+  markConnectionHeld,
+} from './connection-scheduler.ts';
 import { postgresConfig } from './pg-config.ts';
 import migrationNameFixes from './scripts/migration-name-fixes.cjs';
 
@@ -152,6 +156,35 @@ function configuredPoolMax(): number {
   return Number.isInteger(value) && value > 0 ? value : DEFAULT_POOL_MAX;
 }
 
+// How many of the pool's connections one tenant may hold while another tenant
+// has work open (see `ConnectionScheduler`). The tenants are the realms a
+// search names, so this is the share of a replica's database concurrency one
+// realm's searches keep when another realm is searching too.
+//
+// Sized at the concurrency past which the database stops getting faster. On
+// the staging instance (2 vCPU), a single realm's saturating search load drove
+// CPU to 85% at 8.0 average active sessions and 95% at 8.7, then sat at
+// 98-99% from 11 up through the 54-session bursts the load reached — so across
+// the fleet's two replicas, about eight concurrent sessions is what saturates
+// it, and everything above that queued inside Postgres. Four per replica is
+// the smallest share that still lets one realm drive the database to that
+// point on its own, so a heavy realm keeps its throughput while contending,
+// and what it no longer does is multiply every other realm's query time by
+// the session count. It scales with the database the fleet shares and with
+// the number of replicas sharing it, so an environment with more cores per
+// replica wants a proportionally larger value.
+const DEFAULT_POOL_TENANT_SHARE = 4;
+function configuredPoolTenantShare(): number {
+  let rawValue = process.env.PG_POOL_TENANT_SHARE;
+  if (!rawValue) {
+    return DEFAULT_POOL_TENANT_SHARE;
+  }
+  let value = Number(rawValue);
+  return Number.isInteger(value) && value > 0
+    ? value
+    : DEFAULT_POOL_TENANT_SHARE;
+}
+
 export type NotificationHandler = (notification: Notification) => void;
 
 export interface NotificationSubscription {
@@ -210,6 +243,10 @@ export class PgAdapter implements DBAdapter {
   readonly kind = 'pg';
   #isClosed = false;
   private pool: Pool;
+  // Decides who checks out the pool's connections, and in what order. Every
+  // checkout goes through it, and it grants at most the pool's own max at
+  // once, so the pool's internal FIFO queue never forms.
+  #scheduler: ConnectionScheduler;
   private started: Promise<void>;
   private config: Config;
   // Shared LISTEN connection used by all subscribe() callers. A dedicated
@@ -244,6 +281,10 @@ export class PgAdapter implements DBAdapter {
     this.config = config();
     let { user, host, database, password, port } = this.config;
     let max = configuredPoolMax();
+    this.#scheduler = new ConnectionScheduler({
+      limit: max,
+      tenantShare: configuredPoolTenantShare(),
+    });
     log.debug(`connecting to DB ${this.url}`);
     this.pool = new Pool({
       user,
@@ -266,6 +307,23 @@ export class PgAdapter implements DBAdapter {
 
   get isClosed() {
     return this.#isClosed;
+  }
+
+  // What the connection scheduler is doing right now, for the health sampler:
+  // connections checked out against the pool's max, acquisitions waiting,
+  // and how many of those wait only because their tenant is at its share.
+  get connectionStats(): {
+    inUse: number;
+    limit: number;
+    waiting: number;
+    waitingAtShare: number;
+  } {
+    return {
+      inUse: this.#scheduler.inUse,
+      limit: this.#scheduler.limit,
+      waiting: this.#scheduler.waiting,
+      waitingAtShare: this.#scheduler.waitingAtShare,
+    };
   }
 
   get url() {
@@ -293,6 +351,7 @@ export class PgAdapter implements DBAdapter {
     const client = this.#notificationClient;
     this.#notificationClient = undefined;
     this.#channels.clear();
+    this.#scheduler.dispose();
     if (client) {
       try {
         await client.end();
@@ -438,7 +497,7 @@ export class PgAdapter implements DBAdapter {
     opts?: ExecuteOptions,
   ): Promise<Record<string, PgPrimitive>[]> {
     await this.started;
-    let client = await this.pool.connect();
+    let { client, releaseTurn } = await this.#checkout();
     // A checked-out client's death is nobody's event: the pool removes its
     // own idle listener for the duration of the checkout, so the in-flight
     // query rejects into the caller that handles it and the socket's closing
@@ -464,6 +523,20 @@ export class PgAdapter implements DBAdapter {
     } finally {
       stopRecording();
       client.release();
+      releaseTurn();
+    }
+  }
+
+  // Wait for the scheduler's go-ahead, then check a client out of the pool.
+  // The turn is handed back by the caller after the client is released, or
+  // here if the checkout itself fails.
+  async #checkout(): Promise<{ client: PoolClient; releaseTurn: () => void }> {
+    let releaseTurn = await this.#scheduler.acquire();
+    try {
+      return { client: await this.pool.connect(), releaseTurn };
+    } catch (e) {
+      releaseTurn();
+      throw e;
     }
   }
 
@@ -1027,7 +1100,7 @@ export class PgAdapter implements DBAdapter {
   ): Promise<T> {
     await this.started;
 
-    let client = await this.pool.connect();
+    let { client, releaseTurn } = await this.#checkout();
     let stopRecording = recordConnectionErrors(client, this.url, 'warn');
     let query = async (expression: Expression) => {
       let sql = expressionToSql(this.kind, expression);
@@ -1035,9 +1108,12 @@ export class PgAdapter implements DBAdapter {
       let { rows } = await client.query(sql);
       return rows;
     };
+    // `fn` runs holding this client, so any connection it checks out through
+    // the adapter is one it needs before it can give this one back.
+    let holding = markConnectionHeld();
     let released = false;
     try {
-      return await fn(query);
+      return await holding.run(() => fn(query));
     } catch (e) {
       // Clean up any in-progress transaction before returning the client to
       // the pool. Without this, a connection left in a dirty transaction
@@ -1060,10 +1136,12 @@ export class PgAdapter implements DBAdapter {
       released = true;
       throw e;
     } finally {
+      holding.end();
       stopRecording();
       if (!released) {
         client.release();
       }
+      releaseTurn();
     }
   }
 

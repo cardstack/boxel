@@ -1,0 +1,330 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+// Which tenant a piece of database work is done for, and how the pool's
+// connections are shared between tenants.
+//
+// # Why the pool decides this, and not an admission gate in front of it
+//
+// A realm's search fans out into the database far more than it fans out
+// anywhere else. One search over a few hundred rows resolves every row's
+// query-backed fields concurrently, and each of those is a search of its own
+// with its own definition lookups and SQL, so a single request puts hundreds
+// of queries in front of the pool at once. A cap on concurrent *requests* —
+// per realm or per process — cannot bound that: one admitted request is
+// enough to fill the pool's queue. The queue that forms is where a different
+// realm's search waits, so the queue is where fairness has to be decided.
+//
+// And past a point, more concurrency buys the database nothing. Every
+// connection the pool hands out runs its query on the database at once; once
+// those outnumber what the database can execute in parallel, the excess
+// queues inside Postgres, where every session shares the CPU and nothing
+// separates one tenant's query from another's. A tenant holding most of the
+// pool then slows every other tenant's queries by the ratio of sessions to
+// cores, whatever order the pool granted them in. Keeping that queue here
+// instead — where it can be ordered — is what lets one tenant's query run at
+// close to its own speed while another tenant saturates the database.
+//
+// # The policy
+//
+// - Connections are granted lowest-held-first: when one frees, it goes to the
+//   waiting tenant that currently holds the fewest, and arrival order breaks
+//   ties. A tenant with one query waiting behind another tenant's hundreds is
+//   served next, not last.
+// - While another tenant has work open, a tenant holds at most
+//   `tenantShare` connections; its excess waits here even if connections are
+//   free. A tenant with no one else active is not held to it, so a realm
+//   searching alone keeps the whole pool.
+// - Untagged work — anything not run under `withConnectionTenant`, which is
+//   everything but search — is ordered with the tenants as one more of them
+//   but never held to the share, and its activity does not hold anyone else
+//   to it. Writes, locks and the indexer's own commits keep the reach they
+//   had.
+// - Work that runs while its caller already holds a connection (inside
+//   `withConnection`) is granted ahead of everything and outside the share.
+//   It cannot finish, and so cannot give back the connection it is nested in,
+//   until it gets one; holding it to a share its own tenant's outer holders
+//   have used up would deadlock that tenant.
+//
+// "Has work open" is whether a `withConnectionTenant` scope for the tenant is
+// running, not whether it happens to hold or want a connection at this
+// instant. A search issues its queries in sequence as often as in parallel,
+// and between two of them it holds nothing and asks for nothing; a tenant
+// judged by that instant would drop out of contention at every gap, and the
+// tenant it was meant to be protected from would refill the pool before its
+// next query arrived.
+export class ConnectionScheduler {
+  #limit: number;
+  #tenantShare: number;
+  #inUse = 0;
+  #held = new Map<TenantKey, number>();
+  #queues = new Map<TenantKey, Waiter[]>();
+  #nested: Waiter[] = [];
+  #arrivals = 0;
+  #unsubscribe: () => void;
+
+  constructor(opts: { limit: number; tenantShare: number }) {
+    this.#limit = normalizeCount(opts.limit);
+    this.#tenantShare = normalizeCount(opts.tenantShare);
+    // A tenant whose last scope closes may leave another tenant's waiters
+    // eligible; nothing else would wake them.
+    this.#unsubscribe = onScopeClosed(() => this.#drain());
+  }
+
+  get limit(): number {
+    return this.#limit;
+  }
+
+  get tenantShare(): number {
+    return this.#tenantShare;
+  }
+
+  // Connections currently granted.
+  get inUse(): number {
+    return this.#inUse;
+  }
+
+  // Acquisitions waiting for a connection, whether for want of a free one or
+  // because their tenant is at its share.
+  get waiting(): number {
+    let count = this.#nested.length;
+    for (let queue of this.#queues.values()) {
+      count += queue.length;
+    }
+    return count;
+  }
+
+  // Acquisitions waiting only because their tenant is at its share — the ones
+  // a free connection would not be handed to.
+  get waitingAtShare(): number {
+    let count = 0;
+    for (let [key, queue] of this.#queues) {
+      if (!this.#eligible(key)) {
+        count += queue.length;
+      }
+    }
+    return count;
+  }
+
+  // Resolves with a release once this caller may check out a connection. The
+  // tenant and nesting are read from the async context the call is made in.
+  acquire(): Promise<() => void> {
+    let scope = scopeStorage.getStore();
+    let key: TenantKey = scope?.tenant ?? UNTAGGED;
+    let nested = holdsConnection(scope?.holding);
+    if (this.#inUse < this.#limit && (nested || this.#eligible(key))) {
+      return Promise.resolve(this.#grant(key));
+    }
+    return new Promise((resolve) => {
+      let waiter: Waiter = { key, arrival: this.#arrivals++, resolve };
+      if (nested) {
+        this.#nested.push(waiter);
+      } else {
+        let queue = this.#queues.get(key);
+        if (!queue) {
+          queue = [];
+          this.#queues.set(key, queue);
+        }
+        queue.push(waiter);
+      }
+    });
+  }
+
+  // Stop listening for scope changes. Waiters still queued stay queued; the
+  // owner is expected to have stopped issuing work.
+  dispose(): void {
+    this.#unsubscribe();
+  }
+
+  #eligible(key: TenantKey): boolean {
+    if (key === UNTAGGED) {
+      return true;
+    }
+    if ((this.#held.get(key) ?? 0) < this.#tenantShare) {
+      return true;
+    }
+    return !anotherTenantOpen(key);
+  }
+
+  #grant(key: TenantKey): () => void {
+    this.#inUse++;
+    this.#held.set(key, (this.#held.get(key) ?? 0) + 1);
+    let released = false;
+    return () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      this.#inUse--;
+      let held = (this.#held.get(key) ?? 1) - 1;
+      if (held > 0) {
+        this.#held.set(key, held);
+      } else {
+        this.#held.delete(key);
+      }
+      this.#drain();
+    };
+  }
+
+  #drain(): void {
+    while (this.#inUse < this.#limit) {
+      let next = this.#nested.shift() ?? this.#takeNextTenantWaiter();
+      if (!next) {
+        return;
+      }
+      next.resolve(this.#grant(next.key));
+    }
+  }
+
+  // The head of the queue belonging to the eligible tenant holding the fewest
+  // connections, the earlier arrival winning a tie.
+  #takeNextTenantWaiter(): Waiter | undefined {
+    let best: { key: TenantKey; queue: Waiter[]; held: number } | undefined;
+    for (let [key, queue] of this.#queues) {
+      if (queue.length === 0 || !this.#eligible(key)) {
+        continue;
+      }
+      let held = this.#held.get(key) ?? 0;
+      if (
+        !best ||
+        held < best.held ||
+        (held === best.held && queue[0].arrival < best.queue[0].arrival)
+      ) {
+        best = { key, queue, held };
+      }
+    }
+    if (!best) {
+      return undefined;
+    }
+    let waiter = best.queue.shift()!;
+    if (best.queue.length === 0) {
+      this.#queues.delete(best.key);
+    }
+    return waiter;
+  }
+}
+
+// Run `fn` with the database work it does charged to `tenant`, and with the
+// tenant counted as having work open until `fn` settles. Nests: an inner
+// scope's tenant is the one its work is charged to.
+export async function withConnectionTenant<T>(
+  tenant: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  let parent = scopeStorage.getStore();
+  openScopes.set(tenant, (openScopes.get(tenant) ?? 0) + 1);
+  try {
+    return await scopeStorage.run(
+      { tenant, ...(parent?.holding ? { holding: parent.holding } : {}) },
+      fn,
+    );
+  } finally {
+    let count = (openScopes.get(tenant) ?? 1) - 1;
+    if (count > 0) {
+      openScopes.set(tenant, count);
+    } else {
+      openScopes.delete(tenant);
+      for (let listener of [...scopeClosedListeners]) {
+        listener();
+      }
+    }
+  }
+}
+
+// Mark the work run through the returned `run` as holding a checked-out
+// connection, so the acquisitions it makes are granted as nested ones, until
+// `end` is called. For the adapter's own use around a callback it hands a
+// pinned connection to.
+//
+// The mark is ended rather than scoped to `run`'s promise because a callback
+// can go on working after it gives its connection back — a lock section that
+// releases early continues its write with the locks gone — and that work no
+// longer holds anything a waiter could be deadlocked behind.
+export function markConnectionHeld(): {
+  run<T>(fn: () => Promise<T>): Promise<T>;
+  end(): void;
+} {
+  let parent = scopeStorage.getStore();
+  let holding: HoldMarker = {
+    held: true,
+    ...(parent?.holding ? { parent: parent.holding } : {}),
+  };
+  let scope: ConnectionScope = {
+    ...(parent?.tenant ? { tenant: parent.tenant } : {}),
+    holding,
+  };
+  return {
+    run: (fn) => scopeStorage.run(scope, fn),
+    end: () => {
+      holding.held = false;
+    },
+  };
+}
+
+// The tenant the calling async context's database work is charged to, if any.
+export function currentConnectionTenant(): string | undefined {
+  return scopeStorage.getStore()?.tenant;
+}
+
+interface ConnectionScope {
+  tenant?: string;
+  holding?: HoldMarker;
+}
+
+// One checked-out connection some enclosing frame holds. Chained, because a
+// callback can check out a second connection inside the first: ending the
+// inner mark leaves the outer one's work still nested.
+interface HoldMarker {
+  held: boolean;
+  parent?: HoldMarker;
+}
+
+function holdsConnection(marker: HoldMarker | undefined): boolean {
+  for (let m = marker; m; m = m.parent) {
+    if (m.held) {
+      return true;
+    }
+  }
+  return false;
+}
+
+interface Waiter {
+  key: TenantKey;
+  arrival: number;
+  resolve: (release: () => void) => void;
+}
+
+// Untagged work shares one key. A symbol, so no tenant string can collide
+// with it.
+const UNTAGGED = Symbol('untagged');
+type TenantKey = string | typeof UNTAGGED;
+
+// Module state rather than per scheduler: a scope is opened by request
+// handling that knows nothing of which adapter its queries will reach, and a
+// process normally has one.
+const scopeStorage = new AsyncLocalStorage<ConnectionScope>();
+const openScopes = new Map<string, number>();
+const scopeClosedListeners = new Set<() => void>();
+
+function onScopeClosed(listener: () => void): () => void {
+  scopeClosedListeners.add(listener);
+  return () => scopeClosedListeners.delete(listener);
+}
+
+function anotherTenantOpen(key: string): boolean {
+  for (let tenant of openScopes.keys()) {
+    if (tenant !== key) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// A count is a positive integer; anything else would either grant nothing or
+// compare against NaN and stall every acquisition.
+function normalizeCount(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 1;
+  }
+  let floored = Math.floor(value);
+  return floored < 1 ? 1 : floored;
+}

@@ -35,6 +35,17 @@ import {
 export interface HealthSamplerOptions {
   // How often to sample + log. Defaults to 5s.
   intervalMs?: number;
+  // The database connection scheduler's state at the moment of the sample:
+  // connections checked out against the pool's max, acquisitions waiting for
+  // one, and how many of those are held back only by their tenant's share.
+  // Waiting alone says the pool is the bottleneck; waiting at share says the
+  // scheduler is keeping one realm's searches from crowding out another's.
+  connectionStats?: () => {
+    inUse: number;
+    limit: number;
+    waiting: number;
+    waitingAtShare: number;
+  };
 }
 
 export function startHealthSampler(
@@ -74,11 +85,17 @@ export function startHealthSampler(
     // process rather than assumed from the task definition). Alerts threshold
     // on the used/limit ratio, which survives a task resize or a Node bump.
     let heap = heapTelemetry();
+    let connections = opts.connectionStats?.();
     log.info(
       `eventLoopLagMs(mean/p99/max)=${meanLagMs.toFixed(0)}/${p99LagMs.toFixed(0)}/${maxLagMs.toFixed(0)} ` +
         `inFlightSearch=${inFlightSearch} searchRequests=${searchRequests} ` +
         `searchLoad=${searchLoad.toFixed(2)} ` +
         `realmSearchLoadMax=${(busiest?.sustained ?? 0).toFixed(2)} ` +
+        (connections
+          ? `dbConnections=${connections.inUse}/${connections.limit} ` +
+            `dbWaiting=${connections.waiting} ` +
+            `dbWaitingAtShare=${connections.waitingAtShare} `
+          : '') +
         `${formatHeapTelemetry(heap)}`,
     );
   }, intervalMs);

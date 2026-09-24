@@ -13,6 +13,7 @@ import {
 } from '@cardstack/runtime-common';
 import type Koa from 'koa';
 import mime from 'mime-types';
+import { withConnectionTenant } from '@cardstack/postgres';
 import { nodeStreamToText, nodeStreamToBuffer } from '../stream.ts';
 import { retrieveTokenClaim } from '../utils/jwt.ts';
 import {
@@ -278,6 +279,25 @@ export function attributeSearchRequest(
 ): void {
   let searchRequest = ctxt.state[SEARCH_REQUEST] as SearchRequest | undefined;
   searchRequest?.attribute(realms);
+}
+
+// Run the rest of a search request with the database connections it draws on
+// shared out as the realms it names, so that while another realm is searching
+// on this replica its queries wait for their share of the pool rather than
+// behind everything the other realm has queued (see the connection scheduler
+// in `@cardstack/postgres`). A request naming several realms is its own
+// tenant, keyed by the set. Called by whichever handler first knows the
+// realms, beside `attributeSearchRequest`; requests the admission gate did not
+// count run untagged.
+export async function withSearchConnectionTenant<T>(
+  ctxt: Koa.Context,
+  realms: readonly string[],
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (!ctxt.state[SEARCH_REQUEST] || realms.length === 0) {
+    return await fn();
+  }
+  return await withConnectionTenant([...realms].sort().join(' '), fn);
 }
 
 // Puts a search through the admission gate (`search-inflight.ts`). A search
