@@ -63,8 +63,10 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
   // True when the skill's source can no longer be loaded — for example a
   // room enabled a skill card that has since been deleted or renamed. The
   // pill still renders so the user can see the reference and turn it off.
+  // The error wins over `card`, which keeps returning the last loaded
+  // instance after the source goes away.
   private get isUnavailable(): boolean {
-    return !this.card && Boolean(this.cardResource?.cardError);
+    return Boolean(this.cardResource?.cardError);
   }
 
   // Title for either skill source: `cardTitle` for a Skill card; for a skill
