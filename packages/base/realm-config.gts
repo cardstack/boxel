@@ -1178,6 +1178,18 @@ export class RealmConfig extends CardDef {
       "Realm-level settings a card operation reads with realmConfig('key') — an approver's user id, a threshold, a default assignee. Values are JSON. They are not indexed for search and are not included in the realmInfo carried on card responses",
   });
 
+  // The card that holds this realm's policy, as `{ "card": "<absolute URL>" }`.
+  // A declared field for the reason `config` is one: a pointer the card did
+  // not declare would be dropped by the next write to this card. JSON rather
+  // than a compound field because JSON round-trips whatever was written, so
+  // the realm judges the same value whether it reads it from this file or from
+  // the index — and a value that is not a usable pointer leaves the realm with
+  // no policy rather than with whatever a typed field made of it.
+  @field policy = contains(JsonField, {
+    description:
+      'The RealmPolicy card that governs this realm, as { "card": "<absolute URL of the card>" }. Absent for a realm with no policy. Only the pointer lives here; the rules live on the card it names',
+  });
+
   @field cardTitle = contains(StringField, {
     computeVia: function (this: RealmConfig) {
       let name = this.cardInfo?.name?.trim();
