@@ -123,7 +123,7 @@ export class IndexingEventSink {
         });
         this.#completedFilesSets.set(event.jobId, new Set());
         log.info(
-          `[indexing-progress] event=started job=${event.jobId} realm=${event.realmURL} total_files=${totalFiles}`,
+          `[indexing-progress] event=started job=${event.jobId} realm=${event.realmURL} lane=${event.lane ?? 'none'} total_files=${totalFiles}`,
         );
         // Detached: don't block the IPC handler waiting on Postgres.
         void this.#upsertProgress(event.jobId, 0, totalFiles);
@@ -189,7 +189,7 @@ export class IndexingEventSink {
         // but it's clearer to clean up here.
         this.#dirtyJobIds.delete(event.jobId);
         log.info(
-          `[indexing-progress] event=finished job=${event.jobId} realm=${event.realmURL} files_completed=${finalCompleted}`,
+          `[indexing-progress] event=finished job=${event.jobId} realm=${event.realmURL} lane=${event.lane ?? 'none'} files_completed=${finalCompleted}`,
         );
         // Final write — don't wait for the next tick, so the row
         // reflects terminal state by the time the dashboard refreshes.

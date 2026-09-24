@@ -22,6 +22,7 @@ import {
 } from '../jobs/indexing.ts';
 import {
   enqueuePrerenderHtmlJob,
+  prerenderHtmlLaneFollowing,
   mergePrerenderHtmlChanges,
   skipsPrerenderHtml,
   type SpawningIndexPass,
@@ -668,6 +669,8 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
           // From-scratch: the prerender job runs the realm-wide module
           // pre-warm sweep before its format renders.
           preWarm: true,
+          // The pass is its family's exclusive work, so the render is too.
+          lane: prerenderHtmlLaneFollowing(realmURL, jobInfo),
         }).catch((e) => {
           log.warn(
             `${jobIdentity(jobInfo)} failed to enqueue prerender_html job for ${realmURL}: ${(e as Error)?.message}`,
@@ -832,6 +835,10 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
           // Incremental: no realm-wide sweep — its cost is O(realm module
           // count), deliberately not paid on incrementals.
           preWarm: false,
+          // The writer's own render lane, the one the bulk-write render hold
+          // names, so another writer's render work neither waits behind this
+          // one nor merges into it.
+          lane: prerenderHtmlLaneFollowing(realmURL, jobInfo),
         }).catch((e) => {
           log.warn(
             `${jobIdentity(jobInfo)} failed to enqueue prerender_html job for ${realmURL}: ${(e as Error)?.message}`,

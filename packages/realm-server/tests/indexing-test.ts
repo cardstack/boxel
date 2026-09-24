@@ -581,7 +581,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         prerenderJob.concurrency_group,
         `prerender-html:${testRealm}`,
-        'HTML work runs in its own per-realm concurrency group',
+        "a from-scratch pass's HTML runs in the exclusive lane of the realm's prerender-html family",
       );
       assert.strictEqual(
         prerenderJob.status,
@@ -2532,7 +2532,7 @@ module(basename(import.meta.filename), function () {
                 `SELECT id, priority, args
              FROM jobs
              WHERE job_type = 'incremental-index'
-               AND concurrency_group = $1
+               AND (concurrency_group = $1 OR lane_family = $1)
                AND status = 'unfulfilled'`,
                 { bind: [`indexing:${realm.url}`] },
               )) as {
@@ -2621,7 +2621,7 @@ module(basename(import.meta.filename), function () {
                 `SELECT args
              FROM jobs
              WHERE job_type = 'incremental-index'
-               AND concurrency_group = $1
+               AND (concurrency_group = $1 OR lane_family = $1)
                AND status = 'unfulfilled'`,
                 { bind: [`indexing:${realm.url}`] },
               )) as {
@@ -2685,7 +2685,7 @@ module(basename(import.meta.filename), function () {
               let rows = (await testDbAdapter.execute(
                 `SELECT job_type
              FROM jobs
-             WHERE concurrency_group = $1
+             WHERE (concurrency_group = $1 OR lane_family = $1)
                AND status = 'unfulfilled'
                AND job_type IN ('incremental-index', 'from-scratch-index')`,
                 { bind: [`indexing:${realm.url}`] },
@@ -2823,7 +2823,7 @@ module(basename(import.meta.filename), function () {
               let rows = (await testDbAdapter.execute(
                 `SELECT job_type
                FROM jobs
-               WHERE concurrency_group = $1
+               WHERE (concurrency_group = $1 OR lane_family = $1)
                  AND status = 'unfulfilled'
                  AND job_type IN ('incremental-index', 'from-scratch-index')`,
                 { bind: [`indexing:${realm.url}`] },

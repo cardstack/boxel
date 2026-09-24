@@ -144,7 +144,8 @@ module(basename(import.meta.filename), function (hooks) {
   ): Promise<{ id: number; status: string }[]> {
     return (await testDbAdapter.execute(
       `select id, status from jobs
-         where job_type = $1 and concurrency_group = $2
+         where job_type = $1
+           and (concurrency_group = $2 or lane_family = $2)
          order by id`,
       { bind: [jobType, concurrencyGroup] },
     )) as { id: number; status: string }[];
@@ -737,7 +738,7 @@ module(basename(import.meta.filename), function (hooks) {
         let [inFlight] = (await testDbAdapter.execute(
           `select count(*)::int as n from jobs j
              where j.job_type = 'incremental-index'
-               and j.concurrency_group = $1
+               and (j.concurrency_group = $1 or j.lane_family = $1)
                and j.status = 'unfulfilled'`,
           { bind: [`indexing:${realm.url}`] },
         )) as { n: number }[];

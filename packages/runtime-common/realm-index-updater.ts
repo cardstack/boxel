@@ -14,6 +14,7 @@ import {
 } from './index.ts';
 import {
   indexingConcurrencyGroup,
+  indexingWriterLane,
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
   makeIncrementalArgsWithCallerMetadata,
   mapIncrementalDoneResult,
@@ -462,7 +463,9 @@ export class RealmIndexUpdater {
       );
       job = await this.#queue.publish<IncrementalDoneResult>({
         jobType: 'incremental-index',
-        concurrencyGroup: indexingConcurrencyGroup(this.#realm.url),
+        // The writer's own lane, so this pass neither waits behind another
+        // writer's pass nor coalesces with one.
+        ...indexingWriterLane(this.#realm.url, opts?.initiatedBy),
         timeout: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
         priority: userInitiatedPriority,
         args: jobArgs,

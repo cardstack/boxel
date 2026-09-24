@@ -202,6 +202,18 @@ export interface IndexingProgressEvent {
   files?: string[];
   url?: string;
   stats?: Stats;
+  // The lane the job was claimed in (its `concurrency_group`), on
+  // `indexing-started` and `indexing-finished`, so a job's progress log lines
+  // say whose pass it is: a writer's lane, the owner's, or the family's
+  // exclusive lane. Absent when no queue claimed the job.
+  lane?: string;
+}
+
+// `IndexingProgressEvent.lane` for a job, spread into the event.
+export function progressLaneOf(jobInfo: JobInfo | undefined): {
+  lane?: string;
+} {
+  return jobInfo?.concurrencyGroup ? { lane: jobInfo.concurrencyGroup } : {};
 }
 
 // The job types an `indexJobsOnly` worker registers. The queue's claim

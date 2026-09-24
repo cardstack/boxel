@@ -46,7 +46,7 @@ import {
   type ScreenshotManifestEntry,
 } from '../capture-spec.ts';
 import type { DBAdapter } from '../db.ts';
-import type { IndexingProgressEvent } from '../worker.ts';
+import { progressLaneOf, type IndexingProgressEvent } from '../worker.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 import {
   CardError,
@@ -230,6 +230,7 @@ export async function runPrerenderHtmlPass({
     type: 'indexing-started',
     realmURL: realmURL.href,
     jobId: jobInfo.jobId,
+    ...progressLaneOf(jobInfo),
     reservationId: jobInfo.reservationId,
     jobType: 'prerender_html',
     totalFiles,
@@ -453,6 +454,7 @@ export async function runPrerenderHtmlPass({
       type: 'indexing-finished',
       realmURL: realmURL.href,
       jobId: jobInfo.jobId,
+      ...progressLaneOf(jobInfo),
       stats,
     });
     // Release the batch's ownership of this realm's affinity on the

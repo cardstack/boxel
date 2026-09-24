@@ -761,6 +761,11 @@ export interface RenderTimeoutDiagnostics extends BuildModelDiagnostics {
       // persisted before priority threading landed will lack the
       // field. Consumers should treat absent as `0`.
       priority?: number;
+      // The indexing batch the call belongs to; absent for a call that
+      // belongs to none (a module prerender, an on-demand render). An
+      // affinity can carry several batches at once, so this is what tells
+      // a stalled render's own batch apart from a concurrent one.
+      batchId?: string;
     }>;
   };
   // Host-emitted computed-field counters lifted out of

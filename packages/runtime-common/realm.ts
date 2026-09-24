@@ -13,7 +13,7 @@ import {
 import {
   awaitPublishedHtmlReady,
   enqueuePrerenderHtmlJob,
-  prerenderHtmlConcurrencyGroup,
+  prerenderHtmlWriterLane,
 } from './jobs/prerender-html.ts';
 import { JobClaimHold } from './jobs/claim-hold.ts';
 import { settledBy } from './settled-by.ts';
@@ -1925,10 +1925,10 @@ export class Realm {
   #router: Router;
   #testOnlyCoarseAdmission: CoarseAdmission | undefined;
   #log = logger('realm');
-  // Anchors the render-hold cap across back-to-back bulk commits; see
-  // `_commitBatchUnlocked`. Undefined whenever no commit holds the lane.
-  #renderHoldChainStartedAt: number | undefined;
-  #renderHoldDepth = 0;
+  // Anchors the render-hold cap across back-to-back bulk commits, per render
+  // lane held; see `_commitBatchUnlocked`. A lane has an entry only while a
+  // commit holds it.
+  #renderHoldChains = new Map<string, { startedAt: number; depth: number }>();
   // One line per card read that arrives while incremental indexing is
   // pending — see drainRequestersOwnIndexing for the outcome grammar.
   #readGateLog = logger('realm:read-index-gate');
@@ -3762,13 +3762,13 @@ export class Realm {
     return writes;
   }
 
-  // Whether the current unbroken run of render holds has outlived the cap.
-  // False when no chain is running, which is the common case and the one that
-  // lets a fresh chain start.
-  #renderHoldChainExpired(): boolean {
+  // Whether the current unbroken run of render holds on `lane` has outlived
+  // the cap. False when no chain is running there, which is the common case
+  // and the one that lets a fresh chain start.
+  #renderHoldChainExpired(lane: string): boolean {
+    let chain = this.#renderHoldChains.get(lane);
     return (
-      this.#renderHoldChainStartedAt !== undefined &&
-      Date.now() - this.#renderHoldChainStartedAt > renderHoldMaxMs()
+      chain !== undefined && Date.now() - chain.startedAt > renderHoldMaxMs()
     );
   }
 
@@ -3803,7 +3803,7 @@ export class Realm {
     batch: CommitBatch,
     options?: WriteOptions,
   ): Promise<CommitBatchResult> {
-    // A commit large enough to outlast a render pass holds this realm's
+    // A commit large enough to outlast a render pass holds its writer's
     // render lane for its duration. Coalescing can only merge into a job no
     // worker has claimed, so on an idle cluster a bulk import gets none of
     // it: each commit's render pass is claimed and finished before the next
@@ -3812,6 +3812,13 @@ export class Realm {
     // the next one merges into it and the union renders once. Nothing is
     // skipped — the hold delays rendering, it never cancels it.
     let changeCount = (batch.writes?.size ?? 0) + (batch.deletes?.length ?? 0);
+    // The writer's own render lane — the one the index pass this commit
+    // queues spawns its render job into — so the hold never delays another
+    // writer's renders.
+    let renderLane = prerenderHtmlWriterLane(
+      this.url,
+      options?.initiatingUser,
+    ).concurrencyGroup;
     if (
       changeCount < RENDER_HOLD_MIN_BATCH_SIZE ||
       // A commit that waits for its own indexing has nothing to hold the lane
@@ -3828,13 +3835,13 @@ export class Realm {
       // ever looked old enough to stop. Skipping the acquire outright also
       // leaves the depth counter alone, so the anchor still clears when the
       // holds already in flight drain.
-      this.#renderHoldChainExpired()
+      this.#renderHoldChainExpired(renderLane)
     ) {
       return await this.#commitBatchUnlockedInner(batch, options);
     }
     let hold = await JobClaimHold.acquire(
       this.#dbAdapter,
-      prerenderHtmlConcurrencyGroup(this.url),
+      renderLane,
       RENDER_HOLD_LEASE_MS,
     );
     // The cap spans the chain, not the batch. Each commit acquires its own
@@ -3843,9 +3850,13 @@ export class Realm {
     // render lane indefinitely while no single hold ever looked old. Anchoring
     // on the first hold in an unbroken run is what makes the cap mean what it
     // says.
-    this.#renderHoldChainStartedAt ??= Date.now();
-    this.#renderHoldDepth++;
-    let chainStartedAt = this.#renderHoldChainStartedAt;
+    let chain = this.#renderHoldChains.get(renderLane);
+    if (!chain) {
+      chain = { startedAt: Date.now(), depth: 0 };
+      this.#renderHoldChains.set(renderLane, chain);
+    }
+    chain.depth++;
+    let chainStartedAt = chain.startedAt;
     let heartbeat = setInterval(() => {
       // The other half of the cap, for a chain already under way: past it the
       // lease stops being renewed, so the lane frees itself within one lease
@@ -3868,9 +3879,9 @@ export class Realm {
       // The chain ends when a hold is released with none behind it. A commit
       // that starts before this one finishes keeps the anchor, which is the
       // case the cap exists for.
-      this.#renderHoldDepth--;
-      if (this.#renderHoldDepth === 0) {
-        this.#renderHoldChainStartedAt = undefined;
+      chain.depth--;
+      if (chain.depth === 0) {
+        this.#renderHoldChains.delete(renderLane);
       }
       try {
         await hold.release();
@@ -4558,7 +4569,10 @@ export class Realm {
     // leaves the flush's deferred set with no later pass to fold it into.
     // Those URLs are real dependents of a module that did change, so the
     // commit still owes them a render — enqueue the job the flush skipped.
-    await this.enqueueDeferredPrerenderHtml(deferredPrerenderHtml);
+    await this.enqueueDeferredPrerenderHtml(
+      deferredPrerenderHtml,
+      initiatingUser,
+    );
     return {
       writes: results.map(({ path, lastModified, contentHash }) => ({
         path,
@@ -4573,11 +4587,14 @@ export class Realm {
   // Enqueue the prerender_html job an intermediate index pass deferred, for
   // the case where no later pass in the same write picked the set up. Uses
   // the deferring pass's own generation and loader epoch — the stamp those
-  // URLs were invalidated under. Fire-and-forget, and best-effort, for the
-  // same reason the in-worker enqueue is: an index pass must never fail on
-  // its prerender enqueue, and a missed one self-heals on the next pass.
+  // URLs were invalidated under — and the writer's render lane, the one the
+  // deferring pass would have spawned it into. Fire-and-forget, and
+  // best-effort, for the same reason the in-worker enqueue is: an index pass
+  // must never fail on its prerender enqueue, and a missed one self-heals on
+  // the next pass.
   private async enqueueDeferredPrerenderHtml(
     deferred: DeferredPrerenderHtml | undefined,
+    initiatingUser: string | null,
   ): Promise<void> {
     if (!deferred || deferred.changes.length === 0) {
       return;
@@ -4601,6 +4618,7 @@ export class Realm {
         }),
         timeoutSec: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
         preWarm: false,
+        lane: prerenderHtmlWriterLane(this.url, initiatingUser),
       });
     } catch (e: any) {
       this.#log.warn(

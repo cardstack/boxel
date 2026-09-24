@@ -475,9 +475,14 @@ async function respondWithJobScopedSearchCache(
     // Fold each realm's generation fingerprint (index + prerendered-HTML) into
     // the cache key so the ETag advances when either channel does — a cached
     // `304` can't pin an HTML-less or older-rendering result after newer HTML
-    // lands. Purely a key change: it only fragments the cache, and the body a
-    // miss produces reflects the current DB state.
-    let generations = await searchCache!.realmGenerations(realms);
+    // lands. The consuming realm's rides along even when the query does not
+    // search it: another writer's pass can commit to that realm while this
+    // job runs, and the linked resources a result carries can live there.
+    // Purely a key change: it only fragments the cache, and the body a miss
+    // produces reflects the current DB state.
+    let generations = await searchCache!.realmGenerations([
+      ...new Set([...realms, consumingRealm!]),
+    ]);
     let keyOpts = { ...(args.opts as Record<string, unknown>), generations };
     let expectedEtag = searchCache!.computeETag({
       jobId: jobId!,

@@ -116,6 +116,8 @@ Why this matters for triage:
 
 4. **Sharpening the deadlock fingerprint**: `affinitySnapshot.sameAffinityActivity[*].priority` lets you tell a self-referential prerender deadlock apart from priority-driven queuing. Same-priority queued module sub-render on a stuck same-priority file render → deadlock. Higher-priority queued sibling → priority routing working as intended.
 
+5. **Telling batches apart**: several indexing batches on one realm affinity at once is normal — index passes run one per writer lane, and each pass's `prerender_html` job runs beside it — so a stalled render's siblings can belong to other batches. Each `sameAffinityActivity` entry carries the `batchId` of the call that produced it (absent on a module sub-render or an on-demand render, which belong to no batch). A `file` sibling with a different `batchId` is a concurrent batch competing for the affinity's tabs, not part of the stalled render's own work.
+
 The priority value lives on the `diagnostics.priority` field and on every `sameAffinityActivity` entry. The periodic `prerender-queue-snapshot` log line carries per-affinity priority breakdowns. See [Classify in one pass](#classify-in-one-pass) and the field-by-field section below for the exact triage rules.
 
 ## Mode A — a render timed out
@@ -1353,7 +1355,7 @@ LIMIT 20;
   - Normal value: the janitor counts are 0 on a realm whose jobs run their first attempt through. A retried job's earlier attempt always leaves its staging for the janitor (the retry copied from it rather than taking it over), so expect one per retry. Beyond that, a nonzero count means some pass ended with staged rows still on the table — it died before its commit and was not retried, its commit was refused because it no longer held its job, or its own cleanup failed (a warning on the `index-writer` logger names it). The rows were never read by another pass either way; this is housekeeping, not a correctness signal.
   - `pendingCleanupMs` is absent when the swap never committed, and the janitor counts are absent when the cleanup itself failed.
   - `prerender_html` job results carry the same three swap fields (`swapMs`, `swapAttempts`, `swapRetryMs`) and these three cleanup fields on their `phaseTimings`, alongside `preWarmMs` and `spawnGateMs` (see [A prerender_html job's wait on its spawning passes](#a-prerender_html-jobs-wait-on-its-spawning-passes)).
-- **`commitLockWaitMs`** (job-level) — the part of `swapMs` the committing attempt spent waiting for the realm's commit lock. A pass allocates its generation at commit, one past the realm's `current_generation`, while holding a per-realm lock that serializes commits (not passes); the wait is the time another pass of the same realm spent finishing its own commit. Near 0 while a realm's index passes run one at a time. `prerender_html` jobs take no commit lock and carry no such field.
+- **`commitLockWaitMs`** (job-level) — the part of `swapMs` the committing attempt spent waiting for the realm's commit lock. A pass allocates its generation at commit, one past the realm's `current_generation`, while holding a per-realm lock that serializes commits (not passes); the wait is the time another pass of the same realm spent finishing its own commit. Index passes of one realm run side by side, one per writer lane (see [Mode P](#mode-p--a-save-waited-in-the-queue)), but their commits still take turns, so this is the one place on the index path where one writer's pass can still wait on another's. Expect it near 0 on a realm with one active writer, and up to one peer's commit (its swap plus any validation rounds) when two writers' passes finish close together. `prerender_html` jobs take no commit lock and carry no such field.
 
 ### Reading the commit ledger
 
@@ -1432,7 +1434,7 @@ LIMIT 20;
 The index visit runs at most three route steps, and `indexRoutesMs` records each one's wall-clock, split by the card indexing and the FileDef file indexing (the index-half sibling of the render channel's `renderFormatsMs`):
 
 - **`card.meta`** — the `render.meta` route: instantiate the card, run computeds, build the search doc, and resolve `types` / `displayNames` / `deps`. The types chain is a prototype-chain walk inside this route, not a step of its own — its cost is inside this number. On a card-instance index visit this is the **fused** transition: it also performs the file row's extract, whose share is itemized as `diagnostics.fileExtractMs`. `serializeMs` / `searchDocMs` / `searchDocSettleMs` break the _doc build_ out of it (Mode J); the remainder of `card.meta` net of `fileExtractMs` is the route's own transition + settle.
-- **`card.icon`** — the `render.icon` route. Present only when the icon route actually ran; **absent when the per-type icon memo served the icon**, since a memo hit renders nothing and costs ~0 this visit. So across one job's cards of a given type, expect `card.icon` on the first card of the type and none on the rest.
+- **`card.icon`** — the `render.icon` route. Present only when the icon route actually ran; **absent when the per-type icon memo served the icon**, since a memo hit renders nothing and costs ~0 this visit. So across one job's cards of a given type, expect `card.icon` on the first card of the type and none on the rest. The memo belongs to one job: two index passes of a realm running at once (different writers' lanes) each keep their own, so each renders a type's icon once.
 - **`file.fileExtract`** — a standalone `render.file-extract` route transition: the file's resource, types, and deps. Present on non-card files (they have no card side to fuse into), on the fallback extract a card render error triggers, and on a prerender-html visit that self-resolves its file resource. **Absent on a card-instance visit's happy path** — there the extract runs inside the fused `card.meta` transition and shows up as `fileExtractMs` instead.
 - **`file.icon`** — the file's `render.icon` route, same memo behavior as `card.icon`.
 
@@ -1781,7 +1783,7 @@ If either set is non-empty and fewer than 3 rounds have run, the transaction rol
 
 Then the commit runs again and checks the peers that committed during the round. After 3 rounds that still find something stale, the commit goes ahead anyway. In the same transaction it inserts a follow-up `incremental-index` job for the URLs still stale, taking the lane (`concurrency_group` and `lane_family`), `priority` and `initiated_by` of the pass's own job row. The follow-up carries no `coalescedCallers`, so no write waits on it, and it announces its own pass when it lands: an incremental index event through the worker's event bridge, and `NOTIFY realm_index_updated`.
 
-Batches that cannot re-visit never check: the setup-phase error recording, the worker's failed-entry marking, a copy, and `prerender_html` jobs. While a realm's index passes run one at a time no peer commits during a pass, so the check never runs and the validation fields are absent from `phaseTimings`.
+Batches that cannot re-visit never check: the setup-phase error recording, the worker's failed-entry marking, a copy, and `prerender_html` jobs. A peer commits during a pass when another writer's pass of the realm, in its own writer lane, finishes first; a pass that no peer committed beside skips the check, and the validation fields are absent from its `phaseTimings`. One writer's own passes share a lane and run in order, so they never validate against each other.
 
 **Where it is recorded.**
 
@@ -1865,8 +1867,9 @@ LIMIT 20;
 
 A job runs in a lane, its `concurrency_group`. Lanes group into **lane families** (`jobs.lane_family`), and a realm's index lanes are one family named `indexing:<realm-url>`; its prerender-html lanes are another, `prerender-html:<realm-url>`.
 
-- **Exclusive work** runs in the group named for the family. So does every job published without a family (`lane_family IS NULL`), which is how from-scratch, copy-index and scoped-css-gc are published, and how an incremental pass is published unless it uses a writer lane.
-- **Writer lanes** are groups of their own inside the family (for example `indexing:<realm-url>#user:<matrix-id>`), and record the family in `lane_family`.
+- **Exclusive work** runs in the group named for the family. So does every job published without a family (`lane_family IS NULL`), which is how from-scratch, copy-index and scoped-css-gc are published.
+- **Writer lanes** are groups of their own inside the family, and record the family in `lane_family`. Every incremental pass runs in one: `indexing:<realm-url>#user:<matrix-id>` for a write someone made, `indexing:<realm-url>#owner` for work nobody initiated (a file-watcher echo, system work). One writer's passes share a lane, so they coalesce and run in order; different writers' passes run side by side and are never coalesced.
+- **A `prerender_html` job follows the lane of the index pass that spawned it** into the `prerender-html:<realm-url>` family: an incremental pass's render runs in the same writer's `#user:` / `#owner` lane there, and a from-scratch pass's render, like a reconcile repair, is that family's exclusive work. The bulk-write render hold names the writing user's render lane, so it delays that writer's renders only.
 
 The claim query applies these rules (`PgQueueRunner.processJobs`):
 
@@ -1877,12 +1880,15 @@ The claim query applies these rules (`PgQueueRunner.processJobs`):
 
 A claim hold (`job_claim_holds`) naming a family holds every lane in it. A hold naming a writer lane holds that lane alone.
 
+Every lane query here selects the family with `concurrency_group = F OR lane_family = F`. Selecting the group alone reads one writer's lane, so the other writers' passes drop out of "who held it" and the realm reads as uncontended.
+
 ### Where the numbers live
 
 - **`jobs.result.queueClaim`**: `{ queueWaitMs, concurrencyGroup, laneFamily }` on every index job (`from-scratch-index`, `incremental-index`) and `prerender_html` job the queue claimed. `queueWaitMs` runs from the job's `created_at` to the claim of the attempt that ran, on the database clock. Absent on a job from a worker predating it.
 - **`jobs.result.phaseTimings.totalMs`**: the pass's own run.
 - **`diagnostics.queueClaim`** on every row the pass wrote, in `boxel_index` and `prerendered_html`: the same object, so a card's row names the wait of the pass that last wrote it without a join to `jobs`.
 - **The worker's `queue` log line** at `info`: `starting job <id> (type=… priority=… group=… family=…) after <n>ms in queue`.
+- **The `[indexing-progress]` log lines** at `info`: `event=started` and `event=finished` carry `lane=<concurrency_group>`, so a job's progress lines say whose pass it is without a join to `jobs`.
 
 `queueWaitMs` is measured from the job's creation. A publish that coalesced into a pending job later waited less than that. Read a coalesced caller's own wait from its request log (the `enqueue` / `awaitIndex` split on the write path) instead.
 
@@ -1976,11 +1982,60 @@ Passes that never waited behind anything have no blocker and drop out of the joi
 
 ### Reading it
 
-- **`held_by = {exclusive work}`**: a job in the family's exclusive lane held the pass: a from-scratch, copy or GC job, or an incremental pass published to the exclusive lane. While a realm's incremental passes are published there, this is every blocked pass, and `blocked_by_self` / `blocked_by_other` is the whole answer.
+- **`held_by = {exclusive work}`**: a job in the family's exclusive lane held the pass: a from-scratch, copy or GC job, or the follow-up a from-scratch pass left behind. Exclusive work runs alone, so every writer lane waits for it.
 - **`held_by` includes `own lane`**: the same writer's earlier pass, in its own writer lane. A writer's own passes stay serial by design, so read-your-writes holds. Coalescing is what shortens these.
 - **`held_by = {another writer lane}`** with two writer lanes running: the family was at its cap of two concurrent writer lanes.
 - **A long wait with an exclusive job queued, not running, between the pass's enqueue and its claim**: the barrier. The pass was a writer job and waited for an older exclusive job of no lower priority to run first.
 - **`tax_ratio`** is the wait as a multiple of the pass's own run. A cheap save with a high ratio is the one a user notices.
+
+### Step 3: score fairness per writer
+
+Fairness asks how much of a writer's index time went to waiting on someone else's pass. With benchmark 6's definition, a pass is **blocked** when another pass of the family was claimed and unfinished when it was enqueued, and the block is **cross-writer** when that pass shares no writer with it. Fairness = 1 − Σ cross-writer wait ÷ Σ (wait + run), per writer and for the family. 1.0 means no writer's time went to another writer's work.
+
+```sql
+WITH family_jobs AS (
+  SELECT j.id, j.job_type, j.initiated_by, j.created_at,
+         r.created_at   AS claimed_at,
+         r.completed_at AS finished_at
+  FROM jobs j
+  JOIN LATERAL (
+    SELECT created_at, completed_at FROM job_reservations
+     WHERE job_id = j.id AND completion_reason = 'completed'
+     ORDER BY id DESC LIMIT 1
+  ) r ON true
+  WHERE (j.concurrency_group = 'indexing:<realm-url>' OR j.lane_family = 'indexing:<realm-url>')
+    AND j.created_at BETWEEN '<window-start>' AND '<window-end>'
+),
+passes AS (
+  SELECT p.id,
+         COALESCE(p.initiated_by::text, '(owner)')                  AS writer,
+         EXTRACT(EPOCH FROM (p.claimed_at - p.created_at)) * 1000  AS wait_ms,
+         EXTRACT(EPOCH FROM (p.finished_at - p.claimed_at)) * 1000 AS own_run_ms,
+         EXISTS (
+           SELECT 1 FROM family_jobs b
+            WHERE b.id <> p.id
+              AND b.claimed_at <= p.created_at   -- claimed at enqueue
+              AND b.finished_at > p.created_at   -- and unfinished
+              AND NOT ((b.initiated_by IS NULL AND p.initiated_by IS NULL)
+                       OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(p.initiated_by) u
+                                   WHERE b.initiated_by ? u.value))
+         ) AS blocked_by_other
+  FROM family_jobs p
+  WHERE p.job_type = 'incremental-index'
+)
+SELECT writer,
+       count(*)                                   AS passes,
+       count(*) FILTER (WHERE blocked_by_other)   AS blocked_by_other,
+       round(percentile_cont(0.5) WITHIN GROUP (ORDER BY wait_ms)
+               FILTER (WHERE blocked_by_other)::numeric)     AS blocked_wait_p50_ms,
+       round((1 - COALESCE(sum(wait_ms) FILTER (WHERE blocked_by_other), 0)
+                  / NULLIF(sum(wait_ms + own_run_ms), 0))::numeric, 3) AS fairness
+FROM passes
+GROUP BY ROLLUP (writer)
+ORDER BY writer NULLS LAST;
+```
+
+The `NULL` writer row is the family as a whole. With writer lanes, a pass enqueued during another writer's pass still counts as blocked, but it is claimed at once, so its wait, and its weight in the score, stay near zero; what remains is its share of the commit lock (see `commitLockWaitMs` in [Mode K](#mode-k--the-index-jobs-between-visit-wall-non-render-overhead)). A cheap writer scoring well below 1 while another writer's long passes run means those passes are holding it: check `held_by` in Step 2 for exclusive work or the two-writer-lane cap. Score the `prerender-html:<realm-url>` family the same way to see the render side.
 
 ### What Mode P can't tell you
 
@@ -2192,8 +2247,13 @@ Passes that never waited behind anything have no blocker and drop out of the joi
                                  // "Classify in one pass" table row
                                  // below.
       { "url": "…/customer.gts", "kind": "module", "queue": "module", "state": "running", "ageMs": 68000, "priority": 0 },
-      { "url": "…/order.gts",    "kind": "module", "queue": "module", "state": "running", "ageMs": 66500, "priority": 10 }
+      { "url": "…/order.gts",    "kind": "module", "queue": "module", "state": "running", "ageMs": 66500, "priority": 10 },
+      { "url": "…/order-7.json", "kind": "visit",  "queue": "file",   "state": "queued",  "ageMs": 1200,  "priority": 10, "batchId": "4812-9c1e0f3a" }
     ]
+    // A visit entry carries the `batchId` of the indexing batch it belongs
+    // to. Entries from a batch other than the stalled render's own are a
+    // concurrent batch on the same affinity — another writer's index pass,
+    // or a pass's `prerender_html` job — which is normal.
     // Each `sameAffinityActivity` entry carries the worker-job
     // `priority` of the call that produced it. On a stuck-render
     // post-mortem this disambiguates two regression shapes that look
@@ -2341,7 +2401,7 @@ Walk the fields top-down. The _first_ positive signal wins; stop there.
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `waits.semaphoreMs` ≈ `totalElapsedMs`                                                                                                                                                                                                                | **Launch stall (capacity)**                                                  | Fleet-wide: `prerender-queue-snapshot` lines on every prerender server around that timestamp. Is `totalPending` piled up? Add capacity, don't touch host.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `waits.admissionMs` ≈ `totalElapsedMs` (and semaphoreMs small)                                                                                                                                                                                        | **Per-affinity admission stall**                                             | This realm hit its own file-admission cap — the server had capacity but wasn't letting this realm use it. The signal means ≥ cap concurrent file renders on one affinity. Default cap = `affinityTabMax − 1` (4 on the standard 5-tab deployment), so a single realm fanning out to ≥ 4 concurrent renders (typical catalog-sized reindex) already produces this. Grep the queue-snapshot log for `admission=pending=N/cap=N` on the same affinity to confirm waiters were piling up. If the cap looks too tight for the workload and cross-realm fairness isn't the concern, `PRERENDER_AFFINITY_FILE_CONCURRENCY` is the knob (see the tuning-knobs section).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `waits.tabQueueMs` ≈ `totalElapsedMs` (and semaphoreMs / admissionMs small)                                                                                                                                                                           | **Same-affinity contention**                                                 | Same realm's batch is serialized on one tab. Check whether `PRERENDER_AFFINITY_TAB_MAX` is 1 for this fleet, or whether a rogue user request is sharing the tab (see CS-10873 for the cancel-on-abort follow-up).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `waits.tabQueueMs` ≈ `totalElapsedMs` (and semaphoreMs / admissionMs small)                                                                                                                                                                           | **Same-affinity contention**                                                 | The realm's renders queued for the affinity's tabs. Count the distinct `batchId`s in `affinitySnapshot.sameAffinityActivity`: several batches on one affinity is normal (one index pass per writer lane, plus each pass's `prerender_html` job), and each extra batch competes for the same tabs. Then check whether `PRERENDER_AFFINITY_TAB_MAX` is 1 for this fleet, or whether a rogue user request is sharing the tab (see CS-10873 for the cancel-on-abort follow-up).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `launchMs` small **and** `renderStage` is `null`/`model:start`                                                                                                                                                                                        | **Very early render stall**                                                  | Transition hadn't yet rendered anything. Usually means the route threw before setting a real stage. Look at `capturedDom` (`<data-prerender-error>` is common) and console errors.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `renderStage` ∈ `buildModel:fetching-source` / `buildModel:deriving-type` / `buildModel:hydrating`                                                                                                                                                    | **Backend stall during model build**                                         | Usually a slow realm server or cross-realm fetch. Check realm-server logs for the same requestId; check the fetch target from `capturedDom` / `cardDocsInFlight`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `inFlightModuleImports.length > 0`                                                                                                                                                                                                                    | **Loader stall**                                                             | Each URL is a `.gts` / `.ts` we'd already started a `fetchModule(...)` for. Confirm the realm serves those URLs and that there's no import cycle. Often resolves with `clearCache: true` on retry (already in place) — if that's failing check for 500s on the module URL.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
@@ -2415,6 +2475,16 @@ The `pending=` count on the same line includes the in-flight render holding the 
 Read with `priority` on the per-render `diagnostics`: a priority-10 row stuck on `waits.tabQueueMs` while the snapshot for its affinity shows `priorities=tab:10:N` is the smoking gun for an over-saturated user-priority workload (capacity issue, not priority misrouting). A priority-10 row stuck behind `priorities=tab:0:N` (with manager-side priority routing live in the build) is a priority-routing failure — manager picked the wrong server, or the file render the row was queued behind isn't releasing. Investigate the manager log for `requestId=…` to see where the manager-side scoring went.
 
 Read this alongside a timeout when `waits.semaphoreMs` is large. A snapshot with `totalPending >> totalTabs` near the timestamp confirms saturation.
+
+### Batch ownership lines (`prerenderer` channel)
+
+An indexing batch holds its realm's affinity while it visits, so an on-demand render landing on the same tabs cannot wipe the batch's warm loader with `clearCache`. Several batches holding one affinity is normal: index passes run one per writer lane, and each pass's `prerender_html` job runs beside it. Each batch holds its own entry and its release removes only that entry. The gate names what it saw:
+
+- `batch <B> joins concurrent batch(es) on realm:<realm>: <A>, …` (`debug`) — B started visiting while A was still at work. Routine.
+- `batch <B> succeeds finished batch(es) on realm:<realm>: <A> (idle <n>s), …` (`info`) — A never released (its job died or was cancelled mid-pass). It had nothing in flight on the affinity and had started no visit for one visit's whole request budget, so B dropped it. A steady stream of these means batches are ending without `releaseBatch` reaching the prerender server.
+- `stripping clearCache from non-batch request for realm:<realm> (held by <A>, …)` (`warn`) — an on-demand `clearCache` render was denied the clear because live batches hold the affinity.
+
+The same batch's icon memo goes with its entry: released with the batch, dropped with a finished batch, or cleared when the affinity is disposed.
 
 ## Quick triage rubric (Mode A — timeout)
 

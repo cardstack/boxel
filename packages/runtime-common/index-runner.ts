@@ -46,7 +46,7 @@ import {
   isCardError,
   serializableError,
 } from './error.ts';
-import type { IndexingProgressEvent } from './worker.ts';
+import { progressLaneOf, type IndexingProgressEvent } from './worker.ts';
 import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver.ts';
 import { resolveModuleCacheContext } from './index-runner/prewarm-modules.ts';
 import {
@@ -378,6 +378,7 @@ export class IndexRunner {
       type: 'indexing-started',
       realmURL: current.realmURL.href,
       jobId: current.#jobInfo.jobId,
+      ...progressLaneOf(current.#jobInfo),
       jobType: 'from-scratch',
       totalFiles: 0,
       files: [],
@@ -520,6 +521,7 @@ export class IndexRunner {
         type: 'indexing-finished',
         realmURL: current.realmURL.href,
         jobId: current.#jobInfo.jobId,
+        ...progressLaneOf(current.#jobInfo),
         stats: current.stats,
       });
       // Release the batch's ownership of this realm's affinity on the
@@ -611,6 +613,7 @@ export class IndexRunner {
       type: 'indexing-started',
       realmURL: current.realmURL.href,
       jobId: current.#jobInfo.jobId,
+      ...progressLaneOf(current.#jobInfo),
       jobType: 'incremental',
       totalFiles: 0,
       files: [],
@@ -774,6 +777,7 @@ export class IndexRunner {
         type: 'indexing-finished',
         realmURL: current.realmURL.href,
         jobId: current.#jobInfo.jobId,
+        ...progressLaneOf(current.#jobInfo),
         stats: current.stats,
       });
       // Release the batch's ownership of this realm's affinity on the
