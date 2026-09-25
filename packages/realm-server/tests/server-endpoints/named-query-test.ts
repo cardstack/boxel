@@ -10,7 +10,6 @@ import {
   rri,
 } from '@cardstack/runtime-common';
 import type {
-  DefinitionLookup,
   QueuePublisher,
   QueueRunner,
   Realm,
@@ -116,27 +115,6 @@ const SCHEDULE_MODULE = `
   }
 `;
 
-// A type whose definition the render test evicts from the cache.
-const UNWARMED: ResolvedCodeRef = {
-  module: rri(`${SCHOOL}unwarmed`),
-  name: 'Unwarmed',
-};
-
-const UNWARMED_MODULE = `
-  import { contains, field, CardDef } from "@cardstack/base/card-api";
-  import StringField from "@cardstack/base/string";
-  import { operation } from "@cardstack/base/operations";
-
-  export class Unwarmed extends CardDef {
-    @field label = contains(StringField);
-
-    @operation static every = {
-      base: 'query',
-      query: { filter: { on: () => Unwarmed, eq: { label: 'one' } } },
-    };
-  }
-`;
-
 // A type whose declaration the stale-lowering test rewrites, kept apart from
 // the one every other test reads.
 function driftingModule(status: string) {
@@ -232,16 +210,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
               status: 'closed',
               rank: 4,
             }),
-            'unwarmed.gts': UNWARMED_MODULE,
-            'unwarmed/one.json': JSON.stringify({
-              data: {
-                type: 'card',
-                attributes: { label: 'one' },
-                meta: {
-                  adoptsFrom: { module: rri('../unwarmed'), name: 'Unwarmed' },
-                },
-              },
-            }),
             'drifting/open.json': drifting('open'),
             'drifting/closed.json': drifting('closed'),
           },
@@ -330,12 +298,14 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     realm: Realm,
     body: Record<string, unknown>,
     user: string,
+    headers: Record<string, string> = {},
   ) {
     return request
       .post(`${new URL(realm.url).pathname}_search`)
       .set('Accept', 'application/vnd.card+json')
       .set('Content-Type', 'application/json')
       .set('X-HTTP-Method-Override', 'QUERY')
+      .set(headers)
       .set('Authorization', `Bearer ${createJWT(realm, user, ['read'])}`)
       .send(body);
   }
@@ -377,6 +347,28 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
         SCHOOL_OPEN,
         'the rows the declaration matches, and none of the others the forged filter would have',
       );
+    });
+
+    test('the rendering a caller binds in its filter still applies', async function (assert) {
+      let htmlQuery = { eq: { format: 'embedded' } };
+      let response = await federatedSearch(
+        {
+          operation: 'byStatus',
+          on: SCHEDULE,
+          params: { status: 'open' },
+          filter: { eq: { htmlQuery } },
+          realms: [SCHOOL],
+        },
+        PROVIDER_A,
+      );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.deepEqual(
+        response.body.meta.htmlQuery,
+        htmlQuery,
+        'the binding chooses how rows render, so it survives the filter being replaced',
+      );
+      assert.deepEqual(sortedIds(response), SCHOOL_OPEN);
     });
 
     test('the ad-hoc form is answered with the filter the caller wrote', async function (assert) {
@@ -546,44 +538,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
         200,
         'and the same request outside a render resolves against its user',
       );
-    });
-
-    test('a render resolves a named query only against definitions already cached', async function (assert) {
-      let lookup = school.operationCore
-        .definitionLookup as unknown as DefinitionLookup;
-      await lookup.invalidate(UNWARMED.module);
-      assert.strictEqual(
-        await lookup.lookupCachedDefinition(UNWARMED),
-        undefined,
-        'the type starts with nothing cached',
-      );
-
-      let inRender = await federatedSearch(
-        { operation: 'every', on: UNWARMED, realms: [SCHOOL] },
-        PROVIDER_A,
-        { [DURING_PRERENDER_HEADER]: 'true' },
-      );
-      assert.strictEqual(
-        inRender.status,
-        404,
-        'a type whose definition is not cached resolves as unknown inside a render',
-      );
-      assert.strictEqual(
-        await lookup.lookupCachedDefinition(UNWARMED),
-        undefined,
-        'and nothing was built to answer it, so no module prerender ran while the render held its slot',
-      );
-
-      let live = await federatedSearch(
-        { operation: 'every', on: UNWARMED, realms: [SCHOOL] },
-        PROVIDER_A,
-      );
-      assert.strictEqual(
-        live.status,
-        200,
-        'outside a render the miss is built',
-      );
-      assert.deepEqual(sortedIds(live), [`${SCHOOL}unwarmed/one`]);
     });
   });
 
@@ -779,13 +733,17 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
       );
     });
 
-    test('a named query naming no realms is refused', async function (assert) {
+    test('a named query naming no realms is turned away before it resolves', async function (assert) {
       let response = await federatedSearch(
         { operation: 'byStatus', on: SCHEDULE, params: { status: 'open' } },
         PROVIDER_A,
       );
 
       assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      assert.true(
+        /realms must be supplied/.test(response.text),
+        `the federated endpoint's own refusal of a request that names no realm: ${response.text}`,
+      );
     });
   });
 
@@ -830,6 +788,18 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
 
       assert.strictEqual(response.status, 400, 'HTTP 400 status');
       assert.strictEqual(response.body.errors[0].code, 'invalid-params');
+    });
+
+    test('a render has no actor here either', async function (assert) {
+      let response = await realmSearch(
+        school,
+        { operation: 'listMySchedules', on: SCHEDULE },
+        PROVIDER_A,
+        { [DURING_PRERENDER_HEADER]: 'true' },
+      );
+
+      assert.strictEqual(response.status, 401, 'HTTP 401 status');
+      assert.strictEqual(response.body.errors[0].code, 'actor-required');
     });
 
     test('an unknown operation is refused', async function (assert) {

@@ -185,12 +185,6 @@ export interface OperationStoredFileMeta {
 // `CachingDefinitionLookup`, narrowed to the one read an operation makes.
 export interface OperationDefinitionLookup {
   lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition | undefined>;
-  // The definition as the cache already holds it, never built on a miss. A
-  // lookup made while a render waits on the answer reads this instead — see
-  // `resolveNamedQuery`.
-  lookupCachedDefinition?(
-    codeRef: ResolvedCodeRef,
-  ): Promise<Definition | undefined>;
 }
 
 // `RealmIndexQueryEngine`, narrowed to the reads an operation makes.

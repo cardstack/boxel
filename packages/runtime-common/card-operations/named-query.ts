@@ -51,19 +51,12 @@ export interface NamedQueryContext {
   // the realms the request named, each already authorized for the caller; on
   // a realm's own endpoint, that realm.
   realms: string[];
-  // Set for a request a render is waiting on, which changes two things.
-  //
-  // There is no actor. The app authenticates as itself to render, and what a
-  // render produces is served to every viewer, so a declaration compared
-  // against the render's own identity would put one user's rows into shared
-  // HTML. It is refused as a request that authenticated nobody is — the rule
-  // the host applies to the same query before it would send it.
-  //
-  // Definitions are read only from the cache. The render holds a prerender
-  // slot until the search answers, and a definition missing from the cache is
-  // built by a prerender of its module, which can need that same slot — the
-  // reason the search engine reads definitions the same way here. A type
-  // whose definition is not cached resolves as unknown.
+  // Set for a request a render is waiting on. Such a request has no actor: the
+  // app authenticates as itself to render, and what a render produces is
+  // served to every viewer, so a declaration compared against the render's own
+  // identity would put one user's rows into shared HTML. It is refused as a
+  // request that authenticated nobody is — the rule the host applies to the
+  // same query before it would send it.
   duringRender?: boolean;
 }
 
@@ -74,7 +67,10 @@ export interface NamedQueryContext {
 // Where the declaration names a member, the declaration's stands; where it
 // names none, the caller's fills it. The filter is the exception: it is the
 // shape of the query, which is the declaration's alone, so a caller's is
-// dropped even where the declaration wrote none.
+// dropped even where the declaration wrote none. Only its `htmlQuery` binding
+// carries over. The grammar binds it inside the filter, in the top-level `eq`,
+// but it chooses how a row is rendered rather than which rows match, and a
+// declaration has no way to name one.
 //
 // The realms searched are the ones the declaration scopes itself to — or,
 // where it names none, the caller's — narrowed to the ones this request may
@@ -91,7 +87,7 @@ export async function resolveNamedQuery(
     operation,
     on,
     params,
-    filter: _callerFilter,
+    filter: callerFilter,
     ...callerMembers
   } = payload;
   if (typeof operation !== 'string' || operation.length === 0) {
@@ -108,12 +104,11 @@ export async function resolveNamedQuery(
     );
   }
   let actor = context.duringRender ? undefined : context.actor;
-  let resolvingCore = context.duringRender ? cachedOnly(core) : core;
-  let scope = newOperationScope(resolvingCore, {
+  let scope = newOperationScope(core, {
     caller: scopeCallerFor(actor ?? ''),
   });
   let definition = await resolveOperation(
-    resolvingCore,
+    core,
     { kind: 'type', codeRef: on, realm: core.realmURL },
     operation,
     scope,
@@ -132,36 +127,40 @@ export async function resolveNamedQuery(
   }
   let declared = Object.fromEntries(
     Object.entries(lowered).filter(([, value]) => value !== undefined),
-  );
+  ) as SearchEntryWireQuery;
+  let htmlQuery = htmlQueryBinding(callerFilter);
   return {
     ...(callerMembers as SearchEntryWireQuery),
     ...declared,
+    ...(htmlQuery === undefined
+      ? {}
+      : {
+          filter: {
+            ...declared.filter,
+            eq: { ...declared.filter?.eq, htmlQuery },
+          },
+        }),
     realms,
   };
 }
 
-function cachedOnly(core: OperationCore): OperationCore {
-  let { definitionLookup } = core;
-  let lookupCached = definitionLookup.lookupCachedDefinition;
-  // A lookup that keeps no cache has no prerender behind a miss to wait on.
-  if (!lookupCached) {
-    return core;
+// The rendering a caller's filter asks for, read where the grammar binds it.
+// Checked by the search parser along with the rest of the query it lands in.
+function htmlQueryBinding(filter: unknown): unknown {
+  if (!isPlainRecord(filter) || !isPlainRecord(filter.eq)) {
+    return undefined;
   }
-  return {
-    ...core,
-    definitionLookup: {
-      lookupDefinition: (codeRef) =>
-        lookupCached.call(definitionLookup, codeRef),
-    },
-  };
+  return filter.eq.htmlQuery;
 }
 
 // `lowerQueryOperation` leaves a declaration's own list standing, empty or
 // not, and fills an unnamed scope only from a non-empty one — so an empty list
 // here is one the declaration wrote, and an absent one is a scope nobody named.
 function unscopedDetail(operation: string, declared: string[] | undefined) {
+  // The declaration's own realms go unnamed: its type can sit in a realm this
+  // caller cannot read, and so can the realms it scopes itself to.
   if (declared?.length) {
-    return `operation "${operation}" searches ${declared.join(', ')}, and this request may search none of them`;
+    return `operation "${operation}" searches only the realms its declaration names, and this request may search none of them`;
   }
   return `operation "${operation}" names no realm to search: ${
     declared

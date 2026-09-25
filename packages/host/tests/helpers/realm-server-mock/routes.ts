@@ -1,6 +1,7 @@
 import {
   buildSearchErrorResponse,
   baseRealm,
+  DURING_PRERENDER_HEADER,
   ensureTrailingSlash,
   parseRealmsFromPayload,
   parseSearchEntryQueryFromPayload,
@@ -190,7 +191,12 @@ function registerSearchRoutes() {
           let resolved = await resolveNamedQuery(
             resolvingRealm.operationCore,
             payload,
-            { actor: authenticatedUser(req), realms: realmList },
+            {
+              actor: authenticatedUser(req),
+              realms: realmList,
+              duringRender:
+                (req.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0,
+            },
           );
           payload = resolved;
           realmList = resolved.realms!;
@@ -629,12 +635,6 @@ async function handleArchiveToggle(
   );
 }
 
-// The entry searchable-realm resolver. In-process registry
-// realms expose `searchEntries` directly; a live remote realm (base, skills,
-// catalog on localhost:4201) is reached by passing the original wire payload
-// through to its per-realm `_search` endpoint — the parsed query the
-// fan-out hands us is the server's internal form and has no wire spelling,
-// so the passthrough closes over the raw payload instead.
 // The user a request's realm-server token names. The mock issues its tokens
 // unsigned, so there is nothing to verify, only a claim to read.
 function authenticatedUser(req: Request): string | undefined {
@@ -645,6 +645,12 @@ function authenticatedUser(req: Request): string | undefined {
   return claimsFromRawToken(authorization.replace(/^Bearer /, '')).user;
 }
 
+// The entry searchable-realm resolver. In-process registry
+// realms expose `searchEntries` directly; a live remote realm (base, skills,
+// catalog on localhost:4201) is reached by passing the original wire payload
+// through to its per-realm `_search` endpoint — the parsed query the
+// fan-out hands us is the server's internal form and has no wire spelling,
+// so the passthrough closes over the raw payload instead.
 function getSearchEntrySearchableRealmForURL(
   realmURL: string,
   rawPayload: unknown,

@@ -1,7 +1,8 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { isResolvedCodeRef } from '@cardstack/runtime-common';
+import { isResolvedCodeRef, rri } from '@cardstack/runtime-common';
+import type { CodeRef, ResolvedCodeRef } from '@cardstack/runtime-common';
 import {
   isNamedQueryPayload,
   isOperationFailure,
@@ -17,33 +18,47 @@ import type { Definition } from '@cardstack/runtime-common/definitions';
 //
 // The definition cache is stubbed, so what is under test is the resolution
 // alone: which members of the request survive it, what `actor()` becomes,
-// which realms the query ends up scoped to, and what a render may read. The
+// which realms the query ends up scoped to, and what changes in a render. The
 // endpoints that call it are covered against a real realm in
 // `server-endpoints/named-query-test`.
 // ============================================================================
 
 const REALM_A = 'http://example.test/a/';
 const REALM_B = 'http://example.test/b/';
-const REPORT = { module: `${REALM_A}report`, name: 'Report' };
+const REPORT: ResolvedCodeRef = {
+  module: rri(`${REALM_A}report`),
+  name: 'Report',
+};
 const ANCHOR = { 'item.on': REPORT };
 
 const OPERATIONS: Record<string, OperationDefinition> = {
   byStatus: {
     base: 'query',
+    deterministic: true,
     params: { status: {} as any },
     query: {
       filter: {
         ...ANCHOR,
-        eq: { 'item.status': { $ref: 'params', key: 'status' } },
+        eq: { 'item.status': { $ref: 'params', key: 'status' } as const },
       },
     },
   },
   mine: {
     base: 'query',
-    query: { filter: { ...ANCHOR, eq: { 'item.owner': { $ref: 'actor' } } } },
+    deterministic: true,
+    query: {
+      filter: { ...ANCHOR, eq: { 'item.owner': { $ref: 'actor' } as const } },
+    },
+  },
+  // A declaration may order a search without narrowing it.
+  newestFirst: {
+    base: 'query',
+    deterministic: true,
+    query: { sort: [{ by: 'item.createdAt', direction: 'desc' }] },
   },
   ranked: {
     base: 'query',
+    deterministic: true,
     query: {
       filter: { ...ANCHOR, eq: { 'item.status': 'open' } },
       sort: [{ by: 'item.rank', 'item.on': REPORT, direction: 'asc' }],
@@ -52,6 +67,7 @@ const OPERATIONS: Record<string, OperationDefinition> = {
   },
   inA: {
     base: 'query',
+    deterministic: true,
     query: {
       filter: { ...ANCHOR, eq: { 'item.status': 'open' } },
       realms: [REALM_A],
@@ -61,13 +77,13 @@ const OPERATIONS: Record<string, OperationDefinition> = {
   // reach a stored definition some other way; resolving one still refuses it.
   nowhere: {
     base: 'query',
+    deterministic: true,
     query: { filter: { ...ANCHOR, eq: { 'item.status': 'open' } }, realms: [] },
   },
-  retitle: { base: 'transform' },
+  retitle: { base: 'transform', deterministic: true },
 };
 
-function stubCore(opts: { cached?: boolean } = {}) {
-  let calls: string[] = [];
+function stubCore() {
   let definition: Definition = {
     type: 'card-def',
     codeRef: REPORT,
@@ -80,18 +96,13 @@ function stubCore(opts: { cached?: boolean } = {}) {
     realmURL: REALM_A,
     definitionLookup: {
       async lookupDefinition() {
-        calls.push('lookupDefinition');
         return definition;
       },
-      async lookupCachedDefinition() {
-        calls.push('lookupCachedDefinition');
-        return opts.cached === false ? undefined : definition;
-      },
     },
-    resolveCodeRef: (codeRef: unknown) =>
+    resolveCodeRef: (codeRef: CodeRef) =>
       isResolvedCodeRef(codeRef) ? codeRef : undefined,
   } as unknown as OperationCore;
-  return { core, calls };
+  return { core };
 }
 
 const CONTEXT: NamedQueryContext = {
@@ -143,6 +154,71 @@ module(basename(import.meta.filename), function () {
       Object.keys(resolved).sort(),
       ['filter', 'realms'],
       'and what it resolves to is an ad-hoc query, carrying none of the members that named it',
+    );
+  });
+
+  test('a declaration that writes no filter still drops the caller’s', async function (assert) {
+    let { core } = stubCore();
+    let resolved = await resolveNamedQuery(
+      core,
+      {
+        operation: 'newestFirst',
+        on: REPORT,
+        filter: { ...ANCHOR, eq: { 'item.status': 'open' } },
+        realms: [REALM_A],
+      },
+      CONTEXT,
+    );
+
+    assert.strictEqual(
+      resolved.filter,
+      undefined,
+      'the declaration searches everything it is scoped to, and a caller cannot narrow that into a query of its own choosing',
+    );
+    assert.deepEqual(resolved.sort, [
+      { by: 'item.createdAt', direction: 'desc' },
+    ]);
+  });
+
+  test('the rendering a caller asks for carries over onto the declaration’s filter', async function (assert) {
+    let { core } = stubCore();
+    let htmlQuery = { eq: { format: 'embedded' } };
+    let forged = {
+      ...ANCHOR,
+      eq: { 'item.status': 'closed', htmlQuery },
+    };
+
+    let declared = await resolveNamedQuery(
+      core,
+      {
+        operation: 'byStatus',
+        on: REPORT,
+        params: { status: 'open' },
+        filter: forged,
+        realms: [REALM_A],
+      },
+      CONTEXT,
+    );
+    assert.deepEqual(
+      declared.filter,
+      { ...ANCHOR, eq: { 'item.status': 'open', htmlQuery } },
+      'the binding joins the declared filter, and nothing else of the caller’s does',
+    );
+
+    let unfiltered = await resolveNamedQuery(
+      core,
+      {
+        operation: 'newestFirst',
+        on: REPORT,
+        filter: forged,
+        realms: [REALM_A],
+      },
+      CONTEXT,
+    );
+    assert.deepEqual(
+      unfiltered.filter,
+      { eq: { htmlQuery } },
+      'and a declaration with no filter carries the binding alone, which matches every row',
     );
   });
 
@@ -259,6 +335,10 @@ module(basename(import.meta.filename), function () {
     );
     assert.strictEqual(outside.status, 400);
     assert.true(/may search none of them/.test(outside.detail));
+    assert.false(
+      outside.detail.includes(REALM_A),
+      'the refusal does not name the realms a declaration is scoped to, which the caller may not be able to read',
+    );
   });
 
   test('a scope that resolves to no realm is refused', async function (assert) {
@@ -283,18 +363,17 @@ module(basename(import.meta.filename), function () {
     assert.true(/neither does the request/.test(unnamed.detail));
   });
 
-  test('a render reads only cached definitions and has no actor', async function (assert) {
-    let { core, calls } = stubCore();
+  test('a render has no actor', async function (assert) {
+    let { core } = stubCore();
     let resolved = await resolveNamedQuery(
       core,
       { operation: 'byStatus', on: REPORT, params: { status: 'open' } },
       { ...CONTEXT, duringRender: true },
     );
-    assert.deepEqual(resolved.realms, [REALM_A, REALM_B]);
     assert.deepEqual(
-      calls,
-      ['lookupCachedDefinition'],
-      'the definition came from the cache, and nothing was built',
+      resolved.filter?.eq,
+      { 'item.status': 'open' },
+      'a declaration that does not compare against the caller resolves as usual',
     );
 
     let noActor = await refusal(
@@ -309,17 +388,6 @@ module(basename(import.meta.filename), function () {
       'actor-required',
       'the render’s own identity is not an actor to compare against',
     );
-
-    let uncached = stubCore({ cached: false });
-    let miss = await refusal(
-      resolveNamedQuery(
-        uncached.core,
-        { operation: 'byStatus', on: REPORT, params: { status: 'open' } },
-        { ...CONTEXT, duringRender: true },
-      ),
-    );
-    assert.strictEqual(miss.code, 'target-not-found');
-    assert.deepEqual(uncached.calls, ['lookupCachedDefinition']);
   });
 
   test('what the request names has to resolve to a declared query', async function (assert) {

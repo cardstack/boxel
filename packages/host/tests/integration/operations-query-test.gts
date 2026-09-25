@@ -102,6 +102,16 @@ const REPORT_MODULE = `
   }
 `;
 
+// A type no report is, for a filter that could never match one.
+const MEMO_MODULE = `
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+
+  export class Memo extends CardDef {
+    @field body = contains(StringField);
+  }
+`;
+
 function reportRef() {
   return { module: testRRI('report'), name: 'Report' };
 }
@@ -174,6 +184,7 @@ module('Integration | operations query', function (hooks) {
       realmURL: testRealmURL,
       contents: {
         'report.gts': REPORT_MODULE,
+        'memo.gts': MEMO_MODULE,
         'reports/open-1.json': reportFile({
           headline: 'Air quality',
           status: 'open',
@@ -360,6 +371,41 @@ module('Integration | operations query', function (hooks) {
         (entry) => entry.id === `${testRealmURL}reports/open-3`,
       ),
       'the report written after the search started joined it when the realm indexed it — a query is as fresh as the index',
+    );
+  });
+
+  test('a search the realm resolves by name re-runs on writes its own filter cannot see', async function (assert) {
+    // What a host holding a stale definition sends: the named operation, and
+    // beside it a lowering of that operation which no longer matches what the
+    // realm resolves it to. The realm answers with its own resolution, so the
+    // carried filter cannot be what decides which writes the search skips.
+    let stale = {
+      ...(saved('openReports').query() as NamedSearchWireQuery),
+      filter: { 'item.on': { module: testRRI('memo'), name: 'Memo' } },
+    };
+    let reports = getService('operations').search.entries(() => stale);
+    assert.strictEqual(
+      (await settledEntries(reports)).length,
+      3,
+      'the realm answered with the open reports its declaration matches',
+    );
+
+    await realm.write(
+      'reports/open-4.json',
+      JSON.stringify(
+        reportFile({
+          headline: 'Filed under a stale definition',
+          status: 'open',
+        }),
+      ),
+    );
+    await waitUntil(() => reports.entries.length === 4, { timeout: 10_000 });
+
+    assert.ok(
+      reports.entries.find(
+        (entry) => entry.id === `${testRealmURL}reports/open-4`,
+      ),
+      'the report joined the search though the filter it carries could never match one',
     );
   });
 

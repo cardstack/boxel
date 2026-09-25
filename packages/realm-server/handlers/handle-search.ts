@@ -116,7 +116,13 @@ export default function handleSearch(opts: {
     let { realmList, user } = getMultiRealmAuthorization(ctxt);
     let payload = getSearchRequestPayload(ctxt);
     if (isNamedQueryPayload(payload)) {
-      let resolved = await resolveNamedSearch(ctxt, payload, realmList, user);
+      // Resolving reads the declaration's definition, so it draws on the
+      // database as a search of the realms the request names, the same as the
+      // search it resolves to.
+      let named = payload;
+      let resolved = await withSearchConnectionTenant(ctxt, realmList, () =>
+        resolveNamedSearch(ctxt, named, realmList, user),
+      );
       if (!resolved) {
         return;
       }
@@ -133,22 +139,28 @@ export default function handleSearch(opts: {
   };
 
   // The ad-hoc query a named one resolves to, or nothing once the refusal has
-  // been answered. The declaration is read through the first realm the
-  // request names. For a type whose module this server serves, the definition
-  // entry belongs to the module's own realm whichever realm reads it; for one
-  // served elsewhere, it is read with the reading realm owner's credentials.
-  // The realms the query may search are the ones the middleware authorized,
-  // so resolving it never widens what the caller can reach.
+  // been answered. The declaration is read through a realm the request names:
+  // one this process already holds where there is one, so resolving mounts a
+  // realm only when none of them is mounted. For a type whose module this
+  // server serves, the definition entry belongs to the module's own realm
+  // whichever realm reads it; for one served elsewhere, it is read with the
+  // reading realm owner's credentials. The realms the query may search are the
+  // ones the middleware authorized, so resolving it never widens what the
+  // caller can reach.
   async function resolveNamedSearch(
     ctxt: Koa.Context,
     payload: Record<string, unknown>,
     realmList: string[],
     user: string | undefined,
   ) {
-    let [resolvingRealm] = await resolveRealmsForFederatedRequest(
-      reconciler,
-      realmList.slice(0, 1),
-    );
+    let resolvingRealm =
+      realmList.map((url) => reconciler.mounted.get(url)).find(Boolean) ??
+      (
+        await resolveRealmsForFederatedRequest(
+          reconciler,
+          realmList.slice(0, 1),
+        )
+      )[0];
     if (!resolvingRealm) {
       await sendResponseForNotFound(
         ctxt,
