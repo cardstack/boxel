@@ -45,7 +45,7 @@ export default class RenderFileExtractRoute extends Route<Model> {
     });
     this.#authGuard.register();
     if (!isTesting()) {
-      this.realm.restoreSessionsFromStorage();
+      this.realm.restoreSessionsFromStorage({ startingVisit: true });
     }
   }
 

@@ -117,7 +117,7 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
         (globalThis as any).__boxelRenderContext = undefined;
       }
     });
-    this.realm.restoreSessionsFromStorage();
+    this.realm.restoreSessionsFromStorage({ startingVisit: true });
   }
 
   deactivate() {
