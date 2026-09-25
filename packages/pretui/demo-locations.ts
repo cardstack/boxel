@@ -70,10 +70,18 @@ function demoIn(
 }
 
 // the realm loader hands each module its own loader on import.meta
-async function importSibling(path: string): Promise<Record<string, unknown>> {
+function meta(): ImportMeta & { loader: Loader } {
   // @ts-ignore tsc checks realm modules as CommonJS and rejects import.meta
-  let meta = import.meta as ImportMeta & { loader: Loader };
-  return (await meta.loader.import(new URL(path, meta.url).href)) as Record<
+  return import.meta as ImportMeta & { loader: Loader };
+}
+
+/** The URL of a module in this package, wherever the package is served. */
+export function siblingHref(path: string): string {
+  return new URL(path, meta().url).href;
+}
+
+async function importSibling(path: string): Promise<Record<string, unknown>> {
+  return (await meta().loader.import(siblingHref(path))) as Record<
     string,
     unknown
   >;

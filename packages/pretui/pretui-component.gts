@@ -2,8 +2,8 @@
 // its ember-freestyle usage page (ported machinery in freestyle.gts — the
 // verbatim-reuse directive) inside Boxel. It extends the base Spec card, so
 // every instance is findable by Spec type queries and carries a `ref` to the
-// module that exports the component. Instances live in components/ as
-// <kebab>-spec.json and are the source of truth. The isolated view loads the
+// module that exports the component. Instances live in whichever realm
+// catalogs the kit and adopt from this module. The isolated view loads the
 // component's usage page when it renders (demo-locations.ts says where it
 // lives). Components without a page fall back to an EmptyState; host-retained
 // entries state the goal-2 split.
@@ -37,7 +37,12 @@ import { Textarea } from './components/textarea';
 import { StepList } from './components/composites';
 import type { StepItem, StepState } from './components/composites';
 import { Popover } from './overlay';
-import { demoModuleFor, loadDemo, loadExamples } from './demo-locations';
+import {
+  demoModuleFor,
+  loadDemo,
+  loadExamples,
+  siblingHref,
+} from './demo-locations';
 import type { DemoSubject } from './demo-locations';
 import { iconFor } from './icon-registry';
 import { ExampleGallery } from './example-gallery';
@@ -78,15 +83,10 @@ function createCardAction(context: unknown): CreateCardAction | undefined {
   )?.actions?.createCard;
 }
 
-// The note module, resolved from a PretUISpec instance id. Instances
-// live at <realm>/components/<kebab>-spec, so the module is ONE LEVEL UP —
-// './pretui-note' would resolve to <realm>/components/pretui-note,
-// which does not exist, and a filter naming a module that does not exist
-// matches nothing at all rather than erroring. Resolved relative to the
-// instance (not hardcoded) so the kit still works copied into another realm.
-function noteModuleHref(instanceId: string): string {
-  return new URL('../pretui-note', instanceId).href;
-}
+// The note card lives beside this module, not beside the Spec instance: an
+// instance can sit in any realm, and a note must adopt from a module that
+// resolves wherever it is written.
+const NOTE_REF = { module: siblingHref('./pretui-note'), name: 'PretuiNote' };
 
 // ── The sticky-note composer ─────────────────────────────────────────────
 // A top-level component, not an inline block in the page: reactive state
@@ -370,14 +370,6 @@ export class PretUISpec extends Spec {
     get titleHue() {
       return htmlSafeHue(statusHue(this.args.model.stage ?? 'planned'));
     }
-    openCatalog = () => {
-      if (!this.args.model.id) return;
-      this.args.viewCard?.(
-        new URL('../PretuiCatalog/catalog', this.args.model.id),
-        'isolated',
-      );
-    };
-
     // ── Sticky notes ───────────────────────────────────────────────────
     // Notes are their own cards (pretui-note.gts) that LINK to this one, so
     // the page finds its annotations by querying that edge. This file does
@@ -394,8 +386,8 @@ export class PretUISpec extends Spec {
             on: {
               // A CodeRef module is a branded URL type: a string LITERAL
               // satisfies it, but a runtime-computed href is plain `string`.
-              module: noteModuleHref(id) as RealmResourceIdentifier,
-              name: 'PretuiNote',
+              module: NOTE_REF.module as RealmResourceIdentifier,
+              name: NOTE_REF.name,
             },
             // The id stays in its branded RealmResourceIdentifier form —
             // that is exactly what an `.id` query value is typed as.
@@ -445,7 +437,7 @@ export class PretUISpec extends Spec {
       let create = createCardAction(this.args.context);
       if (!id || !create || !body) return;
       let realmURL = new URL('../', id);
-      let ref = { module: noteModuleHref(id), name: 'PretuiNote' };
+      let ref = NOTE_REF;
       // The timestamp is stamped HERE, in an event handler, not in a getter.
       // The no-clock rule exists so that RENDER is deterministic (the same
       // card must prerender identically); recording when a note was written
@@ -476,11 +468,7 @@ export class PretUISpec extends Spec {
       <article class='page' data-demo-policy={{this.demoPolicy}}>
         <nav class='wb-topbar'>
           <div class='wb-crumb'>
-            <button
-              type='button'
-              class='wb-crumb-link'
-              {{on 'click' this.openCatalog}}
-            >Pretui</button>
+            <span class='wb-crumb-root'>Pretui</span>
             <span class='wb-sep'>/</span>
             <span class='wb-crumb-dim'>{{if
                 @model.category
@@ -737,18 +725,8 @@ export class PretUISpec extends Spec {
           color: var(--muted-foreground);
           min-width: 0;
         }
-        .wb-crumb-link {
-          font: inherit;
-          color: inherit;
-          background: none;
-          border: 0;
+        .wb-crumb-root {
           padding: 3px 5px;
-          border-radius: 4px;
-          cursor: pointer;
-        }
-        .wb-crumb-link:hover {
-          background: var(--hover, var(--boxel-100));
-          color: var(--foreground);
         }
         .wb-sep {
           color: var(--ink-3, var(--boxel-400));
