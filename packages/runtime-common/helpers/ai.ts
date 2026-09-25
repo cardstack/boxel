@@ -191,7 +191,7 @@ export async function basicMappings(loader: Loader) {
       filter: {
         type: 'object',
         description:
-          "Filter criteria for the query. This object conforms to one of several structures (e.g., CardTypeFilter, EqFilter, AnyFilter). All properties within are optional and depend on the specific filter type. 'on' (a CodeRef) can specify context for field paths. Example properties: 'type' (CodeRef for CardTypeFilter), 'any'/'every' (array of filters), 'not' (a filter to negate), 'eq'/'contains' (object mapping field paths to values), 'range' (object mapping field paths to range constraints like {gt: 5}). Refer to the Query.Filter documentation for complete details.",
+          "Filter criteria for the query. A filter object holds exactly one operator — 'type', 'eq', 'contains', 'in', 'range', 'matches', 'any', 'every' or 'not' — plus an optional 'on' (a CodeRef) that anchors field paths to a card type. Omit every key you do not use: an empty operator ({}, [] or a CodeRef with empty strings) is not ignored — it changes what the query matches, or is rejected. Combine conditions by nesting filters in 'every' or 'any'. Example: { on: <CodeRef>, matches: 'recipe cookbook' }. Refer to the Query.Filter documentation for complete details.",
         properties: {
           type: {
             type: 'object',
@@ -258,6 +258,17 @@ export async function basicMappings(loader: Loader) {
             properties: {},
             description:
               'An object where keys are field paths. Values are objects specifying range constraints (e.g., { gt: 10, lte: 20 }).',
+          },
+          in: {
+            type: 'object',
+            properties: {},
+            description:
+              'An object where keys are field paths and values are arrays of accepted values (e.g., { status: ["open", "closed"] }).',
+          },
+          matches: {
+            type: 'string',
+            description:
+              "Full-text search terms matched against each card's searchable text (e.g., 'spin wheel OR roulette').",
           },
         },
       },

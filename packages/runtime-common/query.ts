@@ -520,6 +520,15 @@ function assertCardType(type: any, pointer: string[]) {
       `${pointer.join('/') || '/'}: type is not valid`,
     );
   }
+  // An empty module passes the shape check but cannot be resolved, so the
+  // engine throws on it in every realm the query reaches. A model that fills
+  // every schema property sends `{ module: '', name: '' }` for a type it does
+  // not mean to set; naming the key tells it to leave the key out.
+  if (!('type' in type) && (type.module === '' || type.name === '')) {
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: module and name must not be empty; omit the key when you do not filter by it`,
+    );
+  }
 }
 
 function assertAnyFilter(
