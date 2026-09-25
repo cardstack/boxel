@@ -1083,6 +1083,20 @@ module(basename(import.meta.filename), function (hooks) {
         .set('Authorization', AUTH.teacher());
       assert.strictEqual(denied.status, 200, 'a denied HEAD is discovery');
       assert.notOk(denied.get('etag'), 'with no card headers');
+      let missing = await request
+        .head(path(`${EDUCATION}classrooms/room-999`))
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('Authorization', AUTH.teacher());
+      let headersOf = (response: Response) =>
+        Object.entries(response.headers as Record<string, string>)
+          .filter(([name]) => name !== 'date')
+          .sort(([a], [b]) => a.localeCompare(b));
+      assert.strictEqual(missing.status, denied.status, 'a missing card too');
+      assert.deepEqual(
+        headersOf(missing),
+        headersOf(denied),
+        'with the same headers as the card the gate refused',
+      );
     });
   });
 
@@ -1127,6 +1141,7 @@ module(basename(import.meta.filename), function (hooks) {
       // which the card+json read does not do.
       let rows: {
         situation: string;
+        caller: 'anonymous' | 'reader' | 'teacher';
         card?: () => Test;
         envelope?: () => Test;
         status: number;
@@ -1134,6 +1149,7 @@ module(basename(import.meta.filename), function (hooks) {
       }[] = [
         {
           situation: 'no credentials, a card',
+          caller: 'anonymous',
           card: () => getCard(ROOM_204),
           envelope: () =>
             operations(
@@ -1146,6 +1162,7 @@ module(basename(import.meta.filename), function (hooks) {
         },
         {
           situation: 'no credentials, nothing there',
+          caller: 'anonymous',
           card: () => getCard(ROOM_999),
           envelope: () =>
             operations(
@@ -1158,6 +1175,7 @@ module(basename(import.meta.filename), function (hooks) {
         },
         {
           situation: 'realm read, no grant',
+          caller: 'reader',
           envelope: () =>
             operations(
               EDUCATION,
@@ -1169,6 +1187,7 @@ module(basename(import.meta.filename), function (hooks) {
         },
         {
           situation: 'realm read, nothing there',
+          caller: 'reader',
           card: () => getCard(ROOM_999, AUTH.reader()),
           envelope: () =>
             operations(
@@ -1181,6 +1200,7 @@ module(basename(import.meta.filename), function (hooks) {
         },
         {
           situation: 'no realm read, no grant',
+          caller: 'teacher',
           card: () => getCard(NOTE, AUTH.teacher()),
           envelope: () =>
             operations(
@@ -1193,6 +1213,7 @@ module(basename(import.meta.filename), function (hooks) {
         },
         {
           situation: 'no realm read, a predicate that is false',
+          caller: 'teacher',
           card: () => getCard(ROOM_205, AUTH.teacher()),
           envelope: () =>
             operations(
@@ -1205,6 +1226,7 @@ module(basename(import.meta.filename), function (hooks) {
         },
         {
           situation: 'no realm read, nothing there',
+          caller: 'teacher',
           card: () => getCard(ROOM_999, AUTH.teacher()),
           envelope: () =>
             operations(
@@ -1217,6 +1239,7 @@ module(basename(import.meta.filename), function (hooks) {
         },
         {
           situation: 'a predicate that throws',
+          caller: 'teacher',
           card: () => getCard(`${EDUCATION}syllabi/algebra`, AUTH.teacher()),
           envelope: () =>
             operations(
@@ -1229,12 +1252,14 @@ module(basename(import.meta.filename), function (hooks) {
         },
         {
           situation: 'module source, no realm read',
+          caller: 'teacher',
           card: () => getSource(`${EDUCATION}classroom.gts`, AUTH.teacher()),
           status: 404,
           code: 'target-not-found',
         },
         {
           situation: 'an operation the target’s def kind does not carry',
+          caller: 'reader',
           envelope: () =>
             operations(
               EDUCATION,
@@ -1245,9 +1270,11 @@ module(basename(import.meta.filename), function (hooks) {
           code: 'operation-not-allowed',
         },
       ];
+      let observed: { caller: string; status: number }[] = [];
       for (let row of rows) {
         if (row.card) {
           let response = await row.card();
+          observed.push({ caller: row.caller, status: response.status });
           assert.strictEqual(
             response.status,
             row.status,
@@ -1256,6 +1283,7 @@ module(basename(import.meta.filename), function (hooks) {
         }
         if (row.envelope) {
           let response = await row.envelope();
+          observed.push({ caller: row.caller, status: response.status });
           assert.strictEqual(
             response.status,
             row.status,
@@ -1268,15 +1296,22 @@ module(basename(import.meta.filename), function (hooks) {
           );
         }
       }
+      let callersAnswered = (status: number) => [
+        ...new Set(
+          observed
+            .filter((answer) => answer.status === status)
+            .map((answer) => answer.caller),
+        ),
+      ];
       assert.deepEqual(
-        rows.filter((row) => row.status === 401).map((row) => row.situation),
-        ['no credentials, a card', 'no credentials, nothing there'],
-        'a 401 is only ever for a request with no credentials',
+        callersAnswered(401),
+        ['anonymous'],
+        'a 401 only ever answered a request with no credentials',
       );
       assert.deepEqual(
-        rows.filter((row) => row.status === 403).map((row) => row.situation),
-        ['realm read, no grant'],
-        'and a 403 only ever for a caller who may read the realm',
+        callersAnswered(403),
+        ['reader'],
+        'and a 403 only ever a caller who may read the realm',
       );
       await pointAt(`${ORG}policies/nowhere`);
       for (let [transport, response] of [
@@ -1345,6 +1380,77 @@ module(basename(import.meta.filename), function (hooks) {
         unknownType.text,
         deniedBatch.text,
         'and a create of a type the realm has no definition for says no more',
+      );
+    });
+
+    test('a write resting on a predicate says no more than a missing target to a caller who may not read the realm', async function (assert) {
+      // The teacher's grant on deleting a classroom rests on a predicate, so
+      // for room-205 the gate matches a grant and leaves the predicate to
+      // run. Room-998 and room-999 do not exist.
+      let query = (...entries: unknown[]) =>
+        request
+          .post(`${path(EDUCATION)}_operations`)
+          .set('X-HTTP-Method-Override', 'QUERY')
+          .set('Accept', SupportedMimeType.BoxelOperations)
+          .set('Content-Type', SupportedMimeType.BoxelOperations)
+          .set('Authorization', AUTH.teacher())
+          .send(envelope(...entries));
+      let existing = await query(invoke('delete', { href: ROOM_205 }));
+      let missing = await query(invoke('delete', { href: ROOM_999 }));
+      assert.strictEqual(existing.status, 404, 'QUERY: a card that exists');
+      assert.strictEqual(
+        existing.text,
+        missing.text,
+        'QUERY: the same answer as one that does not',
+      );
+      let first = await operations(
+        EDUCATION,
+        AUTH.teacher(),
+        invoke('delete', { href: ROOM_205 }),
+        invoke('read', { href: ROOM_999 }),
+      );
+      let second = await operations(
+        EDUCATION,
+        AUTH.teacher(),
+        invoke('delete', { href: `${EDUCATION}classrooms/room-998` }),
+        invoke('read', { href: ROOM_999 }),
+      );
+      assert.strictEqual(
+        first.status,
+        404,
+        'POST: a batch after a card that exists',
+      );
+      assert.strictEqual(
+        first.text,
+        second.text,
+        'POST: the same answer, at the same entry, as after one that does not',
+      );
+      assert.strictEqual(
+        await titleOf(ROOM_205),
+        'Room 205',
+        'and nothing was deleted',
+      );
+    });
+
+    test('a target described by a query says nothing about what the query matches to a caller who may not read the realm', async function (assert) {
+      let described = (title: string) =>
+        operations(
+          EDUCATION,
+          AUTH.teacher(),
+          invoke('read', {
+            'boxel:target': {
+              query: { 'item.on': CLASSROOM, eq: { 'item.title': title } },
+              expect: 'one',
+            },
+          }),
+        );
+      let matching = await described('Room 204');
+      let matchingNothing = await described('Room 999');
+      assert.strictEqual(matching.status, 404);
+      assert.strictEqual(
+        matching.text,
+        matchingNothing.text,
+        'a query that matches a card and one that matches none get the same answer',
       );
     });
 

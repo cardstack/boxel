@@ -717,9 +717,10 @@ export function isOperationFailure(err: unknown): err is OperationFailure {
 // than flattened where each is raised. A caller who may read the realm can list
 // it anyway, so they get every detail, and the gate's own refusal as a 403.
 //
-// A refusal of any other kind passes through. The gate refuses such a caller
-// before an operation resolves, so nothing past that point is about a target
-// they were not admitted to.
+// A refusal of any other kind passes through. Such a caller is refused, as
+// the target is resolved, every invocation the gate did not admit outright, a
+// write whose predicate is still to run included. So nothing past that point
+// is about a target they were not admitted to.
 export function refusalForNonReader(error: OperationError): OperationError {
   if (
     error.code !== 'target-not-found' &&

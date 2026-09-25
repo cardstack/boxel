@@ -563,7 +563,10 @@ Three worth recognizing:
   exist, so the refusal does not tell them which cards are there. Two things
   still can, and neither is concealed: a refusal that evaluated a policy
   predicate takes measurably longer than one that found no card, and a
-  predicate that throws answers 500 rather than 404.
+  predicate that throws answers 500 rather than 404. Whether a predicate throws
+  depends on the card's stored values, so the 500 also says something about
+  what the card holds; write predicates that cannot throw on any value the
+  card can store.
 
 ## Where to look next
 

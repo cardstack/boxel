@@ -59,8 +59,11 @@ import {
 // still set those apart, and neither is closed here. Time: a refusal that
 // evaluated a predicate takes longer than one that found no card, so a caller
 // who measures carefully can tell the two apart. And the 500: a predicate only
-// runs against a card that exists and whose type a rule names, so a predicate
-// that throws tells any caller who reaches it that such a card is there.
+// runs against a card that exists and whose type a rule names, and whether it
+// throws depends on the card's stored values. So a predicate that throws tells
+// any caller who reaches it that such a card is there, and something about what
+// it holds: `(.title | tonumber) > 0` answers 500 for a card whose title is not
+// a number and 404 for one whose title is a number no greater than zero.
 //
 // What a grant admits is the invocation, and the operation then runs as it
 // runs for anyone. A granted `read` assembles the card's whole representation:

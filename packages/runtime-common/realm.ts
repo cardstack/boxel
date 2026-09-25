@@ -5552,6 +5552,14 @@ export class Realm {
         canonical.name,
         scope,
       );
+      // A write whose admission still rests on a predicate has not been
+      // admitted. For a caller who may not read the realm it is refused here,
+      // where a target that is not there is refused, so nothing the batch goes
+      // on to decide about it, and no position in the batch, tells them the
+      // card exists.
+      if (decision.kind === 'pending' && scope.coarseDeclined === 'all') {
+        throw notPermitted(target, canonical.name);
+      }
       assertTravelsInEnvelope(canonical, definition);
       assertVersionableEntry(canonical, definition);
       return { entry: canonical, target, definition, decision, scope };
