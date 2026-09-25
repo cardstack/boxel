@@ -5228,7 +5228,9 @@ export class Realm {
     // answers from every card of the realm before any entry is gated. The
     // gate grants operations on cards, not searches over the realm, so a
     // caller the realm ACL would not let read the realm names each target
-    // outright.
+    // outright. The query here is the caller's own, which is what sets it
+    // apart from a query-backed field: that query is part of a card type's
+    // declaration, and a granted read serves its results as part of the card.
     if (coarseDeclined === 'all') {
       let described = invocationsIn(parsed).find((entry) => entry.find);
       if (described) {

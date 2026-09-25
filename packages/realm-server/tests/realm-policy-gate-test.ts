@@ -68,10 +68,20 @@ function adoptsFrom(ref: { module: string; name: string }) {
 const TEACHES = '.teacherIds | any(. == actor())';
 const LEADS = '.leadTeacherIds | any(. == actor())';
 
+const STUDENT_MODULE = `
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+  export class Student extends CardDef {
+    @field name = contains(StringField);
+    @field standing = contains(StringField);
+  }
+`;
+
 const CLASSROOM_MODULE = `
-  import { contains, containsMany, field, CardDef } from "@cardstack/base/card-api";
+  import { contains, containsMany, field, linksToMany, CardDef } from "@cardstack/base/card-api";
   import StringField from "@cardstack/base/string";
   import { operation, params, actor } from "@cardstack/base/operations";
+  import { Student } from "./student";
 
   export class ClassroomActivity extends CardDef {
     @field note = contains(StringField);
@@ -82,6 +92,13 @@ const CLASSROOM_MODULE = `
     @field title = contains(StringField);
     @field teacherIds = containsMany(StringField);
     @field leadTeacherIds = containsMany(StringField);
+    @field students = linksToMany(() => Student);
+    @field honorRoll = linksToMany(() => Student, {
+      query: {
+        filter: { eq: { standing: 'honors' } },
+        page: { size: 10, number: 0 },
+      },
+    });
 
     @operation static rename = {
       base: 'transform',
@@ -192,11 +209,21 @@ function classroom(
   teacherIds: string[],
   leadTeacherIds: string[] = [],
   name = 'Classroom',
+  students: string[] = [],
 ) {
-  return card(
-    { module: '../classroom', name },
-    { title, teacherIds, leadTeacherIds },
-  );
+  return JSON.stringify({
+    data: {
+      type: 'card',
+      attributes: { title, teacherIds, leadTeacherIds },
+      relationships: Object.fromEntries(
+        students.map((student, index) => [
+          `students.${index}`,
+          { links: { self: `../students/${student}` } },
+        ]),
+      ),
+      meta: { adoptsFrom: { module: '../classroom', name } },
+    },
+  });
 }
 
 function note(name: string) {
@@ -260,7 +287,22 @@ module(basename(import.meta.filename), function (hooks) {
             'bulletin.gts': BULLETIN_MODULE,
             'syllabus.gts': SYLLABUS_MODULE,
             'school.gts': SCHOOL_MODULE,
-            'classrooms/room-204.json': classroom('Room 204', [TEACHER]),
+            'student.gts': STUDENT_MODULE,
+            'students/ada.json': card(
+              { module: '../student', name: 'Student' },
+              { name: 'Ada', standing: 'honors' },
+            ),
+            'students/ben.json': card(
+              { module: '../student', name: 'Student' },
+              { name: 'Ben', standing: 'regular' },
+            ),
+            'classrooms/room-204.json': classroom(
+              'Room 204',
+              [TEACHER],
+              [],
+              'Classroom',
+              ['ben'],
+            ),
             'classrooms/room-205.json': classroom('Room 205', [COLLEAGUE]),
             'classrooms/room-206.json': classroom(
               'Room 206',
@@ -884,6 +926,33 @@ module(basename(import.meta.filename), function (hooks) {
           }),
         ),
         'a read whose target a search would find',
+      );
+    });
+  });
+
+  module('row reach', function () {
+    test('a granted read serves the card’s whole representation, its links and query-backed fields included', async function (assert) {
+      // A grant admits the invocation, and the read then assembles the card as
+      // it does for anyone. So a grant on Classroom reaches the students the
+      // classroom links to, and those its query-backed field finds, though no
+      // rule names Student.
+      let response = await getCard(ROOM_204, AUTH.teacher());
+      assert.strictEqual(response.status, 200);
+      let included = (
+        (response.body as { included?: { id: string }[] }).included ?? []
+      ).map((resource) => resource.id);
+      assert.true(
+        included.some((id) => id.endsWith('/students/ben')),
+        'the student the classroom links to',
+      );
+      assert.true(
+        included.some((id) => id.endsWith('/students/ada')),
+        'and the student its query-backed field finds',
+      );
+      assertNotPermitted(
+        assert,
+        await getCard(`${EDUCATION}students/ben`, AUTH.teacher()),
+        'though no rule admits a read of the student itself',
       );
     });
   });

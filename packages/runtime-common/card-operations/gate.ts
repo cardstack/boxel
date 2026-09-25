@@ -49,6 +49,15 @@ import {
 // with no rule for the type, a predicate that throws or answers anything but
 // `true`, and a target whose type the index cannot vouch for are each a
 // refusal, never an opening.
+//
+// What a grant admits is the invocation, and the operation then runs as it
+// runs for anyone. A granted `read` assembles the card's whole representation:
+// its link closure, whatever the linked cards' types, and the results of its
+// query-backed fields. So a grant on a type reaches every card that type's
+// representation carries, and granting `read` on a type asserts that all of it
+// is fit for every caller the grant admits. Nothing here narrows that reach. A
+// response's shape never depends on how its caller was authorized, so a
+// narrower one has to be declared on the operation, for every caller alike.
 // ============================================================================
 
 // What the gate reads for a caller the realm ACL declined. The realm supplies
