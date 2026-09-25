@@ -188,7 +188,7 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
       .toggle-and-realm-icon {
         width: 100%;
         display: inline-grid;
-        grid-template-columns: auto 1fr auto;
+        grid-template-columns: auto minmax(0, 1fr) auto;
         align-items: center;
         gap: var(--boxel-sp-4xs);
       }
@@ -199,7 +199,7 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
         --pill-icon-size: 18px;
         --boxel-realm-icon-size: var(--pill-icon-size);
         display: inline-grid;
-        grid-template-columns: 1fr auto;
+        grid-template-columns: minmax(0, 1fr) auto;
         border: 1px solid var(--boxel-400);
         height: var(--pill-height, 1.875rem);
         overflow: hidden;
