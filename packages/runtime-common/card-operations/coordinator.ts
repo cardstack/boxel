@@ -24,6 +24,7 @@ import {
   stagedIdentity,
   stageTransform,
   stageUpdate,
+  type AdmissionSubject,
   type BatchEntry,
   type IndexedCardValues,
   type LidIndex,
@@ -472,9 +473,10 @@ export async function commitBatch(
       let stageStart = Date.now();
       try {
         let { stored, storedMeta } = await readPreState(core, entries, paths);
-        // After the pre-state read, so an entry is admitted against exactly
-        // the bytes it is about to stage from, and before any entry stages.
-        await admitEntries(core, entries, positions, paths, stored);
+        // The cards the batch read before any entry staged, which is how an
+        // entry admitted under the lock tells a card an earlier entry removed
+        // from one the batch never read.
+        let readBeforeStaging = new Set(stored.keys());
         let state: StagingState = {
           stored,
           storedMeta,
@@ -492,28 +494,35 @@ export async function commitBatch(
           staged,
           baseHashes,
           budget: stagingBudget(STAGING_WIDTH),
-          stage: (entry, position, against) =>
-            stageEntry(entry, position, {
-              realmURL: core.realmURL,
-              paths,
-              lids,
-              foreignLids,
-              foreignSideLoadLink: opts.foreignSideLoadLink,
-              stored: against.stored,
-              storedMeta: against.storedMeta,
-              splices: against.splices,
-              openSourceBytes: core.openSourceBytes,
-              fileExists: core.fileExists,
-              indexedCardValues: core.indexedCardValues,
-              actor: opts.actor ?? '',
-              realmConfig,
-              serializeCard: core.serializeCard,
-              codeRefKey: core.codeRefKey,
-              resolveModuleId: core.resolveModuleId,
-              storedLink: core.storedLink,
-              resolvedLink: core.resolvedLink,
-              lookupDefinition: core.lookupDefinition,
-            }),
+          stage: (entry, position, against) => {
+            let stage = () =>
+              stageEntry(entry, position, {
+                realmURL: core.realmURL,
+                paths,
+                lids,
+                foreignLids,
+                foreignSideLoadLink: opts.foreignSideLoadLink,
+                stored: against.stored,
+                storedMeta: against.storedMeta,
+                splices: against.splices,
+                openSourceBytes: core.openSourceBytes,
+                fileExists: core.fileExists,
+                indexedCardValues: core.indexedCardValues,
+                actor: opts.actor ?? '',
+                realmConfig,
+                serializeCard: core.serializeCard,
+                codeRefKey: core.codeRefKey,
+                resolveModuleId: core.resolveModuleId,
+                storedLink: core.storedLink,
+                resolvedLink: core.resolvedLink,
+                lookupDefinition: core.lookupDefinition,
+              });
+            return entry.admit
+              ? stageAdmitted(entry, entry.admit, position, stage, () =>
+                  heldCard(core, entry.href, paths, against, readBeforeStaging),
+                )
+              : stage();
+          },
         });
         // First, because linking a side-load to the card already stored
         // takes its write out of the batch, and the checks after it have to
@@ -1086,6 +1095,75 @@ async function stageEntry(
   }
 }
 
+// Stage an entry whose admission was left to the lock (`admit`), deciding it
+// where it stages.
+//
+// It is judged against the state it stages against rather than the state the
+// batch began from: in a serial run, what the entries before it left, and in
+// a parallel group, what the group began from. So a write that follows another
+// to the same card in one batch is judged by the card the earlier write
+// leaves, which is the card this one changes.
+//
+// A write to a card is judged before it stages, by that card. A create that
+// names no card is judged after staging, by the card it would mint: nothing is
+// stored to judge it by, and the card its template fills is what it writes,
+// which the payload it was sent is not.
+//
+// A refusal abandons the batch like any other refusal. An entry that staged
+// before it commits nothing, since nothing commits until every entry has
+// staged, so a refused batch leaves no write, no index job and no event.
+async function stageAdmitted(
+  entry: BatchEntry,
+  admit: (judged: AdmissionSubject | undefined) => Promise<void>,
+  position: EntryPosition,
+  stage: () => Promise<StagedChange>,
+  held: () => Promise<AdmissionSubject | undefined>,
+): Promise<StagedChange> {
+  try {
+    if (entry.op === 'create' && !entry.href) {
+      let change = await stage();
+      let source = primaryContent(change);
+      await admit(source === undefined ? undefined : { id: change.id, source });
+      return change;
+    }
+    await admit(await held());
+    return await stage();
+  } catch (err: unknown) {
+    throw atEntry(err, position);
+  }
+}
+
+// The card `href` names, as `against` holds it. What an earlier entry in the
+// run staged is what the card now is. A card an earlier entry removed, or
+// changed without holding its bytes, leaves nothing to judge. A card the batch
+// never read, which an append's target is, is read from disk, under the lock
+// the batch already holds.
+async function heldCard(
+  core: BatchCore,
+  href: string | undefined,
+  paths: RealmPaths,
+  against: StagingState,
+  readBeforeStaging: ReadonlySet<LocalPath>,
+): Promise<AdmissionSubject | undefined> {
+  let path = href ? cardSourcePathOf(href, paths) : undefined;
+  if (!href || !path) {
+    return undefined;
+  }
+  let held = against.stored.get(path);
+  if (held) {
+    return { id: href, source: held.content };
+  }
+  if (
+    readBeforeStaging.has(path) ||
+    against.splices.has(path) ||
+    against.storedMeta.has(path)
+  ) {
+    return undefined;
+  }
+  let file = await core.readSourceFile(path);
+  return file ? { id: href, source: file.content } : undefined;
+}
+
 // A `baseVersion` names the state a write is computed on top of, and the
 // result reports whether the target was still at it. Only the two entries that
 // compute over the stored document have both — an update merges over it and a
@@ -1396,45 +1474,6 @@ async function readPreState(
       }),
   ]);
   return { stored, storedMeta };
-}
-
-// Decides every entry whose admission was left to the lock (`admit`), in batch
-// order, against the target card's stored source as this batch holds it.
-//
-// All of them are decided before any entry stages. That is what keeps a
-// refusal here from needing anything undone: an entry refused after a sibling
-// had staged would abandon the batch just the same, since nothing commits
-// until everything has staged, but deciding first means no sibling runs a
-// program over a batch that is already refused. Whichever group an entry sits
-// in, a refusal here leaves the realm with no write, no index job and no
-// event.
-//
-// A card whose bytes the batch already read is judged by those bytes. One it
-// did not read, an append's target, is read here, under the same lock. The
-// append still never reads it for staging; only an entry that has to be
-// judged pays for the read.
-async function admitEntries(
-  core: BatchCore,
-  entries: readonly BatchEntry[],
-  positions: readonly EntryPosition[],
-  paths: RealmPaths,
-  stored: ReadonlyMap<LocalPath, StoredFile>,
-): Promise<void> {
-  for (let [index, entry] of entries.entries()) {
-    if (!entry.admit) {
-      continue;
-    }
-    try {
-      let path = entry.href ? cardSourcePathOf(entry.href, paths) : undefined;
-      let source = path
-        ? (stored.get(path)?.content ??
-          (await core.readSourceFile(path))?.content)
-        : undefined;
-      await entry.admit(source);
-    } catch (err: unknown) {
-      throw atEntry(err, positions[index]);
-    }
-  }
 }
 
 // One range of a stored file, as bytes. Bounded by whatever the caller asked

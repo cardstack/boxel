@@ -12,11 +12,15 @@ import type {
   RealmAdapter,
 } from '@cardstack/runtime-common';
 import {
+  batchEntryFor,
+  commitBatch,
   dischargePendingDecision,
   newOperationScope,
+  paramsFor,
   resolveOperation,
   scopeCallerFor,
   stageWriteEntry,
+  type EnvelopeEntry,
   type MatchedGrant,
   type OperationDefinition,
   type OperationTarget,
@@ -105,8 +109,10 @@ const CLASSROOM_MODULE = `
   }
 `;
 
-// `post` is a named create whose `input` stage supplies the audience a caller
-// leaves out, so what it would write is not what it was sent.
+// `post` is a named create whose template fills `audience` from the `group`
+// param, and whose `input` stage supplies the group a caller leaves out. So
+// the card it writes is neither the payload it was sent nor the params as the
+// caller named them.
 const BULLETIN_MODULE = `
   import { contains, field, CardDef } from "@cardstack/base/card-api";
   import StringField from "@cardstack/base/string";
@@ -119,9 +125,9 @@ const BULLETIN_MODULE = `
     @operation static post = {
       base: 'create',
       of: () => Bulletin,
-      params: { body: StringField, audience: StringField },
-      input: bxl\`. + {audience: (.audience // "staff")}\`,
-      fill: { body: params('body'), audience: params('audience') },
+      params: { body: StringField, group: StringField },
+      input: bxl\`. + {group: (.group // "staff")}\`,
+      fill: { body: params('body'), audience: params('group') },
     };
   }
 `;
@@ -521,10 +527,10 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(gateStats().pendingDischarges, 2);
     });
 
-    test('a create against a type is judged by the document it would write, a param its input supplied included', async function (assert) {
-      // The decision is built the way the gate records one for a pending
-      // write: the grants it matched, and the type's definition. What is
-      // pinned is what the lock judges such a create by.
+    test('a create against a type is judged by the card it would mint, not the payload it was sent', async function (assert) {
+      // Staged through the coordinator as a batch stages it, with the
+      // decision the gate records for a pending write: the grants it matched
+      // and the type's definition.
       let core = education.operationCore;
       let target: OperationTarget = {
         kind: 'type',
@@ -546,47 +552,66 @@ module(basename(import.meta.filename), function (hooks) {
           ),
         typeDefinition,
       });
-      let discharge = async (
+      let scope = newOperationScope(core, {
+        caller: scopeCallerFor(TEACHER),
+        coarseDeclined: 'all',
+      });
+      let mint = async (
         name: string,
         definition: OperationDefinition,
         data: Record<string, unknown>,
       ) => {
         let decision = decisionFor(name);
-        let { scope } = await stageWriteEntry(
-          {
-            entry: { op: 'invoke', position: 0, name, data },
-            target,
-            definition,
-            decision,
-            scope: newOperationScope(core, {
-              caller: scopeCallerFor(TEACHER),
-              coarseDeclined: 'all',
-            }),
-          },
+        let entry: EnvelopeEntry = { op: 'invoke', position: 0, name, data };
+        let staged = await stageWriteEntry(
+          { entry, target, definition, decision, scope },
           {
             name,
-            params: data,
+            params: paramsFor(entry),
             actor: TEACHER,
             realmConfig: async () => ({}),
           },
         );
-        return dischargePendingDecision(
-          core,
-          { target, name, definition, decision, scope },
-          undefined,
+        let [result] = await commitBatch(
+          education.batchCore,
+          [
+            {
+              ...batchEntryFor(staged.entry, definition),
+              admit: (judged) =>
+                dischargePendingDecision(
+                  core,
+                  { target, name, decision, scope },
+                  judged,
+                ),
+            },
+          ],
+          { actor: TEACHER },
         );
+        return result?.id;
       };
+      let audienceOf = async (id: string | undefined) =>
+        id
+          ? (
+              (await getCard(id, AUTH.admin())).body as {
+                data: { attributes: { audience?: string } };
+              }
+            ).data.attributes.audience
+          : undefined;
 
       let post = await resolveOperation(core, target, 'post');
       assert.strictEqual(
-        await discharge('post', post, { body: 'Picture day' }),
-        undefined,
-        'a post that names no audience is admitted on the one its input supplies',
+        await audienceOf(await mint('post', post, { body: 'Picture day' })),
+        'staff',
+        'a post naming no group is admitted on the audience its input and template give it',
       );
       await assert.rejects(
-        discharge('post', post, { body: 'Picture day', audience: 'students' }),
+        mint('post', post, {
+          body: 'Picture day',
+          group: 'students',
+          audience: 'staff',
+        }),
         /operation-not-permitted/,
-        'and one that names another audience is not',
+        'and one whose template writes another audience is refused, whatever else its payload names',
       );
 
       let create = await resolveOperation(core, target, 'create');
@@ -596,19 +621,15 @@ module(basename(import.meta.filename), function (hooks) {
         meta: { adoptsFrom: adoptsFrom(BULLETIN) },
       });
       assert.strictEqual(
-        await discharge('create', create, resource('staff')),
-        undefined,
-        'a plain create is judged by the resource it mints',
+        await audienceOf(await mint('create', create, resource('staff'))),
+        'staff',
+        'a plain create is judged by the card it mints',
       );
       await assert.rejects(
-        discharge('create', create, resource('students')),
+        mint('create', create, resource('students')),
         /operation-not-permitted/,
       );
-      assert.strictEqual(
-        gateStats().predicateEvaluations,
-        4,
-        'each judged by its predicate once',
-      );
+      assert.strictEqual(gateStats().pendingDischarges, 4);
     });
   });
 
@@ -682,6 +703,36 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(await indexJobCount(), jobsBefore);
     });
 
+    test('a later write to a card in one batch is judged by the card the earlier write leaves', async function (assert) {
+      let response = await operations(
+        AUTH.teacher(),
+        invoke('update', {
+          href: ROOM_204,
+          data: {
+            type: 'card',
+            attributes: { teacherIds: [COLLEAGUE] },
+            meta: { adoptsFrom: adoptsFrom(CLASSROOM) },
+          },
+        }),
+        invoke('rename', { href: ROOM_204, data: { title: 'Renamed' } }),
+      );
+      assertNotPermitted(
+        assert,
+        response,
+        'a rename after the same batch hands the classroom to someone else',
+      );
+      assert.strictEqual(
+        (response.body as { errors: { meta: { entry: number } }[] }).errors[0]
+          .meta.entry,
+        1,
+      );
+      assert.deepEqual(
+        (await stored(ROOM_204))?.attributes,
+        { title: 'Room 204', teacherIds: [TEACHER] },
+        'and neither write landed',
+      );
+    });
+
     test('a batch whose second entry is refused leaves its first unwritten', async function (assert) {
       let response = await operations(
         AUTH.teacher(),
@@ -699,6 +750,95 @@ module(basename(import.meta.filename), function (hooks) {
         'the first entry was not written',
       );
       assert.ok(await stored(ROOM_205), 'and the second card is still there');
+    });
+  });
+
+  module('what a caller the ACL declined is told', function () {
+    // A batch refused past the gate, before a pending write was decided,
+    // would otherwise tell a caller with no permission on the realm that the
+    // card exists and what its type declares.
+    const ROOM_999 = `${EDUCATION}classrooms/room-999`;
+
+    function sameRefusal(
+      assert: Assert,
+      a: Response,
+      b: Response,
+      [aURL, bURL]: [string, string],
+      label: string,
+    ) {
+      assertNotPermitted(assert, a, label);
+      assert.strictEqual(
+        a.text.replaceAll(aURL, bURL),
+        b.text,
+        `${label}: the same refusal as a card that does not exist`,
+      );
+    }
+
+    test('a missing param on a card the caller may not write says no more than a refusal', async function (assert) {
+      let noTitle = (href: string) =>
+        operations(AUTH.teacher(), invoke('rename', { href }));
+      sameRefusal(
+        assert,
+        await noTitle(ROOM_205),
+        await noTitle(ROOM_999),
+        [ROOM_205, ROOM_999],
+        'a classroom the caller does not teach',
+      );
+      let own = await noTitle(ROOM_204);
+      assert.strictEqual(own.status, 400, 'a classroom the caller teaches');
+      assert.strictEqual(
+        (own.body as { errors: { code: string }[] }).errors[0].code,
+        'invalid-params',
+        'is told what is wrong with the request',
+      );
+    });
+
+    test('a write sent where only reads are carried says no more than a refusal', async function (assert) {
+      let queried = (href: string) =>
+        operations(AUTH.teacher(), invoke('delete', { href })).set(
+          'X-HTTP-Method-Override',
+          'QUERY',
+        );
+      sameRefusal(
+        assert,
+        await queried(ROOM_205),
+        await queried(ROOM_999),
+        [ROOM_205, ROOM_999],
+        'a delete in a QUERY batch',
+      );
+    });
+
+    test('a later entry refused at resolution is not told apart by where it sits', async function (assert) {
+      const ROOM_998 = `${EDUCATION}classrooms/room-998`;
+      let ahead = (href: string) =>
+        operations(
+          AUTH.teacher(),
+          invoke('delete', { href }),
+          invoke('read', { href: ROOM_999 }),
+        );
+      sameRefusal(
+        assert,
+        await ahead(ROOM_205),
+        await ahead(ROOM_998),
+        [ROOM_205, ROOM_998],
+        'a delete ahead of a read of a card that does not exist',
+      );
+    });
+
+    test('another entry’s failure says no more than a refusal either', async function (assert) {
+      let beside = (href: string) =>
+        operations(
+          AUTH.teacher(),
+          invoke('rename', { href: ROOM_207 }),
+          invoke('rename', { href, data: { title: 'Renamed' } }),
+        );
+      sameRefusal(
+        assert,
+        await beside(ROOM_205),
+        await beside(ROOM_999),
+        [ROOM_205, ROOM_999],
+        'a write beside one that fails',
+      );
     });
   });
 

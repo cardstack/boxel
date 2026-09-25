@@ -16,6 +16,7 @@ export type { LoweringContext } from './lowering.ts';
 export {
   dischargePendingDecision,
   notPermitted,
+  pendingWriteHolds,
   policyGateStats,
 } from './gate.ts';
 export type {
@@ -73,6 +74,7 @@ export {
   stageUpdate,
 } from './executors.ts';
 export type {
+  AdmissionSubject,
   AppendContainsManyEntry,
   AppendLineEntry,
   BatchDocument,
@@ -128,6 +130,7 @@ export {
   needsActor,
   paramsFor,
   parseOperationsEnvelope,
+  pendingWriteOf,
   projectedResult,
   readResult,
   resultsTree,

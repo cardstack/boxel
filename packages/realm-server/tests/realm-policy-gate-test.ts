@@ -740,7 +740,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('a write whose predicate does not hold is refused before anything is staged', async function (assert) {
+    test('a write whose predicate does not hold refuses its batch with nothing written', async function (assert) {
       let response = await operations(
         EDUCATION,
         AUTH.teacher(),

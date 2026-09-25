@@ -4366,7 +4366,17 @@ module(basename(import.meta.filename), function () {
       };
     }
 
-    test('is decided inside the lock, after the drain, against the bytes staging reads, before anything stages', async function (assert) {
+    function firstNameIn(source: string | undefined) {
+      return source === undefined
+        ? undefined
+        : (
+            JSON.parse(source) as {
+              data: { attributes: { firstName?: string } };
+            }
+          ).data.attributes.firstName;
+    }
+
+    test('is decided inside the lock, after the drain, against the bytes staging reads, before it stages', async function (assert) {
       let original = cardFile({ firstName: 'Original' }, PERSON);
       let serializations = 0;
       let s = stub({
@@ -4378,7 +4388,7 @@ module(basename(import.meta.filename), function () {
       });
       let observed:
         | {
-            source: string | undefined;
+            judged: { id: string; source: string } | undefined;
             lockDepth: number;
             drains: number;
             serializations: number;
@@ -4388,9 +4398,9 @@ module(basename(import.meta.filename), function () {
       await commitBatch(s.core, [
         {
           ...update(`${REALM}person-1`, 'Updated'),
-          admit: async (source) => {
+          admit: async (judged) => {
             observed = {
-              source,
+              judged,
               lockDepth: s.lockDepth(),
               drains: s.drainCount(),
               serializations,
@@ -4401,9 +4411,9 @@ module(basename(import.meta.filename), function () {
       ]);
 
       assert.ok(observed, 'the entry was admitted');
-      assert.strictEqual(
-        observed?.source,
-        original,
+      assert.deepEqual(
+        observed?.judged,
+        { id: `${REALM}person-1`, source: original },
         'handed the card’s stored source as the batch read it',
       );
       assert.strictEqual(observed?.lockDepth, 1, 'with the lock held');
@@ -4416,7 +4426,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         observed?.serializations,
         0,
-        'before any entry was staged',
+        'before the entry was staged',
       );
       assert.strictEqual(
         s.sourceReads(),
@@ -4426,17 +4436,68 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(s.commits.length, 1, 'the write then proceeds');
     });
 
-    test('a refusal leaves every entry unstaged and uncommitted, whichever group holds it', async function (assert) {
-      let serializations = 0;
+    test('a later entry in a serial run is judged by the card the earlier entries leave', async function (assert) {
+      let { core, commits } = stub({
+        stored: {
+          'person-1.json': cardFile({ firstName: 'Original' }, PERSON),
+        },
+      });
+      let judged: (string | undefined)[] = [];
+      let admitRecording = async (subject: { source: string } | undefined) => {
+        judged.push(firstNameIn(subject?.source));
+      };
+      await commitBatch(core, [
+        { ...update(`${REALM}person-1`, 'First'), admit: admitRecording },
+        { ...update(`${REALM}person-1`, 'Second'), admit: admitRecording },
+      ]);
+      assert.deepEqual(
+        judged,
+        ['Original', 'First'],
+        'the second write is judged by the card the first one stages',
+      );
+      assert.strictEqual(commits.length, 1);
+    });
+
+    test('a card an earlier entry removes leaves nothing to judge, whatever is still on disk', async function (assert) {
+      let s = stub({
+        stored: {
+          'person-1.json': cardFile({ firstName: 'Original' }, PERSON),
+        },
+      });
+      let handed: unknown = 'unset';
+      let failure = await commitBatch(s.core, [
+        { op: 'delete', href: `${REALM}person-1` },
+        {
+          ...update(`${REALM}person-1`, 'Revived'),
+          admit: async (judged) => {
+            handed = judged;
+            throw new OperationFailure({
+              status: 403,
+              code: 'operation-not-permitted',
+              title: 'Operation not permitted',
+              detail: 'not permitted',
+            });
+          },
+        },
+      ]).then(
+        () => undefined,
+        (err: unknown) => (isOperationFailure(err) ? err.error.code : err),
+      );
+      assert.strictEqual(handed, undefined);
+      assert.strictEqual(failure, 'operation-not-permitted');
+      assert.strictEqual(
+        s.sourceReads(),
+        1,
+        'the card was not read again from disk',
+      );
+    });
+
+    test('a refusal commits nothing, whichever group holds it', async function (assert) {
       let { core, commits } = stub({
         stored: {
           'person-1.json': cardFile({ firstName: 'One' }, PERSON),
           'person-2.json': cardFile({ firstName: 'Two' }, PERSON),
           'person-3.json': cardFile({ firstName: 'Three' }, PERSON),
-        },
-        serialize: (doc: any) => {
-          serializations++;
-          return doc;
         },
       });
       let failure = await commitBatch(core, [
@@ -4478,11 +4539,10 @@ module(basename(import.meta.filename), function () {
         'the refusal is the batch’s, naming the refused entry',
       );
       assert.strictEqual(
-        serializations,
+        commits.length,
         0,
-        'neither the entry before it nor its sibling in the group was staged',
+        'and neither the entry staged before it nor its sibling is committed',
       );
-      assert.strictEqual(commits.length, 0, 'and nothing is committed');
     });
 
     test('an append’s target, which staging never reads whole, is read for its admission under the lock', async function (assert) {
@@ -4494,26 +4554,38 @@ module(basename(import.meta.filename), function () {
           LogEvent: logEventDefinition(),
         },
       });
-      let handed: string | undefined;
+      let handed: { id: string; source: string } | undefined;
       await commitBatch(s.core, [
         {
           op: 'appendContainsMany',
           href: `${REALM}log-1`,
           field: 'events',
           items: [{ label: 'second' }],
-          admit: async (source) => {
-            handed = source;
+          admit: async (judged) => {
+            handed = judged;
           },
         },
       ]);
-      assert.strictEqual(handed, stored, 'handed the card’s stored source');
+      assert.deepEqual(
+        handed,
+        { id: `${REALM}log-1`, source: stored },
+        'handed the card’s stored source',
+      );
       assert.strictEqual(s.readsOutsideLock(), 0, 'read inside the lock');
       assert.strictEqual(s.commits.length, 1);
     });
 
-    test('a create that names no stored card is handed nothing to judge', async function (assert) {
-      let { core, commits } = stub();
-      let handed: string | undefined = 'unset';
+    test('a create that names no card is judged by the card it would mint', async function (assert) {
+      let serializations = 0;
+      let { core, commits } = stub({
+        serialize: (doc: any) => {
+          serializations++;
+          return doc;
+        },
+      });
+      let observed:
+        | { id: string; firstName: string | undefined; serializations: number }
+        | undefined;
       await commitBatch(core, [
         {
           op: 'create',
@@ -4525,12 +4597,24 @@ module(basename(import.meta.filename), function () {
               meta: { adoptsFrom: PERSON },
             },
           },
-          admit: async (source) => {
-            handed = source;
+          admit: async (judged) => {
+            observed = judged && {
+              id: judged.id,
+              firstName: firstNameIn(judged.source),
+              serializations,
+            };
           },
         },
       ]);
-      assert.strictEqual(handed, undefined);
+      assert.deepEqual(
+        observed,
+        {
+          id: `${REALM}Person/new-person`,
+          firstName: 'New',
+          serializations: 1,
+        },
+        'handed the card it stages, once it is staged',
+      );
       assert.strictEqual(commits.length, 1);
     });
   });
