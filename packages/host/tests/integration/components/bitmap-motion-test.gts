@@ -118,11 +118,15 @@ class EmbeddedFixture extends Component {
           data-boxel-card-format={{unless this.custom 'fitted'}}
         ><article class='preview-surface'>Gallery preview</article></div>
         {{#if this.duplicate}}
+          {{! A fitted tile opens on click without being a button itself. }}
+          {{! template-lint-disable no-invalid-interactive }}
           <div
             class='preview'
             data-boxel-card-id='https://example.test/gallery'
             data-boxel-card-format='fitted'
-          >Another preview</div>
+            data-test-duplicate-preview
+            {{on 'click' this.open}}
+          ><span data-test-duplicate-face>Another preview</span></div>
         {{/if}}
         <button
           type='button'
@@ -437,12 +441,40 @@ module('Integration | bitmap motion', function (hooks) {
       'temporary match is released',
     );
     assert.dom('[data-bitmap-body]').doesNotExist();
+    // The host releases the return address once the card has closed.
+    forgetCardActionOrigin(parent, id);
     await click('[data-test-duplicate]');
     assert.strictEqual(
       embeddedCardElement(parent, id),
       undefined,
       'duplicate identities remain ambiguous',
     );
+  });
+  test('a card shown twice opens from the clicked preview and returns to it', async function (assert) {
+    await renderComponent(EmbeddedFixture);
+    await click('[data-test-duplicate]');
+    let parent = find('[data-test-index]') as HTMLElement;
+    let clicked = find('[data-test-duplicate-preview]') as HTMLElement;
+    let id = 'https://example.test/gallery';
+    assert.strictEqual(
+      embeddedCardOrigin(parent, id),
+      undefined,
+      'two visible previews are ambiguous by identity alone',
+    );
+    await click('[data-test-duplicate-face]');
+    await bitmapReady;
+    assert.ok(
+      (find('[data-test-opened-gallery]') as HTMLElement).style
+        .viewTransitionName,
+      'the clicked preview is an opening origin',
+    );
+    await completion;
+    assert.strictEqual(
+      embeddedCardElement(parent, id),
+      clicked,
+      'the hidden parent returns to the preview it left from',
+    );
+    forgetCardActionOrigin(parent, id);
   });
   test('capture reads shared-element styles before writing participant names', async function (assert) {
     await renderComponent(EmbeddedFixture);
@@ -891,6 +923,8 @@ module('Integration | bitmap motion', function (hooks) {
     assert
       .dom('[data-bitmap-body]')
       .doesNotExist('temporary content frame released');
+    // The host releases the return address once the card has closed.
+    forgetCardActionOrigin(index, 'https://example.test/gallery');
     await click('[data-test-duplicate]');
     assert.strictEqual(
       embeddedCardElement(

@@ -29,11 +29,32 @@ export function cardActionOrigin(
   cardId: string,
 ): CardOpenOrigin | undefined {
   if (!boundary) return;
-  let embedded = embeddedCardOrigin(boundary, cardId);
-  if (embedded) return embedded;
   let event = activations.get(boundary);
   activations.delete(boundary);
-  if (!event || event.eventPhase === Event.NONE) return;
+  let live = event && event.eventPhase !== Event.NONE ? event : undefined;
+  // A card shown more than once (a fitted tile and an embedded row) is
+  // ambiguous by identity alone; the preview that was clicked is the origin.
+  let target = live?.target instanceof Node ? live.target : undefined;
+  let clicked = target
+    ? embeddedCardElements(boundary, cardId).find((element) =>
+        element.contains(target),
+      )
+    : undefined;
+  let embedded = clicked
+    ? visibleCardOrigin(clicked, boundary)
+    : embeddedCardOrigin(boundary, cardId);
+  if (embedded) {
+    // A buried parent hides every preview, so the way back would be
+    // ambiguous again. Keep the one this card left from.
+    if (embedded.source)
+      returns.set(boundary, {
+        cardId,
+        element: new WeakRef(embedded.source),
+      });
+    return embedded;
+  }
+  if (!live) return;
+  event = live;
   let element =
     event.target instanceof Element
       ? event.target.closest<HTMLElement>('button, a[href], [role="button"]')

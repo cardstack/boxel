@@ -378,7 +378,11 @@ export default class InteractSubmode extends Component {
       }
     }
     let sourceItem = this.stacks[stackIndex]?.at(-1);
+    // Like all host motion, crossings take no time in tests: without a crossing
+    // there is no deferred body, and the card opens as an ordinary push.
+    let boundaryDuration = isTesting() ? 0 : motionDurations.boundary;
     let origin =
+      boundaryDuration > 0 &&
       format === 'isolated' &&
       !this.hostMotion.dragging &&
       !opts?.openingOrigin &&
@@ -452,6 +456,8 @@ export default class InteractSubmode extends Component {
     });
     this.boundaryCrossingToken = token;
     let budgetToken = this.hostMotion.beginBitmap();
+    // Tests settle only once the crossing and its deferred body are done.
+    let waiterToken = waiter.beginAsync();
     try {
       await crossfadeCardBitmap(
         source,
@@ -464,7 +470,7 @@ export default class InteractSubmode extends Component {
             schedule('afterRender', resolve),
           );
         },
-        motionDurations.boundary,
+        boundaryDuration,
         boundaryEase,
         (finish) => {
           this.hostMotion.onBitmapReady(budgetToken, finish);
@@ -489,6 +495,7 @@ export default class InteractSubmode extends Component {
           resolve();
         });
       });
+      waiter.endAsync(waiterToken);
     }
   };
 
@@ -560,16 +567,28 @@ export default class InteractSubmode extends Component {
     let parent = stack?.at(-2);
     let source = stackItemComponentAPI.get(item)?.element();
     let underlay = parent && stackItemComponentAPI.get(parent)?.element();
-    if (
-      !animate ||
-      item.format !== 'isolated' ||
-      stack?.at(-1) !== item ||
-      this.hostMotion.dragging ||
-      !supportsBitmapCrossing() ||
-      !source ||
-      !underlay ||
-      !embeddedCardElement(underlay, item.id)
-    ) {
+    let returnDuration = isTesting() ? 0 : motionDurations.boundaryReturn;
+    let skip = !animate
+      ? 'unanimated'
+      : returnDuration === 0
+        ? 'no-duration'
+        : item.format !== 'isolated'
+          ? 'format'
+          : stack?.at(-1) !== item
+            ? 'not-top'
+            : this.hostMotion.dragging
+              ? 'dragging'
+              : !supportsBitmapCrossing()
+                ? 'unsupported'
+                : !source
+                  ? 'no-source'
+                  : !underlay
+                    ? 'no-underlay'
+                    : !embeddedCardElement(underlay, item.id)
+                      ? 'no-return-tile'
+                      : undefined;
+    if (skip) {
+      traceMotionPhase(`return-skipped:${skip}`);
       remove();
       return;
     }
@@ -589,6 +608,7 @@ export default class InteractSubmode extends Component {
     let destination: HTMLElement | undefined;
     this.boundaryCrossingToken = token;
     let budgetToken = this.hostMotion.beginBitmap();
+    let waiterToken = waiter.beginAsync();
     try {
       await crossfadeCardBitmap(
         source,
@@ -604,7 +624,7 @@ export default class InteractSubmode extends Component {
           destination = embeddedCardOrigin(underlay, item.id)?.source;
           if (destination) destination.dataset.bitmapReturn = key;
         },
-        motionDurations.boundaryReturn,
+        returnDuration,
         boundaryReturnEase,
         (finish) => this.hostMotion.onBitmapReady(budgetToken, finish),
         underlay,
@@ -616,6 +636,7 @@ export default class InteractSubmode extends Component {
         delete destination.dataset.bitmapReturn;
       if (this.boundaryCrossingToken === token)
         this.boundaryCrossingToken = undefined;
+      waiter.endAsync(waiterToken);
     }
   };
 

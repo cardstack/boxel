@@ -3,7 +3,8 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
 import { service } from '@ember/service';
-
+import { buildWaiter } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -39,6 +40,7 @@ import {
   supportsBitmapCrossing,
 } from '@cardstack/host/lib/bitmap-crossing';
 import type { CardOpenOrigin } from '@cardstack/host/lib/card-open-origin';
+import { motionDurations } from '@cardstack/host/lib/motion-timing';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 import { AiAssistantPanelWidth } from '@cardstack/host/utils/local-storage-keys';
@@ -64,6 +66,8 @@ import type StoreService from '../../services/store';
 import type { SearchSheetMode } from '../search-sheet';
 import type { Submode } from '../submode-switcher';
 import type { PerformCommand } from 'glimmer-motion';
+
+const crossingWaiter = buildWaiter('operator-mode:search-crossing');
 
 interface Signature {
   Element: HTMLDivElement;
@@ -400,7 +404,14 @@ export default class SubmodeLayout extends Component<Signature> {
     origin?: CardOpenOrigin,
   ) {
     let source = origin?.source;
-    if (!source || !supportsBitmapCrossing() || this.hostMotion.dragging) {
+    // Like all host motion, the crossing takes no time in tests.
+    let duration = isTesting() ? 0 : motionDurations.crossing;
+    if (
+      !source ||
+      duration === 0 ||
+      !supportsBitmapCrossing() ||
+      this.hostMotion.dragging
+    ) {
       this.args.onCardSelectFromSearch?.(cardId, kind, origin);
       this.closeSearchSheet();
       return;
@@ -410,6 +421,7 @@ export default class SubmodeLayout extends Component<Signature> {
     let budgetToken = this.hostMotion.beginBitmap();
     let bitmapKey = `search-bitmap-${token}`;
     let { source: _source, ...geometry } = origin!;
+    let waiterToken = crossingWaiter.beginAsync();
     try {
       await crossfadeCardBitmap(
         source,
@@ -422,7 +434,7 @@ export default class SubmodeLayout extends Component<Signature> {
           });
           if (token === this.bitmapEntrySequence) this.closeSearchSheet();
         },
-        undefined,
+        duration,
         undefined,
         (finish) => this.hostMotion.onBitmapReady(budgetToken, finish),
       );
@@ -430,6 +442,7 @@ export default class SubmodeLayout extends Component<Signature> {
       this.hostMotion.endBitmap(budgetToken);
       if (this.bitmapCrossingToken === token)
         this.bitmapCrossingToken = undefined;
+      crossingWaiter.endAsync(waiterToken);
     }
   }
 
