@@ -47,6 +47,12 @@ import {
 // anything, and what keeps a realm writer editing their own realm from paying
 // for a policy load or a predicate evaluation.
 //
+// Authorization infrastructure is outside the grant model. An operation
+// declared `nonGrantable`, on the target's type or on any type it descends
+// from, and any write to the card the realm's policy key names, are refused to
+// every caller the ACL declined, before any rule is matched. Were either
+// grantable, one grant could be made into every grant.
+//
 // Every way the gate can fail denies. A policy that is gone, a compiled policy
 // with no rule for the type, a predicate that throws or answers anything but
 // `true`, and a target whose type the index cannot vouch for are each a
